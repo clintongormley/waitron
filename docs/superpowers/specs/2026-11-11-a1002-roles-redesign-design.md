@@ -2,7 +2,8 @@
 
 **Status: OWNER APPROVED, 2026-11-11** ("approved", in the main-checkout brainstorm session, with the
 help-bubble addition in §10). The owner also reviewed the "my call" defaults listed to them
-before approving.
+before approving. **Amended 2026-11-12 (owner, "Y"):** a role change leaves a person's links
+alone (§4).
 It replaces the [7 November design](2026-10-22-a1002-custom-roles-design.md) wherever the two
 differ. Where this document is silent, that design's decision stands only if §9 lists it as kept.
 The [cut 2 scope forecast](../plans/2026-11-10-a1002-cut2-scope-refresh.md) (branch
@@ -146,14 +147,19 @@ suspending someone, resetting an account to pending, removing a sign-in method, 
 and import. A change that would leave none is refused. PIN-only, pending and suspended people do
 not count.
 
-**Any change to a person's access roles expires their outstanding invitation and password-reset
-links** (owner, 2026-11-11, after the Fable read). Today's code does this when someone gains or
-loses Admin (`invalidatePersonAccountActions` in `packages/identity/src/staff.ts`); it now applies to
-every access-role change. Cancelling on an email or status change (`revokePersonAccess`) stays.
+**A change to a person's access roles leaves their invitation and password-reset links alone**
+(owner, 2026-11-12, reversing the 2026-11-11 addition that every role change expires them). Those
+links go only to the person's own address, and anyone who can read that mailbox can get a fresh
+one at any time from the public "forgot password" page (`queueAccountRecovery` in
+`packages/identity/src/account-action.ts`, for active and pending people of any role). Cancelling
+on a role change therefore protected nothing, and it broke the invitation of a person added and
+then given roles. Today's cancelling when someone gains or loses Admin
+(`invalidatePersonAccountActions` in `packages/identity/src/staff.ts`) goes too. Cancelling on an
+email or status change (`revokePersonAccess`) stays: that is the change that moves the mailbox,
+and who may make it is what Rule 2 and "Change other people's email addresses" guard.
 **There is no check of who sent a link** (owner, option B): it was planned, but anyone can request a
-fresh senderless invitation from the public "forgot password" page, so it protected nothing. No
-`issued_by` column. This replaces the 7 November design's "links are not cancelled by a role
-change". When a link is used, current status and roles decide, as today.
+fresh senderless invitation from the same public page, so it protected nothing. No `issued_by`
+column. When a link is used, current status and roles decide, as today.
 
 **Kept: "changed while you were editing."** A save compares the role set or permission set it read
 with what is stored and refuses a difference, keeping the draft. No version counters or hashes.
@@ -258,8 +264,7 @@ The settings-export work to translate role references inside comp settings (the 
 - The deletion impact preview, and retirement for access roles (§7).
 - Per-reason and bill-limit role lists on comps, and the settings-export remapping they needed (§6).
 - Email for job-role changes (§8).
-- Checking who sent a link when it is used, and the 7 November rule that role changes never cancel
-  links (§4, owner after the Fable read).
+- Checking who sent a link when it is used (§4, owner after the Fable read).
 
 **Kept as approved:** several roles per person, combined; no ladder; fixed built-in names; Admin
 always holds everything; one `person.admin` covering roles and other people's sign-in; Manager

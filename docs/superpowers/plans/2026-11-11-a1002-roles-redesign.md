@@ -3,7 +3,8 @@
 **Status: APPROVED by the owner, 2026-11-11**, after the fresh-context plan-against-design read
 and the Fable second read. The owner's words: "approve", typed at 21:46 Madrid time (20:46:54 UTC)
 in the owner's main-checkout Claude session (`a914fa5c-626b-4ca9-a682-f12947d87788`), in answer to
-this revision's PR list and 40–50 hour estimate. Queued to lane K.
+this revision's PR list and 40–50 hour estimate. Queued to lane K. **Amended 2026-11-12 (owner,
+"Y"):** a role change no longer expires links (PRs 11, 14 and 16).
 **Revision 3, 2026-11-11 evening:** the fresh-context read's findings, the Fable read
 (`~/waitron-campaign-m/reports/ra.md`) and the owner's answers to its proposals (recorded in the
 design by `e69416d2cd`) are applied: eighteen pull requests, re-sized from source on `c00b1a6f39`.
@@ -46,7 +47,8 @@ Today a person has one of four levels and each level holds everything below it. 
   if you hold every permission in it; you can change another person's sign-in only if you hold
   every permission they hold. Changing an existing person's email also needs its own permission
   (Admin only by default), is logged, and tells the old address.
-- Any change to a person's access roles expires their outstanding invitation and reset links.
+- A change to a person's access roles leaves their invitation and reset links alone; changing their
+  email or status still cancels them.
 
 ## Global constraints
 
@@ -79,10 +81,12 @@ Today a person has one of four levels and each level holds everything below it. 
 - **A usable Admin** is a distinct person who holds the Admin access role, is `active`, and has a
   password hash, a Google subject or a WebAuthn credential. PIN-only, pending and suspended people
   do not count. (No email condition: a Google or passkey sign-in needs none.)
-- **Links:** any change to a person's access roles expires their outstanding account actions with
-  today's `invalidatePersonAccountActions` (`packages/identity/src/staff.ts:158`), which marks every
-  unused action used (invitation, password reset, and a pending email-change proof); email or
-  status changes keep `revokePersonAccess`. There is no sender column and no check of who sent a
+- **Links:** a change to a person's access roles cancels none of their outstanding account
+  actions, and today's calls of `invalidatePersonAccountActions` on Admin gain or loss
+  (`packages/identity/src/staff.ts:290`, `:522`) are removed (owner, 2026-11-12: the public
+  "forgot password" page gives the mailbox a fresh link at any time, so the cancel protected nothing
+  and broke the invitation of a person added and then given roles). Email or status changes keep
+  `revokePersonAccess`. There is no sender column and no check of who sent a
   link (owner, option B).
 - **PINs:** nobody sets another person's PIN; an administrator can only clear it (owner, option A).
   Adding a person needs an email, as today.
@@ -194,7 +198,7 @@ light-path PRs (4, 5, 6, 8, 17, 18) skip per-task reviews.
 | 11 | Access-role storage; `persons.role` removed | ~26 | +420 / −240 | ~30 | +330 / −230 | ~350 + demo ~40 | full | 2.5 |
 | 12 | Rule 2 on every route; the email-change permission | ~7 | +240 / −220 | ~8 | +560 / −300 | — | full | 2.5 |
 | 13 | The usable Admin; email changes logged and the old address told | ~9 | +330 / −20 | ~6 | +420 / −0 | ~10 | full | 2.5 |
-| 14 | Membership changes with Rule 1, logged, mailed, links expired | ~6 | +300 / −20 | ~3 | +420 / −0 | — | full | 2 |
+| 14 | Membership changes with Rule 1, logged, mailed | ~6 | +300 / −20 | ~3 | +420 / −0 | — | full | 2 |
 | 15 | Access-role tags on the staff editor; Managers hold `person.admin` | ~18 | +450 / −320 | ~65 | +600 / −420 | — | full | 3 |
 | 16 | Custom access roles (server) | ~7 | +460 / −20 | ~5 | +700 / −0 | — | full | 2.5 |
 | 17 | Access roles page | ~8 | +900 / −20 | ~4 | +550 / −0 | — | light | 3 |
@@ -993,7 +997,7 @@ Tests: `apps/dashboard/src/dashboard-app.test.ts`.
 **Outcome:** the four built-in access roles are rows, people hold them through memberships,
 authority reads memberships, and `persons.role` is gone. Each person still holds exactly one
 built-in role, set through the existing staff form's `role` field (transitional; PR 15 replaces
-it). Any change of that role expires the person's outstanding links. **Depends on:** PR 5, PR 7,
+it). A change of that role leaves the person's links alone. **Depends on:** PR 5, PR 7,
 PR 10. **Risk trigger:** migration, auth. **First PR line:** core starting migration rebuilt, venue
 reset.
 
@@ -1038,8 +1042,9 @@ lifecycle, authority, personal-data, login and session suites.
   (`actor.admin`, else `authorization.not_permitted` `{ permission: "person.admin" }`), replacing
   today's "any `person.admin` holder" at `staff.ts:234-241`. Every "active admins" query becomes
   "active persons holding Admin".
-- **Any change of the role expires the person's outstanding links** with
-  `invalidatePersonAccountActions` (today only on Admin gain or loss, `staff.ts:290`, `:522`).
+- **A change of the role leaves the person's links alone:** remove today's
+  `invalidatePersonAccountActions` calls on Admin gain or loss (`staff.ts:290`, `:522`; owner,
+  2026-11-12). Email and status changes keep `revokePersonAccess`.
 - `listActivePersonsWithPermission` reads all active people's memberships and roles in one query,
   never one authority read per person.
 - `PersonSummary.role` = `heldBuiltInKey`; `login.ts`'s client `role` field goes;
@@ -1048,7 +1053,8 @@ lifecycle, authority, personal-data, login and session suites.
 
 - [ ] **Step 1:** `it("the last admin is counted by membership")`; `it("only an Admin holder makes
   someone Admin")` (a person given `person.admin` through the Manager row's stored permissions is
-  refused); `it("changing a person's role from Staff to Supervisor expires their invitation")`.
+  refused); `it("an invitation still works after the person is made Supervisor, and after they are made Admin")`
+  (fails on today's code for the Admin half: `staff.ts:290`).
 - [ ] **Step 2–4.** **Step 5: Commit.**
 
 ### Task 11.3: Setup, transfer and import
@@ -1197,10 +1203,10 @@ create `apps/server/src/email-changed-mail.ts` and `apps/server/src/i18n/email-c
 
 ---
 
-## PR 14 — Membership changes with Rule 1, logged, mailed, links expired (A1002 cut 15)
+## PR 14 — Membership changes with Rule 1, logged, mailed (A1002 cut 15)
 
 **Outcome:** identity can change a person's access roles under Rule 1 with the changed-while-editing
-check, expiring their outstanding links, logging each change and emailing the person. No route uses
+check, leaving their links alone, logging each change and emailing the person. No route uses
 it until PR 15. **Depends on:** PR 13. **Risk trigger:** auth.
 
 ### Task 14.1: Membership command
@@ -1220,7 +1226,7 @@ export function setPersonAccessRoles(tx: Transaction, input: {
 - Each added or removed role: Admin needs `actor.admin`; any other needs every **declared**
   permission in the role's stored list within the actor's, else `role.not_permitted` `{ roleId }`.
   The check is on the role, not the person's total.
-- When the set changes: `invalidatePersonAccountActions` for the person, one `recordActivity` and
+- When the set changes: one `recordActivity` and
   one `queueRoleMembershipMail` (14.2) per change, then `assertUsableAdminRemains`.
 
 - [ ] **Step 1:** (actors given `person.admin` as in 12.1) adding a custom role within the actor's
@@ -1229,7 +1235,7 @@ export function setPersonAccessRoles(tx: Transaction, input: {
   cannot stand in for Admin; a role storing a retired ID (`sale.discount`) can still be given by an
   Admin and by an actor holding its declared permissions; stale `expectedRoleIds` →
   `person.roles_changed`; past the fresh sign-in → the existing fresh-sign-in code; the person's
-  outstanding invitation is expired after any change and kept after a no-op; reordered sets log
+  outstanding invitation still works after a role is added (a person added, then given roles); reordered sets log
   nothing; removing the last usable Admin's Admin → `person.last_admin`; a person may end with no
   roles.
 - [ ] **Step 2–4.** **Step 5: Commit.**
@@ -1335,7 +1341,7 @@ Tests: `management-api.*staff*.test.ts`, `management-api.staff-rule2.test.ts`, `
 
 **Outcome:** holders of `person.admin` can create, copy, rename, edit the permissions of and delete
 access roles within Rule 1; built-ins keep fixed names and Admin's list is locked; every change is
-logged, and deletion expires each holder's links and emails each person who loses the role.
+logged, and deletion emails each person who loses the role.
 **Depends on:** PR 15. **Risk trigger:** auth.
 
 ### Task 16.1: Lifecycle
@@ -1357,7 +1363,7 @@ export function deleteAccessRole(tx, input: { managementSessionId: string; roleI
 - Built-ins: rename/delete → `role.built_in` `{ roleId }`; Admin's permissions → `role.built_in`.
 - Copy reads the source's current effective permissions (Admin: `declaredPermissions()`), takes no
   people, and is an ordinary custom role; Rule 1 applies to the copy's list.
-- Delete removes each membership (`invalidatePersonAccountActions` for each holder, logged
+- Delete removes each membership (logged
   `access_role.member_removed`, mailed through `queueRoleMembershipMail`), deletes the row and logs
   `access_role.deleted`.
 - Kinds (`access_role` subject): `access_role.created` `{ name, permissions, copiedFromRoleId: string | null }`;
@@ -1372,7 +1378,7 @@ export function deleteAccessRole(tx, input: { managementSessionId: string; roleI
   are each `role.not_permitted`. "Café" then "CAFE" → `role.name_taken`; renaming Manager or
   editing Admin → `role.built_in`; removing `payment.take` from Staff stops a Staff holder taking
   payment; stale `expectedPermissions` → `role.changed`; deleting a role held by three people logs
-  three removals, expires their links and queues mail for those with email; a permission edit
+  three removals and queues mail for those with email; a permission edit
   queues no mail.
 - [ ] **Step 2–4.** **Step 5: Commit.**
 
