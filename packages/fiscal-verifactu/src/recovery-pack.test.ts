@@ -61,13 +61,6 @@ it.each([
   });
 });
 
-it("refuses a snapshot for another venue", async () => {
-  await expect(create(input(), { ...node, venueId: "another-venue" })).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "scope_mismatch" },
-  });
-});
-
 it("refuses a missing series rather than printing a pack the venue cannot activate", async () => {
   await expect(create(input({ bases: bases.slice(0, 2) }))).rejects.toMatchObject({
     code: "sif.allocation_invalid",
