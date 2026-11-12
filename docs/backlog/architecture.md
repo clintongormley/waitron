@@ -518,8 +518,8 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   `apps/server/src/leave-for-clearing.test.ts`, `apps/server/src/configuration-import.test.ts` and
   `apps/server/src/print-agent-e2e.test.ts`) give English names to what they create. The alert,
   configuration-import and print-agent suites keep their es-ES locales; the alert and print-agent
-  suites keep the operation description "Venta en establecimiento", the alert suite its staff first
-  names, the configuration-import suite its legal name, Madrid street addresses and the drink
+  suites keep the operation description "Venta en establecimiento", the configuration-import
+  suite its legal name, Madrid street addresses and the drink
   "Mojito", the errors suite its guest surname "Soler", and the clearing suite the Spanish names its
   shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
@@ -850,6 +850,8 @@ the helper's constant status is not evidence of the write.
   delivery, published-menu sale and unroutable-dish staff samples use Cashier.
   Local box-host, box-health, disk-stop and clock set/confirm route fixtures use Martha, Anna
   and Simon for their manager, administrator and supervisor samples; the clock suites' administrators remain Mario and Berta.
+  Local alert, box-host call, attendance-fact, bill-editor transition, transfer-close and orders
+  route fixtures use English staff display-name samples.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
@@ -1005,8 +1007,8 @@ the helper's constant status is not evidence of the write.
   `apps/server/src/leave-for-clearing.test.ts`, `apps/server/src/configuration-import.test.ts` and
   `apps/server/src/print-agent-e2e.test.ts`) give English names to what they create. The alert,
   configuration-import and print-agent suites keep their es-ES locales; the alert and print-agent
-  suites keep the operation description "Venta en establecimiento", the alert suite its staff first
-  names, the configuration-import suite its legal name, Madrid street addresses and the drink
+  suites keep the operation description "Venta en establecimiento", the configuration-import
+  suite its legal name, Madrid street addresses and the drink
   "Mojito", the errors suite its guest surname "Soler", and the clearing suite the Spanish names its
   shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)

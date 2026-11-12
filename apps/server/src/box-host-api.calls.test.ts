@@ -38,8 +38,8 @@ async function seedCookie(role: PersonRoleValue, name: string): Promise<string> 
 const sockets: Socket[] = [];
 
 beforeEach(async () => {
-  managerCookie = await seedCookie("manager", "Marta");
-  supervisorCookie = await seedCookie("supervisor", "Sergio");
+  managerCookie = await seedCookie("manager", "Martha");
+  supervisorCookie = await seedCookie("supervisor", "Simon");
 });
 
 afterEach(() => {

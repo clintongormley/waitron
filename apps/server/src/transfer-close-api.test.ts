@@ -228,7 +228,7 @@ describe("POST /api/working-orders/:id/close-by-transfer, allowed", () => {
 describe("POST /api/working-orders/:id/close-by-transfer, refusals", () => {
   it("refuses a suspended person whose session is still open, then closes for an active one", async () => {
     const [person] = await seedPersons(suite.db, {
-      displayName: "Luis",
+      displayName: "Lewis",
       pinHash: hashPin("4444"),
       role: "staff",
     });
