@@ -536,12 +536,14 @@ describe("a sent line is payable whatever its availability; an unsent one is not
     const tableId = await seedTable(cfg, "Focus-6", suite.db, tables.zoneId);
     const { tabId } = await withTransaction(suite.db, (tx) => openPartyTab(tx, cfg, { tableId }));
     await withTransaction(suite.db, async (tx) => {
-      // Line 1: two Burgers, fired. Line 2: a bottle with no preparation, sent with the round.
+      // Lines 1 and 2: a Burger each, fired. Line 3: a bottle with no preparation, sent with the
+      // round.
       await addTabRound(tx, cfg, tabId, [
-        { menuItemId: offers.offerFor(burgerId), quantity: "2" },
+        { menuItemId: offers.offerFor(burgerId), quantity: "1" },
+        { menuItemId: offers.offerFor(burgerId), quantity: "1" },
         { menuItemId: offers.offerFor(beerId), quantity: "1" },
       ]);
-      // Line 3: a third Burger, held with its course and never sent.
+      // Line 4: a third Burger, held with its course and never sent.
       await addTabRound(tx, cfg, tabId, [
         { menuItemId: offers.offerFor(burgerId), quantity: "1", courseId, hold: true },
       ]);
@@ -553,7 +555,7 @@ describe("a sent line is payable whatever its availability; an unsent one is not
 
     // One of the two fired Burgers goes to a check of its own, which pays.
     const { billId: checkId } = await withTransaction(suite.db, (tx) =>
-      splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+      splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]),
     );
     const check = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
       id: checkId,
@@ -595,7 +597,7 @@ describe("a sent line is payable whatever its availability; an unsent one is not
     });
 
     // Removing the held Burger lets the tab pay its fired Burger and the bottle.
-    await withTransaction(suite.db, (tx) => cancelLine(tx, cfg, tabId, 3));
+    await withTransaction(suite.db, (tx) => cancelLine(tx, cfg, tabId, 4));
     const tab = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, {
       id: tabId,
       lines: [],

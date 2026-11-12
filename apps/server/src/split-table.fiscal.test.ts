@@ -182,14 +182,15 @@ async function atTwoTables(...names: string[]) {
  */
 async function twoBillsLeftPaidByAPick() {
   const { partyId, tabId: bill1, leaving } = await atTwoTables("Caña", "Caña", "Paella", "Caña");
-  const path = `/api/bills/${bill1}/split`;
+  const path = `/api/bills/${bill1}/move-dishes`;
   const split = await send(
     venue.app,
     venue.cookie,
     "POST",
     path,
     await observedBillActionBody(venue.db, path, {
-      transfers: [{ lineNo: 3 }, { lineNo: 4 }],
+      lineIds: lineIdsOf(bill1).slice(2),
+      toBillId: null,
       expectedPartyRevision: revisionOf(partyId),
     }),
   );

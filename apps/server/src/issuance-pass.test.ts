@@ -549,14 +549,15 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     ]);
   });
 
-  it("a check split off a tab after the move keeps the chain the carved line was rung with", async () => {
+  it("a check split off a tab after the move keeps the chain the moved dish was rung with", async () => {
     const v = await setupVenue();
     const tabId = await openTableTab(v, [
-      { menuItemId: v.tables.offerFor(v.products.negroni), quantity: "2" },
+      { menuItemId: v.tables.offerFor(v.products.negroni), quantity: "1" },
+      { menuItemId: v.tables.offerFor(v.products.negroni), quantity: "1" },
     ]);
     await moveCocktailsToSpirits(v);
     const { billId: checkId } = await withTransaction(suite.db, (tx) =>
-      splitPartyBill(tx, v.cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+      splitPartyBill(tx, v.cfg, tabId, [{ lineNo: 1 }]),
     );
 
     await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {

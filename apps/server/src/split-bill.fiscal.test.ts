@@ -188,38 +188,23 @@ interface ThreeChecks {
  * Open the mixed-VAT origin tab (3× agua @21%, 0.300 kg jamón @10%), carve it into three checks
  * (A = 1 agua + whole jamón; B = 1 agua; C = 1 agua, which empties the tab), and pay all three.
  * `portions` holds each agua as its own line; the jamón is ordered first so that check A holds it
- * first, as the grouped carve does, and its VAT breakdown lists the rates in the same order.
- * `grouped` holds the three agua as one line, as a tab written before portions does, and carves it
- * by quantity.
+ * first, and its VAT breakdown lists the rates in the same order.
  */
 async function splitIntoThreeChecks(
   seeded: Seeded,
   deps: Parameters<typeof payWorkingOrder>[0],
-  shape: "portions" | "grouped" = "portions",
 ): Promise<ThreeChecks> {
   const { cfg, waterId, hamId, tableId, offers } = seeded;
   const water = { productId: waterId, quantity: "3" };
   const ham = { productId: hamId, quantity: "0.300" };
-  const { tabId } = await asApp(cfg, async (tx) => {
-    if (shape === "portions") {
-      return openPartyTab(tx, cfg, { tableId, lines: offers.toOfferLines([ham, water]) });
-    }
-    const lines = offers.toOfferLines([water, ham]);
-    const opened = await openPartyTab(tx, cfg, { tableId });
-    await writeGroupedLines(tx, cfg, opened.tabId, lines);
-    return opened;
-  });
-  const [toA, toB, toC] =
-    shape === "portions"
-      ? [[{ lineNo: 1 }, { lineNo: 2 }], [{ lineNo: 3 }], [{ lineNo: 4 }]]
-      : [
-          [{ lineNo: 1, quantity: "1" }, { lineNo: 2 }],
-          [{ lineNo: 1, quantity: "1" }],
-          [{ lineNo: 1 }],
-        ];
-  const { billId: a } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, toA!));
-  const { billId: b } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, toB!));
-  const { billId: c } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, toC!));
+  const { tabId } = await asApp(cfg, (tx) =>
+    openPartyTab(tx, cfg, { tableId, lines: offers.toOfferLines([ham, water]) }),
+  );
+  const { billId: a } = await asApp(cfg, (tx) =>
+    splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }, { lineNo: 2 }]),
+  );
+  const { billId: b } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 3 }]));
+  const { billId: c } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 4 }]));
 
   // A check is a retrieved order, so req.lines is ignored — it files from its stored locked lines.
   const rA = await payWorkingOrder(deps, cfg, {
@@ -326,16 +311,30 @@ describe("split-bill: pay each check files its own registro", () => {
     expect(new Set(waterLinks.map((link) => link.portionId)).size).toBe(3);
   });
 
-  it("on a tab written before portions, a part of the agua line still files on its own check", async () => {
-    const seeded = await setupVenue();
-    const { cfg } = seeded;
-    const deps = { db: suite.db, backend, clock };
-
-    const { tabId, a, b, c, rA, rB, rC } = await splitIntoThreeChecks(
-      seeded,
-      { ...deps, admission: testTradingAdmission() },
-      "grouped",
-    );
+  it("on a tab written before portions, the whole agua line files on its own check", async () => {
+    const { cfg, waterId, hamId, tableId, offers } = await setupVenue();
+    const deps = { db: suite.db, backend, clock, admission: testTradingAdmission() };
+    const lines = offers.toOfferLines([
+      { productId: waterId, quantity: "3" },
+      { productId: hamId, quantity: "0.300" },
+    ]);
+    const { tabId } = await asApp(cfg, async (tx) => {
+      const opened = await openPartyTab(tx, cfg, { tableId });
+      await writeGroupedLines(tx, cfg, opened.tabId, lines);
+      return opened;
+    });
+    const { billId: a } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 2 }]));
+    const { billId: b } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]));
+    const rA = await payWorkingOrder(deps, cfg, {
+      id: a,
+      tender: { method: "cash", amount: "10.00" },
+      lines: [],
+    });
+    const rB = await payWorkingOrder(deps, cfg, {
+      id: b,
+      tender: { method: "cash", amount: "5.00" },
+      lines: [],
+    });
 
     const { records, originLines, filed } = await asApp(cfg, async (tx) => ({
       records: await tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion),
@@ -352,16 +351,11 @@ describe("split-bill: pay each check files its own registro", () => {
         .from(saleLines)
         .innerJoin(sales, eq(sales.id, saleLines.saleId)),
     }));
-    expect(records.length).toBe(3);
-    const seqs = [seqOf(rA), seqOf(rB), seqOf(rC)].sort((x, y) => x - y);
-    expect(seqs).toEqual([seqs[0], seqs[0]! + 1, seqs[0]! + 2]);
-    expect([rA.total, rB.total, rC.total]).toEqual(["8.97", "1.50", "1.50"]);
-    expect(rA.vatBreakdown).toEqual([
-      { rate: "10.00", base: "6.79", tax: "0.68" },
-      { rate: "21.00", base: "1.24", tax: "0.26" },
-    ]);
-    expect(rB.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
-    expect(rC.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
+    expect(records.length).toBe(2);
+    expect(seqOf(rB)).toBe(seqOf(rA) + 1);
+    expect([rA.total, rB.total]).toEqual(["7.47", "4.50"]);
+    expect(rA.vatBreakdown).toEqual([{ rate: "10.00", base: "6.79", tax: "0.68" }]);
+    expect(rB.vatBreakdown).toEqual([{ rate: "21.00", base: "3.72", tax: "0.78" }]);
     expect(originLines).toEqual([]);
     expect(
       filed
@@ -369,10 +363,8 @@ describe("split-bill: pay each check files its own registro", () => {
         .sort((x, y) => String(x).localeCompare(String(y))),
     ).toEqual(
       [
-        [a, 2100, 1000],
         [a, 1000, 300],
-        [b, 2100, 1000],
-        [c, 2100, 1000],
+        [b, 2100, 3000],
       ].sort((x, y) => String(x).localeCompare(String(y))),
     );
   });

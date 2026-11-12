@@ -3458,10 +3458,9 @@ describe("a party's bill request goes when a card or collect settles its last ow
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const table = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
       const { tabId, partyId } = await openPartyTab(tx, cfg, { tableId: table.id });
-      await addTabRound(tx, cfg, tabId, [
-        { menuItemId: offers.offerFor(coffee.id), quantity: owingSibling ? "2" : "1" },
-      ]);
-      if (owingSibling) await splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
+      const coffeeLine = { menuItemId: offers.offerFor(coffee.id), quantity: "1" };
+      await addTabRound(tx, cfg, tabId, owingSibling ? [coffeeLine, coffeeLine] : [coffeeLine]);
+      if (owingSibling) await splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]);
       if (serviceMode !== "table_tab") {
         const elsewhere = await offerProducts(tx, cfg, {
           orderStart: "counter",
