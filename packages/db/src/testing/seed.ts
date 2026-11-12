@@ -152,10 +152,7 @@ export async function seedDeviceProfiles(
   db: Database | Transaction,
   values: DeviceProfileInsert | readonly DeviceProfileInsert[],
 ): Promise<(typeof deviceProfiles.$inferSelect)[]> {
-  return db
-    .insert(deviceProfiles)
-    .values(Array.isArray(values) ? values : [values as DeviceProfileInsert])
-    .returning();
+  return db.insert(deviceProfiles).values([values].flat()).returning();
 }
 
 let deviceCounter = 0;

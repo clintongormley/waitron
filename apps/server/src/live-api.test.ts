@@ -1,6 +1,6 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 // This suite checks route authorization and stream lifecycle; what the database itself delivers is
 // `packages/db/src/change-feed.test.ts`.
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";

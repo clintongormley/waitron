@@ -1,8 +1,8 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 // `GET /api/backup/settings-evidence` on a real venue database, one case per row of the design's
 // cause table. Each failure is produced by a real supervisor loading the record as boot does, except
 // the `unknown` row: no read this suite can produce fails without a code, so that case swaps in a
 // record read that throws a plain error.
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createCipheriv, randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { mkdir, stat, writeFile } from "node:fs/promises";

@@ -1,5 +1,5 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 // Reads on one transaction.
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { incidents, withTransaction, type Database, type Transaction } from "@waitron/db";

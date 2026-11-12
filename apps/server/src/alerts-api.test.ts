@@ -1,5 +1,5 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 // Route authorization over one transaction per request.
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";

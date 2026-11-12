@@ -1,5 +1,5 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 /** The device delete routes, end to end over `app.request`. */
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";

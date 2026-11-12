@@ -1,4 +1,4 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
 import {
@@ -112,7 +112,8 @@ it.each([
   { email: null },
 ])("cancels mail for an inadmissible recipient %o", async (patch) => {
   await queue("clock.records_misdated");
-  await suite.db.update(persons).set(patch).where(eq(persons.id, personId));
+  if (patch.role !== undefined) await setBuiltInRoleForTest(suite.db, personId, patch.role);
+  else await suite.db.update(persons).set(patch).where(eq(persons.id, personId));
   await runMailPass(deps);
   expect(await row()).toMatchObject({ status: "cancelled", attempts: 0 });
   expect(deps.send).not.toHaveBeenCalled();

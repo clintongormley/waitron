@@ -1,8 +1,8 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 /**
  * A primary with no `fiscal.aeat` certificate: the drain must not crash, must not submit, must leave
  * the chain untouched, and must surface the awaiting-certificate state on box-status, logged once.
  */
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";

@@ -1,6 +1,6 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
 // The management-session permission gate over a migrated venue database: a real session row, a real
 // person row and a real permission lookup, with only the Mailpit client faked.
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
