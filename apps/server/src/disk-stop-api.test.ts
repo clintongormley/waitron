@@ -51,9 +51,9 @@ async function seedPerson(role: PersonRoleValue, name: string): Promise<Person> 
 
 beforeEach(async () => {
   staff = await seedPerson("staff", "Paula");
-  supervisor = await seedPerson("supervisor", "Sergio");
-  manager = await seedPerson("manager", "Marta");
-  admin = await seedPerson("admin", "Ana");
+  supervisor = await seedPerson("supervisor", "Simon");
+  manager = await seedPerson("manager", "Martha");
+  admin = await seedPerson("admin", "Anna");
   stoppedSince = null;
 });
 

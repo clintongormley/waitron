@@ -99,10 +99,10 @@ useVenueDb({
     });
     const first = await cashSale(venue.app);
     if (first.status !== 200) throw new Error(`setup sale answered ${first.status}`);
-    marta = await seedPerson("manager", "Marta");
+    marta = await seedPerson("manager", "Martha");
     mario = await seedPerson("admin", "Mario");
     berta = await seedPerson("admin", "Berta");
-    sergio = await seedPerson("supervisor", "Sergio");
+    sergio = await seedPerson("supervisor", "Simon");
   },
 });
 
@@ -1377,7 +1377,7 @@ it("lists the sales a closing found dated wrongly, by series, number and time, o
     ...open!,
     incidentId: misdatedIncident(confirmationId),
     handledAt,
-    handledBy: { kind: "person", name: "Marta" },
+    handledBy: { kind: "person", name: "Martha" },
     note: null,
   });
   expect((await healthOf(stop)).misdatedHandledCount).toBe(handledBefore + 1);

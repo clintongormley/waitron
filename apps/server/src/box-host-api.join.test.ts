@@ -61,8 +61,8 @@ async function seedPerson(role: PersonRoleValue, name: string, id?: string): Pro
 const sockets: Socket[] = [];
 
 beforeEach(async () => {
-  manager = await seedPerson("manager", "Marta");
-  supervisor = await seedPerson("supervisor", "Sergio");
+  manager = await seedPerson("manager", "Martha");
+  supervisor = await seedPerson("supervisor", "Simon");
 });
 
 afterEach(async () => {
