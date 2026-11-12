@@ -21,3 +21,5 @@
 **Size/risk:** After Claude’s review, the driver estimates 350 production, 750 test/fixture, 100 support changed lines (1,200), including caller adaptations. Watcher clears one larger server+till PR before build; no temporary whole-table mode. Risk triggers: fiscal-path adjacency, by-id membership, concurrency, wire contract. No schema/migration, new records/protocols, fiscal writer/invariant changes (H2), approval system, bulk picker or A1308 relocation. Outside opinion past 1.5 times the cleared estimate.
 
 **12 November, build review correction:** The watcher cleared the final-close exception at 16:08: when the departure closes the table, hand over paid, served siblings as ordinary Finish does. While the table stays open, sibling food and collection stamps remain untouched.
+
+**12 November, zero-due correction:** The watcher cleared leaving zero-due bills out of the unpaid dialog at 16:18. Keep the existing ordinary Pay settlement and the server’s zero-due behavior; add no route or debt.

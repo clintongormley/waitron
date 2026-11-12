@@ -1059,7 +1059,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   A collect straight after Place order does not re-read the kitchen queue.
   [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 
-- **Loose ends left by service Task 17 (#991, a table that leaves without paying).**
+- **Loose ends left by service Task 17 (#991, a bill left unpaid).**
   Collecting PART of the debt later is not built. Collecting it in full uses
   `POST /api/working-orders/:id/collect`.
   [Detail](backlog/till.md#task-17-991-a-bill-left-unpaid)

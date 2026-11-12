@@ -17968,7 +17968,7 @@ export class TillApp extends LitElement {
     const sent = this.#sentNow();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let sends = 0;
-    let state: "open" | "closed" = "open";
+    let state: "open" | "closed";
     try {
       const result = await this.#resend(
         (signal) => {
