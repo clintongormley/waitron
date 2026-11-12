@@ -471,20 +471,24 @@ describe("openInvoiceCorrection", () => {
     ).toEqual([{ reason: correction.reason }]);
   });
 
-  it("reads a filing refusal as what filing now would answer", async () => {
+  it("reads a filing refusal as what filing now would answer, and whether Close can end it", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
     await giveBack(saleId, "4.00", correction.id);
-    const voided = Object.create(venue.backend, {
-      correctionAdmissionFor: {
-        value: async () => ({ eligible: false, reason: "voided" }),
-      },
-    }) as typeof venue.backend;
-    expect(
-      await inTx(venue, (tx) => readInvoiceCorrection(tx, voided, venue.cfg, correction.id)),
-    ).toMatchObject({
+    const admittingNot = (reason: string) =>
+      Object.create(venue.backend, {
+        correctionAdmissionFor: { value: async () => ({ eligible: false, reason }) },
+      }) as typeof venue.backend;
+    const readWith = (backend: typeof venue.backend) =>
+      inTx(venue, (tx) => readInvoiceCorrection(tx, backend, venue.cfg, correction.id));
+
+    expect(await readWith(admittingNot("voided"))).toMatchObject({
       moneyBack: "4.00",
-      fileNow: { refusal: "sale.correction_not_admitted" },
+      fileNow: { refusal: "sale.correction_not_admitted", closable: true },
+    });
+    expect(await readWith(admittingNot("filing_refused"))).toMatchObject({
+      moneyBack: "4.00",
+      fileNow: { refusal: "sale.correction_not_admitted", closable: false },
     });
   });
 

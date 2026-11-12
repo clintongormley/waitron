@@ -21,6 +21,7 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
+  hasCode,
   isUuid,
   negateDecimal,
   seriesId as brandSeriesId,
@@ -75,9 +76,10 @@ export interface InvoiceCorrectionView {
   correctiveSaleId: string | null;
   legs: TenderRefundView[];
   /** What /file would file now: `previewCorrectionAmounts` for the money back over the
-   * correction's lineIds, or the code it refused with; null while a leg is pending, nothing is
-   * back, or the correction has ended. */
-  fileNow: { gross: string; vatBreakdown: SplitLine[] } | { refusal: string } | null;
+   * correction's lineIds, or the code it refused with and whether /close may end the correction
+   * keeping its refunds; null while a leg is pending, nothing is back, or the correction has ended. */
+  fileNow:
+    { gross: string; vatBreakdown: SplitLine[] } | { refusal: string; closable: boolean } | null;
 }
 
 export type InvoiceCorrectionDeps = Pick<TenderRefundDeps, "backend" | "clock" | "attendance">;
@@ -382,26 +384,11 @@ export async function closeInvoiceCorrection(
   const correction = await openCorrection(tx, correctionId);
   const { completed } = await readCorrectionMoney(tx, correctionId);
   if (completed > 0) {
-    const refusal = await previewCorrectionAmounts(
-      tx,
-      deps.backend,
-      correction.originalSaleId as SaleId,
-      cfg.nodeId,
-      {
-        gross: centsToDecimal(completed),
-        ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
-      },
-    ).then(
-      () => null,
-      (error: unknown) => {
-        if (error instanceof AppError) return error;
-        throw error;
-      },
-    );
-    if (
-      refusal?.code !== "sale.correction_not_admitted" ||
-      !NEVER_FILEABLE.has((refusal.params as NotAdmitted).reason)
-    )
+    const filing = await previewOrRefusal(tx, deps.backend, cfg, correction.originalSaleId, {
+      gross: centsToDecimal(completed),
+      ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
+    });
+    if (!("refusal" in filing) || !filing.closable)
       throw new AppError("invoice_correction.still_correctable", { correctionId });
   }
   const ended = await tx
@@ -431,6 +418,29 @@ async function openCorrection(tx: Transaction, correctionId: string) {
   return correction;
 }
 
+/**
+ * What filing `selection` off the sale would file, or the refusal it meets and whether that refusal
+ * is one in `NEVER_FILEABLE`, which Close may end the correction over.
+ */
+async function previewOrRefusal(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: Pick<DeviceRequestConfig, "nodeId">,
+  saleId: string,
+  selection: { gross: Decimal; lineIds?: readonly string[] },
+): Promise<CorrectionPreview | { refusal: AppError; closable: boolean }> {
+  try {
+    return await previewCorrectionAmounts(tx, backend, saleId as SaleId, cfg.nodeId, selection);
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    return {
+      refusal: error,
+      closable:
+        hasCode(error, "sale.correction_not_admitted") && NEVER_FILEABLE.has(error.params.reason),
+    };
+  }
+}
+
 async function fileNowFor(
   tx: Transaction,
   backend: FiscalBackend,
@@ -438,22 +448,12 @@ async function fileNowFor(
   saleId: string,
   selection: { gross: Decimal; lineIds?: readonly string[] },
 ): Promise<InvoiceCorrectionView["fileNow"]> {
-  try {
-    const preview = await previewCorrectionAmounts(
-      tx,
-      backend,
-      saleId as SaleId,
-      cfg.nodeId,
-      selection,
-    );
-    return {
-      gross: preview.gross,
-      vatBreakdown: preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
-    };
-  } catch (error) {
-    if (error instanceof AppError) return { refusal: error.code };
-    throw error;
-  }
+  const filing = await previewOrRefusal(tx, backend, cfg, saleId, selection);
+  if ("refusal" in filing) return { refusal: filing.refusal.code, closable: filing.closable };
+  return {
+    gross: filing.gross,
+    vatBreakdown: filing.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
+  };
 }
 
 /** The line ids a request names, canonical; refused `lineIds` unless absent or a list of ids. */
