@@ -1282,7 +1282,7 @@ describe("scheduled PR planner recovery", () => {
   });
   it("preserves a planner assigned during the final inventory read", async () => {
     const f = planner();
-    replyJobs(f, () => ({ total_count: 1, jobs: [{ ...f.job, runner_id: 8 }] }), 2);
+    replyJobs(f, () => ({ total_count: 1, jobs: [{ ...f.job, runner_id: 8 }] }), 1);
     expect((await health.recoverServer(f.options)).retried).toEqual([]);
     expect(f.calls.filter(([, options]) => options.method)).toEqual([]);
   });
@@ -1400,6 +1400,19 @@ describe("scheduled PR planner recovery", () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+  it("requires intervention when a cancelled current-head planner cannot be verified", async () => {
+    const f = planner(),
+      request = f.options.request;
+    f.options.request = async (path, options) => {
+      const reply = await request(path, options);
+      if (path.endsWith("/force-cancel")) f.job.labels = [];
+      return reply;
+    };
+    await expect(health.recoverServer(f.options)).rejects.toThrow(
+      /Cancelled PR run 12.*intervention/,
+    );
+    expect(f.run.run_attempt).toBe(1);
   });
   it("reports an interrupted cancelled PR for a person without resuming it from history", async () => {
     const f = planner(),

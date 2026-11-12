@@ -327,7 +327,7 @@ export async function recoverServer(options) {
       }
       return current;
     };
-    if (!(await eligible())) continue;
+    if (!plannersOnly && !(await eligible())) continue;
     if (
       !plannersOnly &&
       !(await serverHealth(options)).stuck.some(
@@ -365,10 +365,19 @@ export async function recoverServer(options) {
       try {
         if (plannersOnly) {
           if (!(await eligible(true))) {
-            options.report?.(
-              `Cancelled PR run ${run.id} is no longer eligible; not retried. Inspect it if its current head still needs a run.`,
+            const number = run.pull_requests[0].number;
+            const pull = await request(`/repos/${repository}/pulls/${number}`);
+            if (
+              pull.number === number &&
+              (pull.state === "closed" ||
+                (typeof pull.head?.sha === "string" && pull.head.sha !== run.head_sha))
+            ) {
+              options.report?.(`Cancelled PR run ${run.id} is obsolete; not retried.`);
+              continue;
+            }
+            throw new Error(
+              "Current-head PR identity or work could not be verified after cancellation",
             );
-            continue;
           }
         }
         await request(path + "/rerun", { method: "POST" });
