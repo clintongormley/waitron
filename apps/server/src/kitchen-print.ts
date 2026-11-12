@@ -903,6 +903,46 @@ export function isStarted(state: TicketState | null): boolean {
  */
 export const firedQuantity = sql<number>`coalesce(${ticketItems.quantity}, ${workingOrderLines.quantity})`;
 
+/**
+ * Whether part of a ticket item's fired quantity is still to be served. Ticket quantities already
+ * exclude service cancellations, so serving consumes only that active work. For a query joining
+ * `ticket_items` to its `working_order_lines` row.
+ */
+export function leftToServe(): SQL {
+  return gt(firedQuantity, workingOrderLines.servedQuantity);
+}
+
+/**
+ * A ticket item still the kitchen's work, whatever its party. For a query joining `ticket_items` to
+ * its `working_order_lines` and `working_orders` rows.
+ */
+export function kitchenWork(): SQL | undefined {
+  return and(
+    eq(ticketItems.madeHere, false),
+    ne(workingOrders.status, "abandoned"),
+    isNull(workingOrders.collectedAt),
+    leftToServe(),
+  );
+}
+
+export function liveKitchenDish(): SQL | undefined {
+  return and(
+    kitchenWork(),
+    or(
+      isNull(workingOrders.partyId),
+      sql`exists (
+        with recursive service_family(id, state, next) as (
+          select id, state, merged_into_party_id from parties where id = ${workingOrders.partyId}
+          union
+          select p.id, p.state, p.merged_into_party_id
+          from parties p join service_family f on p.id = f.next
+        )
+        select 1 from service_family where state = 'open'
+      )`,
+    ),
+  );
+}
+
 /** One correction to work a station has: the quantity it corrects, and whether the cook had
  *  started it. */
 export interface CorrectionItem {
@@ -959,11 +999,8 @@ async function readKitchenChangeItems(
     .where(
       and(
         inArray(ticketItems.workingOrderId, [...orderIds]),
-        ne(workingOrders.status, "abandoned"),
-        isNull(workingOrders.collectedAt),
-        eq(ticketItems.madeHere, false),
+        kitchenWork(),
         isNull(workingOrderLines.servedAt),
-        gt(firedQuantity, workingOrderLines.servedQuantity),
         or(
           isNotNull(ticketItems.firedAt),
           and(eq(orderGroups.state, "held"), isNotNull(orderGroups.holdPrintedAt)),

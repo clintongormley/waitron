@@ -21,7 +21,8 @@ import {
   type PassRow,
   type PassTarget,
 } from "./pass-card.js";
-import { liveKitchenDish, readPassRows } from "./working-order.js";
+import { readPassRows } from "./working-order.js";
+import { liveKitchenDish } from "./kitchen-print.js";
 
 /** null: every station (zone). */
 export interface PassScope {

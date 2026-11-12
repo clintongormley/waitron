@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { and, count, eq, gt, inArray, isNull, ne } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import { ticketItems, workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import { invalid } from "./bill-allocation.js";
 import { moveDishesToStation, stillMovable, type StationMoveActor } from "./station-move.js";
 import type { TradingContext } from "./trading-context.js";
-import { firedQuantity } from "./kitchen-print.js";
+import { kitchenWork } from "./kitchen-print.js";
 
 export async function openDishCount(tx: Transaction, stationId: string): Promise<number> {
   const [row] = await tx
@@ -17,13 +17,7 @@ export async function openDishCount(tx: Transaction, stationId: string): Promise
 }
 
 function unfinishedAtStation(stationId: string) {
-  return and(
-    eq(ticketItems.stationId, stationId),
-    eq(ticketItems.madeHere, false),
-    gt(firedQuantity, workingOrderLines.servedQuantity),
-    ne(workingOrders.status, "abandoned"),
-    isNull(workingOrders.collectedAt),
-  );
+  return and(eq(ticketItems.stationId, stationId), kitchenWork());
 }
 
 export type OpenDishesChoice = "send" | "leave";

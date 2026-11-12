@@ -283,6 +283,8 @@ import {
   enqueueKitchenTickets,
   firedQuantity,
   isStarted,
+  kitchenWork,
+  liveKitchenDish,
   readCancelledExtra,
   stationOrdersWithPrintProblem,
 } from "./kitchen-print.js";
@@ -7154,7 +7156,7 @@ async function cancelPlaced(
     }
     if (invoice !== undefined) await creditWholeInvoice(tx, deps, cfg, invoice, authz);
 
-    const kitchenWork = await tx
+    const toCorrect = await tx
       .select({
         workingOrderLineId: ticketItems.workingOrderLineId,
         stationId: ticketItems.stationId,
@@ -7177,7 +7179,7 @@ async function cancelPlaced(
       tx,
       cfg,
       id,
-      kitchenWork.map(({ state, ...item }) => ({
+      toCorrect.map(({ state, ...item }) => ({
         ...item,
         wasStarted: isStarted(state),
       })),
@@ -7962,9 +7964,8 @@ function optional<K extends string, V>(key: K, value: V | undefined): { [P in K]
 }
 
 /**
- * The venue's ticket items at one station, grouped by order, oldest first. An abandoned or collected
- * order, and a dish served in full, drop out.
- * Items made at the till are absent from the station queue.
+ * The venue's ticket items at one station that are still the kitchen's work ({@link kitchenWork}),
+ * grouped by order, oldest first.
  * When the station shows the rest of the order, each card also carries its unserved items at other stations.
  */
 export async function listStationQueue(
@@ -8027,16 +8028,14 @@ async function readBillTableShortNames(
 /** The ticket items {@link listStationQueues} lists, at `stationIds`. */
 function onStationQueues(stationIds: readonly string[]): SQL | undefined {
   return and(
-    // Read tickets by bill; a station's index range includes its collected history.
+    // Read tickets by bill; a station's index range includes its collected history. Never narrower
+    // than kitchenWork()'s bill tests.
     inArray(
       ticketItems.workingOrderId,
       sql`(select ${workingOrders.id} from ${workingOrders} where ${workingOrders.collectedAt} is null and ${workingOrders.status} <> ${"abandoned"})`,
     ),
     inArray(sql`+${ticketItems.stationId}`, [...stationIds]),
-    eq(ticketItems.madeHere, false),
-    ne(workingOrders.status, "abandoned"),
-    isNull(workingOrders.collectedAt),
-    gt(firedQuantity, workingOrderLines.servedQuantity),
+    kitchenWork(),
   );
 }
 
@@ -8303,28 +8302,6 @@ export interface ExpoItem {
    *  items can span several stations each with different thresholds. */
   thresholds: StationThresholds;
   band: TimingBand;
-}
-
-/** Ticket quantities already exclude service cancellations; serving consumes only that active work. */
-export function liveKitchenDish(): SQL | undefined {
-  return and(
-    eq(ticketItems.madeHere, false),
-    ne(workingOrders.status, "abandoned"),
-    isNull(workingOrders.collectedAt),
-    gt(firedQuantity, workingOrderLines.servedQuantity),
-    or(
-      isNull(workingOrders.partyId),
-      sql`exists (
-        with recursive service_family(id, state, next) as (
-          select id, state, merged_into_party_id from parties where id = ${workingOrders.partyId}
-          union
-          select p.id, p.state, p.merged_into_party_id
-          from parties p join service_family f on p.id = f.next
-        )
-        select 1 from service_family where state = 'open'
-      )`,
-    ),
-  );
 }
 
 /**
