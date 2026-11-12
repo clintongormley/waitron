@@ -235,3 +235,44 @@ describe("installShutdownHandlers", () => {
     expect(cancelled).toBe(true);
   });
 });
+
+it("publishes completion only after close resolves, and waits for its output before exiting", async () => {
+  const handlers = new Map<string, () => void>();
+  let resolveClose!: () => void;
+  let completeWrite!: () => void;
+  let cancelled = false;
+  const written: string[] = [];
+  const exit = vi.fn();
+  installShutdownHandlers(
+    {
+      close: () =>
+        new Promise<void>((resolve) => {
+          resolveClose = resolve;
+        }),
+    },
+    {
+      on: (signal, handler) => void handlers.set(signal, handler),
+      write: (line, done) => {
+        written.push(line);
+        completeWrite = done;
+      },
+      exit,
+      now: () => new Date("2026-11-12T04:22:00Z"),
+      setTimer: () => ({
+        cancel: () => {
+          cancelled = true;
+        },
+      }),
+    },
+  );
+  handlers.get("SIGTERM")!();
+  expect(written).toEqual([]);
+  resolveClose();
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(written.map((line) => JSON.parse(line).event)).toEqual(["server.shutdown_complete"]);
+  expect(exit).not.toHaveBeenCalled();
+  expect(cancelled).toBe(false);
+  completeWrite();
+  expect(cancelled).toBe(true);
+  expect(exit).toHaveBeenCalledExactlyOnceWith(0);
+});

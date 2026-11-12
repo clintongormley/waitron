@@ -245,3 +245,12 @@ node scripts/go-binary-notices.mjs versitygw "$v" deploy/third-party/versitygw/N
 The same container serves for Litestream's steps above on a machine without Go. Measured
 2026-11-10: the go1.26.10 toolchain in `golang:1.26-alpine` read the versitygw binaries, built with
 go1.27.1, and the Litestream ones, whose notice it regenerated unchanged.
+
+## Host upgrade runtime
+
+The dormant `scripts/box/upgrades/bootstrap.sh` downloads pinned Node.js 26.7.0 for a Linux host, verifies its archive checksum, and retains the complete archive tree at `<host-dir>/node-v26.7.0`, including its `LICENSE` and bundled notices. The app/recovery services are wired in A950's activation slice.
+
+| Source                                                                 | Source wording                                                     | What the bootstrap retains                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [26.7.0 checksum list](https://nodejs.org/dist/v26.7.0/SHASUMS256.txt) | `node-v26.7.0-linux-arm64.tar.xz`, `node-v26.7.0-linux-x64.tar.xz` | The matching ARM64 or x64 archive, checked against the checksum pinned in the script. |
+| The verified archive's `LICENSE`                                       | “Node.js is licensed for use as follows:”                          | The upstream licence file beside the installed binary.                                |

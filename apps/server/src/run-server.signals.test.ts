@@ -31,6 +31,12 @@ describe("repeated requests to restart during a slow shutdown", () => {
 
     // Failing case, an ask that always signals: `signal` SIGTERM, and `close finished` is missing.
     expect(result.out).toContain("close finished");
+    expect(
+      result.out
+        .split("\n")
+        .filter((line) => line.startsWith("{"))
+        .map((line) => JSON.parse(line).event),
+    ).toEqual(["server.shutdown_complete"]);
     expect(result).toMatchObject({ code: 0, signal: null });
   }, 30_000);
 
