@@ -768,7 +768,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   server.** Left open by A1171 part 3.
   [Detail](backlog/till.md#a-spanish-invoice-recipients-locality-or-province-holding-a-comma-is-refused-only-at-the-server)
 
-- **Remove till code nothing reaches** (bundle of 3, size M). Holds A1007. [Detail](backlog/till.md#bundle-remove-till-code-nothing-reaches)
+- **Remove till code nothing reaches** (bundle of 1, size M). Holds A1007. [Detail](backlog/till.md#bundle-remove-till-code-nothing-reaches)
 
 - **Small till and floor wording fixes** (bundle of 9, size M). Holds A1259, A934, A920, A912, A470, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 

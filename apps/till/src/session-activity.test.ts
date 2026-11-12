@@ -350,6 +350,23 @@ describe("SessionActivity with its default platform dependencies", () => {
     expect(onIdle).not.toHaveBeenCalled();
   });
 
+  it("never signs out after stop(), even when configured or touched afterwards", () => {
+    vi.useFakeTimers();
+    const onIdle = vi.fn();
+    const sa = new SessionActivity({
+      wakeLock: { request: async () => ({ released: false, release: async () => {} }) },
+    });
+    sa.configure({ loggedIn: true, kind: "handheld", timeoutSeconds: 60, onIdle });
+    void sa.start();
+    vi.advanceTimersByTime(30_000);
+    void sa.stop();
+    sa.configure({ loggedIn: true, kind: "handheld", timeoutSeconds: 30, onIdle });
+    sa.noteInteraction();
+    sa.reacquire();
+    vi.advanceTimersByTime(600_000);
+    expect(onIdle).not.toHaveBeenCalled();
+  });
+
   it("constructs and runs without a wake lock where the page has no navigator", async () => {
     const prev = Object.getOwnPropertyDescriptor(globalThis, "navigator");
     Object.defineProperty(globalThis, "navigator", { configurable: true, value: undefined });
