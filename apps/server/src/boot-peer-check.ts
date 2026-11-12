@@ -119,7 +119,7 @@ function operationFences(op: PeerOperationStatus | null, nodeId: string): boolea
 /**
  * The decision a returning box makes before it sells or files: ask the boxes its held chart lists,
  * then `proceed`, `superseded` (a newer chart or a peer's operation says another box took over) or
- * `wait` (no box that finished joining answered).
+ * `wait` (no counted box answered; a box whose signed answer says it is still joining is set aside).
  */
 export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartCheckResult> {
   const { held, nodeId } = deps;

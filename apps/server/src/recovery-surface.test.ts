@@ -463,7 +463,7 @@ describe("a box that lost its own record", () => {
     expect(english).toContain(escapeHtml("This box has lost its record of which box it is"));
     expect(english).toContain(
       escapeHtml(
-        "It holds a copy of the venue's data but not its own role, so it does not sell or send anything to the tax agency, in case it is the venue's spare. The main box keeps selling. Retry a normal boot starts this box once more, and stops here again while the record is missing. While this box is stopped, the main box waits for it each time the main box starts, until an administrator chooses Carry on as the main box there. In this version no screen clears this box or joins it to the venue again, so it can stay switched off. The venue's data stays on the main box.",
+        "It holds a copy of the venue's data but not its own role, so it does not sell or send anything to the tax agency, in case it is the venue's spare. The main box keeps selling. “Retry a normal boot” starts this box once more, and stops here again while the record is missing. While this box is stopped, the main box waits for it each time the main box starts, until an administrator chooses “Carry on as the main box” there. In this version no screen clears this box or joins it to the venue again, so it can stay switched off. The venue's data stays on the main box.",
       ),
     );
     expect(english).toContain('<button type="submit">Retry a normal boot</button>');
@@ -564,7 +564,7 @@ describe("curated operator text", () => {
   // `sif.producer_changed` because a retry of the same version and settings refuses again, and the
   // generic line does not say what to change; `sif.allocation_invalid` because a restore placed
   // after the restart is refused there when the box cannot read the internet clock, and Retry
-  // places it once it can.
+  // places it once it can; `node.state_missing` because Retry refuses again while the record is missing.
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
@@ -592,6 +592,7 @@ describe("curated operator text", () => {
       "sif.producer_invalid",
       "sif.producer_changed",
       "sif.allocation_invalid",
+      "node.state_missing",
     ];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_TEXT),

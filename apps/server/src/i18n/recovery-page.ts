@@ -299,7 +299,7 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "This box has lost its record of which box it is",
       action:
-        "It holds a copy of the venue's data but not its own role, so it does not sell or send anything to the tax agency, in case it is the venue's spare. The main box keeps selling. Retry a normal boot starts this box once more, and stops here again while the record is missing. While this box is stopped, the main box waits for it each time the main box starts, until an administrator chooses Carry on as the main box there. In this version no screen clears this box or joins it to the venue again, so it can stay switched off. The venue's data stays on the main box.",
+        "It holds a copy of the venue's data but not its own role, so it does not sell or send anything to the tax agency, in case it is the venue's spare. The main box keeps selling. “Retry a normal boot” starts this box once more, and stops here again while the record is missing. While this box is stopped, the main box waits for it each time the main box starts, until an administrator chooses “Carry on as the main box” there. In this version no screen clears this box or joins it to the venue again, so it can stay switched off. The venue's data stays on the main box.",
     },
     "es-ES": {
       title: "Este equipo ha perdido el registro de qué equipo es",

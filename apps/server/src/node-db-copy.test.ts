@@ -314,8 +314,7 @@ describe("a spare whose venue.db is replaced by the main box's", () => {
     },
   );
 
-  // A known limit, with its own backlog entry: "a lost node.db beside an intact venue.db reads as a
-  // sole primary".
+  // The reader alone; a start refuses such a box with node.state_missing (boot.node-state-missing.test.ts).
   it("reads as a sole primary once its node.db is lost", async () => {
     const box = await bHoldingAsVenue();
     await close(box.store);

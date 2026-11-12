@@ -22,15 +22,14 @@ export interface ReconcileMembershipDeps {
 }
 
 /**
- * A returned box asks its cloud peer for the current signed chart. Only a chart that verifies, is
+ * A returned box asks the box its mirror link names for the current signed chart. Only a chart that verifies, is
  * strictly newer, and fences this node reports `{ superseded: true }`. A fenced boot is a state, not a
  * crash: it logs and returns rather than throwing.
  */
 export async function reconcileMembershipOnBoot(
   deps: ReconcileMembershipDeps,
 ): Promise<{ superseded: boolean }> {
-  // Unreachable → proceed (Ruling C7): a box cannot have been superseded without a reachable cloud AND a
-  // human promotion — the MVP's accepted window.
+  // Unreachable → proceed (Ruling C7).
   const peer = await deps.fetchPeerMembership(deps.peerUrl);
   if (peer === null) return { superseded: false };
 
