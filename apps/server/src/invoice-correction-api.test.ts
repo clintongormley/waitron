@@ -6,6 +6,7 @@ import {
   devices,
   floorZones,
   invoiceCorrections,
+  products,
   sales,
   withTransaction,
 } from "@waitron/db";
@@ -29,6 +30,7 @@ import { parkOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import {
   watchDerivationsAndLock,
   watchedDerivationCount,
@@ -94,8 +96,12 @@ async function serveOnly(zoneId: string) {
   });
 }
 
-/** A €10.00 croquettes order paid through the till in `parts`; issued unpaid when `parts` is empty. */
-async function sold(parts: readonly (string | { card: string } | { reader: string })[]) {
+/** A €10.00 croquettes order paid through the till in `parts`; issued unpaid when `parts` is empty.
+ * `where` names another zone and its croquettes offer. */
+async function sold(
+  parts: readonly (string | { card: string } | { reader: string })[],
+  where?: { zoneId: string; croquettes: string },
+) {
   const id = randomUUID();
   const deps = {
     db: venue.db,
@@ -105,8 +111,8 @@ async function sold(parts: readonly (string | { card: string } | { reader: strin
   };
   await parkOrder(deps, venue.cfg, {
     id,
-    lines: [{ menuItemId: venue.offerFor("Croquettes"), quantity: "1" }],
-    zoneId: venue.zoneId,
+    lines: [{ menuItemId: where?.croquettes ?? venue.offerFor("Croquettes"), quantity: "1" }],
+    zoneId: where?.zoneId ?? venue.zoneId,
     operatorId: venue.operatorId,
   });
   if (parts.length === 0) await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
@@ -451,6 +457,48 @@ const cashBody = (patch: Record<string, unknown> = {}) => ({
   amount: "5.00",
   override: supervisor(),
   ...patch,
+});
+
+describe("GET /api/invoice-corrections", () => {
+  const list = (cookie = venue.cookie) =>
+    send(venue.app, cookie, "GET", "/api/invoice-corrections") as Promise<{
+      status: number;
+      json: { corrections: { id: string }[] };
+    }>;
+
+  it("lists open corrections in the till's zones only", async () => {
+    const terrace = await inTx(venue, async (tx) => {
+      const department = await createDepartment(tx, { name: "Terrace", orderStart: "counter" });
+      const zoneId = (await createServiceZone(tx, { name: "Terrace", departmentId: department.id }))
+        .id;
+      const [croquettes] = await tx
+        .select({ id: products.id })
+        .from(products)
+        .where(eq(products.name, "Croquettes"));
+      const offers = await offerProducts(tx, venue.cfg, { zone: { zoneId } });
+      return { zoneId, croquettes: offers.offerFor(croquettes!.id) };
+    });
+    const here = await opened(await sold(["10.00"]));
+    const there = await opened(await sold(["10.00"], terrace));
+    const filed = await opened(await sold(["10.00"], terrace));
+    expect(await giveCash(filed, cashBody())).toMatchObject({
+      status: 200,
+      json: { correction: { state: "filed" } },
+    });
+    await serveOnly(terrace.zoneId);
+    const zoned = await list(zonedTill.cookie);
+    expect(zoned).toMatchObject({
+      status: 200,
+      json: {
+        corrections: [{ id: there, state: "open", gross: "5.00", moneyBack: "0.00", left: "5.00" }],
+      },
+    });
+    expect(zoned.json.corrections[0]).not.toHaveProperty("fileNow");
+    const ids = (await list()).json.corrections.map((correction) => correction.id);
+    expect(ids).toEqual(expect.arrayContaining([here, there]));
+    expect(ids).not.toContain(filed);
+    await serveOnly(venue.zoneId);
+  });
 });
 
 describe("POST /api/invoice-corrections/:id/cash", () => {

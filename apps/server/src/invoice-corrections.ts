@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { findAdjustmentReason } from "@waitron/adjustments";
 import {
   previewCorrectionAmounts,
@@ -44,6 +44,7 @@ import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import type { TenderRefundView } from "./tender-refund-types.js";
 import { canonicaliseUuid } from "./till-session.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
 
 export interface SplitLine {
@@ -222,12 +223,26 @@ export async function readInvoiceCorrection(
   cfg: Pick<DeviceRequestConfig, "nodeId">,
   correctionId: string,
 ): Promise<InvoiceCorrectionView> {
+  const { view, row, back, pending } = await summaryOf(tx, correctionId);
+  return {
+    ...view,
+    fileNow:
+      row.state !== "open" || pending > 0 || back === 0
+        ? null
+        : await fileNowFor(tx, backend, cfg, row.originalSaleId, {
+            gross: centsToDecimal(back),
+            ...(row.lineIds === null ? {} : { lineIds: row.lineIds }),
+          }),
+  };
+}
+
+async function summaryOf(tx: Transaction, correctionId: string) {
   const row = await readCorrectionRow(tx, correctionId);
   const {
     refunds,
     money: { completed: back, pending },
   } = await readCorrectionLegs(tx, correctionId);
-  return {
+  const view: Omit<InvoiceCorrectionView, "fileNow"> = {
     id: row.id,
     saleId: row.originalSaleId,
     state: row.state,
@@ -239,14 +254,23 @@ export async function readInvoiceCorrection(
     openedAt: row.createdAt,
     correctiveSaleId: row.correctiveSaleId,
     legs: refunds.map(toTenderRefundView),
-    fileNow:
-      row.state !== "open" || pending > 0 || back === 0
-        ? null
-        : await fileNowFor(tx, backend, cfg, row.originalSaleId, {
-            gross: centsToDecimal(back),
-            ...(row.lineIds === null ? {} : { lineIds: row.lineIds }),
-          }),
   };
+  return { view, row, back, pending };
+}
+
+/** The open corrections whose invoice's working order `inZones` admits, oldest first, each without
+ * `fileNow`. */
+export async function listOpenInvoiceCorrections(
+  tx: Transaction,
+  inZones?: OrderZoneCondition,
+): Promise<Omit<InvoiceCorrectionView, "fileNow">[]> {
+  const rows = await tx.execute<{ id: string }>(sql`select c.id from invoice_corrections c
+    join sales s on s.id = c.original_sale_id
+    where c.state = 'open' and (${inZones?.(sql`s.working_order_id`) ?? sql`1`})
+    order by c.created_at, c.id`);
+  const views: Omit<InvoiceCorrectionView, "fileNow">[] = [];
+  for (const { id } of rows.rows) views.push((await summaryOf(tx, id)).view);
+  return views;
 }
 
 /**
