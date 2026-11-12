@@ -10,10 +10,18 @@ afterEach(() => {
   cleanupWidgets();
 });
 
-function api(boxAt: number, confirm: BoxTimeApi["boxClockConfirm"]): BoxTimeApi {
+function api(
+  boxAt: number,
+  confirm: BoxTimeApi["boxClockConfirm"],
+  keepOffered = false,
+): BoxTimeApi {
   return {
     boxClockChallenge: () =>
-      Promise.resolve({ challengeId: "c1", boxAt: new Date(boxAt).toISOString() }),
+      Promise.resolve({
+        challengeId: "c1",
+        boxAt: new Date(boxAt).toISOString(),
+        ...(keepOffered ? { keepOffered: true as const } : {}),
+      }),
     boxClockConfirm: confirm,
     listAdjustmentApprovers: () => Promise.resolve([{ personId: "p1", displayName: "Alex Admin" }]),
   };
@@ -39,11 +47,15 @@ async function press(el: TillBoxTimeDialog, name: string): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("till-box-time-dialog a11y (%s theme)", (theme) => {
-  async function open(boxAt: number, confirm: BoxTimeApi["boxClockConfirm"] = confirmed) {
+  async function open(
+    boxAt: number,
+    confirm: BoxTimeApi["boxClockConfirm"] = confirmed,
+    keepOffered = false,
+  ) {
     vi.spyOn(Date, "now").mockReturnValue(TILL_AT);
     const { el, host } = await mountWidget<TillBoxTimeDialog>(
       "till-box-time-dialog",
-      { api: api(boxAt, confirm) },
+      { api: api(boxAt, confirm, keepOffered) },
       theme,
     );
     await settle(el);
@@ -60,11 +72,22 @@ describe.each(["light", "dark"] as const)("till-box-time-dialog a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations while the server waits and this till differs", async () => {
+    const { host } = await open(Date.UTC(2001, 0, 2, 3, 4), confirmed, true);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations when asked to correct this device", async () => {
+    const { el, host } = await open(Date.UTC(2001, 0, 2, 3, 4));
+    await press(el, "both-wrong");
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with a refusal above the buttons", async () => {
     const { el, host } = await open(TILL_AT, () =>
       Promise.reject({ code: "clock.set_refused", reason: "stale" }),
     );
-    await press(el, "primary");
+    await press(el, "yes");
     await expectNoA11yViolations(host);
   });
 
@@ -72,14 +95,14 @@ describe.each(["light", "dark"] as const)("till-box-time-dialog a11y (%s theme)"
     const { el, host } = await open(TILL_AT, () =>
       Promise.reject({ code: "clock.set_refused", reason: "not_start_up" }),
     );
-    await press(el, "primary");
+    await press(el, "yes");
     await press(el, "admin");
     await expectNoA11yViolations(host);
   });
 
   it("has no violations once the time is confirmed", async () => {
     const { el, host } = await open(TILL_AT);
-    await press(el, "primary");
+    await press(el, "yes");
     await expectNoA11yViolations(host);
   });
 });

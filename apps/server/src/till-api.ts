@@ -474,6 +474,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "fiscal.chain_handed_over": 409,
   "clock.unusable": 409,
   "clock.behind_chain": 409,
+  "clock.unconfirmed": 409,
   "fiscal.foreign_recipient_unsupported": 409,
   // Adding a line refuses a classification snapshot the catalogue's data cannot make valid:
   // permanent until the catalogue is fixed, and not the till's fault.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClockWitness } from "./clock-witnesses.js";
 import {
+  agreeingDeviceCount,
   agreeingDeviceGroup,
   CLOCK_WITNESS_MARGIN_MS,
   judgeClockWitnesses,
@@ -474,6 +475,56 @@ describe("the group of agreeing devices", () => {
     expect(
       agreeingDeviceGroup([device("a", 0, -10_000), device("a", 61_000, 10_000), device("b", 0)]),
     ).toEqual([]);
+  });
+});
+
+describe("agreeing devices within a narrower margin", () => {
+  const FIVE_SECONDS_MS = 5_000;
+
+  it("holds and counts two devices at two addresses 3 s and 4 s from the box", () => {
+    const pair = [at("10.0.0.5", device("a", 3_000)), at("10.0.0.6", device("b", 4_000))];
+    expect(ids(agreeingDeviceGroup(pair, FIVE_SECONDS_MS))).toEqual(["a", "b"]);
+    expect(agreeingDeviceCount(pair, FIVE_SECONDS_MS)).toBe(2);
+  });
+
+  it("holds none, and counts one, when one of the two is 6 s out", () => {
+    const pair = [at("10.0.0.5", device("a", 3_000)), at("10.0.0.6", device("b", 6_000))];
+    expect(agreeingDeviceGroup(pair, FIVE_SECONDS_MS)).toEqual([]);
+    expect(agreeingDeviceCount(pair, FIVE_SECONDS_MS)).toBe(1);
+  });
+
+  it("counts two devices at one address once", () => {
+    const pair = [at("10.0.0.5", device("a", 0)), at("10.0.0.5", device("b", 1_000, 1_000))];
+    expect(agreeingDeviceGroup(pair, FIVE_SECONDS_MS)).toEqual([]);
+    expect(agreeingDeviceCount(pair, FIVE_SECONDS_MS)).toBe(1);
+  });
+
+  it("counts one, not two, for devices 4 s ahead and 4 s behind, 8 s apart", () => {
+    const pair = [at("10.0.0.5", device("a", 4_000)), at("10.0.0.6", device("b", -4_000))];
+    expect(agreeingDeviceGroup(pair, FIVE_SECONDS_MS)).toEqual([]);
+    expect(agreeingDeviceCount(pair, FIVE_SECONDS_MS)).toBe(1);
+  });
+
+  it("counts none when no device agrees with the box", () => {
+    expect(agreeingDeviceCount([device("a", 6_000)], FIVE_SECONDS_MS)).toBe(0);
+    expect(agreeingDeviceCount([], FIVE_SECONDS_MS)).toBe(0);
+  });
+
+  it("leaves out every authority reading from the count", () => {
+    expect(agreeingDeviceCount([authority(0, 0)], FIVE_SECONDS_MS)).toBe(0);
+  });
+
+  it("lets a tie at one address keep the reading outside the narrower margin, in either order", () => {
+    const agreed = at("10.0.0.5", device("a", 0));
+    const outside = at("10.0.0.5", device("b", 10_000));
+    const elsewhere = at("10.0.0.6", device("c", 0));
+    for (const tie of [
+      [agreed, outside],
+      [outside, agreed],
+    ]) {
+      expect(agreeingDeviceGroup([...tie, elsewhere], FIVE_SECONDS_MS)).toEqual([]);
+      expect(agreeingDeviceCount([...tie, elsewhere], FIVE_SECONDS_MS)).toBe(1);
+    }
   });
 });
 

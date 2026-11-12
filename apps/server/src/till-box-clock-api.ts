@@ -32,6 +32,7 @@ import {
 } from "./clock-correction.js";
 import type { ClockStartUp } from "./clock-start-up.js";
 import type { Logger } from "./logger.js";
+import type { ChainHeads, StartClockState } from "./start-clock-check.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { requestAddress, requestFromBox } from "./request-from-box.js";
 import { parseOverrideField } from "./till-api.js";
@@ -54,6 +55,12 @@ export interface TillBoxClockDeps {
   requestFromBox?: (c: Context) => boolean;
   /** Whether the box files records, so could ask AEAT its time. */
   filesRecords: () => boolean;
+  /** The start's clock check. Until it is confirmed by the internet, staff are admitted whatever
+   * the start-up window and AEAT say (plan A1420 D1). */
+  start?: {
+    state: Pick<StartClockState, "status" | "confirm" | "mark">;
+    heads(tx: Transaction): Promise<ChainHeads>;
+  };
 }
 
 const run = createErrorBoundary(
@@ -78,9 +85,23 @@ const run = createErrorBoundary(
 type Session = Awaited<ReturnType<typeof requireSession>>;
 
 function refuse(
-  reason: Exclude<ClockSetRefusal, "not_admitted" | "refused" | "unverified"> | "same_machine",
+  reason:
+    | Exclude<ClockSetRefusal, "not_admitted" | "refused" | "unverified">
+    | "same_machine"
+    | "stopped",
 ): never {
   throw new AppError("clock.set_refused", { reason });
+}
+
+/** `keep: true` confirms the box's time as it stands, whatever the till's reading. */
+function keepOf(body: unknown): boolean {
+  const keep =
+    typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as { keep?: unknown }).keep
+      : undefined;
+  if (keep !== undefined && typeof keep !== "boolean")
+    throw new AppError("management.request_invalid", { field: "keep" });
+  return keep === true;
 }
 
 function overrideOf(body: unknown): { personId: string; pin: string } | undefined {
@@ -90,8 +111,9 @@ function overrideOf(body: unknown): { personId: string; pin: string } | undefine
 }
 
 /** "Check the time" on a till: `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
- * (plan decision 15). Any staff member the till's profile admits, during the start-up window; an
- * administrator, signed in or by PIN, at any time. Refused on the box itself. */
+ * (plan decision 15). Any staff member the till's profile admits, during the start-up window or
+ * until the internet confirms the start; an administrator, signed in or by PIN, at any time.
+ * Refused on the box itself. */
 export function mountTillBoxClockApi(
   app: Hono,
   deps: {
@@ -119,6 +141,14 @@ export function mountTillBoxClockApi(
     if (!deps.devMode && (boxClock.requestFromBox ?? requestFromBox)(c)) refuse("same_machine");
   };
   const canAskAuthority = () => boxClock.filesRecords() && backend.readAuthorityTime !== undefined;
+  const start = boxClock.start;
+  const startWaits = () => start?.state.status === "waiting";
+  /** Before the internet confirms the start, staff are admitted whatever the window says. */
+  const beforeInternet = () => start !== undefined && start.state.status !== "by_internet";
+  const admitStaff = (input: { unusable: boolean }) =>
+    beforeInternet()
+      ? null
+      : boxClock.startUp.admit({ unusable: input.unusable, canAskAuthority: canAskAuthority() });
 
   /** The till's label, or `device_profile.not_admitted` when its profile no longer admits the
    * session's person. */
@@ -181,20 +211,28 @@ export function mountTillBoxClockApi(
       await assertRequestDevice(deps, c, session);
       // The PIN is checked by the confirm; here an override only says an administrator is asking.
       const override = overrideOf(await readJsonBody<unknown>(c));
-      await withTransaction(db, async (tx) => {
+      const keepOffered = await withTransaction(db, async (tx) => {
         await admitted(tx, session);
-        const asAdmin = override !== undefined || (await holdsAdmin(tx, session.personId));
         const stop = await stopAt(tx, clock.now(), boxClock.witnesses());
+        // A waiting start is itself what is checked: no stop need hold. A keep writes no
+        // confirmation, so it cannot lift a stop and is not offered while one holds.
+        if (startWaits()) return !stop.stopped;
+        const asAdmin = override !== undefined || (await holdsAdmin(tx, session.personId));
         if (!stop.stopped) noStop();
-        if (asAdmin) return;
-        const refusal = boxClock.startUp.admit({
-          unusable: stop.unusable,
-          canAskAuthority: canAskAuthority(),
-        });
+        if (asAdmin) return false;
+        const refusal = admitStaff(stop);
         if (refusal !== null) refuse(refusal);
+        return false;
       });
       const { challengeId, boxAt } = challenges.issue(session.sessionId);
-      return c.json({ challengeId, boxAt: new Date(boxAt).toISOString() }, 200);
+      return c.json(
+        {
+          challengeId,
+          boxAt: new Date(boxAt).toISOString(),
+          ...(keepOffered ? { keepOffered: true } : {}),
+        },
+        200,
+      );
     }),
   );
 
@@ -206,6 +244,7 @@ export function mountTillBoxClockApi(
       const raw = await readRawJsonBody<unknown>(c);
       const { challengeId, deviceAt } = confirmBody(raw);
       const override = overrideOf(raw);
+      const keep = keepOf(raw);
       const asAdmin = await withTransaction(db, async (tx) => {
         await admitted(tx, session);
         return override !== undefined || (await holdsAdmin(tx, session.personId));
@@ -235,7 +274,8 @@ export function mountTillBoxClockApi(
       // The till read its clock at the round trip's midpoint, give or take half of it.
       const halfMs = challenge.elapsedMs / 2;
       const boxAtMs = reading.instant.getTime() - halfMs;
-      if (!(deviceAt >= EARLIEST_TARGET_MS && deviceAt < LATEST_TARGET_MS))
+      // A keep uses nothing of the till's time.
+      if (!keep && !(deviceAt >= EARLIEST_TARGET_MS && deviceAt < LATEST_TARGET_MS))
         refuse("target_invalid");
       const tillReading = {
         boxAt: new Date(Math.round(boxAtMs)).toISOString(),
@@ -255,39 +295,80 @@ export function mountTillBoxClockApi(
         device: { deviceId: session.deviceId, deviceLabel, address },
       });
 
-      if (Math.abs(deviceAt - boxAtMs) + tillReading.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS) {
-        const confirmation: ClockConfirmation = await withPinCheckAhead(
-          db,
-          toCheck,
-          attempts,
-          (checked) =>
-            // Taken around the whole transaction, never inside it: a set in the turn waits for
-            // the write lock a transaction holds.
-            correction.inTurn(() =>
-              withTransaction(db, async (tx) => {
-                const deviceLabel = await admitted(tx, session);
-                const witnesses = boxClock.witnesses();
-                const now = clock.now();
-                // A set landed, or the wall clock stepped, after the reading: the comparison is void.
-                if (
-                  correction.steps() !== stepsSeen ||
-                  wallMovedAgainstSteady(
-                    { wallMs: reading.instant.getTime(), monoMs: steadyMs },
-                    { wallMs: now.instant.getTime(), monoMs: boxClock.steady() },
-                  )
-                )
-                  refuse("stale");
-                const stop = await stopAt(tx, now, witnesses);
-                if (!stop.stopped) noStop();
-                let personId = session.personId;
-                if (asAdmin) personId = (await authorizeAdmin(tx, checked)).authorizedBy;
-                else {
-                  const refusal = boxClock.startUp.admit({
-                    unusable: stop.unusable,
-                    canAskAuthority: canAskAuthority(),
-                  });
-                  if (refusal !== null) refuse(refusal);
-                }
+      const agrees =
+        Math.abs(deviceAt - boxAtMs) + tillReading.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS;
+      const stale = (now: ReturnType<TrustedClock["now"]>) =>
+        correction.steps() !== stepsSeen ||
+        wallMovedAgainstSteady(
+          { wallMs: reading.instant.getTime(), monoMs: steadyMs },
+          { wallMs: now.instant.getTime(), monoMs: boxClock.steady() },
+        );
+
+      const startConfirmed = (
+        personId: string,
+        now: ReturnType<TrustedClock["now"]>,
+        heads: ChainHeads,
+      ) =>
+        log("info", "clock_start.confirmed", {
+          source: asAdmin ? "admin" : "staff",
+          person: personId,
+          device: session.deviceId,
+          boxAt: now.instant.toISOString(),
+          heads,
+        });
+
+      if (keep) {
+        // The start's own confirmation by a person: it sets nothing, so it writes no row (D3).
+        const confirmed = await withPinCheckAhead(db, toCheck, attempts, (checked) =>
+          correction.inTurn(() =>
+            withTransaction(db, async (tx) => {
+              await admitted(tx, session);
+              const now = clock.now();
+              if (stale(now)) refuse("stale");
+              // Judged first, so a stop that holds never reaches `noStop()`, which shuts the window.
+              if ((await stopAt(tx, now, boxClock.witnesses())).stopped) refuse("stopped");
+              // Keeping the box's time is offered only until the internet confirms the start.
+              if (start === undefined || start.state.status === "by_internet") noStop();
+              const personId = asAdmin
+                ? (await authorizeAdmin(tx, checked)).authorizedBy
+                : session.personId;
+              const heads = await start.heads(tx);
+              start.state.confirm("by_person", heads);
+              return { personId, now, heads };
+            }),
+          ),
+        );
+        startConfirmed(confirmed.personId, confirmed.now, confirmed.heads);
+        return c.json(
+          { confirmationId: null, stepMs: 0, confirmedAt: confirmed.now.instant.toISOString() },
+          200,
+        );
+      }
+
+      if (agrees) {
+        // A waiting start is confirmed by the person, and a stop that holds is confirmed with its
+        // row, in the one transaction; a waiting start with no stop writes no row (D3).
+        const confirmed = await withPinCheckAhead(db, toCheck, attempts, (checked) =>
+          // Taken around the whole transaction, never inside it: a set in the turn waits for
+          // the write lock a transaction holds.
+          correction.inTurn(() =>
+            withTransaction(db, async (tx) => {
+              const deviceLabel = await admitted(tx, session);
+              const witnesses = boxClock.witnesses();
+              const now = clock.now();
+              // A set landed, or the wall clock stepped, after the reading: the comparison is void.
+              if (stale(now)) refuse("stale");
+              const waiting = startWaits();
+              const stop = await stopAt(tx, now, witnesses);
+              if (!stop.stopped && !waiting) noStop();
+              let personId = session.personId;
+              if (asAdmin) personId = (await authorizeAdmin(tx, checked)).authorizedBy;
+              else {
+                const refusal = admitStaff(stop);
+                if (refusal !== null) refuse(refusal);
+              }
+              let confirmation: ClockConfirmation | null = null;
+              if (stop.stopped) {
                 const answer = await confirmClockStop(tx, {
                   reading: { instant: now.instant, offsetMinutes: now.offsetMinutes },
                   boot: boxClock.readBoot(),
@@ -296,13 +377,26 @@ export function mountTillBoxClockApi(
                   admin: person(personId, await requiredNameOf(tx, personId), deviceLabel),
                 });
                 // With a person, the seat answers a row or throws.
-                return answer.confirmation!;
-              }),
-            ),
+                confirmation = answer.confirmation!;
+              }
+              let heads: ChainHeads | null = null;
+              if (waiting) {
+                heads = await start!.heads(tx);
+                start!.state.confirm("by_person", heads);
+              }
+              return { confirmation, personId, now, heads };
+            }),
+          ),
         );
-        boxClock.clearWitnesses();
+        if (confirmed.confirmation !== null) boxClock.clearWitnesses();
+        if (confirmed.heads !== null)
+          startConfirmed(confirmed.personId, confirmed.now, confirmed.heads);
         return c.json(
-          { confirmationId: confirmation.id, stepMs: 0, confirmedAt: confirmation.confirmedAt },
+          {
+            confirmationId: confirmed.confirmation?.id ?? null,
+            stepMs: 0,
+            confirmedAt: confirmed.confirmation?.confirmedAt ?? confirmed.now.instant.toISOString(),
+          },
           200,
         );
       }
@@ -324,7 +418,7 @@ export function mountTillBoxClockApi(
       }));
       const unusable = unusableAt(reading);
       const answer = await correction.set({
-        reason: unusable ? "unusable" : "behind_chain",
+        reason: startWaits() ? "start" : unusable ? "unusable" : "behind_chain",
         source: asAdmin ? "admin" : "staff",
         offsetMs: Math.round(deviceAt - boxAtMs),
         measuredAt: { wallMs: boxAtMs, monoMs: steadyMs - halfMs },
@@ -342,7 +436,7 @@ export function mountTillBoxClockApi(
                   if (codeOf(error) === "device_profile.not_admitted") return "not_admitted";
                   throw error;
                 }
-                return boxClock.startUp.admit({ unusable, canAskAuthority: canAskAuthority() });
+                return admitStaff({ unusable });
               },
             }),
         requester: {

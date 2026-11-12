@@ -120,6 +120,22 @@ describe("the box's check-the-time marker", () => {
     expect(checkTimeOffered(withMarker, false)).toBe(true);
   });
 
+  it("is offered by the box's waiting-start notice, which is still shown", () => {
+    const waiting: StaffNotice = {
+      owner: "box-clock",
+      key: "clock.unconfirmed",
+      code: "clock.unconfirmed",
+      severity: "error",
+      params: { agreed: 0 },
+    };
+    const read1 = read({ notices: [waiting] });
+    expect(nextNotices([], read1)).toEqual([waiting]);
+    expect(checkTimeOffered(read1, false)).toBe(true);
+    expect(checkTimeOffered(read({ notices: [{ ...waiting, owner: "fiscal" }] }), false)).toBe(
+      false,
+    );
+  });
+
   it("is not offered when the read does not carry it, and the notices are as before", () => {
     const without = read({ notices: [behind] });
     expect(nextNotices([], without)).toEqual([behind]);

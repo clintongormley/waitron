@@ -20,7 +20,11 @@ function unknownText(): { main: string; hint: string } {
 }
 
 /** The clock stops a person at a till can lift with "Check the time" while the box offers it. */
-const CHECKABLE: ReadonlySet<string> = new Set(["clock.unusable", "clock.behind_chain"]);
+const CHECKABLE: ReadonlySet<string> = new Set([
+  "clock.unusable",
+  "clock.behind_chain",
+  "clock.unconfirmed",
+]);
 
 /** Whether `notice` is a clock stop whose hint is "Check the time" while `checkTime` is set. */
 export function checksTime(notice: Pick<StaffNotice, "code">, checkTime: boolean): boolean {
@@ -42,6 +46,14 @@ export function staffNoticeText(
   if (Object.hasOwn(FIXED, notice.code)) {
     return {
       main: t(FIXED[notice.code as keyof typeof FIXED]),
+      hint: t(checksTime(notice, checkTime) ? "staff_notice.check_time" : TELL_MANAGER),
+    };
+  }
+  if (notice.code === "clock.unconfirmed") {
+    const { agreed } = notice.params;
+    if (agreed !== 0 && agreed !== 1) return unknownText();
+    return {
+      main: t("staff_notice.clock.unconfirmed").replace("{agreed}", String(agreed)),
       hint: t(checksTime(notice, checkTime) ? "staff_notice.check_time" : TELL_MANAGER),
     };
   }

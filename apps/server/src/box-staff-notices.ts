@@ -59,24 +59,48 @@ const CHECK_TIME: StaffNotice = {
 
 type ClockCheck = (tx: Transaction, reading: StaffNoticeReadContext["reading"]) => Promise<boolean>;
 
-/** `clock.check_time` while `check` answers true at the read's reading. */
-export function clockCheckNoticeSource(check: ClockCheck): StaffNoticeSource {
+/** While `check` answers true at the read's reading: `clock.unconfirmed` with its count while
+ * `startClockAgreed` answers one (the start check waits), otherwise `clock.check_time`. */
+export function clockCheckNoticeSource(
+  check: ClockCheck,
+  startClockAgreed?: () => number | null,
+): StaffNoticeSource {
   return {
-    read: async ({ tx, reading }) => ((await check(tx, reading)) ? [CHECK_TIME] : []),
+    read: async ({ tx, reading }) => {
+      if (!(await check(tx, reading))) return [];
+      const agreed = startClockAgreed?.() ?? null;
+      if (agreed === null) return [CHECK_TIME];
+      return [
+        {
+          key: "clock.unconfirmed",
+          code: "clock.unconfirmed",
+          severity: "error",
+          params: { agreed },
+        },
+      ];
+    },
   };
 }
 
 /** The box's source, the clock check's when given, then the modules', so the box's notices come
  * first among equal severities. Give it the enabled modules. */
 export function deviceNoticeSources(
-  box: Parameters<typeof boxStaffNoticeSource>[0] & { clockCheck?: ClockCheck },
+  box: Parameters<typeof boxStaffNoticeSource>[0] & {
+    clockCheck?: ClockCheck;
+    startClockAgreed?: () => number | null;
+  },
   modules: readonly WaitronModule[],
 ): readonly OwnedStaffNoticeSource[] {
   return [
     { owner: BOX_NOTICE_OWNER, source: boxStaffNoticeSource(box) },
     ...(box.clockCheck === undefined
       ? []
-      : [{ owner: BOX_CLOCK_NOTICE_OWNER, source: clockCheckNoticeSource(box.clockCheck) }]),
+      : [
+          {
+            owner: BOX_CLOCK_NOTICE_OWNER,
+            source: clockCheckNoticeSource(box.clockCheck, box.startClockAgreed),
+          },
+        ]),
     ...enabledStaffNoticeSources(modules),
   ];
 }

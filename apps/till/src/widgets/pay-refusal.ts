@@ -87,6 +87,9 @@ export function refusalText(
     const behind = clockBehindOf(refusal);
     if (behind !== undefined) return clockBehindText(behind, { checkTime });
   }
+  if (refusal.code === "clock.unconfirmed") return t("sale.clock_unconfirmed");
+  if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "clock_unconfirmed")
+    return t(billPayment ? "bill_pay.charged_clock_unconfirmed" : "sale.charged_clock_unconfirmed");
   if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "disk_full")
     return t("sale.charged_disk_full");
   if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "clock_behind_chain")

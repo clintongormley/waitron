@@ -11,6 +11,7 @@ export type {
   TrustedTimeSource,
 } from "./clock.js";
 export {
+  agreeingDeviceCount,
   agreeingDeviceGroup,
   CLOCK_WITNESS_MARGIN_MS,
   judgeClockWitnesses,

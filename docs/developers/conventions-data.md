@@ -4124,11 +4124,14 @@ failure. Pointer: `packages/migrations/src/apply-complete.test.ts`.
 
 **The sale path and failover**
 
-## Nothing external may block a sale, and a till needs the venue's primary
+## Nothing external may block a sale, though a start must have its time confirmed first, and a till needs the venue's primary
 
-**Nothing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.** AEAT, the card network
-and the internet are never on the sale path of whichever node is primary: records chain locally and
-the outbox drains later; a card falls back to 4G, a standalone terminal or cash. Fiscal submission
+**Nothing EXTERNAL may block a sale, though a start must have its time confirmed first — and a till
+needs the venue's PRIMARY.** AEAT, the card network and the internet are never on the sale path of
+whichever node is primary, except that, on a box that files records, a start the internet cannot
+confirm waits for two devices or a person to confirm its time before its first payment (owner,
+2026-11-10; [below](#every-start-confirms-the-boxs-time-before-it-trades)): records chain locally
+and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. Fiscal submission
 is an outbox, never inline.
 
 A definite invoice-identity conflict already retained in the local database is a separate stop on
@@ -4614,13 +4617,128 @@ closings and presses they name. What nothing checks:
 - that only `writeClosing`, `confirmClockStop` and `confirmClockStep` write the table: nothing refuses another writer,
   and a row it wrote that passes the cover's checks would cover.
 
+### Every start confirms the box's time before it trades
+
+Built by A1420 PR 1a ([plan](../superpowers/plans/2026-11-09-a1420-start-clock-corrects-itself.md)).
+A box's clock dates every invoice, and a misdated invoice cannot be repaired by editing it. Until
+PR 1a an ordinary start never looked at the clock: only a clock behind the latest record, or
+before 28-10-2024, was caught. The owner's rule (2026-11-10): "we rely on NTP only, we don't bother about AEAT … If we
+are not on the internet then we either wait for two devices … Or we stop and ask a user to confirm
+that our current date+time is correct (or we ask them to correct it)". Asked whether orders wait
+too: "Orders still go".
+
+**Why a box can be online and still not synchronised** (plan R4, read, not run). Waitron installs
+no time service: `waitron.sh install` only asks for one (`enable_time_sync`) and carries on when
+that fails. The host service may be missing too (`install_box_service` carries on), and then the
+client answers every request `available: false`. Every boot starts unsynchronised, and after a
+power cut the router usually comes back after the box. A network that lets only web traffic out
+blocks the time protocol (UDP port 123), so such a box never synchronises.
+
+**The start check** (`apps/server/src/start-clock-check.ts`). Each server process holds one state
+in memory: `waiting`, `by_devices`, `by_person` or `by_internet`. Before the trading listener
+opens, `bootServer` looks once at the host's time service through the shared one-minute reading
+(`apps/server/src/clock-service-reading.ts`; the host's status waits at most 2 seconds). A
+synchronised answer confirms `by_internet` and logs `clock_start.confirmed` with source
+`internet`. Anything else leaves it `waiting` and logs `clock_start.waiting`: not synchronised, a
+host that throws, or a host that answers `available: false`, which the state keeps as
+`hostAnswers: false` (plan D12). AEAT is not asked. The look runs whatever the box's role.
+
+How it moves (plan D3):
+
+- **`by_internet` is final** for the process: nothing moves it.
+- **The time service.** Until the start is `by_internet`, each clock-watch look (every 15 seconds,
+  `CLOCK_WATCH_MS`, on every node) reads the time service through the same shared reading, so the
+  host program, which systemd starts once per request, runs at most once a minute. A synchronised
+  answer confirms `by_internet`, from `waiting`, `by_devices` or `by_person`.
+- **Two devices.** While waiting, each look also offers the stored device readings: two or more
+  devices at different network addresses, each within 5 seconds (`START_CLOCK_MARGIN_MS`) of the
+  box and of each other, confirm `by_devices` and log `clock_start.confirmed` with source
+  `devices` and their ids. They set nothing. A till or handheld sends its clock with each
+  equipment read, every 15 seconds while someone is signed in on it, and the store keeps a reading
+  for five minutes (plan R11), so in PR 1a only signed-in devices count.
+- **A person on a till** (below) confirms `by_person`.
+- **Back to waiting.** A clock set that moved the clock by more than a second but could not be
+  verified (the host gave no successful answer, or the clock did not land within 2 seconds of the target) sends a start that is
+  `by_devices` or `by_person` back to `waiting` and logs `clock_start.step_unverified`, whatever the
+  set's reason. The watch's device check runs in the correction's turn, so it never confirms while a
+  set is in flight.
+
+A confirmation that sets nothing writes a log line, and no row unless a clock stop also holds:
+while the clock-behind stop holds it writes that stop's confirmation row as before; while the clock
+reads a date before 28-10-2024 it is refused and writes nothing (below). Each confirmation keeps the chain
+heads it was made at, read through the seat's optional `recordHeads?(tx)` (`packages/fiscal/src/backend.ts`).
+
+**The gate** (`apps/server/src/start-clock-gate.ts`, plan D4 and R6). Boot wraps the one fiscal
+seat. The gate holds on a box that files records while the start waits, and also while a clock set
+is with the host, whatever the start's status. While the gate holds, its `refuseWhileClockBehind` throws `clock.unconfirmed` (409, no
+params), so every route that calls it refuses before any card reader, refund send or drawer job;
+and its four writers (`recordSale`, `recordVoid`, `recordCorrection`, `recordSubstitution`) throw
+the same, so no path through the seat writes a record. Both wrappers are needed: the plan's R6 run
+showed that wrapping the writers alone charged a card and then answered `507`. A card already
+charged when a writer refuses is answered `507 sale.charged_not_recorded` with reason
+`clock_unconfirmed`. While the gate holds (`clockUnconfirmed`), the two refund recovery loops leave
+pending refunds alone, and the bill payments loop leaves a card payment charged before the start
+pending and raises no `payment.bill_settle_failed` for it, also when the gate starts holding
+partway through a pass; it records it at its first pass once the gate opens (`bill-payments-loop.test.ts`). The gate holds while the box files records (`filesRecords()`) and the start
+is `waiting` or a clock set is with the host, each asked at each call, so a box that starts filing while it waits is gated from
+that call. Orders still reach the kitchen (the owner's "Orders still go"): sending one is not among
+the wrapped calls (read, not run). The administrator's record remedies call the chain directly and are outside the gate;
+production enables none of them (plan R7, run).
+
+**"Check the time" on a till while the start waits** (`apps/server/src/till-box-clock-api.ts`,
+`apps/server/src/clock-start-up.ts`). While the start is `waiting` on a box that files records,
+staff signed in on a till see `clock.unconfirmed`, "Payments wait: the server is waiting for
+devices to connect and agree with its time (… of 2 so far)", with “Check the time”, whatever the
+start-up window and AEAT say. The count shows at most 1, since two confirm at the next look. While
+the start waits, the challenge needs no stop and asks neither the start-up window nor AEAT; it
+answers `keepOffered: true` unless the clock-behind stop or the before-28-10-2024 stop holds. The
+till's profile and the person are still checked. The confirm then takes one of three paths:
+
+- `keep: true` ("The server") confirms the box's time as it stands, whatever the
+  till reads: no host call, no row, state `by_person`, one `clock_start.confirmed` line with
+  source `staff` or `admin`. While either stop holds it is refused `clock.set_refused` with reason
+  `stopped`, writing nothing: a keep writes no confirmation, so it could not end the stop;
+- a till within a minute confirms the same way ("Yes"); while either stop holds, it calls
+  `confirmClockStop` in the same transaction, which writes the clock-behind stop's confirmation.
+  On a clock reading before 28-10-2024 a "Yes" is refused, leaving the start waiting: the till then
+  reads before that date too, so the confirm refuses it `target_invalid` (run, in
+  `till-box-clock-api.test.ts`); a till reading that passes that check, within a minute of that
+  date, reaches `confirmClockStop`, which refuses it `clock.unusable` (read, not run);
+- a till further out ("This device") sets the clock through the host with reason `start`, which
+  writes the row every set writes and raises `clock.corrected` with its email, then, when the set is
+  verified, confirms `by_person`; if the chain heads cannot be read then, the start stays
+  waiting and `clock_start.mark_failed` is logged. While the clock-behind stop also holds at the
+  set, judged in the correction's turn, the row is written at reason `behind_chain`, so it ends
+  that stop as a set outside the start does, and, as at that reason, a person is then refused
+  `witnessed` once AEAT has a reading taken during that stop, agreeing or not. With no clock-behind
+  stop (the seat answers none for a reading before 28-10-2024 either) the row is at reason `start`
+  and AEAT's readings refuse nothing. A set that moves a clock not behind the latest record to more
+  than a minute behind it writes its row at reason `start`, so the clock-behind stop then holds
+  after the start is confirmed `by_person`; a person's "Yes" lifts it, while the till offers
+  “Check the time” (`till-box-clock-api.test.ts`).
+
+Once the start is `by_devices` or `by_person`, the notice and the challenge follow the clock-behind
+stop's paths again, except that staff are admitted whatever the start-up window and AEAT say until
+the start is `by_internet`. `keep: true` is refused `stopped` while a stop holds, and otherwise
+`not_stopped` once the start is `by_internet`.
+A box whose host service does not answer waits at every start and cannot be set through it, so
+devices or a person confirm its time as it stands (plan D12).
+
+Guards: `apps/server/src/start-clock-check.test.ts`, `apps/server/src/start-clock-gate.test.ts`,
+`apps/server/src/clock-unconfirmed-gate.test.ts`, `apps/server/src/boot.start-clock-gate.test.ts`,
+`apps/server/src/clock-watch.start-up.test.ts` and `apps/server/src/till-box-clock-api.test.ts`,
+weaker than the rule: the seat's four writers and one cash sale through boot; no table of money
+routes yet (PR 1d).
+
 ### The box sets its own clock
 
 Built by A798-B slice 9b ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)).
 The app's container cannot set the clock, so a small root program on the box's own system, outside
-the container — the **host service** — sets it when the server asks. The box sets its clock only
-inside a stop it already has: the clock behind the latest record, or the clock before 28-10-2024
-(`clock.unusable`). It opens no stop of its own.
+the container — the **host service** — sets it when the server asks. The box sets its clock
+inside a stop it already has (the clock behind the latest record, or before 28-10-2024,
+`clock.unusable`), and, from a till's time, while a start waits for its time to be
+confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)). It opens no stop of its
+own.
 
 _2026-11-12, B3:_ the installed recipe also forwards `tag.write` (up to 4096 characters) and
 `network.read` (up to 700) to their installed adapters. An absent adapter keeps `unknown_request`
@@ -4678,8 +4796,9 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
   `POST /api/box/clock-set` (`apps/server/src/box-health-api.ts`, `person.admin`), after the same
   challenge as slice 9's confirmation;
 - on a till, `POST /api/box-clock/challenge` and `POST /api/box-clock/confirm`
-  (`apps/server/src/till-box-clock-api.ts`): any staff member the till's profile admits, during
-  the start-up window only (below), or an administrator signed in on the till or named with their
+  (`apps/server/src/till-box-clock-api.ts`): any staff member the till's profile admits, while
+  the start has not been confirmed by the internet (during a stop, or while the start waits) or
+  during the start-up window (below), or an administrator signed in on the till or named with their
   PIN, at any time.
 
 Never from devices alone, never while the host says the clock is synchronised, and never when the
@@ -4698,10 +4817,14 @@ Inside the turn, each refusal asking nothing further:
 2. `stale` (below), then `target_invalid` (the target before 2024-10-28 or from 2100 on);
 3. in one write-lock turn with no change-list drain: `not_stopped` unless the stop still holds;
    for a staff member, then the till's admission and the window (`not_admitted`, `not_start_up`,
-   `authority_pending`);
+   `authority_pending`). A set at reason `start` needs no stop and is refused `not_stopped` once
+   the start is confirmed by the internet, and `not_admitted` from source `authority`; until the start is confirmed
+   by the internet, a staff member is asked only the till's admission
+   ([above](#every-start-confirms-the-boxs-time-before-it-trades));
 4. the host's status: `host_unavailable`, then `synchronised`;
 5. for a person: `witnessed` when AEAT has a reading taken during this stop, agreeing or not, so the
-   box sets or confirms from AEAT itself; then `agrees` when the device is within a minute, so
+   box sets or confirms from AEAT itself (at reason `start`, only while the clock-behind stop also
+   holds); then `agrees` when the device is within a minute, so
    confirming is the way;
 6. each anchor's `stepComing` (a throw refuses `pending_disproofs`); then steps 3 and 5 again,
    because AEAT can answer or the stop end during the waits (a refusal there re-anchors every
@@ -4726,8 +4849,8 @@ by hand): an offset is valid only while the clock has not stepped since it was m
 **A step's row and alert** (`confirmClockStep`, `packages/fiscal-verifactu/src/clock-step.ts`). A
 verified step writes one `clock_confirmations` row: `box_clock_at` the reading before,
 `confirmed_at` the reading after (the time the cover takes as adopted), `step_ms` the measured step
-rounded, `source` `authority`, `admin` or `staff`, `person_id` the person, `reason` `behind_chain`
-or `unusable`, and in `proof` what set the clock (AEAT's reading, or the person's reading with
+rounded, `source` `authority`, `admin` or `staff`, `person_id` the person, `reason` `behind_chain`,
+`unusable` or `start`, and in `proof` what set the clock (AEAT's reading, or the person's reading with
 `device` naming the till when there was one) plus `step: { beforeAt, afterAt, stepMs, targetAt }`.
 For the clock-behind stop it also closes the open check (opening one at the before reading if none
 is open), stores `heads` and `closing` as slice 9 does, lists the wrongly dated sales
@@ -4803,12 +4926,16 @@ time noted from a filing reply).
   before 28-10-2024, the box does not file or cannot ask AEAT, or AEAT has not answered), the box
   sends the tills `clock.check_time` from a source of its own (`clockCheckNoticeSource`, owner
   `box-clock`, `apps/server/src/box-staff-notices.ts`); the till's clock line then offers “Check
-  the time”.
+  the time”. While the start check waits on a box that files records, the same source sends
+  `clock.unconfirmed` instead, whatever the window says
+  ([above](#every-start-confirms-the-boxs-time-before-it-trades)).
 - **The till's check.** Both routes are refused `same_machine` from the box itself outside
   development, `device_profile.not_admitted` when the till's profile does not admit the person
   (checked again inside the write), and `not_stopped` with no stop; for a staff member also
   `not_start_up` once the window has closed and `authority_pending` while AEAT has not been asked
-  and could be. The confirm carries the till's own clock, never a typed time, and the box takes its
+  and could be. Until the start check is confirmed by the internet, a staff member is refused
+  neither, and while it waits no stop is needed
+  ([above](#every-start-confirms-the-boxs-time-before-it-trades)). The confirm carries the till's own clock, never a typed time, and the box takes its
   time at the round trip's midpoint. A till within a minute, uncertainty included, confirms the
   box's time with no step through slice 9's `confirmClockStop` with the person — refused `stale`
   when the clock stepped while it waited, and `contrary_proof` when AEAT or a group of devices
@@ -4822,7 +4949,9 @@ time noted from a filing reply).
 Limits, stated, not fixed: a node promoted while running has no window until it restarts; on a node
 demoted while running the watch's looks, which stop off the primary, no longer close it; while every
 read of the stop fails, the window stays as it was. Until slice 9c, a clock wrong forward at a
-start, or wrong backward by less than the gap to the last sale, raises no stop, so nobody is asked.
+start, or wrong backward by less than the gap to the last sale, raises no stop; since A1420 PR 1a,
+a start the internet cannot confirm on a box that files records waits for its time whatever the
+clock reads ([above](#every-start-confirms-the-boxs-time-before-it-trades)).
 
 **The `staff` source and its one migration** (Task 8-0). (2026-11-07, A1422: the two old
 migration files named here were deleted with the frozen history; read one with
@@ -6284,17 +6413,22 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   reader/refund/drawer work; pause both refund recovery loops. Recheck card-refund send/outcome in
   their dating transaction after provider waits. Still store money already moved.
   **Clock confirmation lifts the stop for one step back, with no gap limit; once a record is written
-  under it, readings stay within a minute of the latest record written since.** Sources: AEAT, two
-  agreeing devices at different addresses (not while the stop found at start-up lasts), an
-  administrator's own device, or a till's time confirmed on it by an administrator at any time or,
-  during a stop found at start-up once AEAT has not answered or cannot be asked, by a staff member
-  signed in on it (owner, 2026-10-31); never a box device outside development. Guards:
+  under it, readings stay within a minute of the latest record written since.** Sources: the box's
+  time service; during the stop, AEAT and two agreeing devices at different addresses (not while the
+  stop found at start-up lasts); while a start waits, two devices at different addresses within 5
+  seconds, signed in, which confirm and set nothing; an administrator's own device; or a till's time
+  confirmed on it by an administrator at any time or, by a staff member signed in on it, while the
+  start waits for its time, during a stop before the internet confirms that start, or during a stop
+  found at start-up once AEAT has not answered or cannot be asked (owner, 2026-10-31; 2026-11-10); never a box device outside development. Guards:
   clock-behind-stop, payments clock-behind, fiscal chain/restart/confirmation, clock-confirm route
   and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule: only named routes/readings/requests; new money routes
-  unguarded. **The box sets its clock only through the host service, from AEAT, a till's time (a
-  staff member's during start-up, an administrator's at any time) or an administrator's own device —
-  never from devices alone and never while it keeps time over the internet — and every step it
-  verifies, or sees move the clock by over a second, is alerted and emailed.** Guards:
+  unguarded. **The box's internet time service keeps its clock; Waitron sets it only through the host
+  service, from a till's time (a staff member's while the start waits for its time, or during a stop
+  until the internet confirms that start or during start-up; an administrator's at any time), an
+  administrator's own device, or AEAT only inside the clock-behind stop — never from devices alone
+  and never while it keeps time over the internet — and every step it verifies, or sees move the
+  clock by over a second, is alerted and emailed** (owner, 2026-11-10: "we rely on NTP only, we
+  don't bother about AEAT"). Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
   rule: the handler's suite runs stubs, not systemd; the route suites cover the named routes only.

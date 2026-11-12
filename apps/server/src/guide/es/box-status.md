@@ -432,23 +432,35 @@ actualización, **Reiniciar el equipo** o a mano.
 
 Aquí se llama arranque al tiempo que va desde que el equipo arranca hasta que el reloj deja de
 parar los cobros. En el medio minuto siguiente al arranque, más o menos, cuando el equipo ha
-preguntado a Hacienda y no ha tenido respuesta, cada caja y terminal con alguien con la sesión iniciada termina su línea roja de
+visto que no puede confirmar su hora por sí mismo, cada caja y terminal con alguien con la sesión iniciada termina su línea roja de
 la hora con **Comprobar la hora** en lugar de **Avisa al encargado**. En un equipo cuyo reloj marca
 una fecha anterior al 28 de octubre de 2024, o en uno que no envía registros a Hacienda, lo hace en
 la siguiente consulta de la caja, en unos 15 segundos. Cualquier empleado con la sesión iniciada en la caja puede pulsarlo; no necesita ningún
 permiso. La [guía de avisos del terminal](till-notices.md#notices) explica qué muestra el diálogo
 de la caja y qué hace cada botón.
 
-La caja envía su propia hora. Cuando está a más de un minuto de la del equipo, el equipo pone su
-reloj a esa hora; cuando está a menos de un minuto, el equipo mantiene su reloj y los cobros se
-reanudan con él. En los dos casos, la campana y el correo nombran al empleado y a la caja. Cuando se
-usa la hora de la caja, las lecturas de otros dispositivos no lo impiden. Cuando la caja coincide
-con el equipo, dos dispositivos que no coinciden con el equipo impiden la confirmación, y el diálogo
-dice por qué. Durante el arranque, dos cajas o terminales que coinciden con el equipo no reanudan
-los cobros por sí solos; la hora la confirma una persona.
+La caja envía su propia hora. Cuando está a más de un minuto de la del equipo, **Este dispositivo**
+pone el reloj del equipo a esa hora, y **El servidor** mantiene el reloj del equipo sea cual sea la
+hora de la caja mientras el equipo espera a que se confirme su hora tras un arranque y los cobros no
+están parados además porque el reloj marca más de un minuto antes del último registro, o una fecha
+anterior al 28 de octubre de 2024; si no, **El servidor** pide a la persona que corrija la hora de
+la caja. Cuando está a menos de un minuto, **Sí** mantiene el reloj del equipo. Cada uno de ellos
+que el equipo acepta reanuda los cobros, con una excepción: cuando **Este dispositivo** lleva un
+reloj que marcaba como mucho un minuto antes del último registro a más de un minuto antes, los
+cobros se paran hasta que el reloj se vuelve a confirmar, como explica [Cuando se paran los cobros
+por la hora](box-status.md#clock-behind); una persona puede hacerlo con **Comprobar la hora** y
+**Sí** mientras la caja lo siga ofreciendo. Cuando el equipo pone su reloj en hora, la campana y el
+correo nombran al empleado y a la caja. Cuando se usa la hora de la caja, las lecturas de otros
+dispositivos no lo impiden. Cuando la caja coincide con un reloj que marca una hora anterior al
+último registro, dos dispositivos que no coinciden con el equipo impiden la confirmación, y el
+diálogo dice por qué.
 
-El arranque termina en cuanto el equipo ve que el reloj ya no para los cobros. Desde entonces, un
-empleado ya no puede poner la hora desde una caja. Si el reloj vuelve a parar los cobros mientras
+Dos cajas o terminales que coinciden con el equipo confirman su hora tras un arranque por sí solos.
+Durante el arranque no terminan una parada por un reloj que marca una hora anterior al último
+registro; la confirma una persona.
+
+El arranque termina en cuanto el equipo ve que el reloj ya no para los cobros. Desde entonces, en cuanto
+internet ha confirmado la hora del equipo, un empleado ya no puede poner la hora desde una caja. Si el reloj vuelve a parar los cobros mientras
 el equipo está en marcha, las cajas no ofrecen nada: un administrador pone la hora desde esta
 página con su propio móvil u ordenador. Si Hacienda responde mientras se ofrece **Comprobar la
 hora**, la oferta termina y el equipo usa la hora de Hacienda por sí mismo.

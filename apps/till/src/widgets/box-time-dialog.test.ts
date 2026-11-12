@@ -14,11 +14,19 @@ const ADMIN = { personId: "p-admin", displayName: "Alex Admin" };
 
 let challenges = 0;
 
-function fakeApi(boxAt: string, confirm: BoxTimeApi["boxClockConfirm"] = okConfirm()) {
+function fakeApi(
+  boxAt: string,
+  confirm: BoxTimeApi["boxClockConfirm"] = okConfirm(),
+  { keepOffered = false }: { keepOffered?: boolean } = {},
+) {
   challenges = 0;
   return {
     boxClockChallenge: vi.fn<BoxTimeApi["boxClockChallenge"]>(() =>
-      Promise.resolve({ challengeId: `c${++challenges}`, boxAt }),
+      Promise.resolve({
+        challengeId: `c${++challenges}`,
+        boxAt,
+        ...(keepOffered ? { keepOffered: true as const } : {}),
+      }),
     ),
     boxClockConfirm: vi.fn(confirm),
     listAdjustmentApprovers: vi.fn(() => Promise.resolve([ADMIN])),
@@ -81,33 +89,102 @@ afterEach(() => {
 });
 
 describe("till-box-time-dialog", () => {
-  it("shows both times when this till differs, and offers this till's time", async () => {
+  it("shows both clocks when this till differs, and asks which is correct", async () => {
     const el = await open(fakeApi(BOX_BEHIND));
-    expect(words(el)).toContain(
-      en["box_time.differs"]
-        .replace("{box}", clockDateTime(Date.parse(BOX_BEHIND)))
-        .replace("{till}", clockDateTime(TILL_AT)),
+    expect(words(el)).toBe(
+      [
+        "It is very important that the time on the server is correct.",
+        "The server's clock says the current date and time is:",
+        clockDateTime(Date.parse(BOX_BEHIND)),
+        "This device's clock says the current date and time is:",
+        clockDateTime(TILL_AT),
+        "Which is correct:",
+      ].join(" "),
     );
-    expect(words(el)).toContain(en["box_time.differs_ask"]);
-    expect(words(el)).toContain(en["box_time.differs_wrong_till"]);
-    expect(flat(control(el, "primary"))).toBe(en["box_time.use_till"]);
-    expect(controls(el)).toEqual(["not-now", "primary"]);
+    expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
+    expect(controls(el).map((name) => flat(control(el, name)))).toEqual([
+      "The server",
+      "This device",
+      "Both times are wrong",
+    ]);
   });
 
-  it("asks only to confirm when this till agrees", async () => {
+  it("asks whether the time is correct when this till agrees", async () => {
     const el = await open(fakeApi(BOX_AGREES));
     expect(words(el)).toBe(
-      en["box_time.agrees"].replace("{box}", clockDateTime(Date.parse(BOX_AGREES))),
+      [
+        "It is very important that the time on the server is correct.",
+        "The server's clock says the current date and time is:",
+        clockDateTime(Date.parse(BOX_AGREES)),
+        "This device's clock says the current date and time is:",
+        clockDateTime(TILL_AT),
+        "Is this time correct:",
+      ].join(" "),
     );
-    expect(flat(control(el, "primary"))).toBe(en["box_time.time_right"]);
+    expect(controls(el)).toEqual(["no", "yes"]);
+    expect(controls(el).map((name) => flat(control(el, name)))).toEqual(["No", "Yes"]);
   });
+
+  it.each([
+    ["differs", BOX_BEHIND, "box_time.which_correct", ["server", "device", "both_wrong"]],
+    ["agrees", BOX_AGREES, "box_time.is_correct", ["no", "yes"]],
+  ] as const)(
+    "words the question in Spanish when this till %s",
+    async (_case, boxAt, question, labels) => {
+      setLocale("es-ES");
+      const el = await open(fakeApi(boxAt));
+      expect(words(el)).toBe(
+        [
+          es["box_time.important"],
+          es["box_time.server_says"],
+          clockDateTime(Date.parse(boxAt)),
+          es["box_time.device_says"],
+          clockDateTime(TILL_AT),
+          es[question],
+        ].join(" "),
+      );
+      expect(controls(el).map((name) => flat(control(el, name)))).toEqual(
+        labels.map((label) => es[`box_time.${label}`]),
+      );
+    },
+  );
+
+  it.each([
+    [false, BOX_BEHIND],
+    [false, BOX_AGREES],
+    [true, BOX_BEHIND],
+    [true, BOX_AGREES],
+  ] as const)(
+    "offers no Not now and says nothing beyond the two clocks and the question (waiting %s)",
+    async (keepOffered, boxAt) => {
+      for (const [locale, strings] of [
+        ["en-GB", en],
+        ["es-ES", es],
+      ] as const) {
+        setLocale(locale);
+        const el = await open(fakeApi(boxAt, okConfirm(), { keepOffered }));
+        expect(control(el, "not-now")).toBeNull();
+        expect(words(el)).toBe(
+          [
+            strings["box_time.important"],
+            strings["box_time.server_says"],
+            clockDateTime(Date.parse(boxAt)),
+            strings["box_time.device_says"],
+            clockDateTime(TILL_AT),
+            strings[boxAt === BOX_BEHIND ? "box_time.which_correct" : "box_time.is_correct"],
+          ].join(" "),
+        );
+        cleanupWidgets();
+      }
+    },
+  );
 
   it("takes a second challenge for the confirm and sends this till's own time", async () => {
     const api = fakeApi(BOX_BEHIND, okConfirm(800_000_000_000));
     const el = await open(api);
     const later = TILL_AT + 3_000;
     vi.mocked(Date.now).mockReturnValue(later);
-    await press(el, "primary");
+    await press(el, "device");
     expect(api.boxClockChallenge).toHaveBeenCalledTimes(2);
     expect(api.boxClockConfirm.mock.calls).toEqual([[{ challengeId: "c2", deviceAt: later }]]);
     expect(words(el)).toBe(en["box_time.set_to"].replace("{after}", clockDateTime(TILL_AT)));
@@ -119,12 +196,13 @@ describe("till-box-time-dialog", () => {
     const el = await open(api);
     let done = 0;
     el.addEventListener("box-time-done", () => done++);
-    await press(el, "primary");
+    await press(el, "yes");
+    expect(api.boxClockConfirm.mock.calls).toEqual([[{ challengeId: "c2", deviceAt: TILL_AT }]]);
     expect(words(el)).toBe(en["box_time.confirmed"]);
     expect(done).toBe(1);
   });
 
-  it("keeps the primary disabled while the confirm is out", async () => {
+  it("keeps Yes and No disabled, Yes loading, while the confirm is out", async () => {
     let answer!: () => void;
     const api = fakeApi(BOX_AGREES, () => {
       return new Promise((resolve) => {
@@ -132,24 +210,31 @@ describe("till-box-time-dialog", () => {
       });
     });
     const el = await open(api);
-    await press(el, "primary");
-    expect(control(el, "primary")!.disabled).toBe(true);
+    await press(el, "yes");
+    expect(control(el, "yes")!.disabled).toBe(true);
+    expect(control(el, "no")!.disabled).toBe(true);
+    expect(
+      root(el).querySelector<HTMLElement & { loading: boolean }>('[data-box-time="yes"]')!.loading,
+    ).toBe(true);
+    expect(
+      root(el).querySelector<HTMLElement & { loading: boolean }>('[data-box-time="no"]')!.loading,
+    ).toBe(false);
     answer();
     await settle(el);
     expect(words(el)).toBe(en["box_time.confirmed"]);
   });
 
-  it("sends one confirm when the primary is clicked twice before it redraws", async () => {
+  it("sends one confirm when Yes is clicked twice before it redraws", async () => {
     const api = fakeApi(BOX_AGREES);
     const el = await open(api);
-    control(el, "primary")!.click();
-    control(el, "primary")!.click();
+    control(el, "yes")!.click();
+    control(el, "yes")!.click();
     await settle(el);
     expect(api.boxClockChallenge).toHaveBeenCalledTimes(2);
     expect(api.boxClockConfirm).toHaveBeenCalledOnce();
   });
 
-  it("keeps Not now disabled, and the dialog from closing, while the confirm is out", async () => {
+  it("keeps the dialog from closing while the confirm is out", async () => {
     let answer!: () => void;
     const api = fakeApi(BOX_AGREES, () => {
       return new Promise((resolve) => {
@@ -159,8 +244,7 @@ describe("till-box-time-dialog", () => {
     const el = await open(api);
     const box = () => root(el).querySelector<HTMLElement & { dismissible: boolean }>("wt-dialog")!;
     expect(box().dismissible).toBe(true);
-    await press(el, "primary");
-    expect(control(el, "not-now")!.disabled).toBe(true);
+    await press(el, "yes");
     expect(box().dismissible).toBe(false);
     answer();
     await settle(el);
@@ -168,22 +252,51 @@ describe("till-box-time-dialog", () => {
   });
 
   it.each([
-    [60_000, "box_time.time_right"],
-    [60_001, "box_time.use_till"],
-  ] as const)("treats a till %i ms from the box as %s", async (gap, label) => {
+    [60_000, ["no", "yes"]],
+    [60_001, ["server", "device", "both-wrong"]],
+  ] as const)("treats a till %i ms from the box as asking %j", async (gap, buttons) => {
     const el = await open(fakeApi(new Date(TILL_AT - gap).toISOString()));
-    expect(flat(control(el, "primary"))).toBe(en[label]);
+    expect(controls(el)).toEqual(buttons);
   });
 
-  it("sends nothing on Not now and closes", async () => {
-    const api = fakeApi(BOX_BEHIND);
-    const el = await open(api);
-    let closed = 0;
-    el.addEventListener("box-time-close", () => closed++);
-    await press(el, "not-now");
-    expect(api.boxClockConfirm).not.toHaveBeenCalled();
-    expect(api.boxClockChallenge).toHaveBeenCalledTimes(1);
-    expect(closed).toBe(1);
+  it.each([
+    ["Both times are wrong", BOX_BEHIND, "both-wrong", false],
+    ["Both times are wrong while the server waits", BOX_BEHIND, "both-wrong", true],
+    ["No", BOX_AGREES, "no", false],
+    ["No while the server waits", BOX_AGREES, "no", true],
+    ["The server, when the server cannot keep its own time", BOX_BEHIND, "server", false],
+  ] as const)(
+    "sends nothing on %s, asks to correct this device, and closes on Close",
+    async (_case, boxAt, name, keepOffered) => {
+      const api = fakeApi(boxAt, okConfirm(), { keepOffered });
+      const el = await open(api);
+      let closed = 0;
+      el.addEventListener("box-time-close", () => closed++);
+      await press(el, name);
+      expect(words(el)).toBe(
+        [
+          "It is very important that the time on the server is correct.",
+          "The server's clock says the current date and time is:",
+          clockDateTime(Date.parse(boxAt)),
+          "This device's clock says the current date and time is:",
+          clockDateTime(TILL_AT),
+          "Please correct the time on this device and then reconnect to the server.",
+        ].join(" "),
+      );
+      expect(controls(el)).toEqual(["close"]);
+      await press(el, "close");
+      expect(closed).toBe(1);
+      expect(api.boxClockConfirm).not.toHaveBeenCalled();
+      expect(api.boxClockChallenge).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("asks to correct this device in Spanish too", async () => {
+    setLocale("es-ES");
+    const el = await open(fakeApi(BOX_BEHIND));
+    await press(el, "both-wrong");
+    expect(words(el).endsWith(es["box_time.correct_device"])).toBe(true);
+    expect(flat(control(el, "close"))).toBe(es["box_time.close"]);
   });
 
   const REFUSALS: [string, Record<string, unknown>, string, string[]][] = [
@@ -272,6 +385,12 @@ describe("till-box-time-dialog", () => {
       ["close", "check-again"],
     ],
     [
+      "a keep refused while payments are stopped for the server's clock",
+      { code: "clock.set_refused", reason: "stopped" },
+      "box_time.refused.stopped",
+      ["close", "check-again"],
+    ],
+    [
       "pending_disproofs",
       { code: "clock.set_refused", reason: "pending_disproofs" },
       "box_time.refused.pending_disproofs",
@@ -290,7 +409,7 @@ describe("till-box-time-dialog", () => {
     "words a confirm refused for %s above its buttons",
     async (_case, refusal, key, buttons) => {
       const el = await open(fakeApi(BOX_BEHIND, refusing(refusal)));
-      await press(el, "primary");
+      await press(el, "device");
       expect(shownError(el)).toBe(en[key as keyof typeof en]);
       expect(controls(el)).toEqual(buttons);
     },
@@ -311,7 +430,7 @@ describe("till-box-time-dialog", () => {
     const el = await open(
       fakeApi(BOX_BEHIND, refusing({ code: "clock.set_refused", reason: "target_invalid" })),
     );
-    await press(el, "primary");
+    await press(el, "device");
     expect(shownError(el)).toBe(
       en["box_time.refused.target_invalid"].replace("{till}", clockDateTime(TILL_AT)),
     );
@@ -321,11 +440,11 @@ describe("till-box-time-dialog", () => {
   it("asks for a new challenge on Check again and shows the question again", async () => {
     const api = fakeApi(BOX_BEHIND, refusing({ code: "clock.set_refused", reason: "stale" }));
     const el = await open(api);
-    await press(el, "primary");
+    await press(el, "device");
     await press(el, "check-again");
     expect(api.boxClockChallenge).toHaveBeenCalledTimes(3);
     expect(shownError(el)).toBe("");
-    expect(flat(control(el, "primary"))).toBe(en["box_time.use_till"]);
+    expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
   });
 
   it("closes on Close after a refusal", async () => {
@@ -334,7 +453,7 @@ describe("till-box-time-dialog", () => {
     );
     let closed = 0;
     el.addEventListener("box-time-close", () => closed++);
-    await press(el, "primary");
+    await press(el, "device");
     await press(el, "close");
     expect(closed).toBe(1);
   });
@@ -379,13 +498,10 @@ describe("till-box-time-dialog", () => {
       expect(pinDialog(el)).toBeNull();
       expect(api.boxClockChallenge.mock.calls.at(-1)).toEqual([override]);
       expect(api.boxClockConfirm).not.toHaveBeenCalled();
-      expect(words(el)).toContain(
-        en["box_time.differs"]
-          .replace("{box}", clockDateTime(Date.parse(BOX_BEHIND)))
-          .replace("{till}", clockDateTime(TILL_AT)),
-      );
-      expect(controls(el)).toEqual(["not-now", "primary"]);
-      await press(el, "primary");
+      expect(words(el)).toContain(clockDateTime(Date.parse(BOX_BEHIND)));
+      expect(words(el)).toContain(clockDateTime(TILL_AT));
+      expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
+      await press(el, "device");
       expect(api.boxClockConfirm.mock.calls).toEqual([
         [{ challengeId: "c2", deviceAt: TILL_AT, override }],
       ]);
@@ -402,7 +518,7 @@ describe("till-box-time-dialog", () => {
         const api = fakeApi(BOX_BEHIND, refusing({ code }));
         const el = await refusedNotStartUp(api);
         await signIn(el);
-        await press(el, "primary");
+        await press(el, "device");
         expect(shownError(el)).toBe(text);
         expect(controls(el)).toEqual(["close", "admin"]);
         await press(el, "admin");
@@ -434,7 +550,7 @@ describe("till-box-time-dialog", () => {
       const api = fakeApi(BOX_BEHIND, refusing({ code: "clock.set_refused", reason: "stale" }));
       const el = await refusedNotStartUp(api);
       await signIn(el);
-      await press(el, "primary");
+      await press(el, "device");
       await press(el, "check-again");
       expect(api.boxClockChallenge.mock.calls.at(-1)).toEqual([override]);
     });
@@ -481,7 +597,7 @@ describe("till-box-time-dialog", () => {
       await page.viewport(390, 844);
       try {
         const el = await open(fakeApi(differs ? BOX_BEHIND : BOX_AGREES));
-        for (const name of ["not-now", "primary"]) {
+        for (const name of differs ? ["server", "device", "both-wrong"] : ["no", "yes"]) {
           const button = control(el, name)!;
           const range = document.createRange();
           range.selectNodeContents(button);
@@ -494,6 +610,63 @@ describe("till-box-time-dialog", () => {
     });
 });
 
+describe("till-box-time-dialog while the server waits for its time to be confirmed", () => {
+  const waiting = (boxAt: string, confirm?: BoxTimeApi["boxClockConfirm"]) =>
+    fakeApi(boxAt, confirm, { keepOffered: true });
+
+  it("asks the same question when they differ", async () => {
+    const el = await open(waiting(BOX_BEHIND));
+    expect(controls(el)).toEqual(["server", "device", "both-wrong"]);
+    expect(words(el)).toMatch(/Which is correct:$/);
+  });
+
+  it("keeps the server's time on The server, with a fresh challenge, every choice disabled while it is out", async () => {
+    let answer!: () => void;
+    const api = waiting(BOX_BEHIND, () => {
+      return new Promise((resolve) => {
+        answer = () => resolve({ confirmationId: null, stepMs: 0, confirmedAt: BOX_BEHIND });
+      });
+    });
+    const el = await open(api);
+    let done = 0;
+    el.addEventListener("box-time-done", () => done++);
+    await press(el, "server");
+    expect(control(el, "server")!.disabled).toBe(true);
+    expect(control(el, "device")!.disabled).toBe(true);
+    expect(control(el, "both-wrong")!.disabled).toBe(true);
+    expect(
+      root(el).querySelector<HTMLElement & { loading: boolean }>('[data-box-time="server"]')!
+        .loading,
+    ).toBe(true);
+    expect(
+      root(el).querySelector<HTMLElement & { loading: boolean }>('[data-box-time="device"]')!
+        .loading,
+    ).toBe(false);
+    answer();
+    await settle(el);
+    expect(api.boxClockConfirm.mock.calls).toEqual([
+      [{ challengeId: "c2", deviceAt: TILL_AT, keep: true }],
+    ]);
+    expect(words(el)).toBe(en["box_time.confirmed"]);
+    expect(done).toBe(1);
+  });
+
+  it("sends this till's time, without keep, on This device", async () => {
+    const api = waiting(BOX_BEHIND, okConfirm(800_000_000_000));
+    const el = await open(api);
+    await press(el, "device");
+    expect(api.boxClockConfirm.mock.calls).toEqual([[{ challengeId: "c2", deviceAt: TILL_AT }]]);
+  });
+
+  it("confirms the time, without keep, on Yes when this till agrees", async () => {
+    const api = waiting(BOX_AGREES);
+    const el = await open(api);
+    expect(controls(el)).toEqual(["no", "yes"]);
+    await press(el, "yes");
+    expect(api.boxClockConfirm.mock.calls).toEqual([[{ challengeId: "c2", deviceAt: TILL_AT }]]);
+  });
+});
+
 describe("request-device refusal recovery", () => {
   for (const phase of ["challenge", "confirm"] as const) {
     it.each(["en-GB", "es-ES"] as const)(
@@ -504,7 +677,7 @@ describe("request-device refusal recovery", () => {
         if (phase === "challenge")
           api.boxClockChallenge.mockRejectedValue({ code: "device.unauthorized" });
         const el = await open(api);
-        if (phase === "confirm") await press(el, "primary");
+        if (phase === "confirm") await press(el, "yes");
         expect(shownError(el)).toContain(codeMessage("device.unauthorized", locale));
         expect(controls(el)).not.toContain("check-again");
       },

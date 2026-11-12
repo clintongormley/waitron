@@ -97,6 +97,7 @@ import { freePorts } from "./testing/free-ports.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { createHourTestClock, selectPastWaits } from "./testing/hour-test-clock.js";
 import { serverFixture } from "./testing/server-fixture.js";
+import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { recordVoid } from "@waitron/core";
 import { loginWithPin } from "@waitron/identity";
@@ -340,6 +341,7 @@ interface Boxes {
 
 function seamsFor(box: Box): StartServerSeams {
   return {
+    boxHost: synchronisedBoxHost(),
     requestFromBox: () => false,
     requestProvenFromBox: () => false,
     stepdown: { mount: () => {}, restart: () => box.restartAsked.release() },

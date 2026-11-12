@@ -1,5 +1,5 @@
 import { IssuanceRefusal, withIssuanceTransaction } from "@waitron/core";
-import { refundRefused } from "./bill-refunds.js";
+import { refundsPaused } from "./bill-refunds.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
@@ -9,7 +9,12 @@ import { codeOf } from "@waitron/server-kit";
 import { findPaymentByBillPayment, paymentResolutions } from "@waitron/payments";
 import { AppError, jobOrigin } from "@waitron/shared";
 import { raiseRefundUnresolved } from "./bill-refund-alerts.js";
-import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
+import {
+  billPaymentIsLive,
+  clockUnconfirmedRefusal,
+  completeBillPayment,
+  failBillPayment,
+} from "./bill-payments.js";
 import type { BillPaymentDeps } from "./bill-payments.js";
 import { resumeCardRefund } from "./bill-refunds.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
@@ -50,6 +55,8 @@ export interface BillPaymentsLoopDeps extends BillPaymentDeps {
   cfg: TradingContext;
   /** The card providers pending refunds are looked up at; without it none is looked up. */
   refundProviderFor?: RefundProviderFor;
+  /** True while the start clock gate holds: no pending payment or refund is settled then. */
+  clockUnconfirmed?: () => boolean;
 }
 
 export interface BillPaymentsPass {
@@ -165,7 +172,10 @@ export async function settlePendingBillPayments(
     pending: pending.length,
     errors: [],
   };
+  // While the gate holds it refuses the invoice, which is no failure to alert on: each payment
+  // stays pending until it lets go. It can start holding mid-pass, when a clock set begins.
   for (const { id } of pending) {
+    if (deps.clockUnconfirmed?.() === true) break;
     const now = deps.clock.now().instant;
     try {
       const { settled } = await withIssuanceTransaction(
@@ -176,6 +186,7 @@ export async function settlePendingBillPayments(
       if (settled !== "left") pass[settled] += 1;
       if (settled === "received" || settled === "failed") pass.pending -= 1;
     } catch (error) {
+      if (clockUnconfirmedRefusal(error)) break;
       pass.errors.push({ billPaymentId: id, error: String(error) });
       if (!(error instanceof IssuanceRefusal)) {
         await raiseSettleFailed(deps, id, error, now).catch((alertError: unknown) => {
@@ -236,15 +247,7 @@ async function settlePendingBillRefunds(
   stopSignal: AbortSignal | undefined,
 ): Promise<void> {
   const reading = deps.clock.now();
-  // A completed refund's time places it in a cash-up window, so none is settled by a clock that
-  // reads behind the last sale.
-  const stopped = await withTransaction(
-    deps.db,
-    async (tx) =>
-      (await deps.backend.clockBehindLatestRecord(tx, reading)) !== null ||
-      (await refundRefused(tx, deps)),
-  );
-  if (stopped) return;
+  if (await refundsPaused(deps, reading)) return;
   const pending = await withTransaction(deps.db, (tx) =>
     tx
       .select({ refund: billPaymentRefunds, workingOrderId: billPayments.workingOrderId })

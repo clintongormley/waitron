@@ -458,6 +458,7 @@ declare module "@waitron/shared" {
         | "disk_full"
         | "clock_behind_chain"
         | "clock_unusable"
+        | "clock_unconfirmed"
         | "issuance_refused"
         | "partial_refund";
       recoveryUrl?: string;
@@ -1623,11 +1624,13 @@ declare module "@waitron/shared" {
      * during the stop, the person's device is within a minute of the box (`agrees`),
      * the device's time was measured before a step of the box's clock, the time would be before
      * 28-10-2024 or from 2100 on (`target_invalid`), the readings taken before an earlier step are
-     * not yet recorded (`pending_disproofs`), or, for a staff member on a till, the box's start-up
-     * is over (`not_start_up`) or AEAT has not yet been asked (`authority_pending`). */
+     * not yet recorded (`pending_disproofs`), a till asked the box to keep its time while a stop
+     * holds (`stopped`), or, for a staff member on a till, the box's start-up is over
+     * (`not_start_up`) or AEAT has not yet been asked (`authority_pending`). */
     "clock.set_refused": {
       reason:
         | "same_machine"
+        | "stopped"
         | "not_stopped"
         | "not_start_up"
         | "authority_pending"
@@ -1643,6 +1646,9 @@ declare module "@waitron/shared" {
      * `unverified`, it moved further, but the box could not confirm it landed where it was asked
      * to. */
     "clock.set_failed": { reason: "refused" | "unverified" };
+    /** The box has not confirmed its time since this start, so it writes no fiscal record and
+     * takes or gives back no money until the time service, two devices or a person confirms it. */
+    "clock.unconfirmed": Record<string, never>;
     /** The box's host service cannot take this request: `missing`, no connection to its socket
      * was made (`detail` is the connection error's code); `unsupported`, the host does not take the
      * request (`detail` is the host's word). */

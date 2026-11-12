@@ -13,7 +13,9 @@ import {
   saleReceiptGuests,
   sales,
   type SingletonRole,
+  type Transaction,
 } from "@waitron/db";
+import type { FiscalBackend } from "@waitron/fiscal";
 import {
   insertCapturedPayment,
   insertFailedPayment,
@@ -30,6 +32,9 @@ import {
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { withPendingBillPayments } from "./boot.js";
+import { clockStopsRefund } from "./bill-refunds.js";
+import { startClockState, type StartClockState } from "./start-clock-check.js";
+import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { printSaleReceipt } from "./till-sale.js";
 import type { Logger } from "./logger.js";
@@ -897,5 +902,224 @@ describe("withPendingBillPayments", () => {
       ["warn", "bill_payment.settle_failed", { error: "Error: boom" }],
       ["warn", "bill_payment.settle_failed", { billPaymentId: "bp-1", error: "Error: nope" }],
     ]);
+  });
+});
+
+describe("a pass while the start's time is unconfirmed", () => {
+  /** A pass on the seat behind the start clock gate, wired as boot wires it. */
+  function gatedPass(state: StartClockState) {
+    const holds = startClockGateHolds(
+      state,
+      () => true,
+      () => false,
+    );
+    return settlePendingBillPayments({
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: gateSeatOnStartClock(venue.backend, holds),
+      clock: venue.clock,
+      cfg: venue.cfg,
+      refundProviderFor: (name: string) => venue.pool.get(name),
+      clockUnconfirmed: holds,
+    });
+  }
+  const alertsFor = async (id: string) =>
+    (await incidentsOf("payment.bill_settle_failed")).filter(
+      (row) => (row.params as { billPaymentId?: string }).billPaymentId === id,
+    );
+
+  it("leaves a card charged before the start pending with no alert while waiting, and records it once confirmed", async () => {
+    const billId = await tabWith(venue, "Paella");
+    const id = await capturedPending(billId, 3500);
+    const state = startClockState();
+
+    const paused = await gatedPass(state);
+
+    expect(await alertsFor(id)).toEqual([]);
+    expect(paused.errors).toEqual([]);
+    expect(await stateOf(id)).toBe("pending");
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
+
+    state.confirm("by_devices", {});
+    await gatedPass(state);
+
+    expect(await stateOf(id)).toBe("received");
+    expect(fiscalRecordCount(venue, billId)).toBe(1);
+    expect(await alertsFor(id)).toEqual([]);
+  });
+
+  it("leaves cards pending with no alert when a clock set begins after the pass listed them, and tries no further card", async () => {
+    const firstBill = await tabWith(venue, "Paella");
+    const first = await capturedPending(firstBill, 3500);
+    const secondBill = await tabWith(venue, "Paella");
+    const second = await capturedPending(secondBill, 3500);
+    const state = startClockState();
+    state.confirm("by_devices", {});
+    let setting = false;
+    const holds = startClockGateHolds(
+      state,
+      () => true,
+      () => setting,
+    );
+    let seatAsks = 0;
+    // The set begins as the first card reaches the seat, after the pass asked the gate.
+    const seatHolds = () => {
+      seatAsks += 1;
+      setting = true;
+      return holds();
+    };
+
+    const pass = await settlePendingBillPayments({
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: gateSeatOnStartClock(venue.backend, seatHolds),
+      clock: venue.clock,
+      cfg: venue.cfg,
+      clockUnconfirmed: holds,
+    });
+
+    expect(await alertsFor(first)).toEqual([]);
+    expect(await alertsFor(second)).toEqual([]);
+    expect(seatAsks).toBe(1);
+    expect(
+      pass.errors.filter((e) => "billPaymentId" in e && [first, second].includes(e.billPaymentId)),
+    ).toEqual([]);
+    expect(await stateOf(first)).toBe("pending");
+    expect(await stateOf(second)).toBe("pending");
+    expect(fiscalRecordCount(venue, firstBill) + fiscalRecordCount(venue, secondBill)).toBe(0);
+
+    setting = false;
+    await gatedPass(state);
+
+    expect(await stateOf(first)).toBe("received");
+    expect(await stateOf(second)).toBe("received");
+    expect(fiscalRecordCount(venue, firstBill)).toBe(1);
+    expect(fiscalRecordCount(venue, secondBill)).toBe(1);
+    expect(await alertsFor(first)).toEqual([]);
+    expect(await alertsFor(second)).toEqual([]);
+  });
+
+  it("records the card it reached before a clock set began, and takes no further card to the seat", async () => {
+    const firstBill = await tabWith(venue, "Paella");
+    const first = await capturedPending(firstBill, 3500);
+    const secondBill = await tabWith(venue, "Paella");
+    const second = await capturedPending(secondBill, 3500);
+    const state = startClockState();
+    state.confirm("by_devices", {});
+    let setting = false;
+    const holds = startClockGateHolds(
+      state,
+      () => true,
+      () => setting,
+    );
+    // The set begins as soon as a sale is recorded, between this card and the next.
+    const recordingThenSetting = new Proxy(venue.backend, {
+      get(target, property, receiver) {
+        const value: unknown = Reflect.get(target, property, receiver);
+        if (property !== "recordSale" || typeof value !== "function") return value;
+        return async (...args: unknown[]) => {
+          const recorded: unknown = await (value as (...a: unknown[]) => unknown).apply(
+            receiver,
+            args,
+          );
+          setting = true;
+          return recorded;
+        };
+      },
+    });
+    let seatAsksWhileSetting = 0;
+    const seatHolds = () => {
+      if (setting) seatAsksWhileSetting += 1;
+      return holds();
+    };
+
+    await settlePendingBillPayments({
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend: gateSeatOnStartClock(recordingThenSetting, seatHolds),
+      clock: venue.clock,
+      cfg: venue.cfg,
+      clockUnconfirmed: holds,
+    });
+
+    expect(await stateOf(first)).toBe("received");
+    expect(await stateOf(second)).toBe("pending");
+    expect(seatAsksWhileSetting).toBe(0);
+    expect(await alertsFor(second)).toEqual([]);
+
+    setting = false;
+    await gatedPass(state);
+
+    expect(await stateOf(second)).toBe("received");
+    expect(fiscalRecordCount(venue, secondBill)).toBe(1);
+  });
+
+  it("leaves a refund pending when the start's time is unconfirmed as its send or outcome is dated", async () => {
+    const backend = { clockBehindLatestRecord: vi.fn(async () => null) };
+    const stops = (unconfirmed: boolean) =>
+      clockStopsRefund(
+        {} as Transaction,
+        { backend: backend as unknown as FiscalBackend, clockUnconfirmed: () => unconfirmed },
+        null,
+        venue.clock.now(),
+      );
+
+    await expect(stops(true)).resolves.toBe(true);
+    expect(backend.clockBehindLatestRecord).not.toHaveBeenCalled();
+    await expect(stops(false)).resolves.toBe(false);
+  });
+
+  it("records a card charged before the start at once, with no alert, when the internet confirmed the start", async () => {
+    const billId = await tabWith(venue, "Paella");
+    const id = await capturedPending(billId, 3500);
+    const state = startClockState();
+    state.confirm("by_internet", {});
+
+    await gatedPass(state);
+
+    expect(await stateOf(id)).toBe("received");
+    expect(await alertsFor(id)).toEqual([]);
+  });
+
+  it("leaves a pending refund untouched for a pass while waiting, and completes it once confirmed", async () => {
+    const billId = await tabWith(venue, "Paella");
+    const paid = await cardContribution(billId, "10.00");
+    expect(paid.status).toBe(200);
+    const paymentId = (paid.json.payment as { id: string }).id;
+    // Refunded at the provider, but the answer is lost, so the refund stays pending.
+    venue.card.scriptNextRefund({ made: "completed", answer: "throw" });
+    const asked = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "5.00",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+    expect(asked.json).toMatchObject({ refund: { state: "pending" } });
+    const rows = () =>
+      inTx(venue, (tx) =>
+        tx.select().from(billPaymentRefunds).where(eq(billPaymentRefunds.billPaymentId, paymentId)),
+      );
+    const [row] = await rows();
+    const lookups = venue.card.lookupCalls.length;
+    const state = startClockState();
+
+    const paused = await gatedPass(state);
+
+    expect(paused.refundsCompleted).toBe(0);
+    expect(await rows()).toEqual([row]);
+    expect(venue.card.lookupCalls).toHaveLength(lookups);
+
+    state.confirm("by_devices", {});
+    const after = await gatedPass(state);
+
+    expect(after.refundsCompleted).toBe(1);
+    expect(await rows()).toMatchObject([{ state: "completed" }]);
   });
 });

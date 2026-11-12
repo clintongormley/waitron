@@ -7725,12 +7725,17 @@ describe("till-app", () => {
     },
   );
 
-  it.each(["en-GB", "es-ES"])(
-    "park-order refused for a clock behind the last sale says it can't be recorded (%s)",
-    async (locale) => {
+  it.each([
+    ["en-GB", "clock.behind_chain"],
+    ["es-ES", "clock.behind_chain"],
+    ["en-GB", "clock.unconfirmed"],
+    ["es-ES", "clock.unconfirmed"],
+  ])(
+    "park-order refused by a clock stop says it can't be recorded (%s, %s)",
+    async (locale, code) => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, locale }),
-        parkOrder: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
+        parkOrder: vi.fn().mockRejectedValue({ code, status: 409 }),
       });
       const c = await toCounter(el);
       expect(currentLocale()).toBe(locale);
@@ -7741,7 +7746,7 @@ describe("till-app", () => {
       await flush(el);
 
       const shown = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim();
-      expect(shown).toBe(codeMessage("clock.behind_chain", locale));
+      expect(shown).toBe(codeMessage(code, locale));
       expect(shown).not.toBe(codeMessage("server.internal", locale));
     },
   );
@@ -8497,12 +8502,17 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(shown());
   });
 
-  it.each(["en-GB", "es-ES"])(
-    "discard-order refused for a clock behind the last sale says it can't be recorded (%s)",
-    async (locale) => {
+  it.each([
+    ["en-GB", "clock.behind_chain"],
+    ["es-ES", "clock.behind_chain"],
+    ["en-GB", "clock.unconfirmed"],
+    ["es-ES", "clock.unconfirmed"],
+  ])(
+    "discard-order refused by a clock stop says it can't be recorded (%s, %s)",
+    async (locale, code) => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, locale }),
-        abandonWorkingOrder: vi.fn().mockRejectedValue({ code: "clock.behind_chain", status: 409 }),
+        abandonWorkingOrder: vi.fn().mockRejectedValue({ code, status: 409 }),
         listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
       });
       const c = await toCounter(el);
@@ -8512,7 +8522,7 @@ describe("till-app", () => {
       await flush(el);
 
       const shown = el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim();
-      expect(shown).toBe(codeMessage("clock.behind_chain", locale));
+      expect(shown).toBe(codeMessage(code, locale));
       expect(shown).not.toBe(codeMessage("server.internal", locale));
     },
   );
@@ -10832,6 +10842,28 @@ describe("till-app", () => {
         status: 409,
       });
       expect(text).toContain(codeMessage("clock.unusable"));
+    });
+
+    it("a cash sale refused while the start's time is unconfirmed points at Check the time", async () => {
+      const text = await payCash({ code: "clock.unconfirmed", status: 409 });
+      expect(text).toContain(t("sale.clock_unconfirmed"));
+      expect(text).not.toContain(t("sale.error"));
+    });
+
+    it("a reader card pay refused while the start's time is unconfirmed points at Check the time", async () => {
+      const text = await payReader({ code: "clock.unconfirmed", status: 409 });
+      expect(text).toContain(t("sale.clock_unconfirmed"));
+    });
+
+    it("a card charged while the start's time is unconfirmed says not to charge again, and to retry once confirmed", async () => {
+      const text = await payReader({
+        code: "sale.charged_not_recorded",
+        workingOrderId: "wo-1",
+        reason: "clock_unconfirmed",
+        status: 507,
+      });
+      expect(text).toContain(t("sale.charged_clock_unconfirmed"));
+      expect(text).not.toContain(codeMessage("sale.charged_not_recorded"));
     });
 
     const clockBehind = {

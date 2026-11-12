@@ -74,6 +74,7 @@ import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { useTestProducer } from "./testing/test-producer.js";
+import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 
 useTestProducer();
 
@@ -475,15 +476,19 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       await mirror.close();
       const primaryPort = await freePort();
       const primaryBase = `http://127.0.0.1:${primaryPort}`;
-      primary = await startServer({
-        ...KEY_ENV,
-        ...TICK_ENV,
-        WAITRON_NODE_ID: persisted.WAITRON_NODE_ID!,
-        WAITRON_VENUE_DIR: venueDir.main,
-        WAITRON_HTTP_PORT: String(primaryPort),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_STATE_DIR: stateDir,
-      });
+      primary = await startServer(
+        {
+          ...KEY_ENV,
+          ...TICK_ENV,
+          WAITRON_NODE_ID: persisted.WAITRON_NODE_ID!,
+          WAITRON_VENUE_DIR: venueDir.main,
+          WAITRON_HTTP_PORT: String(primaryPort),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+        },
+        {},
+        { boxHost: synchronisedBoxHost() },
+      );
       await poll(async () => primary!.health.lastPassAt ?? undefined);
 
       const node = await (await fetch(`${primaryBase}/api/node`)).json();

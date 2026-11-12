@@ -93,6 +93,61 @@ describe("the till's clock check", () => {
     expect(clockCheck).toHaveBeenCalledExactlyOnceWith(CTX.tx, CTX.reading);
   });
 
+  it("answers the waiting notice with its count in place of the marker while the start check waits", async () => {
+    const source = clockCheckNoticeSource(
+      async () => true,
+      () => 1,
+    );
+    expect(await source.read(CTX)).toEqual([
+      {
+        key: "clock.unconfirmed",
+        code: "clock.unconfirmed",
+        severity: "error",
+        params: { agreed: 1 },
+      },
+    ]);
+  });
+
+  it("answers the marker when the start check does not wait, and nothing when the check answers false", async () => {
+    expect(
+      await clockCheckNoticeSource(
+        async () => true,
+        () => null,
+      ).read(CTX),
+    ).toEqual([CHECK_TIME]);
+    expect(
+      await clockCheckNoticeSource(
+        async () => false,
+        () => 0,
+      ).read(CTX),
+    ).toEqual([]);
+  });
+
+  it("is given the waiting count by the device sources", async () => {
+    const sources = deviceNoticeSources(
+      {
+        disk: { since: () => null },
+        space: { current: () => OFF },
+        clockCheck: async () => true,
+        startClockAgreed: () => 0,
+      },
+      [],
+    );
+    const read = await readStaffNotices(SAVEPOINTS, sources, {
+      reading: CTX.reading,
+      log: () => {},
+    });
+    expect(read.notices).toEqual([
+      {
+        key: "clock.unconfirmed",
+        code: "clock.unconfirmed",
+        severity: "error",
+        params: { agreed: 0 },
+        owner: BOX_CLOCK_NOTICE_OWNER,
+      },
+    ]);
+  });
+
   it("answers no marker while the check answers false", async () => {
     expect(await clockCheckNoticeSource(async () => false).read(CTX)).toEqual([]);
   });

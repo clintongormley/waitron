@@ -77,28 +77,42 @@ explica más abajo. Si la hora del servidor es correcta y fue la última venta l
 equivocada, dos cajas o terminales que coinciden con el servidor también reanudan los cobros, salvo
 que la parada dure desde que arrancó el servidor. Nunca ponen la hora.
 
+**Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora (0
+de 2 por ahora) · Comprobar la hora** es rojo. Cada vez que el servidor arranca, confirma su hora
+antes de aceptar cobros: por sí mismo en cuanto tiene la hora de internet, o en cuanto dos cajas o
+terminales con alguien con la sesión iniciada coinciden con su hora. Hasta entonces, los cobros y
+las devoluciones esperan, como en la línea de arriba; el resto del trabajo sigue. Puedes esperar, o
+confirmar tú la hora con **Comprobar la hora**.
+
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
-significa que el servidor arrancó con su hora en duda y no ha podido obtener la hora de
-Hacienda. Termina cualquiera de las dos líneas rojas de la hora de arriba. Un cobro rechazado dice
+significa que el servidor arrancó con su hora en duda y no ha podido confirmarla por sí
+mismo. Termina cualquiera de las tres líneas rojas de la hora de arriba. Un cobro rechazado dice
 entonces que uses **Comprobar la hora** arriba de la pantalla. Pulsa **Comprobar la hora** para
 abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ahí. Puede usarlo
 cualquiera con la sesión iniciada en la caja.
 
 El diálogo muestra la hora del servidor y la de esta caja. Nadie escribe una hora: lo que se envía es
-la hora de la propia caja, así que si la hora de la caja también está mal, corrígela primero en los
-ajustes de la caja y vuelve a comprobarlo.
+la hora de la propia caja.
 
-- Cuando las dos horas están a más de un minuto, pregunta **¿Usar la hora de este dispositivo?**
-  Pulsa **Usar esta hora** para poner el reloj del servidor a la hora de la caja; se
-  puede volver a cobrar. Pulsa **Ahora no** para dejarlo.
-- Cuando coinciden, te pide que confirmes que la hora del servidor es correcta. Pulsa **La hora es
-  correcta** si lo es; se puede volver a cobrar con el reloj del servidor. Pulsa **Ahora no** para
-  dejarlo.
+- Cuando las dos horas están a más de un minuto, pregunta cuál es la correcta. Pulsa **Este
+  dispositivo** si la hora de la caja es la buena: el reloj del servidor se pone a esa hora y se
+  puede volver a cobrar. Si la hora de la caja es más de un minuto anterior a la última venta del
+  servidor, los cobros pueden pararse: si la línea roja de la hora termina entonces con **Comprobar
+  la hora**, vuelve a abrirlo y pulsa **Sí**. Pulsa **El servidor** si la hora del servidor es la
+  buena: cuando **Los cobros esperan** es la única línea roja de la hora, el servidor mantiene su
+  hora y se puede volver a cobrar; si no, el diálogo te pide que corrijas la hora de la caja, como
+  con **Las dos horas están mal**. Pulsa **Las dos horas están mal** si ninguna lo es.
+- Cuando coinciden, pregunta si la hora es correcta. Pulsa **Sí** si lo es; se puede volver a
+  cobrar. Pulsa **No** si no lo es.
 
-En los dos casos, se avisa a todos los encargados de quién confirmó la hora y desde qué caja. Si el
+Si el diálogo te pide que corrijas la hora de la caja, corrígela en los ajustes de la propia caja y
+vuelve a abrir **Comprobar la hora**: el diálogo lee de nuevo la hora de la caja cada vez que se abre.
+
+Se avisa a quienes gestionan el sistema cuando el reloj del servidor se pone en hora desde una
+caja. Si el
 servidor se niega, el diálogo dice por qué encima de sus botones y, cuando volver a intentarlo puede
 servir, ofrece **Comprobar otra vez**. Si el [arranque](box-status.md#clock-at-start) del servidor termina con el
-diálogo abierto, un empleado ya no puede poner el reloj en hora desde una caja: el diálogo lo dice y
+diálogo abierto, y internet ha confirmado la hora del servidor, un empleado ya no puede poner el reloj en hora desde una caja: el diálogo lo dice y
 ofrece **Acceso de administrador**, para que un administrador inicie sesión ahí con su PIN y ponga
 la hora desde la misma caja.
 

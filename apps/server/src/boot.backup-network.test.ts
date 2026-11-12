@@ -32,6 +32,7 @@ import {
   withCapturedStdout,
 } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
+import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -229,7 +230,7 @@ async function bootAndTrade(
     try {
       const raw = await backupBase(scratch);
       serverRunning = true;
-      server = await startServer(env, raw, seams);
+      server = await startServer(env, raw, { boxHost: synchronisedBoxHost(), ...seams });
       const base = `https://127.0.0.1:${httpPort()}`;
       const afterTrading = await whileStarted(lines, { base, via });
       const orderId = randomUUID();

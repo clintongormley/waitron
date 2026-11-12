@@ -1507,8 +1507,14 @@ export const en = {
     "Card charged, but the payment is not recorded: the server's clock reads earlier than its last sale. Don't charge again. Once it is fixed, try this payment again: it is recorded without charging again.",
   "sale.charged_clock_unusable":
     "Card charged, but the payment is not recorded: the server's clock is wrong. Don't charge again. Once it is fixed, try this payment again: it is recorded without charging again.",
+  "sale.clock_unconfirmed":
+    "Payment not recorded: the server is waiting for its time to be confirmed. The order stays open. Use “Check the time” at the top of the screen.",
+  "sale.charged_clock_unconfirmed":
+    "Card charged, but the payment is not recorded: the server is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, try this payment again: it is recorded without charging again.",
   "bill_pay.charged_clock_behind":
     "Card charged, but the payment is not recorded: the server's clock reads earlier than its last sale. Don't charge again. Once it is fixed, the payment is recorded automatically.",
+  "bill_pay.charged_clock_unconfirmed":
+    "Card charged, but the payment is not recorded: the server is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, the payment is recorded automatically.",
   "bill_pay.charged_clock_unusable":
     "Card charged, but the payment is not recorded: the server's clock is wrong. Don't charge again. Once it is fixed, the payment is recorded automatically.",
   "collect.clock_behind_chain":
@@ -1910,6 +1916,8 @@ export const en = {
   "staff_notice.clock.check_time": "The server's time needs checking",
   "staff_notice.clock.behind_chain":
     "Payments stopped: the server's clock reads earlier than its last sale",
+  "staff_notice.clock.unconfirmed":
+    "Payments wait: the server is waiting for devices to connect and agree with its time ({agreed} of 2 so far)",
   "staff_notice.fiscal.records_unsent": "{n} sales not yet sent to the tax agency",
   "staff_notice.fiscal.records_unsent_one": "1 sale not yet sent to the tax agency",
   "staff_notice.printer.jobs_waiting": "Printer “{printer}” not printing",
@@ -1919,16 +1927,18 @@ export const en = {
   "staff_notice.check_time": "Check the time",
   "box_time.title": "Check the time",
   "box_time.loading": "Reading the server's time…",
-  "box_time.differs": "The server's clock says {box}. This device says {till}.",
-  "box_time.differs_ask":
-    "Use this device's time? The server's clock is set to it and payments start again. Every manager is told it was you, from this device.",
-  "box_time.differs_wrong_till":
-    "If this device's time is wrong too, correct it in the device's own settings first.",
-  "box_time.agrees":
-    "The server's clock says {box}, and this device agrees. If that is the right time, confirm it: payments start again. Every manager is told it was you.",
-  "box_time.not_now": "Not now",
-  "box_time.use_till": "Use this time",
-  "box_time.time_right": "The time is right",
+  "box_time.important": "It is very important that the time on the server is correct.",
+  "box_time.server_says": "The server's clock says the current date and time is:",
+  "box_time.device_says": "This device's clock says the current date and time is:",
+  "box_time.which_correct": "Which is correct:",
+  "box_time.server": "The server",
+  "box_time.device": "This device",
+  "box_time.both_wrong": "Both times are wrong",
+  "box_time.is_correct": "Is this time correct:",
+  "box_time.no": "No",
+  "box_time.yes": "Yes",
+  "box_time.correct_device":
+    "Please correct the time on this device and then reconnect to the server.",
   "box_time.set_to": "The server's clock is set to {after}.",
   "box_time.confirmed": "The server's time is confirmed.",
   "box_time.close": "Close",
@@ -1962,6 +1972,8 @@ export const en = {
   "box_time.refused.set_failed_refused": "The server could not set its clock. Nothing was changed.",
   "box_time.refused.set_failed_unverified":
     "The server asked for its clock to be set but could not confirm it took.",
+  "box_time.refused.stopped":
+    "Payments are stopped because of the server's clock, so the server cannot keep its own time. Check again and choose “This device” if this device's time is right; if it is not, correct this device's time first.",
   "box_time.refused.pending_disproofs":
     "The server has not finished recording what it found about its clock. Check again in a minute.",
   "box_time.refused.other":
@@ -3453,8 +3465,14 @@ export const es: Record<StringKey, string> = {
     "Cobrado con tarjeta, pero el pago no se ha registrado: la hora del servidor es anterior a la última venta. No vuelvas a cobrar. Cuando se arregle, vuelve a intentar este pago: se registra sin cobrar otra vez.",
   "sale.charged_clock_unusable":
     "Cobrado con tarjeta, pero el pago no se ha registrado: la hora del servidor es incorrecta. No vuelvas a cobrar. Cuando se arregle, vuelve a intentar este pago: se registra sin cobrar otra vez.",
+  "sale.clock_unconfirmed":
+    "Cobro no registrado: el servidor espera a que se confirme su hora. El pedido sigue abierto. Usa «Comprobar la hora» en la parte superior de la pantalla.",
+  "sale.charged_clock_unconfirmed":
+    "Tarjeta cobrada, pero el cobro no está registrado: el servidor espera a que se confirme su hora. No cobres otra vez. Cuando esté confirmada, vuelve a intentar este cobro: se registra sin cobrar otra vez.",
   "bill_pay.charged_clock_behind":
     "Cobrado con tarjeta, pero el pago no se ha registrado: la hora del servidor es anterior a la última venta. No vuelvas a cobrar. Cuando se arregle, el pago se registra automáticamente.",
+  "bill_pay.charged_clock_unconfirmed":
+    "Cobrado con tarjeta, pero el pago no se ha registrado: el servidor espera a que se confirme su hora. No vuelvas a cobrar. Cuando esté confirmada, el pago se registra automáticamente.",
   "bill_pay.charged_clock_unusable":
     "Cobrado con tarjeta, pero el pago no se ha registrado: la hora del servidor es incorrecta. No vuelvas a cobrar. Cuando se arregle, el pago se registra automáticamente.",
   "collect.clock_behind_chain":
@@ -3851,6 +3869,8 @@ export const es: Record<StringKey, string> = {
   "staff_notice.clock.check_time": "Hay que comprobar la hora del servidor",
   "staff_notice.clock.behind_chain":
     "No se puede cobrar: la hora del servidor es anterior a la última venta",
+  "staff_notice.clock.unconfirmed":
+    "Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora ({agreed} de 2 por ahora)",
   "staff_notice.fiscal.records_unsent": "{n} ventas sin enviar a Hacienda",
   "staff_notice.fiscal.records_unsent_one": "1 venta sin enviar a Hacienda",
   "staff_notice.printer.jobs_waiting": "Impresora «{printer}» no imprime",
@@ -3860,16 +3880,18 @@ export const es: Record<StringKey, string> = {
   "staff_notice.check_time": "Comprobar la hora",
   "box_time.title": "Comprobar la hora",
   "box_time.loading": "Leyendo la hora del servidor…",
-  "box_time.differs": "El reloj del servidor marca {box}. Este dispositivo marca {till}.",
-  "box_time.differs_ask":
-    "¿Usar la hora de este dispositivo? El reloj del servidor se pone a esa hora y se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú, desde este dispositivo.",
-  "box_time.differs_wrong_till":
-    "Si la hora de este dispositivo también está mal, corrígela primero en los ajustes del propio dispositivo.",
-  "box_time.agrees":
-    "El reloj del servidor marca {box} y este dispositivo coincide. Si es la hora correcta, confírmala: se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú.",
-  "box_time.not_now": "Ahora no",
-  "box_time.use_till": "Usar esta hora",
-  "box_time.time_right": "La hora es correcta",
+  "box_time.important": "Es muy importante que la hora del servidor sea correcta.",
+  "box_time.server_says": "El reloj del servidor dice que la fecha y la hora actuales son:",
+  "box_time.device_says": "El reloj de este dispositivo dice que la fecha y la hora actuales son:",
+  "box_time.which_correct": "¿Cuál es la correcta?",
+  "box_time.server": "El servidor",
+  "box_time.device": "Este dispositivo",
+  "box_time.both_wrong": "Las dos horas están mal",
+  "box_time.is_correct": "¿Es correcta esta hora?",
+  "box_time.no": "No",
+  "box_time.yes": "Sí",
+  "box_time.correct_device":
+    "Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
   "box_time.set_to": "El reloj del servidor marca ahora {after}.",
   "box_time.confirmed": "La hora del servidor está confirmada.",
   "box_time.close": "Cerrar",
@@ -3906,6 +3928,8 @@ export const es: Record<StringKey, string> = {
     "El servidor no ha podido poner su reloj en hora. No se ha cambiado nada.",
   "box_time.refused.set_failed_unverified":
     "El servidor pidió poner su reloj en hora, pero no ha podido confirmar que se hiciera.",
+  "box_time.refused.stopped":
+    "Los cobros están parados por el reloj del servidor, así que el servidor no puede mantener su hora. Vuelve a comprobarlo y elige «Este dispositivo» si la hora de este dispositivo es correcta; si no lo es, corrige primero la hora de este dispositivo.",
   "box_time.refused.pending_disproofs":
     "El servidor aún no ha terminado de registrar lo que encontró sobre su reloj. Vuelve a comprobarlo dentro de un minuto.",
   "box_time.refused.other":

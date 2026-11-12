@@ -10,8 +10,9 @@ import { isUnset } from "./env-value.js";
  * The server's side of the box's host service: one request line to the host's socket, one JSON
  * line back. `boxHostClient()` asks the clock requests (`deploy/box/waitron-box.sh`);
  * `boxHostRequests()` asks the host's other requests, writing and reading each line by the rules
- * of `scripts/box/host-protocol.mjs`. Every failure answers `available: false`, never a throw,
- * because a box without the service (a laptop, Docker Desktop, a host without systemd) still sells.
+ * of `scripts/box/host-protocol.mjs`. Every failure answers `available: false`, never a throw: a
+ * box without the service (a laptop, Docker Desktop, a host without systemd) answers every request
+ * so, which the start's clock check reads as not synchronised.
  *
  * `missing`: no connection was made (`detail` is the error's code; EACCES is a socket whose group
  * the app is not in). `lost`: the connection broke, or closed with no answer, after the request was

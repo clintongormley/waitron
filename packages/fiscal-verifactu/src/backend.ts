@@ -63,6 +63,7 @@ import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import {
+  chainHeads,
   clockBehindChain,
   refuseWhileClockBehind as refuseWhileClockBehindChain,
 } from "./clock-behind.js";
@@ -243,6 +244,10 @@ export class VerifactuBackend implements FiscalBackend {
 
   latestClockStep(tx: Transaction): Promise<ClockStep | null> {
     return latestClockStep(tx);
+  }
+
+  recordHeads(tx: Transaction): Promise<Record<string, number>> {
+    return chainHeads(tx);
   }
 
   openClockCheck(tx: Transaction, input: ClockCheckOpenRequest): Promise<{ id: string } | null> {

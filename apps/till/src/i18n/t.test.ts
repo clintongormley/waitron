@@ -16,6 +16,7 @@ import {
 } from "./t.js";
 import { catalogues, en } from "./strings.js";
 import { refusalText } from "../widgets/pay-refusal.js";
+import { staffNoticeText } from "./staff-notices.js";
 
 it.each(["constructor", "toString", "__proto__"])(
   "falls back to English for inherited locale key %s",
@@ -217,6 +218,36 @@ it("words a clock.behind_chain payment refusal with Check the time only while it
   );
   expect(refusalText(unusable)).toBe(clockUnusableText(BEHIND.clockAt, 60));
 });
+
+it.each([
+  [
+    "en-GB",
+    "Payments wait: the server is waiting for devices to connect and agree with its time (1 of 2 so far)",
+    "Payment not recorded: the server is waiting for its time to be confirmed. The order stays open. Use “Check the time” at the top of the screen.",
+    "Card charged, but the payment is not recorded: the server is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, try this payment again: it is recorded without charging again.",
+    "Card charged, but the payment is not recorded: the server is waiting for its time to be confirmed. Don't charge again. Once it is confirmed, the payment is recorded automatically.",
+  ],
+  [
+    "es-ES",
+    "Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora (1 de 2 por ahora)",
+    "Cobro no registrado: el servidor espera a que se confirme su hora. El pedido sigue abierto. Usa «Comprobar la hora» en la parte superior de la pantalla.",
+    "Tarjeta cobrada, pero el cobro no está registrado: el servidor espera a que se confirme su hora. No cobres otra vez. Cuando esté confirmada, vuelve a intentar este cobro: se registra sin cobrar otra vez.",
+    "Cobrado con tarjeta, pero el pago no se ha registrado: el servidor espera a que se confirme su hora. No vuelvas a cobrar. Cuando esté confirmada, el pago se registra automáticamente.",
+  ],
+])(
+  "words the waiting start's notice, with its count, and its payment refusals, a bill payment's own (%s)",
+  (locale, notice, refused, charged, billCharged) => {
+    setLocale(locale);
+    expect(staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1 } }).main).toBe(notice);
+    expect(staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 0 } }).main).toBe(
+      notice.replace("(1 ", "(0 "),
+    );
+    expect(refusalText({ code: "clock.unconfirmed" })).toBe(refused);
+    const chargedRefusal = { code: "sale.charged_not_recorded", reason: "clock_unconfirmed" };
+    expect(refusalText(chargedRefusal)).toBe(charged);
+    expect(refusalText(chargedRefusal, { billPayment: true })).toBe(billCharged);
+  },
+);
 
 it.each(["en-GB", "es-ES"])(
   "writes a date and time of day on one line in the till's own time zone (%s)",

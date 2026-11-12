@@ -24,7 +24,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { ClockServiceStatus } from "./box-host-client.js";
 import { clockCorrection } from "./clock-correction.js";
-import { clockStartUp, type ClockStartUp } from "./clock-start-up.js";
+import { clockStartUp, tillClockCheck, type ClockStartUp } from "./clock-start-up.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
@@ -34,6 +34,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { mountTillApi } from "./till-api.js";
 import { systemClock } from "./till-backend.js";
 import { SESSION_COOKIE } from "./till-session.js";
+import { startClockState, type StartClockState } from "./start-clock-check.js";
 import {
   watchDerivationsAndLock,
   watchedDerivationCount,
@@ -192,6 +193,8 @@ interface Box {
   host: FakeHost;
   startUp: ClockStartUp;
   failures: { slot: string; personId: string }[];
+  /** What the till API logged. */
+  logs: { event: string; fields: Record<string, unknown> }[];
   setClock(ms: number): void;
   setSteady(ms: number): void;
   setFromBox(fromBox: boolean): void;
@@ -214,6 +217,8 @@ async function stoppedBox(
     devMode?: boolean;
     authority?: "not_asked" | "answered";
     backend?: FiscalBackend;
+    /** The start's clock check, handed to the correction and the routes. */
+    start?: StartClockState;
   } = {},
 ): Promise<Box> {
   const backend = options.backend ?? venue.backend;
@@ -263,8 +268,10 @@ async function stoppedBox(
     transaction: (fn) => withTransaction(venue.db, fn),
     nodeId: venue.cfg.nodeId,
     log: () => {},
+    ...(options.start === undefined ? {} : { start: { state: options.start, heads: recordHeads } }),
   });
   const startUp = clockStartUp({ primaryAtStart: true });
+  const logs: Box["logs"] = [];
   if (options.authority === "answered") startUp.authorityAsked(true);
   else if (options.authority !== "not_asked") startUp.authorityAsked(false);
   const failures: Box["failures"] = [];
@@ -315,12 +322,18 @@ async function stoppedBox(
         steady: () => steadyMs,
         requestFromBox: () => fromBox,
         filesRecords: () => filesRecords,
+        ...(options.start === undefined
+          ? {}
+          : { start: { state: options.start, heads: recordHeads } }),
       },
     },
-    () => {},
+    (_level, event, fields) => {
+      logs.push({ event, fields: { ...fields } });
+    },
   );
   return {
     behind,
+    logs,
     witnesses,
     app,
     clock,
@@ -360,6 +373,8 @@ async function stoppedBox(
 }
 
 const boxTime = (box: Box) => box.clock.now().instant.getTime();
+
+const recordHeads = (tx: Transaction) => venue.backend.recordHeads!(tx);
 
 function ask(box: Box, cookie: string, body: unknown = {}) {
   return send(box.app, cookie, "POST", "/api/box-clock/challenge", body);
@@ -1124,3 +1139,349 @@ it("finishes a set held in the turn and an agreeing till's confirmation, on the 
   expect(setAnswer.status).toBe(200);
   expect(confirmAnswer.status).toBe(409);
 });
+
+/** A box whose latest record is a minute behind its clock, so no stop holds, with the start check
+ * waiting and the start-up window already shut by a read that saw no stop. */
+async function waitingBox(options: { authority?: "not_asked" } = {}) {
+  const start = startClockState();
+  const box = await stoppedBox(-MINUTE, { start, ...options });
+  box.startUp.noStop();
+  return { box, start };
+}
+
+it("serves a waiting box's challenge and keep with AEAT never asked", async () => {
+  const { box, start } = await waitingBox({ authority: "not_asked" });
+  const answer = await check(box, staffCookie, 10 * MINUTE, { keep: true });
+  expect(answer.status).toBe(200);
+  expect(start.status).toBe("by_person");
+});
+
+it("refuses the challenge with the window shut once the start check is by the internet, the control", async () => {
+  const { box, start } = await waitingBox();
+  start.confirm("by_internet", {});
+  await expectRefused(box, ask(box, staffCookie), 409, setRefused("not_stopped"));
+});
+
+it("offers a staff member the keep with the window shut, and keeps the box's time from a till 10 minutes off: no set, no row, one log line", async () => {
+  const { box, start } = await waitingBox();
+  const before = written(box);
+  const boxAt = boxTime(box);
+  const asked = await ask(box, staffCookie);
+  expect(asked.status).toBe(200);
+  expect(asked.json).toMatchObject({ keepOffered: true });
+  const answer = await confirmWith(box, staffCookie, {
+    challengeId: asked.json.challengeId,
+    deviceAt: boxAt + 10 * MINUTE,
+    keep: true,
+  });
+  expect(answer.status).toBe(200);
+  expect(answer.json).toMatchObject({ stepMs: 0 });
+  expect(written(box)).toEqual(before);
+  expect(box.host.statusAsks).toBe(0);
+  expect(boxTime(box)).toBe(boxAt);
+  expect(start.status).toBe("by_person");
+  const heads = await venue.db.withWriteLock(() => recordHeads(venue.db as unknown as Transaction));
+  expect(start.mark).toEqual(heads);
+  const confirmed = box.logs.filter((line) => line.event === "clock_start.confirmed");
+  expect(confirmed).toEqual([
+    {
+      event: "clock_start.confirmed",
+      fields: {
+        source: "staff",
+        person: venue.operatorId,
+        device: venue.deviceId,
+        boxAt: new Date(boxAt).toISOString(),
+        heads,
+      },
+    },
+  ]);
+});
+
+it("sets the box from a till 2 days off while waiting, at reason start, then by a person", async () => {
+  const { box, start } = await waitingBox();
+  const before = written(box);
+  const answer = await check(box, staffCookie, 2 * DAY);
+  expect(answer.status).toBe(200);
+  expect(box.host.sets).toHaveLength(1);
+  expect(box.host.sets[0]!.requester).toEqual({
+    source: "staff",
+    person: venue.operatorId,
+    device: venue.deviceId,
+  });
+  expect(written(box).rows).toBe(before.rows + 1);
+  expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
+    source: "staff",
+    person_id: venue.operatorId,
+    reason: "start",
+  });
+  expect(start.status).toBe("by_person");
+});
+
+it("confirms a till within a minute while waiting with no set and no row", async () => {
+  const { box, start } = await waitingBox();
+  const before = written(box);
+  const answer = await check(box, staffCookie, 20_000);
+  expect(answer.status).toBe(200);
+  expect(written(box)).toEqual(before);
+  expect(box.host.statusAsks).toBe(0);
+  expect(start.status).toBe("by_person");
+  expect(box.logs.filter((line) => line.event === "clock_start.confirmed")).toHaveLength(1);
+});
+
+it("refuses a keep behind the chain once the start check is by the internet, leaving the start-up window open", async () => {
+  const start = startClockState();
+  start.confirm("by_internet", {});
+  const box = await stoppedBox(DAY, { start });
+  const asked = await ask(box, staffCookie);
+  expect(asked.status).toBe(200);
+  expect(asked.json).not.toHaveProperty("keepOffered");
+  await expectRefused(
+    box,
+    check(box, staffCookie, DAY, { keep: true }),
+    409,
+    setRefused("stopped"),
+  );
+  expect(box.host.statusAsks).toBe(0);
+  expect(box.startUp.open()).toBe(true);
+});
+
+it("refuses a keep with no stop once the start check turned by the internet after the challenge, and shuts the window", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(-MINUTE, { start });
+  const asked = await ask(box, staffCookie);
+  expect(asked.json).toMatchObject({ keepOffered: true });
+  start.confirm("by_internet", {});
+  await expectRefused(
+    box,
+    confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box),
+      keep: true,
+    }),
+    409,
+    setRefused("not_stopped"),
+  );
+  expect(box.startUp.open()).toBe(false);
+});
+
+const paymentsAdmitted = (box: Box) =>
+  withTransaction(venue.db, (tx) => venue.backend.refuseWhileClockBehind(tx, box.clock.now()));
+
+it("confirms a waiting start from an agreeing till behind the chain, and lifts that stop too", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(DAY, { start });
+  box.startUp.noStop();
+  await expect(paymentsAdmitted(box)).rejects.toMatchObject({ code: "clock.behind_chain" });
+  const before = written(box);
+  const answer = await check(box, staffCookie, 20_000);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(answer.json).toMatchObject({ stepMs: 0 });
+  expect(box.host.sets).toHaveLength(0);
+  expect(written(box).rows).toBe(before.rows + 1);
+  const id = answer.json.confirmationId as string;
+  expect(confirmationRow(id)).toMatchObject({ source: "staff", person_id: venue.operatorId });
+  expect(incidentParams("clock.behind_chain_restarted", id)).toMatchObject({
+    confirmedBy: "staff",
+    person: "Ana",
+  });
+  expect(start.status).toBe("by_person");
+  expect(box.logs.filter((line) => line.event === "clock_start.confirmed")).toHaveLength(1);
+  await expect(paymentsAdmitted(box)).resolves.toBeUndefined();
+  expect(box.witnesses.witnesses()).toEqual([]);
+});
+
+it("offers no keep to a waiting start behind the chain, and refuses one sent anyway", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(DAY, { start });
+  const before = written(box);
+  const asked = await ask(box, staffCookie);
+  expect(asked.status).toBe(200);
+  expect(asked.json).not.toHaveProperty("keepOffered");
+  await expectRefused(
+    box,
+    confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box) + 10 * MINUTE,
+      keep: true,
+    }),
+    409,
+    setRefused("stopped"),
+  );
+  expect(written(box)).toEqual(before);
+  expect(box.host.sets).toHaveLength(0);
+  expect(box.host.statusAsks).toBe(0);
+  expect(start.status).toBe("waiting");
+  expect(box.logs.filter((line) => line.event === "clock_start.confirmed")).toEqual([]);
+  await expect(paymentsAdmitted(box)).rejects.toMatchObject({ code: "clock.behind_chain" });
+});
+
+it.each(["by_person", "by_devices"] as const)(
+  "refuses a keep behind the chain once the start is confirmed %s",
+  async (status) => {
+    const start = startClockState();
+    start.confirm(status, {});
+    const box = await stoppedBox(DAY, { start });
+    const before = written(box);
+    await expectRefused(
+      box,
+      check(box, staffCookie, DAY, { keep: true }),
+      409,
+      setRefused("stopped"),
+    );
+    expect(written(box)).toEqual(before);
+    expect(box.host.sets).toHaveLength(0);
+    expect(box.host.statusAsks).toBe(0);
+    expect(start.status).toBe(status);
+    expect(box.startUp.open()).toBe(true);
+  },
+);
+
+it("confirms a waiting start from an agreeing administrator behind the chain, and lifts that stop too", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(DAY, { start });
+  box.startUp.noStop();
+  const before = written(box);
+  const answer = await check(box, adminTillCookie, 20_000);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(box.host.sets).toHaveLength(0);
+  expect(written(box).rows).toBe(before.rows + 1);
+  const id = answer.json.confirmationId as string;
+  expect(confirmationRow(id)).toMatchObject({ source: "admin", person_id: venue.adminId });
+  expect(incidentParams("clock.behind_chain_restarted", id)).toMatchObject({
+    confirmedBy: "admin",
+  });
+  expect(start.status).toBe("by_person");
+  expect(
+    box.logs.filter((line) => line.event === "clock_start.confirmed").map((l) => l.fields),
+  ).toMatchObject([{ source: "admin", person: venue.adminId }]);
+  await expect(paymentsAdmitted(box)).resolves.toBeUndefined();
+});
+
+it("sets a waiting box behind the chain from a till still more than a minute before its last record, and lifts that stop too", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(DAY, { start });
+  box.startUp.noStop();
+  await expect(paymentsAdmitted(box)).rejects.toMatchObject({ code: "clock.behind_chain" });
+  const before = written(box);
+  const answer = await check(box, staffCookie, 10 * MINUTE);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(box.host.sets).toHaveLength(1);
+  expect(written(box).rows).toBe(before.rows + 1);
+  const id = answer.json.confirmationId as string;
+  expect(confirmationRow(id)).toMatchObject({
+    source: "staff",
+    person_id: venue.operatorId,
+    reason: "behind_chain",
+  });
+  expect(incidentParams("clock.behind_chain_restarted", id)).toMatchObject({
+    confirmedBy: "staff",
+    person: "Ana",
+  });
+  expect(start.status).toBe("by_person");
+  await expect(paymentsAdmitted(box)).resolves.toBeUndefined();
+});
+
+it("refuses a waiting box's set behind the chain once AEAT has spoken during that stop, leaving the start waiting", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(DAY, { start, authority: "answered" });
+  noteAuthority(box, DAY);
+  const before = written(box);
+  await expectRefused(box, check(box, staffCookie, 10 * MINUTE), 409, setRefused("witnessed"));
+  expect(box.host.sets).toHaveLength(0);
+  expect(written(box)).toEqual(before);
+  expect(start.status).toBe("waiting");
+});
+
+it("sets a waiting box whose clock reads before 28-10-2024 at reason start, and refuses its Yes", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(0, { at: IN_2001, start });
+  // A till that agrees with the box also reads before 28-10-2024.
+  await expectRefused(box, check(box, staffCookie, 20_000), 409, setRefused("target_invalid"));
+  expect(start.status).toBe("waiting");
+  const answer = await check(box, staffCookie, Date.now() + DAY - IN_2001);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
+    source: "staff",
+    reason: "start",
+  });
+  expect(start.status).toBe("by_person");
+});
+
+it("keeps the box's time from a till whose own clock reads 1970", async () => {
+  const { box, start } = await waitingBox();
+  const asked = await ask(box, staffCookie);
+  const answer = await confirmWith(box, staffCookie, {
+    challengeId: asked.json.challengeId,
+    deviceAt: 0,
+    keep: true,
+  });
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(start.status).toBe("by_person");
+  expect(box.host.sets).toHaveLength(0);
+});
+
+it("refuses a keep that is not true or false as the request's field", async () => {
+  const { box, start } = await waitingBox();
+  const asked = await ask(box, staffCookie);
+  await expectRefused(
+    box,
+    confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box),
+      keep: "yes",
+    }),
+    400,
+    { code: "management.request_invalid", params: { field: "keep" } },
+  );
+  expect(start.status).toBe("waiting");
+});
+
+it("admits a staff member to today's stop with the window shut once a person has confirmed the start", async () => {
+  const start = startClockState();
+  start.confirm("by_person", {});
+  const box = await stoppedBox(DAY, { start });
+  box.startUp.noStop();
+  const asked = await ask(box, staffCookie);
+  expect(asked.status).toBe(200);
+  expect(asked.json).not.toHaveProperty("keepOffered");
+  const answer = await check(box, staffCookie, DAY);
+  expect(answer.status).toBe(200);
+  expect(box.host.sets).toHaveLength(1);
+  expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
+    reason: "behind_chain",
+  });
+});
+
+it.each([
+  ["shut, as the clock watch leaves it after seeing no stop, so the till offers nothing", true],
+  ["still open, so the till offers Check the time", false],
+])(
+  "leaves the clock-behind stop in force after a waiting box ahead of its last record is set ten minutes back, with the start-up window %s; a person's Yes then lifts it",
+  async (_, shut) => {
+    const start = startClockState();
+    const box = await stoppedBox(-MINUTE, { start });
+    if (shut) box.startUp.noStop();
+    const set = await check(box, staffCookie, -10 * MINUTE);
+    expect(set.status, JSON.stringify(set.json)).toBe(200);
+    expect(confirmationRow(set.json.confirmationId as string)).toMatchObject({ reason: "start" });
+    expect(start.status).toBe("by_person");
+    await expect(paymentsAdmitted(box)).rejects.toMatchObject({ code: "clock.behind_chain" });
+    const offered = await venue.db.withWriteLock(() =>
+      tillClockCheck({
+        startUp: box.startUp,
+        backend: venue.backend,
+        witnesses: () => box.witnesses.witnesses(),
+        filesRecords: () => true,
+        start,
+      })(venue.db as unknown as Transaction, box.clock.now()),
+    );
+    expect(offered).toBe(!shut);
+    const yes = await check(box, staffCookie, 0);
+    expect(yes.status, JSON.stringify(yes.json)).toBe(200);
+    expect(confirmationRow(yes.json.confirmationId as string)).toMatchObject({
+      source: "staff",
+      reason: "behind_chain",
+    });
+    await expect(paymentsAdmitted(box)).resolves.toBeUndefined();
+  },
+);

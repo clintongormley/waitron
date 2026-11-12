@@ -15,10 +15,13 @@ import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
 type Override = { personId: string; pin: string };
 
 export interface BoxTimeApi {
-  boxClockChallenge(override?: Override): Promise<{ challengeId: string; boxAt: string }>;
+  boxClockChallenge(
+    override?: Override,
+  ): Promise<{ challengeId: string; boxAt: string; keepOffered?: true }>;
   boxClockConfirm(body: {
     challengeId: string;
     deviceAt: number;
+    keep?: true;
     override?: Override;
   }): Promise<BoxClockConfirmed>;
   listAdjustmentApprovers(roles: PersonRole[]): Promise<StaffMember[]>;
@@ -27,9 +30,19 @@ export interface BoxTimeApi {
 /** How far this till's clock may be from the box's and still agree with it. */
 const AGREES_MS = 60_000;
 
+type Choice = "server" | "device" | "yes";
+
 type View =
   | { kind: "loading" }
-  | { kind: "ask"; boxAt: number; tillAt: number; sending: boolean }
+  | {
+      kind: "ask";
+      boxAt: number;
+      tillAt: number;
+      keepOffered: boolean;
+      sending: Choice | null;
+      /** Asked to correct this device's own time instead of choosing. */
+      correcting: boolean;
+    }
   | { kind: "done"; text: string }
   | { kind: "refused"; text: string; checkAgain: boolean; admin: boolean };
 
@@ -53,6 +66,7 @@ const REASONS: Record<string, { key: StringKey; checkAgain: boolean }> = {
   same_machine: { key: "box_time.refused.same_machine", checkAgain: false },
   contrary_proof: { key: "box_time.refused.contrary_proof", checkAgain: false },
   pending_disproofs: { key: "box_time.refused.pending_disproofs", checkAgain: true },
+  stopped: { key: "box_time.refused.stopped", checkAgain: true },
 };
 
 const OTHER = { key: "box_time.refused.other", checkAgain: true } as const;
@@ -78,7 +92,7 @@ function refusalOf(error: unknown): { key: StringKey; checkAgain: boolean } {
 }
 
 /** "Check the time" on a till: the box's time beside this till's, and the signed-in person's
- * confirmation of it or of this till's time. The till never asks anyone to type a time: it sends
+ * choice of which is correct. The till never asks anyone to type a time: it sends
  * its own. Emits `box-time-close` when it closes and `box-time-done` once the box took it. */
 @customElement("till-box-time-dialog")
 export class TillBoxTimeDialog extends LitElement {
@@ -87,6 +101,27 @@ export class TillBoxTimeDialog extends LitElement {
     css`
       .words p {
         margin: 0 0 var(--wt-space-3);
+      }
+      .clocks {
+        margin: 0 0 var(--wt-space-3);
+      }
+      .clocks div {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        column-gap: var(--wt-space-3);
+        margin-block-end: var(--wt-space-2);
+      }
+      .clocks dd {
+        margin: 0;
+        font-weight: var(--wt-font-weight-medium);
+        white-space: nowrap;
+      }
+      .words p.question {
+        margin: 0 0 var(--wt-space-2);
+      }
+      wt-button[slot="cancel"] {
+        white-space: nowrap;
       }
     `,
   ];
@@ -107,24 +142,34 @@ export class TillBoxTimeDialog extends LitElement {
   async #check(): Promise<void> {
     this.view = { kind: "loading" };
     try {
-      const { boxAt } = await this.api.boxClockChallenge(this.#override);
-      this.view = { kind: "ask", boxAt: Date.parse(boxAt), tillAt: Date.now(), sending: false };
+      const { boxAt, keepOffered } = await this.api.boxClockChallenge(this.#override);
+      this.view = {
+        kind: "ask",
+        boxAt: Date.parse(boxAt),
+        tillAt: Date.now(),
+        keepOffered: keepOffered === true,
+        sending: null,
+        correcting: false,
+      };
     } catch (error) {
       this.#refused(error);
     }
   }
 
-  /** A fresh challenge, since one lives only a few seconds, then the confirm with this till's time. */
-  async #send(): Promise<void> {
-    if (this.view.kind !== "ask" || this.view.sending) return;
+  /** A fresh challenge, since one lives only a few seconds, then the confirm with this till's time;
+   * for `"server"`, the confirm asks the box to keep its own time whatever this till's says. */
+  async #send(choice: Choice): Promise<void> {
+    if (this.view.kind !== "ask" || this.view.sending !== null) return;
+    const keep = choice === "server";
     const override = this.#override;
-    this.view = { ...this.view, sending: true };
+    this.view = { ...this.view, sending: choice };
     try {
       const { challengeId } = await this.api.boxClockChallenge(override);
       const deviceAt = Date.now();
       const answer = await this.api.boxClockConfirm({
         challengeId,
         deviceAt,
+        ...(keep ? { keep: true as const } : {}),
         ...(override === undefined ? {} : { override }),
       });
       this.view = {
@@ -188,6 +233,13 @@ export class TillBoxTimeDialog extends LitElement {
     void this.#check();
   }
 
+  /** "The server" asks the box to keep its own time only when the box offers it (`keepOffered`);
+   * otherwise it asks the same as "Both times are wrong". */
+  #correctDevice(): void {
+    if (this.view.kind !== "ask" || this.view.sending !== null) return;
+    this.view = { ...this.view, correcting: true };
+  }
+
   #close(): void {
     if (!this.active) return;
     this.active = false;
@@ -227,37 +279,71 @@ export class TillBoxTimeDialog extends LitElement {
           }${view.admin ? this.#button("admin", "box_time.admin", () => void this.#askAdmin()) : nothing}</wt-form-actions
         >`;
       case "ask": {
-        const box = clockDateTime(view.boxAt);
         const differs = Math.abs(view.tillAt - view.boxAt) > AGREES_MS;
+        const choice = (
+          name: string,
+          label: StringKey,
+          variant: "primary" | "secondary",
+          onClick: () => void,
+          sends?: Choice,
+        ) =>
+          html`<wt-button
+            variant=${variant}
+            data-box-time=${name}
+            .loading=${sends !== undefined && view.sending === sends}
+            .disabled=${view.sending !== null}
+            @click=${onClick}
+            >${t(label)}</wt-button
+          >`;
+        const correct = () => this.#correctDevice();
         return html`<div class="words" data-box-time-words>
-            ${
-              differs
-                ? html`<p>
-                      ${t("box_time.differs")
-                        .replace("{box}", () => box)
-                        .replace("{till}", () => clockDateTime(view.tillAt))}
-                    </p>
-                    <p>${t("box_time.differs_ask")}</p>
-                    <p>${t("box_time.differs_wrong_till")}</p>`
-                : html`<p>${t("box_time.agrees").replace("{box}", () => box)}</p>`
-            }
+            <p>${t("box_time.important")}</p>
+            <dl class="clocks">
+              <div>
+                <dt>${t("box_time.server_says")}</dt>
+                <dd>${clockDateTime(view.boxAt)}</dd>
+              </div>
+              <div>
+                <dt>${t("box_time.device_says")}</dt>
+                <dd>${clockDateTime(view.tillAt)}</dd>
+              </div>
+            </dl>
+            <p class="question">
+              ${t(
+                view.correcting
+                  ? "box_time.correct_device"
+                  : differs
+                    ? "box_time.which_correct"
+                    : "box_time.is_correct",
+              )}
+            </p>
           </div>
           <wt-form-actions
-            ><wt-button
-              slot="cancel"
-              variant="secondary"
-              data-box-time="not-now"
-              .disabled=${view.sending}
-              @click=${close}
-              >${t("box_time.not_now")}</wt-button
-            ><wt-button
-              variant="primary"
-              data-box-time="primary"
-              .loading=${view.sending}
-              .disabled=${view.sending}
-              @click=${() => void this.#send()}
-              >${t(differs ? "box_time.use_till" : "box_time.time_right")}</wt-button
-            ></wt-form-actions
+            >${
+              view.correcting
+                ? this.#button("close", "box_time.close", close, "cancel")
+                : differs
+                  ? html`${choice(
+                      "server",
+                      "box_time.server",
+                      "primary",
+                      view.keepOffered ? () => void this.#send("server") : correct,
+                      view.keepOffered ? "server" : undefined,
+                    )}${choice(
+                      "device",
+                      "box_time.device",
+                      "primary",
+                      () => void this.#send("device"),
+                      "device",
+                    )}${choice("both-wrong", "box_time.both_wrong", "secondary", correct)}`
+                  : html`${choice("no", "box_time.no", "secondary", correct)}${choice(
+                      "yes",
+                      "box_time.yes",
+                      "primary",
+                      () => void this.#send("yes"),
+                      "yes",
+                    )}`
+            }</wt-form-actions
           >`;
       }
     }
@@ -268,7 +354,7 @@ export class TillBoxTimeDialog extends LitElement {
         ${trackDialog()}
         .open=${this.active}
         .heading=${t("box_time.title")}
-        .dismissible=${!(this.view.kind === "ask" && this.view.sending)}
+        .dismissible=${!(this.view.kind === "ask" && this.view.sending !== null)}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           if (event.target === event.currentTarget) this.#close();

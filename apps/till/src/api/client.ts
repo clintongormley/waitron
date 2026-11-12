@@ -2864,12 +2864,13 @@ export class TillApi {
     );
   }
 
-  /** A challenge for "Check the time": the box's time, valid for a few seconds. `override` says an
-   * administrator signing in here asks; its PIN is checked by the confirm. */
+  /** A challenge for "Check the time": the box's time, valid for a few seconds, and `keepOffered`
+   * while its start waits. `override` says an administrator signing in here asks; its PIN is
+   * checked by the confirm. */
   boxClockChallenge(override?: {
     personId: string;
     pin: string;
-  }): Promise<{ challengeId: string; boxAt: string }> {
+  }): Promise<{ challengeId: string; boxAt: string; keepOffered?: true }> {
     return this.#request(
       "/api/box-clock/challenge",
       "POST",
@@ -2877,10 +2878,12 @@ export class TillApi {
     );
   }
 
-  /** Confirms the box's time, or sets it to `deviceAt`, this till's own time in milliseconds. */
+  /** Confirms the box's time, or sets it to `deviceAt`, this till's own time in milliseconds;
+   * `keep`, offered only while the box's start waits, confirms its time whatever `deviceAt` says. */
   boxClockConfirm(body: {
     challengeId: string;
     deviceAt: number;
+    keep?: true;
     override?: { personId: string; pin: string };
   }): Promise<BoxClockConfirmed> {
     return this.#request("/api/box-clock/confirm", "POST", body);

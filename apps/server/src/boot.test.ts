@@ -104,6 +104,7 @@ import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import { freePort } from "./testing/free-ports.js";
+import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import { peerCertificate } from "./testing/box-tls.js";
 import {
   seedDevice,
@@ -2891,13 +2892,17 @@ describe("startServer, against a migrated venue directory", () => {
 
     try {
       const server = await withCapturedStdout(async (lines) => {
-        const started = await startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: sharedVenueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_ENV: "production",
-        });
+        const started = await startServer(
+          {
+            ...KEY_ENV,
+            WAITRON_VENUE_DIR: sharedVenueDir,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "production",
+          },
+          {},
+          { boxHost: synchronisedBoxHost() },
+        );
         await waitForEvent(lines, "loop.sleeping");
         return started;
       });
