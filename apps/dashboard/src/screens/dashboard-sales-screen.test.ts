@@ -1065,10 +1065,11 @@ describe("dashboard-sales-screen accountant workbook", () => {
   });
 
   it("blocks missing and backwards dates, then retries a refusal without a report refresh erasing it", async () => {
+    let refuseRetry!: (reason: unknown) => void;
     const downloadAccountantExport = vi
       .fn()
       .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-      .mockImplementationOnce(() => new Promise<Blob>(() => {}));
+      .mockImplementationOnce(() => new Promise<Blob>((_, reject) => (refuseRetry = reject)));
     const liveData = new LiveData();
     const api = stubApi({ downloadAccountantExport, liveData } as Partial<DashboardApi>);
     const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", {
@@ -1107,6 +1108,9 @@ describe("dashboard-sales-screen accountant workbook", () => {
     });
     expect(error(el)).toBeNull();
     expect(button(el)!.loading).toBe(true);
+    refuseRetry({ code: "authorization.not_permitted" });
+    await flush(el);
+    expect(error(el)).toBe(codeMessage("authorization.not_permitted"));
     setDate(el, "to-picker", "2030-06-21");
     await flush(el);
     expect(error(el)).toBeNull();
