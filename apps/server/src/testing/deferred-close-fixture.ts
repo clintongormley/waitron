@@ -24,8 +24,6 @@ import { testTradingAdmission } from "./trading-admission.js";
 import { tableSnapshot } from "./table-snapshot.js";
 import { offerProducts } from "./zone-offers.js";
 
-export const MINUTE = 60_000;
-
 /** The fiscal records and their outbox rows, by id: a refused close adds to neither. */
 export function fiscalWrites(db: Database) {
   return {

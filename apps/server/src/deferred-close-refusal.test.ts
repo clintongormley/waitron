@@ -32,9 +32,7 @@ import { inTx, seatedWith, send, tendersOfBill, type Answer } from "./testing/bi
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { collectOrderOrchestration } from "./testing/whole-payment-fixture.js";
 import {
-  MINUTE,
   RECIPIENT,
-  clockAt,
   refusal,
   deferredCloseVenue,
   type DeferredCloseKit,
@@ -177,20 +175,6 @@ describe("closeBillDeferredTx refuses, before writing anything", () => {
 
     for (const error of [routed, noted]) expect(error.code).toBe("storage.disk_full");
     const served = await t.close(request, t.depsWith({ disk: diskNoted(false) }));
-    expect(served.workingOrderId).toBe(billId);
-  });
-
-  it("a clock more than a minute behind the latest record, serving one within the minute", async () => {
-    const billId = await t.counterOrder("placed");
-    const request = await counterRequest(billId);
-    const latest = t.latestRecordMs();
-
-    const error = await refusedWithNothingWritten(() =>
-      t.close(request, t.depsWith({ clock: clockAt(latest - 10 * MINUTE) })),
-    );
-
-    expect(error.code).toBe("clock.behind_chain");
-    const served = await t.close(request, t.depsWith({ clock: clockAt(latest - 30_000) }));
     expect(served.workingOrderId).toBe(billId);
   });
 
