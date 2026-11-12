@@ -1,5 +1,7 @@
 # A444: date a completed meal by its end
 
+> **2026-11-12:** the [revised plan](../plans/2026-11-12-a444-meal-end-date.md) proposes keeping the close day on the final payment row instead of `working_orders.meal_completion` (its decision 2).
+
 > **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
 > Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
 > `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)

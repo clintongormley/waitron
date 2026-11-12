@@ -1,5 +1,7 @@
 # A444 Meal Completion Date Implementation Plan
 
+> **2026-11-12:** superseded by the [revised, smaller plan](2026-11-12-a444-meal-end-date.md), pending the watcher's clearance of its decisions.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans, inline by the driver. Read the TDD skill before writing any implementation or test. Checkboxes record execution, not documentation progress. Do not dispatch agents for these tasks.
 
 **Goal:** Give future completed-meal F1 invoices the saved venue calendar day of meal end,
