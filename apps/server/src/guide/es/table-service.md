@@ -224,8 +224,8 @@ Una tarjeta registrada desde un datáfono aparte siempre pide un PIN nuevo para 
 devolución en el datáfono se ha hecho.
 
 Mantén abierta esta ventana de devolución para usar la aprobación de la cancelación. Si la
-cierras y abres una devolución desde el ticket más tarde, introduce de nuevo el importe y el
-motivo y consigue la aprobación si se te pide.
+cierras antes de enviar una devolución y abres otra desde el ticket más tarde, introduce de nuevo
+el importe y el motivo y consigue la aprobación si se te pide.
 
 Cuando el pago elegido tiene menos que el total de los platos, el importe es lo que tiene, y una
 línea como **Quedan 2,00 € por devolver de otro pago** indica lo que falta. Cuenta desde el

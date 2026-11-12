@@ -212,8 +212,9 @@ If you raise the amount or add a tip, you need refund permission or a fresh appr
 refund still counts against the cancelled dishes, up to their value. A card keyed on a separate
 terminal always asks for a fresh PIN to confirm that the terminal refund was done.
 
-Keep this refund window open to use the cancellation's approval. If you close it and open a
-refund from the receipt later, enter its amount and reason again and get approval if asked.
+Keep this refund window open to use the cancellation's approval. If you close it before sending
+a refund and open one from the receipt later, enter its amount and reason again and get approval
+if asked.
 
 When the chosen payment holds less than the dishes' total, the amount is what it holds, and a line
 such as **€2.00 left to refund from another payment** says what remains. It counts from the amount

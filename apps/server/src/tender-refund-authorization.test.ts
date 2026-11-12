@@ -199,7 +199,13 @@ function request(tenderId: string, patch: Partial<TenderRefundRequest> = {}): Te
 }
 const operator = () => ({ personId, sessionId, attempts });
 const override = () => ({ personId: managerId, pin: PIN });
-async function reserve(t: Target, req = request(t.tenderId), config = cfg, op = operator()) {
+async function reserve(
+  t: Target,
+  req = request(t.tenderId),
+  config = cfg,
+  op = operator(),
+  cancelledBy?: string,
+) {
   return withTenderRefundAuthorization(
     store.db,
     config,
@@ -207,7 +213,7 @@ async function reserve(t: Target, req = request(t.tenderId), config = cfg, op = 
     req,
     op,
     async (tx, authorize) => {
-      const authorization = await authorize();
+      const authorization = await authorize(cancelledBy);
       const held = await reserveTenderRefund(
         tx,
         config,
@@ -415,14 +421,7 @@ describe("settled-tender refund authorization before reservation", () => {
     const t = await target("card", "manual");
     await role("staff");
     await expect(
-      withTenderRefundAuthorization(
-        store.db,
-        cfg,
-        t.saleId,
-        request(t.tenderId, { manualConfirmed: true }),
-        operator(),
-        (_tx, authorize) => authorize(managerId),
-      ),
+      reserve(t, request(t.tenderId, { manualConfirmed: true }), cfg, operator(), managerId),
     ).rejects.toMatchObject({ code: "authorization.not_permitted" });
     expect(await rows()).toEqual([]);
   });
@@ -430,13 +429,12 @@ describe("settled-tender refund authorization before reservation", () => {
     const t = await target();
     await role("staff");
     await expect(
-      withTenderRefundAuthorization(
-        store.db,
-        cfg,
-        t.saleId,
+      reserve(
+        t,
         request(t.tenderId, { override: { personId, pin: PIN } }),
+        cfg,
         operator(),
-        (_tx, authorize) => authorize(managerId),
+        managerId,
       ),
     ).rejects.toMatchObject({ code: "authorization.not_permitted" });
     expect(await rows()).toEqual([]);
