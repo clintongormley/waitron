@@ -130,16 +130,20 @@ function gone(pid: number) {
 
 describe("owned certificate child lifetime", () => {
   it("resolves only after its exact child exits and permits the next attempt", async () => {
-    const value = runner();
+    const value = runner(5_000, 2_000);
     const marker = join(root, "normal");
     await expect(
       value.attempt(async (runChild, abort) => {
-        const result = await runChild({ mode: "normal", marker, value: "selected" }, abort);
+        const result = await runChild(
+          { mode: "normal", marker, value: "selected", exitDelayMs: 300 },
+          abort,
+        );
         gone((await records(marker))[0]!.pid);
         return { result };
       }, signal()),
     ).resolves.toEqual({ result: { outcome: "completed", value: { value: "selected" } } });
     await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
+    expect(lifetime.events.filter(({ event }) => event === "kill")).toEqual([]);
   });
 
   it("keeps TypeScript cache housekeeping outside the child cleanup bound", async () => {
@@ -270,12 +274,16 @@ describe("owned certificate child lifetime", () => {
     vi.stubEnv("DIAGNOSIS_PRIVATE_CREDENTIAL", "PRIVATE SECRET");
     vi.stubEnv("NODE_OPTIONS", "--no-warnings");
     vi.stubEnv("TZ", "UTC");
-    const result = await runner().attempt(
+    const result = await runner(5_000, 2_000).attempt(
       async (runChild, abort) => ({
-        result: await runChild({ mode: "environment", marker: join(root, "environment") }, abort),
+        result: await runChild(
+          { mode: "environment", marker: join(root, "environment"), exitDelayMs: 300 },
+          abort,
+        ),
       }),
       signal(),
     );
+    expect(result).toMatchObject({ result: { outcome: "completed" } });
     const completed = (
       result as { result: { value: { env: Record<string, string>; argv: string[] } } }
     ).result.value;

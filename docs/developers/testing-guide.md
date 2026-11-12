@@ -1833,6 +1833,35 @@ rather than landing before it, nor time the fold-back of a 256 MiB file; the fro
 with its own write queue; both are skipped locally without their binaries (the stream loop test's
 section above); the bucket-copy cases in `apps/server/src/health.test.ts` hold `/health`.
 
+## Repeat a named test while keeping each attempt's evidence
+
+When a failure appears only sometimes, keep the failed attempt instead of replacing it with a
+successful rerun. You can repeat one command with a fresh log for each attempt:
+
+```bash
+node scripts/repeat-test.mjs 10 60 -- pnpm --filter @waitron/server exec vitest run src/fiscal-certificate-diagnosis-process.test.ts --reporter=default --silent=false
+```
+
+The first two arguments are the attempt count and each attempt's limit in seconds. The tool
+prints `Evidence: <temporary directory>`. Each `attempt-N.log` records the literal command,
+its output and its exit status. Any failed attempt makes the experiment fail, even if later
+attempts pass. An assertion failure adds a process snapshot labelled “after exit”; a deadline
+also captures the existing wrapper's snapshot before termination.
+
+To investigate under a chosen load, put its command before the test command:
+
+```bash
+node scripts/repeat-test.mjs 10 60 --load node -e 'const { Worker } = require("node:worker_threads"); for (let i = 0; i < 2; i++) new Worker("for (;;) {}", { eval: true });' -- pnpm --filter @waitron/server exec vitest run src/fiscal-certificate-diagnosis-process.test.ts --reporter=default --silent=false
+```
+
+Measure memory headroom and check other running tests before adding load. An early load exit
+makes the experiment invalid and fails it; the current attempt finishes and no further attempt starts. The
+first `--` separates the load arguments from the test command, so a load argument cannot itself
+be `--`. Ctrl-C stops the owned attempt and load through
+`run-with-deadline.mjs`, including its five-second cleanup grace. Arguments go directly to the
+commands, without shell expansion. Keep the printed evidence directory until you have recorded
+the result, then remove it yourself.
+
 **Timers and real work**
 
 ## A child’s exit can precede its readable output
@@ -1849,6 +1878,12 @@ stays within the existing total attempt budget. Run the server's
 and `fiscal-certificate-diagnosis-process.test.ts` together.
 
 ## Compile a process-lifetime fixture before starting its cleanup clock
+
+**12 November 2026:** The two naturally exiting process cases now use a 2,000 ms cleanup
+allowance and a controlled 300 ms delay after the dispatch channel closes. Both fail with
+200 ms and pass with 2,000 ms. The cache-housekeeping case keeps its 200 ms allowance, so its
+300 ms loader control still distinguishes the compiled fixture. The experiment below records
+the earlier bounds.
 
 A TypeScript loader can leave work running after the child has sent its result and closed its
 pipe. Compile a fixture once per suite when the case measures that child's exit. Keep the real

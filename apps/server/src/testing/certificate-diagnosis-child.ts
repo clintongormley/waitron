@@ -1,11 +1,13 @@
 import { appendFileSync, closeSync, writeSync } from "node:fs";
 import { runCertificateDiagnosisEntry } from "../fiscal-certificate-diagnosis-dispatch.js";
 
+let exitDelayMs = 0;
 await runCertificateDiagnosisEntry((id) => {
   if (id !== "fixture") throw new Error("PRIVATE UNKNOWN MODULE");
   return {
     diagnoseInChild: async (input, abort, report) => {
-      const body = input as { mode: string; marker: string; value?: string };
+      const body = input as { mode: string; marker: string; value?: string; exitDelayMs?: number };
+      exitDelayMs = body.exitDelayMs ?? 0;
       const mark = (stage: string) =>
         appendFileSync(body.marker, JSON.stringify({ stage, pid: process.pid }) + "\n");
       mark("started");
@@ -72,3 +74,4 @@ await runCertificateDiagnosisEntry((id) => {
     },
   };
 });
+if (exitDelayMs) await new Promise((resolve) => setTimeout(resolve, exitDelayMs));
