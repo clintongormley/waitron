@@ -1082,8 +1082,8 @@ corrective itself on the approval given at opening, under the till that opened i
 when its card refund goes through, or in the background check (about once a minute) when the card
 company confirms it later. The refund is recorded first and is never undone. A refused filing
 raises `invoice_correction.filing_refused`, an error among the tax-filing alerts, once per ticket;
-the check tries again each minute only while the refusal could clear, not once the approver is
-suspended or has lost the right to correct invoices, or the invoice can no longer be corrected
+the check tries again each minute while refunds are not paused, and attempts no filing while the approver is suspended or lacks
+the right to correct invoices, or while the invoice can no longer be corrected
 (decision 14 of the [reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md)).
 
 ### A444: a full invoice shows only the date it was created (owner, 2026-11-12)
