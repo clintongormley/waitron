@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -164,6 +164,8 @@ describe("runDeclarationCommand", () => {
     ],
     ["a flag given a value", ["show", "--draft=yes", ...SIGNING], invalid("--draft")],
     ["a missing option", ["check"], invalid("--version")],
+    ["a render with no folder", ["render", "--version", "1.0.0"], invalid("--out")],
+    ["an empty folder", ["render", "--version", "1.0.0", "--out", ""], invalid("--out")],
     ["a version with a leading zero", ["check", "--version", "1.01.0"], invalid("--version")],
     ["a version with a suffix", ["check", "--version", "1.0.0-rc.1"], invalid("--version")],
     ["an empty place", place(" "), invalid("--place")],
@@ -181,6 +183,61 @@ describe("runDeclarationCommand", () => {
     ],
   ])("refuses %s before reading any blocker", async (_name, argv, expected) => {
     expect(await run(real, argv)).toEqual({ status: 1, stdout: "", stderr: expected });
+  });
+
+  const RELEASING = ["--version", "1.0.0", "--place", "Elche", "--date", "2026-12-03"];
+
+  it("renders a written version's four files into the folder it is given", async () => {
+    expect((await run(unblocked, ["write", ...RELEASING], {})).status).toBe(0);
+    const out = join(unblocked, "out", "declaration");
+
+    const result = await run(unblocked, ["render", "--version", "1.0.0", "--out", out]);
+
+    expect(result).toEqual({ status: 0, stdout: `wrote ${out}\n`, stderr: "" });
+    expect((await readdir(out)).sort()).toEqual([
+      "declaration.html",
+      "declaration.pdf",
+      "declaration.txt",
+      "release.json",
+    ]);
+    expect(await readFile(join(out, "release.json"), "utf8")).toBe(
+      '{"version":"1.0.0","releasedOn":"2026-12-03"}\n',
+    );
+    expect(await readFile(join(out, "declaration.txt"), "utf8")).toContain("00000000T");
+  });
+
+  it("refuses to render without the producer's settings, in production terms", async () => {
+    await run(unblocked, ["write", ...RELEASING], {});
+    const out = join(unblocked, "out");
+
+    const result = await run(unblocked, ["render", "--version", "1.0.0", "--out", out], {});
+
+    expect(result.status).toBe(1);
+    expect(code(result.stderr)).toBe("sif.producer_unset");
+    await expect(stat(out)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("refuses to render a written version whose 1.a has been edited", async () => {
+    await run(unblocked, ["write", ...RELEASING]);
+    const file = join(unblocked, "declarations/v1.0.0.md");
+    const text = await readFile(file, "utf8");
+    await writeFile(file, text.replace(/(\*\*1\.a\)[^*]*\*\*)\s*Waitron/, "$1\nOtro"));
+    const out = join(unblocked, "out");
+
+    const result = await run(unblocked, ["render", "--version", "1.0.0", "--out", out]);
+
+    expect(result).toEqual({
+      status: 1,
+      stdout: "",
+      stderr: 'declaration.disagrees {"item":"1.a"}\n',
+    });
+    await expect(stat(out)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("lets a missing version's read error through when rendering", async () => {
+    await expect(
+      run(real, ["render", "--version", "9.9.9", "--out", join(real, "out")]),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("lets an error that is not a refusal through", async () => {

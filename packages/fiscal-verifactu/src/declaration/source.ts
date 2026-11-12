@@ -66,6 +66,11 @@ export function releaseBlockers(source: string): string[] {
   return [...source.matchAll(/^<!-- release-blocker: (.*?) -->$/gm)].map((match) => match[1]!);
 }
 
+export function refuseBlockers(source: string): void {
+  const count = releaseBlockers(source).length;
+  if (count > 0) throw new AppError("declaration.release_blocked", { count });
+}
+
 /** Each `**<n>.<x>) …**` paragraph's text after its closing `**`, keyed `"<n>.<x>"`. */
 export function declarationItems(source: string): ReadonlyMap<string, string> {
   const items = new Map<string, string>();
@@ -88,4 +93,21 @@ export function spanishDate(isoDate: string): string {
     year: "numeric",
     timeZone: "UTC",
   }).format(date);
+}
+
+/** The `YYYY-MM-DD` that item 1.l)'s first bullet states, in the words `spanishDate` writes. */
+export function declarationDate(source: string): string {
+  const bullet = /^\*\*1\.l\)\*\*\s*\n- ((?:.+\n?)(?: {2}.+\n?)*)/m.exec(source)?.[1] ?? "";
+  const joined = bullet.replace(/\s+/g, " ").trim();
+  const line = joined.slice(joined.lastIndexOf(": ") + 2).replace(/\.$/, "");
+  const words = /^(\d{1,2}) de \p{L}+ de (\d{4})$/u.exec(line);
+  for (let month = 1; words && month <= 12; month += 1) {
+    const date = `${words[2]}-${String(month).padStart(2, "0")}-${words[1]!.padStart(2, "0")}`;
+    try {
+      if (spanishDate(date) === line) return date;
+    } catch {
+      // An impossible day in this month: try the next.
+    }
+  }
+  throw new AppError("declaration.date_unreadable", { line: bullet === "" ? "" : line });
 }
