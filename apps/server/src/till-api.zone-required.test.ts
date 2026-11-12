@@ -69,7 +69,7 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
   await seedKitchenStation(db, { locationId });
   const [person] = await db
     .insert(persons)
-    .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+    .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
     .returning({ id: persons.id });
   const cfg: WithVenueRowId<OriginConfig> = {
     origin: jobOrigin("dashboard"),

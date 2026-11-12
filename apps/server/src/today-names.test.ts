@@ -115,7 +115,7 @@ beforeAll(async () => {
   const session = await inTx(v, async (tx) => {
     const [person] = await tx
       .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
   });

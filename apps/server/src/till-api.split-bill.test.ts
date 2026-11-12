@@ -84,7 +84,7 @@ const suite = useVenueDb({
     const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     staffMember = { id: person!.id };
     cfg = makeCfg(await venueLocationId(db), nodeId);
@@ -497,7 +497,7 @@ describe("a split-off check after the till that made it has forgotten it", () =>
       });
       const [person] = await tx
         .insert(persons)
-        .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+        .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
         .returning({ id: persons.id });
       const [profile] = await tx
         .insert(deviceProfiles)
