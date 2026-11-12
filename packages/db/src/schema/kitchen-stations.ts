@@ -38,11 +38,11 @@ export const kitchenStations = table(
       .notNull()
       .default("held-or-waiting"),
     waitsForPass: flag("waits_for_pass").notNull().default(false),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     closedOnDay: day("closed_on_day"),
     closedSendsToStationId: id("closed_sends_to_station_id").references(
       (): AnySQLiteColumn => kitchenStations.id,
     ),
-    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
     check(

@@ -36,7 +36,6 @@ import {
   venueLocationId,
   zoneDayRanges,
   zoneDays,
-  zoneExtensions,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
@@ -328,14 +327,11 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
         menuId: menu!.id,
       })),
     );
-    await tx.insert(zoneExtensions).values(
-      [f.gone, f.elsewhere].map((zoneId) => ({
-        zoneId,
-        businessDay: "2026-10-12",
-        startsAt: "17:00:00",
-        endsAt: "18:00:00",
-      })),
-    );
+    for (const zoneId of [f.gone, f.elsewhere])
+      await tx
+        .update(floorZones)
+        .set({ keptOpenDay: "2026-10-12", keptOpenFrom: "17:00:00", keptOpenUntil: "18:00:00" })
+        .where(eq(floorZones.id, zoneId));
     await tx.insert(departmentTransferDesks).values([
       { departmentId: f.department, receivingProfileId: f.explicit },
       { departmentId: f.alpha, receivingProfileId: f.explicit },
@@ -354,7 +350,6 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
       periods: menuPeriods,
       staff: menuPeriodStaffMenus,
       policies: floorZones,
-      zoneExtensions,
       sales: departmentSalePolicies,
       desks: departmentTransferDesks,
       routes: departmentTransferDestinations,
@@ -421,6 +416,9 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
               orderStart: null,
               paidWhen: null,
               collectionNumber: null,
+              keptOpenDay: null,
+              keptOpenFrom: null,
+              keptOpenUntil: null,
             }
           : row.id === f.elsewhere
             ? { ...row, isCounterDefault: true }

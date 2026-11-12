@@ -1,15 +1,14 @@
-import { eq } from "drizzle-orm";
+import { eq, and, isNotNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
-  stationDayStates,
   withTransaction,
   type Transaction,
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { setStationToday } from "./station-times.js";
 import { VENUE_SERVICE } from "./service.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
@@ -220,7 +219,7 @@ describe("station day seats", () => {
   it("lists destinations by name and omits the source and unavailable stations", async () => {
     await withTransaction(suite.db, async (tx) => {
       const f = await stationFixture(tx);
-      await setStationToday(tx, f.closed, "closed", AT);
+      await setStationToday(tx, f.closed, "closed", AT, await seedActivityActor(tx));
       expect(await VENUE_SERVICE.stationDestinations(tx, f.grill, AT)).toEqual([
         { id: f.bar, name: "Bar", isDefault: false },
         { id: f.kitchen, name: "Kitchen", isDefault: true },
@@ -231,9 +230,18 @@ describe("station day seats", () => {
   it("closes the chosen station for this business day and records its destination", async () => {
     await withTransaction(suite.db, async (tx) => {
       const f = await stationFixture(tx);
-      await VENUE_SERVICE.closeStationForToday(tx, f.grill, f.bar, AT);
+      await VENUE_SERVICE.closeStationForToday(tx, f.grill, f.bar, AT, await seedActivityActor(tx));
       expect(
-        await tx.select().from(stationDayStates).where(eq(stationDayStates.stationId, f.grill)),
+        await tx
+          .select({
+            id: kitchenStations.id,
+            stationId: kitchenStations.id,
+            businessDay: kitchenStations.closedOnDay,
+            open: sql<boolean>`0`.mapWith(Boolean),
+            sendsToStationId: kitchenStations.closedSendsToStationId,
+          })
+          .from(kitchenStations)
+          .where(and(isNotNull(kitchenStations.closedOnDay), eq(kitchenStations.id, f.grill))),
       ).toEqual([
         {
           id: expect.any(String),
@@ -255,10 +263,19 @@ describe("station day seats", () => {
   it("opens a station by deleting its closure and destination", async () => {
     await withTransaction(suite.db, async (tx) => {
       const f = await stationFixture(tx);
-      await setStationToday(tx, f.grill, "closed", AT, f.bar);
-      await VENUE_SERVICE.openStationForToday(tx, f.grill, AT);
+      await setStationToday(tx, f.grill, "closed", AT, await seedActivityActor(tx), f.bar);
+      await VENUE_SERVICE.openStationForToday(tx, f.grill, AT, await seedActivityActor(tx));
       expect(
-        await tx.select().from(stationDayStates).where(eq(stationDayStates.stationId, f.grill)),
+        await tx
+          .select({
+            id: kitchenStations.id,
+            stationId: kitchenStations.id,
+            businessDay: kitchenStations.closedOnDay,
+            open: sql<boolean>`0`.mapWith(Boolean),
+            sendsToStationId: kitchenStations.closedSendsToStationId,
+          })
+          .from(kitchenStations)
+          .where(and(isNotNull(kitchenStations.closedOnDay), eq(kitchenStations.id, f.grill))),
       ).toEqual([]);
       expect((await VENUE_SERVICE.stationStates(tx, AT)).get(f.grill)).toMatchObject({
         open: true,

@@ -40,11 +40,9 @@ beforeAll(() => {
 const TABLES = [
   "departments",
   "floor_zones",
-  "zone_extensions",
   "menu_period_staff_menus",
   "device_profile_service_access",
   "device_profile_zones",
-  "station_day_states",
   "routing_cells",
   "routing_cell_periods",
   "order_service_contexts",
@@ -257,10 +255,6 @@ describe("the venue-service tables carry no tenant column", () => {
         primaryKey: ["id"],
         foreignKeys: ["(department_id) -> departments(id)"],
       },
-      zone_extensions: {
-        primaryKey: ["id"],
-        foreignKeys: ["(zone_id) -> floor_zones(id)"],
-      },
       menu_period_staff_menus: {
         primaryKey: ["period_id", "menu_id"],
         foreignKeys: [
@@ -281,13 +275,6 @@ describe("the venue-service tables carry no tenant column", () => {
         foreignKeys: [
           "(device_profile_id) -> device_profile_service_access(device_profile_id) on delete cascade",
           "(zone_id) -> floor_zones(id)",
-        ],
-      },
-      station_day_states: {
-        primaryKey: ["id"],
-        foreignKeys: [
-          "(sends_to_station_id) -> kitchen_stations(id)",
-          "(station_id) -> kitchen_stations(id)",
         ],
       },
       routing_cells: {
@@ -424,8 +411,6 @@ describe("the venue-service tables carry no tenant column", () => {
     const columns = (name: string) => defs[name]?.columns;
     // No PRAGMA reports a partial index's `WHERE`, so it is read off the stored statement.
     const predicate = (name: string) => / WHERE (.*)$/.exec(defs[name]?.sql ?? "")?.[1];
-    expect(columns("station_day_states_day_key")).toEqual(["station_id", "business_day"]);
-    expect(defs["station_day_states_day_key"]?.unique).toBe(true);
     expect(columns("kitchen_notices_open_idx")).toEqual(["station_id", "created_at"]);
     expect(predicate("kitchen_notices_open_idx")).toBe(
       `"kitchen_notices"."acknowledged_at" is null`,
@@ -614,104 +599,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION), constraint).toBe(true);
     expect(engineErrorMessage(error), constraint).toContain("FOREIGN KEY constraint failed");
   }
-
-  async function zoneWithPolicy() {
-    const v = await venue();
-    return v;
-  }
-
-  it("keeps one zone extension per business day while other zones and days remain independent", async () => {
-    const v = await zoneWithPolicy();
-    const other = await zoneWithPolicy();
-    const extension = (zoneId: string, businessDay: string) =>
-      sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)
-        values (${randomUUID()}, ${zoneId}, ${businessDay}, '23:30:00', '01:30:00')`;
-    await db.execute(extension(v.zoneId, "2026-10-09"));
-    await db.execute(extension(v.zoneId, "2026-10-10"));
-    await db.execute(extension(other.zoneId, "2026-10-09"));
-    expect(
-      (
-        await db.execute(sql`select business_day, starts_at, ends_at from zone_extensions
-      where zone_id = ${v.zoneId} order by business_day`)
-      ).rows,
-    ).toEqual([
-      { business_day: "2026-10-09", starts_at: "23:30:00", ends_at: "01:30:00" },
-      { business_day: "2026-10-10", starts_at: "23:30:00", ends_at: "01:30:00" },
-    ]);
-    expect(
-      (
-        await db.execute(sql`select business_day from zone_extensions
-      where zone_id = ${other.zoneId}`)
-      ).rows,
-    ).toEqual([{ business_day: "2026-10-09" }]);
-    const error = await captureError(() =>
-      db.transaction((tx) => tx.execute(extension(v.zoneId, "2026-10-09"))),
-    );
-    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toContain(
-      "zone_extensions.zone_id, zone_extensions.business_day",
-    );
-  });
-
-  it.each([
-    ["23:10:00", "01:30:00"],
-    ["23:30:00", "01:10:00"],
-  ])("refuses zone extension endpoints %s–%s between quarter-hours", async (start, end) => {
-    const v = await zoneWithPolicy();
-    const error = await captureError(() =>
-      db.transaction((tx) =>
-        tx.execute(
-          sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)
-        values (${randomUUID()}, ${v.zoneId}, '2026-10-09', ${start}, ${end})`,
-        ),
-      ),
-    );
-    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toContain("zone_extensions_step_ck");
-  });
-
-  it("ties a zone extension to an existing zone", async () => {
-    const v = await venue();
-    const extension = (zoneId: string) => sql`insert into zone_extensions
-      (id, zone_id, business_day, starts_at, ends_at)
-      values (${randomUUID()}, ${zoneId}, '2026-10-09', '23:30:00', '01:30:00')`;
-    await refusal(extension(randomUUID()), "zone_extensions_zone_fk");
-    await db.execute(extension(v.zoneId));
-    expect(
-      (
-        await db.execute(sql`select zone_id from zone_extensions
-      where zone_id = ${v.zoneId}`)
-      ).rows,
-    ).toEqual([{ zone_id: v.zoneId }]);
-  });
-
-  it("stores a station's chosen destination while accepting a day with no destination", async () => {
-    await venue();
-    const [station, destination] = await db
-      .insert(kitchenStations)
-      .values([{ name: "Grill" }, { name: "Bar" }])
-      .returning({ id: kitchenStations.id });
-    const state = (day: string, sendsTo: string | null) =>
-      sql`insert into station_day_states (id, station_id, business_day, open, sends_to_station_id)
-        values (${randomUUID()}, ${station!.id}, ${day}, 0, ${sendsTo})`;
-    await db.execute(state("2026-10-08", destination!.id));
-    await db.execute(state("2026-10-09", null));
-    expect(
-      (
-        await db.execute(sql`select business_day, sends_to_station_id from station_day_states
-      where station_id = ${station!.id} order by business_day`)
-      ).rows,
-    ).toEqual([
-      { business_day: "2026-10-08", sends_to_station_id: destination!.id },
-      { business_day: "2026-10-09", sends_to_station_id: null },
-    ]);
-    await refusal(state("2026-10-10", randomUUID()), "station_day_states_sends_to_fk");
-    const self = await captureError(() =>
-      db.transaction((tx) => tx.execute(state("2026-10-10", station!.id))),
-    );
-    expect(isRefusal(self, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(self)).toContain("station_day_states_sends_to_not_self_ck");
-  });
 
   async function routedPeriod() {
     const v = await venue();

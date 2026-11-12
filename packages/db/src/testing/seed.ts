@@ -1,3 +1,4 @@
+import { persons } from "../schema/identity/persons.js";
 import { and, asc, eq, ne, sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, NodeId } from "@waitron/shared";
@@ -10,7 +11,7 @@ import { kitchenStations } from "../schema/kitchen-stations.js";
 import { nodes } from "../schema/nodes.js";
 import { workingOrders } from "../schema/orders.js";
 import { locations } from "../schema/tenants.js";
-import { nowIso } from "../schema/columns.js";
+import { newId, nowIso } from "../schema/columns.js";
 import { settings } from "../schema/settings.js";
 import { BUSINESS_DAY_SETTINGS, FIRST_DAY_START, type VenueSettings } from "../venue-settings.js";
 import { readSettings, saveSettings } from "../settings.js";
@@ -284,4 +285,21 @@ export async function seedZone(
     .values({ ...input, departmentId })
     .returning({ id: floorZones.id, departmentId: floorZones.departmentId });
   return zone!;
+}
+
+export async function seedPerson(
+  db: Database | Transaction,
+  input: { id?: string; displayName?: string } = {},
+): Promise<string> {
+  const id = input.id ?? newId();
+  await db
+    .insert(persons)
+    .values({ id, displayName: input.displayName ?? "Test person" })
+    .onConflictDoNothing({ target: persons.id });
+  return id;
+}
+
+export async function seedActivityActor(db: Database | Transaction) {
+  const personId = await seedPerson(db, { id: "test-activity-person", displayName: "Today actor" });
+  return { personId, deviceId: null, authorizedBy: personId };
 }

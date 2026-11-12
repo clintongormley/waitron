@@ -1,3 +1,4 @@
+import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -1861,7 +1862,7 @@ describe("dish extras on kitchen tickets", () => {
       };
       const orderId = party.tabId;
       await addTabRound(tx, cfg, orderId, [pick]);
-      await setStationToday(tx, stations.fryer, "closed", new Date());
+      await setStationToday(tx, stations.fryer, "closed", new Date(), await seedActivityActor(tx));
       await addTabRound(tx, cfg, orderId, [pick]);
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
       await reprintOrderTickets(tx, cfg, orderId);

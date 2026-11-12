@@ -45,7 +45,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 23,
+  version: 24,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -215,6 +215,7 @@ describe("staged configuration import", () => {
     ["pre-comp-permissions export", { version: 20 }],
     ["pre-saved-floor-fold export", { version: 21 }],
     ["pre-job-role-move export", { version: 22 }],
+    ["pre-today-choice-fold export", { version: 23 }],
     ["future version", { version: bundle.version + 1 }],
     ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {

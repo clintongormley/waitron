@@ -5,13 +5,7 @@ import {
   sameScheduleRanges,
 } from "./business-day-schedule.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import {
-  departments,
-  floorZones,
-  readVenueClock,
-  zoneExtensions,
-  type Transaction,
-} from "@waitron/db";
+import { departments, floorZones, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
 import { resolveZoneContext, wireTime } from "./operations.js";
 import { parseClosedRanges, type ClosedRange, rangeSpan, rangeSpanInDay } from "./service-day.js";
@@ -223,15 +217,15 @@ export async function zoneClosureDays(
       ? []
       : await tx
           .select({
-            zoneId: zoneExtensions.zoneId,
-            startsAt: zoneExtensions.startsAt,
-            endsAt: zoneExtensions.endsAt,
+            zoneId: floorZones.id,
+            startsAt: floorZones.keptOpenFrom,
+            endsAt: floorZones.keptOpenUntil,
           })
-          .from(zoneExtensions)
+          .from(floorZones)
           .where(
             and(
-              eq(zoneExtensions.businessDay, moment.businessDay),
-              zoneIds === undefined ? undefined : inArray(zoneExtensions.zoneId, [...zoneIds]),
+              eq(floorZones.keptOpenDay, moment.businessDay),
+              zoneIds === undefined ? undefined : inArray(floorZones.id, [...zoneIds]),
             ),
           );
   for (const [zoneId, days] of closures) {
@@ -241,7 +235,7 @@ export async function zoneClosureDays(
       extension:
         extension === undefined
           ? null
-          : { startsAt: wireTime(extension.startsAt), endsAt: wireTime(extension.endsAt) },
+          : { startsAt: wireTime(extension.startsAt!), endsAt: wireTime(extension.endsAt!) },
     });
   }
   return { clock, moment, dayContext, cutover: dayContext.dayCutover, zones };

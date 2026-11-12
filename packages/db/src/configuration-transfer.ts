@@ -65,13 +65,21 @@ export const CORE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
     { name: "catalogues" },
-    { name: "kitchen_stations", leaveBehindWhenFalse: "active" },
+    {
+      name: "kitchen_stations",
+      leaveBehindWhenFalse: "active",
+      omit: ["closed_on_day", "closed_sends_to_station_id"],
+    },
     { name: "kitchen_courses", leaveBehindWhenFalse: "active" },
     { name: "categories" },
     // The catalogue module's `afterImport` sets `name_key` from the name.
     { name: "products", omit: ["name_key"] },
     { name: "device_profiles", leaveBehindWhenSet: "retired_at" },
-    { name: "floor_zones", leaveBehindWhenFalse: "active" },
+    {
+      name: "floor_zones",
+      leaveBehindWhenFalse: "active",
+      omit: ["kept_open_day", "kept_open_from", "kept_open_until"],
+    },
     {
       name: "dining_tables",
       omit: ["needs_clearing_since", "short_name_key"],

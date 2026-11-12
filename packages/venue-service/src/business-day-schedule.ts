@@ -13,7 +13,6 @@ import {
   specialDays,
   zoneDayRanges,
   zoneDays,
-  zoneExtensions,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -284,22 +283,21 @@ export async function keptOpenConflicts(
     .select({
       departmentId: floorZones.departmentId,
       departmentName: departments.name,
-      zoneId: zoneExtensions.zoneId,
+      zoneId: floorZones.id,
       zoneName: floorZones.name,
-      endsAt: zoneExtensions.endsAt,
+      endsAt: floorZones.keptOpenUntil,
     })
-    .from(zoneExtensions)
-    .innerJoin(floorZones, eq(floorZones.id, zoneExtensions.zoneId))
+    .from(floorZones)
     .innerJoin(departments, eq(departments.id, floorZones.departmentId))
-    .where(eq(zoneExtensions.businessDay, tonight))
-    .orderBy(asc(zoneExtensions.id));
+    .where(eq(floorZones.keptOpenDay, tonight))
+    .orderBy(asc(floorZones.id));
   const oldCutover = cutoverForBusinessDay(before, tonight);
   const newEnd = serviceDayWallContext(candidate, tonight).endMinute;
   return zones
-    .filter((row) => (minuteOfServiceDay(row.endsAt, oldCutover) || 1440) > newEnd)
+    .filter((row) => (minuteOfServiceDay(row.endsAt!, oldCutover) || 1440) > newEnd)
     .map((row) => ({
       ...row,
-      endsAt: row.endsAt.slice(0, 5),
+      endsAt: row.endsAt!.slice(0, 5),
       rangeIndex: 0,
       reason: "kept_open" as const,
     }));

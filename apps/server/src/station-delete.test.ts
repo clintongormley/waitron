@@ -23,7 +23,12 @@ import {
   orderDraftEvents,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedWorkingOrder,
+  seedActivityActor,
+} from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   closeStationForToday,
@@ -141,7 +146,6 @@ async function snapshot(v: PartyVenue) {
       "device_made_here_stations",
       "routing_cells",
       "routing_cell_periods",
-      "station_day_states",
       "device_kitchen_screens",
       "device_kitchen_screen_stations",
       "device_kitchen_screen_removals",
@@ -428,7 +432,7 @@ describe("permanent station deletion", () => {
         sql`insert into routing_cells (id, no_category, station_id, product_id) values (${ownedCell}, 1, ${id}, null), (${survivingCell},0,${otherId},${v.productId("Flan")})`,
       );
       await tx.execute(
-        sql`insert into station_day_states (id,station_id,business_day,open,sends_to_station_id) values (${randomUUID()},${id},'2026-10-09',0,null), (${randomUUID()},${id},'2026-10-10',0,null), (${randomUUID()},${otherId},'2026-10-10',0,${id})`,
+        sql`update kitchen_stations set closed_on_day='2026-10-10', closed_sends_to_station_id=case when id=${otherId} then ${id} else null end where id in (${id},${otherId})`,
       );
     });
     const before = await snapshot(v);
@@ -439,7 +443,7 @@ describe("permanent station deletion", () => {
       ends: [],
       removes: [
         { key: "station_routing_cells", count: 1, targets: [] },
-        { key: "station_daily_states", count: 2, targets: [] },
+        { key: "station_daily_states", count: 1, targets: [] },
         {
           key: "station_daily_destinations",
           count: 1,
@@ -451,16 +455,19 @@ describe("permanent station deletion", () => {
     expect(after.routing_cells).toEqual(
       (before.routing_cells as { id: string }[]).filter((row) => row.id !== ownedCell),
     );
-    expect(after.station_day_states).toEqual(
-      (before.station_day_states as { station_id: string; sends_to_station_id: string | null }[])
-        .filter((row) => row.station_id !== id)
-        .map((row) =>
-          row.sends_to_station_id === id ? { ...row, sends_to_station_id: null } : row,
-        ),
-    );
     expect(after.kitchen_stations).toEqual(
-      (before.kitchen_stations as { id: string; active: number }[]).map((row) =>
-        row.id === id ? { ...row, active: 0 } : row,
+      (
+        before.kitchen_stations as {
+          id: string;
+          active: number;
+          closed_sends_to_station_id: string | null;
+        }[]
+      ).map((row) =>
+        row.id === id
+          ? { ...row, active: 0, closed_on_day: null, closed_sends_to_station_id: null }
+          : row.closed_sends_to_station_id === id
+            ? { ...row, closed_sends_to_station_id: null }
+            : row,
       ),
     );
     for (const key of [
@@ -792,7 +799,8 @@ describe("A773 no dispatch state", () => {
           id,
           destination.id,
           undefined,
-          (at) => closeStationForToday(tx, id, destination.id, at),
+          async (at) =>
+            closeStationForToday(tx, id, destination.id, at, await seedActivityActor(tx)),
           { deviceId: v.cfg.origin.deviceId, personId: OPERATOR },
         ),
       ),
@@ -818,7 +826,7 @@ describe("A773 no dispatch state", () => {
         id,
         destination.id,
         "send",
-        (at) => closeStationForToday(tx, id, destination.id, at),
+        async (at) => closeStationForToday(tx, id, destination.id, at, await seedActivityActor(tx)),
         { deviceId: v.cfg.origin.deviceId, personId: OPERATOR },
       ),
     );

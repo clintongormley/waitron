@@ -1,5 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type {
@@ -538,7 +538,9 @@ describe("Hours when the venue's clock changes", () => {
     /** Thursday 15 October 2026 02:30 in Madrid. */
     const at = new Date("2026-10-15T00:30:00Z");
     expect(await barStatus(fx, at)).toEqual({ open: true, why: "open" });
-    await withTransaction(db, (tx) => setStationToday(tx, fx.bar.id, "closed", at));
+    await withTransaction(db, async (tx) =>
+      setStationToday(tx, fx.bar.id, "closed", at, await seedActivityActor(tx)),
+    );
     const before = await model(at);
     expect(before.civilDate).toBe("2026-10-15");
     expect(await barStatus(fx, at)).toEqual({ open: false, why: "closed_by_hand" });

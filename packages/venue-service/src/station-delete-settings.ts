@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, isNotNull, or } from "drizzle-orm";
 import {
   deviceKitchenScreenRemovals,
   deviceKitchenScreenStations,
@@ -8,7 +8,6 @@ import {
   kitchenStations,
   routingCellPeriods,
   routingCells,
-  stationDayStates,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -68,14 +67,13 @@ async function settings(tx: Transaction, id: string) {
     )
     .where(eq(deviceProfileKitchenScreenStations.stationId, id));
   const daily = await tx
-    .select({ id: stationDayStates.id })
-    .from(stationDayStates)
-    .where(eq(stationDayStates.stationId, id));
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(and(eq(kitchenStations.id, id), isNotNull(kitchenStations.closedOnDay)));
   const incoming = await tx
-    .select({ rowId: stationDayStates.id, id: kitchenStations.id, name: kitchenStations.name })
-    .from(stationDayStates)
-    .innerJoin(kitchenStations, eq(kitchenStations.id, stationDayStates.stationId))
-    .where(eq(stationDayStates.sendsToStationId, id));
+    .select({ rowId: kitchenStations.id, id: kitchenStations.id, name: kitchenStations.name })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.closedSendsToStationId, id));
   const displays = await tx
     .select({ id: devices.id, name: devices.label })
     .from(devices)
@@ -171,20 +169,17 @@ export async function clearStationDeleteSettings(tx: Transaction, id: string): P
     .delete(deviceProfileKitchenScreenStations)
     .where(eq(deviceProfileKitchenScreenStations.stationId, id));
   await tx.delete(deviceKitchenScreenRemovals).where(eq(deviceKitchenScreenRemovals.stationId, id));
-  if (rows.daily.length > 0)
-    await tx.delete(stationDayStates).where(
-      inArray(
-        stationDayStates.id,
-        rows.daily.map((row) => row.id),
-      ),
-    );
+  await tx
+    .update(kitchenStations)
+    .set({ closedOnDay: null, closedSendsToStationId: null })
+    .where(eq(kitchenStations.id, id));
   if (rows.incoming.length > 0)
     await tx
-      .update(stationDayStates)
-      .set({ sendsToStationId: null })
+      .update(kitchenStations)
+      .set({ closedSendsToStationId: null })
       .where(
         inArray(
-          stationDayStates.id,
+          kitchenStations.id,
           rows.incoming.map((row) => row.rowId),
         ),
       );

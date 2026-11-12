@@ -19,7 +19,7 @@ import {
   readVenueClock,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
@@ -346,7 +346,13 @@ it.each([
 it("planning ignores a station's daily closure", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    await closeStationForToday(db, f.station, f.defaultStation, new Date("2026-10-12T11:00:00Z"));
+    await closeStationForToday(
+      db,
+      f.station,
+      f.defaultStation,
+      new Date("2026-10-12T11:00:00Z"),
+      await seedActivityActor(db),
+    );
     expect(await stationServiceTimes(db, f.station, day, day)).toEqual(planned(f));
   }));
 it.each([

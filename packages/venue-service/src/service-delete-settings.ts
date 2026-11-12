@@ -24,7 +24,6 @@ import {
   serviceSteps,
   zoneDayRanges,
   zoneDays,
-  zoneExtensions,
   type Transaction,
 } from "@waitron/db";
 import { createLabelComparator, type DeleteImpactItem, type DeleteTarget } from "@waitron/shared";
@@ -57,10 +56,7 @@ async function settings(
         departmentId === null ? undefined : eq(routingCellPeriods.departmentId, departmentId),
       ),
     );
-  const extensions = await tx
-    .select()
-    .from(zoneExtensions)
-    .where(inArray(zoneExtensions.zoneId, zoneIds));
+  const extensions = zones.filter((zone) => zone.keptOpenDay !== null);
   const memberships = await tx
     .select()
     .from(deviceProfileZones)
@@ -380,7 +376,6 @@ export async function clearServiceDeleteSettings(
       selected.cells.map((row) => row.id),
     ),
   );
-  await tx.delete(zoneExtensions).where(inArray(zoneExtensions.zoneId, selected.zoneIds));
   await tx.delete(zoneDays).where(inArray(zoneDays.zoneId, selected.zoneIds));
   for (const start of selected.starts)
     await tx
@@ -410,7 +405,15 @@ export async function clearServiceDeleteSettings(
     .where(inArray(deviceKitchenScreenRemovals.zoneId, selected.zoneIds));
   await tx
     .update(floorZones)
-    .set({ isCounterDefault: false, orderStart: null, paidWhen: null, collectionNumber: null })
+    .set({
+      isCounterDefault: false,
+      orderStart: null,
+      paidWhen: null,
+      collectionNumber: null,
+      keptOpenDay: null,
+      keptOpenFrom: null,
+      keptOpenUntil: null,
+    })
     .where(inArray(floorZones.id, selected.zoneIds));
   if (selected.departmentId !== null) {
     await tx

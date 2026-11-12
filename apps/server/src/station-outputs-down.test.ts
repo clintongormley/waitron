@@ -208,7 +208,10 @@ describe("station output status", () => {
         stationScreensDark(tx, new Date("2026-10-02T18:02:00Z")),
       ),
     ).toEqual([]);
-    await suite.db.update(kitchenStations).set({ closedOnDay: "2026-10-02" }).where(eq(kitchenStations.id, f.bar));
+    await suite.db
+      .update(kitchenStations)
+      .set({ closedOnDay: "2026-10-02" })
+      .where(eq(kitchenStations.id, f.bar));
     expect(
       (await withTransaction(suite.db, (tx) => VENUE_SERVICE.stationStates(tx, at))).get(f.bar)
         ?.open,

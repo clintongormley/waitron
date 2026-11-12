@@ -1,6 +1,6 @@
 import { cancelItemForTest } from "./testing/cancel-line.js";
 
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -3912,8 +3912,22 @@ describe("opening hours", () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-02T18:00:00Z"));
       try {
-        await setStationToday(tx, upstairs.id, "closed", new Date(), downstairs.id);
-        await setStationToday(tx, downstairs.id, "closed", new Date(), upstairs.id);
+        await setStationToday(
+          tx,
+          upstairs.id,
+          "closed",
+          new Date(),
+          await seedActivityActor(tx),
+          downstairs.id,
+        );
+        await setStationToday(
+          tx,
+          downstairs.id,
+          "closed",
+          new Date(),
+          await seedActivityActor(tx),
+          upstairs.id,
+        );
         await fireLines(tx, cfg, orderId, await fireableLines(tx, orderId));
         expect(await ticketItemsFor(tx, orderId)).toEqual([
           { productId: product, stationId: kitchen.id, state: "queued" },
@@ -3941,7 +3955,14 @@ describe("opening hours", () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-02T19:00:00Z"));
       try {
-        await setStationToday(tx, upstairs.id, "closed", new Date(), downstairs.id);
+        await setStationToday(
+          tx,
+          upstairs.id,
+          "closed",
+          new Date(),
+          await seedActivityActor(tx),
+          downstairs.id,
+        );
         const { id } = await fireContextless(tx, cfg, [product]);
         expect((await ticketItemsFor(tx, id))[0]!.stationId).toBe(downstairs.id);
       } finally {
@@ -3979,7 +4000,14 @@ describe("opening hours", () => {
         const before = await recorded();
         expect(before[0].map((item) => item.stationId)).toEqual([upstairs.id]);
 
-        await setStationToday(tx, upstairs.id, "closed", new Date(), downstairs.id);
+        await setStationToday(
+          tx,
+          upstairs.id,
+          "closed",
+          new Date(),
+          await seedActivityActor(tx),
+          downstairs.id,
+        );
         const second = await fireContextless(tx, cfg, [product]);
         expect((await ticketItemsFor(tx, second.id))[0]!.stationId).toBe(downstairs.id);
         expect(await recorded()).toEqual(before);
@@ -4060,7 +4088,7 @@ describe("opening hours", () => {
       try {
         await addRound(tx, cfg, tabId, [line(product)]);
         expect((await ticketItemsFor(tx, tabId))[0]!.stationId).toBe(upstairs.id);
-        await setStationToday(tx, upstairs.id, "closed", new Date());
+        await setStationToday(tx, upstairs.id, "closed", new Date(), await seedActivityActor(tx));
         const [{ revision }] = await tx
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
@@ -4162,7 +4190,7 @@ describe("opening hours", () => {
         expect(original!.makeAtStationId).toBeNull();
         expect((await ticketItemsFor(tx, tabId))[0]!.stationId).toBe(upstairs.id);
 
-        await setStationToday(tx, upstairs.id, "closed", new Date());
+        await setStationToday(tx, upstairs.id, "closed", new Date(), await seedActivityActor(tx));
         const [{ revision }] = await tx
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
@@ -4216,6 +4244,7 @@ describe("opening hours", () => {
         upstairs.id,
         "closed",
         new Date("2026-10-02T19:00:00Z"),
+        await seedActivityActor(tx),
         downstairs.id,
       );
       const product = await makeProduct(tx, catalogueId, { categoryId: drinks.id });
@@ -4306,7 +4335,7 @@ describe("opening hours", () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-02T18:00:00Z"));
       try {
-        await setStationToday(tx, upstairs.id, "closed", new Date());
+        await setStationToday(tx, upstairs.id, "closed", new Date(), await seedActivityActor(tx));
         await expect(fireLines(tx, cfg, orderId, lines)).rejects.toMatchObject({
           code: "station.no_replacement",
           params: { stationId: upstairs.id, productIds: [product] },
@@ -4424,8 +4453,15 @@ describe("a sale on a Spanish public holiday", () => {
       await tx.execute(sql`insert into special_day_dates (id, special_day_id, date, closed_all_day)
         values (${specialDate}, ${specialDay}, ${HOLIDAY}, 0)`);
     });
-    await withTransaction(db, (tx) =>
-      setStationToday(tx, upstairs.id, "closed", new Date(`${HOLIDAY}T10:00:00Z`), downstairs.id),
+    await withTransaction(db, async (tx) =>
+      setStationToday(
+        tx,
+        upstairs.id,
+        "closed",
+        new Date(`${HOLIDAY}T10:00:00Z`),
+        await seedActivityActor(tx),
+        downstairs.id,
+      ),
     );
     const afterSpecialDate = await saleOn(HOLIDAY);
     expect(await tickets(afterSpecialDate.fired)).toEqual([

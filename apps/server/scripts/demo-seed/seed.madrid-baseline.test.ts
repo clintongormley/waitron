@@ -695,7 +695,36 @@ for (const locale of ["en", "es"] as const) {
             collection_number: "collection_number",
           },
         },
+        {
+          from: "zone_extensions",
+          into: "floor_zones",
+          match: { from: "zone_id", into: "id" },
+          columns: {
+            business_day: "kept_open_day",
+            starts_at: "kept_open_from",
+            ends_at: "kept_open_until",
+          },
+        },
+        {
+          from: "station_day_states",
+          into: "kitchen_stations",
+          match: { from: "station_id", into: "id" },
+          columns: {
+            business_day: "closed_on_day",
+            sends_to_station_id: "closed_sends_to_station_id",
+          },
+        },
       ]);
+      for (const table of ["floor_zones", "kitchen_stations"])
+        for (const column of expected[phase].tables[table]!.columns)
+          if (
+            ["kept_open_day", "kept_open_from", "kept_open_until", "closed_on_day"].includes(
+              column.name,
+            )
+          )
+            column.notnull = 0;
+      delete phases[phase]!.zone_extensions;
+      delete phases[phase]!.station_day_states;
       delete phases[phase]!.department_floor_plan_sets;
       delete phases[phase]!.zone_service_policies;
       delete phases[phase]!.zone_sale_policies;

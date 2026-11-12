@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, inArray, sql } from "drizzle-orm";
@@ -1045,8 +1045,14 @@ describe("A773 pass release: paper", () => {
     const placed = await requestedBurger(venue);
     const every = await passOn(venue, "Every pass", null);
     const stale = await cardOf(every, placed.groupId);
-    await withTransaction(db, (tx) =>
-      setStationToday(tx, venue.stations.grill, "closed", new Date(AT)),
+    await withTransaction(db, async (tx) =>
+      setStationToday(
+        tx,
+        venue.stations.grill,
+        "closed",
+        new Date(AT),
+        await seedActivityActor(tx),
+      ),
     );
     await refusedWhole(release(venue, every, askOf(stale)), "ticket.pass_context_changed", [
       placed.item,
@@ -1091,7 +1097,8 @@ describe("A773 pass release: paper", () => {
         venue.stations.grill,
         undefined,
         "leave",
-        (at) => setStationToday(tx, venue.stations.grill, "closed", at),
+        async (at) =>
+          setStationToday(tx, venue.stations.grill, "closed", at, await seedActivityActor(tx)),
         { deviceId: venue.cfg.origin.deviceId, personId: null },
       ),
     );
@@ -1115,7 +1122,13 @@ describe("A773 pass release: paper", () => {
         .update(workingOrders)
         .set({ status: "settled", settledAt: AT })
         .where(eq(workingOrders.id, venue.party.tabId));
-      await setStationToday(tx, venue.stations.bar, "closed", new Date(AT));
+      await setStationToday(
+        tx,
+        venue.stations.bar,
+        "closed",
+        new Date(AT),
+        await seedActivityActor(tx),
+      );
       await moveDishesToStation(
         tx,
         venue.cfg,
@@ -1157,7 +1170,13 @@ describe("A773 pass release: paper", () => {
         .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
         .where(eq(workingOrderLines.productId, venue.products.chips));
       await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
-      await setStationToday(tx, venue.stations.fryer, "closed", new Date(AT));
+      await setStationToday(
+        tx,
+        venue.stations.fryer,
+        "closed",
+        new Date(AT),
+        await seedActivityActor(tx),
+      );
       await fireGroup(tx, venue.cfg, venue.party.partyId, group.id, {
         operatorId: OPERATOR,
         submissionId: randomUUID(),
@@ -1222,7 +1241,13 @@ describe("A773 pass release: paper", () => {
           })
         ).groups[0]!;
         if (waits) await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-        await setStationToday(tx, venue.stations.grill, "closed", new Date(AT));
+        await setStationToday(
+          tx,
+          venue.stations.grill,
+          "closed",
+          new Date(AT),
+          await seedActivityActor(tx),
+        );
         await fireGroup(tx, venue.cfg, venue.party.partyId, group.id, {
           operatorId: OPERATOR,
           submissionId: randomUUID(),
@@ -1272,7 +1297,13 @@ describe("A773 pass release: paper", () => {
           })
         ).groups[0]!;
         if (waits) await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
-        await setStationToday(tx, venue.stations.fryer, "closed", new Date(AT));
+        await setStationToday(
+          tx,
+          venue.stations.fryer,
+          "closed",
+          new Date(AT),
+          await seedActivityActor(tx),
+        );
         await fireGroup(tx, venue.cfg, venue.party.partyId, group.id, {
           operatorId: OPERATOR,
           submissionId: randomUUID(),
@@ -1316,8 +1347,20 @@ describe("A773 pass release: paper", () => {
         })
       ).groups[0]!;
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      await setStationToday(tx, venue.stations.grill, "closed", new Date(AT));
-      await setStationToday(tx, venue.stations.fryer, "closed", new Date(AT));
+      await setStationToday(
+        tx,
+        venue.stations.grill,
+        "closed",
+        new Date(AT),
+        await seedActivityActor(tx),
+      );
+      await setStationToday(
+        tx,
+        venue.stations.fryer,
+        "closed",
+        new Date(AT),
+        await seedActivityActor(tx),
+      );
       const waitingReads = vi.spyOn(kitchenRelease, "passWaitingStations");
       try {
         await fireGroup(tx, venue.cfg, venue.party.partyId, group.id, {

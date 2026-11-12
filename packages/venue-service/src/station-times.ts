@@ -1,5 +1,6 @@
+import type { ActivityActor } from "@waitron/module";
 import { and, asc, eq, ne } from "drizzle-orm";
-import { kitchenStations, readVenueClock, stationDayStates, type Transaction } from "@waitron/db";
+import { kitchenStations, readVenueClock, recordActivity, type Transaction } from "@waitron/db";
 import { venueMomentAt, type VenueMoment } from "@waitron/reporting";
 import { AppError, compareStationNames } from "@waitron/shared";
 import { routingModel } from "./routing-store.js";
@@ -15,6 +16,8 @@ async function requireStation(tx: Transaction, stationId: string) {
       id: kitchenStations.id,
       active: kitchenStations.active,
       isDefault: kitchenStations.isDefault,
+      closedOnDay: kitchenStations.closedOnDay,
+      closedSendsToStationId: kitchenStations.closedSendsToStationId,
     })
     .from(kitchenStations)
     .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
@@ -27,42 +30,31 @@ export async function setStationToday(
   stationId: string,
   state: "open" | "closed" | null,
   at: Date,
+  actor: ActivityActor,
   sendsToStationId?: string | null,
 ): Promise<void> {
-  await requireStation(tx, stationId);
+  const station = await requireStation(tx, stationId);
   const moment = await venueMoment(tx, at);
   if (moment === null) throw new AppError("time_zone.unreadable", {});
+  const wasClosed = station.closedOnDay === moment.businessDay;
+  const closed = state === "closed";
+  const destination = closed ? (sendsToStationId ?? null) : null;
   await tx
-    .delete(stationDayStates)
-    .where(
-      and(
-        eq(stationDayStates.stationId, stationId),
-        ne(stationDayStates.businessDay, moment.businessDay),
-      ),
-    );
-  if (state !== "closed") {
-    await tx
-      .delete(stationDayStates)
-      .where(
-        and(
-          eq(stationDayStates.stationId, stationId),
-          eq(stationDayStates.businessDay, moment.businessDay),
-        ),
-      );
-    return;
-  }
-  const destination = sendsToStationId ?? null;
-  await tx
-    .insert(stationDayStates)
-    .values({
-      stationId,
-      businessDay: moment.businessDay,
-      open: false,
-      sendsToStationId: destination,
-    })
-    .onConflictDoUpdate({
-      target: [stationDayStates.stationId, stationDayStates.businessDay],
-      set: { open: false, sendsToStationId: destination },
+    .update(kitchenStations)
+    .set({ closedOnDay: closed ? moment.businessDay : null, closedSendsToStationId: destination })
+    .where(eq(kitchenStations.id, stationId));
+  if (wasClosed !== closed || (closed && station.closedSendsToStationId !== destination))
+    await recordActivity(tx, {
+      kind: closed ? "station.closed_for_day" : "station.reopened",
+      subjectId: stationId,
+      personId: actor.personId,
+      deviceId: actor.deviceId,
+      at,
+      data: {
+        businessDay: moment.businessDay,
+        sendsTo: closed ? destination : station.closedSendsToStationId,
+        authorizedBy: actor.authorizedBy,
+      },
     });
 }
 
@@ -95,6 +87,7 @@ export async function closeStationForToday(
   stationId: string,
   sendsToStationId: string,
   at: Date,
+  actor: ActivityActor,
 ): Promise<void> {
   const station = await requireStation(tx, stationId);
   if (station.isDefault) throw new AppError("station.always_open", { stationId });
@@ -126,14 +119,15 @@ export async function closeStationForToday(
       sendsToStationId,
       reason: "closed",
     });
-  await setStationToday(tx, stationId, "closed", at, sendsToStationId);
+  await setStationToday(tx, stationId, "closed", at, actor, sendsToStationId);
 }
 
 export async function openStationForToday(
   tx: Transaction,
   stationId: string,
   at: Date,
+  actor: ActivityActor,
 ): Promise<void> {
   await requireStation(tx, stationId);
-  await setStationToday(tx, stationId, null, at);
+  await setStationToday(tx, stationId, null, at, actor);
 }

@@ -1,4 +1,4 @@
-import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedZone, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
@@ -1399,7 +1399,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const made = await dish("Chosen closed lager");
     const chosen = await station("Closed chosen bar");
     await routeTo(made.productId, chosen);
-    await inTx(v, (tx) => setStationToday(tx, chosen, "closed", new Date()));
+    await inTx(v, async (tx) =>
+      setStationToday(tx, chosen, "closed", new Date(), await seedActivityActor(tx)),
+    );
     const id = randomUUID();
     const paid = await app.request("/api/sales", {
       method: "POST",
@@ -1731,7 +1733,9 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       lines: [{ menuItemId: made.counterOffer, quantity: "1" }],
     });
     await inTx(v, async (tx) => fireLines(tx, v.cfg, id, await unsentDishLines(tx, id)));
-    await inTx(v, (tx) => setStationToday(tx, original, "closed", new Date()));
+    await inTx(v, async (tx) =>
+      setStationToday(tx, original, "closed", new Date(), await seedActivityActor(tx)),
+    );
     const revision = await inTx(v, (tx) => readOrderRevision(tx, id));
     await inTx(v, (tx) =>
       updateOrderLine(tx, v.cfg, id, 1, { portionLineNos: [], quantity: "2" }, revision, OPERATOR),

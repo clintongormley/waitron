@@ -1,3 +1,4 @@
+import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { kitchenStations } from "@waitron/db";
@@ -43,7 +44,7 @@ describe("findDeadEnds", () => {
         .update(kitchenStations)
         .set({ isDefault: false })
         .where(eq(kitchenStations.id, kitchen!.id));
-      await setStationToday(tx, bar!.id, "closed", at);
+      await setStationToday(tx, bar!.id, "closed", at, await seedActivityActor(tx));
     });
     const answer = await inTx(v, (tx) =>
       findDeadEnds(
@@ -96,7 +97,9 @@ describe("findDeadEnds", () => {
         name: `Destination bar ${randomUUID()}`,
       })
       .returning({ id: kitchenStations.id });
-    await inTx(v, (tx) => setStationToday(tx, bar!.id, "closed", at, destination!.id));
+    await inTx(v, async (tx) =>
+      setStationToday(tx, bar!.id, "closed", at, await seedActivityActor(tx), destination!.id),
+    );
     const replaced = await inTx(v, (tx) =>
       findDeadEnds(
         tx,

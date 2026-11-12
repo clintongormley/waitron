@@ -1,7 +1,7 @@
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql, and, isNotNull } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import {
   kitchenStations,
@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setRoutingCell, stationDayStates } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { mountManagementApi } from "./management-api.js";
 import {
@@ -127,7 +127,6 @@ async function snapshot() {
       "device_made_here_stations",
       "routing_cells",
       "routing_cell_periods",
-      "station_day_states",
       "device_kitchen_screens",
       "device_kitchen_screen_stations",
       "device_kitchen_screen_zones",
@@ -265,7 +264,18 @@ it.each(["queued", "held"] as const)(
       state: "queued",
       firedAt: state === "held" ? null : item.firedAt,
     });
-    expect(await suite.db.select().from(stationDayStates)).toEqual([]);
+    expect(
+      await suite.db
+        .select({
+          id: kitchenStations.id,
+          stationId: kitchenStations.id,
+          businessDay: kitchenStations.closedOnDay,
+          open: sql<boolean>`0`.mapWith(Boolean),
+          sendsToStationId: kitchenStations.closedSendsToStationId,
+        })
+        .from(kitchenStations)
+        .where(and(isNotNull(kitchenStations.closedOnDay))),
+    ).toEqual([]);
     expect(await suite.db.select().from(ticketItemMoves)).toEqual([]);
   },
 );

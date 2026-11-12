@@ -15,7 +15,25 @@ import {
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, catalogues, departmentDayRanges, departmentDays, departments, locations, settings as businessDaySettingsTable, dayCutoverChanges, menuPeriods, seasons, specialDayDates, specialDays, withTransaction, zoneDayRanges, zoneDays, type Transaction, floorZones } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  catalogues,
+  departmentDayRanges,
+  departmentDays,
+  departments,
+  locations,
+  settings as businessDaySettingsTable,
+  dayCutoverChanges,
+  menuPeriods,
+  seasons,
+  specialDayDates,
+  specialDays,
+  withTransaction,
+  zoneDayRanges,
+  zoneDays,
+  type Transaction,
+  floorZones,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { type BusinessDayClock } from "@waitron/shared";
 import {
@@ -2271,7 +2289,10 @@ describe("a keep-open for the night before the change", () => {
   const keptOpen = async (endsAt: string, businessDay = "2026-11-03") => {
     const v = await fixture([], { zone: true });
     await withTransaction(suite.db, async (tx) => {
-      await tx.update(floorZones).set({ keptOpenDay: businessDay, keptOpenFrom: "22:00:00", keptOpenUntil: `${endsAt}:00` }).where(eq(floorZones.id, v.zoneId!));
+      await tx
+        .update(floorZones)
+        .set({ keptOpenDay: businessDay, keptOpenFrom: "22:00:00", keptOpenUntil: `${endsAt}:00` })
+        .where(eq(floorZones.id, v.zoneId!));
     });
     return v;
   };

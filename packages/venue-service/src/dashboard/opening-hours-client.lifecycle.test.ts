@@ -362,7 +362,7 @@ it("retired station rows do not start another year read", async () => {
       { type: "hours_week_cells" },
       { type: "hours_week_periods" },
       { type: "station_fallbacks" },
-      { type: "station_day_states" },
+      { type: "kitchen_stations" },
     ]);
     for (let turn = 0; turn < 20; turn++) await Promise.resolve();
     expect(request).toHaveBeenCalledTimes(1);

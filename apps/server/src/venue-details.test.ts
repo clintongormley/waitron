@@ -20,7 +20,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { recordTillSaleOrchestration as recordTillSale } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   BUSINESS_DAY_SETTINGS,
   readSettings,
@@ -39,7 +39,6 @@ import {
   replaceMenuWeek,
   createDepartment,
   stationStates,
-  stationDayStates,
 } from "@waitron/venue-service";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import type { ResourceChange } from "@waitron/shared";
@@ -1130,10 +1129,14 @@ describe("venue detail consumer reads", () => {
           { name: "New-day override" },
         ])
         .returning({ id: kitchenStations.id });
-      await tx.insert(stationDayStates).values([
-        { stationId: rows[1]!.id, businessDay: "2026-10-03", open: false },
-        { stationId: rows[2]!.id, businessDay: "2026-10-02", open: false },
-      ]);
+      for (const [index, day] of [
+        [1, "2026-10-03"],
+        [2, "2026-10-02"],
+      ] as const)
+        await tx
+          .update(kitchenStations)
+          .set({ closedOnDay: day })
+          .where(eq(kitchenStations.id, rows[index]!.id));
       const defaults = await tx.execute<{ id: string }>(
         sql`select id from kitchen_stations where is_default`,
       );
@@ -1167,7 +1170,9 @@ describe("venue detail consumer reads", () => {
       },
     ]);
     const retained = () => ({
-      overrides: suite.db.all(sql`select * from station_day_states order by id`),
+      overrides: suite.db.all(
+        sql`select id, closed_on_day, closed_sends_to_station_id from kitchen_stations where closed_on_day is not null order by id`,
+      ),
       bookings: suite.db.all(sql`select * from bookings order by id`),
     });
     const before = retained();

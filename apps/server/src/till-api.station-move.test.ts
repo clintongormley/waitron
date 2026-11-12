@@ -1,3 +1,4 @@
+import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -60,7 +61,9 @@ const call = async (path: string, body: unknown, cookie = venue.cookie) => {
 
 describe("GET /api/stations", () => {
   it("reports the current open state of active stations", async () => {
-    await inTx(venue, (tx) => setStationToday(tx, grill, "closed", new Date()));
+    await inTx(venue, async (tx) =>
+      setStationToday(tx, grill, "closed", new Date(), await seedActivityActor(tx)),
+    );
     const response = await send(venue.app, venue.cookie, "GET", "/api/stations");
     expect(response.status).toBe(200);
     expect(response.json).toEqual(

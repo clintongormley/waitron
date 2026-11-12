@@ -27,7 +27,7 @@ import { PERSON_HEADER } from "@waitron/shared";
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedWorkingOrder, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { createTable } from "./testing/live-table.js";
 import {
   fiscalRecordCount,
@@ -799,7 +799,7 @@ describe("POST /api/dead-ends/draft", () => {
         { row: { kind: "product", productId: beer!.id }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
-      await setStationToday(tx, bar!.id, "closed", new Date());
+      await setStationToday(tx, bar!.id, "closed", new Date(), await seedActivityActor(tx));
     });
     const [defaultStation] = await inTx(venue, (tx) =>
       tx
@@ -840,7 +840,7 @@ describe("POST /api/dead-ends/draft", () => {
           row: { kind: "product", productId: beer!.id },
           zoneId: null,
         });
-        await setStationToday(tx, bar!.id, null, new Date());
+        await setStationToday(tx, bar!.id, null, new Date(), await seedActivityActor(tx));
       });
       await inTx(venue, (tx) =>
         tx
@@ -872,7 +872,7 @@ describe("a draft's chosen station at submission", () => {
         { row: { kind: "product", productId: beer!.id }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
-      await setStationToday(tx, bar!.id, "closed", new Date());
+      await setStationToday(tx, bar!.id, "closed", new Date(), await seedActivityActor(tx));
     });
     const chosen = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
@@ -924,7 +924,7 @@ describe("a draft's chosen station at submission", () => {
           row: { kind: "product", productId: beer!.id },
           zoneId: null,
         });
-        await setStationToday(tx, bar!.id, null, new Date());
+        await setStationToday(tx, bar!.id, null, new Date(), await seedActivityActor(tx));
       });
       await inTx(venue, (tx) =>
         tx
