@@ -26,8 +26,8 @@ diagnostic; `scripts/ci-workflow.test.mjs` owns executable shell regression
 cases. Update the corresponding claims in `docs/developers/ci-and-gates.md`
 and the existing CI bundle in `docs/backlog.md` / `docs/backlog/ci.md`.
 Retire the blanket missing-job claim in the step's comment and the guide's
-API polling / delayed-record paragraphs; the reusable skipped caller's API
-record is optional, rather than always present.
+API polling / delayed-record paragraphs. Keep reusable caller naming
+unchanged; the observed omission and exception concern only `server-probe`.
 
 **Build and verification:**
 - [ ] Add a shell case with successful lint plus absent skipped server-probe;

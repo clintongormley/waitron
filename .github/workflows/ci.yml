@@ -4147,7 +4147,6 @@ jobs:
 
       # Only an absent server-probe may trust needs skipped: its ordinary-run condition is false.
       # Other missing jobs require API evidence because needs can hide a never-acquired runner.
-      # Steps alone cannot establish the result: the runner publishes it after the final step.
       - name: Fail unless GitHub's jobs API reports every needed job succeeded or skipped
         if: always()
         timeout-minutes: 12

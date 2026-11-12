@@ -1462,8 +1462,8 @@ fails: on 2026-10-06,
 
 How the second step reads the API. While no needed job sets a `name:`, a needed job's entries are
 named by its id (`lint`), by its id and a matrix value (`test-heavy (1)`), or, for a job that calls
-a reusable workflow, by its id and the inner job (`image / smoke`; plain `image` when a
-skipped caller has an API record); GitHub names a job by its `name:` when one is set (on 2026-10-06,
+a reusable workflow, by its id and the inner job (`image / smoke`; plain `image` when it was
+skipped); GitHub names a job by its `name:` when one is set (on 2026-10-06,
 `gh api "repos/clintongormley/waitron/actions/runs/37435810196/attempts/1/jobs?per_page=100"`, a
 `licence.yml` run, listed its two jobs as `Every commit is signed off` and
 `LICENSE is unmodified Elastic License 2.0`), so the guard below fails if a needed job sets one.
@@ -1503,6 +1503,7 @@ second step only when its own `needs` result is `success` and its API record sup
 
 An absent `server-probe` passes on the first complete inventory when its saved `needs` result is
 exactly `skipped`. Its condition selects only an explicit manual probe, so ordinary runs skip it.
+On a requested manual probe, the first gate step requires `server-probe` to succeed.
 Every other missing job still waits and fails, including one saved as skipped; a present
 `server-probe` record still receives the ordinary API checks. Run `43229439512`, job
 `131230224765`, exhausted 21 polls on 12 November 2026 because GitHub omitted that skipped
