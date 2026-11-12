@@ -2448,6 +2448,8 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     expect(await preview(billId, billOff("40.00"))).toMatchObject({ needsApproval: null });
     await adjust(billId, billOff("40.00"));
 
+    expect((await recordedOn(billId))[0]!.policySnapshot.maxBillComp).toBe("40.00");
+
     await refusedWith(billId, billOff("0.01"), "adjustment.approval_required", PAST_BILL);
     await adjust(billId, billOff("0.01", { approver: MANAGER_PIN() }));
     expect(await approvals(billId)).toEqual([

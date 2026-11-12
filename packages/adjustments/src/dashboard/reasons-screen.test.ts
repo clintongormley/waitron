@@ -1102,7 +1102,7 @@ describe("the editor", () => {
     await choose(el, "kind", "void");
     await choose(el, "kind", "comp");
     expect(actionBox(el, "comp").checked).toBe(false);
-    expect(field(el, "maxAmount").value).toBe("");
+    expect(field(el, "maxAmount").value).toBe("0");
     await press(el, "save-editor");
     expect(api.updateReason).not.toHaveBeenCalled();
     expect(besideField(el, "actions")).toBe("Choose at least one action.");
@@ -2442,23 +2442,30 @@ it.each([
 });
 
 describe("permission-based limits", () => {
-  it("creates a Comp reason with a zero limit until the venue changes it", async () => {
-    const api = fakeApi();
-    const el = await mount(api);
-    await press(el, "add-reason");
-    await type(el, "name", "Celebration");
-    await toggleAction(el, "comp");
-    await press(el, "save-editor");
-    expect(api.createReason).toHaveBeenCalledWith({
-      name: "Celebration",
-      names: {},
-      kind: "comp",
-      actions: ["comp"],
-      maxPercentBp: null,
-      maxAmount: "0",
-      noteRequired: false,
-    });
-  });
+  it.each([false, true])(
+    "creates a Comp reason with a zero limit (kind round trip=%s)",
+    async (roundTrip) => {
+      const api = fakeApi();
+      const el = await mount(api);
+      await press(el, "add-reason");
+      if (roundTrip) {
+        await choose(el, "kind", "void");
+        await choose(el, "kind", "comp");
+      }
+      await type(el, "name", "Celebration");
+      await toggleAction(el, "comp");
+      await press(el, "save-editor");
+      expect(api.createReason).toHaveBeenCalledWith({
+        name: "Celebration",
+        names: {},
+        kind: "comp",
+        actions: ["comp"],
+        maxPercentBp: null,
+        maxAmount: "0",
+        noteRequired: false,
+      });
+    },
+  );
 
   it("saves a reason with a zero amount limit", async () => {
     const api = fakeApi();

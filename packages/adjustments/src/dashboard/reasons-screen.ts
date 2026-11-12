@@ -1299,7 +1299,11 @@ export class AdjustmentReasonsScreen extends LitElement {
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
           if (this.editor !== editor || !this.isConnected) return;
-          this.#edit({ kind: event.detail.value as ReasonKind, ...COMP_FIELDS_CLEARED }, editor);
+          const kind = event.detail.value as ReasonKind;
+          this.#edit(
+            { kind, ...COMP_FIELDS_CLEARED, maxAmount: kind === "comp" ? "0" : "" },
+            editor,
+          );
         }}
       ></wt-segmented-control>
       <wt-input
