@@ -1,4 +1,4 @@
-# D-form-plumbing: in progress, plan only
+# D-form-plumbing: shared form feedback, first slice
 
 **Result:** share repeated form feedback through `@waitron/ui`, without visible change. Source: Lane D `queue.md`, D-form-plumbing; [C47](../../backlog/dashboard.md#the-form-plumbing-is-hand-written-per-form). Prior Claude approach read: 138s, `/Users/clintongormley/waitron-campaign-d/receipts/form-plumbing/plan-review.md`. Watcher cleared narrowed adoption on 2026-11-12 at 16:54, conditionally below about 600 changed lines; no owner-design approval. No new plan read requested.
 
@@ -24,4 +24,8 @@ Preserve manual bottom-message assembly/domain mapping: the joiner alone is not 
 
 **Later:** exclude equipment-label (one joiner), variant-form (one attempt flag), floor-plan-editor (no named plumbing). All other original forms deferred, not promised; inventory repetition at each later slice's start. Split at useful form boundaries around 1,000 changed lines, not five predetermined PRs. After slice one, narrow backlog scope; keep remaining dashboard/module/till work open.
 
-Measured representative extraction is pending, not yet performed.
+**Measured 12 November:** Unit extraction +13/-21 production lines; its existing 36 cases
+passed before and after. First-slice forecast: production +130/-150, tests +100/-0,
+support files 0, docs/plan about 70 changed; about 450 total, within the watcher's conditional
+clearance. The shared helper's four tests failed for missing exports before implementation,
+then passed. Receipt: Lane D `progress.log`, 12 November after 16:54 clearance.

@@ -90,15 +90,13 @@ printer keys.
 
 ## The form plumbing is hand-written per form
 
-  (4) the form plumbing is hand-written per form: assembling the bottom message, waiting for the
-  render and then calling `focusFirstInvalid`, and the state that remembers the first press and
-  which refusals the person has since changed, in several different shapes across `apps/dashboard`,
-  the image library, the Stripe and SumUp forms, the Voids and comps page (`packages/adjustments`),
-  Departments and zones, and the till's forms. A dashboard-only helper could live in
-  `apps/dashboard/src/widgets/form-fields.ts`, but `packages/media` cannot import from
-  `apps/dashboard` (it would be a dependency loop), so a helper meant to cover the module screens
-  and the image library too would have to live in a package they can all reach, such as
-  `@waitron/ui`;
+Move the remaining repeated attempt, refusal-dismissal and render-before-focus plumbing onto
+`FormFeedback` in `@waitron/ui`: the other dashboard editors, the image library, Stripe and SumUp
+forms, Voids and comps (`packages/adjustments`), Departments and zones, and the till's forms.
+The Unit, Add/Edit staff, Section, Include folder, Category colour and Option label editors are
+outside this remaining work. Inventory each later batch before migrating it; leave single-job
+forms local. Field mapping and bottom-message policy stay in each form; `bottomMessage` shares
+only the string joiner. See the [first-slice plan](../superpowers/plans/2026-11-12-d-form-plumbing.md).
 
 ## What C47 part 2 found and did not fix
 
@@ -806,9 +804,8 @@ forms receive field messages from their parent screen.
     also uses it (`waitron-cloud/apps/portal/src/screens.ts:14,68`, `app.ts:227`; watcher checked
     2026-11-10, read, not run), pinned at ui-core 0.2.1. Keep its published export while that
     consumer remains.
-  - The form plumbing is hand-written per form: assembling the bottom message, waiting for the
-    render and then calling `focusFirstInvalid`, and the state that remembers the first press and
-    which refusals the person has since changed, in several different shapes.
+  - Move the remaining repeated form-feedback plumbing onto the shared helper, keeping each
+    form's field mapping and message policy local.
     [Detail](dashboard.md#the-form-plumbing-is-hand-written-per-form)
   - Found during C47 part 2 and not fixed: a blue line along the top of a `wt-modal` editor's
     footer, in a screenshot after a refusal that names no field, which looks like the modal's

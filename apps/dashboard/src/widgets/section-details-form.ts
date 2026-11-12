@@ -5,6 +5,7 @@ import {
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
 } from "@waitron/ui";
@@ -84,9 +85,7 @@ export class SectionDetailsForm extends LitElement {
   @state() private internalName = "";
   @state() private image: string | null = null;
   @state() private color: string | null = null;
-  @state() private attempted = false;
-  /** Refusal keys the operator has since changed the field of, or submitted past. */
-  @state() private dismissed = new Set<string>();
+  readonly #feedback = new FormFeedback(this);
   @state() private pickerOpen = false;
   #scope?: DraftScope<SectionInput>;
   #baseline?: SectionInput;
@@ -122,10 +121,9 @@ export class SectionDetailsForm extends LitElement {
       for (const locale of this.languages.languages) this.names[locale] ??= "";
       this.image = this.value?.image ?? null;
       this.color = this.value ? (this.value.color ?? null) : this.startColor;
-      this.attempted = false;
-      this.dismissed = new Set();
+      this.#feedback.reset();
     }
-    if (changes.has("fieldErrors") || changes.has("refusal")) this.dismissed = new Set();
+    if (changes.has("fieldErrors") || changes.has("refusal")) this.#feedback.newRefusal();
     if (!this.open) {
       this.#scope?.dispose();
       this.#scope = undefined;
@@ -154,9 +152,6 @@ export class SectionDetailsForm extends LitElement {
     if (changes.has("fieldErrors") && this.#fieldKeys(this.fieldErrors).length > 0)
       void focusFirstInvalid(this.shadowRoot!);
   }
-  #dismiss(...keys: string[]): void {
-    this.dismissed = new Set([...this.dismissed, ...keys]);
-  }
   #validate(): Record<string, string> {
     const error = this.internalName.trim()
       ? this.validateName?.(this.internalName.trim())
@@ -177,13 +172,11 @@ export class SectionDetailsForm extends LitElement {
       .map(([key]) => key);
   }
   #errors(): Record<string, string> {
-    const refused = Object.fromEntries(
-      Object.entries({
-        ...this.fieldErrors,
-        ...(this.refusal ? { [fieldOf(this.refusal)]: codeMessage(codeOf(this.refusal)) } : {}),
-      }).filter(([key]) => !this.dismissed.has(key)),
-    );
-    return { ...refused, ...(this.attempted ? this.#validate() : {}) };
+    const refused = this.#feedback.remaining({
+      ...this.fieldErrors,
+      ...(this.refusal ? { [fieldOf(this.refusal)]: codeMessage(codeOf(this.refusal)) } : {}),
+    });
+    return { ...refused, ...(this.#feedback.attempted ? this.#validate() : {}) };
   }
   #emit(
     event: Event,
@@ -197,13 +190,12 @@ export class SectionDetailsForm extends LitElement {
     event.stopPropagation();
     if (this.busy || this.pickerOpen) return;
     if (saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
-    this.#dismiss(
+    this.#feedback.press(
       ...Object.keys(this.fieldErrors),
       ...(this.refusal ? [fieldOf(this.refusal)] : []),
     );
     if (Object.keys(this.#validate()).length > 0) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(() => this.shadowRoot!);
       return;
     }
     this.#emit(event, "wt-submit", this.#submissionValue());
@@ -249,7 +241,7 @@ export class SectionDetailsForm extends LitElement {
     const bottom = [...formMessages, ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : [])].join(
       " ",
     );
-    const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
+    const invalid = this.#feedback.attempted && Object.keys(this.#validate()).length > 0;
     const action = saveActionState(this.#scope);
     return html`<wt-modal
       size="standard"
@@ -278,7 +270,7 @@ export class SectionDetailsForm extends LitElement {
           (value) => {
             this.internalName = value;
             this.#scope?.changed();
-            this.#dismiss("internalName");
+            this.#feedback.dismiss("internalName");
           },
           true,
           t("sections.internal_name_help"),
@@ -298,7 +290,7 @@ export class SectionDetailsForm extends LitElement {
               );
               this.names = names;
               this.#scope?.changed();
-              this.#dismiss("names", ...changed.map((language) => `names-${language}`));
+              this.#feedback.dismiss("names", ...changed.map((language) => `names-${language}`));
             },
             this.internalName,
             this.languages.defaultLanguage,
@@ -314,7 +306,7 @@ export class SectionDetailsForm extends LitElement {
           change: (color) => {
             this.color = color;
             this.#scope?.changed();
-            this.#dismiss("color");
+            this.#feedback.dismiss("color");
           },
         })}
         <dashboard-image-upload
@@ -331,7 +323,7 @@ export class SectionDetailsForm extends LitElement {
             event.stopPropagation();
             this.image = event.detail.image;
             this.#scope?.changed();
-            this.#dismiss("image");
+            this.#feedback.dismiss("image");
           }}
         ></dashboard-image-upload>
       </div>

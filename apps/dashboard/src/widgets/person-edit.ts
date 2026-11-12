@@ -5,6 +5,7 @@ import {
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
 } from "@waitron/ui";
@@ -61,9 +62,7 @@ export class PersonEdit extends LitElement {
     role: "staff",
     status: "pending",
   };
-  @state() private attempted = false;
-  /** Refusal keys the operator has since changed the field of, or submitted past. */
-  @state() private dismissed = new Set<string>();
+  readonly #feedback = new FormFeedback(this);
   #personId: string | null = null;
   #scope?: DraftScope<PersonEditDetails>;
   #leave?: LeaveCoordinator;
@@ -90,10 +89,9 @@ export class PersonEdit extends LitElement {
       this.#scope = undefined;
       this.#loadPerson();
     }
-    if (changed.has("error")) this.dismissed = new Set();
+    if (changed.has("error")) this.#feedback.newRefusal();
     if (changed.has("open") && this.open) {
-      this.attempted = false;
-      this.dismissed = new Set();
+      this.#feedback.reset();
     }
     if (!this.open || !this.person) {
       this.#scope?.dispose();
@@ -122,20 +120,16 @@ export class PersonEdit extends LitElement {
       void focusFirstInvalid(this.shadowRoot!);
   }
 
-  #dismiss(...keys: string[]): void {
-    this.dismissed = new Set([...this.dismissed, ...keys]);
-  }
-
   #refused(): Record<string, string> {
     if (!this.error) return {};
     const refused = {
       [refusedField(this.error, this.errorField) ?? "_form"]: codeMessage(this.error),
     };
-    return Object.fromEntries(Object.entries(refused).filter(([key]) => !this.dismissed.has(key)));
+    return this.#feedback.remaining(refused);
   }
 
   #errors(): Record<string, string> {
-    return { ...this.#refused(), ...(this.attempted ? this.#validate() : {}) };
+    return { ...this.#refused(), ...(this.#feedback.attempted ? this.#validate() : {}) };
   }
 
   #loadPerson(): void {
@@ -151,8 +145,7 @@ export class PersonEdit extends LitElement {
       role: person?.role ?? "staff",
       status: person?.status ?? "pending",
     };
-    this.attempted = false;
-    this.dismissed = new Set();
+    this.#feedback.reset();
   }
 
   #change(field: EditableField | "telephone", event: CustomEvent<{ value: string }>): void {
@@ -174,7 +167,10 @@ export class PersonEdit extends LitElement {
     } else {
       this.details = { ...this.details, [field]: field === "telephone" ? value || null : value };
     }
-    this.#dismiss(field, ...(this.details.displayName !== prevDisplayName ? ["displayName"] : []));
+    this.#feedback.dismiss(
+      field,
+      ...(this.details.displayName !== prevDisplayName ? ["displayName"] : []),
+    );
     this.#scope?.changed();
   }
 
@@ -197,10 +193,9 @@ export class PersonEdit extends LitElement {
   #save(event: Event): void {
     event.stopPropagation();
     if (this.busy || saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
-    this.#dismiss("_form");
+    this.#feedback.press("_form");
     if (Object.keys(this.#validate()).length > 0) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.#feedback.focus(() => this.shadowRoot!);
       return;
     }
     this.#emit("save-person", { ...this.#submissionValue() });
@@ -401,7 +396,7 @@ export class PersonEdit extends LitElement {
             ?disabled=${
               s.unchanged ||
               this.busy ||
-              (this.attempted && Object.keys(this.#validate()).length > 0)
+              (this.#feedback.attempted && Object.keys(this.#validate()).length > 0)
             }
             @click=${(event: Event) => this.#save(event)}
             >${t("action.save")}</wt-button
