@@ -4061,7 +4061,6 @@ export const en = {
     "Compared with the tax agency at {time} · the box was {seconds} s ahead",
   "box_status.clock.compared_behind":
     "Compared with the tax agency at {time} · the box was {seconds} s behind",
-  "box_status.clock.stop.contrary": "Other clocks say the box's clock is wrong.",
   "box_status.clock.synced": "Kept in time over the internet",
   "box_status.clock.not_synced": "Not kept in time over the internet",
   "box_status.clock.admin.open": "Check with this device's time",
@@ -4070,10 +4069,6 @@ export const en = {
   "box_status.clock.admin.times": "The box's clock says {box}. This device says {device}.",
   "box_status.clock.admin.differ":
     "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, connect the box to the internet so it can correct its clock.",
-  "box_status.clock.admin.refused.same_machine":
-    "This screen is the box itself, so its clock is the box's own. Confirm from your phone or another computer.",
-  "box_status.clock.admin.refused.not_stopped":
-    "There is nothing left to confirm. See the Clock row.",
   "box_status.clock.admin.set.question":
     "The box's clock says {box}. Your device says {device}. Use your device's time?",
   "box_status.clock.admin.set.confirm": "Use this time",
@@ -8279,7 +8274,6 @@ export const es: Record<StringKey, string> = {
     "Comparado con Hacienda el {time} · el servidor iba {seconds} s adelantado",
   "box_status.clock.compared_behind":
     "Comparado con Hacienda el {time} · el servidor iba {seconds} s atrasado",
-  "box_status.clock.stop.contrary": "Otros relojes dicen que la hora del servidor está mal.",
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",
@@ -8289,9 +8283,6 @@ export const es: Record<StringKey, string> = {
     "El reloj del servidor marca {box}. Este dispositivo marca {device}.",
   "box_status.clock.admin.differ":
     "El servidor no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el servidor a internet para que corrija la hora.",
-  "box_status.clock.admin.refused.same_machine":
-    "Esta pantalla es el propio servidor, así que su hora es la del servidor. Confírmalo desde tu móvil o desde otro ordenador.",
-  "box_status.clock.admin.refused.not_stopped": "No queda nada que confirmar. Mira la fila Reloj.",
   "box_status.clock.admin.set.question":
     "El reloj del servidor marca {box}. Tu dispositivo marca {device}. ¿Usar la hora de tu dispositivo?",
   "box_status.clock.admin.set.confirm": "Usar esta hora",

@@ -66,7 +66,6 @@ const REASONS: Record<string, { key: StringKey; checkAgain: boolean }> = {
   host_unavailable: { key: "box_time.refused.host_unavailable", checkAgain: false },
   stale: { key: "box_time.refused.stale", checkAgain: true },
   same_machine: { key: "box_time.refused.same_machine", checkAgain: false },
-  contrary_proof: { key: "box_time.refused.contrary_proof", checkAgain: false },
   pending_disproofs: { key: "box_time.refused.pending_disproofs", checkAgain: true },
   stopped: { key: "box_time.refused.stopped", checkAgain: true },
 };
@@ -84,11 +83,7 @@ function refusalOf(error: unknown): { key: StringKey; checkAgain: boolean } {
     return { key: "box_time.refused.not_admitted", checkAgain: false };
   if (code === "clock.set_failed" && (reason === "refused" || reason === "unverified"))
     return { key: `box_time.refused.set_failed_${reason}`, checkAgain: true };
-  if (
-    (code === "clock.set_refused" || code === "clock.confirm_refused") &&
-    typeof reason === "string" &&
-    Object.hasOwn(REASONS, reason)
-  )
+  if (code === "clock.set_refused" && typeof reason === "string" && Object.hasOwn(REASONS, reason))
     return REASONS[reason]!;
   return OTHER;
 }

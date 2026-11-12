@@ -6,7 +6,7 @@ import "./errors.js";
 /** The route check, so a route refuses before any card reader, refund send or drawer job, and the
  * four writers, so no path through the seat writes a record past it (plan R6). */
 const GATED = new Set<keyof FiscalBackend>([
-  "refuseWhileClockBehind",
+  "refuseUntilRecordable",
   "recordSale",
   "recordVoid",
   "recordCorrection",

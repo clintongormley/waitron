@@ -86,19 +86,19 @@ async function queue(
 const row = () => readMail(suite.db, "notice");
 
 it("sends an open alert in the manager's own language without personal log fields", async () => {
-  const params = { count: 2, unconfirmed: true };
-  await queue("clock.records_misdated", { params });
+  const params = { count: 2, date: "2026-10-27", lastDate: "2026-10-27", severalDays: false };
+  await queue("backup.archives_deleted", { params });
   await runMailPass(deps);
   expect(deps.send).toHaveBeenCalledWith(expect.anything(), {
     to: "manager@example.test",
-    ...boxEmailMessage("clock.records_misdated", "es", "Corner Bistro", params),
+    ...boxEmailMessage("backup.archives_deleted", "es", "Corner Bistro", params),
   });
   expect(await row()).toMatchObject({ status: "sent" });
-  expect(log.mock.calls).toEqual([["info", "box_email.sent", { code: "clock.records_misdated" }]]);
+  expect(log.mock.calls).toEqual([["info", "box_email.sent", { code: "backup.archives_deleted" }]]);
 });
 
 it.each(["handled", "gone"])("cancels an ordinary alert whose row is %s", async (state) => {
-  const id = await queue("clock.records_misdated", { handled: state === "handled" });
+  const id = await queue("backup.archives_deleted", { handled: state === "handled" });
   if (state === "gone") await suite.db.delete(incidents).where(eq(incidents.id, id!));
   await runMailPass(deps);
   expect(await row()).toMatchObject({ status: "cancelled", attempts: 0 });
@@ -111,7 +111,7 @@ it.each([
   { email: "   " },
   { email: null },
 ])("cancels mail for an inadmissible recipient %o", async (patch) => {
-  await queue("clock.records_misdated");
+  await queue("backup.archives_deleted");
   if (patch.role !== undefined) await setBuiltInRoleForTest(suite.db, personId, patch.role);
   else await suite.db.update(persons).set(patch).where(eq(persons.id, personId));
   await runMailPass(deps);
@@ -154,15 +154,7 @@ it.each([
 it.each([
   ["storage.space_low", {}],
   ["backup.run_stopped", { neededBytes: 1024, availableBytes: 512 }],
-  [
-    "clock.behind_chain",
-    {
-      clockAt: "2026-11-09T11:00:00.000Z",
-      offsetMinutes: 60,
-      lastRecordAt: "2026-11-09T12:00:00.000Z",
-      lastRecordOffsetMinutes: 60,
-    },
-  ],
+  ["clock.unusable", { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 }],
 ] as const)(
   "words %s from its queued params using the venue language fallback",
   async (code, params) => {

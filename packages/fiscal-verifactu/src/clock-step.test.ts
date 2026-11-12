@@ -14,10 +14,8 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
-import { nextCheckSeq, openCheck as openCheckOf } from "./clock-checks.js";
 import { confirmClockStep } from "./clock-step.js";
 import { recordCorrected } from "./clock-stop-incidents.js";
-import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -69,16 +67,6 @@ async function sale(ms: number): Promise<void> {
   );
 }
 
-function authority(boxMs: number, differenceMs: number): ClockWitness {
-  return {
-    kind: "authority",
-    id: "authority",
-    boxAt: iso(boxMs),
-    witnessAt: iso(boxMs + differenceMs),
-    uncertaintyMs: 50,
-  };
-}
-
 function device(id: string, boxMs: number, differenceMs: number, address: string): ClockWitness {
   return {
     kind: "device",
@@ -88,48 +76,6 @@ function device(id: string, boxMs: number, differenceMs: number, address: string
     witnessAt: iso(boxMs + differenceMs),
     uncertaintyMs: 0,
   };
-}
-
-function headsNow(): Record<string, number> {
-  return Object.fromEntries(
-    suite.db
-      .all<{
-        node: string;
-        head: number;
-      }>(
-        sql`select node_id as node, max(secuencia) as head from registros_facturacion group by node_id`,
-      )
-      .map((row) => [row.node, row.head]),
-  );
-}
-
-/** A `behind_chain` check opened at `ms` on `boot`, as the clock watch opens one. */
-function openCheck(ms: number, boot = BOOT_BEFORE): Promise<string> {
-  return withTransaction(suite.db, async (tx) => {
-    const [row] = await tx
-      .insert(clockChecks)
-      .values({
-        seq: await nextCheckSeq(tx),
-        nodeId,
-        openedAt: new Date(ms),
-        reason: "behind_chain",
-        detail: {
-          clockAt: iso(ms),
-          offsetMinutes: 60,
-          bootMs: boot.ms,
-          bootId: boot.id,
-          heads: headsNow(),
-        },
-      })
-      .returning({ id: clockChecks.id });
-    return row!.id;
-  });
-}
-
-function checkIds(): string[] {
-  return suite.db
-    .all<{ id: string }>(sql`select id from clock_checks order by seq`)
-    .map((r) => r.id);
 }
 
 function rows() {
@@ -173,9 +119,10 @@ function request(after: number, over: Partial<ClockStepRequest> = {}): ClockStep
     targetAt: iso(after - 2 * S),
     stepMs: after - R - 2 * S,
     verified: true,
-    reason: "behind_chain",
-    source: "authority",
-    witnesses: [authority(R - S, after - R)],
+    reason: "unusable",
+    source: "admin",
+    admin: LUIS,
+    witnesses: [],
     nodeId,
     ...over,
   };
@@ -185,7 +132,7 @@ function step(input: ClockStepRequest) {
   return withTransaction(suite.db, (tx) => confirmClockStep(tx, input));
 }
 
-describe("a step of the box's clock during a payment stop", () => {
+describe("who a step of the box's clock names", () => {
   it("stores an administrator's step from a till under admin with the till beside it as its device", async () => {
     await sale(T);
     const A = T + 5 * M;
@@ -225,15 +172,14 @@ describe("a step of the box's clock during a payment stop", () => {
   });
 
   it.each([
-    ["staff with no person", { source: "staff" as const }],
+    ["staff with no person", { source: "staff" as const, admin: undefined }],
     ["staff given an administrator", { source: "staff" as const, admin: LUIS }],
     [
       "staff with no till",
       { source: "staff" as const, admin: { ...ANA_ON_A_DEVICE, device: undefined } },
     ],
-    ["admin with no person", { source: "admin" as const }],
+    ["admin with no person", { source: "admin" as const, admin: undefined }],
     ["admin given a staff member", { source: "admin" as const, admin: ANA_ON_A_DEVICE }],
-    ["authority given a person", { source: "authority" as const, admin: LUIS }],
   ])("refuses %s before writing anything", async (_name, over) => {
     await sale(T);
     await expect(step(request(T + 5 * M, over))).rejects.toThrow(/confirmClockStep/);
@@ -241,40 +187,10 @@ describe("a step of the box's clock during a payment stop", () => {
     expect(count("clock_checks")).toBe(0);
     expect(incidentsOf("clock.corrected")).toEqual([]);
   });
-
-  it("lists a record written before the check opened and stamped more than a minute after the corrected start", async () => {
-    await sale(T);
-    const checkId = await openCheck(R);
-    const A = T - 2 * H;
-    const bootAfter = { ms: BOOT_BEFORE.ms + 30 * M, id: "boot-1" };
-    await step(request(A, { source: "staff", admin: ANA_ON_A_DEVICE, bootAfter, witnesses: [] }));
-
-    const [row] = await rows();
-    expect(row!.checkId).toBe(checkId);
-    expect((row!.proof as { closing: unknown }).closing).toEqual({
-      bootMs: bootAfter.ms,
-      bootId: "boot-1",
-      correctedStart: iso(A - 30 * M),
-      partial: false,
-      unconfirmed: false,
-    });
-    expect(incidentsOf("clock.records_misdated").map((i) => i.params)).toMatchObject([
-      { confirmationId: row!.id, count: 1, from: iso(T), to: iso(T), partial: false },
-    ]);
-  });
 });
 
-it("names no record when the after reading is exactly a minute behind the latest record", async () => {
-  await sale(T);
-  await step(request(T - M));
-
-  const [row] = await rows();
-  expect(row).toMatchObject({ registroId: null, recordAt: null });
-  expect(incidentsOf("clock.behind_chain_restarted")).toEqual([]);
-});
-
-describe("a step of the box's clock with no payment stop", () => {
-  it("writes a row naming no check and no record when nothing stops and no check is open", async () => {
+describe("a step of the box's clock", () => {
+  it("writes a row naming no check and no record", async () => {
     await sale(R - 5 * M);
     const A = R + H;
     const input = request(A);
@@ -283,15 +199,14 @@ describe("a step of the box's clock with no payment stop", () => {
     });
 
     const [row] = await rows();
-    expect(row).toMatchObject({ checkId: null, registroId: null, reason: "behind_chain" });
+    expect(row).toMatchObject({ checkId: null, registroId: null, reason: "unusable" });
     expect(row!.proof).toEqual({
-      authority: { boxAt: iso(R - S), witnessAt: iso(A - S), uncertaintyMs: 50 },
+      authority: null,
       devices: [],
-      admin: null,
+      admin: LUIS.reading,
       step: { beforeAt: iso(R), afterAt: iso(A), stepMs: input.stepMs, targetAt: input.targetAt },
     });
     expect(count("clock_checks")).toBe(0);
-    expect(incidentsOf("clock.records_misdated")).toEqual([]);
     expect(incidentsOf("clock.corrected")).toHaveLength(1);
   });
 
@@ -332,43 +247,8 @@ describe("a step of the box's clock with no payment stop", () => {
     ]);
   });
 
-  it("closes a check whose stop ended by itself", async () => {
-    await sale(R - 5 * M);
-    const checkId = await openCheck(R - 30 * M);
-    await step(request(R + H));
-
-    const [row] = await rows();
-    expect(row!.checkId).toBe(checkId);
-    expect(row!.registroId).toBeNull();
-    expect(count("clock_checks")).toBe(1);
-  });
-
-  it("with a check still open, names the latest record when an administrator steps the clock back past it", async () => {
+  it("records an unusable clock's step with no check and no record named", async () => {
     await sale(T);
-    const checkId = await openCheck(R);
-    const before = T + 5 * M;
-    const A = T - H;
-    await step(
-      request(A, {
-        before: reading(before),
-        source: "admin",
-        admin: LUIS,
-        witnesses: [],
-        stepMs: A - before,
-      }),
-    );
-
-    const [row] = await rows();
-    expect(row).toMatchObject({ checkId, recordAt: new Date(T) });
-    expect(row!.registroId).not.toBeNull();
-    expect(incidentsOf("clock.behind_chain_restarted").map((i) => i.params)).toMatchObject([
-      { confirmedBy: "admin", person: "Luis", clockAt: iso(A), lastRecordAt: iso(T) },
-    ]);
-  });
-
-  it("records an unusable clock's step with no check, no record named and nothing listed, leaving an open check open", async () => {
-    await sale(T);
-    const checkId = await openCheck(R);
     const before = Date.parse("2001-01-01T10:00:00.000Z");
     const A = T + 5 * M;
     await step(
@@ -376,7 +256,6 @@ describe("a step of the box's clock with no payment stop", () => {
         before: reading(before),
         reason: "unusable",
         stepMs: A - before,
-        witnesses: [authority(before, A - before)],
       }),
     );
 
@@ -388,9 +267,6 @@ describe("a step of the box's clock with no payment stop", () => {
       boxClockAt: new Date(before),
     });
     expect(row!.proof).not.toHaveProperty("closing");
-    expect(checkIds()).toEqual([checkId]);
-    expect(await withTransaction(suite.db, (tx) => openCheckOf(tx))).toMatchObject({ id: checkId });
-    expect(incidentsOf("clock.records_misdated")).toEqual([]);
     expect(incidentsOf("clock.corrected").map((i) => i.params)).toMatchObject([
       { confirmationId: row!.id, before: iso(before) },
     ]);

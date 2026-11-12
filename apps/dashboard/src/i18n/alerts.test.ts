@@ -618,44 +618,13 @@ describe("the box's clock set before the earliest date", () => {
   );
 });
 
-describe("the box's clock reading behind its last sale", () => {
-  const params = { clockAt: "2025-03-14T09:12:00.000Z", lastRecordAt: "2026-10-22T19:43:00.000Z" };
-
-  it("writes both times as the dashboard writes an instant, and says payments stop, in English", () => {
-    expect(alertMessage("clock.behind_chain", params, "en")).toBe(
-      `The box's clock (${formatIsoMinute(params.clockAt)}) reads earlier than its last sale (${formatIsoMinute(params.lastRecordAt)}), so no payment can be taken. Orders and the kitchen still work. Sort it out on the Box status page.`,
-    );
-  });
-
-  it("fills both times into the Spanish words", () => {
-    expect(alertMessage("clock.behind_chain", params, "es")).toBe(
-      ALERT_MESSAGES["clock.behind_chain"]!.es.replace(
-        "{clockAt:minute}",
-        formatIsoMinute(params.clockAt),
-      ).replace("{lastRecordAt:minute}", formatIsoMinute(params.lastRecordAt)),
-    );
-  });
-
-  it("says it in three sentences in each language, pointing at the Box status page", () => {
-    const { en, es } = ALERT_MESSAGES["clock.behind_chain"]!;
-    for (const text of [en, es]) expect(text.split(/(?<=\.)\s+/).length).toBe(3);
-    expect(es).toContain(t("nav.box_status", "es-ES"));
-    expect(es).toContain("{clockAt:minute}");
-    expect(es).toContain("{lastRecordAt:minute}");
-  });
-
-  it("shows a dash for a time it cannot read", () => {
-    expect(alertMessage("clock.behind_chain", { clockAt: null }, "en")).toContain("(—)");
-  });
-});
-
 describe("the box's clock was stepped", () => {
   const before = "2026-10-19T07:10:00.000Z";
   const after = "2026-10-21T10:10:00.000Z";
   const base = {
     confirmationId: "c1",
-    source: "authority",
-    person: null,
+    source: "admin",
+    person: "Luis",
     deviceId: null,
     device: null,
     before,
@@ -666,7 +635,7 @@ describe("the box's clock was stepped", () => {
     direction: "forward",
     verified: true,
     unverified: false,
-    byAdmin: false,
+    byAdmin: true,
     byStaff: false,
   };
   const from = formatIsoMinute(before);
@@ -681,16 +650,6 @@ describe("the box's clock was stepped", () => {
     }
     return { english, spanish };
   }
-
-  it("says the tax agency's time set it, which way, how far, and from when to when", () => {
-    const { english, spanish } = both(base);
-    expect(english).toBe(
-      `The box set its clock from the tax agency's time: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
-    );
-    expect(spanish).toBe(
-      `El servidor puso su reloj con la hora de Hacienda: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
-    );
-  });
 
   it("names the till and the staff member who confirmed it", () => {
     const params = {
@@ -760,159 +719,6 @@ describe("the box's clock was stepped", () => {
     expect(ALERT_WORDS["clock_step_direction"]!.otherwise).toEqual({ en: "moved", es: "cambiado" });
     expect(both({ ...base, direction: "sideways" }).english).toContain(
       ": moved 2 days and 3 hours,",
-    );
-  });
-});
-
-describe("payments restarted on a clock behind the last sale", () => {
-  const base = {
-    confirmationId: "c1",
-    person: null,
-    clockAt: "2026-10-19T07:10:00.000Z",
-    lastRecordAt: "2026-10-19T21:40:00.000Z",
-  };
-  const clockAt = formatIsoMinute(base.clockAt);
-  const lastRecordAt = formatIsoMinute(base.lastRecordAt);
-  const spanish = (confirmedBy: string) =>
-    ALERT_MESSAGES["clock.behind_chain_restarted"]!.es.replace("{clockAt:minute}", clockAt)
-      .replace("{lastRecordAt:minute}", lastRecordAt)
-      .replace("{confirmedBy:clock_confirmed_by}", confirmedBy);
-
-  it.each([
-    ["authority", "authority"],
-    ["devices", "devices"],
-    ["admin", "admin"],
-    ["something else", "otherwise"],
-  ])("names what confirmed the clock, %s, in each language", (confirmedBy, key) => {
-    const list = ALERT_WORDS["clock_confirmed_by"]!;
-    const words = key === "otherwise" ? list.otherwise : list.words[key]!;
-    const params = { ...base, confirmedBy, person: confirmedBy === "admin" ? "Ana" : null };
-    const english = alertMessage("clock.behind_chain_restarted", params, "en");
-    const es = alertMessage("clock.behind_chain_restarted", params, "es");
-    expect(english).toBe(
-      `Payments restarted on the box's clock (${clockAt}), earlier than the last sale (${lastRecordAt}), once ${words.en} confirmed it.`,
-    );
-    expect(es).toBe(spanish(words.es));
-    for (const text of [english, es]) {
-      expect(text).not.toContain("—");
-      expect(text).not.toMatch(/[{}]/);
-      expect(text).not.toContain("something else");
-    }
-  });
-
-  it("names the staff member and the till when a staff member confirmed, in each language", () => {
-    const params = { ...base, confirmedBy: "staff", person: "Ana", byStaff: true, device: "Bar" };
-    expect(alertMessage("clock.behind_chain_restarted", params, "en")).toBe(
-      `Payments restarted on the box's clock (${clockAt}), earlier than the last sale (${lastRecordAt}), once Ana, a staff member, confirmed it on till Bar.`,
-    );
-    expect(alertMessage("clock.behind_chain_restarted", params, "es")).toBe(
-      `Se reanudaron los cobros con la hora del servidor (${clockAt}), anterior a la última venta (${lastRecordAt}), al confirmarla Ana, miembro del personal, en la caja Bar.`,
-    );
-  });
-
-  it("words each way the clock can be confirmed", () => {
-    expect(ALERT_WORDS["clock_confirmed_by"]!.words).toEqual({
-      authority: { en: "the tax agency's time", es: expect.any(String) },
-      devices: { en: "two tills or handhelds", es: expect.any(String) },
-      admin: { en: "an administrator", es: expect.any(String) },
-      staff: { en: "a staff member", es: expect.any(String) },
-    });
-    expect(ALERT_WORDS["clock_confirmed_by"]!.otherwise).toEqual({
-      en: "a check recorded on the box",
-      es: "una comprobación anotada en el servidor",
-    });
-  });
-});
-
-describe("sales recorded with a time later than the real time", () => {
-  const params = {
-    confirmationId: "c1",
-    count: 3,
-    from: "2026-10-19T21:41:00.000Z",
-    fromOffsetMinutes: 120,
-    to: "2026-10-19T22:05:00.000Z",
-    toOffsetMinutes: 120,
-    partial: false,
-    unconfirmed: false,
-  };
-  const from = formatIsoMinute(params.from);
-  const to = formatIsoMinute(params.to);
-  const entry = ALERT_MESSAGES["clock.records_misdated"]!;
-  const fill = (text: string) =>
-    text.replace("{count}", "3").replace("{from:minute}", from).replace("{to:minute}", to);
-  const LIST_EN = `3 sales were recorded with a time later than the real time (from ${from} to ${to}). They stay as recorded. Go through them with your tax adviser; the list is on the Box status page.`;
-
-  it("counts them, names the first and last times, and points at the list", () => {
-    expect(alertMessage("clock.records_misdated", params, "en")).toBe(LIST_EN);
-    expect(alertMessage("clock.records_misdated", params, "es")).toBe(fill(entry.es));
-    expect(entry.es).toContain(t("nav.box_status", "es-ES"));
-  });
-
-  it("says one sale in the singular, in each language, and the list may be short after it", () => {
-    const one = { ...params, count: 1, to: params.from };
-    expect(alertMessage("clock.records_misdated", one, "en")).toBe(
-      `One sale was recorded with a time later than the real time, at ${from}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page.`,
-    );
-    expect(alertMessage("clock.records_misdated", one, "es")).toBe(
-      `Se registró una venta con una hora posterior a la real, el ${from}. Queda como se registró. Revísala con tu asesor; la lista está en Estado del servidor.`,
-    );
-    expect(alertMessage("clock.records_misdated", { ...one, partial: true }, "en")).toBe(
-      `One sale was recorded with a time later than the real time, at ${from}. It stays as recorded. Go through it with your tax adviser; the list is on the Box status page. The box restarted during the stop, so the list may be short.`,
-    );
-  });
-
-  it("keeps the plural for two sales, in each language", () => {
-    const two = { ...params, count: 2 };
-    expect(alertMessage("clock.records_misdated", two, "en")).toBe(LIST_EN.replace("3 ", "2 "));
-    expect(alertMessage("clock.records_misdated", two, "es")).toBe(
-      `Se registraron 2 ventas con una hora posterior a la real (de ${from} a ${to}). Quedan como se registraron. Revísalas con tu asesor; la lista está en Estado del servidor.`,
-    );
-  });
-
-  it("adds that the list may be short when the box restarted during the stop", () => {
-    const partial = { ...params, partial: true };
-    expect(alertMessage("clock.records_misdated", partial, "en")).toBe(
-      `${LIST_EN} The box restarted during the stop, so the list may be short.`,
-    );
-    expect(alertMessage("clock.records_misdated", partial, "es")).toBe(
-      `${fill(entry.es)} ${entry.variants!["partial"]!.es}`,
-    );
-  });
-
-  it("says nothing confirmed the clock, and counts no sales, when it cannot tell which", () => {
-    const unconfirmed = {
-      confirmationId: "c1",
-      count: 0,
-      from: "2026-10-19T21:41:00.000Z",
-      fromOffsetMinutes: 120,
-      partial: true,
-      unconfirmed: true,
-    };
-    const english = alertMessage("clock.records_misdated", unconfirmed, "en");
-    const es = alertMessage("clock.records_misdated", unconfirmed, "es");
-    expect(english).toBe(
-      `The payment stop that began at ${from} ended by itself, but nothing confirmed the box's clock, so the box cannot tell which sales were dated wrongly. Check the box's clock, and go through the sales since then with your tax adviser.`,
-    );
-    expect(es).toBe(entry.variants!["unconfirmed"]!.es.replace("{from:minute}", from));
-    for (const text of [english, es]) {
-      expect(text).not.toContain("—");
-      expect(text).not.toMatch(/[{}]/);
-      expect(text).not.toMatch(/\b0 /);
-    }
-  });
-});
-
-describe("a restarted clock that later proved wrong", () => {
-  const params = { from: "2026-10-19T07:10:02.000Z", to: "2026-10-19T07:11:30.000Z" };
-
-  it("names the first and last sale times it dated, in each language", () => {
-    const from = formatIsoMinute(params.from);
-    const to = formatIsoMinute(params.to);
-    expect(alertMessage("clock.behind_chain_disproved", params, "en")).toBe(
-      `Sales recorded between ${from} and ${to} were dated by a clock that proved wrong. They stay as recorded; ask your tax adviser.`,
-    );
-    expect(alertMessage("clock.behind_chain_disproved", params, "es")).toBe(
-      `Las ventas registradas entre ${from} y ${to} se fecharon con un reloj que resultó estar mal. Quedan como se registraron; consúltalo con tu asesor.`,
     );
   });
 });

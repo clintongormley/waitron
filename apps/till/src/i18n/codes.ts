@@ -868,10 +868,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The time check took too long. Check again.",
     es: "La comprobación de la hora ha tardado demasiado. Vuelve a comprobarla.",
   },
-  "clock.confirm_refused": {
-    en: "The server's time was not confirmed. Use “Check the time” to see why.",
-    es: "No se ha confirmado la hora del servidor. Usa «Comprobar la hora» para ver por qué.",
-  },
   "handover.stepping_down": {
     en: "This server no longer runs the venue, so it is not taking requests now. Nothing was changed.",
     es: "Este servidor ya no lleva el local, así que ahora no atiende solicitudes. No se ha cambiado nada.",

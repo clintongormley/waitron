@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
-import { addIncidentNote, findIncident, markIncidentHandled } from "@waitron/core";
+import { findIncident, markIncidentHandled } from "@waitron/core";
 import { resolveManagementSession } from "@waitron/identity";
 import { createErrorBoundary, requireManagementSession, type Logger } from "@waitron/server-kit";
 import { AppError, diskFullIn, isUuid } from "@waitron/shared";
@@ -28,13 +28,9 @@ const STATUS = {
   "authorization.not_permitted": 403,
   "alert.not_found": 404,
   "management.request_invalid": 400,
-  "alert.already_handled": 409,
-  "alert.note_exists": 409,
-  "alert.not_handled": 409,
 } as const;
 
 const NOTE_MAX = 500;
-const NOTE_CODE = "clock.records_misdated";
 
 /**
  * Judges a note request's raw body: the trimmed note, or null for none. An empty body, `null`, an
@@ -69,8 +65,7 @@ function judgeNoteBody(text: string, required: boolean): string | null {
 }
 
 /**
- * The dashboard alerts: open alerts, recently handled ones, marking an incident handled and adding
- * a note to a handled one. Each request opens one transaction; a read refused by a full disk
+ * The dashboard alerts: open alerts, recently handled ones, and marking an incident handled. Each request opens one transaction; a read refused by a full disk
  * retries in a turn with no drain.
  */
 export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): void {
@@ -138,38 +133,9 @@ export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): voi
         if (!held.has(permission))
           throw new AppError("authorization.not_permitted", { permission });
         const note = judgeNoteBody(text, false);
-        // No screen shows another code's note, so one is not taken for it.
-        if (note !== null && incident.code !== NOTE_CODE)
-          throw new AppError("alert.not_found", { id });
-        const changed = await markIncidentHandled(tx, {
-          id,
-          personId,
-          handledAt: deps.now(),
-          note,
-        });
-        if (!changed && note !== null) throw new AppError("alert.already_handled", { id });
-      });
-      return c.body(null, 204);
-    }),
-  );
-
-  app.post("/management-api/alerts/incidents/:id/note", (c) =>
-    run(c, log, async () => {
-      const id = c.req.param("id");
-      const text = await c.req.text();
-      await inSession(c, async (tx, { held }) => {
-        const incident =
-          alertsVisible(deps.registry, held) && isUuid(id) ? await findIncident(tx, id) : null;
-        if (incident === null) throw new AppError("alert.not_found", { id });
-        const { permission } = claimFor(deps.registry, incident.code);
-        if (!held.has(permission))
-          throw new AppError("authorization.not_permitted", { permission });
-        if (incident.code !== NOTE_CODE) throw new AppError("alert.not_found", { id });
-        const note = judgeNoteBody(text, true)!;
-        const answer = await addIncidentNote(tx, { id, note });
-        if (answer === "note_exists") throw new AppError("alert.note_exists", { id });
-        if (answer === "not_handled") throw new AppError("alert.not_handled", { id });
-        if (answer === "not_found") throw new AppError("alert.not_found", { id });
+        // No alert takes a note, so one sent is refused as for an unknown alert.
+        if (note !== null) throw new AppError("alert.not_found", { id });
+        await markIncidentHandled(tx, { id, personId, handledAt: deps.now() });
       });
       return c.body(null, 204);
     }),

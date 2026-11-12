@@ -405,8 +405,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       log,
     );
 
-  const refuseWhileClockBehind = (tx: Transaction) =>
-    deps.backend.refuseWhileClockBehind(tx, deps.clock.now());
+  const refuseUntilRecordable = (tx: Transaction) =>
+    deps.backend.refuseUntilRecordable(tx, deps.clock.now());
 
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
 
@@ -1482,7 +1482,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const sessionId = requireManagementSession(c);
       const paymentId = requireUuidParam(c.req.param("id"), "PaymentId");
       const stuck = await gated(sessionId, async (tx, personId) => {
-        await refuseWhileClockBehind(tx);
+        await refuseUntilRecordable(tx);
         const [row] = await tx
           .select({
             paymentRef: payments.paymentRef,
@@ -1676,7 +1676,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "BillPaymentId");
       const stuck = await gated(sessionId, async (tx, personId) => {
-        await refuseWhileClockBehind(tx);
+        await refuseUntilRecordable(tx);
         await requireStuckBillPayment(tx, id);
         const provided = await findPaymentByBillPayment(tx, id);
         if (provided?.state === "attempting" && provided.provider !== "simulator") {
@@ -1743,7 +1743,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         ["received", "failed"] as const,
       );
       const answer = await pinGated(sessionId, pin, async (tx, personId) => {
-        await refuseWhileClockBehind(tx);
+        await refuseUntilRecordable(tx);
         await requireStuckBillPayment(tx, id);
         // A provider row still `attempting` can yet be charged, so no outcome is recorded over it;
         // one that shows the card charged contradicts a failure.
@@ -1824,7 +1824,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await readJsonBody<Record<string, unknown>>(c),
       );
       await pinGated(sessionId, pin, async (tx, personId) => {
-        await refuseWhileClockBehind(tx);
+        await refuseUntilRecordable(tx);
         const at = deps.clock.now().instant;
         await recordHoldOutcome(tx, { holdId: id, outcome, note, personId, at });
         await refreshHeldAlert(tx, heldAlerts, { now: at, by: personId });
@@ -1894,7 +1894,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "BillRefundId");
-      await gated(sessionId, refuseWhileClockBehind);
+      await gated(sessionId, refuseUntilRecordable);
       const resumed = await resumeCardRefund(refundDeps, id, "manager", "stored");
       if (!resumed.claimed) throw new AppError("bill.refund_not_stuck", { refundId: id });
       if (resumed.refund.state !== "pending") return c.json({ outcome: resumed.refund.state });
@@ -1922,7 +1922,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         ["completed", "failed"] as const,
       );
       const personId = await pinGated(sessionId, pin, async (tx, authorizedBy) => {
-        await refuseWhileClockBehind(tx);
+        await refuseUntilRecordable(tx);
         return authorizedBy;
       });
       const refund = await attestCardRefund(refundDeps, id, outcome, {
@@ -1974,7 +1974,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       let release: (() => void) | undefined;
       try {
         await gated(sessionId, async (tx) => {
-          await refuseWhileClockBehind(tx);
+          await refuseUntilRecordable(tx);
           await readStuckTenderRefund(tx, deps.db, id);
           release = claimTenderRefund(deps.db, id);
         });
@@ -1999,7 +1999,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         ["completed", "failed"] as const,
       );
       const refund = await pinGated(sessionId, pin, async (tx, personId) => {
-        await refuseWhileClockBehind(tx);
+        await refuseUntilRecordable(tx);
         await readStuckTenderRefund(tx, deps.db, id);
         return attestTenderRefundIn(tx, refundDeps, id, outcome, { attestedBy: personId, note });
       });

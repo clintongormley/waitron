@@ -92,7 +92,7 @@ export async function recordUnpaidDeparture(
     operator.attempts,
   );
   const reading = deps.clock.now();
-  await deps.backend.refuseWhileClockBehind(tx, reading);
+  await deps.backend.refuseUntilRecordable(tx, reading);
   await checkAndBumpParty(tx, partyId, req.expectedPartyRevision, "open");
   const bills = (await readBillsOfParties(tx, [partyId])).get(partyId)!;
   const bill = bills.find((row) => row.workingOrderId === req.billId);

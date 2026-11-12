@@ -1,5 +1,4 @@
 import type {
-  ClockBehindLatestRecord,
   CorrectionAdmission,
   FiscalBackend,
   FiledReceipt,
@@ -40,11 +39,7 @@ export class NoneBackend implements FiscalBackend {
     return Promise.resolve();
   }
 
-  clockBehindLatestRecord(): Promise<ClockBehindLatestRecord | null> {
-    return Promise.resolve(null);
-  }
-
-  refuseWhileClockBehind(): Promise<void> {
+  refuseUntilRecordable(): Promise<void> {
     return Promise.resolve();
   }
 

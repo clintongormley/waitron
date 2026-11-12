@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, incidents, invoiceSeries, printers, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, printers, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { TrustedReading } from "@waitron/fiscal";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { cardReaders, PAYMENTS_MIGRATIONS } from "@waitron/payments";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { collectBoxHealth, type BoxHealthReaders } from "./box-health.js";
 import { createStaffNoticeLog } from "./staff-notices.js";
 
@@ -348,26 +348,5 @@ describe("collectBoxHealth", () => {
     fail = false;
     await collectBoxHealth(suite.db, readers);
     expect(lines).toEqual(["staff_notice.source_unavailable", "staff_notice.source_recovered"]);
-  });
-});
-
-describe("the wrongly dated sales reads", () => {
-  it("stores and reads back a handled incident's note", async () => {
-    const [row] = await suite.db
-      .insert(incidents)
-      .values({
-        source: "dashboard",
-        code: "clock.records_misdated",
-        severity: "error",
-        detectedAt: "2026-10-22T08:00:00.000Z",
-        acknowledgedAt: "2026-10-22T11:00:00.000Z",
-        acknowledgedNote: "Checked with the accountant",
-      })
-      .returning({ id: incidents.id });
-    const [read] = await suite.db
-      .select({ note: incidents.acknowledgedNote })
-      .from(incidents)
-      .where(eq(incidents.id, row!.id));
-    expect(read).toEqual({ note: "Checked with the accountant" });
   });
 });

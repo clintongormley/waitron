@@ -787,12 +787,7 @@ it("words a dish whose period has ended, in both languages", () => {
 
 it("words the box clock's check refusals plainly, in both languages, never as the generic sentence", () => {
   const generic = [codeMessage("no.such_code", "en-GB"), codeMessage("no.such_code", "es-ES")];
-  for (const code of [
-    "clock.set_refused",
-    "clock.set_failed",
-    "clock.check_expired",
-    "clock.confirm_refused",
-  ]) {
+  for (const code of ["clock.set_refused", "clock.set_failed", "clock.check_expired"]) {
     const words = [codeMessage(code, "en-GB"), codeMessage(code, "es-ES")];
     expect(words[0]).not.toBe(generic[0]);
     expect(words[1]).not.toBe(generic[1]);

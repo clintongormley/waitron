@@ -185,7 +185,7 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
         "the box's own screen refused",
         () =>
           vi.fn().mockRejectedValue({
-            code: "clock.confirm_refused",
+            code: "clock.set_refused",
             params: { reason: "same_machine" },
           }),
         "clock-check-close",

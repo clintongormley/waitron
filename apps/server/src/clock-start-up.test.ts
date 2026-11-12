@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ClockStopState, ClockWitness } from "@waitron/fiscal";
+import type { ClockWitness } from "@waitron/fiscal";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
@@ -11,10 +11,7 @@ const IN_2001 = { instant: new Date("2001-01-01T00:00:00.000Z"), offsetMinutes: 
 const FIRST_ISSUE_MS = Date.parse("2024-10-28T00:00:00.000Z");
 
 describe("tillClockCheck", () => {
-  function check(
-    state: ClockStopState | null,
-    options: { files?: boolean; recordableThrows?: Error } = {},
-  ) {
+  function check(options: { files?: boolean; recordableThrows?: Error } = {}) {
     const startUp = clockStartUp({ primaryAtStart: true });
     const witnesses: ClockWitness[] = [];
     const backend = {
@@ -26,8 +23,6 @@ describe("tillClockCheck", () => {
             offsetMinutes: 60,
           });
       }),
-      clockStopState: vi.fn(async () => state),
-      readAuthorityTime: vi.fn(async () => null),
     };
     const clockCheck = tillClockCheck({
       startUp,
@@ -38,20 +33,20 @@ describe("tillClockCheck", () => {
   }
 
   it("answers false and closes the window when its read sees no stop at a recordable reading", async () => {
-    const h = check(null);
+    const h = check();
     expect(await h.clockCheck(TX, NOW)).toBe(false);
     expect(h.startUp.open()).toBe(false);
   });
 
   it("keeps the window open and offers the till at a reading no record could carry", async () => {
-    const h = check(null);
+    const h = check();
     expect(await h.clockCheck(TX, IN_2001)).toBe(true);
     expect(h.startUp.open()).toBe(true);
   });
 
   it("passes on an error of the seat's date check that is not clock.unusable, leaving the window open", async () => {
     const failure = new Error("seat broke");
-    const h = check(null, { recordableThrows: failure });
+    const h = check({ recordableThrows: failure });
     await expect(h.clockCheck(TX, IN_2001)).rejects.toBe(failure);
     expect(h.startUp.open()).toBe(true);
   });
@@ -63,8 +58,6 @@ describe("tillClockCheck while the start check waits", () => {
     const start = startClockState();
     const backend = {
       assertRecordableAt: vi.fn(),
-      clockStopState: vi.fn(async (): Promise<ClockStopState | null> => null),
-      readAuthorityTime: vi.fn(async () => null),
     };
     const clockCheck = tillClockCheck({
       startUp,
@@ -75,11 +68,10 @@ describe("tillClockCheck while the start check waits", () => {
     return { startUp, start, backend, clockCheck };
   }
 
-  it("offers the check at once, before AEAT is asked, and still once a read that saw no stop shuts the window", async () => {
+  it("offers the check at once, and still once a read that saw no stop shuts the window", async () => {
     const h = waitingCheck();
     expect(await h.clockCheck(TX, NOW)).toBe(true);
     expect(h.startUp.open()).toBe(true);
-    expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
     h.startUp.noStop();
     expect(await h.clockCheck(TX, NOW)).toBe(true);
   });

@@ -2,7 +2,7 @@ import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-// The registry of `clock.confirm_refused` and `clock.check_expired`, which this file throws.
+// The registry of `clock.check_expired`, which this file throws.
 import "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import {

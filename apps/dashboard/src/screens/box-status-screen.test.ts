@@ -625,7 +625,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     params: { clockAt: "2023-01-01T00:00:00.000Z", offsetMinutes: 60 },
     owner: "fiscal-verifactu",
   };
-  const REFUSED = (reason: string) => ({ code: "clock.confirm_refused", params: { reason } });
+  const REFUSED = (reason: string) => ({ code: "clock.set_refused", params: { reason } });
   const atSeconds = (iso: string) => `${formatIsoMinute(iso)}:${iso.slice(17, 19)}`;
 
   function deviceNow(iso: string): void {
@@ -811,7 +811,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     },
   );
 
-  it("says at once that the box's own screen cannot confirm its clock", async () => {
+  it("says at once that the box's own screen cannot check its clock", async () => {
     const api = clockApi(
       { notices: [CLOCK_UNUSABLE] },
       { clockChallenge: vi.fn().mockRejectedValue(REFUSED("same_machine")) },
@@ -820,7 +820,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     await open(el);
     expect(dialog(el).open).toBe(true);
     expect(footerMessage(el)).toBe(
-      "This screen is the box itself, so its clock is the box's own. Confirm from your phone or another computer.",
+      "This screen is the box itself, so its clock is the box's own. Use your phone or another computer.",
     );
     expect(q(el, "[data-test=clock-check-times]")).toBeNull();
     expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
@@ -836,7 +836,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       ),
     );
     await open(el);
-    expect(footerMessage(el)).toBe(t("box_status.clock.admin.refused.same_machine"));
+    expect(footerMessage(el)).toBe(t("box_status.clock.admin.set.refused.same_machine"));
   });
 
   it("closes on Escape", async () => {
@@ -1106,8 +1106,8 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       }
     });
 
-    it.each([["same_machine", "box_status.clock.admin.refused.same_machine"]] as const)(
-      "words a challenge refused as %s during a set as the check's own refusal, leaving Close",
+    it.each([["same_machine", "box_status.clock.admin.set.refused.same_machine"]] as const)(
+      "words a challenge refused as %s during a set as a refused set, leaving Close",
       async (reason, key) => {
         deviceNow(DEVICE_AT);
         const api = setApi(undefined, {

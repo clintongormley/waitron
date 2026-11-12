@@ -77,28 +77,6 @@ vi.mock("./pending-card-recovery.js", async (importOriginal) => {
   };
 });
 
-// AEAT's clock reading answers nothing, so the only AEAT traffic is the drain's, through the
-// stand-in below.
-vi.mock("./clock-watch.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./clock-watch.js")>();
-  return {
-    ...actual,
-    createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) => {
-      const [deps] = args;
-      return actual.createClockWatch({
-        ...deps,
-        backend: new Proxy(deps.backend, {
-          get: (target, key) => {
-            if (key === "readAuthorityTime") return () => Promise.resolve(null);
-            const value: unknown = Reflect.get(target, key);
-            return typeof value === "function" ? value.bind(target) : value;
-          },
-        }),
-      });
-    },
-  };
-});
-
 // The real drain and its loop, with AEAT's transport replaced by a fake that counts submissions
 // and holds the first answer, and a batch cap of three so the seeded records are three batches due.
 vi.mock("@waitron/module", async (importOriginal) => {

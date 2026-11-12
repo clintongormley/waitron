@@ -736,7 +736,7 @@ async function runPayWorkingOrder(
         await requireEconomicWrite(tx, cfg, deps.admission);
         if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
         const reading = deps.clock.now();
-        await deps.backend.refuseWhileClockBehind(tx, reading);
+        await deps.backend.refuseUntilRecordable(tx, reading);
         await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
         const attendanceAt = deps.attendance === undefined ? undefined : reading.instant;
@@ -1197,7 +1197,7 @@ async function payIntegrated(
     const reading = deps.clock.now();
     await prepareIssueClock(tx, cfg, pinnedAt(deps.clock, reading));
     try {
-      await deps.backend.refuseWhileClockBehind(tx, reading);
+      await deps.backend.refuseUntilRecordable(tx, reading);
     } catch (error) {
       if (
         error instanceof AppError &&
@@ -2298,7 +2298,7 @@ async function runCollectOrder(
       }
       if (preRead || (deps.disk?.noted() ?? false)) refuseForDiskStop(deps.log, req.id);
       const reading = deps.clock.now();
-      await deps.backend.refuseWhileClockBehind(tx, reading);
+      await deps.backend.refuseUntilRecordable(tx, reading);
       await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
       await requireEconomicWrite(tx, cfg, deps.admission);

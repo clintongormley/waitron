@@ -3087,21 +3087,13 @@ it("reads the box's health and frees its disk through the box routes", async () 
   ]);
 });
 
-it("marks an alert handled with a note only when one is given, and adds a note later", async () => {
+it("marks an alert handled with no body", async () => {
   const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
   const api = new DashboardApi("", fetchImpl);
-  await api.markIncidentHandled("a b", "Sent to the adviser");
   await api.markIncidentHandled("a b");
-  await api.addIncidentNote("a b", "Adviser filed the correction");
   const calls = fetchImpl.mock.calls as [string, RequestInit][];
   expect(calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
-    ["/management-api/alerts/incidents/a%20b/handled", "POST", '{"note":"Sent to the adviser"}'],
     ["/management-api/alerts/incidents/a%20b/handled", "POST", undefined],
-    [
-      "/management-api/alerts/incidents/a%20b/note",
-      "POST",
-      '{"note":"Adviser filed the correction"}',
-    ],
   ]);
 });
 

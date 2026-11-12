@@ -20,7 +20,6 @@ export const REMEDY_REFUSALS = {
   "fiscal.record_already_corrected": 409,
   "fiscal.chain_handed_over": 409,
   "node.read_only": 409,
-  "clock.behind_chain": 409,
   "clock.unconfirmed": 409,
   "clock.unusable": 409,
   "venue.time_zone_not_ready": 409,

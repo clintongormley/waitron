@@ -26,7 +26,6 @@ import { inspectReturnedPayments } from "./handover-return.js";
 import { listFilingCases } from "./filing-cases.js";
 import { appendToChain } from "./chain.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
-import { clockBehindChain } from "./clock-behind.js";
 import {
   makeReturnedBatches,
   readReturnedOriginals,
@@ -1161,7 +1160,6 @@ it.each([60000, 60001])(
       expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual([]);
       expect(receiver.db.all<ReturnRow>(sql`select * from sales`)).toEqual([]);
     }
-    expect(await clockBehindChain(receiver.db, { instant: now, offsetMinutes: 120 })).toBeNull();
   },
 );
 

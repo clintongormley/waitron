@@ -4817,20 +4817,10 @@ export class DashboardApi {
     return this.#request<AlertsResponse>("/management-api/alerts/handled", "GET");
   }
 
-  /** A non-blank note on an already-handled alert is refused. */
-  markIncidentHandled(incidentId: string, note?: string): Promise<void> {
+  markIncidentHandled(incidentId: string): Promise<void> {
     return this.#request<void>(
       `/management-api/alerts/incidents/${encodeURIComponent(incidentId)}/handled`,
       "POST",
-      note === undefined ? undefined : { note },
-    );
-  }
-
-  addIncidentNote(incidentId: string, note: string): Promise<void> {
-    return this.#request<void>(
-      `/management-api/alerts/incidents/${encodeURIComponent(incidentId)}/note`,
-      "POST",
-      { note },
     );
   }
 

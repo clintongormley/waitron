@@ -1235,7 +1235,7 @@ async function beginBillPayment(
   const reading = read();
   if (!Number.isFinite(reading.instant.getTime()))
     throw new AppError("venue.time_zone_conversion_failed", { reason: "invalid_instant" });
-  await deps.backend.refuseWhileClockBehind(tx, reading);
+  await deps.backend.refuseUntilRecordable(tx, reading);
   await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
   const payable = await requirePayableBill(tx, workingOrderId);

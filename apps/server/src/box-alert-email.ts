@@ -22,10 +22,7 @@ import {
   BACKUP_DELETED_EMAIL_WORDS,
   BACKUP_REFUSED_EMAIL_WORDS,
   BOX_EMAIL_WORDS,
-  CLOCK_CONFIRMED_BY_WORDS,
   CLOCK_CORRECTED_EMAIL_WORDS,
-  CLOCK_MISDATED_EMAIL_WORDS,
-  CLOCK_RESTARTED_EMAIL_WORDS,
 } from "./i18n/box-emails.js";
 import type { Logger } from "./logger.js";
 import { receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
@@ -48,12 +45,7 @@ export function isBoxEmailCode(code: string): code is BoxEmailCode {
 
 /** The alerts the duty emails while they stay open, read from the incidents table; a
  * `clock.corrected` one is emailed even once handled, see `startBoxEmailDuty`'s `remember`. */
-export const INCIDENT_EMAIL_CODES = [
-  "clock.behind_chain_restarted",
-  "clock.records_misdated",
-  "backup.archives_deleted",
-  "clock.corrected",
-] as const;
+export const INCIDENT_EMAIL_CODES = ["backup.archives_deleted", "clock.corrected"] as const;
 
 export type IncidentEmailCode = (typeof INCIDENT_EMAIL_CODES)[number];
 
@@ -75,9 +67,6 @@ export const boxAlertMailKey = (episodeId: string, personId: string) =>
 /** Each time placeholder and the param holding the offset it is written in. */
 const TIME_PLACEHOLDERS = {
   clockAt: "offsetMinutes",
-  lastRecordAt: "lastRecordOffsetMinutes",
-  from: "fromOffsetMinutes",
-  to: "toOffsetMinutes",
   before: "beforeOffsetMinutes",
   after: "afterOffsetMinutes",
 } as const;
@@ -116,23 +105,6 @@ function wordsFor(
       },
     };
   }
-  if (code === "clock.behind_chain_restarted") {
-    const by = CLOCK_CONFIRMED_BY_WORDS[language];
-    const source = params?.["confirmedBy"];
-    const confirmedBy =
-      typeof source === "string" && source !== "otherwise" && Object.hasOwn(by, source)
-        ? by[source as keyof typeof by]
-        : by.otherwise;
-    const words = CLOCK_RESTARTED_EMAIL_WORDS[language];
-    const person = params?.["person"];
-    if (params?.["byStaff"] === true && typeof person === "string") {
-      const device = params["device"];
-      const till =
-        typeof device === "string" ? fillTemplate(words.namedTill, { device }) : words.unnamedTill;
-      return { subject: words.subject, text: words.byStaff, values: { person, till } };
-    }
-    return { subject: words.subject, text: words.text, values: { confirmedBy } };
-  }
   if (code === "clock.corrected") {
     const words = CLOCK_CORRECTED_EMAIL_WORDS[language];
     const direction = params?.["direction"];
@@ -144,7 +116,7 @@ function wordsFor(
     const person = typeof name === "string" ? name : "—";
     const source = params?.["source"];
     let subject: string = words.subject;
-    let text: string = words.authority;
+    let text: string = words.admin;
     const values: Record<string, string> = { step, person };
     if (params?.["unverified"] === true) {
       subject = words.unverifiedSubject;
@@ -154,24 +126,11 @@ function wordsFor(
       values["till"] =
         typeof device === "string" ? fillTemplate(words.namedTill, { device }) : words.unnamedTill;
       text = words.staff;
-    } else if (source === "admin") {
-      text = words.admin;
     } else if (source === "setup") {
       values["person"] = typeof name === "string" ? fillTemplate(words.setupPerson, { name }) : "";
       text = words.setup;
     }
     return { subject, text, values };
-  }
-  if (code === "clock.records_misdated") {
-    const words = CLOCK_MISDATED_EMAIL_WORDS[language];
-    if (params?.["unconfirmed"] === true) return words.unconfirmed;
-    const count = params?.["count"];
-    const main = count === 1 ? words.one : words.text;
-    return {
-      subject: words.subject,
-      text: params?.["partial"] === true ? `${main} ${words.partial}` : main,
-      values: { count: String(count) },
-    };
   }
   return BOX_EMAIL_WORDS[code][language];
 }

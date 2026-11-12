@@ -167,7 +167,7 @@ async function post(venue: Venue, path: string, body: object): Promise<Response>
     admission: testTradingAdmission(),
     db: suite.db,
     backend: {
-      refuseWhileClockBehind: async () => {},
+      refuseUntilRecordable: async () => {},
       refuseNewIssuance: async () => {},
     } as Partial<FiscalBackend> as FiscalBackend,
     clock: systemClock(),

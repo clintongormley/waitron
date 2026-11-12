@@ -1661,18 +1661,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",
   },
-  "alert.already_handled": {
-    en: "This alert was already marked handled, so the note was not saved. Add it from Handled lists on the Box status page.",
-    es: "Este aviso ya estaba marcado como resuelto, así que la nota no se ha guardado. Añádela desde Listas resueltas en Estado del servidor.",
-  },
-  "alert.note_exists": {
-    en: "This alert already has a note, which cannot be changed. Close this window to see it under Handled lists.",
-    es: "Este aviso ya tiene una nota, que no se puede cambiar. Cierra esta ventana para verla en Listas resueltas.",
-  },
-  "alert.not_handled": {
-    en: "This alert has not been marked handled yet. Close this window and use Mark handled, which takes a note too.",
-    es: "Este aviso aún no se ha marcado como resuelto. Cierra esta ventana y usa Marcar como resuelto, que también admite una nota.",
-  },
   "fiscal.not_filing": {
     en: "This box does not send records to the tax agency.",
     es: "Este servidor no envía registros a Hacienda.",
@@ -1689,17 +1677,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Not recorded: the box's clock is wrong.",
     es: "No se ha registrado: la hora del servidor es incorrecta.",
   },
-  "clock.behind_chain": {
-    en: "Not recorded: the box's clock reads earlier than its last sale. Sort it out on the Box status page.",
-    es: "No se ha registrado: la hora del servidor es anterior a la última venta. Resuélvelo en Estado del servidor.",
-  },
   "clock.unconfirmed": {
     en: "Not recorded: the box is waiting for its time to be confirmed. Use “Check the time” on a till.",
     es: "No se ha registrado: el servidor espera a que se confirme su hora. Usa «Comprobar la hora» en una caja.",
-  },
-  "clock.confirm_refused": {
-    en: "The clock could not be confirmed. Look at the Box status page.",
-    es: "No se ha podido confirmar la hora. Mira Estado del servidor.",
   },
   "clock.check_expired": {
     en: "The check took too long. Try again.",

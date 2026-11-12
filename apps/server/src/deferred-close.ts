@@ -90,7 +90,7 @@ export async function closeBillDeferredTx(
     refuseForDiskStop(deps.log, billId);
   await requireEconomicWrite(tx, cfg, deps.admission);
   const reading = deps.clock.now();
-  await deps.backend.refuseWhileClockBehind(tx, reading);
+  await deps.backend.refuseUntilRecordable(tx, reading);
   await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
   deps.backend.assertRecordableAt(reading);
   // One reading prices the invoice and dates the settlement, the order and the closure.

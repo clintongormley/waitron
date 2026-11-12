@@ -2041,8 +2041,6 @@ export const en = {
   "box_time.refused.check_expired": "This took too long.",
   "box_time.refused.same_machine":
     "This screen is the server itself, so its clock is the server's own. Check from a till or handheld instead.",
-  "box_time.refused.contrary_proof":
-    "The tax agency's time or two other devices disagree with the server's clock, so this device cannot confirm it. If one of those devices shows the right time, check the time from that device.",
   "box_time.refused.not_admitted":
     "This device's profile no longer lets you work on it, so it cannot check the time for you. Sign in on a device whose profile admits you.",
   "box_time.refused.set_failed_refused": "The server could not set its clock. Nothing was changed.",
@@ -4077,8 +4075,6 @@ export const es: Record<StringKey, string> = {
   "box_time.refused.check_expired": "Ha tardado demasiado.",
   "box_time.refused.same_machine":
     "Esta pantalla es el propio servidor, así que su reloj es el del servidor. Compruébalo desde una caja o un terminal de mano.",
-  "box_time.refused.contrary_proof":
-    "La hora de Hacienda u otros dos dispositivos no coinciden con el reloj del servidor, así que este dispositivo no puede confirmarlo. Si uno de esos dispositivos muestra la hora correcta, comprueba la hora desde ese dispositivo.",
   "box_time.refused.not_admitted":
     "El perfil de este dispositivo ya no te deja trabajar en él, así que no puede comprobar la hora por ti. Inicia sesión en un dispositivo cuyo perfil te admita.",
   "box_time.refused.set_failed_refused":

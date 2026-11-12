@@ -307,12 +307,6 @@ describe("till-box-time-dialog", () => {
       ["close"],
     ],
     [
-      "a confirm's not_stopped",
-      { code: "clock.confirm_refused", reason: "not_stopped" },
-      "box_time.refused.not_stopped",
-      ["close"],
-    ],
-    [
       "not_start_up",
       { code: "clock.set_refused", reason: "not_start_up" },
       "box_time.refused.not_start_up",
@@ -358,12 +352,6 @@ describe("till-box-time-dialog", () => {
       "same_machine",
       { code: "clock.set_refused", reason: "same_machine" },
       "box_time.refused.same_machine",
-      ["close"],
-    ],
-    [
-      "contrary_proof",
-      { code: "clock.confirm_refused", reason: "contrary_proof" },
-      "box_time.refused.contrary_proof",
       ["close"],
     ],
     [

@@ -11,18 +11,9 @@ import { recipientIdentifierResult } from "@waitron/country-packs";
 import { AppError, decimal, readSaleOrigin, sumDecimals } from "@waitron/shared";
 import type { NodeId, SaleId } from "@waitron/shared";
 import type {
-  AuthorityTimeSample,
-  ClockBehindLatestRecord,
-  ClockCheckCloseRequest,
-  ClockCheckOpenRequest,
-  ClockConfirmation,
-  ClockConfirmRequest,
   ClockStep,
   ClockStepRecorded,
   ClockStepRequest,
-  ClockProvedWrong,
-  ClockStopState,
-  ClockWitness,
   CorrectionAdmission,
   Counterparty,
   FiscalBackend,
@@ -31,14 +22,11 @@ import type {
   FiledInvoiceEvidence,
   FiscalRecordRef,
   IntegrityReport,
-  MisdatedDetail,
-  MisdatedRecords,
   NodeRegistration,
   ReceiptQrText,
   SaleForFiscalRecord,
   TrustedClock,
   VatBreakdownLine,
-  WaitingClockCheck,
 } from "@waitron/fiscal";
 import { formatInvoiceNumber } from "@waitron/core";
 import { buildQrPayload } from "@waitron/verifactu";
@@ -63,16 +51,8 @@ import type { Entorno, RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { verifyChain } from "./verify.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
-import {
-  chainHeads,
-  clockBehindChain,
-  refuseWhileClockBehind as refuseWhileClockBehindChain,
-} from "./clock-behind.js";
-import { closeClockCheckByItself, openClockCheck, waitingClockCheck } from "./clock-checks.js";
-import { clockStopState, confirmClockStop, noteClockProvedWrong } from "./clock-confirmation.js";
+import { chainHeads, refuseWhileClockBehind as refuseBeforeRecordable } from "./clock-behind.js";
 import { confirmClockStep, latestClockStep } from "./clock-step.js";
-import { misdatedDetail, misdatedRecords } from "./clock-misdated.js";
-import { readAuthorityTime } from "./authority-time.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import {
   PRODUCER_PENDING,
@@ -210,33 +190,11 @@ export class VerifactuBackend implements FiscalBackend {
     return assertNoActiveConflict(tx, nodeId);
   }
 
-  clockBehindLatestRecord(
-    tx: Transaction,
-    reading: { instant: Date; offsetMinutes: number },
-  ): Promise<ClockBehindLatestRecord | null> {
-    return clockBehindChain(tx, reading);
-  }
-
-  refuseWhileClockBehind(
+  refuseUntilRecordable(
     tx: Transaction,
     reading: { instant: Date; offsetMinutes: number },
   ): Promise<void> {
-    return refuseWhileClockBehindChain(tx, reading);
-  }
-
-  clockStopState(
-    tx: Transaction,
-    reading: { instant: Date; offsetMinutes: number },
-    witnesses: readonly ClockWitness[],
-  ): Promise<ClockStopState | null> {
-    return clockStopState(tx, reading, witnesses);
-  }
-
-  confirmClockStop(
-    tx: Transaction,
-    input: ClockConfirmRequest,
-  ): Promise<{ confirmation: ClockConfirmation | null }> {
-    return confirmClockStop(tx, input);
+    return refuseBeforeRecordable(tx, reading);
   }
 
   confirmClockStep(tx: Transaction, input: ClockStepRequest): Promise<ClockStepRecorded> {
@@ -249,43 +207,6 @@ export class VerifactuBackend implements FiscalBackend {
 
   recordHeads(tx: Transaction): Promise<Record<string, number>> {
     return chainHeads(tx);
-  }
-
-  openClockCheck(tx: Transaction, input: ClockCheckOpenRequest): Promise<{ id: string } | null> {
-    return openClockCheck(tx, input);
-  }
-
-  closeClockCheckByItself(
-    tx: Transaction,
-    input: ClockCheckCloseRequest,
-  ): Promise<{ confirmation: ClockConfirmation | null }> {
-    return closeClockCheckByItself(tx, input);
-  }
-
-  waitingClockCheck(
-    tx: Transaction,
-    reading: { instant: Date; offsetMinutes: number },
-  ): Promise<WaitingClockCheck | null> {
-    return waitingClockCheck(tx, reading);
-  }
-
-  misdatedRecords(tx: Transaction, confirmationId: string): Promise<MisdatedRecords | null> {
-    return misdatedRecords(tx, confirmationId);
-  }
-
-  misdatedDetail(tx: Transaction, confirmationId: string): Promise<MisdatedDetail | null> {
-    return misdatedDetail(tx, confirmationId);
-  }
-
-  noteClockProvedWrong(
-    tx: Transaction,
-    input: ClockProvedWrong,
-  ): Promise<{ recorded: string[]; unused: string[]; held: string[] }> {
-    return noteClockProvedWrong(tx, input);
-  }
-
-  readAuthorityTime(): Promise<AuthorityTimeSample | null> {
-    return readAuthorityTime(this.deploymentEnvironment);
   }
 
   /**

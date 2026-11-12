@@ -951,7 +951,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   matter how much the clock changes"); a time a person confirms or sets from their own device is
   never compared with the latest record (owner, 2026-11-11 14:34: "if somebody has confirmed the
   time on their device, then we trust that time and move forward"). After replay, call the seat's
-  `refuseWhileClockBehind` (by then: waiting, or before 28-10-2024) before reader/refund/drawer
+  `refuseUntilRecordable` (by then: waiting, or before 28-10-2024) before reader/refund/drawer
   work; pause both refund recovery loops while waiting. Recheck card-refund send/outcome in their
   dating transaction after provider waits, against the same check. Still store money already
   moved. Guards: `packages/fiscal-verifactu/src/chain.earlier-time.test.ts` and

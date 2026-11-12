@@ -33,14 +33,6 @@ const RESTART_AWAY_MS = 30_000;
 /** The server's margin for an administrator's device agreeing with the box. */
 const AGREE_WITHIN_MS = 60_000;
 
-/** The reasons a refused confirmation names that have their own sentence. */
-const CONFIRM_REFUSALS = {
-  same_machine: "box_status.clock.admin.refused.same_machine",
-  contrary_proof: "box_status.clock.stop.contrary",
-  differs: "box_status.clock.admin.differ",
-  not_stopped: "box_status.clock.admin.refused.not_stopped",
-} as const satisfies Record<string, StringKey>;
-
 /** The reasons a refused set names that have their own sentence; `agrees` turns to Confirm. */
 const SET_REFUSALS = {
   same_machine: "box_status.clock.admin.set.refused.same_machine",
@@ -65,10 +57,6 @@ const SET_ENDS_THE_QUESTION: ReadonlySet<string> = new Set([
   "witnessed",
   "stale",
 ]);
-
-/** The check's own refusals, met by a set's fresh challenge, that a second press could only meet
- * again; the challenge route refuses nothing else. */
-const CHECK_ENDS_THE_QUESTION: ReadonlySet<string> = new Set(["same_machine"]);
 
 /** LOCAL copy of `IDLE_TIMEOUT_MS` (`packages/identity/src/management-session.ts:11`): a step
  * past it either way ends the dashboard session that asked for it. */
@@ -421,7 +409,7 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #clockRefused(error: unknown): void {
-    this.clockCheckError = clockRefusal(error);
+    this.clockCheckError = setRefusal(error);
     this.api.liveData.refresh();
   }
 
@@ -454,11 +442,9 @@ export class BoxStatusScreen extends LitElement {
       if (fresh !== null && reason === "agrees") {
         this.clockReading = { ...fresh, agrees: true };
       } else {
-        const checkReason = refusalReason(error);
         if (
           codeOf(error) === "clock.set_failed" ||
-          (reason !== null && SET_ENDS_THE_QUESTION.has(reason)) ||
-          (checkReason !== null && CHECK_ENDS_THE_QUESTION.has(checkReason))
+          (reason !== null && SET_ENDS_THE_QUESTION.has(reason))
         )
           this.clockReading = null;
         this.clockCheckError = setRefusal(error);
@@ -1010,10 +996,6 @@ function reasonOf(error: unknown, code: string): string | null {
   return typeof reason === "string" ? reason : null;
 }
 
-function refusalReason(error: unknown): string | null {
-  return reasonOf(error, "clock.confirm_refused");
-}
-
 function setRefusalReason(error: unknown): string | null {
   return reasonOf(error, "clock.set_refused");
 }
@@ -1026,18 +1008,11 @@ function setRefusal(error: unknown): string {
       ? t(SET_FAILURES[failure as keyof typeof SET_FAILURES])
       : codeMessage(code);
   }
-  if (code !== "clock.set_refused") return clockRefusal(error);
+  if (code !== "clock.set_refused") return codeMessage(code);
   const reason = setRefusalReason(error);
   return reason !== null && Object.hasOwn(SET_REFUSALS, reason)
     ? t(SET_REFUSALS[reason as keyof typeof SET_REFUSALS])
     : codeMessage(code);
-}
-
-function clockRefusal(error: unknown): string {
-  const reason = refusalReason(error);
-  return reason !== null && Object.hasOwn(CONFIRM_REFUSALS, reason)
-    ? t(CONFIRM_REFUSALS[reason as keyof typeof CONFIRM_REFUSALS])
-    : codeMessage(codeOf(error));
 }
 
 declare global {

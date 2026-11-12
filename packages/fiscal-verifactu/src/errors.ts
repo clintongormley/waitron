@@ -403,35 +403,6 @@ declare module "@waitron/shared" {
     "clock.unusable": { clockAt: string; offsetMinutes: number };
 
     /**
-     * `refuseWhileClockBehind` (./clock-behind.ts): the box's clock reads more than a minute
-     * earlier than the latest record in any chain this database holds. `clockAt` and
-     * `lastRecordAt` are ISO 8601 instants, each with its own offset.
-     */
-    "clock.behind_chain": {
-      clockAt: string;
-      offsetMinutes: number;
-      lastRecordAt: string;
-      lastRecordOffsetMinutes: number;
-    };
-
-    /**
-     * Recorded, never thrown, by `recordRestarted` (./clock-stop-incidents.ts) for each confirmation
-     * that lifts a payment stop. `confirmedBy` is the confirmation's source; `person` is the
-     * administrator's or staff member's display name when a person confirmed, else null; `clockAt`
-     * and `lastRecordAt` are ISO 8601 instants. `byStaff` is set when a staff member confirmed, and
-     * `device` (the till's label) when the person confirmed on a till.
-     */
-    "clock.behind_chain_restarted": {
-      confirmationId: string;
-      confirmedBy: "authority" | "devices" | "admin" | "staff";
-      person: string | null;
-      clockAt: string;
-      lastRecordAt: string;
-      byStaff?: true;
-      device?: string | null;
-    };
-
-    /**
      * Recorded, never thrown, by `recordCorrected` (./clock-stop-incidents.ts) for each step of the
      * box's clock, and for a `setup` step by the server at the venue's first full start that is
      * neither a mirror nor fenced.
@@ -446,7 +417,7 @@ declare module "@waitron/shared" {
      */
     "clock.corrected": {
       confirmationId: string | null;
-      source: "authority" | "admin" | "staff" | "setup";
+      source: "admin" | "staff" | "setup";
       person: string | null;
       deviceId: string | null;
       device: string | null;
@@ -462,33 +433,6 @@ declare module "@waitron/shared" {
       byStaff: boolean;
       bySetup?: true;
       bySetupAdmin?: true;
-    };
-
-    /**
-     * Recorded, never thrown, by `recordDisproofs` (./clock-stop-incidents.ts) once per lift whose
-     * clock later proved wrong; `confirmationId` is the lifting confirmation's id. `from` and `to` are
-     * the earliest and latest generation times, ISO 8601, among the records written under it.
-     */
-    "clock.behind_chain_disproved": { confirmationId: string; from: string; to: string };
-
-    /**
-     * Recorded, never thrown, by `recordMisdated` (./clock-stop-incidents.ts) for each closing of a
-     * clock check that finds wrongly dated records, or cannot tell which they are (`unconfirmed`).
-     * With a list, `count` records from `from` to `to`, the earliest and latest generation times
-     * (ISO 8601), each with its record's offset. When it cannot tell, `count` is 0, `from` is when
-     * the check opened, with the offset the box read then (the closing's when the check stored
-     * none), and there is no `to`. `partial` is
-     * the closing's: the stop's start was not known, so the list may be short.
-     */
-    "clock.records_misdated": {
-      confirmationId: string;
-      count: number;
-      from: string;
-      fromOffsetMinutes: number;
-      to?: string;
-      toOffsetMinutes?: number;
-      partial: boolean;
-      unconfirmed: boolean;
     };
 
     /** A declaration's text holds a `‹…›` slot nothing fills; `slot` is the slot, brackets included. */

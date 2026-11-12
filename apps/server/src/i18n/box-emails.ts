@@ -29,67 +29,13 @@ export const BOX_EMAIL_WORDS = {
       text: "El servidor de {venue} tiene la hora puesta antes del 28 de octubre de 2024, así que no se puede registrar ninguna venta en Hacienda hasta que la hora sea correcta. Con internet, el servidor la corrige solo. Si no, un administrador normalmente puede ponerla en hora desde su propio móvil u ordenador en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor); si el servidor arrancó con la hora mal, cualquier empleado puede hacerlo desde una caja con «Comprobar la hora».",
     },
   },
-  "clock.behind_chain": {
-    en: {
-      subject: "Payments stopped at {venue}: the box's clock reads earlier than its last sale",
-      text: "The box's clock ({clockAt}) reads earlier than its last recorded sale ({lastRecordAt}). Since then no device can take payment. Orders can still be taken and sent to the kitchen. What to do: • If the box's clock is wrong (usual after a power cut): with the internet the box puts it right by itself; otherwise an administrator can usually set it from their own phone or computer on the Box status page (in the dashboard, Settings → Box status), and if the box started with payments stopped and the tax agency does not answer (or the box does not send it records), any staff member can do it from a till with “Check the time”. • If you think the box's clock is right: an administrator can confirm it on the same page; with the internet the box does it by itself, and so do two tills that agree with it — except when the box started with payments stopped: then two tills are not enough, and, in the same case, a staff member confirms it from a till with “Check the time”.",
-    },
-    es: {
-      subject: "No se puede cobrar en {venue}: la hora del servidor es anterior a la última venta",
-      text: "La hora del servidor ({clockAt}) es anterior a la última venta registrada ({lastRecordAt}). Desde entonces ningún dispositivo puede cobrar. Se pueden seguir tomando pedidos y enviándolos a cocina. Qué hacer: • Si la hora del servidor está mal (lo normal tras un corte de luz): con internet, el servidor la corrige solo; si no, un administrador normalmente puede ponerla en hora desde su propio móvil u ordenador en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor), y si el servidor arrancó con los cobros parados y Hacienda no responde (o el servidor no le envía registros), cualquier empleado puede hacerlo desde una caja con «Comprobar la hora». • Si crees que la hora del servidor es correcta: un administrador puede confirmarla en esa misma página; con internet, el servidor lo hace solo, y también dos cajas que coincidan con él, salvo si el servidor arrancó con los cobros parados: entonces no bastan dos cajas y, en ese mismo caso, un empleado la confirma desde una caja con «Comprobar la hora».",
-    },
-  },
 } as const satisfies Record<string, Record<"en" | "es", { subject: string; text: string }>>;
-
-/** What confirmed the box's clock, by `clock.behind_chain_restarted`'s `confirmedBy`. */
-export const CLOCK_CONFIRMED_BY_WORDS = {
-  en: {
-    authority: "the tax agency's time",
-    devices: "two tills or handhelds",
-    admin: "an administrator",
-    staff: "a staff member on a till",
-    otherwise: "a check recorded on the box",
-    staffNamed: "a staff member ({person}) on a till",
-  },
-  es: {
-    authority: "la hora de Hacienda",
-    devices: "dos cajas o terminales",
-    admin: "un administrador",
-    staff: "un empleado en una caja",
-    otherwise: "una comprobación anotada en el servidor",
-    staffNamed: "un miembro del personal ({person}) en una caja",
-  },
-} as const satisfies Record<"en" | "es", Record<string, string>>;
-
-export const CLOCK_RESTARTED_EMAIL_WORDS = {
-  en: {
-    subject: "Payments restarted at {venue}",
-    text: "The box's clock was confirmed by {confirmedBy} and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
-    byStaff:
-      "The box's clock was confirmed by {person}, a staff member, on {till}, and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
-    namedTill: "till {device}",
-    unnamedTill: "a till",
-  },
-  es: {
-    subject: "Se reanudaron los cobros en {venue}",
-    text: "La hora del servidor se confirmó con {confirmedBy} y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor).",
-    byStaff:
-      "La hora del servidor la confirmó {person}, miembro del personal, en {till}, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del servidor (en el panel de gestión, Ajustes → Estado del servidor).",
-    namedTill: "la caja {device}",
-    unnamedTill: "una caja",
-  },
-} as const satisfies Record<
-  "en" | "es",
-  { subject: string; text: string; byStaff: string; namedTill: string; unnamedTill: string }
->;
 
 /** By what set the clock, `unverified` (with its own subject) instead of any when the box could
  * not confirm the step took; `{step}` is `forward`, `back` or `moved` with the step's length. */
 export const CLOCK_CORRECTED_EMAIL_WORDS = {
   en: {
     subject: "{venue}: the box's clock was set",
-    authority:
-      "The box set its clock from the tax agency's time: {step}, from {before} to {after}.",
     admin: "The box's clock was set from {person}'s device: {step}, from {before} to {after}.",
     setup:
       "The box's clock was set from the device showing the setup or restore page{person}: {step}, from {before} to {after}.",
@@ -107,7 +53,6 @@ export const CLOCK_CORRECTED_EMAIL_WORDS = {
   },
   es: {
     subject: "{venue}: se puso la hora del servidor",
-    authority: "El servidor puso su reloj con la hora de Hacienda: {step}, de {before} a {after}.",
     admin:
       "El reloj del servidor se puso con la hora del dispositivo de {person}: {step}, de {before} a {after}.",
     setup:
@@ -125,31 +70,6 @@ export const CLOCK_CORRECTED_EMAIL_WORDS = {
     unnamedTill: "una caja",
   },
 } as const satisfies Record<"en" | "es", Record<string, string>>;
-
-/** `text` for several sales, `one` for one, `partial` appended to either; `unconfirmed` instead of
- * all three when the box cannot tell which sales. */
-export const CLOCK_MISDATED_EMAIL_WORDS = {
-  en: {
-    subject: "Sales dated wrongly at {venue}: check them with your tax adviser",
-    text: "{count} sales were recorded with a time later than the real time, from {from} to {to}. They stay as recorded. The list is on the Box status page; go through it with your tax adviser and then mark the alert as handled.",
-    one: "One sale was recorded with a time later than the real time, at {from}. It stays as recorded. The list is on the Box status page; go through it with your tax adviser and then mark the alert as handled.",
-    partial: "The box restarted during the stop, so the list may be short.",
-    unconfirmed: {
-      subject: "Sales may be dated wrongly at {venue}: check them with your tax adviser",
-      text: "The payment stop that began at {from} ended by itself, but nothing confirmed the box's clock, so the box cannot tell which sales were dated wrongly. Check the box's clock, and go through the sales since then with your tax adviser; then mark the alert as handled.",
-    },
-  },
-  es: {
-    subject: "Ventas con fecha incorrecta en {venue}: revísalas con tu asesor",
-    text: "Se registraron {count} ventas con una hora posterior a la real, de {from} a {to}. Quedan como se registraron. La lista está en Estado del servidor; revísala con tu asesor y después marca el aviso como resuelto.",
-    one: "Se registró una venta con una hora posterior a la real, el {from}. Queda como se registró. La lista está en Estado del servidor; revísala con tu asesor y después marca el aviso como resuelto.",
-    partial: "El servidor se reinició durante la parada, así que puede faltar alguna.",
-    unconfirmed: {
-      subject: "Puede haber ventas con fecha incorrecta en {venue}: revísalas con tu asesor",
-      text: "La parada de cobros que empezó el {from} terminó sola, pero nada confirmó la hora del servidor, así que el servidor no puede saber qué ventas tienen la fecha mal. Comprueba la hora del servidor y revisa con tu asesor las ventas desde entonces; después marca el aviso como resuelto.",
-    },
-  },
-} as const;
 
 /** `one` for a single deleted backup, `text` for several taken on one day, `severalDays` for
  * several taken on different days. */
