@@ -261,6 +261,24 @@ describe("till-bill-pay-dialog: paying for items", () => {
     expect(offered(el)).toEqual([`Paella ×1 · ${money("35.00")}`, `Beer ×2 · ${money("6.00")}`]);
   });
 
+  it.each([
+    ["en", "0.35"],
+    ["es", "0,35"],
+  ])("writes a weighed line's quantity with the %s till's decimal mark", async (locale, shown) => {
+    setLocale(locale);
+    const ham: PayLine = {
+      lineNo: 4,
+      name: "Ham",
+      quantity: "0.35",
+      total: "7.00",
+      unitTotal: null,
+    };
+    const el = await mount({ lines: [ham] });
+    expect(offered(el)).toEqual([`Ham ×${shown} · ${money("7.00").replace(/\s/g, " ")}`]);
+    await pick(el, "line", "4");
+    expect(scope(el)).toContain(`Ham ×${shown}`);
+  });
+
   it("shows what the chosen items come to before anything is asked", async () => {
     const el = await mount();
     await pick(el, "line", "1");

@@ -569,7 +569,7 @@ describe("till-ticket-view", () => {
         norm(el.shadowRoot!.querySelector(".invoice-facts span:last-child")!.textContent!)
           .replace(/\s+/g, " ")
           .trim(),
-      ).toBe("1,82 € / 0.1 kg");
+      ).toBe("1,82 € / 0,1 kg");
     },
   );
 
@@ -821,7 +821,7 @@ describe("till-ticket-view", () => {
     expect(rows[0]!.textContent).toContain("2");
     expect(norm(rows[0]!.textContent!)).toContain("3,00 €");
     expect(rows[1]!.textContent).toContain("Jamón");
-    expect(rows[1]!.textContent).toContain("0.32 kg");
+    expect(rows[1]!.textContent).toContain("0,32 kg");
     expect(norm(rows[1]!.textContent!)).toContain("6,40 €");
   });
 
@@ -915,9 +915,68 @@ describe("till-ticket-view", () => {
     });
     const rows = el.shadowRoot!.querySelectorAll(".line");
     expect(rows[1]!.textContent).toContain("Jamón");
-    expect(rows[1]!.textContent).toContain("0.150 kg");
+    expect(rows[1]!.textContent).toContain("0,150 kg");
     expect(rows[1]!.textContent).not.toContain("x");
   });
+
+  it.each([
+    { locale: "es-ES", ui: "en-GB", mark: "," },
+    { locale: "en-GB", ui: "es-ES", mark: "." },
+  ])(
+    "writes weighed quantities with the $locale receipt's decimal mark under a $ui till",
+    async ({ locale, ui, mark }) => {
+      setLocale(ui);
+      const dish = {
+        descriptions: { [locale]: "Jamón" },
+        quantity: "0.35",
+        gross: "7.00",
+        unitName: { es: "kg", en: "kg" },
+        unitPrecision: 3,
+        parentLineNo: null,
+      };
+      const extra = {
+        descriptions: { [locale]: "Queso" },
+        quantity: "0.150",
+        gross: "0.30",
+        unitName: { es: "kg", en: "kg" },
+        unitPrecision: 3,
+        parentLineNo: 1,
+      };
+      const mountAs = (over: Partial<TillSaleResult>) =>
+        mountWidget<TillTicketView>("till-ticket-view", {
+          issuer,
+          invoiceLocale: locale,
+          result: { ...result, ...over },
+        });
+
+      const { el: simplified } = await mountAs({ lines: [dish, extra] });
+      expect(norm(simplified.shadowRoot!.querySelector(".line-qty")!.textContent!).trim()).toBe(
+        `0${mark}35 kg`,
+      );
+      expect(simplified.shadowRoot!.querySelector(".line.option")!.textContent).toContain(
+        `Queso 0${mark}150 kg`,
+      );
+
+      const net = { unitPrice: "2.00", priceQuantity: "0.100", base: "6.36", rate: "10.00" };
+      const { el: full } = await mountAs({
+        invoiceType: "F1",
+        lines: [
+          { ...dish, net },
+          { ...extra, net: { ...net, base: "0.27" } },
+        ],
+      });
+      expect(norm(full.shadowRoot!.querySelector(".line-qty")!.textContent!).trim()).toBe(
+        `0${mark}35 kg`,
+      );
+      expect(full.shadowRoot!.querySelector(".line.option")!.textContent).toContain(
+        `Queso 0${mark}150 kg`,
+      );
+      const facts = [...full.shadowRoot!.querySelectorAll(".invoice-facts .vat-row:first-child")];
+      expect(facts).toHaveLength(2);
+      for (const row of facts)
+        expect(norm(row.textContent!).replace(/\s+/g, " ")).toContain(`/ 0${mark}1 kg`);
+    },
+  );
 
   it("shows a filed Each extra as x3 instead of its translated unit abbreviation", async () => {
     const { el } = await mount({
@@ -1584,7 +1643,7 @@ it("resolves a filed line's unit abbreviation from a BARE content-language key",
       },
     ],
   });
-  expect(norm(el.shadowRoot!.querySelector(".line-qty")!.textContent ?? "").trim()).toBe("0.32 ud");
+  expect(norm(el.shadowRoot!.querySelector(".line-qty")!.textContent ?? "").trim()).toBe("0,32 ud");
 });
 
 it("names a filed line from its first stored description when none is in the invoice locale", async () => {
@@ -2977,8 +3036,8 @@ describe("till-ticket-view: identical dishes (A803)", () => {
     ]);
     const half = { ...beer, quantity: "0.5", gross: "0.75" };
     expect(await shown([half, half])).toEqual([
-      ["Caña", "0.5", "0,75 €"],
-      ["Caña", "0.5", "0,75 €"],
+      ["Caña", "0,5", "0,75 €"],
+      ["Caña", "0,5", "0,75 €"],
     ]);
   });
 
