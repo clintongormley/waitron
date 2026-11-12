@@ -410,7 +410,7 @@ describe("a menu's scheduled versions", () => {
           else dinner = resolve;
         }),
     );
-    const el = await mount(stubApi({ getMenuPublications: read }));
+    const el = await mount(stubApi({ getMenuPublications: read }), { preview: draftPreview() });
     el.menuId = "menu-dinner";
     await flush(el);
     await flush(el);
@@ -418,10 +418,12 @@ describe("a menu's scheduled versions", () => {
     await flush(el);
     expect(cell(el, "version-v-lunch-2")).toBeNull();
     expect(table(el)).toBeNull();
+    expect(inShadow(el, "schedule-open")).toBeNull();
     dinner({ timeZone: "Europe/Madrid", live: null, editions: [] });
     await flush(el);
     await flush(el);
     expect(table(el)).toBeNull();
+    expect(inShadow(el, "schedule-open")).not.toBeNull();
   });
 
   it("does not show the list read after a cancel once it follows another menu", async () => {
