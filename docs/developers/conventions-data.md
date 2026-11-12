@@ -4622,6 +4622,11 @@ the container — the **host service** — sets it when the server asks. The box
 inside a stop it already has: the clock behind the latest record, or the clock before 28-10-2024
 (`clock.unusable`). It opens no stop of its own.
 
+_2026-11-12, B3:_ the installed recipe also forwards `tag.write` (up to 4096 characters) and
+`network.read` (up to 700) to their installed adapters. An absent adapter keeps `unknown_request`
+for a line within the shell's existing limit. The clock wire described below keeps its syntax
+and 700-character limit. See the [host-read cut](../superpowers/plans/2026-11-12-b3-19-network-status.md).
+
 **The host service** (`deploy/box/`). `waitron-box.socket` listens on `/run/waitron-box/box.sock`
 (`Accept=yes`, owner `root`, group `waitron-box`, mode `0660`, at most four connections at once) and
 starts one `waitron-box@.service` per connection. That runs `waitron-box.sh` as root, its error

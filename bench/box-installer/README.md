@@ -116,7 +116,7 @@ TPM and requests its own restart while Docker stays stopped. Two subsequent boot
 through that seal, remove the empty password and reach setup. The rig checks setup choices,
 opens Prepare, compares the installed images and services, and checks that the machine
 identity, certificate authority and separate filesystem/LUKS identities survive the second boot.
-It checks the 512 MiB EFI and 1 GiB boot partitions and the five btrfs areas.
+On both disk boots it reads network status through the shipped host socket as uid/gid 10001 and compares the connected address with Node’s independent interface observation. It checks the 512 MiB EFI and 1 GiB boot partitions and the five btrfs areas.
 The rig compares registers 8 and 9 between stick and disk, requires one extension of register 15,
 and compares the measured kernel, startup image and loader bytes across the disk boots. It
 copies the retained record to a private scratch disk inside the container’s `/run` and uses its

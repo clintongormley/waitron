@@ -59,6 +59,14 @@ export function installedFailures(expected, installedUuid, first, again) {
   const failures = [];
   for (const boot of [first, again]) {
     failures.push(...bootFailures(expected, boot));
+    // The host formatter already refuses an address on a disconnected link.
+    if (
+      boot.network?.ok !== true ||
+      !Object.values(boot.networkInterfaces ?? {})
+        .flat()
+        .some((entry) => entry.internal === false && entry.address === boot.network.wired?.address)
+    )
+      failures.push("host-network");
     if (!installedUuid || installedUuid === expected.uuid || boot.uuid !== installedUuid)
       failures.push("root-uuid");
     if (!boot.luksUuid || boot.luksUuid === boot.uuid || boot.luksUuid !== first.luksUuid)

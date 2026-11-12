@@ -35,7 +35,7 @@ install -D -m 0755 "$repo/deploy/box/start-dev.sh" "$root/usr/local/sbin/waitron
 install -D -m 0644 "$repo/deploy/box/waitron-dev.service" "$root/etc/systemd/system/waitron-dev.service"
 systemctl --root="$root" enable waitron-dev.service
 install -d -m 0755 "$root/opt/waitron-host/box"
-for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host host-protocol wifi-record wifi-boot-copy; do
+for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host network-host host-protocol wifi-record wifi-boot-copy; do
   install -m 0644 "$repo/scripts/box/$module.mjs" "$root/opt/waitron-host/box/"
 done
 install -D -m 0644 "$repo/scripts/box/upgrades/contracts.mjs" "$root/opt/waitron-host/box/upgrades/contracts.mjs"

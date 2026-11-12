@@ -2,7 +2,7 @@
 # The box's host side of app requests: one request line in on stdin, one JSON line out
 # on stdout, run as root by waitron-box@.service for each connection to /run/waitron-box/box.sock.
 #
-#   waitron-box.sh <instance>            answer clock.status, clock.set or tag.write
+#   waitron-box.sh <instance>            answer a host request
 #   waitron-box.sh --restore <instance>  the unit's ExecStopPost: start again a time service the
 #                                        instance stopped, after any end of it (a kill included)
 #
@@ -16,6 +16,7 @@ TIMESYNC_CLOCK="${WAITRON_BOX_TIMESYNC_CLOCK:-/var/lib/systemd/timesync/clock}"
 TIMESYNC_SYNCHRONIZED="${WAITRON_BOX_TIMESYNC_SYNCHRONIZED:-/run/systemd/timesync/synchronized}"
 READ_SECONDS="${WAITRON_BOX_READ_SECONDS:-5}"
 TAG_HOST="${WAITRON_BOX_TAG_HOST:-/opt/waitron-host/box/name-tag-host.mjs}"
+NETWORK_HOST="${WAITRON_BOX_NETWORK_HOST:-/opt/waitron-host/box/network-host.mjs}"
 
 # 2024-10-28T00:00:00Z and 2100-01-01T00:00:00Z, in milliseconds.
 FIRST_TARGET_MS=1730073600000
@@ -174,6 +175,10 @@ main() {
     exit 0
   fi
   if [ ${#line} -gt 700 ]; then refuse request_invalid; exit 0; fi
+  if [[ "$line" = "network.read "* ]] && [ -f "$NETWORK_HOST" ]; then
+    if reply="$(printf '%s' "$line" | node "$NETWORK_HOST")"; then answer "$reply"; else refuse host_failed; fi
+    exit 0
+  fi
   case "$line" in
     clock.status) clock_status ;;
     "clock.set "*)
