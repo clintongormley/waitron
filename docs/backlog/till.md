@@ -1452,15 +1452,6 @@ an imported file can still give a table "1+2" or "T1+T2", which reads on the Rea
 of today's joins.
 
 
-## A1209. A help tooltip near the window's foot covers its own "?".
-
-Seen, 2026-10-29 (A1125's
-look, `g-phone-help-390-*` in `~/waitron-campaign-c/a1125-shots/`); left open by A1125, #2238.
-With no room below its "?", `wt-help-tooltip` slides up over it instead of opening above
-(`positionTooltip`, `packages/ui/src/components/wt-help-tooltip.ts`): on a phone, it covers the
-Order screen's bar.
-
-
 ## A1211. The Served toast covers the Order screen's Fire / Send all buttons.
 
 Measured

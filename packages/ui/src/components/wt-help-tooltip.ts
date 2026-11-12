@@ -194,7 +194,15 @@ export class WtHelpTooltip extends LitElement {
     const popup = this.popup.getBoundingClientRect();
     const centred = anchor.left + anchor.width / 2 - popup.width / 2;
     this.popup.style.left = `${Math.max(8, Math.min(centred, innerWidth - popup.width - 8))}px`;
-    this.popup.style.top = `${Math.max(8, Math.min(anchor.bottom + 4, innerHeight - popup.height - 8))}px`;
+    const below = anchor.bottom + 4;
+    const above = anchor.top - 4 - popup.height;
+    const top =
+      below + popup.height <= innerHeight - 8
+        ? below
+        : above >= 8
+          ? above
+          : innerHeight - popup.height - 8;
+    this.popup.style.top = `${Math.max(8, top)}px`;
   }
 
   override render() {

@@ -1116,10 +1116,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   2), because the till writes tables joined for today as "T1+T2".
   [Detail](backlog/till.md#a1112-the-server-the-api-and-a-configuration-file-still-accept-a--in-a-short-name)
 
-- **A1209. A help tooltip near the window's foot covers its own "?".** Seen, 2026-10-29 (A1125's
-  look, `g-phone-help-390-*` in `~/waitron-campaign-c/a1125-shots/`); left open by A1125, #2238.
-  [Detail](backlog/till.md#a1209-a-help-tooltip-near-the-windows-foot-covers-its-own-)
-
 - **Nothing covers the order screen's bar** (bundle of 2, size S, needs the owner). Holds A1211, A1212. [Detail](backlog/till.md#bundle-nothing-covers-the-order-screens-bar)
 
 - **A1140. Splitting a counter order delivered to a table leaves the new bill with no delivery
