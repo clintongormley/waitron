@@ -1396,7 +1396,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
-- **Forms refusal placement** (bundle of 1 remaining entry, size M). [Detail](backlog/dashboard.md#bundle-forms-refusal-placement)
+- **Form implementation leftovers:** shared plumbing, an untraced dialog focus line and eventual summary retirement. [Detail](backlog/dashboard.md#bundle-form-implementation-leftovers)
 
 - **Reorder controller** (bundle of 2, size S). [Detail](backlog/dashboard.md#bundle-reorder-controller)
 

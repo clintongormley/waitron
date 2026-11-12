@@ -457,9 +457,9 @@ than becoming new items.
   Escape routing for the upper dialog and its open popovers; watcher 2026-11-09 18:51 deferred that mechanism.
   Next: name a production trigger and obtain approval for that routing before changing restoration.
 
-## Bundle: Forms refusal placement
+## Bundle: Form implementation leftovers
 
-1 entry remains, size M.
+Shared form plumbing, an untraced dialog focus line and retiring the summary once its last consumer moves away remain open.
 
 - **Loose ends left by C47 (#838/#839/#840/#841).**
   [Detail](dashboard.md#loose-ends-left-by-c47-838839840841)
