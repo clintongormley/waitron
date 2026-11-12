@@ -182,6 +182,27 @@ describe("financial splits with charged service cancellations", () => {
     },
   );
 
+  it("refuses a line the order does not hold, and an extra named on its own", async () => {
+    const order = await fixture();
+    const carve = (lineNo: number) =>
+      inTx(venue, (tx) =>
+        carveOffLines(tx, venue.cfg, order.billId, order.billId, [{ lineNo, quantity: "1" }], {
+          refuseHeld: false,
+          splitExtras: true,
+        }),
+      );
+    await expect(carve(99)).rejects.toMatchObject({
+      code: "tab.line_not_found",
+      params: { tabId: order.billId, lineNo: 99 },
+    });
+    const extra = order.rows.find((row) => row.parentLineId !== null)!;
+    await expect(carve(extra.lineNo)).rejects.toMatchObject({
+      code: "tab.transfer_modifier_line",
+      params: { tabId: order.billId, lineNo: extra.lineNo },
+    });
+    expect((await projection(order.billId)).map(({ quantity }) => quantity)).toEqual([3000, 6000]);
+  });
+
   it("cuts part of a line only within its order", async () => {
     const order = await fixture();
     const billId = await emptyBill(order.partyId);
