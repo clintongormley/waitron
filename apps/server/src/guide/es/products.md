@@ -24,16 +24,11 @@ está en un pedido conserva la clase con la que se añadió.
 
 ## Decide cómo se vende un producto {#selling}
 
-Abre **Venta** para cambiar Disponible, **Menú por precio fijo** o **Pedir por separado**: Cualquiera, Solo el personal o Nadie.
+Abre **Venta** para cambiar Disponible o **Pedir por separado**: Cualquiera, Solo el personal o Nadie.
 La explicación bajo la opción elegida te dice qué permite. Una variante solo tiene aquí Disponible.
 Venta empieza cerrada, con los ajustes actuales en su línea de resumen. La lista de Productos
-muestra el ajuste de pedido por separado en su columna **Por separado**; el filtro **Pedir por separado** de **Filtros**
+muestra este ajuste en su columna **Por separado**; el filtro **Pedir por separado** de **Filtros**
 elige por él.
-
-En **Venta**, activa **Menú por precio fijo** para marcar un menú de precio fijo. Añade sus
-opciones como extras: indica cero como precio de los platos incluidos y el precio del suplemento
-para los platos con recargo. Decide cuándo se ofrece mediante el período de la carta. Usa estos
-menús para el servicio de mesa.
 
 Elige la miniatura marcada con un lápiz junto a Nombre para cambiar la imagen o el color. El cuadrado
 muestra el cambio de color antes de guardar. Cierra el panel con Escape para volver a la miniatura.

@@ -281,43 +281,6 @@ it("A647 offers three visible ordering choices and only the selected explanation
   }
 });
 
-it("saves the set-lunch setting from Selling and reads it when reopened", async () => {
-  const el = await mountPricing({ ...saved, setLunch: false });
-  await openSection(el, "selling");
-  const setting =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="set-lunch"]');
-  expect(setting, "Selling exposes the lunch setting").not.toBeNull();
-  await setting!.updateComplete;
-  expect(setting!.checked).toBe(false);
-  expect(el.shadowRoot!.querySelector(".selling-summary")!.textContent).not.toContain(
-    t("editor.set_lunch"),
-  );
-  await userEvent.click(setting!.shadowRoot!.querySelector<HTMLLabelElement>("label")!);
-  await el.updateComplete;
-  const submitted = submittedValue(el);
-  expect(submitted.setLunch).toBe(true);
-  expect(el.shadowRoot!.querySelector(".selling-summary")!.textContent).toContain(
-    t("editor.set_lunch"),
-  );
-  el.value = { ...submitted, id: saved.id };
-  el.open = false;
-  await el.updateComplete;
-  await closeReportsDelivered();
-  el.open = true;
-  await el.updateComplete;
-  await openSection(el, "selling");
-  const reopened =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="set-lunch"]')!;
-  await reopened.updateComplete;
-  expect(reopened.checked).toBe(true);
-  await userEvent.click(reopened.shadowRoot!.querySelector<HTMLLabelElement>("label")!);
-  await el.updateComplete;
-  expect(submittedValue(el).setLunch).toBe(false);
-  expect(el.shadowRoot!.querySelector(".selling-summary")!.textContent).not.toContain(
-    t("editor.set_lunch"),
-  );
-});
-
 it("A647 paints the closed unavailable summary with the warning token", async () => {
   const el = await mountPricing({ ...saved, available: false });
   const selling = folded(el, "selling");
@@ -3107,7 +3070,6 @@ it("saves course with a new product, without a separate routing event", async ()
   expect(submit).toHaveBeenCalledOnce();
   expect(submit.mock.calls[0]![0].detail.value).toEqual({
     name: "Omelette",
-    setLunch: false,
     customerName: null,
     description: null,
     kitchenName: null,
