@@ -12,7 +12,6 @@ import type {
 import "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import {
-  codeOf,
   createErrorBoundary,
   readRawJsonBody,
   requireManagementSession,
@@ -27,6 +26,7 @@ import {
   type BoxHealth,
 } from "./box-health.js";
 import { clockChallenges } from "./clock-challenges.js";
+import { clockUnusableAt } from "./clock-unusable.js";
 import "./errors.js";
 import type { FreedSpace } from "./free-space-now.js";
 import { invoiceNumberParts } from "./invoice-number-parts.js";
@@ -358,7 +358,7 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       const halfMs = challenge.elapsedMs / 2;
       const boxAtMs = reading.instant.getTime() - halfMs;
       const answer = await correction.set({
-        reason: unusableAt(backend, reading) ? "unusable" : "behind_chain",
+        reason: clockUnusableAt(backend, reading) ? "unusable" : "behind_chain",
         source: "admin",
         offsetMs: Math.round(deviceAt - boxAtMs),
         measuredAt: { wallMs: boxAtMs, monoMs: steadyMs - halfMs },
@@ -387,16 +387,6 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       );
     }),
   );
-}
-
-function unusableAt(backend: FiscalBackend, reading: ReturnType<TrustedClock["now"]>): boolean {
-  try {
-    backend.assertRecordableAt(reading);
-    return false;
-  } catch (error) {
-    if (codeOf(error) === "clock.unusable") return true;
-    throw error;
-  }
 }
 
 function setRefusal(reason: ClockSetRefusal): Error {

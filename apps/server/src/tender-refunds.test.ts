@@ -37,7 +37,7 @@ import {
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
-import { deviceOrigin, type ResourceIdentity } from "@waitron/shared";
+import { AppError, deviceOrigin, type ResourceIdentity } from "@waitron/shared";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
@@ -697,7 +697,7 @@ describe("settled-tender connected refund orchestration", () => {
     },
   );
 
-  it.each(["deadline", "clock stop", "shutdown"] as const)(
+  it.each(["deadline", "clock refusal", "shutdown"] as const)(
     "omits a temporary balance explanation after a %s",
     async (boundary) => {
       const { t, provider } = await connected();
@@ -713,12 +713,9 @@ describe("settled-tender connected refund orchestration", () => {
       if (boundary === "deadline") {
         await vi.advanceTimersByTimeAsync(10_000);
         expect(await response).not.toHaveProperty("refusalReason");
-      } else if (boundary === "clock stop")
-        vi.spyOn(deps.backend, "clockBehindLatestRecord").mockResolvedValue({
-          clockAt: AT,
-          offsetMinutes: 0,
-          lastRecordAt: "2026-10-16T12:02:00.000Z",
-          lastRecordOffsetMinutes: 0,
+      } else if (boundary === "clock refusal")
+        vi.spyOn(deps.backend, "assertRecordableAt").mockImplementation(() => {
+          throw new AppError("clock.unusable", { clockAt: AT, offsetMinutes: 0 });
         });
       else {
         const stopped = stopTenderRefundResolvers(store.db);

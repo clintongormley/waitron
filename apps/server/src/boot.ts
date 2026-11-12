@@ -285,6 +285,7 @@ import { mountDeviceApi } from "./device-api.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 import { bootReader } from "./boot-reader.js";
 import { clockDisagreesAlertSource } from "./clock-disagrees-alert.js";
+import { clockUnusableAt } from "./clock-unusable.js";
 import { mountJoinApi } from "./join-api.js";
 import { publishState } from "./live-publish.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -3656,13 +3657,8 @@ async function bootServer(
     firstStartAlertSource(firstStart),
     appendOnlyRestoredAlertSource(appendOnlyRestored),
     awaitingCertAlertSource(awaitingFiscalCert),
-    authorityClockAlertSource(
-      authorityClock.read,
-      async (tx, at) =>
-        (await nodeBackend.clockBehindLatestRecord(tx, {
-          instant: at,
-          offsetMinutes: tillClock.now().offsetMinutes,
-        })) !== null,
+    authorityClockAlertSource(authorityClock.read, async (_tx, at) =>
+      clockUnusableAt(nodeBackend, { instant: at, offsetMinutes: tillClock.now().offsetMinutes }),
     ),
     clockDisagreesAlertSource(clockWitnesses),
     printingAlertSource(),

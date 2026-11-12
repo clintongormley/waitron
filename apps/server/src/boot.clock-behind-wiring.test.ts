@@ -122,7 +122,21 @@ async function recordOn(venue: Venue): Promise<void> {
   await insertFiscalRegistro(suite.db, ids, { entorno: "preproduction" });
 }
 
+/** `wall` read as the host's local time, in the offset boot's till clock stamps a reading with. */
+function hostLocal(wall: string): Date {
+  const asUtc = new Date(`${wall}Z`);
+  return new Date(asUtc.getTime() + new Date().getTimezoneOffset() * 60_000);
+}
+
 describe("boot's clock-behind wiring for the drift alert", () => {
+  it("answers stopped for a time before 28 October 2024", async () => {
+    expect(await askStopped(recordOn, hostLocal("2024-10-27T23:59:59.999"))).toBe(true);
+  });
+
+  it("answers not stopped on 28 October 2024, though the latest record is later", async () => {
+    expect(await askStopped(recordOn, hostLocal("2024-10-28T00:00:00.000"))).toBe(false);
+  });
+
   it("answers not stopped for a time a day after the latest record", async () => {
     expect(await askStopped(recordOn, new Date("2026-07-21T18:20:30.000Z"))).toBe(false);
   });
