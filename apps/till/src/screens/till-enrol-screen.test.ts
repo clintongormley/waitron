@@ -522,6 +522,17 @@ it("shows the theme chooser just before the language chooser, at the top right",
   expect(Math.abs(own.top + own.height / 2 - (next.top + next.height / 2))).toBeLessThanOrEqual(1);
 });
 
+it("the corner has the ⓘ, first", async () => {
+  const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", { api: stubApi() });
+  await flush(el);
+  const corner = el.shadowRoot!.querySelector(".language-corner")!;
+  const about = corner.firstElementChild as HTMLElement & { updateComplete: Promise<unknown> };
+  expect(about.localName).toBe("till-about-button");
+  await about.updateComplete;
+  const info = about.shadowRoot!.querySelector("wt-button.about")!;
+  expect(info.getAttribute("aria-label")).toBe(t("about.title"));
+});
+
 it("labels the theme chooser in Spanish", async () => {
   const before = currentLocale();
   setLocale("es-ES");

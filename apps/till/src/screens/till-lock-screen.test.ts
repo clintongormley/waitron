@@ -349,6 +349,17 @@ describe("till-lock-screen", () => {
     );
   });
 
+  it("the corner has the ⓘ, first", async () => {
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api: stubApi() });
+    await flush(el);
+    const corner = el.shadowRoot!.querySelector(".language-corner")!;
+    const about = corner.firstElementChild as HTMLElement & { updateComplete: Promise<unknown> };
+    expect(about.localName).toBe("till-about-button");
+    await about.updateComplete;
+    const info = about.shadowRoot!.querySelector("wt-button.about")!;
+    expect(info.getAttribute("aria-label")).toBe(t("about.title"));
+  });
+
   it("labels the theme chooser in Spanish", async () => {
     const before = currentLocale();
     setLocale("es-ES");
