@@ -972,8 +972,7 @@ that would refuse the write anyway.
 `settings` is written on request paths through its one writer,
 `packages/db/src/settings.ts` (`saveSettings`). `activity_log` is written on request paths through
 `packages/db/src/activity-log.ts` (`recordActivity`). `invoice_corrections` is written only in
-`apps/server/src/invoice-corrections.ts`, where `openInvoiceCorrection` inserts a correction and
-`fileCorrectionIn` marks it filed. `invoice_correction_refunds` is written only in
+`apps/server/src/invoice-corrections.ts`. `invoice_correction_refunds` is written only in
 `apps/server/src/invoice-correction-legs.ts`, where `linkRefundToCorrection` links a refund to its
 correction; `reserveTenderRefund` calls it.
 
@@ -4266,8 +4265,10 @@ which the append's check judges again. The places: `runPayWorkingOrder`, `payInt
 the pending replay, and every new refund); `beginSettledTenderRefund`
 (`apps/server/src/tender-refunds.ts`, twice the same way: the pending replay there, and every new
 refund through `carryNewTenderRefund` in `apps/server/src/tender-refund-completion.ts`);
-`acceptInvoiceCorrection` (`apps/server/src/invoice-corrections.ts`, for each cash refund through
-`carryNewTenderRefund`, after the corrective is filed in the same transaction); the retry route
+`checkCorrectionOpenable` (`apps/server/src/invoice-corrections.ts`, for opening a correction and
+its preview); `giveCorrectionCash` (`apps/server/src/invoice-correction-cash.ts`, for each cash
+refund through `carryNewTenderRefund`, before the last one files the corrective in the same
+transaction); the retry route
 (`apps/server/src/tender-refund-api.ts`); `recordUnpaidDeparture`
 (`apps/server/src/unpaid-departure.ts`); and the eight dashboard resolutions in
 `apps/server/src/payments-api.ts`, first inside each authorized callback.

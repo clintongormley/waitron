@@ -1,5 +1,9 @@
 # A802 Partial Paid Invoice Correction Implementation Plan
 
+> **2026-11-12:** the owner replaced "file when opened" with "When all money is back"
+> ([decision](../../backlog/fiscal.md#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12));
+> the build now follows the [reshape plan](2026-11-12-a802-reshape.md).
+
 > **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
 > Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
 > `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)
