@@ -9,6 +9,7 @@ import {
   drawerOpens,
   printers,
   parties,
+  saleLines,
   sales,
   tenderRefunds,
   tenders,
@@ -17,13 +18,17 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { previewCorrectionAmounts } from "@waitron/core";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { decimal, saleId as brandSaleId } from "@waitron/shared";
 import { setRoutingCell } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
+import { recordAttendanceFact } from "./attendance-capture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { createStation } from "./kitchen.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
+import { openInvoiceCorrection, parseInvoiceCorrection } from "./invoice-corrections.js";
 import { fingerprint } from "./parties.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import {
@@ -725,5 +730,76 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     expect(await linksOf((answer.json as { id: string }).id)).toEqual([
       { adjustmentId: cancelled, amount: 1200 },
     ]);
+  });
+});
+
+describe("a correction's leg", () => {
+  it("refuses to name a cancel it could pay back, and is taken without naming it", async () => {
+    const { paid, burger } = await twoCancels();
+    const saleId = brandSaleId(paid.saleId);
+    const lineIds = (
+      await venue.db
+        .select({ id: saleLines.id })
+        .from(saleLines)
+        .where(eq(saleLines.saleId, saleId))
+    ).map((line) => line.id);
+    const expectedSplit = (
+      await inTx(venue, (tx) =>
+        previewCorrectionAmounts(tx, venue.backend, saleId, venue.cfg.nodeId, {
+          gross: decimal("5.00"),
+          lineIds,
+        }),
+      )
+    ).vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax }));
+    const { correction } = await inTx(venue, (tx) =>
+      openInvoiceCorrection(
+        tx,
+        { backend: venue.backend, clock: venue.clock, attendance: recordAttendanceFact },
+        venue.cfg,
+        saleId,
+        parseInvoiceCorrection({
+          submissionId: randomUUID(),
+          gross: "5.00",
+          lineIds,
+          reasonId: venue.reasonId.houseVoid,
+          expectedSplit,
+        }),
+        {
+          personId: venue.managerId,
+          authorization: {
+            authorizedBy: venue.managerId,
+            permission: "sale.rectify",
+            viaOverride: false,
+          },
+        },
+      ),
+    );
+    const leg = (cancellationIds?: string[]) =>
+      inTx(venue, (tx) =>
+        reserveTenderRefund(
+          tx,
+          venue.cfg,
+          paid.saleId,
+          {
+            submissionId: randomUUID(),
+            tenderId: paid.tenderId,
+            appliedAmount: "5.00",
+            tipAmount: "0.00",
+            reason: "Dish never served",
+            ...(cancellationIds === undefined ? {} : { cancellationIds }),
+            invoiceCorrection: { id: correction.id, requestId: randomUUID(), cashRoute: true },
+          },
+          { requestedBy: venue.managerId, authorizedBy: venue.managerId },
+          new Date().toISOString(),
+        ),
+      );
+    const before = await ledgers();
+
+    await expect(leg([burger])).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "cancellationIds" },
+    });
+    expect(await ledgers()).toEqual(before);
+    await expect(leg()).resolves.toMatchObject({ replayed: false });
   });
 });

@@ -6,6 +6,7 @@ import {
   devices,
   floorZones,
   invoiceCorrections,
+  products,
   sales,
   withTransaction,
 } from "@waitron/db";
@@ -29,6 +30,7 @@ import { parkOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import {
   watchDerivationsAndLock,
   watchedDerivationCount,
@@ -94,8 +96,12 @@ async function serveOnly(zoneId: string) {
   });
 }
 
-/** A €10.00 croquettes order paid through the till in `parts`; issued unpaid when `parts` is empty. */
-async function sold(parts: readonly (string | { card: string })[]) {
+/** A €10.00 croquettes order paid through the till in `parts`; issued unpaid when `parts` is empty.
+ * `where` names another zone and its croquettes offer. */
+async function sold(
+  parts: readonly (string | { card: string } | { reader: string })[],
+  where?: { zoneId: string; croquettes: string },
+) {
   const id = randomUUID();
   const deps = {
     db: venue.db,
@@ -105,20 +111,20 @@ async function sold(parts: readonly (string | { card: string })[]) {
   };
   await parkOrder(deps, venue.cfg, {
     id,
-    lines: [{ menuItemId: venue.offerFor("Croquettes"), quantity: "1" }],
-    zoneId: venue.zoneId,
+    lines: [{ menuItemId: where?.croquettes ?? venue.offerFor("Croquettes"), quantity: "1" }],
+    zoneId: where?.zoneId ?? venue.zoneId,
     operatorId: venue.operatorId,
   });
   if (parts.length === 0) await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
   for (const part of parts) {
-    const amount = typeof part === "string" ? part : part.card;
+    const amount = typeof part === "string" ? part : "card" in part ? part.card : part.reader;
     const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
       submissionId: randomUUID(),
       kind: "contribution",
       amount,
       ...(typeof part === "string"
         ? { method: "cash", tendered: amount }
-        : { method: "card", entry: "manual" }),
+        : { method: "card", entry: "card" in part ? "manual" : "reader" }),
       applied: amount,
       tip: "0.00",
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
@@ -338,11 +344,6 @@ describe("POST /api/transactions/:saleId/corrections", () => {
 
   const refusals: [string, () => Promise<{ saleId: string; patch?: Record<string, unknown> }>][] = [
     ["invoice_correction.not_settled", async () => ({ saleId: await sold([]) })],
-    ["invoice_correction.not_cash", async () => ({ saleId: await sold([{ card: "10.00" }]) })],
-    [
-      "invoice_correction.not_cash",
-      async () => ({ saleId: await sold(["4.00", { card: "6.00" }]) }),
-    ],
     [
       "invoice_correction.already_open",
       async () => {
@@ -393,6 +394,33 @@ describe("POST /api/transactions/:saleId/corrections", () => {
         return { saleId };
       },
     ],
+    [
+      "invoice_correction.refund_pending",
+      async () => {
+        const saleId = await sold([{ reader: "10.00" }]);
+        const [card] = await inTx(venue, (tx) => readRefundableTenders(tx, saleId));
+        venue.card.scriptNextRefund({
+          made: false,
+          answer: { kind: "uncertain", reason: "network" },
+        });
+        const goodwill = await send(
+          venue.app,
+          venue.cookie,
+          "POST",
+          `/api/transactions/${saleId}/refunds`,
+          {
+            submissionId: randomUUID(),
+            tenderId: card!.tenderId,
+            appliedAmount: "1.00",
+            tipAmount: "0.00",
+            reason: "Goodwill",
+            override: supervisor(),
+          },
+        );
+        expect(goodwill).toMatchObject({ status: 200, json: { state: "pending" } });
+        return { saleId };
+      },
+    ],
   ];
   it.each(refusals)("answers %s with 409, writing nothing", async (code, arrange) => {
     const { saleId, patch } = await arrange();
@@ -429,6 +457,48 @@ const cashBody = (patch: Record<string, unknown> = {}) => ({
   amount: "5.00",
   override: supervisor(),
   ...patch,
+});
+
+describe("GET /api/invoice-corrections", () => {
+  const list = (cookie = venue.cookie) =>
+    send(venue.app, cookie, "GET", "/api/invoice-corrections") as Promise<{
+      status: number;
+      json: { corrections: { id: string }[] };
+    }>;
+
+  it("lists open corrections in the till's zones only", async () => {
+    const terrace = await inTx(venue, async (tx) => {
+      const department = await createDepartment(tx, { name: "Terrace", orderStart: "counter" });
+      const zoneId = (await createServiceZone(tx, { name: "Terrace", departmentId: department.id }))
+        .id;
+      const [croquettes] = await tx
+        .select({ id: products.id })
+        .from(products)
+        .where(eq(products.name, "Croquettes"));
+      const offers = await offerProducts(tx, venue.cfg, { zone: { zoneId } });
+      return { zoneId, croquettes: offers.offerFor(croquettes!.id) };
+    });
+    const here = await opened(await sold(["10.00"]));
+    const there = await opened(await sold(["10.00"], terrace));
+    const filed = await opened(await sold(["10.00"], terrace));
+    expect(await giveCash(filed, cashBody())).toMatchObject({
+      status: 200,
+      json: { correction: { state: "filed" } },
+    });
+    await serveOnly(terrace.zoneId);
+    const zoned = await list(zonedTill.cookie);
+    expect(zoned).toMatchObject({
+      status: 200,
+      json: {
+        corrections: [{ id: there, state: "open", gross: "5.00", moneyBack: "0.00", left: "5.00" }],
+      },
+    });
+    expect(zoned.json.corrections[0]).not.toHaveProperty("fileNow");
+    const ids = (await list()).json.corrections.map((correction) => correction.id);
+    expect(ids).toEqual(expect.arrayContaining([here, there]));
+    expect(ids).not.toContain(filed);
+    await serveOnly(venue.zoneId);
+  });
 });
 
 describe("POST /api/invoice-corrections/:id/cash", () => {

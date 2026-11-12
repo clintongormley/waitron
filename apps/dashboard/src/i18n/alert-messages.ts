@@ -399,6 +399,10 @@ export const ALERT_MESSAGES: Readonly<
     en: `Automatic refunds failed for {count} card payments. Waitron will not try them again; refund them in the card provider's own dashboard.${MORE_EN}`,
     es: `Las devoluciones automáticas han fallado en {count} pagos con tarjeta. Waitron no las volverá a intentar; devuélvelos desde el panel del proveedor.${MORE_ES}`,
   },
+  "invoice_correction.unfinished": {
+    en: `{moneyBack:money} went back to a customer over an hour ago for an invoice correction that is not finished, so no corrective invoice has been filed for it. On a till, open the receipt in Find bill: give back the rest, or press Record correction or Finish now to file it for what has gone back.${MORE_EN}`,
+    es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente por una rectificación de factura que no está terminada, así que no se ha emitido su factura rectificativa. En una caja, abre el recibo en Buscar cuenta: devuelve el resto, o pulsa Registrar rectificación o Terminar ahora para emitirla por lo devuelto.${MORE_ES}`,
+  },
   "route.dish_not_sent": {
     en: "Paid order {orderNumber} has dishes no prep station could take: {dishes}. They were not sent to the kitchen. Pass them to the kitchen by hand, and check the Prep stations page: a closed station with no replacement, or no active default station, leaves a dish nowhere to go.",
     es: "El pedido pagado {orderNumber} tiene platos que ninguna estación de preparación podía recibir: {dishes}. No se han enviado a cocina. Pásalos a cocina a mano y revisa la página de Estaciones de preparación: una estación cerrada sin sustituta, o ninguna estación predeterminada activa, deja un plato sin destino.",

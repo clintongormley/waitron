@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { findAdjustmentReason } from "@waitron/adjustments";
 import {
   previewCorrectionAmounts,
@@ -10,7 +10,6 @@ import {
   invoiceCorrections,
   readLiveSeriesIdTx,
   saleSettlements,
-  tenders,
   type Transaction,
 } from "@waitron/db";
 import { prepareIssueClock, type FiscalBackend, type TrustedReading } from "@waitron/fiscal";
@@ -36,6 +35,7 @@ import {
   readCorrectionMoney,
   readCorrectionRow,
   refuseWhileCorrectionOpen,
+  type InvoiceCorrectionRow,
 } from "./invoice-correction-legs.js";
 import { fingerprint } from "./parties.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
@@ -44,6 +44,7 @@ import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import type { TenderRefundView } from "./tender-refund-types.js";
 import { canonicaliseUuid } from "./till-session.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
+import type { OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
 
 export interface SplitLine {
@@ -105,15 +106,16 @@ async function checkCorrectionOpenable(
     .from(saleSettlements)
     .where(eq(saleSettlements.saleId, saleId));
   if (settled === undefined) throw new AppError("invoice_correction.not_settled", { saleId });
-  const paid = await tx
-    .select({ method: tenders.method })
-    .from(tenders)
-    .where(eq(tenders.saleId, saleId));
-  if (paid.some((row) => row.method !== "cash"))
-    throw new AppError("invoice_correction.not_cash", { saleId });
   await refuseWhileCorrectionOpen(tx, saleId);
+  const refundable = await readRefundableTenders(tx, saleId);
+  const pending = refundable.find((row) => row.pendingRefundId !== null);
+  if (pending !== undefined)
+    throw new AppError("invoice_correction.refund_pending", {
+      saleId,
+      refundId: pending.pendingRefundId!,
+    });
   const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
-  const moneyRefundable = appliedRemainingOf(await readRefundableTenders(tx, saleId));
+  const moneyRefundable = appliedRemainingOf(refundable);
   if (compareDecimal(moneyRefundable, preview.gross) < 0)
     throw new AppError("invoice_correction.money_short", {
       saleId,
@@ -221,12 +223,26 @@ export async function readInvoiceCorrection(
   cfg: Pick<DeviceRequestConfig, "nodeId">,
   correctionId: string,
 ): Promise<InvoiceCorrectionView> {
+  const { view, row, back, pending } = await summaryOf(tx, correctionId);
+  return {
+    ...view,
+    fileNow:
+      row.state !== "open" || pending > 0 || back === 0
+        ? null
+        : await fileNowFor(tx, backend, cfg, row.originalSaleId, {
+            gross: centsToDecimal(back),
+            ...(row.lineIds === null ? {} : { lineIds: row.lineIds }),
+          }),
+  };
+}
+
+async function summaryOf(tx: Transaction, correctionId: string) {
   const row = await readCorrectionRow(tx, correctionId);
   const {
     refunds,
     money: { completed: back, pending },
   } = await readCorrectionLegs(tx, correctionId);
-  return {
+  const view: Omit<InvoiceCorrectionView, "fileNow"> = {
     id: row.id,
     saleId: row.originalSaleId,
     state: row.state,
@@ -238,14 +254,23 @@ export async function readInvoiceCorrection(
     openedAt: row.createdAt,
     correctiveSaleId: row.correctiveSaleId,
     legs: refunds.map(toTenderRefundView),
-    fileNow:
-      row.state !== "open" || pending > 0 || back === 0
-        ? null
-        : await fileNowFor(tx, backend, cfg, row.originalSaleId, {
-            gross: centsToDecimal(back),
-            ...(row.lineIds === null ? {} : { lineIds: row.lineIds }),
-          }),
   };
+  return { view, row, back, pending };
+}
+
+/** The open corrections whose invoice's working order `inZones` admits, oldest first, each without
+ * `fileNow`. */
+export async function listOpenInvoiceCorrections(
+  tx: Transaction,
+  inZones?: OrderZoneCondition,
+): Promise<Omit<InvoiceCorrectionView, "fileNow">[]> {
+  const rows = await tx.execute<{ id: string }>(sql`select c.id from invoice_corrections c
+    join sales s on s.id = c.original_sale_id
+    where c.state = 'open' and (${inZones?.(sql`s.working_order_id`) ?? sql`1`})
+    order by c.created_at, c.id`);
+  const views: Omit<InvoiceCorrectionView, "fileNow">[] = [];
+  for (const { id } of rows.rows) views.push((await summaryOf(tx, id)).view);
+  return views;
 }
 
 /**
@@ -263,7 +288,7 @@ export async function fileCorrectionIn(
   expectedSplit?: readonly SplitLine[],
 ): Promise<SaleId> {
   const correction = await openCorrection(tx, correctionId);
-  const { completed } = await readCorrectionMoney(tx, correctionId);
+  const { completed } = await readSettledMoney(tx, correction);
   if (completed === 0) throw new AppError("invoice_correction.nothing_back", { correctionId });
   const saleId = correction.originalSaleId as SaleId;
   const preview = await previewCorrectionAmounts(tx, deps.backend, saleId, cfg.nodeId, {
@@ -310,8 +335,7 @@ export async function fileCorrectionIn(
 
 /**
  * Files the R5 of the open correction `correctionId` for the money its refunds have given back so
- * far. Refuses nothing back (`invoice_correction.nothing_back`) and a split other than the one the
- * till showed (`invoice_correction.split_changed`, with the fresh one).
+ * far.
  */
 export async function fileInvoiceCorrectionNow(
   tx: Transaction,
@@ -356,7 +380,7 @@ export async function closeInvoiceCorrection(
   actor: { personId: string },
 ): Promise<InvoiceCorrectionView> {
   const correction = await openCorrection(tx, correctionId);
-  const { completed } = await readCorrectionMoney(tx, correctionId);
+  const { completed } = await readSettledMoney(tx, correction);
   if (completed > 0) {
     const filing = await previewOrRefusal(tx, deps.backend, cfg, correction.originalSaleId, {
       gross: centsToDecimal(completed),
@@ -377,6 +401,18 @@ export async function closeInvoiceCorrection(
   if (ended.length !== 1)
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
   return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
+}
+
+/** The money `correction`'s refunds have given back; refused `invoice_correction.refund_pending`
+ * while one of them is still pending. */
+async function readSettledMoney(tx: Transaction, correction: InvoiceCorrectionRow) {
+  const money = await readCorrectionMoney(tx, correction.id);
+  if (money.pendingRefundId !== null)
+    throw new AppError("invoice_correction.refund_pending", {
+      saleId: correction.originalSaleId,
+      refundId: money.pendingRefundId,
+    });
+  return money;
 }
 
 /** The correction `correctionId`, refused unless it exists and is open. */

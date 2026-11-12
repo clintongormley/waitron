@@ -12,6 +12,7 @@ import {
   expectedSplitOf,
   fileInvoiceCorrectionNow,
   lineIdsOf,
+  listOpenInvoiceCorrections,
   openInvoiceCorrection,
   parseInvoiceCorrection,
   previewInvoiceCorrection,
@@ -26,6 +27,7 @@ import { checkAccess, overrideOf, pathId } from "./tender-refund-api.js";
 import { overridePinAttempts, STATUS, type TillApiDeps } from "./till-api.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { assertRequestDevice, requireSession } from "./till-session.js";
+import { orderZoneCondition } from "./zone-access.js";
 import "./errors.js";
 
 export function mountInvoiceCorrectionApi(
@@ -46,7 +48,6 @@ export function mountInvoiceCorrectionApi(
       "sale.correction_not_admitted": 409,
       "adjustment_reason.not_found": 400,
       "invoice_correction.not_settled": 409,
-      "invoice_correction.not_cash": 409,
       "invoice_correction.already_open": 409,
       "invoice_correction.money_short": 409,
       "invoice_correction.split_changed": 409,
@@ -56,6 +57,7 @@ export function mountInvoiceCorrectionApi(
       "invoice_correction.cash_short": 409,
       "invoice_correction.nothing_back": 409,
       "invoice_correction.still_correctable": 409,
+      "invoice_correction.refund_pending": 409,
     },
     "invoice_correction.failed",
   );
@@ -208,6 +210,18 @@ export function mountInvoiceCorrectionApi(
     () => undefined,
     (tx, cfg, correctionId, _request, actor) =>
       closeInvoiceCorrection(tx, correctionDeps, cfg, correctionId, { personId: actor.personId }),
+  );
+  app.get("/api/invoice-corrections", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { passive: true });
+      const corrections = await withTransaction(deps.db, async (tx) =>
+        listOpenInvoiceCorrections(
+          tx,
+          await orderZoneCondition(tx, session.device.deviceProfileId),
+        ),
+      );
+      return c.json({ corrections });
+    }),
   );
   app.get("/api/invoice-corrections/:id", (c) =>
     run(c, log, async () => {

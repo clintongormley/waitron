@@ -644,6 +644,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "GET /api/drawer/authorizers",
       "GET /api/expo/board",
       "GET /api/find-bill/options",
+      "GET /api/invoice-corrections",
       "GET /api/invoice-corrections/:id",
       "GET /api/invoice-delivery-options",
       "GET /api/invoices/lookup",

@@ -94,6 +94,9 @@ function parseRequest(body: Record<string, unknown>): TenderRefundRequest {
   for (const field of strings) if (typeof body[field] !== "string") throw invalid(field);
   if (body.manualConfirmed !== undefined && typeof body.manualConfirmed !== "boolean")
     throw invalid("manualConfirmed");
+  const correctionId = body.invoiceCorrectionId;
+  if (correctionId !== undefined && (typeof correctionId !== "string" || !isUuid(correctionId)))
+    throw invalid("invoiceCorrectionId");
   return {
     submissionId: body.submissionId as string,
     tenderId: body.tenderId as string,
@@ -106,6 +109,14 @@ function parseRequest(body: Record<string, unknown>): TenderRefundRequest {
     ...(body.cancellationIds === undefined
       ? {}
       : { cancellationIds: body.cancellationIds as string[] }),
+    ...(correctionId === undefined
+      ? {}
+      : {
+          invoiceCorrection: {
+            id: correctionId,
+            requestId: body.submissionId as string,
+          },
+        }),
     override: overrideOf(body),
   };
 }
@@ -127,6 +138,10 @@ export function mountTenderRefundApi(
       "tender.refund_exceeds_cancelled": 409,
       "tender.refund_unavailable": 409,
       "invoice_correction.already_open": 409,
+      "invoice_correction.not_found": 404,
+      "invoice_correction.not_open": 409,
+      "invoice_correction.leg_too_large": 409,
+      "invoice_correction.cash_route_only": 409,
     },
     "tender_refund.failed",
   );
