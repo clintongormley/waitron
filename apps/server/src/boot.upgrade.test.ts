@@ -114,7 +114,6 @@ describe("contained upgrade data checks", () => {
     const { config, env } = await copiedConfig();
     const report = await checkUpgradeData(config, env);
     expect(report).toEqual({ mode: "trading", menus: 3, orders: 1, fiscalRecords: 1 });
-    // These checks inspect the copy; the mandatory test sale has a separate disposable copy.
     expect(await checkUpgradeData(config, env)).toEqual(report);
   });
 

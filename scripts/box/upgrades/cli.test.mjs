@@ -1,0 +1,86 @@
+import { expect, it, onTestFinished } from "vitest";
+import * as fs from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { URL } from "node:url";
+import { runUpgradeCli } from "./cli.mjs";
+
+async function fixture() {
+  const root = await fs.mkdtemp(join(tmpdir(), "upgrade-cli-"));
+  onTestFinished(() => fs.rm(root, { recursive: true, force: true }));
+  const box = join(root, "box");
+  await fs.mkdir(box);
+  return { root, box, directory: join(root, "box.upgrades", "attempt") };
+}
+
+it("reports the retained manual refusal read-only, including from the installed executable", async () => {
+  const f = await fixture();
+  await fs.mkdir(f.directory, { recursive: true });
+  const marker = {
+    mode: "manual",
+    phase: "awaiting-choice",
+    copied: true,
+    paths: ["/live/state"],
+    images: { old: { app: "sha256:old" }, candidate: { app: "sha256:new" } },
+    failure: "sale refused",
+  };
+  const text = JSON.stringify(marker);
+  await fs.writeFile(join(f.directory, "attempt.json"), text);
+  const forbidden = async () => {
+    throw new Error("status must not call Docker");
+  };
+  expect(await runUpgradeCli(["status", f.box], { run: forbidden })).toEqual(marker);
+  const invoked = await promisify(execFile)(process.execPath, [
+    new URL("./cli.mjs", import.meta.url).pathname,
+    "status",
+    f.box,
+  ]);
+  expect(JSON.parse(invoked.stdout)).toEqual(marker);
+  expect(await fs.readFile(join(f.directory, "attempt.json"), "utf8")).toBe(text);
+  expect(await fs.readdir(f.root)).toEqual(["box", "box.upgrades"]);
+});
+
+it("leaves an unknown nonempty attempt held for inspection before apply, restore or keep", async () => {
+  const f = await fixture();
+  await fs.mkdir(f.directory, { recursive: true });
+  await fs.writeFile(join(f.directory, "evidence"), "retain");
+  for (const verb of ["status", "apply", "restore", "keep"]) {
+    await expect(
+      runUpgradeCli([verb, f.box, ...(verb === "apply" ? ["must-not-run"] : [])]),
+    ).rejects.toThrow("upgrade attempt has no readable marker");
+  }
+  expect(await fs.readFile(join(f.directory, "evidence"), "utf8")).toBe("retain");
+});
+
+it("reports no attempt without creating files and refuses an unsupported choice", async () => {
+  const f = await fixture();
+  expect(await runUpgradeCli(["status", f.box])).toBeNull();
+  expect(await fs.readdir(f.root)).toEqual(["box"]);
+  await expect(runUpgradeCli(["discard", f.box])).rejects.toThrow(
+    "Expected apply, status, restore, keep or offline-recovery",
+  );
+});
+
+it("refuses offline recovery with Docker running before removing a check tree", async () => {
+  const f = await fixture();
+  await fs.mkdir(join(f.directory, "check"), { recursive: true });
+  await fs.writeFile(join(f.directory, "check", "retained"), "still mounted");
+  await fs.writeFile(
+    join(f.directory, "attempt.json"),
+    JSON.stringify({
+      mode: "manual",
+      phase: "awaiting-choice",
+      copied: true,
+      paths: ["/live/state"],
+      images: { old: { app: "sha256:old" }, candidate: { app: "sha256:new" } },
+    }),
+  );
+  await expect(
+    runUpgradeCli(["offline-recovery", f.box], {
+      run: async () => ({ stdout: "active\nactive\n" }),
+    }),
+  ).rejects.toThrow("Docker must be stopped before offline recovery");
+  expect(await fs.readFile(join(f.directory, "check", "retained"), "utf8")).toBe("still mounted");
+});
