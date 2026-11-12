@@ -287,10 +287,10 @@ describe("whose sales an adjustment rate is measured against (plan D21, spec §7
 
 describe("a kitchen cancellation is not a voided invoice (spec §7)", () => {
   it("reports the cancellation as a cancellation, writes no void, and reads nothing from an invoice's later void", async () => {
-    const lucia = await member("Lucía");
+    const lucia = await member("Lucy");
     // A sent dish's cancel needs the refund permission, which a supervisor holds.
-    const pablo = await member("Pablo", "supervisor");
-    const rosa = await member("Rosa");
+    const pablo = await member("Paul", "supervisor");
+    const rosa = await member("Rose");
     const { partyId, billId } = await seat(lucia);
     await submit(lucia, partyId, await draft(lucia, partyId, ["Burger", "Steak"]));
     const voidsBefore = await voidCount();
@@ -307,7 +307,7 @@ describe("a kitchen cancellation is not a voided invoice (spec §7)", () => {
         comp: { count: 0 },
       },
     });
-    // The Steak left the bill; it stays in Lucía's sales through the cancellation's snapshot.
+    // The Steak left the bill; it stays in Lucy's sales through the cancellation's snapshot.
     expect(salesOf(report, lucia)).toBe("37.00");
 
     const manager = await inTx(venue, (tx) =>

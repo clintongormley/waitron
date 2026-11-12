@@ -27,7 +27,6 @@ const suite = useVenueDb({
 });
 const log = () => {};
 
-/** A venue with the till and device surfaces mounted, and Ana and Ben, each with a PIN. */
 async function fixture() {
   const v = await setupPartyVenue(suite.db);
   const app = new Hono();
@@ -57,7 +56,7 @@ async function fixture() {
     });
     return row!.id;
   };
-  const ana = await person("Ana", "4411");
+  const ana = await person("Anna", "4411");
   const ben = await person("Ben", "4422");
   const profile = async (formFactor: "kds" | "till") => {
     const [row] = await seedDeviceProfiles(suite.db, {
@@ -68,7 +67,6 @@ async function fixture() {
     return row!.id;
   };
   const grill = (await inTx(v, (tx) => createStation(tx, { name: "Grill" }))).id;
-  /** A device with Ana signed in and then Ben, each session's cookie beside the device's. */
   const device = async (
     formFactor: "kds" | "till",
     screen: { stationId: string } | { kitchenScreen: { kind: "pass" } },
@@ -93,7 +91,6 @@ async function fixture() {
     const benCookie = await sessionOf(ben);
     return { id: joined.deviceId, jar, ana: anaCookie, ben: benCookie };
   };
-  /** Ana's and Ben's sessions, in that order, on the venue's own till. */
   const login = async (personId: string, pin: string) => {
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId: v.cfg.origin.deviceId, personId, pin }),
