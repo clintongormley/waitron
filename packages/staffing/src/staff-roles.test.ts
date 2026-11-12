@@ -475,7 +475,7 @@ describe("staff roles", () => {
       (tx: Transaction) => reorderStaffRoles(tx, [role.id]),
       (tx: Transaction) => deleteStaffRole(tx, role.id, { personId: null }),
     ])
-      await expect(inTx(write)).rejects.toMatchObject({ code: "staff_role.not_found" });
+      await expect(inTx<unknown>(write)).rejects.toMatchObject({ code: "staff_role.not_found" });
   });
 
   it("reorders by the given ids and refuses a list that is not exactly the venue's roles", async () => {
