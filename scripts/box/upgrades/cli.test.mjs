@@ -84,3 +84,15 @@ it("refuses offline recovery with Docker running before removing a check tree", 
   ).rejects.toThrow("Docker must be stopped before offline recovery");
   expect(await fs.readFile(join(f.directory, "check", "retained"), "utf8")).toBe("still mounted");
 });
+
+it("clears an empty interrupted attempt through existing recovery without contacting Docker", async () => {
+  const f = await fixture();
+  await fs.mkdir(f.directory, { recursive: true });
+  const run = async () => {
+    throw new Error("an empty attempt needs no Docker call");
+  };
+  expect(await runUpgradeCli(["status", f.box], { run })).toBeNull();
+  expect(await fs.readdir(f.directory)).toEqual([]);
+  expect(await runUpgradeCli(["restore", f.box], { run })).toBeNull();
+  await expect(fs.access(f.directory)).rejects.toMatchObject({ code: "ENOENT" });
+});

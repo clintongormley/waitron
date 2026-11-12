@@ -28,7 +28,7 @@ async function pending(boxDirectory) {
   if (entries.length === 0) return null;
   const directory = join(`${boxDirectory}.upgrades`, entries[0]);
   const marker = await upgradeStatus(directory);
-  if (marker === null)
+  if (marker === null && (await fs.readdir(directory)).length > 0)
     throw new Error("upgrade attempt has no readable marker; retain it for inspection");
   return { directory, marker };
 }
@@ -42,8 +42,12 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
     throw new Error(
       "Expected apply, status, restore, keep or offline-recovery and an absolute box directory",
     );
-  const current = await pending(boxDirectory);
+  let current = await pending(boxDirectory);
   if (verb === "status") return current?.marker ?? null;
+  if (current?.marker === null) {
+    await recoverInstalledUpgrade({ boxDirectory, run });
+    current = null;
+  }
   if (verb === "apply") {
     if (current)
       throw new Error("resolve the upgrade attempt with restore or keep before installing");
