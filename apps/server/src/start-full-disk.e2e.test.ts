@@ -919,6 +919,8 @@ describe("a start on a real full disk", () => {
         db.exec("create table locations (id text)");
         db.exec("insert into tenants values ('ES', 'B00000000')");
         db.exec("insert into locations values ('loc-1')");
+        db.exec("create table settings (module text primary key)");
+        db.exec("insert into settings values ('venue')");
       } finally {
         db.close();
       }
