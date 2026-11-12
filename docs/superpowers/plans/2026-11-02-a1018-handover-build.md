@@ -12,6 +12,10 @@ not — so that M2 runs the venue under its own identity and a fresh invoice ser
 to the Spanish tax agency (AEAT) afterwards, and a returning M1 hands back only its tax records and
 AEAT's answers.
 
+**2026-11-12:** the owner's later [returned-fact decision](../../backlog/replication-cloud.md#returned-originals-and-their-recorded-facts-a1342-2026-11-10)
+supersedes the fiscal-only return wording in this historical plan. The emergency page follows
+that decision and its [bounded Slice 8 plan](2026-11-12-a1018-8-emergency-page.md).
+
 **Architecture:** One new generic package, `@waitron/handover`, owns the signed message formats,
 digests and the order of steps. Each box keeps its handover progress in its own `node.db` (the
 per-box database file that the venue copy never overwrites). The server gains routes on both

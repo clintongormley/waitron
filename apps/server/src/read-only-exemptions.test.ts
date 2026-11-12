@@ -80,6 +80,7 @@ describe("the read-only exemption list", () => {
       ["POST", "/api/node/handover/:operationId/preparation", ["mirror"]],
       ["POST", "/api/node/handover/:operationId/activate", ["mirror"]],
       ["POST", "/api/node/handover/emergency/declare", ["mirror"]],
+      ["POST", "/api/node/handover/emergency/preview", ["mirror"]],
     ]);
     for (const row of READ_ONLY_EXEMPTIONS) expect(row.authenticates.trim()).not.toBe("");
   });

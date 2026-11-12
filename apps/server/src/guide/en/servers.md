@@ -5,6 +5,38 @@
 If you see **This box is the spare**, open the main box’s address to use the restaurant screens
 and data. The spare’s page shows its status; it takes no sales and offers no dashboard sign-in.
 
+## Start here when the main box has failed {#emergency}
+
+Use a spare that has finished joining this venue. Switch off the old main box and keep it off,
+because two running main boxes could take payments and file separately. This declaration cannot
+be undone.
+
+Open the spare’s HTTPS address with `/handover/emergency` at the end, for example
+`https://spare.example/handover/emergency`. Sign in with an administrator account’s password and
+current authenticator code, if set up, then choose **Check this copy**. Read its latest dated
+activity. Anything newer may be missing; if no date is available, the page says so.
+
+Read the warnings, tick all three statements and give your reason. Choose **Declare the old main
+box switched off**, compare the clocks and choose **Start the venue on this box**. Keep the page
+open through the restart. You enter your password and code once; if the code expires, enter its
+current replacement when asked and try the step again. Your reason and statements stay in place.
+
+If the copy changes before you declare, review the new activity and tick the three statements
+again.
+
+If an answer is lost, keep the page open and check the copy again before retrying. Reloading or
+opening the address on another device finds your saved declaration; sign in and continue with the
+clock check. An unfinished controlled handover offers its own progress page. If the old main box
+answers, open its **Servers** link or switch it off and check again. If the copy cannot be
+verified against the declaration, stop and keep both boxes’ data intact.
+
+## Keep the failed box’s data {#old-box-returns}
+
+Use the new main box after it starts. Keep the failed box and its data for the return flow.
+Invoice records and their recorded payment facts can return to the new main box; this does not
+replay orders, stock changes, printing or drawer openings. Do not reset the old box while you
+still need its data.
+
 ## Hand over to a spare box {#hand-over}
 
 Use this flow only with a spare that has finished joining the venue.
@@ -28,7 +60,7 @@ A waiting message describes the last attempt; keep both boxes connected while th
 ## After the handover {#after-hand-over}
 
 Use the new box’s address. If the old box’s page offers **Progress**, follow it to resume the
-handover on the spare. Keep the old box and its data until the return flow is available.
+handover on the spare. Keep the old box and its data.
 
 ## When a box no longer runs the venue {#handed-over}
 

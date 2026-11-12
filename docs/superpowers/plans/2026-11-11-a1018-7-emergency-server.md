@@ -1,5 +1,9 @@
 # A1018 Slice 7: connected emergency handover server
 
+**2026-11-12 update:** [Slice 8](2026-11-12-a1018-8-emergency-page.md) adds the protected preview and
+requires the shown copy's identifier and activity date in the declaration request. Activation
+rechecks the stored copy after a process restart; the browser resumes without replaying a declaration.
+
 **Authority.** Lane J A1018: “Simple controlled and emergency handover, with Cloud only a placement — BUILD”. The queue relays owner “Yes, build it” (2026-11-01) and simulated-box permission (2026-11-09 15:11). Follow [design](../specs/2026-10-23-a1018-simple-handover-design.md) §§4/7/9 and [original plan](2026-11-02-a1018-handover-build.md) Formats/Tasks 7.1–7.4. Two Claude reads (204s/380s), then Fable (Lane J `receipts/a1018-7-fable-plan-20261111/fable-read-report.md`); watcher 2026-11-11 05:11 settles both decisions and clears build after this correction. No new owner plan approval; no third Claude read.
 
 **Result/bounds.** Test clients declare, prepare and activate a simulated spare. Preserve controlled behaviour. Real page/preview (Slice 8), real-box qualification (A947 3b/3c or selected-backup path), Cloud, A1342, reconciliation remain outside. No table, copy record, module seat, fiscal invariant or clock-name change. Both gap tables wait for Slice 12a; signed `handover_activations.evidence` alone records the unknown interval until then.

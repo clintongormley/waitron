@@ -300,6 +300,22 @@ export interface HandoverSignIn {
   totp?: string;
 }
 
+export interface EmergencyHandoverPreview {
+  sourceNodeId: string;
+  destinationNodeId: string;
+  sourceServersUrl: string;
+  copy: { source: "mirror-copy"; identifier: string; lastChangeAtMs: number | null };
+  operation: { operationId: string; reason: string | null; declaredAtMs: number | null } | null;
+}
+export interface EmergencyHandoverDeclaration {
+  operationId: string;
+  expectedCopy: Pick<EmergencyHandoverPreview["copy"], "identifier" | "lastChangeAtMs">;
+  signIn: HandoverSignIn;
+  statements: { sourceSwitchedOff: true; noParallelRecovery: true; missingTailAccepted: true };
+  reason: string;
+  locale: "en" | "es";
+}
+
 export class SetupApi {
   readonly #baseUrl: string;
   /**
@@ -326,6 +342,14 @@ export class SetupApi {
     );
     if (!response.ok) throw await apiError(response);
     return ((await response.json()) as { body: HandoverStatus }).body;
+  }
+
+  previewEmergencyHandover(signIn: HandoverSignIn): Promise<EmergencyHandoverPreview> {
+    return this.#request("/api/node/handover/emergency/preview", "POST", { signIn });
+  }
+
+  declareEmergencyHandover(request: EmergencyHandoverDeclaration): Promise<unknown> {
+    return this.#request("/api/node/handover/emergency/declare", "POST", request);
   }
 
   prepareHandover(

@@ -1,12 +1,15 @@
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ALL_MODULES } from "@waitron/composition";
+import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { signDocumentBody } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { writeMirrorLink } from "@waitron/node-db";
+import { checkEmergencyCopy } from "./handover-emergency-check.js";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import {
@@ -310,6 +313,7 @@ describe("a real restart after activating, then the same request again", () => {
 describe("the emergency routes through a real spare start", () => {
   const declaration = {
     operationId: OPERATION,
+    expectedCopy: { identifier: "", lastChangeAtMs: null as number | null },
     signIn,
     statements: { sourceSwitchedOff: true, noParallelRecovery: true, missingTailAccepted: true },
     reason: "Source switched off",
@@ -346,6 +350,14 @@ describe("the emergency routes through a real spare start", () => {
     started = await startServer(env, undefined, {
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
       stepdown: { mount: () => {}, restart: () => {} },
+    });
+    const moduleConfig = parseModuleConfig(
+      JSON.parse(await readFile(join(dirs().spareState, "modules.json"), "utf8")),
+      ALL_MODULES,
+    );
+    declaration.expectedCopy = await checkEmergencyCopy({
+      venueDir: dirs().spareVenue,
+      modules: enabledModules(ALL_MODULES, moduleConfig),
     });
     const running = await post("declare", declaration, "emergency");
     expect(codeOf(running)).toBe("handover.source_not_established");
@@ -389,8 +401,6 @@ describe("the emergency routes through a real spare start", () => {
       node.close();
     }
     beforeServerStarts();
-    // This restart stays in the test's process, which keeps the address the spare reached; a real
-    // restart forgets it, and the activation then waits for the main box to be reached again.
     started = await startServer(env, undefined, {
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
     });
