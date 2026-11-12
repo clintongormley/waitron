@@ -1346,6 +1346,44 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(await reservedAndListed()).toEqual(before);
     });
 
+    it("refuses a join while the venue holds stream settings this box cannot open, as it does readable ones", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated);
+      const otherRing = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      });
+      await withTransaction(db, (tx) =>
+        putCredential(tx, otherRing, {
+          purpose: "backup.stream",
+          value: streamSettingsPayload({
+            venueId: "venue",
+            bucket: {
+              endpoint: "https://s3.example.test",
+              region: "eu-west-1",
+              bucket: "venue-bucket",
+              prefix: "",
+              accessKeyId: "bucket-access-key",
+              secretAccessKey: "bucket-secret-key",
+            },
+          }),
+        }),
+      );
+      const before = await reservedAndListed();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.bucket_stream_active", params: {} },
+      });
+      expect(await reservedAndListed()).toEqual(before);
+    });
+
     it("refuses a Veri*Factu venue's join before reserving", async () => {
       const { designated, adminPersonId } = await setupVenue();
       const warnings: { event: string; fields: Record<string, unknown> | undefined }[] = [];

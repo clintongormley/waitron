@@ -26,7 +26,7 @@ import {
   loginManagerById,
   type TotpKeyRing,
 } from "@waitron/identity";
-import { writePairLinkTx, type KeyRing } from "@waitron/credentials";
+import { credentialRevision, writePairLinkTx, type KeyRing } from "@waitron/credentials";
 import { readPairLink } from "@waitron/node-db";
 import type { AdoptResult } from "@waitron/provisioning";
 import {
@@ -59,7 +59,7 @@ import { readJsonBody } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 import { ownContactUrl, sameBoxName } from "./box-name.js";
-import { readStreamSettings } from "./stream-host.js";
+import { STREAM_PURPOSE } from "./stream-host.js";
 
 export interface MirrorBundleApiDeps {
   appDb: Database;
@@ -280,7 +280,11 @@ async function refuseBeforeReserving(
       standbyAt: new Date(standbyAt).toISOString(),
     });
   }
-  if ((await readStreamSettings(deps.appDb, deps.ring)) !== null)
+  if (
+    (await withTransaction(deps.appDb, (tx) =>
+      credentialRevision(tx, { purpose: STREAM_PURPOSE }),
+    )) !== null
+  )
     throw new AppError("mirror.bucket_stream_active", {});
   if (
     sameBoxName(deps.designated.nodeId, standbyNodeId) ||
