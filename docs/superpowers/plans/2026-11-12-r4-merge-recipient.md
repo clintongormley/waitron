@@ -5,7 +5,9 @@ details, should they move across or should the merge be refused?": **"alert the 
 (`~/waitron-campaign-shared/desk/done/20261111-1825-M-r4-proposals.md`). Queue: lane L, R4-merge.
 Source: lane M's review R4, Important 1 (`~/waitron-campaign-m/reports/r4.md` §2). FISCAL: the
 details decide which invoice is filed, so this takes the full review wave with two Codex angles.
-Revised 2026-11-12 after a fresh-context plan review (one Critical, two Important).
+Revised 2026-11-12 after a fresh-context plan review (one Critical, two Important), then cleared by
+the watcher at 00:52 with three changes, written in below (lane L questions.md, "R4-merge: plan
+CLEARED with three changes").
 
 **Outcome.** When the bill being merged away is set for a full invoice (an invoice in a named
 customer's name, `invoice_type` F1, as opposed to the simplified ticket, F2) for a customer the
@@ -61,15 +63,17 @@ differs from the receiving bill's (or the receiving bill is F2).
   invoice) → the same code. This closes the gap the review's probe showed: a hand change of the
   invoice bumps neither the party revision nor the bill-edit state (`working-order.ts:4630-4694`,
   `bill-editing.ts:278-290`), so neither existing check sees it.
-- Malformed `invoiceChoice` (`from` null or missing, bad `keep`) → `management.request_invalid`
+- Malformed `invoiceChoice` (`from` null or missing, bad `keep`, or `keep: "into"` with `into`
+  null, since a simplified receiving bill has no customer to keep) → `management.request_invalid`
   (`field: "invoiceChoice"`).
 - `keep: "from"`: one `update` of the receiving bill sets the merged-away bill's type, six recipient
   columns and delivery (the delivery belongs to that customer: an email address or A4 printer chosen
-  for them; `null` if none). It runs inside `mergeCheckedBills` after `requireBillEditors` and
+  for them; `null` if none), and that bill's receipt language when it has one (the queue item: carry
+  the language with the recipient); when it has none the receiving bill keeps its own. It runs inside `mergeCheckedBills` after `requireBillEditors` and
   **before** `moveOrderLines`, which checks the simplified-invoice limit against the receiving bill's
   type (`working-order.ts:4282`).
-- **Fill rules, every merge:** receipt language: the receiving bill keeps its own; if it has none it
-  takes the merged-away bill's. Delivery, when nothing was copied: filled the same way, only when
+- **Fill rules, every merge not covered by `keep: "from"` above:** receipt language: the receiving
+  bill keeps its own; if it has none it takes the merged-away bill's. Delivery, when nothing was copied: filled the same way, only when
   both bills name the same customer identity.
 - Register the code in `apps/server/src/errors.ts`, `STATUS` in `till-api.ts`, and wording in
   `apps/till/src/i18n/codes.ts`. Staff-notice text (`staffNoticeText`) is for server-pushed notices,
@@ -97,7 +101,8 @@ On `bill.merge_invoice_choice_required` the till re-reads the party's bills; if 
 to the fresh read it opens it at once, otherwise it shows the code's wording (EN **The bills' invoice
 details changed while you were choosing. Check them and merge again.** / ES **Los datos de factura
 de las cuentas han cambiado mientras elegías. Revísalos y vuelve a juntarlas.**). Look at both
-dialogs in both themes and at phone width.
+dialogs in both themes and at phone width. `mergeBills` in `apps/till/src/api/client.ts` gains the
+optional `invoiceChoice` argument and sends it in the request body.
 
 **Guide.** No new section. One sentence after **Merge bills** in the merge paragraph
 (`apps/server/src/guide/en/table-service.md:345-346`; ES `guide/es/table-service.md:367`): "If the
@@ -105,13 +110,17 @@ bill you add is set for a full invoice, the till asks which customer the merged 
 or lets you stop." And one in `{#full-invoice}` (EN `:37`, ES twin): "Merging bills asks before a
 full invoice's customer would change."
 
+**Backlog.** The known gap above (Move dishes of every dish off a full-invoice bill, then Finish
+table, loses the customer) could cost a filing, so this PR gives it a short entry of its own in
+`docs/backlog.md`'s fiscal area, worded as what a person would see (watcher, 00:52).
+
 **RED tests first.** Server (`party-bill-actions.test.ts`, "merge bills"): **"refuses when the
 receiving bill got a full invoice after the till asked"** (first); "refuses merging away a
 full-invoice bill without a choice, changing nothing"; "refuses when the merged-away bill lost its
 full invoice after the till asked"; "carries the customer and delivery, fills the language, when told
 to keep the merged-away bill's"; "keeps the receiving bill's own customer when told to"; "asks
 nothing when both bills name the same customer identity"; "asks nothing when the bill merged away is
-simplified"; "refuses a malformed choice". `simplified-limit.test.ts`: "merges a full-invoice bill
+simplified"; "refuses a malformed choice" (including `keep: "into"` with `into` null). `simplified-limit.test.ts`: "merges a full-invoice bill
 over the simplified limit into a simplified bill once its invoice is kept". Route
 (`till-api.bill-actions.test.ts`): code and 409. Filing (`move-merge.filing.test.ts`): "a merged bill
 keeping Acme files one F1 naming Acme". Till (`till-app-parties.test.ts`): each dialog's text and
