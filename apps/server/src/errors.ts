@@ -647,12 +647,17 @@ declare module "@waitron/shared" {
     "invoice_correction.not_settled": { saleId: string };
     "invoice_correction.not_cash": { saleId: string };
     "invoice_correction.cash_short": { saleId: string; cashLeft: string; gross: string };
+    /** The invoice already has a correction that is still open. */
+    "invoice_correction.already_open": { saleId: string; correctionId: string };
+    /** The invoice's payments hold less money still refundable than the correction would give back. */
+    "invoice_correction.money_short": { saleId: string; moneyLeft: string; gross: string };
+    "invoice_correction.not_found": { correctionId: string };
     /** The split the till showed is no longer what this correction would file; the fresh one. */
     "invoice_correction.split_changed": {
       saleId: string;
       gross: string;
       vatBreakdown: Array<{ rate: string; base: string; tax: string }>;
-      cashRefundable: string;
+      moneyRefundable: string;
     };
     "invoice_correction.chain_unsound": { saleId: string };
     "invoice_correction.refund_pending": { saleId: string; refundId: string };

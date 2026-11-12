@@ -25,7 +25,8 @@ export function mountInvoiceCorrectionApi(app: Hono, deps: TillApiDeps, log: Log
       "adjustment_reason.not_found": 400,
       "invoice_correction.not_settled": 409,
       "invoice_correction.not_cash": 409,
-      "invoice_correction.cash_short": 409,
+      "invoice_correction.already_open": 409,
+      "invoice_correction.money_short": 409,
       "invoice_correction.split_changed": 409,
       "invoice_correction.chain_unsound": 409,
       "invoice_correction.refund_pending": 409,
@@ -41,7 +42,7 @@ export function mountInvoiceCorrectionApi(app: Hono, deps: TillApiDeps, log: Log
       const lineIds = lineIdsOf(body.lineIds);
       const result = await withTransaction(deps.db, async (tx) => {
         await checkAccess(tx, session, id);
-        return previewInvoiceCorrection(tx, deps.backend, cfg, id, {
+        return previewInvoiceCorrection(tx, deps.backend, cfg, deps.clock.now(), id, {
           gross: body.gross as string,
           ...(lineIds === undefined ? {} : { lineIds }),
         });

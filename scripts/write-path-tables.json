@@ -21,6 +21,6 @@
     "packages/provisioning/src/venue-apply.ts"
   ],
   "activity_log": ["packages/db/src/activity-log.ts"],
-  "invoice_corrections": [],
+  "invoice_corrections": ["apps/server/src/invoice-corrections.ts"],
   "invoice_correction_refunds": []
 }

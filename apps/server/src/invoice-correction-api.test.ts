@@ -121,7 +121,7 @@ describe("POST /api/transactions/:saleId/corrections/preview", () => {
     const saleId = await sold(["10.00"]);
     expect(await preview(saleId, { gross: "5.00" })).toMatchObject({
       status: 200,
-      json: { gross: "5.00", vatBreakdown: SPLIT, cashRefundable: "10.00" },
+      json: { gross: "5.00", vatBreakdown: SPLIT, moneyRefundable: "10.00" },
     });
     for (const lineIds of [null, "x", ["not-a-uuid"]])
       expect(await preview(saleId, { gross: "5.00", lineIds })).toEqual({
@@ -146,7 +146,7 @@ describe("POST /api/transactions/:saleId/corrections/preview", () => {
     await serveOnly(venue.zoneId);
     expect(await preview(saleId, { gross: "5.00" }, zonedTill.cookie)).toMatchObject({
       status: 200,
-      json: { gross: "5.00", vatBreakdown: SPLIT, cashRefundable: "10.00" },
+      json: { gross: "5.00", vatBreakdown: SPLIT, moneyRefundable: "10.00" },
     });
   });
 });

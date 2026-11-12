@@ -960,7 +960,7 @@ calendar.
 
 ## A write of a table `scripts/write-path-tables.json` lists lives only in the files it names
 
-`venue.db`'s `tenants`, `nodes`, `deployment`, `settings`, `activity_log` and `invoice_corrections`, and `node.db`'s `node_mode`, `node_mirror_link`,
+`venue.db`'s `tenants`, `nodes`, `deployment`, `settings`, `activity_log`, `invoice_corrections` and `invoice_correction_refunds`, and `node.db`'s `node_mode`, `node_mirror_link`,
 `node_pair_link`, `node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_handover_operations`,
 `node_handover_events` and `node_handover_restriction`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
@@ -971,8 +971,9 @@ that would refuse the write anyway.
 
 `settings` is written on request paths through its one writer,
 `packages/db/src/settings.ts` (`saveSettings`). `activity_log` is written on request paths through
-`packages/db/src/activity-log.ts` (`recordActivity`). `invoice_corrections` is written only by
-`acceptInvoiceCorrection` (`apps/server/src/invoice-corrections.ts`).
+`packages/db/src/activity-log.ts` (`recordActivity`). `invoice_corrections` is written only in
+`apps/server/src/invoice-corrections.ts`, where `openInvoiceCorrection` inserts a correction.
+No file may write `invoice_correction_refunds` yet.
 
 The guard reads `scripts/write-path-tables.json` and pins its table set independently. It reads
 TEXT, judges a FILE rather than a call chain, and walks `<member>/src` under `apps` and `packages`
