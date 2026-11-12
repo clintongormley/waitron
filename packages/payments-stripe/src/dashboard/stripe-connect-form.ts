@@ -2,7 +2,8 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
-  focusFirstInvalid,
+  FormFeedback,
+  bottomMessage,
   draftScopeFor,
   saveActionState,
   submitOnEnter,
@@ -52,7 +53,7 @@ export class StripeConnectForm extends LitElement {
   @state() private webhookSecret = "";
   @state() private successUrl = "";
   @state() private cancelUrl = "";
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   /** A refusal that names no field, shown above Connect until the next press. */
   @state() private refusal = "";
   @state() private busy = false;
@@ -102,7 +103,7 @@ export class StripeConnectForm extends LitElement {
     this.webhookSecret = "";
     this.successUrl = "";
     this.cancelUrl = "";
-    this.attempted = false;
+    this.#feedback.reset();
     this.refusal = "";
     this.busy = false;
     this.connectedName = null;
@@ -118,13 +119,8 @@ export class StripeConnectForm extends LitElement {
   }
 
   #secretKeyError(): string {
-    const missing = this.attempted && this.secretKey.trim() === "";
+    const missing = this.#feedback.attempted && this.secretKey.trim() === "";
     return missing ? t("payments.stripe.secret_key_required") : "";
-  }
-
-  async #focusFirstInvalid(): Promise<void> {
-    await this.updateComplete;
-    await focusFirstInvalid(this.shadowRoot!);
   }
 
   async #connect(event: Event, opening: object): Promise<void> {
@@ -138,10 +134,10 @@ export class StripeConnectForm extends LitElement {
       return;
     const scope = this.#scope;
     const submitted = this.#value();
-    this.attempted = true;
+    this.#feedback.press();
     this.refusal = "";
     if (this.#secretKeyError() !== "") {
-      await this.#focusFirstInvalid();
+      await this.#feedback.focus(this.shadowRoot!);
       return;
     }
     this.busy = true;
@@ -238,9 +234,7 @@ export class StripeConnectForm extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "cancelUrl", opening)}
       ></wt-input>
       <wt-form-actions
-        .error=${[this.refusal, blocked ? t("payments.stripe.fix_fields") : ""]
-          .filter(Boolean)
-          .join(" ")}
+        .error=${bottomMessage(this.refusal, blocked ? t("payments.stripe.fix_fields") : "")}
       >
         ${this.actions ? html`<wt-button slot="cancel" variant="secondary" ?disabled=${this.busy} @click=${() => this.actions?.onCancel()}>${this.actions.cancelLabel}</wt-button>` : nothing}
         <wt-button

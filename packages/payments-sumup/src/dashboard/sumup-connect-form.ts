@@ -2,7 +2,8 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
-  focusFirstInvalid,
+  FormFeedback,
+  bottomMessage,
   draftScopeFor,
   saveActionState,
   submitOnEnter,
@@ -70,7 +71,7 @@ export class SumUpConnectForm extends LitElement {
   @state() private apiKey = "";
   @state() private merchants: AmbiguousMerchant[] | null = null;
   @state() private merchantCode = "";
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   /** A refusal that names no field, shown above Connect until the next press. */
   @state() private refusal = "";
   @state() private busy = false;
@@ -113,7 +114,7 @@ export class SumUpConnectForm extends LitElement {
     this.#scope = undefined;
     this.apiKey = "";
     this.merchantCode = "";
-    this.attempted = false;
+    this.#feedback.reset();
     this.refusal = "";
     this.busy = false;
     this.connectedName = null;
@@ -136,8 +137,9 @@ export class SumUpConnectForm extends LitElement {
   }
 
   #fieldErrors(): { apiKey: string; merchant: string } {
-    const apiKeyMissing = this.attempted && this.apiKey.trim() === "";
-    const merchantMissing = this.attempted && this.merchants !== null && this.merchantCode === "";
+    const apiKeyMissing = this.#feedback.attempted && this.apiKey.trim() === "";
+    const merchantMissing =
+      this.#feedback.attempted && this.merchants !== null && this.merchantCode === "";
     return {
       apiKey: apiKeyMissing ? t("payments.sumup.api_key_required") : "",
       merchant: merchantMissing ? t("payments.sumup.merchant_required") : "",
@@ -147,11 +149,6 @@ export class SumUpConnectForm extends LitElement {
   #blocked(): boolean {
     const errors = this.#fieldErrors();
     return errors.apiKey !== "" || errors.merchant !== "";
-  }
-
-  async #focusFirstInvalid(): Promise<void> {
-    await this.updateComplete;
-    await focusFirstInvalid(this.shadowRoot!);
   }
 
   async #connect(event: Event, opening: object): Promise<void> {
@@ -165,10 +162,10 @@ export class SumUpConnectForm extends LitElement {
       return;
     const scope = this.#scope;
     const submitted = this.#value();
-    this.attempted = true;
+    this.#feedback.press();
     this.refusal = "";
     if (this.#blocked()) {
-      await this.#focusFirstInvalid();
+      await this.#feedback.focus(this.shadowRoot!);
       return;
     }
     this.busy = true;
@@ -195,7 +192,7 @@ export class SumUpConnectForm extends LitElement {
       if (codeOf(error) === MERCHANT_AMBIGUOUS) {
         // The key spans several merchants: switch to the picker, not yet marked as missing.
         this.merchants = ambiguousMerchants(error);
-        this.attempted = false;
+        this.#feedback.reset();
       } else if (codeOf(error) === "payment.provider_credential_rejected") {
         this.refusal = t("payments.sumup.connect_failed");
       } else {
@@ -263,9 +260,7 @@ export class SumUpConnectForm extends LitElement {
       }
 
       <wt-form-actions
-        .error=${[this.refusal, blocked ? t("payments.sumup.fix_fields") : ""]
-          .filter(Boolean)
-          .join(" ")}
+        .error=${bottomMessage(this.refusal, blocked ? t("payments.sumup.fix_fields") : "")}
       >
         ${this.actions ? html`<wt-button slot="cancel" variant="secondary" ?disabled=${this.busy} @click=${() => this.actions?.onCancel()}>${this.actions.cancelLabel}</wt-button>` : nothing}
         <wt-button
