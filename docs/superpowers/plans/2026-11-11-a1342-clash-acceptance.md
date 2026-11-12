@@ -1,5 +1,7 @@
 # A1342 PR2: accept an exact returned-payment clash
 
+**2026-11-12 15:58 replacement:** The watcher retired the record-acceptance extension noted below. Payment acceptance remains; [the plain-stop rework](2026-11-12-a1342-plain-stop-rework.md) supersedes that extension.
+
 **2026-11-12:** A1342-3 extends this payment-only cut with invoice/position/correction downloads
 and acceptance. Its [watcher-cleared plan](2026-11-11-a1342-3-record-clash-acceptance.md) supersedes
 the remaining-clashes limitation below; missing suffix records still prevent confirmation.

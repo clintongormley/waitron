@@ -94,8 +94,9 @@ equipo principal, sigue usando el principal y conserva los datos del equipo ante
 necesitas. La devolución no está confirmada. Puedes restablecer el equipo, pero eso borra sus
 datos del local, incluidos los registros que sigan pendientes.
 
-Si los datos de pago difieren, mantén ambos equipos encendidos y conserva sus datos. Una persona
-administradora puede consultar las diferencias admisibles con GET `/management-api/return-clashes`
+Si otros datos devueltos difieren, mantén ambos equipos encendidos y conserva sus datos. Solo se
+pueden aceptar diferencias de pago admisibles mediante la API interna. Una persona administradora
+puede consultarlas con GET `/management-api/return-clashes`
 en el principal y aceptar una con POST `/management-api/return-clashes/:clashId/accept`, indicando
 `actionKey` y `reason`. Todavía no hay una pantalla para ello. Después, apaga y enciende el equipo
 detenido para reintentarlo. Cada nuevo lote en conflicto requiere su propia aceptación; solo

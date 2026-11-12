@@ -1,3 +1,4 @@
+import type { CanonicalValue } from "@waitron/membership";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1396,7 +1397,6 @@ it("batches pending refund recovery anchors and preserves receiver progress on r
     source: "device",
     deviceId: source.deviceId,
     nodeId: source.nodeId,
-    locationId: order.locationId,
     method: "card",
     provider: "recorded-provider",
     providerPaymentRef: "recorded-charge",

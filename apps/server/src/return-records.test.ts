@@ -388,47 +388,54 @@ it("shows a retryable clock refusal when the receiver cannot yet accept the reco
   }
 });
 
-it("retries a clock refusal and confirms once the main can accept the dates", async () => {
-  const app = destination();
-  let paused!: () => void;
-  let resume!: () => void;
-  const waiting = new Promise<void>((resolve) => {
-    paused = resolve;
-  });
-  const release = new Promise<void>((resolve) => {
-    resume = resolve;
-  });
-  const sleep = vi.spyOn(loop, "realSleep").mockImplementationOnce(async () => {
-    paused();
-    await release;
-  });
-  let ahead = true;
-  const duty = startReturnRecordsDuty({
-    db: suite.db,
-    node: suite.node,
-    ring,
-    nodeId: source,
-    modules,
-    log: () => {},
-    fetch: async (url, init) =>
-      ahead
-        ? Response.json({ error: { code: "fiscal.return_clock_ahead" } }, { status: 409 })
-        : app.request(String(url), init),
-  });
-  try {
-    await waiting;
-    expect(duty.state()).toBe("clock");
-    ahead = false;
-    resume();
-    await vi.waitFor(() => expect(duty.state()).toBe("confirmed"));
-    await duty.stop();
-    expect(received).toEqual(["first", "second"]);
-  } finally {
-    resume();
-    await duty.stop();
-    sleep.mockRestore();
-  }
-});
+it.each([
+  ["fiscal.return_clock_ahead", "clock"],
+  ["fiscal.return_record_clash", "record-clash"],
+] as const)(
+  "retries unsigned %s and confirms once the main accepts the return",
+  async (code, state) => {
+    const app = destination();
+    let paused!: () => void;
+    let resume!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      paused = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    const sleep = vi.spyOn(loop, "realSleep").mockImplementationOnce(async () => {
+      paused();
+      await release;
+    });
+    let ahead = true;
+    const duty = startReturnRecordsDuty({
+      db: suite.db,
+      node: suite.node,
+      ring,
+      nodeId: source,
+      modules,
+      log: () => {},
+      fetch: async (url, init) =>
+        ahead
+          ? Response.json({ error: { code } }, { status: 409 })
+          : app.request(String(url), init),
+    });
+    try {
+      await vi.waitFor(() => expect(sleep).toHaveBeenCalledTimes(1));
+      await waiting;
+      expect(duty.state()).toBe(state);
+      ahead = false;
+      resume();
+      await vi.waitFor(() => expect(duty.state()).toBe("confirmed"));
+      await duty.stop();
+      expect(received).toEqual(["first", "second"]);
+    } finally {
+      resume();
+      await duty.stop();
+      sleep.mockRestore();
+    }
+  },
+);
 
 it("distinguishes a signed unaccounted batch from a request refusal", async () => {
   accounted = false;
@@ -495,36 +502,6 @@ it("ends the duty after a signed clash without scheduling another receiver pass"
   } finally {
     await duty.stop();
     pause.mockRestore();
-  }
-});
-
-it("stops the duty on a record-clash refusal without retrying or sending later batches", async () => {
-  const receive = vi
-    .spyOn(modules[0]!.handover!.returnRecords!, "receive")
-    .mockImplementation(async (_tx, _source, batch) => {
-      received.push(batch);
-      return { refusal: "fiscal.return_record_clash" };
-    });
-  const app = destination();
-  const pause = vi.spyOn(loop, "realSleep");
-  const duty = startReturnRecordsDuty({
-    db: suite.db,
-    node: suite.node,
-    ring,
-    nodeId: source,
-    modules,
-    log: () => {},
-    fetch: async (url, init) => app.request(String(url), init),
-  });
-  try {
-    await vi.waitFor(() => expect(duty.state()).toBe("record-clash"));
-    await duty.stop();
-    expect(received).toEqual(["first"]);
-    expect(pause).not.toHaveBeenCalled();
-  } finally {
-    await duty.stop();
-    pause.mockRestore();
-    receive.mockRestore();
   }
 });
 

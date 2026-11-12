@@ -411,7 +411,5 @@ it.each(["en-GB", "es-ES"] as const)(
     expect(html).not.toContain(escapeHtml(RESTRICTED_RETURN_WORDS[language].clash));
     expect(html).toContain("Main &lt;box&gt;");
     expect(html).not.toContain("Main <box>");
-    expect(html).not.toContain("/accept");
-    expect(html).not.toContain("/download");
   },
 );

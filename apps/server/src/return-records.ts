@@ -131,7 +131,7 @@ export function startReturnRecordsDuty(
         state = "needs-attention";
         deps.log("warn", "return-records.failed", { errorCode: codeOf(error) });
       }
-      if (state === "confirmed" || state === "clash" || state === "record-clash") return;
+      if (state === "confirmed" || state === "clash") return;
       await realSleep(30_000, stopping.signal);
     }
   })();

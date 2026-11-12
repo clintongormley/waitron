@@ -103,7 +103,7 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
     clock:
       "The main box cannot accept invoice records dated ahead of its clock. Keep both boxes running while the return retries. Check the clocks on both boxes. Do not reset this box. Refresh this page to check again.",
     clash:
-      "The main box found differing payment facts. This return has stopped. Keep both boxes running with their data intact. Some payment differences can be specifically accepted through the main box's internal API; then switch this box off and on to retry. Resetting this box deletes its venue data, including sale lines and local backups; this return is not confirmed.",
+      "The main box found differing returned facts. This return has stopped. Keep both boxes running with their data intact. Some payment differences can be specifically accepted through the main box's internal API; other differences cannot be accepted there. After accepting a payment difference, switch this box off and on to retry. Resetting this box deletes its venue data, including sale lines and local backups; this return is not confirmed.",
     "record-clash":
       "The return stopped because an invoice record clashes with one on the main box. This box's data has been left as it was. Continue using the main box and keep this box's data if you still need it. Resetting this box deletes its venue data, including sale lines and local backups; this return is not confirmed.",
     confirmed:
@@ -119,7 +119,7 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
     clock:
       "El equipo principal no puede aceptar registros de facturación adelantados respecto a su reloj. Mantén ambos equipos encendidos mientras se vuelve a intentar la devolución. Comprueba los relojes de ambos equipos. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
     clash:
-      "El equipo principal ha encontrado diferencias en los datos de pago. La devolución se ha detenido. Mantén ambos equipos encendidos y conserva sus datos. Algunas diferencias de pago pueden ser aceptadas expresamente mediante la API interna del principal; después, apaga y enciende este equipo para reintentarlo. Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales; esta devolución no está confirmada.",
+      "El equipo principal ha encontrado diferencias en los datos devueltos. La devolución se ha detenido. Mantén ambos equipos encendidos y conserva sus datos. Algunas diferencias de pago pueden ser aceptadas expresamente mediante la API interna del principal; las demás diferencias no se pueden aceptar allí. Después de aceptar una diferencia de pago, apaga y enciende este equipo para reintentarlo. Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales; esta devolución no está confirmada.",
     "record-clash":
       "La devolución se ha detenido porque un registro de facturación entra en conflicto con uno del equipo principal. Los datos de este equipo se han dejado como estaban. Sigue usando el equipo principal y conserva los datos de este equipo si aún los necesitas. Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales; esta devolución no está confirmada.",
     confirmed:
