@@ -756,6 +756,47 @@ describe("an edit that grows an order", () => {
     expect(storedLines(secondBill)).toHaveLength(1);
   });
 
+  it("merges a full-invoice bill over the simplified limit into a simplified bill once its invoice is kept", async () => {
+    const { partyId, mainBill, secondBill } = await twoBills({ Mitad: 1 }, { Lote: 1 });
+    const taxId = "B12345674";
+    const chosen = await send(
+      limited,
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${secondBill}/invoice-choice`,
+      {
+        revision: orderRow(secondBill)!.revision,
+        invoiceType: "F1",
+        recipient: {
+          taxId,
+          legalName: "Cliente SL",
+          address: "2 Main Street, 28013 Madrid, Madrid",
+          countryCode: "ES",
+        },
+      },
+    );
+    expect(chosen.status).toBe(200);
+
+    const answer = await send(
+      limited,
+      venue.cookie,
+      "POST",
+      `/api/bills/${mainBill}/merge`,
+      await observedBillActionBody(venue.db, `/api/bills/${mainBill}/merge`, {
+        fromBillId: secondBill,
+        expectedPartyRevision: partyRevision(partyId),
+        invoiceChoice: { keep: "from", into: null, from: { taxId } },
+      }),
+    );
+
+    expect(answer.status).toBe(204);
+    expect(storedLines(mainBill)).toHaveLength(2);
+    expect(
+      venue.db.all(sql`select invoice_type, recipient_tax_id from working_orders
+        where id = ${mainBill}`),
+    ).toEqual([{ invoice_type: "F1", recipient_tax_id: taxId }]);
+  });
+
   it("moving dishes onto a bill that would go over the limit is refused, and both keep their lines", async () => {
     const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Lote: 1 });
     const lineIds = venue.db

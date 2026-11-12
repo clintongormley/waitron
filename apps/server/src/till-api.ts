@@ -639,6 +639,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "bill.presented": 409,
   "bill.paid": 409,
   "bill.other_party": 409,
+  "bill.merge_invoice_choice_required": 409,
   "bill.payment_not_found": 404,
   "bill.refund_exceeds_payment": 422,
   "bill.refund_not_whole": 422,
@@ -4230,7 +4231,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const intoBillId = requireTabParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const fromBillId = requireOtherBill(body.fromBillId, "fromBillId");
-      const command = billCommand(personId, body);
+      const command = { ...billCommand(personId, body), invoiceChoice: body.invoiceChoice };
       await withTransaction(deps.db, async (tx) => {
         await requireEconomicWrite(tx, deps.cfg, deps.admission);
         await checkZones(tx, session, [{ orderId: intoBillId }, { orderId: fromBillId }]);

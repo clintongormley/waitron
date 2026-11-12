@@ -28,7 +28,8 @@ import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.j
 import { refundBillPayment } from "./bill-refunds.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder, setOrderInvoiceChoice } from "./working-order.js";
+import { readBillEditState } from "./bill-editing.js";
 import {
   OPERATOR,
   activeTablesOf,
@@ -725,6 +726,83 @@ describe("a held dish on a whole table bill presented or paid before its group f
   });
 });
 
+const ACME = {
+  taxId: "12345678Z",
+  legalName: "Acme Travel SL",
+  address: "2 Main Street, 08001 Barcelona, Barcelona",
+  countryCode: "ES",
+};
+const BAR_SOL = {
+  taxId: "B12345674",
+  legalName: "Bar Sol SL",
+  address: "5 Sea Road, 28013 Madrid, Madrid",
+  countryCode: "ES",
+};
+
+/** Sets the bill for a full invoice to `recipient`, as another till's invoice choice does. */
+async function fullInvoice(
+  billId: string,
+  recipient: typeof ACME,
+  delivery?: { medium: "receipt" },
+): Promise<void> {
+  await setOrderInvoiceChoice(v.db, v.backend, v.cfg, billId, {
+    revision: (await billRow(v, billId)).revision,
+    invoiceType: "F1",
+    recipient,
+    ...(delivery === undefined ? {} : { delivery }),
+    operatorId: OPERATOR,
+    expectedEdit: await inTx(v, (tx) => readBillEditState(tx, billId)),
+  });
+}
+
+async function setReceiptLanguage(billId: string, language: string): Promise<void> {
+  await inTx(v, (tx) =>
+    tx.update(workingOrders).set({ receiptLocale: language }).where(eq(workingOrders.id, billId)),
+  );
+}
+
+async function mergeChoosing(
+  partyId: string,
+  intoBillId: string,
+  fromBillId: string,
+  invoiceChoice: unknown,
+): Promise<void> {
+  const command = await commandFor(v, partyId);
+  await inTx(v, (tx) =>
+    mergeBills(tx, v.cfg, intoBillId, fromBillId, { ...command, invoiceChoice }),
+  );
+}
+
+/** The bill's invoice: its type, recipient, delivery and receipt language. */
+async function invoiceOf(billId: string) {
+  const row = await billRow(v, billId);
+  return {
+    invoiceType: row.invoiceType,
+    taxId: row.recipientTaxId,
+    legalName: row.recipientLegalName,
+    address: row.recipientAddress,
+    countryCode: row.recipientCountryCode,
+    identifierType: row.recipientIdentifierType,
+    identifierCountryCode: row.recipientIdentifierCountryCode,
+    delivery: row.invoiceDelivery,
+    language: row.receiptLocale,
+  };
+}
+
+const SIMPLIFIED = {
+  invoiceType: "F2",
+  taxId: null,
+  legalName: null,
+  address: null,
+  countryCode: null,
+  identifierType: null,
+  identifierCountryCode: null,
+};
+
+function invoiceTo(recipient: typeof ACME) {
+  return { invoiceType: "F1", ...recipient, identifierType: null, identifierCountryCode: null };
+}
+
 describe("merge bills", () => {
   it("moves every line onto the bill merged into, keeping its group and credit, and abandons the other", async () => {
     const table = await v.table("Table 20");
@@ -924,6 +1002,188 @@ describe("merge bills", () => {
 
     expect(error).toMatchObject({ code: "tab.merge_self", params: { tabId: main } });
     expect(await snapshot(partyId, [main])).toEqual(before);
+  });
+
+  it("refuses when the receiving bill got a full invoice after the till asked", async () => {
+    const { partyId, main, second } = await twoBills("Table merge R4 into changed");
+    await fullInvoice(second, ACME);
+    // The till asked with Bill 1 simplified; another till then set it for Bar Sol SL.
+    await fullInvoice(main, BAR_SOL);
+    const before = await snapshot(partyId, [main, second]);
+
+    const error = await captureError(() =>
+      mergeChoosing(partyId, main, second, {
+        keep: "from",
+        into: null,
+        from: { taxId: ACME.taxId },
+      }),
+    );
+
+    expect(error).toMatchObject({
+      code: "bill.merge_invoice_choice_required",
+      params: { workingOrderId: second, intoWorkingOrderId: main },
+    });
+    expect(await snapshot(partyId, [main, second])).toEqual(before);
+  });
+
+  it("refuses merging away a full-invoice bill without a choice, changing nothing", async () => {
+    const { partyId, main, second } = await twoBills("Table merge R4 no choice");
+    await fullInvoice(second, ACME);
+    const before = await snapshot(partyId, [main, second]);
+
+    const error = await captureError(() => merge(partyId, main, second));
+
+    expect(error).toMatchObject({
+      code: "bill.merge_invoice_choice_required",
+      params: { workingOrderId: second, intoWorkingOrderId: main },
+    });
+    expect(await snapshot(partyId, [main, second])).toEqual(before);
+  });
+
+  it("refuses when the merged-away bill lost its full invoice after the till asked", async () => {
+    const { partyId, main, second } = await twoBills("Table merge R4 from changed");
+    const before = await snapshot(partyId, [main, second]);
+
+    const error = await captureError(() =>
+      mergeChoosing(partyId, main, second, {
+        keep: "from",
+        into: null,
+        from: { taxId: ACME.taxId },
+      }),
+    );
+
+    expect(error).toMatchObject({
+      code: "bill.merge_invoice_choice_required",
+      params: { workingOrderId: second, intoWorkingOrderId: main },
+    });
+    expect(await snapshot(partyId, [main, second])).toEqual(before);
+  });
+
+  it("refuses a choice naming the customer's tax number under another kind of identifier", async () => {
+    const { partyId, main, second } = await twoBills("Table merge R4 identifier kind");
+    await fullInvoice(second, ACME);
+    const before = await snapshot(partyId, [main, second]);
+
+    const error = await captureError(() =>
+      mergeChoosing(partyId, main, second, {
+        keep: "from",
+        into: null,
+        from: { taxId: ACME.taxId, identifierType: "03", identifierCountryCode: "FR" },
+      }),
+    );
+
+    expect(error).toMatchObject({
+      code: "bill.merge_invoice_choice_required",
+      params: { workingOrderId: second, intoWorkingOrderId: main },
+    });
+    expect(await snapshot(partyId, [main, second])).toEqual(before);
+  });
+
+  it("carries the customer and delivery, fills the language, when told to keep the merged-away bill's", async () => {
+    const { partyId, main, second } = await twoBills("Table merge R4 keep from");
+    await fullInvoice(second, ACME, { medium: "receipt" });
+    await setReceiptLanguage(second, "en-GB");
+
+    await mergeChoosing(partyId, main, second, {
+      keep: "from",
+      into: null,
+      from: { taxId: ACME.taxId },
+    });
+
+    expect(await invoiceOf(main)).toEqual({
+      ...invoiceTo(ACME),
+      delivery: { medium: "receipt" },
+      language: "en-GB",
+    });
+    expect((await linesOf(v, main)).map((l) => l.name)).toEqual(["Burger", "Red wine bottle"]);
+    expect((await billRow(v, second)).status).toBe("abandoned");
+  });
+
+  it("keeps the receiving bill's own customer when told to", async () => {
+    const { partyId, main, second } = await twoBills("Table merge R4 keep into");
+    await fullInvoice(main, BAR_SOL);
+    await setReceiptLanguage(main, "es-ES");
+    await fullInvoice(second, ACME, { medium: "receipt" });
+    await setReceiptLanguage(second, "en-GB");
+
+    await mergeChoosing(partyId, main, second, {
+      keep: "into",
+      into: { taxId: BAR_SOL.taxId },
+      from: { taxId: ACME.taxId },
+    });
+
+    expect(await invoiceOf(main)).toEqual({
+      ...invoiceTo(BAR_SOL),
+      delivery: null,
+      language: "es-ES",
+    });
+    expect((await billRow(v, second)).status).toBe("abandoned");
+  });
+
+  it("asks nothing when both bills name the same customer identity", async () => {
+    const { partyId, main, second } = await twoBills("Table merge R4 same customer");
+    await fullInvoice(main, ACME);
+    await fullInvoice(second, { ...ACME, legalName: "Acme Travel" }, { medium: "receipt" });
+    await setReceiptLanguage(second, "en-GB");
+
+    await merge(partyId, main, second);
+
+    expect(await invoiceOf(main)).toEqual({
+      ...invoiceTo(ACME),
+      delivery: { medium: "receipt" },
+      language: "en-GB",
+    });
+    expect((await billRow(v, second)).status).toBe("abandoned");
+  });
+
+  it("asks nothing when the bill merged away is simplified", async () => {
+    const { partyId, main, second } = await twoBills("Table merge R4 simplified away");
+    await fullInvoice(main, BAR_SOL);
+    await setReceiptLanguage(second, "en-GB");
+
+    await merge(partyId, main, second);
+
+    expect(await invoiceOf(main)).toEqual({
+      ...invoiceTo(BAR_SOL),
+      delivery: null,
+      language: "en-GB",
+    });
+    expect((await billRow(v, second)).status).toBe("abandoned");
+  });
+
+  it("keeps a simplified receiving bill simplified when merging away a simplified bill", async () => {
+    const { partyId, main, second } = await twoBills("Table merge R4 both simplified");
+    await setReceiptLanguage(main, "es-ES");
+    await setReceiptLanguage(second, "en-GB");
+
+    await merge(partyId, main, second);
+
+    expect(await invoiceOf(main)).toEqual({ ...SIMPLIFIED, delivery: null, language: "es-ES" });
+  });
+
+  it.each([
+    ["no from", { keep: "from", into: null }],
+    ["a null from", { keep: "from", into: null, from: null }],
+    ["a bad keep", { keep: "both", into: null, from: { taxId: ACME.taxId } }],
+    ["keep into with into null", { keep: "into", into: null, from: { taxId: ACME.taxId } }],
+    ["a from without a tax number", { keep: "from", into: null, from: { taxId: 5 } }],
+    [
+      "an identifier type that is not text",
+      { keep: "from", into: null, from: { taxId: ACME.taxId, identifierType: 7 } },
+    ],
+    ["a choice that is not an object", "from"],
+  ])("refuses a malformed choice: %s, changing nothing", async (_, invoiceChoice) => {
+    const { partyId, main, second } = await twoBills(`Table merge R4 malformed ${_}`);
+    await fullInvoice(second, ACME);
+    const before = await snapshot(partyId, [main, second]);
+
+    const error = await captureError(() => mergeChoosing(partyId, main, second, invoiceChoice));
+
+    expect(error).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "invoiceChoice" },
+    });
+    expect(await snapshot(partyId, [main, second])).toEqual(before);
   });
 
   it("refuses a bill that does not exist as not open, changing nothing", async () => {

@@ -18,7 +18,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { withTransaction } from "@waitron/db";
+import { tenants, withTransaction } from "@waitron/db";
 import { nodeId as brandNodeId, rawCentsToDecimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
@@ -33,7 +33,10 @@ import { joinTables, moveGuests } from "./testing/table-action-fixture.js";
 import { mergeBills } from "./testing/bill-action-fixture.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
+import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
+import { setOrderInvoiceChoice } from "./working-order.js";
+import { readBillEditState } from "./bill-editing.js";
 
 /**
  * Joining and merging tabs, through to what gets FILED: every case here pays through a real
@@ -331,6 +334,83 @@ describe("parties combined, bills merged → one fiscal record (H2)", () => {
     expect(await fiscalRecordCount(intoTab)).toBe(1);
     expect(await fiscalRecordCount(fromTab)).toBe(0);
     // Every count above would still pass on a merge that moved NOTHING; a dropped line files 1.50.
+    expect(await filedSaleTotal(intoTab)).toBe("3.50");
+  });
+});
+
+describe("a full-invoice bill merged away (R4-merge)", () => {
+  it("a merged bill keeping Acme files one F1 naming Acme", async () => {
+    const { cfg, coffee, water } = await setupVenue();
+    // A full invoice names the issuer's domicile; this file's venue plan sets none.
+    await suite.db.update(tenants).set({ taxpayerDomicile: "Calle Mayor 1, 28013 Madrid" });
+    const tInto = await seedTable(cfg, "R4-into");
+    const tFrom = await seedTable(cfg, "R4-from");
+    const intoTab = await openTabOn(cfg, tInto, [{ productId: coffee.id, quantity: "1" }]);
+    const fromTab = await openTabOn(cfg, tFrom, [{ productId: water.id, quantity: "1" }]);
+    const acme = nextNif();
+    const operatorId = randomUUID();
+    const [fromRow] = (
+      await suite.db.execute<{ revision: number }>(
+        sql`select revision from working_orders where id = ${fromTab}`,
+      )
+    ).rows;
+    await setOrderInvoiceChoice(suite.db, backend, cfg, fromTab, {
+      revision: fromRow!.revision,
+      invoiceType: "F1",
+      recipient: {
+        taxId: acme,
+        legalName: "Acme Travel SL",
+        address: "2 Main Street, 08001 Barcelona, Barcelona",
+        countryCode: "ES",
+      },
+      operatorId,
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, fromTab)),
+    });
+
+    const move = await tableAction(fromTab, intoTab);
+    await withTransaction(suite.db, async (tx) => {
+      await moveGuests(tx, cfg, move.partyId, tInto, move.options);
+      const into = (await partyRevisionOfOrder(tx, intoTab))!;
+      await mergeBills(tx, cfg, intoTab, fromTab, {
+        partyId: into.id,
+        expectedPartyRevision: into.revision,
+        operatorId: move.options.operatorId,
+        invoiceChoice: { keep: "from", into: null, from: { taxId: acme } },
+      });
+    });
+    const { rows: admins } = await suite.db.execute<{ id: string }>(
+      sql`select id from persons where role = 'admin'`,
+    );
+    const personId = admins[0]!.id;
+    const { invoice } = await takeBillPayment(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      intoTab,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "3.50",
+        method: "cash",
+        tendered: "3.50",
+        applied: "3.50",
+        tip: "0.00",
+      },
+      {
+        personId,
+        sessionId: await openTillSession(suite.db, { deviceId: cfg.origin.deviceId, personId }),
+      },
+    );
+    expect(invoice).not.toBeNull();
+
+    const { rows } = await suite.db.execute<{ tipo_factura: string; destinatarios: string }>(sql`
+      select r.tipo_factura, r.destinatarios from registros_facturacion r
+      join sales s on s.id = r.sale_id
+      where s.working_order_id in (${intoTab}, ${fromTab})
+    `);
+    expect(rows.map((row) => row.tipo_factura)).toEqual(["F1"]);
+    expect(JSON.parse(rows[0]!.destinatarios)).toMatchObject({
+      IDDestinatario: [{ NombreRazon: "Acme Travel SL", NIF: acme }],
+    });
     expect(await filedSaleTotal(intoTab)).toBe("3.50");
   });
 });

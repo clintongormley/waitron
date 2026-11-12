@@ -15,6 +15,7 @@ import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireBillEditors } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
+import { carryMergeInvoice, checkMergeInvoice, type MergeInvoices } from "./merge-invoice.js";
 import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { guardParty, refuseMovedParty, requireBillOfParty } from "./parties.js";
@@ -105,14 +106,19 @@ export async function guardPathParty(
 
 /**
  * Move every line of `fromBillId` onto `intoBillId` and abandon it, which files nothing. Both must be
- * open bills of one party; the bill merged away must hold no payment.
+ * open bills of one party; the bill merged away must hold no payment. `command.invoiceChoice` is the
+ * request's, unchecked: see {@link checkMergeInvoice}.
  */
 export async function mergeBills(
   tx: Transaction,
   cfg: TradingContext,
   intoBillId: string,
   fromBillId: string,
-  command: BillCommand & { expectedEdits: BillEditExpected[]; admission: TradingAdmission },
+  command: BillCommand & {
+    expectedEdits: BillEditExpected[];
+    admission: TradingAdmission;
+    invoiceChoice?: unknown;
+  },
   attendance?: OrderAttendance,
 ): Promise<void> {
   await requireEconomicWrite(tx, cfg, command.admission);
@@ -123,9 +129,11 @@ export async function mergeBills(
   await refuseBillWithPayments(tx, fromBillId);
   refuseClosedBill(intoBillId, path.status);
   await assertServiceModesMatch(tx, fromBillId, intoBillId);
+  const invoices = await checkMergeInvoice(tx, intoBillId, fromBillId, command.invoiceChoice);
   await mergeCheckedBills(tx, cfg, intoBillId, fromBillId, {
     operatorId: command.operatorId,
     expectedEdits: command.expectedEdits,
+    invoices,
     ...(attendance === undefined
       ? {}
       : {
@@ -154,9 +162,12 @@ export async function mergeCheckedBills(
     expectedEdits: BillEditExpected[];
     kitchenTold?: boolean;
     attendance?: { recorder: AttendanceRecorder; at: string };
+    invoices?: MergeInvoices;
   },
 ): Promise<void> {
   await requireBillEditors(tx, [fromBillId, intoBillId], known.operatorId, known.expectedEdits);
+  // Before the lines move: their check of the simplified-invoice limit reads the kept invoice type.
+  await carryMergeInvoice(tx, intoBillId, fromBillId, known.invoices);
   const before = known.kitchenTold === true ? null : await readSentWork(tx, fromBillId);
   await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined, {
     actorId: known.operatorId,
