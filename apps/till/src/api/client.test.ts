@@ -5533,6 +5533,21 @@ describe("menuOfferToTillProduct", () => {
     expect(options!.kind === "options" && options!.labels.map((l) => l.id)).toEqual([
       "label-medium",
     ]);
+    const [informationExtras, informationOptions] = product.modifierAvailability!;
+    expect(
+      informationExtras!.kind === "extras" &&
+        informationExtras!.items.map((i) => [i.productId, i.available]),
+    ).toEqual([
+      ["bacon", false],
+      ["cheese", true],
+    ]);
+    expect(
+      informationOptions!.kind === "options" &&
+        informationOptions!.labels.map((l) => [l.id, l.available]),
+    ).toEqual([
+      ["label-rare", false],
+      ["label-medium", true],
+    ]);
   });
 });
 
