@@ -4010,10 +4010,63 @@ jobs:
   server-probe:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.server_probe }}
     runs-on: ${{ github.run_attempt == 1 && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-server-probe-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
-    timeout-minutes: 2
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     steps:
-      - name: Verify server pickup
-        run: node -e 'require("node:assert/strict").equal(2 + 2, 4); console.log("Server pickup probe executed")'
+      - name: Verify planner guest tools
+        timeout-minutes: 1
+        run: |
+          failed=0
+          date -u
+          for tool in gh node pnpm timeout git jq; do
+            if command -v "$tool"; then :; else failed=1; fi
+          done
+          node --version || failed=1
+          pnpm --version || failed=1
+          gh --version || failed=1
+          timeout 2 sh -c 'exit 0' || failed=1
+          exit "$failed"
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+          GIT_TRACE2_EVENT: 1
+      - name: Verify full history and authenticated API
+        timeout-minutes: 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(git rev-parse --is-shallow-repository)" = false
+          git merge-base origin/main HEAD
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .id
+          node -e 'require("node:assert/strict").equal(process.version, "v26.13.0")'
+          test "$(pnpm --version)" = 9.15.0
+          date -u
 
   # The aggregate gate. This file's header covers what branch protection requires and why the job
   # ids above are free to change; what follows is only how this job itself works.
