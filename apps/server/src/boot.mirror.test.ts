@@ -157,7 +157,7 @@ beforeAll(async () => {
   await seedIdentity(db.noConfig);
   await db.mirror
     .insert(persons)
-    .values({ id: MIRROR_STAFF_ID, displayName: "Marta", role: "staff" });
+    .values({ id: MIRROR_STAFF_ID, displayName: "Martha", role: "staff" });
   // The primary directory writes no `node_mode` row: `readNodeMode` reads it as 'primary'.
   await stampDeployment(db.mirror, "preproduction");
   await setNodeMode(

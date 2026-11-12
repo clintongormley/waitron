@@ -51,7 +51,7 @@ beforeEach(async () => {
   });
   const [person] = await suite.db
     .insert(persons)
-    .values({ displayName: "Ana", pinHash: "scrypt$00$00", role: "staff" })
+    .values({ displayName: "Anna", pinHash: "scrypt$00$00", role: "staff" })
     .returning({ id: persons.id });
   personId = person!.id;
   const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-01-05" }));

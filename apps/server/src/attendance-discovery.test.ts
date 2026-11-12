@@ -95,7 +95,7 @@ beforeEach(async () => {
   deviceId = (await seedDevice(suite.db)).deviceId;
   const [person] = await suite.db
     .insert(persons)
-    .values({ displayName: "Ana", pinHash: "scrypt$00$00", role: "admin" })
+    .values({ displayName: "Anna", pinHash: "scrypt$00$00", role: "admin" })
     .returning({ id: persons.id });
   personId = person!.id;
 });
