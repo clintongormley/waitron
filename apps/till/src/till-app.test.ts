@@ -22,6 +22,7 @@ import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   adjustmentStubs,
+  cancellationStubs,
   cancelThroughDialog,
   cleanupWidgets,
   expectNoA11yViolations,
@@ -523,6 +524,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
     ...adjustmentStubs(),
+    ...cancellationStubs("wo-7"),
     moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
     joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
@@ -9958,7 +9960,6 @@ describe("till-app", () => {
         }
       });
 
-      // ── Coursing corrections: send / recall / cancel line actions ─────────────────────────────
       it("send-lines fires the held lines on the tab then reloads its lines", async () => {
         const sendLines = vi.fn().mockResolvedValue(undefined);
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
@@ -9993,21 +9994,23 @@ describe("till-app", () => {
       });
 
       it("a cancel records the started line's cancel then reloads its lines", async () => {
-        const { applyAdjustment } = adjustmentStubs();
+        const { getCancellation, cancelItem } = cancellationStubs("wo-7");
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          applyAdjustment,
+          getCancellation,
+          cancelItem,
           getTabLines,
         });
         const screen = await toTableOrder(el, openTable);
 
         await cancelThroughDialog(el, screen, "line-1", () => flush(el));
 
-        expect(applyAdjustment).toHaveBeenCalledWith(
-          "wo-7",
-          expect.objectContaining({ lineId: "line-1", action: "cancel" }),
+        expect(cancelItem).toHaveBeenCalledWith(
+          "v-2",
+          "line-1",
+          expect.objectContaining({ quantity: "1", outcome: "remove_charge" }),
           expect.anything(),
         );
         expect(getTabLines).toHaveBeenCalledTimes(2);
@@ -10038,14 +10041,14 @@ describe("till-app", () => {
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
-          applyAdjustment: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
+          cancelItem: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
         });
         const screen = await toTableOrder(el, openTable);
 
         await cancelThroughDialog(el, screen, "line-1", () => flush(el));
 
         expect(tableOrder(el)).not.toBeNull();
-        const dialog = el.shadowRoot!.querySelector("till-adjustment-dialog")!;
+        const dialog = el.shadowRoot!.querySelector("till-cancel-item-dialog")!;
         expect(
           dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
             .error,

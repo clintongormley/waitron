@@ -51,7 +51,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import "./errors.js";
-import { cancelBody } from "./testing/cancel-line.js";
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import { descendingIds } from "./testing/descending-ids.js";
 
 // The loop's half of a card bill payment (bill payments design §5.4, §8 tests 13 and 16): a pending
@@ -270,13 +270,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
     const [payment] = await paymentRows(venue, billId);
 
     const pass = await settle();
-    const voided = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(venue.db, billId, 2),
-    );
+    const voided = await cancelItemHttp(venue.db, venue.app, venue.cookie, billId, 2);
 
     expect(pass).toMatchObject({ received: 0, failed: 0 });
     expect(pass.pending).toBe(await stillPending());

@@ -19,6 +19,7 @@ import { saleId as brandSaleId } from "@waitron/shared";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createTable } from "./testing/live-table.js";
 import { send } from "./testing/bill-venue.js";
+import { cancelItemRequest } from "./testing/cancel-line.js";
 import {
   inTx,
   PINS,
@@ -144,14 +145,14 @@ async function submit(who: Member, partyId: string, submitted: Draft): Promise<v
   });
 }
 
-async function lineNamed(billId: string, name: string): Promise<string> {
+async function lineNamed(billId: string, name: string): Promise<{ id: string; lineNo: number }> {
   const [row] = await inTx(venue, (tx) =>
     tx
-      .select({ id: workingOrderLines.id })
+      .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
       .from(workingOrderLines)
       .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.name, name))),
   );
-  return row!.id;
+  return row!;
 }
 
 async function adjust(
@@ -160,6 +161,15 @@ async function adjust(
   dish: string,
   action: "cancel" | "comp",
 ): Promise<void> {
+  const line = await lineNamed(billId, dish);
+  if (action === "cancel") {
+    const { path, body } = await cancelItemRequest(venue.db, billId, line.lineNo, undefined, {
+      reasonId: venue.reasonId.houseVoid,
+      preparationStarted: true,
+    });
+    await call(who, "POST", path, body);
+    return;
+  }
   const [bill] = await inTx(venue, (tx) =>
     tx
       .select({ revision: workingOrders.revision })
@@ -169,8 +179,8 @@ async function adjust(
   await call(who, "POST", `/api/working-orders/${billId}/adjustments`, {
     submissionId: randomUUID(),
     expectedRevision: bill!.revision,
-    lineId: await lineNamed(billId, dish),
-    reasonId: action === "cancel" ? venue.reasonId.houseVoid : venue.reasonId.house,
+    lineId: line.id,
+    reasonId: venue.reasonId.house,
     action,
     note: null,
   });
