@@ -2220,8 +2220,8 @@ a name. Joined design rows remain reset metadata; their members become the live 
 A table waits, its reset row left pending, while a party holds it, a module refuses to let it go,
 or it needs clearing. `waitingTogether` grows that set until it is closed: a merge with a waiting
 table waits whole, as does a saved group with a waiting member or food on its way to one.
-A group containing an outside member waits until that member leaves; a subgroup wholly inside
-the saved membership may reform.
+Outside a full reset, a group containing an outside member waits until that member leaves;
+a subgroup wholly inside the saved membership may reform. A full reset may dissolve free groups.
 
 Inside a reset a free table goes to its new place at once. Outside one, the catch-up never moves a
 table drawn on today's map: a pending row whose table would move (`movesTable`,
@@ -2239,9 +2239,7 @@ applied a placed row; ending it, rather than leaving it waiting, keeps a member 
 making every floor read run the catch-up (`catchUpDue`). A row that gives its table a new name or
 short name, as a dashboard rename does, stays waiting, marked placed and not ready to move, so the
 catch-up gives the table its names, as for any row waiting only for its names, and never marks it
-again; while another table holds either name it keeps waiting. A row with no table yet (a joined
-table still to be made) is ended, because the catch-up makes the table of a waiting row with no
-table without reading `placed`. The catch-up reads only waiting rows and skips placed ones, so none
+again; while another table holds either name it keeps waiting. A saved group's metadata row has no live table and is ended rather than marked placed. The catch-up reads only waiting rows and skips placed ones, so none
 of these is marked again until a reset rewrites the zone's rows; that reset treats them as any reset
 does: a free table goes to its new place, or is marked again when that place is still taken; a table
 with guests waits and, once free, is marked whatever stands in its new place. Once none of a marked
@@ -2313,7 +2311,8 @@ A table's name for today is `floor_today_tables.name`, a group's is
 refused `table.label_taken` when, compared after `normalize("NFC")` and `toLowerCase()` in
 JavaScript (`sameName`), it is the saved name of another table or the today's name
 of another group or of another table on the map, spare or taken off; a group's own tables count as
-other tables. A reset clears a table's name when it puts the table back (`todayColumns`). A group's name goes
+other tables. Saved joined-group names remain reserved after a full split; a remaining group can restore its
+saved name. A reset clears a table's name when it puts the table back (`todayColumns`). A group's name goes
 with its row when the group ends; a remaining group keeps it after a split. The room's print reads both columns, so a rename moves the revision.
 Bills, receipts, kitchen tickets and MOVED slips, the expo board and pass screens, overdue orders
 and the floor's party name read a table's shown name — its group's today's name, else its own, else

@@ -68,8 +68,7 @@ export async function markMoved(
  * Leaves a table that needs moving, and every table of a pending joined group holding it, in the
  * place today's map gives it until the next reset rewrites the rows. A row whose table does not
  * yet have the row's label and short name is marked placed but left pending, so the catch-up still
- * gives the table its new names. A row with no table is ended rather than marked placed, because
- * the catch-up makes such a table without reading `placed`.
+ * gives the table its new names.
  */
 export async function leaveHere(
   tx: Transaction,
@@ -113,7 +112,7 @@ export async function leaveHere(
 /**
  * Throws what still holds back the group of `tables`, which Mark moved could not apply: food on
  * its way, a party, a table needing clearing or a module's refusal to let a table go, at one of
- * them or at a table tied to them by today's merges and splits or a pending joined group, as the
+ * them or at a table tied to them by today's merges or a pending joined group, as the
  * catch-up's waiting rules (`waitingTogether`) tie them. `table.needs_moving` is the answer when none of those is found.
  */
 async function refuseHeldBack(
