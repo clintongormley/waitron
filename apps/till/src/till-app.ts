@@ -11542,8 +11542,11 @@ export class TillApp extends LitElement {
     try {
       ticket = await send.api.getFiledTicket(billId);
     } catch {
-      // The bill is closed: nothing is sent again.
-      if (send.live()) this.errorKey = "deferred_close.ticket_unread";
+      // The bill is closed: nothing is sent again, and the basket lets it go.
+      if (!send.live()) return;
+      this.#releaseCounterOrder(billId);
+      this.errorKey = "deferred_close.ticket_unread";
+      await this.#refreshAfterWrite("held", "refresh.held_after_sale");
       return;
     }
     if (!send.same()) return;
@@ -20704,13 +20707,13 @@ export class TillApp extends LitElement {
   /** A device with no counter screen holds a counter bill only to pay it from Find a bill, so the
    * basket lets it go when that pay window closes. */
   #releaseFoundCounterBill(open: PayingOrder): void {
-    if (
-      open.surface !== "counter" ||
-      this.#resolveScreen("counter") === "counter" ||
-      this.#counterOrderInFlight() ||
-      this.#store.id !== open.billId
-    )
-      return;
+    if (open.surface !== "counter" || this.#resolveScreen("counter") === "counter") return;
+    this.#releaseCounterOrder(open.billId);
+  }
+
+  /** The basket lets order `billId` go, unless it holds another order or one still being sent. */
+  #releaseCounterOrder(billId: string): void {
+    if (this.#counterOrderInFlight() || this.#store.id !== billId) return;
     this.#dismissStationChoices();
     this.#clearBasket();
     this.stage = "order";

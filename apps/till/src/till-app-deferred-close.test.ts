@@ -730,6 +730,23 @@ it("closes a Counter bill as a deferred payment, sending a simplified invoice wi
   expect(documents(el)).not.toBeNull();
 });
 
+it("a failed receipt read after a Counter close lets the order go and reads the held list again", async () => {
+  const { api, el } = await counterPay({
+    getFiledTicket: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+  });
+  deferredButton(el)!.click();
+  await flush(el);
+  const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(documents(el)).toBeNull();
+  expect(text(el.shadowRoot!.querySelector(".error"))).toContain(t("deferred_close.ticket_unread"));
+  expect(
+    el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!.store.lines,
+  ).toEqual([]);
+  expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(heldReads);
+});
+
 it.each(["declined", "failed"] as const)(
   "offers the Counter close on a bill whose only card payment %s",
   async (state) => {
