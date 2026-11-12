@@ -9,7 +9,6 @@ import { captureError } from "../testing/errors.js";
 import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
-import { venueLocationId } from "../venue.js";
 import { invoiceCorrections } from "./invoice-corrections.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
@@ -26,7 +25,6 @@ describe("invoice_corrections: the replay record of a cash correction", () => {
   beforeEach(async () => {
     db = suite.db;
     await seedVenue(db, { name: "Fix", invoiceLocales: ["en"], operationDescription: "Meals" });
-    const locationId = await venueLocationId(db);
     const nodeId = await seedNode(db);
     const { deviceId } = await seedDevice(db);
     const [series] = await db
@@ -73,7 +71,6 @@ describe("invoice_corrections: the replay record of a cash correction", () => {
         source: "device",
         deviceId,
         nodeId,
-        locationId,
         method: "cash",
         state: "completed",
         completedAt: AT,
