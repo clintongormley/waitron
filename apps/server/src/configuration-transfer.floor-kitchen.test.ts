@@ -63,27 +63,25 @@ it("exports neither today's keep-open nor station closure, and imports both as o
       .insert(floorPlanTables)
       .values({ zoneId: zone!.id, label: "Saved table", shortName: "S1" })
       .returning();
-    await tx
-      .insert(diningTables)
-      .values({
-        id: "export-table",
-        zoneId: zone!.id,
-        label: "Saved table",
-        shortName: "S1",
-        planTableId: master!.id,
-        ...todaySet({
-          seats: 6,
-          fixed: false,
-          x: 10,
-          y: 20,
-          width: 8,
-          height: 8,
-          shape: "rect",
-          rotation: 90,
-          takenOff: true,
-          name: "Today's name",
-        }),
-      });
+    await tx.insert(diningTables).values({
+      id: "export-table",
+      zoneId: zone!.id,
+      label: "Saved table",
+      shortName: "S1",
+      planTableId: master!.id,
+      ...todaySet({
+        seats: 6,
+        fixed: false,
+        x: 10,
+        y: 20,
+        width: 8,
+        height: 8,
+        shape: "rect",
+        rotation: 90,
+        takenOff: true,
+        name: "Today's name",
+      }),
+    });
     await tx.execute(
       sql`update floor_zones set today_business_day='2026-11-12', today_revision=7, today_layout_revision=3, today_occurrence='lunch' where id=${zone!.id}`,
     );
