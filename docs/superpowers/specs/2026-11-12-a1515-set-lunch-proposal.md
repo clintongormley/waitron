@@ -100,3 +100,39 @@ están al 21 %, y la sopa (6 €), el pollo (12 €) y el pan (1,50 €) al 10 %
 (2,48 € + 0,52 € de IVA), y el resto 15 € al 10 % (13,64 € + 1,36 € de IVA);
 los 3 € del pescado se añaden al 10 %. Si B: cuando no se toma café y se paga lo mismo,
 ¿se excluye el café del reparto?»
+
+## 12 November 2026, 18:39 request: reuse comparison
+
+**Recommend existing extras, rather than variants:** one €18 House lunch product; included
+product choices priced at €0 and hake at €3. This reuses the price components and child links.
+The missing work is course-by-course service and lunch presentation. **Needs owner review before
+a build plan.** These are source-inspection findings, not runtime verification.
+
+| Existing piece | Works today, unchanged | Extension or new behavior needed |
+| --- | --- | --- |
+| **Variants at €18/€21** | Select a variant and save its price on the parent line. | A variant records no separate €3 difference for the receipt. Preserving that breakdown is an extension, and chosen dishes and courses still need another mechanism. Extras already retain the priced child. [1] |
+| **Extras and options** | Extras choose real products, override prices, enforce minimum/maximum picks and quantity caps, and become attached child lines. Each course can have its own one-pick list. Options choose text labels, without priced children. | Extend the existing picker/basket for lunch. A remembered **choose later** state is new: required extras currently block Add; optional lists allow omission without remembering an outstanding course. [2] |
+| **Kitchen and later service** | Extras with explicit product/category station routes can become separate kitchen work, including beneath a no-preparation parent; otherwise they follow it. Tickets have unpriced dishes and parent references. | Extras inherit the parent's course. Started/served work can refuse changed selections; fired work can be resent. New lunch behavior must serve courses independently, accept later coffee, send only that choice, and close an untaken final choice at payment without changing the price. Reuse routing and ticket rendering. [3] |
+| **Bill and receipt** | Parent/child grouping retains €18 and €3 amounts. Extras, including €0 choices, currently show prices. | Extend presentation: name the €3 supplement, show dishes unpriced, and retain one item per diner through existing basket/receipt merging paths. [4] |
+| **Extra starter outside lunch** | Add ordinary Croquettes to the same bill as its own product line, with its ordinary price and kitchen routing. The demo price is €7.80. | No custom lunch inclusion. Keep it outside the indented lunch choices on till and receipt. [5] |
+
+The owner’s answers stand: one lunch item, later choice allowed, supplement priced separately.
+The proposed display is **House lunch €18 + hake supplement €3 + ordinary Croquettes €7.80 =
+€28.80**, with the lunch’s selected dishes beneath it unpriced. Add the second €18 lunch and the
+two-diner example totals **€46.80**. Adviser S10 remains open; no VAT treatment is chosen and the
+full invoice waits.
+
+**Sources inspected:** [1] `packages/catalogue/src/variants.ts::selectMenuVariant`;
+`apps/till/src/state/order-line.ts::productAsVariant`.
+[2] `packages/catalogue/src/extra-contract.ts::{priceForExtraPortion,validateExtraSelections}`;
+`option-contract.ts::validateOptionSelections` in that package;
+`apps/server/src/modifier-selection.ts::buildLineExtras`;
+`apps/till/src/widgets/modifier-picker.ts::TillModifierPicker.#satisfied`.
+[3] `packages/venue-service/src/routing.ts::{chooseExtraMaker,chooseExtraMakerBeside}`;
+`apps/server/src/working-order.ts::{fireLines,insertSplitExtras,applyLineEdits}`;
+`apps/server/src/kitchen-print.ts::buildTicketItems`.
+[4] `apps/till/src/widgets/basket.ts::TillBasket.render`;
+`apps/till/src/state/working-order.ts::WorkingOrderStore.addMerging`;
+`apps/server/src/receipt-lines.ts::{groupByParent,mergeIdenticalGroups,ticketLinesFrom}`.
+[5] `apps/server/src/working-order.ts::{addTabRound,priceTabRound,priceOrderLines,fireLines}`;
+`packages/country-es/src/demo/menu.ts:610–634`.
