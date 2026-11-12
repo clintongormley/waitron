@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { fetch as httpFetch } from "undici";
@@ -13,7 +14,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { deviceOrigin, seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
@@ -81,10 +82,10 @@ it.each([
         .insert(deviceProfiles)
         .values({ name: "Recovered till", formFactor: "till", capabilities: ["take-orders"] })
         .returning({ id: deviceProfiles.id });
-      const [person] = await store.venue
-        .insert(persons)
-        .values({ displayName: "Recovery administrator", role: "admin" })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(store.venue, {
+        displayName: "Recovery administrator",
+        role: "admin",
+      });
       const session = await withTransaction(store.venue, (tx) =>
         startManagementSession(tx, { personId: person!.id }),
       );

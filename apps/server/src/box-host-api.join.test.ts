@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
@@ -46,15 +47,12 @@ let supervisor: Person;
 
 async function seedPerson(role: PersonRoleValue, name: string, id?: string): Promise<Person> {
   return withTransaction(suite.db, async (tx) => {
-    const [p] = await tx
-      .insert(persons)
-      .values({
-        ...(id === undefined ? {} : { id }),
-        displayName: name,
-        pinHash: hashPin("1234"),
-        role,
-      })
-      .returning({ id: persons.id });
+    const [p] = await seedPersons(tx, {
+      ...(id === undefined ? {} : { id }),
+      displayName: name,
+      pinHash: hashPin("1234"),
+      role,
+    });
     const session = await startManagementSession(tx, { personId: p!.id });
     return { id: p!.id, token: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });

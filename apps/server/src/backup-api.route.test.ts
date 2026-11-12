@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -16,7 +17,7 @@ import type { SingletonRole } from "@waitron/db";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
@@ -295,7 +296,7 @@ async function setupTenant(): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     // Through drizzle, not raw SQL: `persons.id` and `persons.created_at` are filled by drizzle's
     // `$defaultFn`, so a statement that names neither is refused.
-    await tx.insert(persons).values({
+    await seedPersons(tx, {
       displayName: "The Manager",
       email: MANAGER_EMAIL,
       pinHash: hashPin("1234"),

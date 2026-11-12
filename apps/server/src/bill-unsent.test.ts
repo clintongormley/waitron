@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -8,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { orderDraftLines, orderDrafts, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons } from "@waitron/identity";
+
 import { insertCapturedPayment } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 import { issueIfFullyPaid } from "./bill-payments.js";
@@ -340,7 +341,7 @@ describe("unsent dishes block new payments on their own bill", () => {
   it("refuses each bill's own fresh dishes without owner details", async () => {
     const billId = await tabWith(venue, "Tarta");
     const ana = await unsent(billId, venue.operatorId, "1.25");
-    const [colleague] = await venue.db.insert(persons).values({ displayName: "Zoë" }).returning();
+    const [colleague] = await seedPersons(venue.db, { displayName: "Zoë" });
     const otherBillId = randomUUID();
     await inTx(venue, async (tx) => {
       const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));

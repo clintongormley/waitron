@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StatementSync } from "node:sqlite";
@@ -21,7 +22,7 @@ import {
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons, sessions, hashSessionToken } from "@waitron/identity";
+import { sessions, hashSessionToken } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
@@ -93,10 +94,11 @@ beforeEach(async () => {
   locationId = await venueLocationId(suite.db);
   nodeId = await seedNode(suite.db);
   deviceId = (await seedDevice(suite.db)).deviceId;
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Anna", pinHash: "scrypt$00$00", role: "admin" })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Anna",
+    pinHash: "scrypt$00$00",
+    role: "admin",
+  });
   personId = person!.id;
 });
 

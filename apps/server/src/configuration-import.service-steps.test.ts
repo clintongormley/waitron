@@ -30,7 +30,7 @@ it("a configuration import over a venue whose closed party has a completed step 
   const [operator] = await source.db
     .select({ id: persons.id })
     .from(persons)
-    .where(eq(persons.role, "admin"));
+    .where(eq(persons.email, "owner@example.test"));
   const bundle = {
     ...(await buildConfigurationBundle(
       source.db,

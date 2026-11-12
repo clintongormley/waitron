@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readBillEditState } from "./bill-editing.js";
 import { firstOpenBillOf } from "./testing/party-bill-of.js";
 import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
@@ -10,7 +11,7 @@ import { ADJUSTMENTS_ROUTES, type AdjustmentReport } from "@waitron/adjustments"
 import { recordVoid } from "@waitron/core";
 import { parties, sales, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, loginWithPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, loginWithPin, startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { ModuleRouteContext } from "@waitron/module";
 import { currentBusinessDay } from "@waitron/reporting";
@@ -70,10 +71,7 @@ interface Member {
 async function member(name: string, role: "staff" | "supervisor" = "staff"): Promise<Member> {
   const device = venue.cookie.staff.split("; ").find((part) => part.startsWith(DEVICE_COOKIE))!;
   return inTx(venue, async (tx) => {
-    const [row] = await tx
-      .insert(persons)
-      .values({ displayName: name, pinHash: hashPin("2468"), role })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(tx, { displayName: name, pinHash: hashPin("2468"), role });
     const session = await loginWithPin(tx, {
       deviceId: venue.deviceId,
       personId: row!.id,

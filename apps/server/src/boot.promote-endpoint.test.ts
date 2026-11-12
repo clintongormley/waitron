@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   locations,
@@ -155,16 +156,15 @@ async function seedTillIdentity(db: Database, node: NodeDatabase): Promise<void>
       name: "Promote Endpoint node",
     })
     .onConflictDoNothing();
-  await db
-    .insert(persons)
-    .values({
+  if (!(await db.select({ id: persons.id }).from(persons).where(eq(persons.id, ADMIN_ID)))[0]) {
+    await seedPersons(db, {
       id: ADMIN_ID,
       displayName: "Promote Admin",
       pinHash: hashPin("1234"),
       passwordHash: hashPassword(ADMIN_PW),
       role: "admin",
-    })
-    .onConflictDoNothing();
+    });
+  }
   await establishNodeIdentity({ ownerDb: db, node, ring: RING }, TILL_ENV.WAITRON_NODE_ID);
 }
 

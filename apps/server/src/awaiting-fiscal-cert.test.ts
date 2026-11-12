@@ -2,6 +2,7 @@
  * A primary with no `fiscal.aeat` certificate: the drain must not crash, must not submit, must leave
  * the chain untouched, and must surface the awaiting-certificate state on box-status, logged once.
  */
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -9,7 +10,7 @@ import { withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { envios, FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 // Seeds a due `envios` row and its registro WITHOUT a `fiscal.aeat` credential.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
@@ -42,7 +43,7 @@ beforeAll(() => {
  * generators, which a raw insert never reaches. */
 async function seedManager(): Promise<void> {
   await withTransaction(db, async (tx) => {
-    await tx.insert(persons).values({
+    await seedPersons(tx, {
       displayName: "The Manager",
       email: MANAGER_EMAIL,
       pinHash: hashPin("1234"),

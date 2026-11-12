@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createStaffApp } from "./cloud-remote.js";
 import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   contentSuggestionJobs,
@@ -47,7 +48,7 @@ beforeEach(async () => {
   await seedVenueSettings(suite.db);
   await inTx(async (tx) => {
     for (const role of ["manager", "staff"] as const) {
-      const [person] = await tx.insert(persons).values({ displayName: role, role }).returning();
+      const [person] = await seedPersons(tx, { displayName: role, role });
       const session = await startManagementSession(tx, { personId: person!.id });
       const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
       if (role === "manager") managerCookie = cookie;

@@ -1,8 +1,9 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Hono } from "hono";
 import type { TLSSocket } from "node:tls";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { putCredential } from "@waitron/credentials";
 import { withTransaction } from "@waitron/db";
@@ -18,7 +19,7 @@ import {
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { SIN_DATOS_BODY } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { startDiagnosticServer } from "@waitron/fiscal-verifactu/test/certificate-diagnosis-fixtures.js";
-import { endManagementSession, managementSessions, persons } from "@waitron/identity";
+import { endManagementSession, managementSessions } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountFiscalCertificateApi } from "./fiscal-certificate-api.js";
 import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
@@ -162,10 +163,7 @@ describe("real certificate diagnosis through HTTP and the isolated module child"
           await withTransaction(suite.db, async (tx) => {
             if (mode === "revoked") await endManagementSession(tx, f.session.token);
             if (mode === "permission")
-              await tx
-                .update(persons)
-                .set({ role: "supervisor" })
-                .where(eq(persons.id, f.session.personId));
+              await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
             if (mode === "stale")
               await putCredential(tx, f.deps.ring, {
                 purpose: "fiscal.aeat",

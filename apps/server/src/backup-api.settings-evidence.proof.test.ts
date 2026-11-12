@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 // What `GET /api/backup/settings-evidence` must never do: change anything, wait for a Save, turn
 // backups on, carry a secret, or answer without `system.manage`. Real venue database, real key rings,
@@ -18,7 +19,7 @@ import {
   tenantCredentials,
   type KeyRing,
 } from "@waitron/credentials";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { planVenue } from "@waitron/provisioning";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -288,10 +289,12 @@ async function setupTenant(): Promise<void> {
   );
   cookies = await withTransaction(suite.db, async (tx) => {
     const start = async (role: "manager" | "staff") => {
-      const [inserted] = await tx
-        .insert(persons)
-        .values({ displayName: role, pinHash: hashPin("1234"), role, email: `${role}@x.com` })
-        .returning({ id: persons.id });
+      const [inserted] = await seedPersons(tx, {
+        displayName: role,
+        pinHash: hashPin("1234"),
+        role,
+        email: `${role}@x.com`,
+      });
       const session = await startManagementSession(tx, { personId: inserted!.id });
       await setFreshManagementSignIn(tx, session.token);
       return `${MANAGEMENT_COOKIE}=${session.token}`;

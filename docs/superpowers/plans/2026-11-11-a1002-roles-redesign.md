@@ -657,6 +657,8 @@ editabas. Recarga para verlos; tus cambios se conservan hasta entonces."
 
 ## PR 5 — Test people and test devices behind helpers (A1002 cut 6)
 
+> 2026-11-12, watcher 07:07: split into PR 5a (Tasks 5.1–5.2) and PR 5b (Tasks 5.3–5.5), both before PR 1. PR 5a retains its 2,550-line forecast and 3,825 outside-opinion stop. Review the tool rules and handwritten changes, and sample tool output; each PR records reproducible commands and separate tool/hand counts.
+
 **Outcome:** every test creates and changes people through `seedPersons` and
 `setBuiltInRoleForTest`, and creates device profiles through `seedDeviceProfiles`; today the
 helpers write exactly what the tests wrote. No product code changes. **Depends on:** nothing.
@@ -682,7 +684,7 @@ export function seedDeviceProfiles(db: Database | Transaction, values: DevicePro
 profile through `seedDeviceProfiles`. `packages/db/src/testing/` is under coverage and mutation,
 so the helper has its own test.
 
-- [ ] **Step 1–4:** one and many rows, full rows returned, default staff, role round-trip.
+- [x] **Step 1–4:** one and many rows, full rows returned, default staff, role round-trip.
   **Step 5: Commit.**
 
 ### Task 5.2–5.4: People codemod (three tasks)
@@ -707,9 +709,13 @@ Other shapes (`.onConflictDoNothing()`, raw `sql\`update persons set role…\``,
 `persons.role`) are rewritten by hand with the helpers.
 
 - [ ] **Each task:** run the script; typecheck the package; fix what it flags; then
-  `git grep -nE 'insert\(persons\)|set\(\{ ?role|set role\b|persons\.role' -- '<the task's paths>/**/*.test.ts' '<the task's paths>/**/testing/**'`
-  prints nothing, and `git diff --stat` shows no production file. Run the touched tests in groups
+  `git grep -nE 'insert\(persons\)|set\(\{ ?role|update persons set role|persons\.role' -- '<the task's paths>/**/*.test.ts' '<the task's paths>/**/testing/**'`
+  leaves only the explicitly recorded copied-file corruption exception. Inspect each remaining
+  `update(persons)` call by hand, including variable and conditional patches. `git diff --stat`
+  shows no production file. Run the touched tests in groups
   of about 40, reading each `Tests` count. **Commit.**
+
+> 2026-11-12, watcher 07:23: the “person who authorised the handover, according to the copy” corruption group in handover-compare.test.ts keeps its deliberate copied-file role mutations until PR 11. Keep every refusal assertion; add no helper solely for injecting invalid copied data.
 
 ### Task 5.5: Device-profile codemod
 

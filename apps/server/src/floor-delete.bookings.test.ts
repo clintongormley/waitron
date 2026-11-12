@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -13,7 +14,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { bookings } from "@waitron/bookings";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { liveResourceTypes } from "./live-resources.js";
@@ -37,10 +38,11 @@ for (const enabled of [true, false]) {
     it("streams hierarchy interests without optional bookings and delivers installed booking table events", async () => {
       await seedTenant(suite.db);
       const session = await withTransaction(suite.db, async (tx) => {
-        const [person] = await tx
-          .insert(persons)
-          .values({ displayName: "Hierarchy manager", pinHash: hashPin("1234"), role: "manager" })
-          .returning();
+        const [person] = await seedPersons(tx, {
+          displayName: "Hierarchy manager",
+          pinHash: hashPin("1234"),
+          role: "manager",
+        });
         return startManagementSession(tx, { personId: person!.id });
       });
       await seedVenue(suite.db, {

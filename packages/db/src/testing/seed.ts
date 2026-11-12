@@ -147,6 +147,14 @@ export async function seedKitchenStation(
   return row!.id;
 }
 
+export type DeviceProfileInsert = typeof deviceProfiles.$inferInsert;
+export async function seedDeviceProfiles(
+  db: Database | Transaction,
+  values: DeviceProfileInsert | readonly DeviceProfileInsert[],
+): Promise<(typeof deviceProfiles.$inferSelect)[]> {
+  return db.insert(deviceProfiles).values([values].flat()).returning();
+}
+
 let deviceCounter = 0;
 
 /** Pairs one active device on `profileId` or on a new
@@ -166,14 +174,11 @@ export async function seedDevice(
   const profileId =
     opts.profileId ??
     (
-      await db
-        .insert(deviceProfiles)
-        .values({
-          name: `Profile ${deviceCounter}`,
-          formFactor: opts.formFactor ?? "till",
-          capabilities: opts.capabilities ?? [],
-        })
-        .returning({ id: deviceProfiles.id })
+      await seedDeviceProfiles(db, {
+        name: `Profile ${deviceCounter}`,
+        formFactor: opts.formFactor ?? "till",
+        capabilities: opts.capabilities ?? [],
+      })
     )[0]!.id;
   const [row] = await db
     .insert(devices)

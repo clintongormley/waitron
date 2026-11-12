@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -8,7 +9,7 @@ import { expect, it } from "vitest";
 import { invoiceSeries, nodes, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { seedTenants, TENANT_A, TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
@@ -52,10 +53,12 @@ it("the actual trading listener downloads the named node key and signed register
     .insert(invoiceSeries)
     .values(bases.map((base) => ({ ...base, code: `${base.code}-S000001`, nodeId: node.nodeId })));
   const token = await withTransaction(suite.db, async (tx) => {
-    const [admin] = await tx
-      .insert(persons)
-      .values({ displayName: "Owner", role: "admin", pinHash: "unused", passwordHash: "unused" })
-      .returning();
+    const [admin] = await seedPersons(tx, {
+      displayName: "Owner",
+      role: "admin",
+      pinHash: "unused",
+      passwordHash: "unused",
+    });
     const session = await startManagementSession(tx, { personId: admin!.id });
     await setFreshManagementSignIn(tx, session.token);
     return session.token;

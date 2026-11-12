@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import {
   saveDraftForTest as saveDraft,
@@ -17,7 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor, manifestSets } from "@waitron/migrations";
 import { eq } from "drizzle-orm";
 import { finishTable } from "./testing/party-close-fixture.js";
-import { persons } from "@waitron/identity";
+
 import { AppError } from "@waitron/shared";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
@@ -33,14 +34,16 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-05T09:00:00.987Z"));
   v = await setupPartyVenue(suite.db);
-  await suite.db
-    .insert(persons)
-    .values({ id: OPERATOR, displayName: "Draft author", pinHash: "scrypt$00$00" });
+  await seedPersons(suite.db, {
+    id: OPERATOR,
+    displayName: "Draft author",
+    pinHash: "scrypt$00$00",
+  });
   ({ partyId, tabId } = await seat(v, await v.table("Attendance")));
-  const [row] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Actual taker", pinHash: "scrypt$00$00" })
-    .returning({ id: persons.id });
+  const [row] = await seedPersons(suite.db, {
+    displayName: "Actual taker",
+    pinHash: "scrypt$00$00",
+  });
   other = row!.id;
 });
 afterEach(() => vi.useRealTimers());

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createServer, type AddressInfo } from "node:net";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -7,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { StartedServer } from "./boot.js";
@@ -97,17 +98,14 @@ async function prepareBox(
     WAITRON_BACKUP_INTERVAL_MS: "86400000",
   };
   beforeServerStarts();
-  const [admin] = await suite.db
-    .insert(persons)
-    .values({
-      displayName: "Email Clock Admin",
-      pinHash: hashPin("1234"),
-      passwordHash: hashPassword(PASSWORD),
-      email: "clock-admin@example.test",
-      role: "admin",
-      locale: "en-GB",
-    })
-    .returning({ id: persons.id });
+  const [admin] = await seedPersons(suite.db, {
+    displayName: "Email Clock Admin",
+    pinHash: hashPin("1234"),
+    passwordHash: hashPassword(PASSWORD),
+    email: "clock-admin@example.test",
+    role: "admin",
+    locale: "en-GB",
+  });
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: admin!.id }),
   );
@@ -143,18 +141,15 @@ async function startEmailBox(path: EmailPath, invitees: number) {
     if (path !== "profile") {
       for (let index = 0; index < invitees; index++) {
         beforeServerStarts();
-        const [person] = await suite.db
-          .insert(persons)
-          .values({
-            displayName: `Invitee ${index}`,
-            pinHash: hashPin("1234"),
-            email: `invitee-${index}@example.test`,
-            role: "staff",
-            status: path === "invitation" ? "pending" : "active",
-            passwordHash: hashPassword(PASSWORD),
-            locale: "en-GB",
-          })
-          .returning({ id: persons.id });
+        const [person] = await seedPersons(suite.db, {
+          displayName: `Invitee ${index}`,
+          pinHash: hashPin("1234"),
+          email: `invitee-${index}@example.test`,
+          role: "staff",
+          status: path === "invitation" ? "pending" : "active",
+          passwordHash: hashPassword(PASSWORD),
+          locale: "en-GB",
+        });
         inviteeIds.push(person!.id);
       }
     }

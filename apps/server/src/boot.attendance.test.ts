@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -130,14 +131,11 @@ for (const enabled of [true, false]) {
         let other: string | undefined;
         if (enabled) {
           await withTransaction(suite.db, async (tx) => {
-            const [person] = await tx
-              .insert(persons)
-              .values({
-                displayName: "Missing worker",
-                email: "missing@example.test",
-                locale: "es-ES",
-              })
-              .returning();
+            const [person] = await seedPersons(tx, {
+              displayName: "Missing worker",
+              email: "missing@example.test",
+              locale: "es-ES",
+            });
             other = person!.id;
             await new WorkforceBackend().clockIn(tx, {
               nodeId: f.venue.cfg.nodeId,

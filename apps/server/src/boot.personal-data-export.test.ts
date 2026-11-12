@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -8,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import type { StartedServer } from "./boot.js";
@@ -45,13 +46,10 @@ describe("the personal-data downloads in a real start", () => {
       body: JSON.stringify({ expectedEntryId: null }),
     });
     expect(clockedIn.status).toBe(200);
-    const [admin, manager] = await suite.db
-      .insert(persons)
-      .values([
-        { displayName: "Ada Admin", email: "ada@example.test", role: "admin" },
-        { displayName: "Mia Manager", email: "mia@example.test", role: "manager" },
-      ])
-      .returning({ id: persons.id });
+    const [admin, manager] = await seedPersons(suite.db, [
+      { displayName: "Ada Admin", email: "ada@example.test", role: "admin" },
+      { displayName: "Mia Manager", email: "mia@example.test", role: "manager" },
+    ]);
     const [adminSession, managerSession] = await withTransaction(suite.db, async (tx) => {
       const adminSession = await startManagementSession(tx, { personId: admin!.id });
       await setFreshManagementSignIn(tx, adminSession.token);

@@ -1,4 +1,5 @@
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { X509Certificate } from "node:crypto";
 import { connect as tlsConnect } from "node:tls";
@@ -192,16 +193,13 @@ describe("startServer, against a migrated venue directory", () => {
     const venue = await freshVenue();
     const db = venue.store.venue;
     await seedTradingVenue(db);
-    const [admin] = await db
-      .insert(persons)
-      .values({
-        displayName: "Sealed Admin",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword("dashPass123"),
-        email: "sealed-admin@example.test",
-        role: "admin",
-      })
-      .returning({ id: persons.id });
+    const [admin] = await seedPersons(db, {
+      displayName: "Sealed Admin",
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword("dashPass123"),
+      email: "sealed-admin@example.test",
+      role: "admin",
+    });
     const session = await withTransaction(db, (tx) =>
       startManagementSession(tx, { personId: admin!.id }),
     );
@@ -517,16 +515,13 @@ describe("startServer, against a migrated venue directory", () => {
     const venue = await freshVenue();
     const db = venue.store.venue;
     await seedTradingVenue(db);
-    const [admin] = await db
-      .insert(persons)
-      .values({
-        displayName: "First Start Admin",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword("dashPass123"),
-        email: "first-start-admin@example.test",
-        role: "admin",
-      })
-      .returning({ id: persons.id });
+    const [admin] = await seedPersons(db, {
+      displayName: "First Start Admin",
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword("dashPass123"),
+      email: "first-start-admin@example.test",
+      role: "admin",
+    });
     const session = await withTransaction(db, (tx) =>
       startManagementSession(tx, { personId: admin!.id }),
     );
@@ -622,16 +617,13 @@ describe("startServer, against a migrated venue directory", () => {
         try {
           const db = venue.store.venue;
           await seedTradingVenue(db);
-          const [admin] = await db
-            .insert(persons)
-            .values({
-              displayName: "Restored Trigger Admin",
-              pinHash: hashPin("1234"),
-              passwordHash: hashPassword("dashPass123"),
-              email: "restored-trigger-admin@example.test",
-              role: "admin",
-            })
-            .returning({ id: persons.id });
+          const [admin] = await seedPersons(db, {
+            displayName: "Restored Trigger Admin",
+            pinHash: hashPin("1234"),
+            passwordHash: hashPassword("dashPass123"),
+            email: "restored-trigger-admin@example.test",
+            role: "admin",
+          });
           const session = await withTransaction(db, (tx) =>
             startManagementSession(tx, { personId: admin!.id }),
           );

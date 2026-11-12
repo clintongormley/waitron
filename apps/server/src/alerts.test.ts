@@ -1,4 +1,5 @@
 // Reads on one transaction.
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { incidents, withTransaction, type Database, type Transaction } from "@waitron/db";
@@ -6,7 +7,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron/core";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import type { AlertSource } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
 import { AppError, backupOrigin, deviceOrigin, type DeviceId } from "@waitron/shared";
@@ -542,10 +543,11 @@ describe("readHandledAlerts", () => {
   it("lists handled events from the last 30 days with who handled them", async () => {
     const v = await seedVenueWithTill();
     const person = await asApp(async (tx) => {
-      const [p] = await tx
-        .insert(persons)
-        .values({ displayName: "Ada", pinHash: hashPin("1234"), role: "manager" })
-        .returning({ id: persons.id });
+      const [p] = await seedPersons(tx, {
+        displayName: "Ada",
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
       return p!.id;
     });
     await raise(v, "payment.refund_unresolved", "error", NOW);

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mkdirSync } from "node:fs";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
@@ -155,9 +156,7 @@ beforeAll(async () => {
   await seedIdentity(db.mirror);
   await seedIdentity(db.primary);
   await seedIdentity(db.noConfig);
-  await db.mirror
-    .insert(persons)
-    .values({ id: MIRROR_STAFF_ID, displayName: "Martha", role: "staff" });
+  await seedPersons(db.mirror, { id: MIRROR_STAFF_ID, displayName: "Martha", role: "staff" });
   // The primary directory writes no `node_mode` row: `readNodeMode` reads it as 'primary'.
   await stampDeployment(db.mirror, "preproduction");
   await setNodeMode(
@@ -510,9 +509,11 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       beforeServerStarts();
       const token = mintSessionToken();
       await withTransaction(db[venue], async (tx) => {
-        await tx
-          .insert(persons)
-          .values({ id: MIRROR_VIEWER_PERSON_ID, displayName: "Old viewer", role: "admin" });
+        await seedPersons(tx, {
+          id: MIRROR_VIEWER_PERSON_ID,
+          displayName: "Old viewer",
+          role: "admin",
+        });
         await tx.insert(managementSessions).values({
           id: MIRROR_VIEWER_SESSION_ID,
           personId: MIRROR_VIEWER_PERSON_ID,
@@ -558,9 +559,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     const token = mintSessionToken();
     const personId = crypto.randomUUID();
     await withTransaction(db.mirror, async (tx) => {
-      await tx
-        .insert(persons)
-        .values({ id: personId, displayName: "Administrator", role: "admin" });
+      await seedPersons(tx, { id: personId, displayName: "Administrator", role: "admin" });
       await tx.insert(managementSessions).values({ personId, tokenHash: hashSessionToken(token) });
     });
     await expect(

@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { billPayments, newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons } from "@waitron/identity";
+
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { readBillEditState } from "./bill-editing.js";
 import { billPaymentIsLive, takeReaderBillPayment } from "./bill-payments.js";
@@ -20,10 +21,10 @@ const suite = useVenueDb({
 let v: PartyVenue, billId: string, collector: { personId: string; sessionId: string };
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
-  const [worker] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Collector", pinHash: "scrypt$00$00" })
-    .returning({ id: persons.id });
+  const [worker] = await seedPersons(suite.db, {
+    displayName: "Collector",
+    pinHash: "scrypt$00$00",
+  });
   collector = {
     personId: worker!.id,
     sessionId: await openTillSession(suite.db, {

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { findAdministrativeArea } from "@waitron/country";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -17,7 +18,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { stringToCents } from "@waitron/shared";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -329,10 +330,7 @@ it.each(["mirror", "primary"] as const)(
         fiscalState: "not_applicable",
       });
     }
-    const [person] = await source.db
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin" })
-      .returning();
+    const [person] = await seedPersons(source.db, { displayName: "Administrator", role: "admin" });
     const session = await withTransaction(source.db, (tx) =>
       startManagementSession(tx, { personId: person!.id }),
     );

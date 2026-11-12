@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
@@ -8,7 +9,7 @@ import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import {
   MEDIA_MODULE,
   mediaImages,
@@ -74,10 +75,7 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
   await suite.db
     .insert(departmentReceipts)
     .values({ departmentId: department!.id, receipt: savedReceipt });
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: randomUUID(), role })
-    .returning();
+  const [person] = await seedPersons(suite.db, { displayName: randomUUID(), role });
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );
@@ -215,7 +213,7 @@ describe("replacement department receipt HTTP contract", () => {
     const changedPolicy = { ...policy };
     expect((await f.put(body({ policy: changedPolicy }))).status).toBe(204);
     expect((await rows()).policies[0]).toMatchObject(changedPolicy);
-    await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, f.personId));
+    await setBuiltInRoleForTest(suite.db, f.personId, "staff");
     const before = await rows();
     await refusal(
       await f.put(body({ policy: { ...policy, printTradingName: false } })),
@@ -619,8 +617,7 @@ describe("replacement department receipt HTTP contract", () => {
       let concurrent: Awaited<ReturnType<typeof rows>> | undefined;
       vi.spyOn(logoModule, "drawLogoRasters").mockImplementation(async (bytes) => {
         await withTransaction(suite.db, async (tx) => {
-          if (kind === "permission")
-            await tx.update(persons).set({ role: "staff" }).where(eq(persons.id, f.personId));
+          if (kind === "permission") await setBuiltInRoleForTest(tx, f.personId, "staff");
           if (kind === "department")
             await tx
               .update(departments)
@@ -628,7 +625,7 @@ describe("replacement department receipt HTTP contract", () => {
               .where(eq(departments.id, f.departmentId));
           if (kind === "languages") await seedVenueSettings(tx, { contentLanguages: ["es", "en"] });
           if (kind === "policy") {
-            await tx.update(persons).set({ role: "staff" }).where(eq(persons.id, f.personId));
+            await setBuiltInRoleForTest(tx, f.personId, "staff");
             await tx
               .update(departmentSalePolicies)
               .set({ printTradingName: false })

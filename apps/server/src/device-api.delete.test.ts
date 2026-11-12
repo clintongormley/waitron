@@ -1,4 +1,5 @@
 /** The device delete routes, end to end over `app.request`. */
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -11,7 +12,6 @@ import {
   hashDeviceToken,
   hashSessionToken,
   loginWithPin,
-  persons,
   sessions,
 } from "@waitron/identity";
 import { payments } from "@waitron/payments";
@@ -111,10 +111,11 @@ async function enrol(
 }
 
 async function openTillSession(deviceId: string): Promise<string> {
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: `Server ${randomUUID()}`, pinHash: hashPin("4321"), role: "staff" })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: `Server ${randomUUID()}`,
+    pinHash: hashPin("4321"),
+    role: "staff",
+  });
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
   );

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -11,7 +12,7 @@ import {
 import { incidents as incidentRows, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { BootReading, FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPin, persons, startManagementSession, type PersonRoleValue } from "@waitron/identity";
+import { hashPin, startManagementSession, type PersonRoleValue } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { jobOrigin } from "@waitron/shared";
@@ -67,10 +68,7 @@ interface Manager {
 
 async function seedPerson(role: PersonRoleValue, name: string): Promise<Manager> {
   return withTransaction(venue.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: name, pinHash: hashPin("1234"), role })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
     const session = await startManagementSession(tx, { personId: person!.id });
     return { id: person!.id, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });

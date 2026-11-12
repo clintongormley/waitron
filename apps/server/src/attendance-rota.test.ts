@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -5,7 +6,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   WORKFORCE_MIGRATIONS,
@@ -33,13 +34,10 @@ beforeEach(async () => {
     operationDescription: "Meals",
   });
   locationId = await venueLocationId(suite.db);
-  const workers = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Manager", role: "manager" },
-      { displayName: "Worker", role: "staff" },
-    ])
-    .returning();
+  const workers = await seedPersons(suite.db, [
+    { displayName: "Manager", role: "manager" },
+    { displayName: "Worker", role: "staff" },
+  ]);
   personId = workers[0]!.id;
   otherId = workers[1]!.id;
   const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));

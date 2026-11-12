@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -20,7 +21,7 @@ import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { handoverActivations, verifyEnvelope } from "@waitron/handover";
 import { nodeSigningPublicKey } from "@waitron/credentials";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { hashPassword, managementSessions, persons } from "@waitron/identity";
+import { hashPassword, managementSessions } from "@waitron/identity";
 import { signDocumentBody, type MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverEvent, readHandoverOperation, readNodeMode } from "@waitron/node-db";
@@ -702,7 +703,7 @@ describe("signing in against the placed copy", () => {
     const store = await placedSpare();
     const { app } = spareOn(store);
     const { input } = await selectName(app);
-    await store.venue.update(persons).set({ role: "staff" }).where(eq(persons.id, ADMIN));
+    await setBuiltInRoleForTest(store.venue, ADMIN, "staff");
     expect(await activate(app, input)).toMatchObject({
       status: 403,
       body: { error: { code: "authorization.not_permitted" } },
@@ -1302,7 +1303,7 @@ describe("one password hash for every failed sign-in", () => {
     const store = await placedSpare();
     const { app } = spareOn(store);
     const { input } = await selectName(app);
-    await store.venue.insert(persons).values([
+    await seedPersons(store.venue, [
       {
         displayName: "Suspended",
         role: "admin",

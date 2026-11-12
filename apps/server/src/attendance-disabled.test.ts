@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { expect, it } from "vitest";
 import { Hono } from "hono";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, sessions } from "@waitron/identity";
+import { hashPin, sessions } from "@waitron/identity";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { nodeId } from "@waitron/shared";
 import { mountTillApi } from "./till-api.js";
@@ -21,10 +22,7 @@ it("signs in normally in a venue where workforce has never been migrated", async
   });
   const node = await seedNode(suite.db);
   const device = await seedDevice(suite.db);
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Worker", pinHash: hashPin("1234") })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, { displayName: "Worker", pinHash: hashPin("1234") });
   const clock = systemClock();
   const backend = new VerifactuBackend({
     db: suite.db,

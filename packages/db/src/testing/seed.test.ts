@@ -16,6 +16,7 @@ import { withTransaction } from "../tenancy.js";
 import {
   freshNif,
   seedDevice,
+  seedDeviceProfiles,
   seedKitchenStation,
   seedNode,
   seedTenant,
@@ -306,4 +307,30 @@ describe("the helpers inside a transaction", () => {
     expect((await readVenue(suite.db)).name).toBe("In a transaction");
     expect(order.nodeId).toEqual(expect.any(String));
   });
+});
+
+it("seeds one device profile with defaults and returns every stored field", async () => {
+  const rows = await seedDeviceProfiles(suite.db, { name: "Front till", formFactor: "till" });
+  expect(rows).toHaveLength(1);
+  const [profile] = rows;
+  expect(profile!.capabilities).toEqual([]);
+  expect(profile!.name).toBe("Front till");
+  const [stored] = await suite.db
+    .select()
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, profile!.id));
+  expect(profile).toEqual(stored);
+});
+it("seeds multiple device profiles inside the caller's transaction", async () => {
+  const profiles = await withTransaction(suite.db, (tx) =>
+    seedDeviceProfiles(tx, [
+      { name: "Handheld", formFactor: "phone-portrait", capabilities: ["take-orders"] },
+      { name: "Kitchen", formFactor: "kds", capabilities: ["prepare-orders"] },
+    ]),
+  );
+  expect(profiles.map((row) => [row.name, row.formFactor, row.capabilities])).toEqual([
+    ["Handheld", "phone-portrait", ["take-orders"]],
+    ["Kitchen", "kds", ["prepare-orders"]],
+  ]);
+  expect(await suite.db.select().from(deviceProfiles)).toHaveLength(2);
 });

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { once } from "node:events";
 import { randomUUID } from "node:crypto";
@@ -161,23 +162,20 @@ beforeEach(async () => {
     .insert(nodes)
     .values({ id: NODE, locationId: LOCATION, name: "Node", filingModule: "verifactu" });
   await stampDeployment(suite.db, "preproduction");
-  const people = await suite.db
-    .insert(persons)
-    .values([
-      {
-        displayName: "Manager",
-        role: "manager",
-        email: "manager@example.test",
-        passwordHash: hashPassword(PASSWORD),
-      },
-      {
-        displayName: "Staff",
-        role: "staff",
-        email: "staff@example.test",
-        passwordHash: hashPassword(PASSWORD),
-      },
-    ])
-    .returning();
+  const people = await seedPersons(suite.db, [
+    {
+      displayName: "Manager",
+      role: "manager",
+      email: "manager@example.test",
+      passwordHash: hashPassword(PASSWORD),
+    },
+    {
+      displayName: "Staff",
+      role: "staff",
+      email: "staff@example.test",
+      passwordHash: hashPassword(PASSWORD),
+    },
+  ]);
   manager = people[0]!.id;
   staff = people[1]!.id;
   managerToken = (

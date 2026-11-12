@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -16,7 +17,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { endDeviceSessions, endSession, hashPin, loginWithPin, persons } from "@waitron/identity";
+import { endDeviceSessions, endSession, hashPin, loginWithPin } from "@waitron/identity";
 import {
   CAPABILITY_FLAGS,
   emptyPrinterLists,
@@ -183,10 +184,11 @@ async function readerHoldersOf(ids: string[]): Promise<Record<string, string>> {
 }
 
 async function signIn(deviceId: string, displayName = "Lucy") {
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName, pinHash: hashPin("4321"), role: "staff" })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName,
+    pinHash: hashPin("4321"),
+    role: "staff",
+  });
   const session = await inTx((tx) =>
     loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
   );

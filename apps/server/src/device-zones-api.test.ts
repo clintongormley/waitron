@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -13,7 +14,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, loginWithPin, persons, sessions, setProfileAdmission } from "@waitron/identity";
+import { hashPin, loginWithPin, sessions, setProfileAdmission } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import type { DeviceZoneSelectionInput } from "@waitron/module";
 import { VENUE_SERVICE } from "@waitron/venue-service";
@@ -51,10 +52,11 @@ async function fixture(formFactor: "till" | "phone-portrait" | "tablet-landscape
     name: "Other till",
     profileId: profile!.id,
   });
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Viewer", role: "staff", pinHash: hashPin("4321") })
-    .returning();
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Viewer",
+    role: "staff",
+    pinHash: hashPin("4321"),
+  });
   const session = await run((tx) =>
     loginWithPin(tx, { deviceId: device.deviceId, personId: person!.id, pin: "4321" }),
   );

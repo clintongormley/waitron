@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mountMeApi } from "./me-api.js";
 import { randomInt } from "node:crypto";
@@ -429,7 +430,7 @@ describe("the make route's refusals", () => {
   it("checks system.manage again after the fiscal evidence is read", async () => {
     const response = await fixture({
       evidence: async () => {
-        await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, admin.personId));
+        await setBuiltInRoleForTest(suite.db, admin.personId, "staff");
         return {};
       },
     }).make(true);

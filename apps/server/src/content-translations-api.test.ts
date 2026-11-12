@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { createStaffApp } from "./cloud-remote.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -6,7 +7,6 @@ import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@w
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenueSettings, seedTenant } from "@waitron/db/testing/seed.js";
 import {
-  persons,
   startManagementSession,
   managementSessions,
   withPassiveManagementRead,
@@ -47,7 +47,7 @@ beforeEach(async () => {
   await seedVenueSettings(suite.db);
   await app(async (tx) => {
     for (const role of ["manager", "staff"] as const) {
-      const [person] = await tx.insert(persons).values({ displayName: role, role }).returning();
+      const [person] = await seedPersons(tx, { displayName: role, role });
       const session = await startManagementSession(tx, { personId: person!.id });
       const cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
       if (role === "manager") {
@@ -372,11 +372,7 @@ describe("inline translation routes", () => {
       const stream = new ReadableStream<Uint8Array>(
         {
           async pull(controller) {
-            if (change === "role")
-              await suite.db
-                .update(persons)
-                .set({ role: "staff" })
-                .where(eq(persons.id, managerId));
+            if (change === "role") await setBuiltInRoleForTest(suite.db, managerId, "staff");
             else
               await suite.db
                 .update(managementSessions)
@@ -416,8 +412,7 @@ describe("inline translation routes", () => {
       const earlier = app(async (tx) => {
         signalStarted();
         await release;
-        if (change === "role")
-          await tx.update(persons).set({ role: "staff" }).where(eq(persons.id, managerId));
+        if (change === "role") await setBuiltInRoleForTest(tx, managerId, "staff");
         else
           await tx
             .update(managementSessions)

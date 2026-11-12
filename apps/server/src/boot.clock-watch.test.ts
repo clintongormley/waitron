@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -7,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { BoxHostClient } from "./box-host-client.js";
 import { menuActivationJob } from "./menu-activation.js";
@@ -196,10 +197,11 @@ describe("boot's clock watch", () => {
         entorno: "preproduction",
         generatedAt: new Date(Date.now() + DAY),
       });
-      const [person] = await suite.db
-        .insert(persons)
-        .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-        .returning();
+      const [person] = await seedPersons(suite.db, {
+        displayName: "Anna",
+        pinHash: hashPin("5555"),
+        role: "staff",
+      });
       const device = await seedDevice(suite.db, {
         capabilities: ["take-orders"],
       });

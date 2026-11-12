@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import {
@@ -12,7 +13,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { liveResourceTypesForModules } from "./live-resources.js";
@@ -35,10 +36,7 @@ const document = (module: string) =>
 async function fixture() {
   await seedTenant(suite.db);
   const session = await withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Manager", role: "manager" })
-      .returning();
+    const [person] = await seedPersons(tx, { displayName: "Manager", role: "manager" });
     return startManagementSession(tx, { personId: person!.id });
   });
   const bus = new LiveEvents();

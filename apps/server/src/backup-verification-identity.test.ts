@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -31,15 +32,12 @@ describe("archived operational TOTP derivation", () => {
       };
       const accountKey = resolveAccountKey(env, loadKeyRing(env));
       const ring = { current: { version: 1, key: accountPurposeKey(accountKey, "totp") } };
-      const [person] = await suite.db
-        .insert(persons)
-        .values({
-          displayName: "Manager",
-          email: "manager@example.test",
-          passwordHash: hashPassword("correct horse"),
-          role: "manager",
-        })
-        .returning();
+      const [person] = await seedPersons(suite.db, {
+        displayName: "Manager",
+        email: "manager@example.test",
+        passwordHash: hashPassword("correct horse"),
+        role: "manager",
+      });
       const session = await withTransaction(suite.db, (tx) =>
         startManagementSession(tx, { personId: person!.id }),
       );

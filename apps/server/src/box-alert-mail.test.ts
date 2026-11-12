@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
 import {
@@ -23,17 +24,14 @@ const log = vi.fn();
 beforeEach(async () => {
   log.mockClear();
   await seedVenue(suite.db, { name: "Corner Bistro" });
-  const [person] = await suite.db
-    .insert(persons)
-    .values({
-      displayName: "Private manager",
-      role: "manager",
-      email: "  manager@example.test ",
-      locale: "es-ES",
-    })
-    .returning();
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Private manager",
+    role: "manager",
+    email: "  manager@example.test ",
+    locale: "es-ES",
+  });
   personId = person!.id;
-  await suite.db.insert(persons).values({
+  await seedPersons(suite.db, {
     displayName: "Other manager",
     role: "admin",
     email: "other@example.test",
@@ -114,7 +112,8 @@ it.each([
   { email: null },
 ])("cancels mail for an inadmissible recipient %o", async (patch) => {
   await queue("clock.records_misdated");
-  await suite.db.update(persons).set(patch).where(eq(persons.id, personId));
+  if (patch.role !== undefined) await setBuiltInRoleForTest(suite.db, personId, patch.role);
+  else await suite.db.update(persons).set(patch).where(eq(persons.id, personId));
   await runMailPass(deps);
   expect(await row()).toMatchObject({ status: "cancelled", attempts: 0 });
   expect(deps.send).not.toHaveBeenCalled();

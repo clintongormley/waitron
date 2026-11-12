@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readVenue } from "@waitron/db";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -383,7 +384,8 @@ describe("the running server's managers' email check", () => {
           sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
         );
       const booted: Booted = {};
-      await suite.db.insert(persons).values(
+      await seedPersons(
+        suite.db,
         [1, 2].map((n) => ({
           displayName: `Queued mail ${n}`,
           email: `queued-${n}@example.test`,

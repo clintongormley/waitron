@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { createStaffApp } from "./cloud-remote.js";
 import { Hono } from "hono";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -29,10 +30,7 @@ const suite = useVenueDb({
 });
 async function person(role: "manager" | "staff") {
   return withTransaction(suite.db, async (tx) => {
-    const [p] = await tx
-      .insert(persons)
-      .values({ displayName: role, pinHash: hashPin("1234"), role })
-      .returning();
+    const [p] = await seedPersons(tx, { displayName: role, pinHash: hashPin("1234"), role });
     const session = await startManagementSession(tx, { personId: p!.id });
     await setFreshManagementSignIn(tx, session.token);
     return { id: p!.id, session: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
@@ -655,11 +653,11 @@ it("losing permission or primary role during the Cloud status wait prevents a co
         }),
       });
     f.onStatus(async () => {
-      await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, manager.id));
+      await setBuiltInRoleForTest(suite.db, manager.id, "staff");
     });
     expect((await send()).status).toBe(403);
     expect(f.requests.some((v) => v[2] === "complete")).toBe(false);
-    await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, manager.id));
+    await setBuiltInRoleForTest(suite.db, manager.id, "manager");
     f.onStatus(async () => {
       primary = false;
     });

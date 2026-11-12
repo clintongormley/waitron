@@ -64,7 +64,10 @@ for (const enabled of [true, false]) {
       async (mode) => {
         beforeServerStarts();
         const venue = await createClockVenue(suite.db, () => new Date(), modules);
-        const [manager] = await suite.db.select().from(persons).where(eq(persons.role, "admin"));
+        const [manager] = await suite.db
+          .select()
+          .from(persons)
+          .where(eq(persons.email, "owner@example.test"));
         const management = await withTransaction(suite.db, (tx) =>
           startManagementSession(tx, { personId: manager!.id }),
         );

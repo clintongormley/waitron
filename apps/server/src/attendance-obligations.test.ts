@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
@@ -49,10 +50,11 @@ beforeEach(async () => {
     invoiceLocales: ["en"],
     operationDescription: "Restaurant",
   });
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Anna", pinHash: "scrypt$00$00", role: "staff" })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Anna",
+    pinHash: "scrypt$00$00",
+    role: "staff",
+  });
   personId = person!.id;
   const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-01-05" }));
   shiftId = await run((tx) =>
@@ -129,10 +131,11 @@ describe("selected-day rota reconciliation", () => {
   });
   it("rereads current assignment after source discovery rather than accepting a cached assignee", async () => {
     await drain();
-    const [other] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Bea", pinHash: "scrypt$00$00", role: "staff" })
-      .returning({ id: persons.id });
+    const [other] = await seedPersons(suite.db, {
+      displayName: "Bea",
+      pinHash: "scrypt$00$00",
+      role: "staff",
+    });
     await suite.db.update(shifts).set({ personId: other!.id }).where(eq(shifts.id, shiftId));
     expect(await next()).toEqual(day());
     expect(await own()).toEqual([]);

@@ -1,9 +1,10 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { newId, sales, tenders, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons } from "@waitron/identity";
+
 import { payments, captureAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { AppError } from "@waitron/shared";
@@ -39,13 +40,15 @@ beforeEach(async () => {
   vi.setSystemTime(new Date("2026-01-05T10:00:00Z"));
   v = await setupPartyVenue(suite.db);
   provider = new FakePaymentProvider(suite.db);
-  await suite.db
-    .insert(persons)
-    .values({ id: OPERATOR, displayName: "Order author", pinHash: "scrypt$00$00" });
-  const [worker] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Collector", pinHash: "scrypt$00$00" })
-    .returning({ id: persons.id });
+  await seedPersons(suite.db, {
+    id: OPERATOR,
+    displayName: "Order author",
+    pinHash: "scrypt$00$00",
+  });
+  const [worker] = await seedPersons(suite.db, {
+    displayName: "Collector",
+    pinHash: "scrypt$00$00",
+  });
   collector = {
     personId: worker!.id,
     sessionId: await openTillSession(suite.db, {

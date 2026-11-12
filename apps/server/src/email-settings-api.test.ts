@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -66,15 +67,12 @@ async function setupVenue(): Promise<{ admin: string; manager: string; staff: st
   );
   const sessions = await withTransaction(suite.db, async (tx) => {
     const start = async (role: "manager" | "staff") => {
-      const [inserted] = await tx
-        .insert(persons)
-        .values({
-          displayName: role,
-          pinHash: hashPin("1234"),
-          role,
-          email: `${role}@example.test`,
-        })
-        .returning({ id: persons.id });
+      const [inserted] = await seedPersons(tx, {
+        displayName: role,
+        pinHash: hashPin("1234"),
+        role,
+        email: `${role}@example.test`,
+      });
       return startManagementSession(tx, {
         personId: inserted!.id,
       });
@@ -82,7 +80,7 @@ async function setupVenue(): Promise<{ admin: string; manager: string; staff: st
     const [admin] = await tx
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.role, "admin"));
+      .where(eq(persons.email, "owner@example.test"));
     return {
       admin: await startManagementSession(tx, { personId: admin!.id }),
       manager: await start("manager"),
@@ -574,7 +572,7 @@ it("allows another database write while an SMTP settings upload is unfinished", 
     await tx
       .update(persons)
       .set({ displayName: "Saved beside slow upload" })
-      .where(eq(persons.role, "manager"));
+      .where(eq(persons.email, "manager@example.test"));
     return true;
   });
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -851,12 +849,19 @@ describe("removing saved SMTP settings", () => {
       const venue = await setupVenue();
       expect((await request(mount(), venue.admin, settings)).status).toBe(200);
       if (role === "supervisor")
-        await withTransaction(suite.db, (tx) =>
-          tx.update(persons).set({ role: "supervisor" }).where(eq(persons.role, "staff")),
-        );
+        await withTransaction(suite.db, async (tx) => {
+          const [staff] = await tx
+            .select({ id: persons.id })
+            .from(persons)
+            .where(eq(persons.email, "staff@example.test"));
+          await setBuiltInRoleForTest(tx, staff!.id, "supervisor");
+        });
       if (role === "suspended")
         await withTransaction(suite.db, (tx) =>
-          tx.update(persons).set({ status: "suspended" }).where(eq(persons.role, "admin")),
+          tx
+            .update(persons)
+            .set({ status: "suspended" })
+            .where(eq(persons.email, "owner@example.test")),
         );
       const before = await suite.db.select().from(tenantCredentials);
       const response = await remove(
@@ -867,7 +872,7 @@ describe("removing saved SMTP settings", () => {
       const [admin] = await suite.db
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "owner@example.test"));
       expect(await response.json()).toEqual({
         error:
           role === "unsigned"

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { publishRestoreFlow } from "./restore-flow.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
@@ -279,7 +280,7 @@ describe("startServer — background listeners and sinks that fail or close", ()
     try {
       const db = venue.store.venue;
       await seedTradingVenue(db);
-      await db.insert(persons).values({
+      await seedPersons(db, {
         displayName: "Reset Person",
         pinHash: hashPin("1234"),
         passwordHash: hashPassword("resetPass123"),
@@ -716,7 +717,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       const [admin] = await venue.store.venue
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.role, "admin"));
+        .where(eq(persons.email, "admin@waitron.dev"));
       const offer = await withTransaction(venue.store.venue, async (tx) => {
         const catalogue = await createCatalogue(tx, {
           name: `Boot setup routes menu ${venueId}`,
@@ -1807,7 +1808,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         const [admin] = await source.store.venue
           .select({ id: persons.id })
           .from(persons)
-          .where(eq(persons.role, "admin"));
+          .where(eq(persons.email, "admin@waitron.dev"));
         const session = await withTransaction(source.store.venue, async (tx) => {
           const session = await startManagementSession(tx, { personId: admin!.id });
           await setFreshManagementSignIn(tx, session.token);

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
@@ -243,7 +244,7 @@ async function boot(
     const [admin] = await suite.db
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.role, "admin"));
+      .where(eq(persons.email, "owner@example.test"));
     const fixture = await standbyContract(
       suite.db,
       { nodeId },
@@ -431,8 +432,11 @@ describe("the start check on a real start", () => {
               store: bucket,
               spawn: litestream.spawn,
             });
-            const [admin] = await suite.db.select().from(persons).where(eq(persons.role, "admin"));
-            await spareSuite.db.insert(persons).values(admin!);
+            const [admin] = await suite.db
+              .select()
+              .from(persons)
+              .where(eq(persons.email, "owner@example.test"));
+            await seedPersons(spareSuite.db, admin!);
             const session = await withTransaction(spareSuite.db, async (tx) => {
               const session = await startManagementSession(tx, { personId: admin!.id });
               await setFreshManagementSignIn(tx, session.token);

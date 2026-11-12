@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { locations } from "@waitron/db";
@@ -338,10 +339,11 @@ async function withMockedExit<T>(fn: (exits: (number | undefined)[]) => Promise<
 
 async function assertPassiveManagementReads(port: number): Promise<void> {
   const { personId, departmentId, policy, session } = await liveFixture(port, async (db) => {
-    const [person] = await db
-      .insert(persons)
-      .values({ displayName: "Passive read probe", pinHash: hashPin("1234"), role: "manager" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(db, {
+      displayName: "Passive read probe",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
     const personId = person!.id;
     const [department] = await db
       .insert(departments)
@@ -506,10 +508,13 @@ describe("startServer, against a migrated venue directory", () => {
       let entered = false;
       writing = liveFixture(httpPort(), async (tx) => {
         entered = true;
-        return tx
-          .insert(persons)
-          .values({ id, displayName: "Queued fixture", role: "staff", pinHash: hashPin("1234") })
-          .returning({ id: persons.id });
+        const rows = await seedPersons(tx, {
+          id,
+          displayName: "Queued fixture",
+          role: "staff",
+          pinHash: hashPin("1234"),
+        });
+        return rows.map((row) => ({ id: row.id }));
       });
       await requested;
       expect(entered).toBe(false);
@@ -2093,10 +2098,11 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("passes the enabled modules' table-removal seats to the management API: a booked table's master cannot be deleted", async () => {
-    const [person] = await sharedDb
-      .insert(persons)
-      .values({ displayName: "Floor plan probe", pinHash: hashPin("1234"), role: "manager" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(sharedDb, {
+      displayName: "Floor plan probe",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
     const session = await withTransaction(sharedDb, (tx) =>
       startManagementSession(tx, { personId: person!.id }),
     );
@@ -3066,10 +3072,11 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   }, 60_000);
 
   it("under devMode, staff schedule writes use header-only device proof through boot", async () => {
-    const [person] = await sharedDb
-      .insert(persons)
-      .values({ displayName: "Schedule proof probe", role: "staff", pinHash: hashPin("1234") })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(sharedDb, {
+      displayName: "Schedule proof probe",
+      role: "staff",
+      pinHash: hashPin("1234"),
+    });
     try {
       const session = await withTransaction(sharedDb, (tx) =>
         loginWithPin(tx, { deviceId: deviceId1, personId: person!.id, pin: "1234" }),
@@ -3328,10 +3335,11 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   }, 60_000);
 
   it("passes the development device identity to an Orders receipt-copy request", async () => {
-    const [person] = await sharedDb
-      .insert(persons)
-      .values({ displayName: "Orders copy probe", pinHash: hashPin("1234"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(sharedDb, {
+      displayName: "Orders copy probe",
+      pinHash: hashPin("1234"),
+      role: "staff",
+    });
     const session = await withTransaction(sharedDb, (tx) =>
       startManagementSession(tx, { personId: person!.id }),
     );
@@ -3418,16 +3426,13 @@ describe("startServer — what a trading boot wires behind its management routes
     venue = await freshVenue();
     db = venue.store.venue;
     await seedTradingVenue(db);
-    const [admin] = await db
-      .insert(persons)
-      .values({
-        displayName: "Route Admin",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(ADMIN_PASSWORD),
-        email: "route-admin@example.test",
-        role: "admin",
-      })
-      .returning({ id: persons.id });
+    const [admin] = await seedPersons(db, {
+      displayName: "Route Admin",
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(ADMIN_PASSWORD),
+      email: "route-admin@example.test",
+      role: "admin",
+    });
     const session = await withTransaction(db, async (tx) => {
       const session = await startManagementSession(tx, { personId: admin!.id });
       await setFreshManagementSignIn(tx, session.token);
@@ -3454,16 +3459,13 @@ describe("startServer — what a trading boot wires behind its management routes
 
   async function invite(email: string): Promise<unknown> {
     const [invitee] = await liveFixture(httpPort(), async (db) =>
-      db
-        .insert(persons)
-        .values({
-          displayName: `Invitee ${email}`,
-          pinHash: hashPin("1234"),
-          email,
-          role: "staff",
-          status: "pending",
-        })
-        .returning({ id: persons.id }),
+      seedPersons(db, {
+        displayName: `Invitee ${email}`,
+        pinHash: hashPin("1234"),
+        email,
+        role: "staff",
+        status: "pending",
+      }),
     );
     const response = await fetch(
       `http://127.0.0.1:${httpPort()}/management-api/staff/${invitee!.id}/invitation`,

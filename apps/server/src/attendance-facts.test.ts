@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -15,7 +16,7 @@ import {
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons, sessions, hashSessionToken } from "@waitron/identity";
+import { sessions, hashSessionToken } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
@@ -89,16 +90,14 @@ beforeEach(async () => {
   });
   nodeId = await seedNode(suite.db);
   deviceId = (await seedDevice(suite.db)).deviceId;
-  const people = await suite.db
-    .insert(persons)
-    .values(
-      ["Ana", "Bea", "Caro", "Diego"].map((displayName) => ({
-        displayName,
-        pinHash: "scrypt$00$00",
-        role: "admin" as const,
-      })),
-    )
-    .returning({ id: persons.id });
+  const people = await seedPersons(
+    suite.db,
+    ["Ana", "Bea", "Caro", "Diego"].map((displayName) => ({
+      displayName,
+      pinHash: "scrypt$00$00",
+      role: "admin" as const,
+    })),
+  );
   [ana, bea, caro, diego] = people.map((r) => r.id) as [string, string, string, string];
   partyId = newId();
   orderId = newId();

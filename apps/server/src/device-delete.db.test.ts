@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -28,7 +29,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordIncident, recordSale } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPin, loginWithPin, persons, sessions } from "@waitron/identity";
+import { hashPin, loginWithPin, sessions } from "@waitron/identity";
 import {
   cardReaderHolders,
   cardReaders,
@@ -150,10 +151,11 @@ const openSessionIds = (snap: Snapshot, deviceId: string) =>
 const inTx = <T>(run: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, run);
 
 async function signIn(deviceId: string): Promise<void> {
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: `Person ${randomUUID()}`, pinHash: hashPin("4321"), role: "staff" })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: `Person ${randomUUID()}`,
+    pinHash: hashPin("4321"),
+    role: "staff",
+  });
   await inTx((tx) => loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }));
 }
 
