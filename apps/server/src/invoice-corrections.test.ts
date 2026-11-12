@@ -631,6 +631,39 @@ describe("a correction's legs", () => {
       params: { correctionId: correction.id, state: "open" },
     });
 
+    const smuggled = async () => {
+      const [row] = await venue.db
+        .select()
+        .from(invoiceCorrections)
+        .where(eq(invoiceCorrections.id, correction.id));
+      return inTx(venue, async (tx) => {
+        const [cash] = await readRefundableTenders(tx, saleId);
+        return reserveTenderRefund(
+          tx,
+          venue.cfg,
+          saleId,
+          {
+            submissionId: randomUUID(),
+            tenderId: cash!.tenderId,
+            appliedAmount: "1.00",
+            tipAmount: "0.00",
+            reason: "Goodwill",
+            invoiceCorrection: {
+              id: correction.id,
+              requestId: randomUUID(),
+              read: { correction: { ...row!, originalSaleId: saleId }, left: 1210 },
+            } as { id: string; requestId: string },
+          },
+          { requestedBy: managerId, authorizedBy: managerId },
+          venue.clock.now().instant.toISOString(),
+        );
+      });
+    };
+    await refusedWithNothingWritten(smuggled, {
+      code: "invoice_correction.not_open",
+      params: { correctionId: correction.id, state: "open" },
+    });
+
     await giveBack(other, "6.05", correction.id);
     await fileAll(correction.id);
     await refusedWithNothingWritten(() => giveBack(other, "1.00", correction.id), {

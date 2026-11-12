@@ -40,7 +40,6 @@ export function mountInvoiceCorrectionApi(
       "sale.not_found": 404,
       "invoice_correction.not_found": 404,
       "submission.id_reused": 409,
-      "tender.refund_unavailable": 409,
       "sale.correction_amount_invalid": 409,
       "sale.correction_scope_invalid": 400,
       "sale.correction_history_unusable": 409,

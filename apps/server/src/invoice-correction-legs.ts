@@ -91,21 +91,22 @@ export async function readCorrectionMoney(
  * Refuses unless the correction is this sale's and open (`invoice_correction.not_open`
  * { correctionId, state }), the tip is zero (`invalid("tipAmount")`), no cancellation ids are named
  * (`invalid("cancellationIds")`), and the leg fits what is left (`invoice_correction.leg_too_large`
- * { correctionId, left }). Answers the correction. Reads the correction and its money unless
- * `link.read` hands them in.
+ * { correctionId, left }). Answers the correction. Reads the correction and its money unless `read`
+ * hands them in; every check runs either way.
  */
 export async function checkCorrectionLeg(
   tx: Transaction,
   saleId: string,
-  link: { id: string; cashRoute?: true; read?: CorrectionRead },
+  link: { id: string; cashRoute?: true },
   leg: {
     method: "cash" | "card";
     appliedCents: number;
     tipCents: number;
     cancellationIds: readonly string[] | undefined;
   },
+  read?: CorrectionRead,
 ): Promise<InvoiceCorrectionRow> {
-  const correction = link.read?.correction ?? (await readCorrectionRow(tx, link.id));
+  const correction = read?.correction ?? (await readCorrectionRow(tx, link.id));
   if (correction.originalSaleId !== saleId || correction.state !== "open")
     throw new AppError("invoice_correction.not_open", {
       correctionId: correction.id,
@@ -114,7 +115,7 @@ export async function checkCorrectionLeg(
   if (leg.tipCents !== 0) throw invalid("tipAmount");
   if (leg.cancellationIds !== undefined) throw invalid("cancellationIds");
   const left =
-    link.read?.left ?? correctionLeft(correction, await readCorrectionMoney(tx, correction.id));
+    read?.left ?? correctionLeft(correction, await readCorrectionMoney(tx, correction.id));
   if (leg.appliedCents > left)
     throw new AppError("invoice_correction.leg_too_large", {
       correctionId: correction.id,

@@ -120,12 +120,7 @@ export async function giveCorrectionCash(
         appliedAmount: centsToDecimal(leg),
         tipAmount: "0.00",
         reason: correction.reason,
-        invoiceCorrection: {
-          id: correctionId,
-          requestId: ask.submissionId,
-          cashRoute: true,
-          read: { correction, left: unclaimed },
-        },
+        invoiceCorrection: { id: correctionId, requestId: ask.submissionId, cashRoute: true },
       },
       {
         requestedBy: actor.personId,
@@ -133,6 +128,7 @@ export async function giveCorrectionCash(
         viaOverride: actor.authorization.viaOverride,
       },
       createdAt,
+      { correction, left: unclaimed },
     );
     unclaimed -= leg;
     const refund = await carryNewTenderRefund(

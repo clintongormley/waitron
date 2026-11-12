@@ -24,6 +24,7 @@ import {
   checkCorrectionLeg,
   linkRefundToCorrection,
   refuseWhileCorrectionOpen,
+  type CorrectionRead,
 } from "./invoice-correction-legs.js";
 import { fingerprint } from "./parties.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
@@ -137,6 +138,9 @@ export async function reserveTenderRefund(
   request: TenderRefundRequest,
   actor: RefundActor,
   createdAt: string,
+  /** The correction `request.invoiceCorrection` names, as the caller read it in this transaction;
+   * set only by server code, never from a request body. */
+  correctionRead?: CorrectionRead,
 ): Promise<{
   refund: typeof tenderRefunds.$inferSelect;
   replayed: boolean;
@@ -165,9 +169,9 @@ export async function reserveTenderRefund(
     request.invoiceCorrection === undefined
       ? undefined
       : {
-          ...request.invoiceCorrection,
           id: uuid(request.invoiceCorrection.id, "invoiceCorrection"),
           requestId: uuid(request.invoiceCorrection.requestId, "invoiceCorrection"),
+          ...(request.invoiceCorrection.cashRoute === true ? { cashRoute: true as const } : {}),
         };
   const reason = request.reason.trim();
   const print = fingerprint({
@@ -271,12 +275,18 @@ export async function reserveTenderRefund(
   const correction =
     correctionLink === undefined
       ? undefined
-      : await checkCorrectionLeg(tx, saleId, correctionLink, {
-          method: refundable.method as "cash" | "card",
-          appliedCents: appliedAmount,
-          tipCents: tipAmount,
-          cancellationIds,
-        });
+      : await checkCorrectionLeg(
+          tx,
+          saleId,
+          correctionLink,
+          {
+            method: refundable.method as "cash" | "card",
+            appliedCents: appliedAmount,
+            tipCents: tipAmount,
+            cancellationIds,
+          },
+          correctionRead,
+        );
   const allocation =
     cancellationIds === undefined
       ? undefined
