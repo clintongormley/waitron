@@ -104,26 +104,6 @@ export async function guardPathParty(
 }
 
 /**
- * Refuse unless the other bill and the path bill, in that order, are untouched bills of the path
- * bill's party: not paid, abandoned or presented, and holding no payment, one given back in full
- * included. A counter order belongs to no party. Returns the party.
- */
-async function requireUntouchedPair(
-  tx: Transaction,
-  pathBillId: string,
-  path: PathBill,
-  otherBillId: string,
-): Promise<string> {
-  if (path.partyId === null) {
-    throw new AppError("bill.other_party", { workingOrderId: otherBillId });
-  }
-  await requireBillOfParty(tx, path.partyId, otherBillId);
-  await refuseBillWithPayments(tx, otherBillId);
-  await refuseTouched(tx, pathBillId, path.status);
-  return path.partyId;
-}
-
-/**
  * Move every line of `fromBillId` onto `intoBillId` and abandon it, which files nothing. Both must be
  * open bills of one party; the bill merged away must hold no payment.
  */

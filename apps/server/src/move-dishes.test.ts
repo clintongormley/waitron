@@ -24,7 +24,6 @@ import { insertPartyBill, partyRevision } from "./parties.js";
 import { saveDraft } from "./order-drafts.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
 import { cancelReasonId } from "./testing/cancel-line.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";

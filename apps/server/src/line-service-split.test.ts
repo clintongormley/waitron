@@ -187,7 +187,6 @@ describe("financial splits with charged service cancellations", () => {
     const carve = (lineNo: number) =>
       inTx(venue, (tx) =>
         carveOffLines(tx, venue.cfg, order.billId, order.billId, [{ lineNo, quantity: "1" }], {
-          refuseHeld: false,
           splitExtras: true,
         }),
       );
@@ -214,7 +213,7 @@ describe("financial splits with charged service cancellations", () => {
           order.billId,
           billId,
           [{ lineNo: order.parent.lineNo, quantity: "2" }],
-          { refuseHeld: false, splitExtras: true },
+          { splitExtras: true },
         ),
       ),
     ).rejects.toThrow("a part of a line is cut only within its order");
@@ -242,7 +241,7 @@ describe("financial splits with charged service cancellations", () => {
         order.billId,
         billId,
         [{ lineNo: [...moved.splitLines.values()][0]!.lineNo }],
-        { refuseHeld: false },
+        {},
       ),
     );
     expect(moved.splitFrom.size).toBe(0);
