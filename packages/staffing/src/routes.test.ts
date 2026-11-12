@@ -1013,6 +1013,37 @@ describe("the rota routes", () => {
       refusal("shift.not_found", { shiftId }),
     );
   });
+  it("refuses a missing, malformed or non-object shift body as the body, after the permission check", async () => {
+    const r = await routed();
+    for (const [method, path] of [
+      ["POST", `${root}/shifts`],
+      ["PATCH", `${root}/shifts/${randomUUID()}`],
+    ] as const) {
+      for (const body of ["x", "", 1, true, [], ["x"], null]) {
+        await answers(
+          await r.call(method, path, r.manager, body),
+          400,
+          refusal("management.request_invalid", { field: "body" }),
+        );
+      }
+      for (const body of [undefined, "", "{"]) {
+        await answers(
+          await r.app.request(path, {
+            method,
+            headers: { cookie: r.manager, "content-type": "application/json" },
+            body,
+          }),
+          400,
+          refusal("management.request_invalid", { field: "body" }),
+        );
+      }
+      await answers(
+        await r.call(method, path, r.staff, null),
+        403,
+        refusal("authorization.not_permitted", { permission: "schedule.manage" }),
+      );
+    }
+  });
 });
 
 describe("Rota body references", () => {
