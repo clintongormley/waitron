@@ -405,7 +405,14 @@ export function loadConfig(
     });
   }
   const httpPort = listeningPort(env, "WAITRON_HTTP_PORT", DEFAULT_HTTP_PORT);
+  const landingPort = boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT);
   const spareStorePort = listeningPort(env, "WAITRON_SPARE_STORE_PORT", DEFAULT_SPARE_STORE_PORT);
+  if (spareStorePort === httpPort || spareStorePort === landingPort) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_SPARE_STORE_PORT",
+      reason: "listener_port_conflict",
+    });
+  }
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
   const stateDir = env.WAITRON_STATE_DIR;
   // Computed once so `venueDir` and `logDir` default under the returned `stateDir`.
@@ -465,16 +472,8 @@ export function loadConfig(
         variable: "WAITRON_STAFF_ORIGIN",
         reason: "https_origin_required",
       });
-    const port = positiveInt(env, "WAITRON_STAFF_PORT", 8443);
-    if (port > MAX_HTTP_PORT)
-      throw new AppError("server.config_invalid", {
-        variable: "WAITRON_STAFF_PORT",
-        reason: "port_out_of_range",
-      });
-    if (
-      port === httpPort ||
-      port === boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT)
-    )
+    const port = listeningPort(env, "WAITRON_STAFF_PORT", 8443);
+    if (port === httpPort || port === landingPort || port === spareStorePort)
       throw new AppError("server.config_invalid", {
         variable: "WAITRON_STAFF_PORT",
         reason: "listener_port_conflict",
@@ -494,7 +493,7 @@ export function loadConfig(
     fiscalTestSubmissions: fiscalTestSubmissions(env),
     paymentTestProviders: paymentTestProviders(env),
     httpPort,
-    landingPort: boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT),
+    landingPort,
     spareStorePort,
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     minTickMs,

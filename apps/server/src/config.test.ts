@@ -1003,6 +1003,54 @@ it.each(["8080", "80"])(
   },
 );
 
+it.each([
+  ["8080", {}],
+  ["80", {}],
+  ["9000", { WAITRON_HTTP_PORT: "9000" }],
+  ["8000", { WAITRON_HTTP_LANDING_PORT: "8000" }],
+])("refuses store port %s when the local or landing listener uses it", (port, env) => {
+  expect(() => loadConfig({ ...env, WAITRON_SPARE_STORE_PORT: port }, ROOT, STATE_ROOT)).toThrow(
+    expect.objectContaining({
+      code: "server.config_invalid",
+      params: { variable: "WAITRON_SPARE_STORE_PORT", reason: "listener_port_conflict" },
+    }),
+  );
+});
+
+it("refuses a staff port the spare's store uses", () => {
+  expect(() =>
+    loadConfig(
+      { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: "7443" },
+      ROOT,
+      STATE_ROOT,
+    ),
+  ).toThrow(
+    expect.objectContaining({
+      code: "server.config_invalid",
+      params: { variable: "WAITRON_STAFF_PORT", reason: "listener_port_conflict" },
+    }),
+  );
+});
+
+it.each([
+  ["staff", "not_a_positive_integer"],
+  ["0", "not_a_positive_integer"],
+  ["65536", "port_out_of_range"],
+])("refuses staff port %s as %s", (port, reason) => {
+  expect(() =>
+    loadConfig(
+      { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: port },
+      ROOT,
+      STATE_ROOT,
+    ),
+  ).toThrow(
+    expect.objectContaining({
+      code: "server.config_invalid",
+      params: { variable: "WAITRON_STAFF_PORT", reason },
+    }),
+  );
+});
+
 it.each(["WAITRON_VENUE_DIR", "WAITRON_LOG_DIR"])(
   "refuses %s in scratch before boot",
   (variable) => {
