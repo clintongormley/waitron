@@ -6829,6 +6829,7 @@ describe("alerts in the shell", () => {
         sessionDefault: "en-GB",
         permissions: ["system.manage"],
       }),
+      getBoxNetwork: vi.fn().mockRejectedValue({ code: "box_host.unavailable" }),
       getBoxHealth: vi.fn(() => new Promise(() => undefined)),
       listAlerts: vi.fn().mockResolvedValue({
         visible: true,

@@ -124,6 +124,7 @@ const PROOF_READY = health({
 
 function stubApi(answer: BoxHealth | Error, alerts: AlertView[] | Error = []): DashboardApi {
   return {
+    getBoxNetwork: vi.fn().mockRejectedValue({ code: "box_host.unavailable" }),
     getBoxHealth:
       answer instanceof Error
         ? vi.fn().mockRejectedValue({ code: "server.internal" })
@@ -248,6 +249,33 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
     ["a failed read", () => stubApi(new Error("read"))],
     ["a failed alert read", () => stubApi(TROUBLED, new Error("alerts"))],
   ];
+  it.each(["ready", "loading", "failed"] as const)(
+    "renders the network %s accessibly",
+    async (state) => {
+      const network = {
+        wired: { connected: true, address: "192.0.2.8" },
+        wifi: { connectedSsidHex: null, savedSsidHex: null },
+      };
+      const api = {
+        ...stubApi(health()),
+        getBoxNetwork:
+          state === "loading"
+            ? vi.fn(() => new Promise(() => {}))
+            : state === "failed"
+              ? vi.fn().mockRejectedValue({ code: "box_host.failed" })
+              : vi.fn().mockResolvedValue(network),
+      } as unknown as DashboardApi;
+      const { el, host } = await mountWidget<BoxStatusScreen>(
+        "dashboard-box-status-screen",
+        { api },
+        theme,
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=box-network]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it.each(cases)("renders accessibly with %s", async (_name, api) => {
     const { el, host } = await mountWidget<BoxStatusScreen>(
       "dashboard-box-status-screen",

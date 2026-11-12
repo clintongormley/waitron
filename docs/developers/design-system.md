@@ -6320,6 +6320,16 @@ in `box-status-rows.ts`) is under Settings, before Diagnostics, for people with 
 reads `GET /api/box/health` every 15 seconds (passively after the first read) and the bell's own
 alert list. Its one staged input is the note in its note dialog, which takes its own draft scope.
 
+- **Network.** A read-only card after the health cards and before Restart, with Wired,
+  Current Wi-Fi and Saved Wi-Fi. It reads `/api/box/network` once a minute even with a live
+  connection, with the first read active and later reads passive. It hides for
+  `box_host.unavailable`; other failures replace its old observation with a read-failed
+  notice until a successful read. When unavailable, it releases the read; reopening the page
+  asks again. Its read state is separate from health and alert failures.
+  Null addresses and saved names say they were not reported; disconnected connections
+  say Not connected. Names are decoded as UTF-8 and rendered as text. Its guide link opens
+  the page's `network` section. It offers no network changes.
+
 - **Rows.** One card per part, in order: Sales, Tax agency, Bucket copy, Printers, Card readers
   (left out when the payments module is off), Clock and Disk space. Each has a dot, the part's name
   in bold, a line of state, a muted line of detail, the sentence of each bell alert on that row, and

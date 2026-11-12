@@ -3696,6 +3696,17 @@ export const en = {
   "disk_stop.open_box_status": "Open Box status",
   "disk_stop.sign_in_as_manager": "Sign in as a manager",
   "box_status.title": "Box status",
+  "box_status.network.title": "Network",
+  "box_status.network.wired": "Wired",
+  "box_status.network.wifi": "Current Wi-Fi",
+  "box_status.network.saved": "Saved Wi-Fi",
+  "box_status.network.disconnected": "Not connected",
+  "box_status.network.no_address": "Address not reported",
+  "box_status.network.not_reported": "Not reported",
+  "box_status.network.loading": "Reading network…",
+  "box_status.network.failed": "Couldn't read the network. Wait for the next automatic attempt.",
+  "box_status.network.guide": "Network guide",
+
   "box_status.legend":
     "Updated {time} · amber: needs attention, everything still works · red: something can't be saved",
   "box_status.part.sales": "Sales",
@@ -7643,6 +7654,18 @@ export const es: Record<StringKey, string> = {
   "disk_stop.open_box_status": "Abrir Estado del equipo",
   "disk_stop.sign_in_as_manager": "Iniciar sesión como encargado",
   "box_status.title": "Estado del equipo",
+  "box_status.network.title": "Red",
+  "box_status.network.wired": "Cable",
+  "box_status.network.wifi": "Wi-Fi actual",
+  "box_status.network.saved": "Wi-Fi guardada",
+  "box_status.network.disconnected": "Sin conexión",
+  "box_status.network.no_address": "Dirección no indicada",
+  "box_status.network.not_reported": "No indicado",
+  "box_status.network.loading": "Leyendo la red…",
+  "box_status.network.failed":
+    "No se ha podido leer la red. Espera al siguiente intento automático.",
+  "box_status.network.guide": "Guía de red",
+
   "box_status.legend":
     "Actualizado {time} · ámbar: necesita atención, todo sigue funcionando · rojo: algo no se puede guardar",
   "box_status.part.sales": "Ventas",

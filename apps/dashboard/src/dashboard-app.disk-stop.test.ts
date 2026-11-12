@@ -135,6 +135,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listOrderStaff: vi.fn().mockResolvedValue({ staff: [] }),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     getDiskStop: vi.fn().mockResolvedValue({ stopped: false, deleted: null }),
+    getBoxNetwork: vi.fn().mockRejectedValue({ code: "box_host.unavailable" }),
     getBoxHealth: vi.fn(() => new Promise(() => undefined)),
     listHandledAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     markIncidentHandled: vi.fn().mockResolvedValue(undefined),

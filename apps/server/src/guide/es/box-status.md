@@ -77,6 +77,14 @@ Si no se han podido leer los avisos, la página sigue mostrando todas las filas 
 parte puede parecer bien aunque no lo esté. Si algunas comprobaciones no se han podido hacer, la
 página avisa de que puede no mostrar todos los problemas.
 
+## Consultar la red {#network}
+
+Cuando tu equipo puede informar de su red, **Red** muestra la conexión por cable y su dirección,
+el nombre de la Wi-Fi actual y el de la Wi-Fi guardada. Úsala para comprobar qué red
+utiliza el equipo. La tarjeta se actualiza aproximadamente cada minuto; no puedes cambiar
+la red desde aquí. Si falla la lectura, espera al siguiente intento automático. Si falta la tarjeta, vuelve a abrir
+**Estado del equipo** para consultar de nuevo al equipo.
+
 ## Vuelve a intentar los registros que esperan {#retry-now}
 
 En un equipo que envía registros a Hacienda, la fila **Hacienda** tiene un botón **Reintentar
