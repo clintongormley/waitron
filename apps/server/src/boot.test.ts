@@ -1208,6 +1208,69 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
+  it("refuses a production start of an unreleased bundle before opening the venue — server.unreleased_build", async () => {
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-unreleased-state-"));
+    try {
+      const outcome = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "production",
+          WAITRON_MIN_TICK_MS: "50",
+          WAITRON_MAX_TICK_MS: "200",
+          WAITRON_SKIP_RETRY_MS: "100",
+          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
+        },
+        {},
+        { builtRelease: { bundled: true, version: null } },
+      ).then(
+        async (started) => {
+          await started.close();
+          return "started";
+        },
+        (error: unknown) => error,
+      );
+      expect(outcome).toMatchObject({ code: "server.unreleased_build" });
+      expect(existsSync(join(stateDir, "venue", "venue.db"))).toBe(false);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("starts in production from a bundle stamped as a release (the unreleased-build check passes it)", async () => {
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-released-state-"));
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { bookings: false, "fiscal-none": false } }),
+    );
+    let server: StartedServer | undefined;
+    try {
+      server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_ENV: "production",
+          WAITRON_MIN_TICK_MS: "50",
+          WAITRON_MAX_TICK_MS: "200",
+          WAITRON_SKIP_RETRY_MS: "100",
+        },
+        {},
+        { builtRelease: { bundled: true, version: "1.2.3" } },
+      );
+      await awaitListening(httpPort());
+    } finally {
+      if (server !== undefined) await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("refuses a trading boot whose enabled set fills no fiscal slot (fiscal off) — module.fiscal_slot_empty", async () => {
     // The fiscal backend comes from whichever enabled module fills the `fiscal` seat; with neither
     // fiscal-slot member enabled, a trading boot must refuse rather than mount till routes that

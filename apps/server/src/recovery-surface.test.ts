@@ -631,6 +631,15 @@ describe("curated operator text", () => {
     );
   });
 
+  it("names a test build refused in production, in both languages", async () => {
+    const english = await pageFor("server.unreleased_build");
+    expect(english).toContain(escapeHtml("This box is running a test build."));
+    expect(english).toContain(escapeHtml("Install a release."));
+    const spanish = await pageFor("server.unreleased_build", undefined, SPANISH);
+    expect(spanish).toContain(escapeHtml("Este equipo ejecuta una versión de prueba."));
+    expect(spanish).toContain(escapeHtml("Instala una versión publicada."));
+  });
+
   it("says the box has already deleted what it could, in both languages", async () => {
     const english = await pageFor("storage.disk_full");
     expect(english).toContain(

@@ -121,6 +121,8 @@ declare module "@waitron/shared" {
     "email.settings_not_allowed": Record<string, never>;
     /** A required environment variable is absent or empty. `variable` is our own declared name. */
     "server.config_missing": { variable: string };
+    /** A production start of a bundle whose release stamp names no release version. */
+    "server.unreleased_build": Record<string, never>;
     /**
      * A supplied environment variable cannot be used. Carries the variable NAME and a reason CODE,
      * never the value: an operator who pasted a secret into the wrong variable must not have it land

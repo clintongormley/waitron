@@ -132,7 +132,7 @@ import {
 } from "@waitron/module";
 import type { AlertSource, ModuleOperationHost, ModuleRouteContext } from "@waitron/module";
 import { DEFAULT_MAX_UPLOAD_BYTES } from "@waitron/media";
-import { AppError } from "@waitron/shared";
+import { AppError, builtRelease, type BuiltRelease } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import {
   ALL_ALERT_CLAIMS,
@@ -147,6 +147,7 @@ import {
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { parseEnvFile } from "./env-file.js";
 import { loadConfig, type ServerConfig } from "./config.js";
+import { refuseUnreleasedBuild } from "./release-check.js";
 import { assertDeploymentMatches } from "./deployment-guard.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import {
@@ -1016,6 +1017,8 @@ export interface StartServerSeams {
    * carry-on request counts as reaching it over HTTPS (tests serve plain HTTP).
    */
   waitingStart?: { intervalMs?: number; secure?: (c: Context) => boolean };
+  /** What this build's release stamp says; unset, the stamp `builtRelease()` reads. */
+  builtRelease?: BuiltRelease;
   /** The mDNS responder's socket; unset, the real multicast one. */
   mdnsSocket?: () => MdnsSocket;
   /** The socket the setup start asks whether another box answers `waitron.local`. */
@@ -1105,6 +1108,7 @@ async function bootServer(
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+  refuseUnreleasedBuild(config.environment, seams.builtRelease ?? builtRelease());
   if (backupKeysInEnv(base)) await assertBackupOutsideScratch(env, config.stateDir);
   await assertOutsideScratchResolved(config.stateDir, config.venueDir, "WAITRON_VENUE_DIR");
   await assertOutsideScratchResolved(config.stateDir, config.logDir, "WAITRON_LOG_DIR");
