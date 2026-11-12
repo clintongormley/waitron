@@ -17,7 +17,8 @@ import "../widgets/numeric-pad.js";
 import { chooserStyles } from "../widgets/chooser-styles.js";
 import { themeChooser } from "../widgets/theme-chooser.js";
 import "../widgets/about-button.js";
-import type { StaffMember, TillApi } from "../api/client.js";
+import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
+import { staffNoticeText } from "../i18n/staff-notices.js";
 import type { ServerStatus } from "../api/server-router.js";
 
 /** Keyed by deviceId so two enrolled browsers at one venue remember their last operator independently. */
@@ -95,7 +96,8 @@ export class TillLockScreen extends LitElement {
 
       /* The server status line — set off below the roster, muted like the other
          status copy, with the "check again" control spaced off the states it follows. */
-      .servers {
+      .servers,
+      .clock {
         margin-top: var(--wt-space-4);
       }
 
@@ -183,6 +185,8 @@ export class TillLockScreen extends LitElement {
   @property({ attribute: false }) serverCurrent = "";
 
   @property({ type: Boolean }) serverWaiting = false;
+
+  @property({ attribute: false }) clockNotice?: StaffNotice;
 
   /** `undefined` while the fetch is in flight. */
   @state() private staff?: StaffMember[];
@@ -361,6 +365,13 @@ export class TillLockScreen extends LitElement {
         ${this.#renderPoweredBy()}
       </div>
       ${this.#renderServers()}
+      ${
+        this.clockNotice === undefined
+          ? nothing
+          : html`<p class="clock status" role="status" data-clock-notice>
+              ${staffNoticeText(this.clockNotice).main}
+            </p>`
+      }
     `;
   }
 

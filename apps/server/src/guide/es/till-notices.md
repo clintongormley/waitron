@@ -78,11 +78,11 @@ equivocada, dos cajas o terminales que coinciden con el servidor también reanud
 que la parada dure desde que arrancó el servidor. Nunca ponen la hora.
 
 **Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora (0
-de 2 por ahora) · Comprobar la hora** es rojo. Cada vez que el servidor arranca, confirma su hora
-antes de aceptar cobros: por sí mismo en cuanto tiene la hora de internet, o en cuanto dos cajas o
-terminales con alguien con la sesión iniciada coinciden con su hora. Hasta entonces, los cobros y
-las devoluciones esperan, como en la línea de arriba; el resto del trabajo sigue. Puedes esperar, o
-confirmar tú la hora con **Comprobar la hora**.
+de 2 por ahora) · Comprobar la hora** es rojo. Cuando el servidor arranca sin la hora de internet,
+los cobros esperan. Vuelven a funcionar solos en cuanto dos terminales están encendidos y
+conectados, aunque estén en la pantalla de inicio de sesión, y coinciden con la hora del servidor.
+Si no, usa **Comprobar la hora**: mantén la hora del servidor si es correcta, o usa la de este
+dispositivo si lo es esa.
 
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
 significa que el servidor arrancó con su hora en duda y no ha podido confirmarla por sí

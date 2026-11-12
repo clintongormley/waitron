@@ -2612,6 +2612,7 @@ export class TillApp extends LitElement {
     this.#battery?.stop();
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
+    this.#stopPinScreenPoll();
     this.#stopFloorPoll();
     this.#endSplitRefusalReads(SPLIT_READS_OFF_PAGE);
     this.#draftSync?.drop();
@@ -3187,6 +3188,24 @@ export class TillApp extends LitElement {
         this.#holdEquipment(equipment);
     },
   });
+  /** The PIN screen's reads, so the server hears this device's clock with nobody signed in. */
+  readonly #pinScreenPoll = new EquipmentPoll({
+    read: (signal) => this.api.getDeviceEquipment({ signal }),
+    onEquipment: ({ notices }) => {
+      this.pinClockNotice = notices?.find((notice) => notice.code === "clock.unconfirmed");
+    },
+  });
+  @state() private pinClockNotice?: StaffNotice;
+
+  #startPinScreenPoll(): void {
+    if (this.deviceId !== undefined && !this.deviceMode && !this.#equipmentPoll.running)
+      this.#pinScreenPoll.start();
+  }
+
+  #stopPinScreenPoll(): void {
+    this.#pinScreenPoll.stop();
+    this.pinClockNotice = undefined;
+  }
   @state() private tableSelectedCatalogueId = "";
   /** Identifies the latest table-selection offer request so a slower prior selection cannot win. */
   #tableOfferRequest = 0;
@@ -4673,6 +4692,7 @@ export class TillApp extends LitElement {
     this.#stopClocking();
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
+    this.#stopPinScreenPoll();
     const bootGeneration = ++this.#bootGeneration;
     this.#refusedPerson = undefined;
     this.#setupRead = undefined;
@@ -4848,6 +4868,7 @@ export class TillApp extends LitElement {
         this.#setScreen("station");
         this.#onHistory();
       }
+      this.#startPinScreenPoll();
     } catch (error) {
       // Only a genuine `device.unauthorized` goes to the join screen. Any other failure is transient,
       // and stranding a sellable till behind an approval it cannot get would block sales, so it falls
@@ -5799,6 +5820,7 @@ export class TillApp extends LitElement {
     if (!clocking) this.#configureSessionActivity();
     if (!offerLoadFailed) this.#reconcileBasket();
     this.#menuPoll.start();
+    this.#stopPinScreenPoll();
     this.#equipmentPoll.start();
     void this.#readEquipment().then(() => {
       if (replaced()) return;
@@ -20333,6 +20355,7 @@ export class TillApp extends LitElement {
     this.#stationsLoaded = false;
     this.#abandonListRefreshes();
     this.#setScreen("lock");
+    this.#startPinScreenPoll();
     this.#configureSessionActivity();
     const signIns = this.#signIns;
     const session = this.#operatorSession;
@@ -21834,6 +21857,7 @@ export class TillApp extends LitElement {
                           .serverStatuses=${this.router?.statuses() ?? []}
                           .serverCurrent=${this.router?.current ?? ""}
                           .serverWaiting=${this.router?.waiting ?? false}
+                          .clockNotice=${this.pinClockNotice}
                           @check-again=${() => void this.router?.probeNow()}
                         ></till-lock-screen>`,
                       )
