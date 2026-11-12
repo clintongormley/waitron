@@ -844,8 +844,8 @@ it.each([
   ],
   [
     "deferred_close.conflict",
-    "This bill's total or invoice details have changed since you opened it. Reload the bill, check them and try again",
-    "El total o los datos de factura de esta cuenta han cambiado desde que la abriste. Vuelve a cargarla, revísalos e inténtalo de nuevo",
+    "This bill's total or invoice changed since you opened this window. Check the new details and confirm again.",
+    "El total o la factura de esta cuenta han cambiado desde que abriste esta ventana. Revisa los datos nuevos y vuelve a confirmar.",
   ],
   [
     "deferred_close.day_frozen",
@@ -864,4 +864,36 @@ it("words the merge refusal for invoice details that changed, in both languages"
   expect(codeMessage("bill.merge_invoice_choice_required", "es")).toBe(
     "Los datos de factura de las cuentas han cambiado. Revísalos y vuelve a juntarlas.",
   );
+});
+
+const deferredTaken = [
+  "Someone has already taken a payment on this bill, closed it or cancelled it. The bill on screen now shows what happened.",
+  "Alguien ya ha cobrado un pago de esta cuenta, la ha cerrado o la ha anulado. La cuenta en pantalla ya muestra lo que ha pasado.",
+] as const;
+const deferredCorrected = [
+  "This bill's invoice has been corrected or replaced, so it can't be closed as a deferred payment. Take payment with Pay instead.",
+  "La factura de esta cuenta se ha rectificado o sustituido, así que no se puede cerrar como pago aplazado. Cobra la cuenta con Cobrar.",
+] as const;
+
+it.each([
+  ["prior_payment", ...deferredTaken],
+  ["prior_tender", ...deferredTaken],
+  ["final_without_deferral", ...deferredTaken],
+  ["void", ...deferredTaken],
+  ["correction", ...deferredCorrected],
+  ["substitution", ...deferredCorrected],
+  [
+    "non_positive",
+    "This bill owes nothing now, so there is nothing to close.",
+    "Esta cuenta ya no debe nada, así que no hay nada que cerrar.",
+  ],
+  [
+    "other_node",
+    "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
+    "Esta cuenta no se puede cerrar como pago aplazado: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
+  ],
+])("words deferred_close.ineligible by its reason %s", (reason, english, spanish) => {
+  const params = { reason };
+  expect(codeMessage("deferred_close.ineligible", "en", params)).toBe(english);
+  expect(codeMessage("deferred_close.ineligible", "es", params)).toBe(spanish);
 });

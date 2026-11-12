@@ -76,6 +76,7 @@ describe("the till's Spanish Clear snooze label, and no aplazar for snooze in th
     "table.bill_deferred",
     "waiting.deferred_not_handed_over",
     "deferred_close.title",
+    "deferred_close.ticket_unread",
   ]);
 
   it("has no Spanish catalogue string that says aplazar, other than a deferred payment", () => {
