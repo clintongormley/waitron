@@ -203,7 +203,49 @@ it("refuses a linked restore destination without clearing the linked folder", as
   await copyStoppedTree(source, destination);
   const link = join(root, "linked-state");
   await fs.symlink(source, link);
+  await fs.writeFile(join(source, "candidate-only"), "do not clear through the link");
   const { restoreStoppedTree } = await import("./copy.mjs");
   await expect(restoreStoppedTree(destination, link)).rejects.toThrow("symlink");
   expect(await fs.readFile(join(source, "venue.db"), "utf8")).toBe("original venue bytes");
+  expect(await fs.readFile(join(source, "candidate-only"), "utf8")).toBe(
+    "do not clear through the link",
+  );
+});
+
+it.each(["saved-file", "linked-live-parent"])(
+  "refuses a %s at a retained lock's parent",
+  async (kind) => {
+    const { root, source, destination } = await fixture();
+    const child = join(source, "venue");
+    await fs.mkdir(child);
+    await fs.writeFile(join(child, "venue.lock"), "keep lock");
+    await copyStoppedTree(source, destination);
+    const { restoreStoppedTree } = await import("./copy.mjs");
+    if (kind === "saved-file") {
+      await fs.rm(join(destination, "venue"), { recursive: true });
+      await fs.writeFile(join(destination, "venue"), "not a folder");
+    } else {
+      await fs.rename(child, join(root, "outside"));
+      await fs.symlink(join(root, "outside"), child);
+    }
+    await expect(restoreStoppedTree(destination, source, ["venue/venue.lock"])).rejects.toThrow(
+      kind === "saved-file" ? "not a directory" : "symlink",
+    );
+    expect(await fs.readFile(join(child, "venue.lock"), "utf8")).toBe("keep lock");
+  },
+);
+
+it("restores a missing retained parent without copying a stale lock back", async () => {
+  const { source, destination } = await fixture();
+  await fs.mkdir(join(source, "venue"));
+  await fs.writeFile(join(source, "venue", "venue.lock"), "stale lock");
+  await fs.writeFile(join(source, "venue", "venue.db"), "old nested bytes");
+  await copyStoppedTree(source, destination);
+  await fs.rm(join(source, "venue"), { recursive: true });
+  const { restoreStoppedTree } = await import("./copy.mjs");
+  await restoreStoppedTree(destination, source, ["venue/venue.lock"]);
+  expect(await fs.readFile(join(source, "venue", "venue.db"), "utf8")).toBe("old nested bytes");
+  await expect(fs.stat(join(source, "venue", "venue.lock"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
 });

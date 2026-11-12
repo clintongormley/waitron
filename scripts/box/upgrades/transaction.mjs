@@ -1,6 +1,9 @@
 import * as fs from "node:fs/promises";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { copyStoppedTree, restoreStoppedTree } from "./copy.mjs";
+
+// The Node-only host uses the default layout; the nested-lock test reads the store constants.
+const RETAINED_LOCK_PATHS = ["recovery.lock", "venue/venue.lock"];
 
 async function syncDirectory(path) {
   const handle = await fs.open(path, "r");
@@ -28,26 +31,12 @@ async function writeFileDurable(path, value) {
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const failureText = (error) => String(error?.message ?? error);
 
-function validateInputs({ mode, paths, preserve }) {
+function validateInputs({ mode, paths }) {
   if (
     !["manual", "automatic"].includes(mode) ||
     !Array.isArray(paths) ||
     paths.length === 0 ||
-    !paths.every((path) => typeof path === "string" && isAbsolute(path)) ||
-    !object(preserve) ||
-    !Object.entries(preserve).every(
-      ([path, names]) =>
-        paths.includes(path) &&
-        Array.isArray(names) &&
-        names.every(
-          (name) =>
-            typeof name === "string" &&
-            name.length > 0 &&
-            name !== "." &&
-            name !== ".." &&
-            basename(name) === name,
-        ),
-    )
+    !paths.every((path) => typeof path === "string" && isAbsolute(path))
   )
     throw new Error("invalid upgrade marker");
 }
@@ -106,11 +95,7 @@ async function restore(directory, host, marker) {
   marker = await record(directory, { ...marker, phase: "restoring" });
   if (marker.copied) {
     for (const [index, path] of marker.paths.entries()) {
-      await restoreStoppedTree(
-        join(directory, "copies", String(index)),
-        path,
-        marker.preserve[path] ?? [],
-      );
+      await restoreStoppedTree(join(directory, "copies", String(index)), path, RETAINED_LOCK_PATHS);
     }
   }
   return commit(directory, host, marker, "old");
@@ -119,19 +104,20 @@ async function restore(directory, host, marker) {
 /**
  * The caller holds the host upgrade lock for apply/recovery. prepareImages pins old images
  * before pulling and returns exact old/candidate IDs; stop verifies every writer drained.
- * installCandidate/checkCandidate stay contained; resume uses ordinary boot's fiscal guards.
+ * installCandidate/checkCandidate stay contained; resume uses ordinary boot's fiscal guards
+ * and tolerates repetition after an interrupted cleanup.
  * The host owns the fixed volume/config inventory and its free-space check before this call.
- * It supplies a fresh attempt directory and retained lock names from the store's constants.
+ * It supplies a fresh attempt directory and the default state-volume layout.
  */
-export async function applyUpgrade({ directory, paths, preserve = {}, mode, host }) {
+export async function applyUpgrade({ directory, paths, mode, host }) {
   if (!["manual", "automatic"].includes(mode)) throw new Error("invalid upgrade mode");
-  validateInputs({ mode, paths, preserve });
+  validateInputs({ mode, paths });
   await fs.mkdir(directory, { mode: 0o700 });
   await syncDirectory(dirname(directory));
   let images;
   try {
     images = await host.prepareImages();
-    validateMarker({ mode, paths, preserve, images, phase: "copying", copied: false });
+    validateMarker({ mode, paths, images, phase: "copying", copied: false });
   } catch (error) {
     await fs.rmdir(directory);
     await syncDirectory(dirname(directory));
@@ -142,7 +128,6 @@ export async function applyUpgrade({ directory, paths, preserve = {}, mode, host
     phase: "copying",
     copied: false,
     paths,
-    preserve,
     images,
     checks: null,
     failure: null,

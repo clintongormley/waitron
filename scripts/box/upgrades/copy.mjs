@@ -56,6 +56,43 @@ export async function copyStoppedTree(source, destination) {
   throw new Error("upgrade copy destination exists");
 }
 
+async function restoreDirectory(source, target, preserve) {
+  const stat = source === null ? null : await fs.lstat(source);
+  if (stat !== null && !stat.isDirectory())
+    throw new Error("retained lock parent is not a directory");
+  try {
+    if ((await fs.lstat(target)).isSymbolicLink())
+      throw new Error("upgrade restore destination is a symlink");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  await fs.mkdir(target, { recursive: true });
+  const saved = source === null ? [] : await fs.readdir(source);
+  const live = await fs.readdir(target);
+  const roots = new Set(preserve.map((path) => path.split("/")[0]));
+  for (const child of live) {
+    if (!roots.has(child)) await fs.rm(join(target, child), { recursive: true, force: true });
+  }
+  for (const child of roots) {
+    if (preserve.includes(child) || (!saved.includes(child) && !live.includes(child))) continue;
+    await restoreDirectory(
+      saved.includes(child) ? join(source, child) : null,
+      join(target, child),
+      preserve
+        .filter((path) => path.startsWith(child + "/"))
+        .map((path) => path.slice(child.length + 1)),
+    );
+  }
+  const children = saved.filter((child) => !roots.has(child));
+  if (children.length > 0)
+    await run("cp", ["-a", "--", ...children.map((child) => join(source, child)), target]);
+  if (stat !== null) {
+    await fs.chown(target, stat.uid, stat.gid);
+    await fs.chmod(target, stat.mode & 0o7777);
+    await fs.utimes(target, stat.atime, stat.mtime);
+  }
+}
+
 /** Keep the snapshot intact so a restore interrupted before completion can repeat. */
 export async function restoreStoppedTree(snapshot, destination, preserve = []) {
   const source = resolve(snapshot);
@@ -75,21 +112,7 @@ export async function restoreStoppedTree(snapshot, destination, preserve = []) {
     if (error.code !== "ENOENT") throw error;
   }
   if (sourceStat.isDirectory()) {
-    await fs.mkdir(target, { recursive: true });
-    for (const child of await fs.readdir(target)) {
-      if (!preserve.includes(child))
-        await fs.rm(join(target, child), { recursive: true, force: true });
-    }
-    if (preserve.length === 0) {
-      await run("cp", ["-a", "--", source + "/.", target]);
-    } else {
-      const children = (await fs.readdir(source)).filter((child) => !preserve.includes(child));
-      if (children.length > 0)
-        await run("cp", ["-a", "--", ...children.map((child) => join(source, child)), target]);
-      await fs.chown(target, sourceStat.uid, sourceStat.gid);
-      await fs.chmod(target, sourceStat.mode & 0o7777);
-      await fs.utimes(target, sourceStat.atime, sourceStat.mtime);
-    }
+    await restoreDirectory(source, target, preserve);
   } else {
     await fs.rm(target, { force: true });
     await run("cp", ["-a", "--", source, target]);

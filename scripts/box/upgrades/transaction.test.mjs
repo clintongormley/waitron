@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { expect, it, onTestFinished, vi } from "vitest";
 import { applyUpgrade, recoverUpgrade, upgradeStatus } from "./transaction.mjs";
 import { VENUE_LOCK_FILE } from "../../../packages/store/src/venue-lock.js";
-import { RECOVERY_LOCK_FILE } from "../../../packages/store/src/state-layout.js";
+import { RECOVERY_LOCK_FILE, VENUE_DIR_NAME } from "../../../packages/store/src/state-layout.js";
 
 const gnuCopy =
   process.platform === "darwin"
@@ -394,6 +394,7 @@ it.each([[], ["relative-state"]])(
     expect(f.events).toEqual([]);
     expect(await fs.readFile(join(f.state, "venue.db"), "utf8")).toBe("old venue");
     expect(await upgradeStatus(f.directory)).toBeNull();
+    await expect(fs.stat(f.directory)).rejects.toMatchObject({ code: "ENOENT" });
   },
 );
 
@@ -408,6 +409,7 @@ it.each([{}, "sha256:old", ["sha256:old"]])(
     expect(f.events).toEqual([]);
     expect(await fs.readFile(join(f.state, "venue.db"), "utf8")).toBe("old venue");
     expect(await upgradeStatus(f.directory)).toBeNull();
+    await expect(fs.stat(f.directory)).rejects.toMatchObject({ code: "ENOENT" });
   },
 );
 
@@ -477,18 +479,55 @@ it("removes only an empty unpublished attempt directory during recovery", async 
 
 it("restores data without unlinking or replacing the host's retained lock files", async () => {
   const f = await fixture();
-  const names = [VENUE_LOCK_FILE, RECOVERY_LOCK_FILE];
-  for (const name of names) await fs.writeFile(join(f.state, name), "original lock bytes");
-  const inodes = await Promise.all(
-    names.map(async (name) => (await fs.stat(join(f.state, name))).ino),
-  );
+  const venue = join(f.state, VENUE_DIR_NAME);
+  await fs.mkdir(venue, { mode: 0o750 });
+  await fs.chmod(f.state, 0o700);
+  await fs.writeFile(join(venue, "venue.db"), "old nested venue");
+  const paths = [join(venue, VENUE_LOCK_FILE), join(f.state, RECOVERY_LOCK_FILE)];
+  for (const path of paths) await fs.writeFile(path, "original lock bytes");
+  const inodes = await Promise.all(paths.map(async (path) => (await fs.stat(path)).ino));
+  f.host.installCandidate = async () =>
+    fs.writeFile(join(venue, "venue.db"), "candidate nested venue");
   f.host.checkCandidate = async () => [{ name: "sale", ok: false }];
-  await applyUpgrade({ ...f.input, mode: "manual", preserve: { [f.state]: names } });
-  for (const name of names) await fs.writeFile(join(f.state, name), "retained lock bytes");
+  await applyUpgrade({ ...f.input, mode: "manual" });
+  for (const path of paths) await fs.writeFile(path, "retained lock bytes");
+  await fs.chmod(f.state, 0o755);
+  await fs.chmod(venue, 0o777);
   await recoverUpgrade({ ...f.input, choice: "restore" });
-  for (const [index, name] of names.entries()) {
-    expect((await fs.stat(join(f.state, name))).ino).toBe(inodes[index]);
-    expect(await fs.readFile(join(f.state, name), "utf8")).toBe("retained lock bytes");
+  for (const [index, path] of paths.entries()) {
+    expect((await fs.stat(path)).ino).toBe(inodes[index]);
+    expect(await fs.readFile(path, "utf8")).toBe("retained lock bytes");
   }
-  expect(await fs.readFile(join(f.state, "venue.db"), "utf8")).toBe("old venue");
+  expect(await fs.readFile(join(venue, "venue.db"), "utf8")).toBe("old nested venue");
+  expect((await fs.stat(f.state)).mode & 0o777).toBe(0o700);
+  expect((await fs.stat(venue)).mode & 0o777).toBe(0o750);
+});
+
+it("keeps a new venue lock but removes candidate data when the old copy had no venue folder", async () => {
+  const f = await fixture();
+  const venue = join(f.state, VENUE_DIR_NAME);
+  f.host.installCandidate = async () => {
+    await fs.mkdir(venue);
+    await fs.writeFile(join(venue, VENUE_LOCK_FILE), "new lock bytes");
+    await fs.writeFile(join(venue, "venue.db"), "candidate only");
+  };
+  f.host.checkCandidate = async () => [{ name: "sale", ok: false }];
+  await applyUpgrade({ ...f.input, mode: "manual" });
+  const inode = (await fs.stat(join(venue, VENUE_LOCK_FILE))).ino;
+  await recoverUpgrade({ ...f.input, choice: "restore" });
+  expect((await fs.stat(join(venue, VENUE_LOCK_FILE))).ino).toBe(inode);
+  expect(await fs.readFile(join(venue, VENUE_LOCK_FILE), "utf8")).toBe("new lock bytes");
+  await expect(fs.stat(join(venue, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("leaves a truncated attempt and candidate bytes held for inspection", async () => {
+  const f = await fixture();
+  f.host.checkCandidate = async () => [{ name: "sale", ok: false }];
+  await applyUpgrade({ ...f.input, mode: "manual" });
+  await fs.writeFile(join(f.directory, "attempt.json"), "{");
+  await expect(recoverUpgrade({ ...f.input, choice: "restore" })).rejects.toBeInstanceOf(
+    SyntaxError,
+  );
+  expect(f.events.filter((event) => event.resume)).toEqual([]);
+  expect(await fs.readFile(join(f.state, "venue.db"), "utf8")).toBe("candidate venue");
 });
