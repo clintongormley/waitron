@@ -37,6 +37,33 @@ describe("query controller", () => {
     ).rejects.toEqual(error);
     controller.hostDisconnected();
   });
+  it("says which slots' latest read failed, until a later read applies", async () => {
+    const data = new LiveData();
+    const controller = new QueryController(
+      host(),
+      () => data,
+      () => {},
+    );
+    let fails = true;
+    const read = async () => {
+      if (fails) throw { code: "server.internal" };
+      return 1;
+    };
+    await controller.watch(
+      "printers",
+      { key: "printers", dependencies: [], read: async () => 1 },
+      () => {},
+    );
+    await controller
+      .watch("jobs", { key: "jobs", dependencies: [{ type: "print_jobs" }], read }, () => {})
+      .catch(() => undefined);
+    expect(controller.failing("jobs")).toBe(true);
+    expect(controller.failing("printers")).toBe(false);
+    fails = false;
+    data.invalidate([{ type: "print_jobs" }]);
+    await vi.waitFor(() => expect(controller.failing("jobs")).toBe(false));
+    controller.hostDisconnected();
+  });
   it("applies observed snapshots without recreating the host, and stops on disconnect", async () => {
     const data = new LiveData();
     const owner = host();

@@ -633,6 +633,7 @@ export class PrintersScreen extends LitElement {
     () => this.api,
     (error) => {
       this.refreshErrorKey = codeOf(error);
+      this.requestUpdate();
     },
     (error) => {
       if (this.refreshErrorKey === codeOf(error)) this.refreshErrorKey = null;
@@ -640,6 +641,8 @@ export class PrintersScreen extends LitElement {
     },
   );
   #loadFailed = false;
+  /** The discovered list's latest read outside its live query failed, or was never made. */
+  @state() private discoveredUnread = false;
 
   @state() private view = "";
   @state() private selectedPrinterId: string | null = null;
@@ -1184,6 +1187,7 @@ export class PrintersScreen extends LitElement {
       });
     } catch (error) {
       this.#loadFailed = true;
+      this.discoveredUnread = true;
       this.refreshErrorKey = codeOf(error);
     } finally {
       this.loading = false;
@@ -1372,6 +1376,7 @@ export class PrintersScreen extends LitElement {
   // Keep successful additions hidden even if the subsequent inventory refresh fails.
   /** `started` is a `#readCount` no later than the read's start. */
   #setDiscovered(devices: DiscoveredPrinter[], started: number): void {
+    this.discoveredUnread = false;
     this.discovered = devices.map((device) => ({
       ...device,
       alreadyRegistered:
@@ -1477,6 +1482,7 @@ export class PrintersScreen extends LitElement {
     } catch (error) {
       if (epoch !== this.#scanEpoch) return;
       this.refreshErrorKey = codeOf(error);
+      this.discoveredUnread = true;
       this.probeStatus = "idle";
       this.#endScan();
       return;
@@ -1868,6 +1874,7 @@ export class PrintersScreen extends LitElement {
       if (epoch === this.#commandEpoch) {
         this.#commandReadError = codeOf(error);
         this.refreshErrorKey = this.#commandReadError;
+        this.discoveredUnread = true;
       }
     }
     if (epoch !== this.#commandEpoch) return;
@@ -2529,6 +2536,9 @@ export class PrintersScreen extends LitElement {
         .loading=${this.loading}
         .loadingMessage=${t("printers.table_loading")}
         .emptyMessage=${t("printers.no_agents")}
+        .errorMessage=${this.#unreadMessage(
+          this.agents.every((agent) => !agent.active) && this.#queries.failing("listAgents"),
+        )}
         >${this.agents.every((agent) => !agent.active) ? this.#renderAddAgent("empty-action") : nothing}</wt-data-table
       >
     </section>`;
@@ -3652,6 +3662,10 @@ export class PrintersScreen extends LitElement {
         .loading=${this.loading}
         .loadingMessage=${t("printers.table_loading")}
         .emptyMessage=${t("printers.no_printers")}
+        .errorMessage=${this.#unreadMessage(
+          rows.length === 0 &&
+            (this.#queries.failing("listPrinters") || this.#queries.failing("listPagePrinters")),
+        )}
         >${rows.length === 0 ? this.#renderAddPrinter("empty-action") : nothing}</wt-data-table
       >
       ${
@@ -3868,6 +3882,7 @@ export class PrintersScreen extends LitElement {
         .loading=${this.loading}
         .loadingMessage=${t("printers.table_loading")}
         .emptyMessage=${t("printers.no_jobs")}
+        .errorMessage=${this.#unreadMessage(this.jobs.length === 0 && this.#queries.failing("listRecentJobs"))}
       ></wt-data-table>
     </section>`;
   }
@@ -3975,6 +3990,15 @@ export class PrintersScreen extends LitElement {
     );
     modal.open = false;
     await closed;
+  }
+
+  /** An empty list whose read failed says so instead of saying there is nothing. */
+  #unreadMessage(unread: boolean): string {
+    if (!unread) return "";
+    const failed = t("printers.refresh_failed");
+    return this.refreshErrorKey === null
+      ? failed
+      : `${failed} ${codeMessage(this.refreshErrorKey)}`;
   }
 
   /** A failed read, with its own retry, stays at the top of the page or the dialog. */
@@ -4780,6 +4804,10 @@ export class PrintersScreen extends LitElement {
         .rows=${[...rows, ...lost]}
         .rowKey=${(d: DiscoveredPrinter) => `${d.agentId}:${this.#deviceKey(d)}`}
         .emptyMessage=${t(this.scanning ? "printers.scan_empty" : "printers.no_discovered")}
+        .errorMessage=${this.#unreadMessage(
+          rows.length + lost.size === 0 &&
+            (this.discoveredUnread || this.#queries.failing("listDiscoveredPrinters")),
+        )}
       ></wt-data-table>
       <wt-form-actions
         slot="footer"

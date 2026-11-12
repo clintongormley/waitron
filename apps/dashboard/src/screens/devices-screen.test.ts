@@ -1289,6 +1289,38 @@ describe("the Edit dialog", () => {
     expect(q(el, "[data-test=edit-made-here]")).toBeNull();
   });
 
+  it("says the printers are loading, not Use default (None) alone, while the printer list loads", async () => {
+    let answer!: (rows: Printer[]) => void;
+    const el = await openEdit(
+      editApi({
+        listPrinters: vi.fn(() => new Promise<Printer[]>((resolve) => (answer = resolve))),
+      }),
+    );
+    const shown = (id: string) =>
+      q(el, `[data-test=${id}]`)!.shadowRoot!.querySelector("button.trigger .value")!;
+    for (const id of ["edit-receipt-printer", "edit-slip-printer"]) {
+      expect(field(el, id).options).toEqual([]);
+      expect(field(el, id).disabled).toBe(true);
+      expect(shown(id).textContent!.trim()).toBe(t("device_profiles.printers_loading"));
+    }
+    answer(editPrinters);
+    await flush(el);
+    expect(field(el, "edit-receipt-printer").value).toBe("pr3");
+    expect(field(el, "edit-receipt-printer").disabled).toBe(false);
+    expect(shown("edit-receipt-printer").textContent!.trim()).toBe("Back bar (Deshabilitada)");
+  });
+
+  it("says the printers could not be read, not Use default (None) alone, after the printer read failed", async () => {
+    const el = await openEdit(
+      editApi({ listPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    );
+    const receipt = q(el, "[data-test=edit-receipt-printer]")!;
+    expect(field(el, "edit-receipt-printer").options).toEqual([]);
+    expect(receipt.shadowRoot!.querySelector("button.trigger .value")!.textContent!.trim()).toBe(
+      t("printers.refresh_failed"),
+    );
+  });
+
   it("shows None as the chosen printer of a device that has none", async () => {
     const el = await openEdit(editApi(), "k1");
     const shown = (id: string) =>

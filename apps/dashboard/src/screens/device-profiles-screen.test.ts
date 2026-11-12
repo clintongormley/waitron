@@ -3397,7 +3397,7 @@ describe("the printer lists while the venue's printers are not read", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
     expect(bottom(el)).toBe(codeMessage("connection.failed"));
-    expect(noPrinters(el)).not.toBeNull();
+    expect(noPrinters(el)).toBeNull();
   });
 
   it("shows a read failure a refused delete was covering once the editor opens", async () => {
@@ -3425,6 +3425,51 @@ describe("the printer lists while the venue's printers are not read", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await flush(el);
     expect(bottom(el)).toBe(codeMessage("connection.failed"));
+  });
+
+  it("says the printers are loading while a read after a failed one is under way", async () => {
+    const liveData = new LiveData();
+    const listPrinters = vi.fn().mockRejectedValue({ code: "connection.failed" });
+    const el = await mount(stubApi({ listPrinters, liveData } as Partial<DashboardApi>));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await flush(el);
+    expect(loadingLine(el)).toBeNull();
+    listPrinters.mockReturnValue(new Promise(() => undefined));
+    liveData.refresh();
+    await vi.waitFor(() => expect(listPrinters).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(loadingLine(el)?.textContent?.trim()).toBe(t("device_profiles.printers_loading"));
+    expect(noPrinters(el)).toBeNull();
+  });
+
+  it("does not say to add a printer when a refresh of an empty printer list failed", async () => {
+    const liveData = new LiveData();
+    const listPrinters = vi.fn().mockResolvedValue([]);
+    const el = await mount(stubApi({ listPrinters, liveData } as Partial<DashboardApi>));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await flush(el);
+    expect(noPrinters(el)).not.toBeNull();
+    listPrinters.mockRejectedValue({ code: "connection.failed" });
+    liveData.refresh();
+    await vi.waitFor(() => expect(bottom(el)).toBe(codeMessage("connection.failed")));
+    expect(noPrinters(el)).toBeNull();
+    listPrinters.mockResolvedValue([]);
+    liveData.refresh();
+    await vi.waitFor(() => expect(noPrinters(el)).not.toBeNull());
+  });
+
+  it("puts a standing read failure back on the list after Cancel", async () => {
+    const el = await mount(
+      stubApi({ listPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    );
+    const alert = () => el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim();
+    await vi.waitFor(() => expect(alert()).toBe(codeMessage("connection.failed")));
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
+    expect(alert()).toBe(codeMessage("connection.failed"));
   });
 });
 

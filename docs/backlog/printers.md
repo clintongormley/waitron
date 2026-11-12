@@ -674,10 +674,8 @@ Hardware and inbox checks to complete in the owner session.
 
 ## Bundle: Printers screen leftovers
 
-6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **Printer lists that still read as empty while loading or after a failed read** — left open by
-  A428. [Detail](printers.md#printer-lists-that-still-read-as-empty-while-loading-or-after-a-failed-read)
 - Choose one reset-on-dismiss policy for armed destructive row actions across printers and agents;
   migrate `?disabled=${busy}` buttons to `loading`; the seen-status is as of the last read, not a live
   presence light.
@@ -980,24 +978,6 @@ construct a friendly computer name from a printer label. See the
   the poll** — left open by C117 (#955), so the job pull still waits for them. The agent puts no
   limit of its own on a scan pass; read, not run: the whole sweep across several networks and the
   USB reads have no overall limit.
-
-## Printer lists that still read as empty while loading or after a failed read
-
-- **Printer lists that still read as empty while loading or after a failed read** — left open by
-  A428, which fixed the reprint dialog, the device profile window's printer section and the
-  Printers list's loading line. Still open: the Printers screen's printers, agents and jobs tables
-  say "No printers yet.", "No print agents yet." and "No print jobs yet." after a FAILED read,
-  beside the screen's refresh-failed message (sibling tables pass `errorMessage`); the devices
-  screen's device editor is believed, from reading only, to offer just "Use default (None)" while
-  its printer list loads; the device profile window, after its first printer read failed and before
-  a later one succeeds, shows no printer section and no loading line, even while the next read is
-  under way; after an empty printer list loaded and a later refresh failed, that window shows the
-  failure but still says "Add a printer first.", because the shared query code does not say which
-  read failed; and Cancel in that window clears the
-  screen's message without putting back a read failure that is still standing (read, not run).
-  Add a printer's discovered list says "No printers found. Check that the printer is on and
-  connected, then scan again." after a failed read, beside the dialog's refresh-failed message
-  (read, not run).
 
 ## Loose ends left by C107 (#974)
 

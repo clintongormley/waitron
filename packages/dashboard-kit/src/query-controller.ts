@@ -4,6 +4,7 @@ import type { LiveData, ObservedResource, ResourceQuery } from "./live-data.js";
 export class QueryController implements ReactiveController {
   #slots = new Map<string, () => void>();
   #failing = new Set<string>();
+  #unread = new Set<string>();
   #lastError: unknown = undefined;
   #failures = 0;
 
@@ -40,6 +41,7 @@ export class QueryController implements ReactiveController {
       const reject = (error: unknown): void => {
         if (active) {
           this.#failing.add(slot);
+          this.#unread.add(slot);
           this.#lastError = error;
           this.#failures += 1;
           this.error(error);
@@ -57,6 +59,7 @@ export class QueryController implements ReactiveController {
             reject(error);
             return;
           }
+          if (active) this.#unread.delete(slot);
           if (
             active &&
             failures === this.#failures &&
@@ -84,15 +87,22 @@ export class QueryController implements ReactiveController {
     });
   }
 
+  /** Whether the slot's latest read, or the apply of its answer, failed. */
+  failing(slot: string): boolean {
+    return this.#unread.has(slot);
+  }
+
   release(slot: string): void {
     this.#slots.get(slot)?.();
     this.#slots.delete(slot);
     this.#failing.delete(slot);
+    this.#unread.delete(slot);
   }
 
   hostDisconnected(): void {
     for (const release of this.#slots.values()) release();
     this.#slots.clear();
     this.#failing.clear();
+    this.#unread.clear();
   }
 }
