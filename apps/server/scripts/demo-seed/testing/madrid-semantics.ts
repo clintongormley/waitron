@@ -215,9 +215,10 @@ export async function canonicalMadridSemantics(
         key = parts("zone_id", "label");
         break;
       case "floor_plan_sets": {
-        const rows = snapshot.tables.department_floor_plan_sets!.rows.filter(
-          (set) => set.set_id === id,
-        );
+        const rows =
+          row.department_id === undefined
+            ? snapshot.tables.department_floor_plan_sets!.rows.filter((set) => set.set_id === id)
+            : [row];
         if (rows.length !== 1) throw new Error("ambiguous floor set owner");
         key = [alias(rows[0]!.department_id!), rows[0]!.name];
         break;

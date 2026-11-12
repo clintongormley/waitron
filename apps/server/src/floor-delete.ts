@@ -3,10 +3,7 @@ import {
   diningTables,
   floorZones,
   floorPlans,
-  floorPlanTableParts,
-  floorPlanTableSizes,
   floorPlanTables,
-  floorResetTableParts,
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
@@ -154,17 +151,6 @@ export function floorDeletionFor(removals: readonly TableRemoval[]): FloorDeleti
       const [refusal] = await refusalsFor(tx, removals, floor.tables, now);
       if (refusal)
         throw new AppError(refusal.code as ErrorCode, refusal.params as ErrorParams[ErrorCode]);
-      await tx
-        .delete(floorResetTableParts)
-        .where(
-          inArray(
-            floorResetTableParts.joinedResetTableId,
-            tx
-              .select({ id: floorResetTables.id })
-              .from(floorResetTables)
-              .where(inArray(floorResetTables.zoneId, floor.ids)),
-          ),
-        );
       await tx.delete(floorResetTables).where(inArray(floorResetTables.zoneId, floor.ids));
       const kept = await removeLiveTables(
         tx,
@@ -197,11 +183,9 @@ export function floorDeletionFor(removals: readonly TableRemoval[]): FloorDeleti
         .set({ planTableId: null })
         .where(inArray(floorResetTables.planTableId, masterIds));
       await tx
-        .delete(floorPlanTableParts)
-        .where(inArray(floorPlanTableParts.joinedTableId, masterIds));
-      await tx
-        .delete(floorPlanTableSizes)
-        .where(inArray(floorPlanTableSizes.planTableId, masterIds));
+        .update(floorPlanTables)
+        .set({ partOfTableId: null })
+        .where(inArray(floorPlanTables.partOfTableId, masterIds));
       await deletePlans(
         tx,
         floor.plans.map((plan) => plan.id),

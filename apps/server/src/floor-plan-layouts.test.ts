@@ -4,10 +4,10 @@ import { and, eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorPlanPlacements, floorPlans, floorPlanSets, floorPlanTables } from "@waitron/db";
+import { floorPlanPlacements, floorPlans, floorPlanTables } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
+import { createDepartment, createServiceZone, addFloorPlanSet } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import { todayRow, mergeOf, standardAndDinner } from "./testing/floor-today-venue.js";
 import { listTables } from "./tables.js";
@@ -53,8 +53,7 @@ async function department() {
       ["standard", "Standard"],
       ["dinner", "Dinner"],
     ] as const) {
-      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, { setId: row!.id, departmentId: dept.id, name });
+      const row = { id: await addFloorPlanSet(tx, { departmentId: dept.id, name }) };
       sets[key] = row!.id;
     }
     return { zoneId: inside.id, elsewhere: elsewhere.id, ...sets };

@@ -37,7 +37,6 @@ let nextOrderNumber = 0;
 export function fakeCore(cfg: FakeCoreConfig): CoreServices {
   return {
     floorPlanSets: {
-      create: () => Promise.reject(new Error("unused floor plan sets")),
       copyLayouts: () => Promise.reject(new Error("unused floor plan sets")),
       readLayouts: () => Promise.reject(new Error("unused floor plan sets")),
       zonesShowing: () => Promise.reject(new Error("unused floor plan sets")),

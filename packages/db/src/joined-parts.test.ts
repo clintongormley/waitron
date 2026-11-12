@@ -1,10 +1,9 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { needsMoving } from "./joined-parts.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { diningTables } from "./schema/dining-tables.js";
 import {
-  floorResetTableParts,
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
@@ -49,11 +48,10 @@ async function seedJoinedToday(db: Db): Promise<void> {
     { id: COUNTER_5_ROW, zoneId: ZONE, tableId: COUNTER_5, label: "Counter 5", seats: 4 },
     { id: PLAIN_ROW, zoneId: ZONE, tableId: PLAIN, label: "Plain", seats: 4 },
   ]);
-  await db.insert(floorResetTableParts).values([
-    { joinedResetTableId: LONG_ROW, partResetTableId: COUNTER_3_ROW },
-    { joinedResetTableId: LONG_ROW, partResetTableId: COUNTER_4_ROW },
-    { joinedResetTableId: LONG_ROW, partResetTableId: COUNTER_5_ROW },
-  ]);
+  await db
+    .update(floorResetTables)
+    .set({ partOfResetTableId: LONG_ROW })
+    .where(inArray(floorResetTables.id, [COUNTER_3_ROW, COUNTER_4_ROW, COUNTER_5_ROW]));
 }
 
 describe("needs moving", () => {

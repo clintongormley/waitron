@@ -7351,8 +7351,7 @@ it("carries Long table's parts, naming the imported tables", async () => {
       },
       new Date("2026-10-11T12:00:00Z"),
     );
-    const parts = await tx.execute<{ id: string }>(sql`select id from floor_plan_table_parts`);
-    return [...Object.values(ids), ...parts.rows.map((row) => row.id)];
+    return Object.values(ids);
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -7374,7 +7373,7 @@ it("carries Long table's parts, naming the imported tables", async () => {
     part_id: string;
     part: string;
   }>(
-    sql`select x.id, j.id joined_id, j.label joined, p.id part_id, p.label part from floor_plan_table_parts x join floor_plan_tables j on j.id=x.joined_table_id join floor_plan_tables p on p.id=x.part_table_id join floor_zones z on z.id=j.zone_id where z.name='Joined zone' order by p.label`,
+    sql`select p.id, j.id joined_id, j.label joined, p.id part_id, p.label part from floor_plan_tables p join floor_plan_tables j on j.id=p.part_of_table_id join floor_zones z on z.id=j.zone_id where z.name='Joined zone' order by p.label`,
   );
   expect(rows.rows.map((row) => [row.joined, row.part])).toEqual([
     ["Long table", "Counter 3"],
@@ -7417,7 +7416,7 @@ it("carries a kept size, naming the imported table", async () => {
       new Date("2026-10-11T12:00:00Z"),
     );
     await tx.execute(
-      sql`insert into floor_plan_table_sizes (id, plan_id, plan_table_id, width, height) values (${randomUUID()}, (select id from floor_plans where zone_id = ${zone.id}), ${ids.c3!}, 2, 2)`,
+      sql`insert into floor_plan_placements (id, plan_id, plan_table_id, width, height) values (${randomUUID()}, (select id from floor_plans where zone_id = ${zone.id}), ${ids.c3!}, 2, 2)`,
     );
     return Object.values(ids);
   });
@@ -7440,7 +7439,7 @@ it("carries a kept size, naming the imported table", async () => {
     width: number;
     height: number;
   }>(
-    sql`select s.plan_table_id, p.label, s.width, s.height from floor_plan_table_sizes s join floor_plan_tables p on p.id=s.plan_table_id`,
+    sql`select s.plan_table_id, p.label, s.width, s.height from floor_plan_placements s join floor_plan_tables p on p.id=s.plan_table_id`,
   );
   expect(rows.rows).toEqual([
     { plan_table_id: expect.any(String), label: "Counter 3", width: 2, height: 2 },

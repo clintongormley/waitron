@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import {
-  departmentFloorPlanSets,
+  floorPlanSets,
   departments,
   departmentTransferRequests,
   deviceProfiles,
@@ -296,9 +296,9 @@ async function remove(
   await floor.clear(tx, zoneIds, now);
   if (departmentId !== null) {
     const links = await tx
-      .select({ setId: departmentFloorPlanSets.setId })
-      .from(departmentFloorPlanSets)
-      .where(eq(departmentFloorPlanSets.departmentId, departmentId));
+      .select({ setId: floorPlanSets.id })
+      .from(floorPlanSets)
+      .where(eq(floorPlanSets.departmentId, departmentId));
     await removeFloorPlanSets(
       tx,
       floor,

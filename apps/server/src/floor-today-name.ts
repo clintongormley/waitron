@@ -1,8 +1,8 @@
+import { alias } from "drizzle-orm/sqlite-core";
 import { eq, isNotNull } from "drizzle-orm";
 import {
   diningTables,
   floorPlanTables,
-  floorPlanTableParts,
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodayTables,
@@ -84,11 +84,12 @@ async function refuseInUse(
     .from(diningTables);
   if (saved.some((t) => t.id !== selfTable && sameName(t.label, name))) throw taken;
 
+  const member = alias(floorPlanTables, "saved_group_member");
   const savedGroups = await tx
     .select({ label: floorPlanTables.label, joinId: floorTodayJoinTables.joinId })
-    .from(floorPlanTableParts)
-    .innerJoin(floorPlanTables, eq(floorPlanTables.id, floorPlanTableParts.joinedTableId))
-    .leftJoin(diningTables, eq(diningTables.planTableId, floorPlanTableParts.partTableId))
+    .from(member)
+    .innerJoin(floorPlanTables, eq(floorPlanTables.id, member.partOfTableId))
+    .leftJoin(diningTables, eq(diningTables.planTableId, member.id))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id));
   const reserved = savedGroups.filter((g) => sameName(g.label, name));
   if (reserved.length > 0 && !reserved.some((g) => selfJoin !== null && g.joinId === selfJoin))

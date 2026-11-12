@@ -12,7 +12,6 @@ import {
   diningTables,
   floorPlanPlacements,
   floorPlans,
-  floorPlanSets,
   floorPlanTables,
   floorResetTables,
   floorTodayJoins,
@@ -27,7 +26,7 @@ import {
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
+import { createDepartment, createServiceZone, addFloorPlanSet } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { createTable } from "./testing/live-table.js";
 import { defaultLayout } from "./testing/floor-sets.js";
@@ -1308,9 +1307,8 @@ describe("the parts of joined tables in the till's copy", () => {
     const rows = await inTx(v, async (tx) =>
       tx.all<{ joined: string; part: string }>(sql`
         select joined_row.plan_table_id as joined, part_row.plan_table_id as part
-        from floor_reset_table_parts copied
-        join floor_reset_tables joined_row on joined_row.id = copied.joined_reset_table_id
-        join floor_reset_tables part_row on part_row.id = copied.part_reset_table_id
+        from floor_reset_tables part_row
+        join floor_reset_tables joined_row on joined_row.id = part_row.part_of_reset_table_id
         where joined_row.zone_id = ${zoneId}`),
     );
     return rows.sort((a, b) => a.part.localeCompare(b.part));
@@ -1849,10 +1847,10 @@ describe("resets onto a set's layout", () => {
         name: `Setless ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
-      const [unlinked] = await tx
-        .insert(floorPlanSets)
-        .values({})
-        .returning({ id: floorPlanSets.id });
+      const other = await createDepartment(tx, { name: randomUUID(), orderStart: "table" });
+      const unlinked = {
+        id: await addFloorPlanSet(tx, { departmentId: other.id, name: "Other department" }),
+      };
       await tx.insert(floorPlans).values({
         zoneId: zone.id,
         setId: unlinked!.id,
@@ -1894,10 +1892,10 @@ describe("resets onto a set's layout", () => {
         orderStart: "table",
       });
       await tx.update(floorZones).set({ departmentId: moved.id }).where(eq(floorZones.id, zone.id));
-      const [unlinked] = await tx
-        .insert(floorPlanSets)
-        .values({})
-        .returning({ id: floorPlanSets.id });
+      const other = await createDepartment(tx, { name: randomUUID(), orderStart: "table" });
+      const unlinked = {
+        id: await addFloorPlanSet(tx, { departmentId: other.id, name: "Other department" }),
+      };
       await tx.insert(floorPlans).values({
         zoneId: zone.id,
         setId: unlinked!.id,
@@ -1916,12 +1914,7 @@ describe("resets onto a set's layout", () => {
     expect(await todayRow(live!.id)).toEqual(rowBefore);
 
     const setId = await inTx(v, async (tx) => {
-      const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, {
-        setId: set!.id,
-        departmentId: gaining,
-        name: "Standard",
-      });
+      const set = { id: await addFloorPlanSet(tx, { departmentId: gaining, name: "Standard" }) };
       return set!.id;
     });
     await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
@@ -1997,12 +1990,8 @@ describe("resets onto a set's layout", () => {
         .update(floorZones)
         .set({ departmentId: gaining.id })
         .where(eq(floorZones.id, zone.id));
-      const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, {
-        setId: set!.id,
-        departmentId: gaining.id,
-        name: "Standard",
-      });
+
+      await addFloorPlanSet(tx, { departmentId: gaining.id, name: "Standard" });
       return { zoneId: zone.id, fromSet: from.setId };
     });
     const recordBefore = await todayZone(zoneId);

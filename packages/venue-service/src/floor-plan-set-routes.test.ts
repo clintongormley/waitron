@@ -11,7 +11,6 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  departmentFloorPlanSets,
   floorPlanSets,
   floorPlanTables,
   menuPeriods,
@@ -50,10 +49,6 @@ function fakeCore() {
   const removed: string[][] = [];
   const asked: string[][] = [];
   const floorPlanSetsPort: CoreServices["floorPlanSets"] = {
-    async create(tx) {
-      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-      return row!.id;
-    },
     async copyLayouts(_tx, fromSetId, toSetId) {
       copies.push([fromSetId, toSetId]);
     },
@@ -242,7 +237,7 @@ const periodSet = async (periodId: string) =>
   )[0]!.setId;
 
 const linkOf = async (setId: string) =>
-  db.select().from(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, setId));
+  db.select().from(floorPlanSets).where(eq(floorPlanSets.id, setId));
 
 describe("the floor plan sets model", () => {
   it("lists a department's default first, its zones, and the periods each set serves", async () => {
@@ -423,7 +418,7 @@ describe("renaming, copying and the default", () => {
     const { setId } = (await res.json()) as { setId: string };
     expect(v.copies.at(-1)).toEqual([v.dinnerSet, setId]);
     expect(await linkOf(setId)).toEqual([
-      { setId, departmentId: v.restaurant, name: "Late", isDefault: false },
+      { id: setId, departmentId: v.restaurant, name: "Late", isDefault: false },
     ]);
   });
 

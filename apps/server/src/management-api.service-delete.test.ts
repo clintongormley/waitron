@@ -454,7 +454,10 @@ describe("stale floor identifiers", () => {
         shape: "rect",
         rotation: 0,
       });
-      const [set] = await tx.insert(floorPlanSets).values({}).returning();
+      const [set] = await tx
+        .insert(floorPlanSets)
+        .values({ departmentId: f.departmentId, name: randomUUID() })
+        .returning();
       const [plan] = await tx
         .insert(floorPlans)
         .values({ zoneId: f.zoneId, setId: set!.id, savedAt: now.toISOString() })

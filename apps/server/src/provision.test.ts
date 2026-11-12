@@ -23,7 +23,7 @@ import { parseModuleConfig } from "@waitron/module";
 import { createCategory } from "@waitron/catalogue";
 import {
   createDepartment,
-  linkFloorPlanSet,
+  addFloorPlanSet,
   readHolidays,
   readHolidayAreaModel,
   saveHolidayArea,
@@ -561,21 +561,17 @@ describe("clearProvisionFixture", () => {
         name: "Restaurant",
         orderStart: "table",
       });
-      const setId = randomUUID();
-      await tx.execute(sql`insert into floor_plan_sets (id)
-        values (${setId})`);
-      await linkFloorPlanSet(tx, { setId, departmentId: department.id, name: "Standard" });
+      await addFloorPlanSet(tx, { departmentId: department.id, name: "Standard" });
     });
 
     await clearProvisionFixture(db);
 
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
-        (select cast(count(*) as int) from department_floor_plan_sets) as links,
         (select cast(count(*) as int) from floor_plan_sets) as sets,
         (select cast(count(*) as int) from departments) as departments,
         (select cast(count(*) as int) from locations) as locations`);
-    expect(rows[0]).toEqual({ links: 0, sets: 0, departments: 0, locations: 0 });
+    expect(rows[0]).toEqual({ sets: 0, departments: 0, locations: 0 });
   });
 
   it("clears a venue's routing cells before its stations", async () => {

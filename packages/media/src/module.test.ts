@@ -89,7 +89,6 @@ describe("the media module descriptor", () => {
         cfg: {},
         core: {
           floorPlanSets: {
-            create: () => Promise.reject(new Error("unused floor plan sets")),
             copyLayouts: () => Promise.reject(new Error("unused floor plan sets")),
             readLayouts: () => Promise.reject(new Error("unused floor plan sets")),
             zonesShowing: () => Promise.reject(new Error("unused floor plan sets")),

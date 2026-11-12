@@ -6,7 +6,6 @@ export {
   billNumberAllocations,
   departmentDayRanges,
   departmentDays,
-  departmentFloorPlanSets,
   departmentReceipts,
   departments,
   departmentSalePolicies,
@@ -187,7 +186,7 @@ export * from "./device-zone-selection.js";
 export type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/module";
 export {
   createFloorPlanSet,
-  linkFloorPlanSet,
+  addFloorPlanSet,
   readFloorPlanSets,
   type FloorPlanSetsModel,
 } from "./floor-plan-set-store.js";

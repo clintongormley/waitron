@@ -222,3 +222,25 @@ it("maps only the generated activity id and retains the setup save facts", async
     }),
   ).not.toEqual(first);
 });
+
+it("keeps floor-set identity when department ownership moves into its row", async () => {
+  const department = "123e4567-e89b-42d3-a456-426614174002";
+  const original = await canonical({
+    tables: {
+      departments: table([{ id: department, name: "Restaurant" }]),
+      floor_plan_sets: table([{ id }]),
+      department_floor_plan_sets: table([
+        { set_id: id, department_id: department, name: "Standard", is_default: 1 },
+      ]),
+    },
+  });
+  const folded = await canonical({
+    tables: {
+      departments: table([{ id: department, name: "Restaurant" }]),
+      floor_plan_sets: table([{ id, department_id: department, name: "Standard", is_default: 1 }]),
+    },
+  });
+  expect(Object.keys(folded.tables.floor_plan_sets!.rows)).toEqual(
+    Object.keys(original.tables.floor_plan_sets!.rows),
+  );
+});

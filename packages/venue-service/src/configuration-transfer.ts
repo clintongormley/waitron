@@ -91,19 +91,18 @@ export function validateMenuTimetables(tables: Tables): void {
   const setDepartment = new Map<unknown, unknown>();
   const setNames = new Set<string>();
   const defaults = new Map<unknown, number>();
-  for (const row of tables.department_floor_plan_sets ?? []) {
-    if (!departments.has(row.department_id)) refuse("department_floor_plan_sets.department_id");
+  for (const row of tables.floor_plan_sets ?? []) {
+    if (!departments.has(row.department_id)) refuse("floor_plan_sets.department_id");
     const name = JSON.stringify([row.department_id, row.name]);
-    if (setNames.has(name)) refuse("department_floor_plan_sets.name");
+    if (setNames.has(name)) refuse("floor_plan_sets.name");
     setNames.add(name);
     defaults.set(
       row.department_id,
       (defaults.get(row.department_id) ?? 0) + (row.is_default === 1 ? 1 : 0),
     );
-    setDepartment.set(row.set_id, row.department_id);
+    setDepartment.set(row.id, row.department_id);
   }
-  if ([...defaults.values()].some((count) => count !== 1))
-    refuse("department_floor_plan_sets.is_default");
+  if ([...defaults.values()].some((count) => count !== 1)) refuse("floor_plan_sets.is_default");
   const names = new Set<string>();
   for (const row of tables.menu_periods ?? []) {
     if (!departments.has(row.department_id)) refuse("menu_periods.department_id");
@@ -678,7 +677,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "department_transfer_desks" },
     { name: "department_transfer_destinations" },
     { name: "routing_cells" },
-    { name: "department_floor_plan_sets" },
     { name: "menu_periods" },
     { name: "menu_period_staff_menus" },
     { name: "routing_cell_periods" },

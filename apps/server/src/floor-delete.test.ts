@@ -1,19 +1,16 @@
+import { addFloorPlanSet } from "@waitron/venue-service";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, isNotNull, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { BOOKINGS_TABLE_REMOVAL, bookings } from "@waitron/bookings";
 import {
   diningTables,
   floorPlanPlacements,
-  floorPlanSets,
   floorPlans,
-  floorPlanTableParts,
-  floorPlanTableSizes,
   floorPlanTables,
-  floorResetTableParts,
   floorResetTables,
   floorTodayTables,
   floorTodayJoins,
@@ -87,9 +84,7 @@ const floorRows = {
   diningTables,
   floorPlans,
   floorPlanTables,
-  floorPlanTableParts,
-  floorPlanTableSizes,
-  floorResetTableParts,
+  floorPlanPlacements,
   floorResetTables,
   floorTodayTables,
   floorTodayJoins,
@@ -113,7 +108,13 @@ async function snapshot(tx: Transaction) {
 
 async function planned(z: string, prefix: string) {
   return inTx(v, async (tx) => {
-    const [set] = await tx.insert(floorPlanSets).values({}).returning();
+    const [zone] = await tx
+      .select({ departmentId: floorZones.departmentId })
+      .from(floorZones)
+      .where(eq(floorZones.id, z));
+    const set = {
+      id: await addFloorPlanSet(tx, { departmentId: zone!.departmentId, name: randomUUID() }),
+    };
     const [plan] = await tx
       .insert(floorPlans)
       .values({ zoneId: z, setId: set!.id, savedAt: NOW.toISOString() })
@@ -528,8 +529,8 @@ describe("floor hierarchy deletion", () => {
       await inTx(v, (tx) =>
         tx
           .select()
-          .from(floorPlanTableSizes)
-          .where(inArray(floorPlanTableSizes.planTableId, masterIds)),
+          .from(floorPlanPlacements)
+          .where(inArray(floorPlanPlacements.planTableId, masterIds)),
       ),
     ).toEqual([]);
     expect(
@@ -590,27 +591,30 @@ describe("floor hierarchy deletion", () => {
     const masterIds = Object.values(master);
     const partsOf = () =>
       inTx(v, (tx) =>
-        tx
-          .select()
-          .from(floorPlanTableParts)
-          .where(inArray(floorPlanTableParts.joinedTableId, masterIds)),
+        tx.select().from(floorPlanTables).where(inArray(floorPlanTables.partOfTableId, masterIds)),
       );
     const copiedOf = () =>
       inTx(v, (tx) =>
         tx
-          .select({ id: floorResetTableParts.id })
-          .from(floorResetTableParts)
-          .innerJoin(
-            floorResetTables,
-            eq(floorResetTables.id, floorResetTableParts.joinedResetTableId),
-          )
-          .where(eq(floorResetTables.zoneId, zoneId)),
+          .select({ id: floorResetTables.id })
+          .from(floorResetTables)
+
+          .where(
+            and(
+              eq(floorResetTables.zoneId, zoneId),
+              isNotNull(floorResetTables.partOfResetTableId),
+            ),
+          ),
       );
     expect(await partsOf()).toHaveLength(3);
     expect(await copiedOf()).toHaveLength(3);
     await inTx(v, (tx) => seatFor().clear(tx, [zoneId], NOW));
     expect(await partsOf()).toEqual([]);
-    expect(await inTx(v, (tx) => tx.select().from(floorResetTableParts))).toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(floorResetTables).where(isNotNull(floorResetTables.partOfResetTableId)),
+      ),
+    ).toEqual([]);
     expect(
       await inTx(v, (tx) =>
         tx.select().from(floorPlanTables).where(inArray(floorPlanTables.id, masterIds)),

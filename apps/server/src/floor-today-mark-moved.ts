@@ -1,12 +1,6 @@
 import { and, eq, inArray, or, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import {
-  diningTables,
-  floorResetTableParts,
-  floorResetTables,
-  floorTodayJoinTables,
-  needsMoving,
-} from "@waitron/db";
+import { diningTables, floorResetTables, floorTodayJoinTables, needsMoving } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -181,24 +175,26 @@ async function pendingGroupRows(
   rowIds: string[] | SQLWrapper,
 ): Promise<{ id: string; tableId: string | null }[]> {
   const links = await tx
-    .select({ joinedId: floorResetTableParts.joinedResetTableId })
-    .from(floorResetTableParts)
+    .select({ joinedId: floorResetTables.partOfResetTableId })
+    .from(floorResetTables)
     .innerJoin(
       joinedRow,
-      and(eq(joinedRow.id, floorResetTableParts.joinedResetTableId), eq(joinedRow.pending, true)),
+      and(eq(joinedRow.id, floorResetTables.partOfResetTableId), eq(joinedRow.pending, true)),
     )
     .where(
       or(
-        inArray(floorResetTableParts.joinedResetTableId, rowIds),
-        inArray(floorResetTableParts.partResetTableId, rowIds),
+        inArray(floorResetTables.partOfResetTableId, rowIds),
+        inArray(floorResetTables.id, rowIds),
       ),
     );
-  const joinedIds = [...new Set(links.map((link) => link.joinedId))];
+  const joinedIds = [
+    ...new Set(links.flatMap((link) => (link.joinedId === null ? [] : [link.joinedId]))),
+  ];
   if (joinedIds.length === 0) return [];
   const parts = tx
-    .select({ id: floorResetTableParts.partResetTableId })
-    .from(floorResetTableParts)
-    .where(inArray(floorResetTableParts.joinedResetTableId, joinedIds));
+    .select({ id: floorResetTables.id })
+    .from(floorResetTables)
+    .where(inArray(floorResetTables.partOfResetTableId, joinedIds));
   return tx
     .select({ id: floorResetTables.id, tableId: floorResetTables.tableId })
     .from(floorResetTables)

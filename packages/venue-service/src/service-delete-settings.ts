@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import {
   departmentDayRanges,
   departmentDays,
-  departmentFloorPlanSets,
+  floorPlanSets,
   departments,
   departmentSalePolicies,
   departmentTransferDesks,
@@ -143,10 +143,10 @@ async function settings(
     .select()
     .from(menuPeriods)
     .where(eq(menuPeriods.departmentId, departmentId ?? ""));
-  const floorPlanSets = await tx
+  const sets = await tx
     .select()
-    .from(departmentFloorPlanSets)
-    .where(eq(departmentFloorPlanSets.departmentId, departmentId ?? ""));
+    .from(floorPlanSets)
+    .where(eq(floorPlanSets.departmentId, departmentId ?? ""));
   const staff = await tx
     .select()
     .from(menuPeriodStaffMenus)
@@ -311,7 +311,7 @@ async function settings(
     { key: "zone_policies", count: zones.length, targets: [] },
     { key: "zone_extensions", count: extensions.length, targets: [] },
     { key: "department_periods", count: departmentPeriods.length, targets: [] },
-    { key: "floor_plan_sets", count: floorPlanSets.length, targets: [] },
+    { key: "floor_plan_sets", count: sets.length, targets: [] },
     { key: "staff_menus", count: staff.length, targets: [] },
     {
       key: "seasons",

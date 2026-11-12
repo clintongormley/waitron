@@ -6,9 +6,8 @@ import { expect } from "vitest";
 import {
   diningTables,
   floorPlans,
-  floorPlanSets,
   floorPlanTables,
-  floorPlanTableSizes,
+  floorPlanPlacements,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodayTables,
@@ -19,7 +18,7 @@ import { createCatalogue } from "@waitron/catalogue";
 import {
   createDepartment,
   createServiceZone,
-  linkFloorPlanSet,
+  addFloorPlanSet,
   menuPeriods,
   replaceMenuWeek,
   saveMenuPeriod,
@@ -134,7 +133,7 @@ export async function giveKeptSize(
       .from(floorPlans)
       .where(and(eq(floorPlans.zoneId, master!.zoneId!), eq(floorPlans.setId, inSet)));
     await tx
-      .insert(floorPlanTableSizes)
+      .insert(floorPlanPlacements)
       .values({ planId: plan!.id, planTableId: masterId, ...size });
   });
 }
@@ -189,12 +188,7 @@ export async function setsDepartment(
       1,
     );
     const set = async (setName: string) => {
-      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, {
-        setId: row!.id,
-        departmentId: department.id,
-        name: setName,
-      });
+      const row = { id: await addFloorPlanSet(tx, { departmentId: department.id, name: setName }) };
       return row!.id;
     };
     const standard = await set("Standard");

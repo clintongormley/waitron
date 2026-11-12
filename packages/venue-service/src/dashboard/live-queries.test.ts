@@ -144,7 +144,7 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
       "department_transfer_desks",
       "department_transfer_destinations",
       "department_transfer_requests",
-      "department_floor_plan_sets",
+      "floor_plan_sets",
     ]);
   },
 );
@@ -189,6 +189,6 @@ it("reads a period's floor plan choices again on a set, zone or table change, no
     "departments",
     "floor_zones",
     "floor_plan_tables",
-    "department_floor_plan_sets",
+    "floor_plan_sets",
   ]);
 });

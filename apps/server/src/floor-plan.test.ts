@@ -2,7 +2,7 @@ import { seedZone } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, isNotNull, asc, eq, inArray, isNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -10,19 +10,16 @@ import {
   diningTables,
   floorPlanPlacements,
   floorPlans,
-  floorPlanTableParts,
   floorPlanTables,
-  floorPlanTableSizes,
   floorResetTables,
   floorTodayTables,
   floorTodayZones,
-  floorPlanSets,
   shortNameColumns,
   floorZones,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
+import { createDepartment, createServiceZone, addFloorPlanSet } from "@waitron/venue-service";
 import {
   checkLayoutSave,
   readLayout,
@@ -674,8 +671,10 @@ describe("saveLayout", () => {
       const rows = await inTx(v, (tx) =>
         tx
           .select()
-          .from(floorPlanTableParts)
-          .where(inArray(floorPlanTableParts.partTableId, partIds)),
+          .from(floorPlanTables)
+          .where(
+            and(inArray(floorPlanTables.id, partIds), isNotNull(floorPlanTables.partOfTableId)),
+          ),
       );
       expect(rows).toEqual([]);
     });
@@ -1148,7 +1147,7 @@ describe("saveLayout", () => {
         ids: {},
       });
       const sizes = await inTx(v, (tx) =>
-        tx.select().from(floorPlanTableSizes).where(eq(floorPlanTableSizes.planTableId, c3)),
+        tx.select().from(floorPlanPlacements).where(eq(floorPlanPlacements.planTableId, c3)),
       );
       expect(sizes).toEqual([]);
     });
@@ -1159,7 +1158,7 @@ describe("saveLayout", () => {
         tx.select({ id: floorPlans.id }).from(floorPlans).where(eq(floorPlans.zoneId, z)),
       );
       const sizes = await inTx(v, (tx) =>
-        tx.select().from(floorPlanTableSizes).where(eq(floorPlanTableSizes.planTableId, c3)),
+        tx.select().from(floorPlanPlacements).where(eq(floorPlanPlacements.planTableId, c3)),
       );
       expect(sizes).toMatchObject([{ planId: plan!.id, width: 2, height: 3 }]);
     });
@@ -1182,7 +1181,7 @@ describe("saveLayout", () => {
           const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
           try {
             await saveLayout(tx, NONE, at, input, NOW);
-            return prepare.mock.calls.filter(([sql]) => sql.includes("floor_plan_table_sizes"))
+            return prepare.mock.calls.filter(([sql]) => sql.includes("floor_plan_placements"))
               .length;
           } finally {
             prepare.mockRestore();
@@ -1461,8 +1460,7 @@ describe("short names", () => {
       });
       const setIds: string[] = [];
       for (const name of ["Standard", "Dinner"]) {
-        const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-        await linkFloorPlanSet(tx, { setId: row!.id, departmentId: dept.id, name });
+        const row = { id: await addFloorPlanSet(tx, { departmentId: dept.id, name }) };
         setIds.push(row!.id);
       }
       return { zoneId: inside.id, standard: setIds[0]!, dinner: setIds[1]! };

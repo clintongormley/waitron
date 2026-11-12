@@ -35,9 +35,8 @@ import {
   createServiceZone,
   configureZone,
   departments,
-  departmentFloorPlanSets,
   departmentReceipts,
-  linkFloorPlanSet,
+  addFloorPlanSet,
   menuPeriods,
   departmentTransferRequests,
   requestDepartmentTransfer,
@@ -162,12 +161,8 @@ describe("real module floor deletion", () => {
     const service = core().floorDeletion;
     const { standard, dinner } = await run(async (tx) => {
       const standard = (await defaultLayout(tx, venue.cfg, f.zoneId)).setId;
-      const dinner = await core().floorPlanSets.create(tx);
-      await linkFloorPlanSet(tx, {
-        setId: dinner,
-        departmentId: f.departmentId,
-        name: "Dinner",
-      });
+
+      const dinner = await addFloorPlanSet(tx, { departmentId: f.departmentId, name: "Dinner" });
       const [menu] = await tx.insert(catalogues).values({ name: "Menu" }).returning();
       await tx.insert(menuPeriods).values([
         { departmentId: f.departmentId, name: "Lunch", menuId: menu!.id, floorPlanSetId: standard },
@@ -203,8 +198,8 @@ describe("real module floor deletion", () => {
         .where(inArray(menuPeriods.floorPlanSetId, setIds)),
       links: await tx
         .select()
-        .from(departmentFloorPlanSets)
-        .where(eq(departmentFloorPlanSets.departmentId, f.departmentId)),
+        .from(floorPlanSets)
+        .where(eq(floorPlanSets.departmentId, f.departmentId)),
       sets: await tx.select().from(floorPlanSets).where(inArray(floorPlanSets.id, setIds)),
       plans: await tx.select().from(floorPlans).where(inArray(floorPlans.setId, setIds)),
     }));
@@ -850,9 +845,7 @@ const FLOOR_ROWS = [
   "dining_tables",
   "floor_plans",
   "floor_plan_tables",
-  "floor_plan_table_parts",
-  "floor_plan_table_sizes",
-  "floor_reset_table_parts",
+  "floor_plan_placements",
   "floor_reset_tables",
   "floor_today_tables",
   "floor_today_zones",

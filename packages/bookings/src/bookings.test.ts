@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   floorPlanSets,
-  floorPlanTableParts,
   floorPlanTables,
   floorPlans,
   floorTodayTables,
@@ -714,7 +713,10 @@ describe("a part of a joined table on a layout", () => {
   /** Long table (10 seats) made of Counter 3 (2), 4 (6) and 5 (4) on a layout, each with a live table on today's plan. */
   async function longTable(): Promise<Record<"long" | "c3" | "c4" | "c5", string>> {
     const zone = await seedZone(db, { name: "Counter" });
-    const [set] = await db.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
+    const [set] = await db
+      .insert(floorPlanSets)
+      .values({ departmentId: zone.departmentId, name: "Standard", isDefault: true })
+      .returning({ id: floorPlanSets.id });
     await db.insert(floorPlans).values({ zoneId: zone!.id, setId: set!.id, savedAt: nowIso() });
     const seats = { long: 10, c3: 2, c4: 6, c5: 4 } as const;
     const labels = { long: "Long table", c3: "Counter 3", c4: "Counter 4", c5: "Counter 5" };
@@ -733,12 +735,10 @@ describe("a part of a joined table on a layout", () => {
       live[key] = table.rows[0]!.id;
       await db.insert(floorTodayTables).values({ tableId: live[key] });
     }
-    await db.insert(floorPlanTableParts).values(
-      (["c3", "c4", "c5"] as const).map((key) => ({
-        joinedTableId: master.long,
-        partTableId: master[key],
-      })),
-    );
+    await db
+      .update(floorPlanTables)
+      .set({ partOfTableId: master.long })
+      .where(inArray(floorPlanTables.id, [master.c3, master.c4, master.c5]));
     return live;
   }
 

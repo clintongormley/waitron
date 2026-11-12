@@ -8,13 +8,12 @@ import { and, eq } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { departments, floorPlans, floorPlanSets, floorTodayZones } from "@waitron/db";
+import { departments, floorPlans, floorTodayZones } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import {
   createDepartment,
   createServiceZone,
-  departmentFloorPlanSets,
-  linkFloorPlanSet,
+  addFloorPlanSet,
   menuPeriods,
   replaceZoneClosedWeek,
 } from "@waitron/venue-service";
@@ -121,10 +120,13 @@ async function updateToDue(zoneId: string, at: Date): Promise<void> {
   await inTx(v, (tx) => resetZone(tx, REMOVALS, zoneId, at, "due"));
 }
 
-/** A layout row of the zone in a set no department holds, which a lookup by zone alone counts. */
+/** A layout row of the zone in another department's set, which a lookup by zone alone counts. */
 async function unlinkedPlanRow(zoneId: string): Promise<void> {
   await inTx(v, async (tx) => {
-    const [set] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
+    const other = await createDepartment(tx, { name: randomUUID(), orderStart: "table" });
+    const set = {
+      id: await addFloorPlanSet(tx, { departmentId: other.id, name: "Other department" }),
+    };
     await tx
       .insert(floorPlans)
       .values({ zoneId, setId: set!.id, revision: 1, savedAt: LUNCH.toISOString() });
@@ -191,12 +193,9 @@ describe("GET /api/zones offers the due layout", () => {
     const { d } = await twoSets();
     await updateToDue(d.zoneId, AFTER_LUNCH);
     const party = await inTx(v, async (tx) => {
-      const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-      await linkFloorPlanSet(tx, {
-        setId: row!.id,
-        departmentId: d.departmentId,
-        name: "Private party",
-      });
+      const row = {
+        id: await addFloorPlanSet(tx, { departmentId: d.departmentId, name: "Private party" }),
+      };
       await tx
         .update(menuPeriods)
         .set({ floorPlanSetId: row!.id })
@@ -218,7 +217,6 @@ describe("GET /api/zones offers the due layout", () => {
         .update(menuPeriods)
         .set({ floorPlanSetId: null })
         .where(eq(menuPeriods.floorPlanSetId, d.dinner));
-      await tx.delete(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, d.dinner));
       await floorDeletionFor(REMOVALS).removeSets(tx, [d.dinner]);
     });
 

@@ -1,11 +1,5 @@
 import { and, asc, desc, eq, inArray, type SQL } from "drizzle-orm";
-import {
-  departmentFloorPlanSets,
-  departments,
-  floorZones,
-  menuPeriods,
-  type Transaction,
-} from "@waitron/db";
+import { floorPlanSets, departments, floorZones, menuPeriods, type Transaction } from "@waitron/db";
 import type { FloorDeletion, FloorPlanSets, FloorPlanSetSummary } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -18,11 +12,10 @@ import { listDepartments } from "./operations.js";
 
 export type { FloorPlanSetsModel, PeriodFloorPlans };
 
-/** Gives a core floor plan set to a department under `name`; the department's first set is its default. */
-export async function linkFloorPlanSet(
+export async function addFloorPlanSet(
   tx: Transaction,
-  input: { setId: string; departmentId: string; name: string },
-): Promise<void> {
+  input: { departmentId: string; name: string },
+): Promise<string> {
   const [department] = await tx
     .select({ id: departments.id })
     .from(departments)
@@ -30,29 +23,31 @@ export async function linkFloorPlanSet(
   if (department === undefined)
     throw new AppError("department.not_found", { departmentId: input.departmentId });
   const held = await tx
-    .select({ name: departmentFloorPlanSets.name })
-    .from(departmentFloorPlanSets)
-    .where(eq(departmentFloorPlanSets.departmentId, input.departmentId));
-  await insertLink(tx, input, held);
+    .select({ name: floorPlanSets.name })
+    .from(floorPlanSets)
+    .where(eq(floorPlanSets.departmentId, input.departmentId));
+  return insertSet(tx, input, held);
 }
 
-/** `linkFloorPlanSet` for a caller that has checked the department and read its sets, `held`. */
-async function insertLink(
+async function insertSet(
   tx: Transaction,
-  input: { setId: string; departmentId: string; name: string },
+  input: { departmentId: string; name: string },
   held: readonly { name: string }[],
-): Promise<void> {
+): Promise<string> {
   if (held.some(({ name }) => name === input.name))
     throw new AppError("floor_plan_set.name_taken", {
       departmentId: input.departmentId,
       name: input.name,
     });
-  await tx.insert(departmentFloorPlanSets).values({
-    setId: input.setId,
-    departmentId: input.departmentId,
-    name: input.name,
-    isDefault: held.length === 0,
-  });
+  const [row] = await tx
+    .insert(floorPlanSets)
+    .values({
+      departmentId: input.departmentId,
+      name: input.name,
+      isDefault: held.length === 0,
+    })
+    .returning({ id: floorPlanSets.id });
+  return row!.id;
 }
 
 /** The sets of the venue's active departments, each department's default first, then by name. */
@@ -73,28 +68,26 @@ export async function readFloorPlanSets(
 function setRows(tx: Transaction, filter: { setIds?: readonly string[]; departmentId?: string }) {
   return tx
     .select({
-      setId: departmentFloorPlanSets.setId,
-      departmentId: departmentFloorPlanSets.departmentId,
-      name: departmentFloorPlanSets.name,
-      isDefault: departmentFloorPlanSets.isDefault,
+      setId: floorPlanSets.id,
+      departmentId: floorPlanSets.departmentId,
+      name: floorPlanSets.name,
+      isDefault: floorPlanSets.isDefault,
     })
-    .from(departmentFloorPlanSets)
-    .innerJoin(departments, eq(departments.id, departmentFloorPlanSets.departmentId))
+    .from(floorPlanSets)
+    .innerJoin(departments, eq(departments.id, floorPlanSets.departmentId))
     .where(
       and(
         eq(departments.active, true),
-        filter.setIds === undefined
-          ? undefined
-          : inArray(departmentFloorPlanSets.setId, [...filter.setIds]),
+        filter.setIds === undefined ? undefined : inArray(floorPlanSets.id, [...filter.setIds]),
         filter.departmentId === undefined
           ? undefined
-          : eq(departmentFloorPlanSets.departmentId, filter.departmentId),
+          : eq(floorPlanSets.departmentId, filter.departmentId),
       ),
     )
     .orderBy(
-      asc(departmentFloorPlanSets.departmentId),
-      desc(departmentFloorPlanSets.isDefault),
-      asc(departmentFloorPlanSets.name),
+      asc(floorPlanSets.departmentId),
+      desc(floorPlanSets.isDefault),
+      asc(floorPlanSets.name),
     );
 }
 
@@ -194,14 +187,14 @@ export async function readPeriodFloorPlans(
   if (shown.length === 0) return { departments: [] };
   const sets = await tx
     .select({
-      id: departmentFloorPlanSets.setId,
-      departmentId: departmentFloorPlanSets.departmentId,
-      name: departmentFloorPlanSets.name,
-      isDefault: departmentFloorPlanSets.isDefault,
+      id: floorPlanSets.id,
+      departmentId: floorPlanSets.departmentId,
+      name: floorPlanSets.name,
+      isDefault: floorPlanSets.isDefault,
     })
-    .from(departmentFloorPlanSets)
-    .where(inArray(departmentFloorPlanSets.departmentId, shown))
-    .orderBy(desc(departmentFloorPlanSets.isDefault), asc(departmentFloorPlanSets.name));
+    .from(floorPlanSets)
+    .where(inArray(floorPlanSets.departmentId, shown))
+    .orderBy(desc(floorPlanSets.isDefault), asc(floorPlanSets.name));
   const setsOf = byDepartment(sets);
   return {
     departments: shown.map((id) => ({
@@ -238,7 +231,7 @@ async function ownedSet(tx: Transaction, setId: string) {
 }
 
 /**
- * Makes a set for a department and links it under `name`. The department's first set starts
+ * Makes a set for a department under `name`. The department's first set starts
  * empty and takes no `fromSetId`; every later one copies the layouts of `fromSetId`, a set of the
  * same department.
  */
@@ -261,8 +254,7 @@ export async function createFloorPlanSet(
   )
     throw new AppError("floor_plan_set.invalid", { field: "fromSetId" });
   const name = setName(input.name);
-  const setId = await core.create(tx);
-  await insertLink(tx, { setId, departmentId: input.departmentId, name }, held);
+  const setId = await insertSet(tx, { departmentId: input.departmentId, name }, held);
   if (input.fromSetId !== undefined) await core.copyLayouts(tx, input.fromSetId, setId);
   return setId;
 }
@@ -295,10 +287,7 @@ export async function renameFloorPlanSet(
       departmentId: set.departmentId,
       name: trimmed,
     });
-  await tx
-    .update(departmentFloorPlanSets)
-    .set({ name: trimmed })
-    .where(eq(departmentFloorPlanSets.setId, setId));
+  await tx.update(floorPlanSets).set({ name: trimmed }).where(eq(floorPlanSets.id, setId));
 }
 
 /** The old default's flag is cleared first: the database holds one default per department. */
@@ -306,13 +295,10 @@ export async function makeDefaultFloorPlanSet(tx: Transaction, setId: string): P
   const set = await ownedSet(tx, setId);
   if (set.isDefault) return;
   await tx
-    .update(departmentFloorPlanSets)
+    .update(floorPlanSets)
     .set({ isDefault: false })
-    .where(eq(departmentFloorPlanSets.departmentId, set.departmentId));
-  await tx
-    .update(departmentFloorPlanSets)
-    .set({ isDefault: true })
-    .where(eq(departmentFloorPlanSets.setId, setId));
+    .where(eq(floorPlanSets.departmentId, set.departmentId));
+  await tx.update(floorPlanSets).set({ isDefault: true }).where(eq(floorPlanSets.id, setId));
 }
 
 /** What deleting a set changes: the periods that name it, and the zones whose today's map came from it. */
@@ -373,8 +359,7 @@ export async function deleteFloorPlanSet(
 }
 
 /**
- * Deletes `setIds` after the periods `periods` selects take `replacement`. The periods and the
- * department links go before core's rows, which they name by plain foreign keys.
+ * Periods release their references before core deletes the sets and layouts.
  */
 export async function removeFloorPlanSets(
   tx: Transaction,
@@ -384,8 +369,5 @@ export async function removeFloorPlanSets(
   replacement: string | null,
 ): Promise<void> {
   await tx.update(menuPeriods).set({ floorPlanSetId: replacement }).where(periods);
-  await tx
-    .delete(departmentFloorPlanSets)
-    .where(inArray(departmentFloorPlanSets.setId, [...setIds]));
   await deletion.removeSets(tx, setIds);
 }

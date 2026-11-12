@@ -1,3 +1,4 @@
+import { CORE_CONFIGURATION_TRANSFER } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createHolidayCalendar, type CountryPack } from "@waitron/country";
@@ -163,7 +164,7 @@ describe("the menu timetable rows of a bundle", () => {
           name: "Mañanas",
           colour: "blue",
           menu_id: "m-desayunos",
-          floor_plan_set_id: "s-dinner",
+          floor_plan_id: "s-dinner",
         },
         {
           id: MADRUGADA,
@@ -183,10 +184,10 @@ describe("the menu timetable rows of a bundle", () => {
       menu_period_staff_menus: [
         { period_id: MANANAS, department_id: RESTAURANT, menu_id: "m-cafe", display_order: 0 },
       ],
-      department_floor_plan_sets: [
-        { set_id: "s-standard", department_id: RESTAURANT, name: "Standard", is_default: 1 },
-        { set_id: "s-dinner", department_id: RESTAURANT, name: "Dinner", is_default: 0 },
-        { set_id: "s-deli", department_id: DELI, name: "Standard", is_default: 1 },
+      floor_plan_sets: [
+        { id: "s-standard", department_id: RESTAURANT, name: "Standard", is_default: 1 },
+        { id: "s-dinner", department_id: RESTAURANT, name: "Dinner", is_default: 0 },
+        { id: "s-deli", department_id: DELI, name: "Standard", is_default: 1 },
       ],
     };
   }
@@ -204,12 +205,12 @@ describe("the menu timetable rows of a bundle", () => {
     expect(at).toBeGreaterThan(names.indexOf("department_sale_policies"));
   });
 
-  it("transfer a department's floor plan sets before the periods that name them", () => {
-    const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-    expect(names.indexOf("department_floor_plan_sets")).toBeGreaterThan(
-      names.indexOf("departments"),
-    );
-    expect(names.indexOf("department_floor_plan_sets")).toBeLessThan(names.indexOf("menu_periods"));
+  it("transfers floor sets once through core and periods through venue-service", () => {
+    const coreNames = CORE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    const moduleNames = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    expect(coreNames.filter((name) => name === "floor_plan_sets")).toHaveLength(1);
+    expect(moduleNames).not.toContain("floor_plan_sets");
+    expect(moduleNames).toContain("menu_periods");
   });
 
   it("accept rows a writer could have written, and a bundle with none", () => {
@@ -278,30 +279,30 @@ describe("the menu timetable rows of a bundle", () => {
     [
       "a floor plan set of a department the bundle lacks",
       (t: Tables) => {
-        t.department_floor_plan_sets![2]!.department_id = "d-gone";
+        t.floor_plan_sets![2]!.department_id = "d-gone";
       },
-      "department_floor_plan_sets.department_id",
+      "floor_plan_sets.department_id",
     ],
     [
       "a floor plan set name its department uses twice",
       (t: Tables) => {
-        t.department_floor_plan_sets![1]!.name = "Standard";
+        t.floor_plan_sets![1]!.name = "Standard";
       },
-      "department_floor_plan_sets.name",
+      "floor_plan_sets.name",
     ],
     [
       "a department whose floor plan sets have no default",
       (t: Tables) => {
-        t.department_floor_plan_sets![0]!.is_default = 0;
+        t.floor_plan_sets![0]!.is_default = 0;
       },
-      "department_floor_plan_sets.is_default",
+      "floor_plan_sets.is_default",
     ],
     [
       "a department with two default floor plan sets",
       (t: Tables) => {
-        t.department_floor_plan_sets![1]!.is_default = 1;
+        t.floor_plan_sets![1]!.is_default = 1;
       },
-      "department_floor_plan_sets.is_default",
+      "floor_plan_sets.is_default",
     ],
     [
       "a period naming another department's floor plan set",

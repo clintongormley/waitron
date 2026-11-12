@@ -13,7 +13,6 @@ import {
   CORE_MIGRATIONS,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
-  floorPlanSets,
   floorZones,
   kitchenStations,
   withTransaction,
@@ -29,7 +28,7 @@ import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { readOpeningHoursModel, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot, OpeningHoursModel } from "./menu-timetable-types.js";
 import { saveSpecialDay } from "./special-days.js";
-import { linkFloorPlanSet } from "./floor-plan-set-store.js";
+import { addFloorPlanSet } from "./floor-plan-set-store.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
@@ -1356,8 +1355,7 @@ describe("a period's Floor plan field", () => {
     const r = await routed();
     const set = (departmentId: string, name: string) =>
       scoped(async (tx) => {
-        const [row] = await tx.insert(floorPlanSets).values({}).returning({ id: floorPlanSets.id });
-        await linkFloorPlanSet(tx, { setId: row!.id, departmentId, name });
+        const row = { id: await addFloorPlanSet(tx, { departmentId, name }) };
         return row!.id;
       });
     const standard = await set(r.restaurant, "Standard");

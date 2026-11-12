@@ -30,7 +30,7 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "device_profile_admission_roles",
       "device_profile_admission_persons",
       "device_approved_profiles",
-      "department_floor_plan_sets",
+      "floor_plan_sets",
       "service_steps",
       "kitchen_courses",
       "floor_zones",
@@ -45,7 +45,6 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "nodes",
       "device_made_here_stations",
       "kitchen_stations",
-      "floor_plan_sets",
       "day_cutover_changes",
       "locations",
       // Before the menus: `menu_details`' keys and `sections_owner_menu_fk` have no delete rule.
