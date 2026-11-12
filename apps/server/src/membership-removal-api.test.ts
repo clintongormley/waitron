@@ -16,6 +16,7 @@ import { seedNode } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, tryGetCredential, writePairLinkTx, type KeyRing } from "@waitron/credentials";
 import { readPairLink } from "@waitron/node-db";
 import { startManagementSession } from "@waitron/identity";
+import { AppError } from "@waitron/shared";
 import {
   MAX_REVOKED,
   routableServers,
@@ -618,21 +619,24 @@ describe("removing the standby this box's pair link names", () => {
     expect(p.reloadStream).toHaveBeenCalledOnce();
   });
 
-  it("a repeated removal finishes a reload the first one could not, and reloads no more after", async () => {
+  it("a reload that fails after the pair link is deleted is logged by its code, and the removal still answers 200", async () => {
     const p = await primary();
     const gone = standby();
     await holdChart(p, [self(p), gone]);
     await linkTo(p, gone.nodeId);
-    p.reloadStream.mockRejectedValueOnce(new Error("test: reload failed"));
+    p.reloadStream.mockRejectedValueOnce(new AppError("backup.reload_in_progress", {}));
 
-    expect((await remove(p, gone.nodeId, p.adminCookie)).status).toBe(500);
+    const res = await remove(p, gone.nodeId, p.adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ removed: true });
     expect(await readPairLink(suite.node, p.nodeId)).toBeNull();
-
-    expect((await remove(p, gone.nodeId, p.adminCookie)).status).toBe(200);
-    expect(p.reloadStream).toHaveBeenCalledTimes(2);
-
-    expect((await remove(p, gone.nodeId, p.adminCookie)).status).toBe(200);
-    expect(p.reloadStream).toHaveBeenCalledTimes(2);
+    expect(p.reloadStream).toHaveBeenCalledOnce();
+    expect(p.lines).toContainEqual({
+      level: "warn",
+      event: "membership.stream_reload_failed",
+      fields: { nodeId: gone.nodeId, errorCode: "backup.reload_in_progress" },
+    });
   });
 });
 

@@ -7,9 +7,9 @@ import type { KeyRing } from "@waitron/credentials";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import {
   clearRemovedMachine,
-  createStandbyUnlinker,
   listServers,
   removeUnjoinedStandby,
+  unlinkRemovedStandby,
 } from "./membership-removal.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
@@ -46,12 +46,6 @@ export function mountMembershipRemovalApi(
 ): void {
   const run = createErrorBoundary(STATUS, "membership.removal_failed");
   const runClear = createErrorBoundary(STATUS, "membership.clearance_failed");
-  const unlinkRemovedStandby = createStandbyUnlinker({
-    node: deps.node,
-    nodeId: deps.nodeId,
-    log,
-    reloadStream: deps.reloadStream,
-  });
 
   // Admin-only, the same permission that hands a standby its bundle.
   const authorize = (sessionId: string, fresh = false): Promise<string> =>
@@ -86,7 +80,10 @@ export function mountMembershipRemovalApi(
         { db: deps.db, node: deps.node, ring: deps.ring, nodeId: deps.nodeId, log },
         { targetNodeId, personId },
       );
-      await unlinkRemovedStandby(targetNodeId);
+      await unlinkRemovedStandby(
+        { node: deps.node, nodeId: deps.nodeId, log, reloadStream: deps.reloadStream },
+        targetNodeId,
+      );
       return c.json(result);
     }),
   );
