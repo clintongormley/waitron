@@ -276,6 +276,12 @@ async function openCalibration(el: PrintersScreen): Promise<void> {
   q(el, "[data-test=calibrate-printer-details]")!.click();
   await flush(el);
 }
+/** axe looks for an open modal with `document.elementsFromPoint`, which answers with the screen,
+ * never a dialog inside its shadow root, so it grades the details dialog Calibrate covers; at phone
+ * width that dialog's scrolled-away "Used by" heading lies on its footer's red Delete. */
+function calibrationDialog(el: PrintersScreen): Element {
+  return q(el, '[data-test="edit-printer-modal"]')!;
+}
 async function openDiscovery(el: PrintersScreen): Promise<void> {
   q(el, "[data-test=open-add-printer]")!.click();
   await flush(el);
@@ -741,7 +747,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     setLocale(locale);
     await page.viewport(width, 900);
     try {
-      const { el, host } = await mountWidget<PrintersScreen>(
+      const { el } = await mountWidget<PrintersScreen>(
         "dashboard-printers-screen",
         { api: stubApi() },
         theme,
@@ -763,7 +769,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         .getBoundingClientRect();
       expect(rect.left).toBeGreaterThanOrEqual(modal.left);
       expect(rect.right).toBeLessThanOrEqual(modal.right);
-      await expectNoA11yViolations(host);
+      await expectNoA11yViolations(calibrationDialog(el));
       await userEvent.click(field.shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!);
       await flush(el);
       expect(field.shadowRoot!.querySelector<HTMLInputElement>("input.search")!.placeholder).toBe(
@@ -776,14 +782,14 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       await userEvent.click(receipt);
       await flush(el);
       expect(field.values).toEqual(["payment_slip"]);
-      await expectNoA11yViolations(host);
+      await expectNoA11yViolations(calibrationDialog(el));
       const slip = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
         (row) => row.textContent!.trim() === t("devices.slip_printer_now"),
       )!;
       await userEvent.click(slip);
       await flush(el);
       expect(field.values).toEqual([]);
-      await expectNoA11yViolations(host);
+      await expectNoA11yViolations(calibrationDialog(el));
     } finally {
       setLocale(before);
       await page.viewport(1280, 900);
@@ -895,14 +901,14 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         });
         q(el, '[data-test="print-ruler-p1"]')!.click();
         await flush(el);
-        await expectNoA11yViolations(host);
+        await expectNoA11yViolations(calibrationDialog(el));
         q(el, "[data-test=calibration-next]")!.click();
         await flush(el);
-        await expectNoA11yViolations(host);
+        await expectNoA11yViolations(calibrationDialog(el));
         q(el, "[data-test=calibration-next]")!.click();
         await flush(el);
         assertInsideDialog(["printer-cash-drawer"]);
-        await expectNoA11yViolations(host);
+        await expectNoA11yViolations(calibrationDialog(el));
         q(el, '[data-test="cancel-edit-printer"]')!.click();
         await flush(el);
         q(el, '[data-test="printer-details-close"]')!.click();
