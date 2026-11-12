@@ -34,6 +34,16 @@ const binding = {
   sourceId: "old",
   targetNodeId: "new",
 };
+const selectedInput = {
+  allocation: {
+    installationIdentity: "0CSQW",
+    series: [
+      { code: "A-0CSQW", purpose: "standard" },
+      { code: "FF-0CSQW", purpose: "full" },
+      { code: "R-0CSQW", purpose: "rectificative" },
+    ],
+  },
+};
 const q = <T extends HTMLElement>(el: HTMLElement, selector: string) =>
   el.shadowRoot!.querySelector<T>(selector)!;
 async function edit(el: LitElement, name: string, value: string) {
@@ -170,7 +180,7 @@ async function mount(
                 status: "selected",
                 identity: "0CSQW",
                 binding: { ...binding, eventId: saved.operationId },
-                input: { chosen: "minute" },
+                input: selectedInput,
               },
       ),
     );
@@ -453,7 +463,7 @@ it("shows a fresh copy and asks for confirmation again when it changed before de
   ]);
 });
 
-it("explains a second code expiry after replacing only the code and preparing again", async () => {
+it("explains a second code expiry after replacing only the code and pressing Try again", async () => {
   const { el, posts } = await mount({ saved: true, activationExpired: true });
   await authenticate(el);
   q(el, "[data-test=authenticate]").click();
@@ -465,9 +475,10 @@ it("explains a second code expiry after replacing only the code and preparing ag
     ),
   );
   await edit(el, "handover-code", "654321");
-  q(el, "[data-test=authenticate]").click();
-  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
-  await startVenue(el);
+  q(el, "[data-test=retry-activation]").click();
+  await vi.waitFor(() =>
+    expect(posts.filter(({ path }) => path.endsWith("/activate"))).toHaveLength(2),
+  );
   await vi.waitFor(() =>
     expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
       t("handover.emergency.code_expired"),

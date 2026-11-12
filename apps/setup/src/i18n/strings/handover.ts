@@ -109,28 +109,28 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
     "Identifícate como administrador para comprobar esta copia e iniciar el local aquí. Introduce tu contraseña y el código actual del autenticador, si está configurado. Solo necesitas un código nuevo si este caduca.",
   "handover.emergency.saved":
     "Esta declaración está guardada y no se puede deshacer. Parar sale de esta página; no cancela la declaración.",
-  "handover.emergency.copy": "Copia guardada en este equipo de reserva",
+  "handover.emergency.copy": "Copia guardada en este servidor de reserva",
   "handover.emergency.copy_changed":
     "La copia cambió mientras la leías. Revisa su última actividad y vuelve a confirmar las tres declaraciones.",
   "handover.emergency.latest_activity": "Última actividad con fecha:",
   "handover.emergency.declared_at": "Declarado:",
   "handover.emergency.no_date": "No se encontró actividad con fecha en esta copia.",
-  "handover.emergency.servers": "Abrir Servidores en el equipo principal anterior",
+  "handover.emergency.servers": "Abrir Servidores en el servidor principal anterior",
   "handover.emergency.one_way":
-    "Esta declaración no se puede deshacer. Apaga el equipo principal anterior antes de continuar y mantenlo apagado.",
+    "Esta declaración no se puede deshacer. Apaga el servidor principal anterior antes de continuar y mantenlo apagado.",
   "handover.emergency.split":
-    "Si el equipo principal anterior sigue encendido, ambos equipos podrían cobrar y enviar registros por separado. No continúes mientras siga encendido.",
+    "Si el servidor principal anterior sigue encendido, ambos servidores podrían cobrar y enviar registros por separado. No continúes mientras siga encendido.",
   "handover.emergency.returned":
-    "Conserva el equipo anterior y sus datos. Sus registros de facturación y hechos de pago registrados podrán volver más adelante; no se repiten pedidos, cambios de existencias ni aperturas de cajón.",
-  "handover.emergency.sourceSwitchedOff": "He apagado el equipo principal anterior.",
+    "Conserva el servidor anterior y sus datos. Sus registros de facturación y hechos de pago registrados podrán volver más adelante; no se repiten pedidos, cambios de existencias ni aperturas de cajón.",
+  "handover.emergency.sourceSwitchedOff": "He apagado el servidor principal anterior.",
   "handover.emergency.noParallelRecovery":
-    "No se está iniciando otro equipo ni una recuperación en la nube para este local.",
+    "No se está iniciando otro servidor ni una recuperación en la nube para este local.",
   "handover.emergency.missingTailAccepted":
-    "Acepto que esta copia puede no incluir la actividad más reciente del equipo anterior.",
+    "Acepto que esta copia puede no incluir la actividad más reciente del servidor anterior.",
   "handover.emergency.reason": "¿Por qué vas a iniciar el local aquí?",
   "handover.emergency.reason_long": "No uses más de 500 caracteres.",
   "handover.emergency.check": "Comprobar esta copia",
-  "handover.emergency.declare": "Declarar apagado el equipo principal anterior",
+  "handover.emergency.declare": "Declarar apagado el servidor principal anterior",
   "handover.emergency.stop": "Parar",
   "handover.emergency.progress": "Abrir el progreso del traspaso",
   "handover.emergency.controlled_link": "Abrir el traspaso pendiente",
@@ -143,15 +143,15 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.throttled":
     "Demasiados intentos de acceso. Espera un momento y vuelve a intentarlo.",
   "handover.emergency.source_answered":
-    "El equipo principal anterior ha respondido. Abre su página Servidores o apágalo y vuelve a comprobarlo.",
+    "El servidor principal anterior ha respondido. Abre su página Servidores o apágalo y vuelve a comprobarlo.",
   "handover.emergency.controlled":
     "Primero hay que resolver un traspaso controlado pendiente. Abre su página de progreso.",
   "handover.emergency.copy_failed":
-    "No se pudo verificar esta copia con la declaración guardada. Para aquí y conserva los datos de ambos equipos.",
+    "No se pudo verificar esta copia con la declaración guardada. Para aquí y conserva los datos de ambos servidores.",
   "handover.emergency.changed":
-    "El local o el traspaso ha cambiado. Comprueba el progreso y usa el equipo principal actual.",
+    "El local o el traspaso ha cambiado. Comprueba el progreso y usa el servidor principal actual.",
   "handover.emergency.trust":
-    "No se pudo comprobar la identidad o dirección del equipo principal anterior. Comprueba su conexión y dirección en Servidores antes de volver a intentarlo.",
+    "No se pudo comprobar la identidad o dirección del servidor principal anterior. Comprueba su conexión y dirección en Servidores antes de volver a intentarlo.",
   "handover.emergency.failed":
     "No se pudo terminar este paso. Vuelve a comprobar esta copia antes de continuar.",
 };

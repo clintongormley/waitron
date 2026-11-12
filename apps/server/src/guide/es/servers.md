@@ -19,8 +19,9 @@ copia**. Revisa su última actividad con fecha. Puede faltar la actividad poster
 ninguna fecha disponible, la página lo indica.
 
 Lee las advertencias, marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
-el equipo principal anterior**, compara los relojes y elige **Iniciar el local en este equipo**.
-Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
+el servidor principal anterior**. En la comprobación del reloj, marca **Estos datos son correctos.**
+y elige **Continuar**: la página compara los relojes, crea las series de facturas nuevas e inicia
+el local en este servidor sola. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
 el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. El
 motivo y las declaraciones se conservan.
 

@@ -17,8 +17,9 @@ current authenticator code, if set up, then choose **Check this copy**. Read its
 activity. Anything newer may be missing; if no date is available, the page says so.
 
 Read the warnings, tick all three statements and give your reason. Choose **Declare the old main
-box switched off**, compare the clocks and choose **Start the venue on this box**. Keep the page
-open through the restart. You enter your password and code once; if the code expires, enter its
+box switched off**. At the clock check, tick **These details are correct.** and choose **Proceed**:
+the page compares the clocks, creates the new invoice series and starts the venue on this box by
+itself. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
 current replacement when asked and try the step again. Your reason and statements stay in place.
 
 If the copy changes before you declare, review the new activity and tick the three statements
