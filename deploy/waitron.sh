@@ -14,6 +14,7 @@
 set -euo pipefail
 
 WAITRON_DIR="${WAITRON_DIR:-/opt/waitron}"
+WAITRON_HOST_DIR="${WAITRON_HOST_DIR:-/opt/waitron-host}"
 # The public repo, written out in full (not via a variable) so scripts/deploy-image-env.test.ts can
 # pin the literal URL as text — a typo in the org/repo then fails the guard loudly.
 RAW_BASE="https://raw.githubusercontent.com/clintongormley/waitron"
@@ -29,6 +30,8 @@ waitron.sh: usage:
   waitron.sh install [ref]     install or upgrade the box (ref defaults to main)
   waitron.sh update [ref]      same as install
   waitron.sh status            show each running Waitron image and its build time
+  waitron.sh restore           restore the intact copy from a held manual upgrade
+  waitron.sh keep              start the candidate despite its failed checks
   waitron.sh reset [--all]     wipe the box to a clean state (keeps the certificate unless the box
                                joined another, the start-again records and the files a Move set
                                aside; --all drops them too)
@@ -574,6 +577,11 @@ print_image_versions() {
 }
 
 cmd_status() {
+  if [ -x "$WAITRON_HOST_DIR/node-v26.7.0/bin/node" ]; then
+    upgrade_cli status
+  elif upgrade_pending; then
+    echo "waitron.sh: upgrade pending; the retained host runtime is unavailable" >&2
+  fi
   [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
   cd "$WAITRON_DIR"
   print_image_versions
@@ -776,8 +784,32 @@ delete_previous_images() {
 # any image is built or pulled: the check reads the box with its CURRENT compose.yml and image, which
 # the fetch replaces and the build or pull supersedes. refresh_self, which runs first, may already
 # have replaced this script itself. The wipe waits until the new images are in place.
+upgrade_pending() {
+  [ -d "${WAITRON_DIR}.upgrades" ] || return 1
+  [ -n "$(find "${WAITRON_DIR}.upgrades" -mindepth 1 -maxdepth 1 -print -quit)" ]
+}
+
+refuse_pending_upgrade() {
+  if upgrade_pending; then
+    die "upgrade pending — run 'waitron.sh status', then choose restore or keep; nothing was refreshed or reset"
+  fi
+}
+
+upgrade_cli() {
+  local node="$WAITRON_HOST_DIR/node-v26.7.0/bin/node"
+  [ -x "$node" ] || die "the retained host runtime is unavailable — retain the upgrade copy and runtime; do not reset"
+  "$node" "$WAITRON_HOST_DIR/box/upgrades/cli.mjs" "$1" "$WAITRON_DIR"
+}
+
+cmd_upgrade_choice() (
+  exec 9>"${WAITRON_DIR}.upgrade.lock"
+  flock -n 9 || die "another host operation is running"
+  upgrade_cli "$1"
+)
+
 cmd_install() {
   local ref="${1:-main}" wipe="$RESET_BEFORE_INSTALL"
+  refuse_pending_upgrade
   refresh_self "$ref"
   ensure_docker
   if [ "$wipe" -eq 1 ]; then
@@ -874,6 +906,7 @@ cmd_reset() {
   for a in "$@"; do
     reset_option "$a" || die "reset: unknown option '$a'" 2
   done
+  refuse_pending_upgrade
   [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
   confirm_reset
   cd "$WAITRON_DIR"
@@ -901,7 +934,7 @@ main() {
     verb=install
   fi
   case "$verb" in
-    install | update | status | reset | "" | -h | --help) ;;
+    install | update | status | restore | keep | reset | "" | -h | --help) ;;
     *) die "unknown command '$verb'" 2 ;;
   esac
   if [ -n "$first" ]; then
@@ -912,6 +945,7 @@ main() {
   case "$verb" in
     install | update) shift; cmd_install "$@" ;;
     status) shift; cmd_status "$@" ;;
+    restore | keep) cmd_upgrade_choice "$verb" ;;
     reset)   shift; cmd_reset "$@" ;;
     *) usage ;;
   esac

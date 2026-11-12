@@ -315,6 +315,7 @@ exit 2`,
 stub("groupadd", "exit 0");
 // as_root calls `sudo -n <cmd>`; drop the -n and exec the rest so it lands on the stubbed systemctl.
 stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
+stub("flock", `[ "\${WT_UPGRADE_BUSY:-0}" != 1 ]`);
 
 const GIT_LOCATION_OVERRIDES = [
   "GIT_DIR",
@@ -548,6 +549,56 @@ function composeCalls(sb) {
     .filter((call) => call.startsWith("compose "))
     .map((call) => call.slice("compose ".length));
 }
+
+describe("waitron.sh pending manual upgrade", () => {
+  it.each([["install"], ["--reset", "--yes", "install"], ["reset", "--yes"]])(
+    "refuses %j before refreshing the script or touching Docker",
+    (...args) => {
+      const sb = sandbox();
+      writeFileSync(sb.log, "");
+      mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
+      writeFileSync(`${sb.boxDir}.upgrades/interrupted/partial`, "intact evidence");
+      const result = run(sb, args);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("restore or keep");
+      expect(readFileSync(sb.log, "utf8")).toBe("");
+      expect(readFileSync(`${sb.boxDir}.upgrades/interrupted/partial`, "utf8")).toBe(
+        "intact evidence",
+      );
+    },
+  );
+
+  it.each(["status", "restore", "keep"])(
+    "dispatches %s through the retained runtime without downloads",
+    (verb) => {
+      const sb = sandbox();
+      writeFileSync(join(sb.boxDir, "compose.yml"), "services: {}\n");
+      const host = join(sb.root, "host");
+      mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
+      writeFileSync(
+        join(host, "node-v26.7.0/bin/node"),
+        '#!/bin/bash\nprintf "host:%s\\n" "$*" >> "$WT_LOG"\nprintf \'{"phase":"awaiting-choice"}\\n\'\n',
+        { mode: 0o700 },
+      );
+      const result = run(sb, [verb], { WAITRON_HOST_DIR: host });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('"phase":"awaiting-choice"');
+      const calls = readFileSync(sb.log, "utf8");
+      expect(calls).toContain(`host:${host}/box/upgrades/cli.mjs ${verb} ${sb.boxDir}\n`);
+      expect(calls).not.toContain("curl ");
+      expect(calls).not.toContain("wget ");
+      expect(calls).not.toContain("bootstrap");
+      if (verb !== "status") expect(calls).not.toContain("docker ");
+    },
+  );
+  it("refuses a recovery choice when another host operation holds the lock", () => {
+    const sb = sandbox();
+    const result = run(sb, ["restore"], { WT_UPGRADE_BUSY: "1" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("another host operation");
+    expect(readFileSync(sb.log, "utf8")).not.toContain("host:");
+  });
+});
 
 describe("waitron.sh image provenance", () => {
   const app = "0123456789abcdef0123456789abcdef01234567";
