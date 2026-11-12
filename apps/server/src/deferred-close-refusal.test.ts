@@ -15,6 +15,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { recordCorrection } from "@waitron/core";
+import { payments } from "@waitron/payments";
 import { loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
@@ -27,7 +28,7 @@ import {
   setOrderInvoiceChoice,
   setOrderReceiptLanguage,
 } from "./testing/order-writer-fixture.js";
-import { inTx, seatedWith, send, type Answer } from "./testing/bill-venue.js";
+import { inTx, seatedWith, send, tendersOfBill, type Answer } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { collectOrderOrchestration } from "./testing/whole-payment-fixture.js";
 import {
@@ -132,6 +133,33 @@ function payPart(
       tip: "0.00",
     }),
   );
+}
+
+/** Pays `amount` of the bill, then gives `back` of it back through the refund route. */
+async function payPartAndGiveBack(
+  party: { tabId: string },
+  amount: string,
+  back: string,
+  method: "cash" | "card" = "cash",
+): Promise<void> {
+  const paid = await payPart(party, amount, method);
+  expect(paid.status).toBe(200);
+  const paymentId = (paid.json.payment as { id: string }).id;
+  const givenBack = await send(
+    t.venue.app,
+    t.venue.cookie,
+    "POST",
+    `/api/working-orders/${party.tabId}/payments/${paymentId}/refunds`,
+    {
+      submissionId: randomUUID(),
+      appliedAmount: back,
+      tipAmount: "0.00",
+      reason: "Overcharged",
+      override: { personId: t.venue.adminId, pin: "1234" },
+    },
+  );
+  expect(givenBack.status, JSON.stringify(givenBack)).toBe(200);
+  expect(givenBack.json).toMatchObject({ refund: { appliedAmount: back, state: "completed" } });
 }
 
 describe("closeBillDeferredTx refuses, before writing anything", () => {
@@ -276,60 +304,53 @@ describe("closeBillDeferredTx refuses, before writing anything", () => {
     expect((await t.close(staleRequest)).workingOrderId).toBe(stale.tabId);
   });
 
-  it("a bill holding an earlier payment, even a part, but not one whose only card was declined", async () => {
-    const party = await seatedWith(t.venue, "House salad");
-    const paid = await payPart(party, "5.00");
-    expect(paid.status).toBe(200);
-    const declinedParty = await seatedWith(t.venue, "House salad");
+  it("a bill still holding money from an earlier part payment, serving one whose payments were all declined or given back in full", async () => {
+    const held = await seatedWith(t.venue, "House salad");
+    expect((await payPart(held, "5.00")).status).toBe(200);
+    const partlyBack = await seatedWith(t.venue, "House salad");
+    await payPartAndGiveBack(partlyBack, "5.00", "2.00");
+
+    for (const party of [held, partlyBack]) {
+      const error = await refusedWithNothingWritten(async () =>
+        t.close(await t.requestFor(party.tabId, "12.00", party.partyId)),
+      );
+      expect(error).toMatchObject(ineligible(party.tabId, "prior_payment"));
+    }
+
+    const declined = await seatedWith(t.venue, "House salad");
     t.venue.card.failNextCollect();
-    const declined = await payPart(declinedParty, "5.00", "card");
-    expect(declined.status).toBe(200);
-    expect(declined.json).toMatchObject({
+    expect((await payPart(declined, "12.00", "card")).json).toMatchObject({
       outcome: "declined",
       payment: { state: "failed" },
       balance: { received: "0.00", reserved: "0.00" },
     });
+    const cashBack = await seatedWith(t.venue, "House salad");
+    await payPartAndGiveBack(cashBack, "5.00", "5.00");
+    const cardBack = await seatedWith(t.venue, "House salad");
+    await payPartAndGiveBack(cardBack, "5.00", "5.00", "card");
 
-    const error = await refusedWithNothingWritten(async () =>
-      t.close(await t.requestFor(party.tabId, "12.00", party.partyId)),
-    );
-
-    expect(error).toMatchObject(ineligible(party.tabId, "prior_payment"));
-    const served = await t.close(
-      await t.requestFor(declinedParty.tabId, "12.00", declinedParty.partyId),
-    );
-    expect(served.workingOrderId).toBe(declinedParty.tabId);
-  });
-
-  it("a bill whose payment was given back in full", async () => {
-    const party = await seatedWith(t.venue, "House salad");
-    const paid = await payPart(party, "5.00");
-    expect(paid.status).toBe(200);
-    const paymentId = (paid.json.payment as { id: string }).id;
-    const refunded = await send(
-      t.venue.app,
-      t.venue.cookie,
-      "POST",
-      `/api/working-orders/${party.tabId}/payments/${paymentId}/refunds`,
-      {
-        submissionId: randomUUID(),
-        appliedAmount: "5.00",
-        tipAmount: "0.00",
-        reason: "Customer requested it",
-        override: { personId: t.venue.adminId, pin: "1234" },
-      },
-    );
-    expect(refunded.status).toBe(200);
-    expect(refunded.json).toMatchObject({
-      refund: { appliedAmount: "5.00", state: "completed" },
-      balance: { received: "0.00" },
-    });
-
-    const error = await refusedWithNothingWritten(async () =>
-      t.close(await t.requestFor(party.tabId, "12.00", party.partyId)),
-    );
-
-    expect(error).toMatchObject(ineligible(party.tabId, "prior_payment"));
+    for (const party of [declined, cashBack, cardBack]) {
+      const closed = await t.close(await t.requestFor(party.tabId, "12.00", party.partyId));
+      expect(closed.workingOrderId).toBe(party.tabId);
+      expect(await tendersOfBill(t.venue, party.tabId)).toEqual([
+        {
+          method: "deferred",
+          amount: 1200,
+          tip: 0,
+          billPaymentId: null,
+          saleDeviceId: t.venue.cfg.origin.deviceId,
+        },
+      ]);
+    }
+    const { id: cardSaleId } = await issuedSaleOf(cardBack.tabId);
+    expect(
+      await inTx(t.venue, (tx) =>
+        tx
+          .select({ state: payments.state, saleId: payments.saleId })
+          .from(payments)
+          .where(eq(payments.workingOrderId, cardBack.tabId)),
+      ),
+    ).toEqual([{ state: "refunded", saleId: cardSaleId }]);
   });
 
   it("a bill whose card payment is still being taken", async () => {

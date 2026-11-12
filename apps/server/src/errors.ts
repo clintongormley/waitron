@@ -635,10 +635,8 @@ declare module "@waitron/shared" {
      */
     "unpaid_departure.unfired_dishes": { workingOrderId: string };
     /**
-     * Record unpaid departure found a bill it would invoice, open or presented, holding a payment,
-     * one given back in full included: collecting a presented bill refuses one that holds a payment
-     * (`collectOrder`, through `refuseBillWithPayments`), so the invoice issued now could not be
-     * collected later.
+     * Record unpaid departure found a bill it would invoice, open or presented, still holding money
+     * from a payment: one pending, or one received whose money or tip was not all given back.
      */
     "unpaid_departure.bill_holds_payment": { workingOrderId: string };
     /**
@@ -675,7 +673,7 @@ declare module "@waitron/shared" {
       moneyRefundable: string;
     };
     "invoice_correction.chain_unsound": { saleId: string };
-    /** The bill cannot be closed as a deferred payment: it is not one whole, positive, untouched bill. */
+    /** The bill cannot be closed as a deferred payment: it is not one whole, positive bill. */
     "deferred_close.ineligible": {
       workingOrderId: string;
       reason:

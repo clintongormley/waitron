@@ -19,7 +19,7 @@ import { AppError, businessDayAt, centsToDecimal, decimal, decimalToCents } from
 import type { Decimal, ErrorParams, SaleId } from "@waitron/shared";
 import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
-import { holdsPayment } from "./bill-payments.js";
+import { billsHoldingMoney } from "./bill-payments.js";
 import { checkedInvoiceRecipient, storedRecipientIdentifier } from "./invoice-selection.js";
 import { requireOrderBillEditor } from "./bill-editing.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
@@ -127,7 +127,7 @@ export async function closeBillDeferredTx(
     expectedEdit: request.expectedEdit,
   });
   await assertBillHasNoUnsent(tx, billId);
-  if (await holdsPayment(tx, billId)) throw ineligible("prior_payment");
+  if ((await billsHoldingMoney(tx, [billId])).has(billId)) throw ineligible("prior_payment");
   await refusePaymentInFlight(tx, [billId]);
   await refusePlacedPaymentInFlight(deps.db, tx, [billId]);
 

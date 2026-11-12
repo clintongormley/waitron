@@ -46,6 +46,8 @@ show **Close bill / Cerrar cuenta** and reuse that invoice. Explain before confi
 This is a whole-bill action with zero tip. Accept a positive, uncorrected ordinary invoice/bill
 with no earlier bill payments, settlement, void, substitution, unresolved card/refund outcome,
 conflicting edit or unsent changes. Refuse unsupported states before writing or contacting anything.
+_(2026-11-12, R6-2: "no earlier bill payments" now means none still holding money; a bill whose
+payments were all declined or given back in full can be closed (owner, 2026-11-12, `docs/backlog/till.md`).)_
 Retain existing trusted-clock, primary-node, fiscal, invoice-limit and recipient admission checks.
 Do not split a large bill, invent recipient details, bypass F1 gates or absorb existing payments.
 

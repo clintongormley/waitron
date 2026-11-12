@@ -18,6 +18,7 @@ import {
   saleLines,
   saleSettlements,
   sales,
+  tenders,
   unpaidDepartures,
   withTransaction,
   workingOrderLines,
@@ -724,6 +725,66 @@ describe("cancelling a placed order whose invoice was issued", () => {
       status: 409,
       code: "bill.payments_received",
     });
+  });
+
+  it("credits a bill its party left unpaid after its part payment was given back in full, tendering nothing", async () => {
+    const party = await seatedWith(venue, "Caña");
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "1.00",
+        method: "cash",
+        tendered: "1.00",
+        applied: "1.00",
+        tip: "0.00",
+      },
+    );
+    expect(paid.status).toBe(200);
+    const givenBack = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments/${(paid.json.payment as { id: string }).id}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "1.00",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+    expect(givenBack.status, JSON.stringify(givenBack)).toBe(200);
+    const [{ revision }] = venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${party.partyId}`,
+    );
+    const departed = await send(
+      venue.app,
+      supervisorCookie,
+      "POST",
+      `/api/parties/${party.partyId}/unpaid-departure`,
+      { billId: party.tabId, expectedPartyRevision: revision, reason: "Se marcharon sin pagar" },
+    );
+    expect(departed.status, JSON.stringify(departed)).toBe(200);
+    const original = await invoiceOf(party.tabId);
+
+    const answer = await cancel(party.tabId);
+
+    expect(answer).toEqual({ status: 200, json: { body: "" } });
+    expect(await creditsOf(original.id)).toEqual([expect.objectContaining({ total: -300 })]);
+    expect(
+      await inTx(venue, (tx) => tx.select().from(tenders).where(eq(tenders.saleId, original.id))),
+    ).toEqual([]);
+    expect(
+      await inTx(venue, (tx) =>
+        tx.select().from(saleSettlements).where(eq(saleSettlements.saleId, original.id)),
+      ),
+    ).toHaveLength(1);
+    expect(await statusOf(venue, party.tabId)).toBe("abandoned");
   });
 
   it("refuses an operator without sale.rectify on a bill holding a payment as not permitted, writing nothing", async () => {

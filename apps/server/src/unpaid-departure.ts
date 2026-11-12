@@ -28,6 +28,7 @@ import { parseBillEditExpecteds, requireBillEditors } from "./bill-editing.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readPartyFinishReadiness } from "./finish-party-service.js";
 import type { BillEditExpected } from "./order-drafts.js";
+import { billsHoldingMoney } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
 import { pinnedAt } from "./issue-moment.js";
@@ -108,7 +109,7 @@ export async function recordUnpaidDeparture(
   if (issued === undefined) {
     if ((await ordersWithUnfiredDish(tx, [req.billId])).has(req.billId))
       throw new AppError("unpaid_departure.unfired_dishes", { workingOrderId: req.billId });
-    if (bill.hasPayments)
+    if ((await billsHoldingMoney(tx, [req.billId])).has(req.billId))
       throw new AppError("unpaid_departure.bill_holds_payment", { workingOrderId: req.billId });
   }
   if (bill.status === "open") await refusePaymentInFlight(tx, [req.billId]);

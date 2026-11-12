@@ -110,6 +110,7 @@ import {
   collectFailure,
   holdsPayment,
   readBillBalance,
+  refuseBillHoldingMoney,
   refuseBillWithPayments,
 } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
@@ -1224,8 +1225,10 @@ async function payIntegrated(
         );
       if (short !== undefined)
         return { kind: "partial" as const, balance: await readBillBalance(tx, req.id) };
-      await refuseBillWithPayments(tx, req.id);
       const outstanding = await readOutstandingSaleForOrder(tx, req.id);
+      if (locked.status === "placed" && outstanding !== undefined)
+        await refuseBillHoldingMoney(tx, [req.id]);
+      else await refuseBillWithPayments(tx, req.id);
 
       // A captured payment with no sale: P2 committed but P3 has not run. Driving `collect` again
       // would charge the card a SECOND time.
@@ -2282,7 +2285,9 @@ async function runCollectOrder(
       if (locked === undefined || locked.status !== "placed") {
         throw new AppError("working_order.not_placed", { workingOrderId: req.id });
       }
-      await refuseBillWithPayments(tx, req.id);
+      const outstanding = await readOutstandingSaleForOrder(tx, req.id);
+      if (outstanding !== undefined) await refuseBillHoldingMoney(tx, [req.id]);
+      else await refuseBillWithPayments(tx, req.id);
       await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
 
       await requireOrderBillEditor(tx, req.id, { operatorId, expectedEdit: req.expectedEdit });
@@ -2292,7 +2297,6 @@ async function runCollectOrder(
       if (req.tender.method !== "cash" && req.tender.method !== "card") {
         throw new AppError("sale.unsupported_tender", { method: req.tender.method });
       }
-      const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
       if (outstanding !== undefined) {
         // Before the owes-nothing return, so a malformed cash amount is refused whatever is owed.

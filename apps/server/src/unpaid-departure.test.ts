@@ -29,6 +29,7 @@ import {
   saleSettlements,
   sales,
   tenants,
+  tenders,
   ticketItems,
   unpaidDepartures,
   workingOrderLines,
@@ -37,7 +38,7 @@ import {
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { hashPin, loginWithPin } from "@waitron/identity";
-import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
+import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -1593,6 +1594,262 @@ describe("what is refused", () => {
     });
     await expectNothingWritten(party.partyId, party.tabId);
   });
+
+  /** A €10 part payment on the party's bill, then given back in full through the refund route. */
+  async function payPartAndGiveItBack(
+    party: { tabId: string },
+    method: "cash" | "card" = "cash",
+  ): Promise<void> {
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "10.00",
+        method,
+        ...(method === "cash" ? { tendered: "10.00" } : { entry: "reader" }),
+        applied: "10.00",
+        tip: "0.00",
+      },
+    );
+    expect(paid.status).toBe(200);
+    const paymentId = (paid.json.payment as { id: string }).id;
+    const givenBack = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "10.00",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+    expect(givenBack.status, JSON.stringify(givenBack)).toBe(200);
+  }
+
+  it("records the whole bill as unpaid after its part payment was given back in full, tendering nothing", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    await payPartAndGiveItBack(party);
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(answer.status, JSON.stringify(answer)).toBe(200);
+    const [invoiced] = await salesOf(party.tabId);
+    expect(invoiced).toEqual({ id: expect.any(String), total: 3000, settledAt: null });
+    expect(await departuresOf(party.tabId)).toEqual([
+      expect.objectContaining({ saleId: invoiced!.id, amount: 3000 }),
+    ]);
+    expect(
+      await inTx(venue, (tx) => tx.select().from(tenders).where(eq(tenders.saleId, invoiced!.id))),
+    ).toEqual([]);
+    const outstanding = await inTx(venue, listOutstandingSales);
+    expect(outstanding.find((sale) => sale.saleId === invoiced!.id)).toMatchObject({
+      amountDue: "30.00",
+    });
+    expect(await paymentRows(venue, party.tabId)).toEqual([
+      expect.objectContaining({ applied: 1000, state: "received" }),
+    ]);
+    expect(await partyState(party.partyId)).toEqual({ state: "closed", closedBy: supervisorId });
+  });
+
+  it("links a card part payment given back in full to the invoice it issues, as the bill's own invoice does", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    await payPartAndGiveItBack(party, "card");
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(answer.status, JSON.stringify(answer)).toBe(200);
+    const [invoiced] = await salesOf(party.tabId);
+    expect(
+      venue.db.all(
+        sql`select state, sale_id as saleId from payments where working_order_id = ${party.tabId}`,
+      ),
+    ).toEqual([{ state: "refunded", saleId: invoiced!.id }]);
+  });
+
+  it("settles the unpaid debt left by a card given back in full, part by a short card capture and the rest in cash, linking both cards to its invoice", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    await payPartAndGiveItBack(party, "card");
+    expect(
+      (
+        await depart(party.partyId, {
+          expectedPartyRevision: revisionOf(party.partyId),
+          reason: REASON,
+        })
+      ).status,
+    ).toBe(200);
+    const [invoiced] = await salesOf(party.tabId);
+    const collect = venue.card.collect.bind(venue.card);
+    vi.spyOn(venue.card, "collect").mockImplementationOnce((params) =>
+      collect({ ...params, amount: decimal("20.00") }),
+    );
+
+    const short = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+      id: party.tabId,
+      lines: [],
+    });
+    expect(short.status, JSON.stringify(short)).toBe(200);
+    expect(short.json).toMatchObject({ outcome: "partial", balance: { outstanding: "10.00" } });
+
+    const rest = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "10.00",
+        method: "cash",
+        tendered: "10.00",
+        applied: "10.00",
+        tip: "0.00",
+      },
+    );
+
+    expect(rest.status, JSON.stringify(rest)).toBe(200);
+    expect(await statusOf(venue, party.tabId)).toBe("settled");
+    expect(await salesOf(party.tabId)).toEqual([
+      { id: invoiced!.id, total: 3000, settledAt: expect.any(String) },
+    ]);
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ method: tenders.method, amount: tenders.amount })
+          .from(tenders)
+          .where(eq(tenders.saleId, invoiced!.id))
+          .orderBy(tenders.method),
+      ),
+    ).toEqual([
+      { method: "card", amount: 2000 },
+      { method: "cash", amount: 1000 },
+    ]);
+    expect(
+      venue.db.all(
+        sql`select state, amount, sale_id as saleId from payments where working_order_id = ${party.tabId} order by state`,
+      ),
+    ).toEqual([
+      { state: "captured", amount: 2000, saleId: invoiced!.id },
+      { state: "refunded", amount: 1000, saleId: invoiced!.id },
+    ]);
+  });
+
+  const collectWays = [
+    {
+      label: "collected in cash",
+      method: "cash",
+      collect: (billId: string) =>
+        send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/collect`, {
+          tender: { method: "cash", amount: "30.00" },
+        }),
+    },
+    {
+      label: "paid by card at the reader",
+      method: "card",
+      collect: (billId: string) =>
+        send(venue.app, venue.cookie, "POST", "/api/pay", { id: billId, lines: [] }),
+    },
+  ];
+
+  it.each(
+    (["cash", "card"] as const).flatMap((givenBack) =>
+      collectWays.map((way) => ({ ...way, givenBack })),
+    ),
+  )(
+    "settles the whole unpaid debt $label after its $givenBack part payment was given back in full, the given-back payment no tender",
+    async ({ method, collect, givenBack }) => {
+      const party = await seatedWith(venue, "Red wine bottle");
+      await payPartAndGiveItBack(party, givenBack);
+      expect(
+        (
+          await depart(party.partyId, {
+            expectedPartyRevision: revisionOf(party.partyId),
+            reason: REASON,
+          })
+        ).status,
+      ).toBe(200);
+      const [invoiced] = await salesOf(party.tabId);
+
+      const collected = await collect(party.tabId);
+
+      expect(collected.status, JSON.stringify(collected)).toBe(200);
+      expect(await salesOf(party.tabId)).toEqual([
+        { id: invoiced!.id, total: 3000, settledAt: expect.any(String) },
+      ]);
+      expect(
+        await inTx(venue, (tx) =>
+          tx
+            .select({
+              method: tenders.method,
+              amount: tenders.amount,
+              billPaymentId: tenders.billPaymentId,
+            })
+            .from(tenders)
+            .where(eq(tenders.saleId, invoiced!.id)),
+        ),
+      ).toEqual([{ method, amount: 3000, billPaymentId: null }]);
+      expect(await statusOf(venue, party.tabId)).toBe("settled");
+    },
+  );
+
+  it.each([
+    { label: "in cash", method: "cash" as const },
+    { label: "by card at the reader", method: "card" as const },
+  ])(
+    "refuses a new payment $label on the bill left unpaid after its card was given back, as on one never paid, writing nothing",
+    async ({ method }) => {
+      const party = await seatedWith(venue, "Red wine bottle");
+      await payPartAndGiveItBack(party, "card");
+      expect(
+        (
+          await depart(party.partyId, {
+            expectedPartyRevision: revisionOf(party.partyId),
+            reason: REASON,
+          })
+        ).status,
+      ).toBe(200);
+      const sales = await salesOf(party.tabId);
+      const payments = await paymentRows(venue, party.tabId);
+      const calls = venue.card.collectCalls.length;
+
+      const paid = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${party.tabId}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "10.00",
+          method,
+          ...(method === "cash" ? { tendered: "10.00" } : { entry: "reader" }),
+          applied: "10.00",
+          tip: "0.00",
+        },
+      );
+
+      expect(paid).toEqual({
+        status: 409,
+        json: { code: "working_order.not_open", params: { workingOrderId: party.tabId } },
+      });
+      expect(venue.card.collectCalls).toHaveLength(calls);
+      expect(await paymentRows(venue, party.tabId)).toEqual(payments);
+      expect(await salesOf(party.tabId)).toEqual(sales);
+      expect(await statusOf(venue, party.tabId)).toBe("placed");
+    },
+  );
 
   it("refuses a bill being paid in full by card at the reader, and writes nothing", async () => {
     const party = await seatedWith(venue, "Red wine bottle");

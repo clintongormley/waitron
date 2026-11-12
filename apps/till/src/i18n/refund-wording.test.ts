@@ -58,7 +58,7 @@ describe("A803 refund refusal wording", () => {
   it.each([
     [
       "unpaid_departure.bill_holds_payment",
-      "This bill already holds a payment, even if it was refunded, so it cannot be left unpaid. Take the rest of that bill as a payment first",
+      "This bill holds a payment that has not been refunded in full, so it cannot be left unpaid. Take the rest of that bill as a payment first",
     ],
     [
       "bill.refund_exceeds_payment",
