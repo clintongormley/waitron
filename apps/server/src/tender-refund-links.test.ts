@@ -490,11 +490,19 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     expect(await refusedOver(paid, refundBody(paid, "12.01", [burger]))).toBe("12.00");
   });
 
-  it("and one with a tip", async () => {
+  it("requires fresh approval for a tip without claiming the applied amount exceeds its cancels", async () => {
     const { paid, burger } = await oneCancel(true);
-    expect(
-      await refusedOver(paid, { ...refundBody(paid, "12.00", [burger]), tipAmount: "1.00" }),
-    ).toBe("12.00");
+    const before = await ledgers();
+    const answer = await staffRefund(paid, {
+      ...refundBody(paid, "12.00", [burger]),
+      tipAmount: "1.00",
+    });
+    expect(answer.status).toBe(403);
+    expect(answer.json).toEqual({
+      code: "authorization.not_permitted",
+      params: { permission: "sale.refund" },
+    });
+    expect(await ledgers()).toEqual(before);
   });
 
   it("reserves and links one at its cancels' value", async () => {

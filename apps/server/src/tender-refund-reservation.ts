@@ -270,7 +270,7 @@ export async function reserveTenderRefund(
         error.code === "authorization.not_permitted" &&
         request.override === undefined &&
         allocation !== undefined &&
-        !covered
+        appliedAmount > allocation.canStillTake
       )
         throw new AppError("tender.refund_exceeds_cancelled", {
           tenderId,

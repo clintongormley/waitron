@@ -4039,7 +4039,7 @@ describe("till-app: service cancellation consent", () => {
             getCancellation: vi.fn().mockResolvedValue(whole),
             refundTransaction: vi
               .fn()
-              .mockRejectedValueOnce({ code: "tender.refund_exceeds_cancelled" })
+              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
               .mockResolvedValue(refunded),
           }),
         );
