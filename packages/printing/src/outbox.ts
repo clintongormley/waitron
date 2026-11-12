@@ -7,6 +7,7 @@ import type { Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
 
+/** Keep hardware I/O in the worker so enqueueing a job does not wait for the printer. */
 export async function enqueuePrintJob(
   tx: Transaction,
   printerId: string,

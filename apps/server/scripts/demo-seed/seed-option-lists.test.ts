@@ -28,13 +28,12 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 
 describe("seedOptionLists", () => {
   it("creates the Punto list with three different names at both levels and attaches it to the steak", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
 
     const { lists, steakId, coffeeId, attachments, available } = await withTransaction(
       suite.db,
       async (tx) => {
         const { productsByImage } = await seedCatalogues(tx, {
-          locationId,
           locale: LOCALE,
           dataSet: CASA_DELGADO_ES,
         });

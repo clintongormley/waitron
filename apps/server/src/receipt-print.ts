@@ -52,6 +52,7 @@ export interface DevicePrinter extends EscSetting {
 
 export type PrinterLookup = (role: ProfilePrinterRole) => Promise<DevicePrinter | undefined>;
 
+/** Do not reuse after changing the device's equipment: its role map is cached. */
 export function printerLookup(tx: Transaction, origin: Origin): PrinterLookup {
   let read: Promise<Map<ProfilePrinterRole, DevicePrinter>> | undefined;
   return async (role) => {
@@ -282,7 +283,7 @@ export async function enqueueCollectionTicket(
   if (printer === undefined) return;
   const language = await readKitchenLanguage(tx);
   const bytes = formatOrderNumberSlip({ orderNumber, language }, printer);
-  await enqueuePrintJob(tx, printer.id, bytes, "document", {});
+  await enqueuePrintJob(tx, printer.id, bytes, "document");
 }
 
 export async function enqueueReceiptReprint(
@@ -573,7 +574,7 @@ async function enqueueBillDrawer(
     billPaymentId,
     ...(authorization ?? {}),
   });
-  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer", {});
+  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer");
 }
 
 /**
@@ -689,5 +690,5 @@ export async function enqueueSaleDrawer(
     reason: method === "cash" ? "cash_sale" : "card_slip",
     saleId,
   });
-  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer", {});
+  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer");
 }

@@ -664,7 +664,7 @@ async function catchUpPass(
   }
   for (const tableId of kept) await hideTable(tx, tableId);
   // Each renamed table first steps aside under a spare name, so a swap never meets the unique
-  // (location, label) key halfway.
+  // label key halfway.
   const labelOf = new Map(inZone.map((table) => [table.id, table.label]));
   const renamed = plan.apply.filter(
     ({ target, label }) => label !== null && label !== labelOf.get(target.tableId!),
@@ -678,7 +678,7 @@ async function catchUpPass(
     ]),
   );
   for (const [tableId, label] of spare) await setLabel(tx, tableId, label);
-  // Short names step aside as null, which the unique (location, short name key) index never
+  // Short names step aside as null, which the unique short name key index never
   // matches, so a swap never meets it halfway.
   const shortKeyOf = new Map(
     inZone.map((table) => [table.id, shortNameColumns(table.shortName).shortNameKey]),

@@ -840,7 +840,7 @@ async function enqueueKitchenJobs(
   reprint: boolean,
 ): Promise<void> {
   for (const job of jobs) {
-    const { jobId } = await enqueuePrintJob(tx, job.printerId, job.bytes, "document", {});
+    const { jobId } = await enqueuePrintJob(tx, job.printerId, job.bytes, "document");
     await linkKitchenJob(tx, jobId, orderId, job.stationIds, reprint);
     await insertInChunks(
       tx,
@@ -1621,7 +1621,7 @@ async function printCorrectionSlips(
         timeZone,
       );
       for (const printer of group) {
-        await enqueuePrintJob(tx, printer.printerId, bytes, "document", {});
+        await enqueuePrintJob(tx, printer.printerId, bytes, "document");
       }
     }
   }
@@ -2054,7 +2054,7 @@ async function printMovedSlips(
         timeZone,
       );
       for (const printer of group) {
-        await enqueuePrintJob(tx, printer.printerId, bytes, "document", {});
+        await enqueuePrintJob(tx, printer.printerId, bytes, "document");
       }
     }
   }

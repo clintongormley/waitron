@@ -101,7 +101,7 @@ export const workingOrders = table(
     recipientIdentifierCountryCode: label("recipient_identifier_country_code"),
     // Null means no explicit delivery choice has been staged.
     invoiceDelivery: json<StagedInvoiceDelivery>("invoice_delivery"),
-    // Null means the location's receipt language.
+    // Null means the venue's receipt language.
     receiptLocale: label("receipt_locale"),
     paymentAttemptAt: tsString("payment_attempt_at"),
     // The seated party this bill belongs to; a counter order has none.
@@ -143,7 +143,7 @@ export const workingOrders = table(
  * price without a re-price (grossLockedLines, @waitron/catalogue), at its class's rate on the day the
  * invoice is issued.
  *
- * `descriptions` is a locale→string map holding exactly the location's invoice locales as they
+ * `descriptions` is a locale→string map holding exactly the venue's invoice locales as they
  * were when the line was written or last moved, checked by trigger against
  * settings.venue.invoiceLocales; every key holds the text of the venue's default content language at the
  * time the line was written, or another stored language's where the default had none.

@@ -1162,7 +1162,7 @@ the helper's constant status is not evidence of the write.
     it alone rebuilds `locations` (S17, #2415; A773-2 PR D plan D113). S28 also deletes the tests
     that still set it, listed in D113 and in [kitchen.md](kitchen.md). Server test helpers take the venue row's
     id through the test type `WithVenueRowId` (`apps/server/src/testing/venue-row-id.ts`), which
-    stays only in node, Cloud and backup fixtures until 5f/5g (watcher, 2026-11-11). `verifyCoreBackupData`
+    stays in fixtures that still read the venue row, including node, Cloud, backup, kitchen-setting and menu-name fixtures. `verifyCoreBackupData`
     (`packages/db/src/backup-evidence.ts`) still reads `locations` and `nodes.location_id` (S18f).
     Until `venueLocationId` goes, boot takes the venue row's id for backup settings, recovery
     packs, the bucket stream and the Cloud connection, and `backup-data-placement.ts` and

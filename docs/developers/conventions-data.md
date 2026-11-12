@@ -2145,8 +2145,7 @@ Edit a set's layouts on the dashboard; work from today's plan on the till. Savin
 not rearrange tables during service: only a reset does.
 
 A zone's tables are shared by every layout of the zone (`floor_plan_tables`, keyed by `zone_id`,
-with a joined table's parts in `floor_plan_table_parts`). A set (`floor_plan_sets`: an id and a
-location) holds at most one layout per zone (`floor_plans`, unique on set and zone); where a layout
+with a joined table's parts in `floor_plan_table_parts`). A set (`floor_plan_sets`: an id) holds at most one layout per zone (`floor_plans`, unique on set and zone); where a layout
 puts a table is a `floor_plan_placements` row, and a table it leaves off has none. Venue-service
 owns the rest: a set's department, name and default (`department_floor_plan_sets`, a unique name per
 department and one default each), and the set a period picks (`menu_periods.floor_plan_set_id`, null
@@ -2164,7 +2163,7 @@ the till (`plannedZones`, `apps/server/src/floor-layout-due.ts`).
 A table's short name (`short_name`) is on the plan's tables (`floor_plan_tables`), the reset rows
 (`floor_reset_tables`) and the live tables (`dining_tables`), and may be null. The live tables also
 hold a folded copy, `short_name_key`, unique in the venue
-(`dining_tables_location_short_name_key_uq`) and written only through `shortNameColumns`
+(`dining_tables_short_name_key_uq`) and written only through `shortNameColumns`
 (`packages/db/src/table-short-names.ts`). Nothing in the database ties the copy to the short name: a
 writer that skips the helper is not refused. A save resolves each table's short name
 (`resolveShortNames`, `apps/server/src/table-short-names.ts`, called from `checkSave` in

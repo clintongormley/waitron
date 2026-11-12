@@ -336,7 +336,7 @@ describe("transfer — guards", () => {
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: coffeeOffer, quantity: "2" }]);
     const empty = await openBeside(cfg, tabA, [], true);
     await expect(
-      asApp( (tx) => transfer(tx, cfg, tabA, empty, [{ lineNo: 1 }])),
+      asApp((tx) => transfer(tx, cfg, tabA, empty, [{ lineNo: 1 }])),
     ).rejects.toMatchObject({
       code: "service_zone.mode_incompatible",
       params: { zoneId: "unscoped", expected: "table_tab", actual: "unscoped" },

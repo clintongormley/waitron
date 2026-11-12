@@ -792,9 +792,6 @@ it("stops when both boxes independently settled the same sale", async () => {
     source: "device",
     deviceId: source.deviceId,
     nodeId: source.nodeId,
-    locationId: receiver.db.all<{ location_id: string }>(
-      sql`select location_id from nodes where id = ${source.nodeId}`,
-    )[0]!.location_id,
     method: "cash",
     state: "pending",
     createdAt: now.toISOString(),

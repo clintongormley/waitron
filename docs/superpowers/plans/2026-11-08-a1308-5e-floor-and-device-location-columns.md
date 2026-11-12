@@ -425,3 +425,5 @@ Split point for a fresh implementer.
 
 
 **2026-11-11 amendment, owner 22:03 (Lane H questions.md):** The owner answered “Yes (Recommended)” to “Let the test's setup stop reading the column, keeping every fingerprint and chain check exactly as it is?” This supersedes the pending prerequisite above: remove only the `devices.location_id` read, its `seedDevice` option and the unused setup import. All fingerprint and chain assertions remain byte-for-byte unchanged. The PR's first lines show the before/after setup.
+
+**2026-11-12 amendment, watcher 06:26 (Lane H questions.md):** Omit item 13’s added `catalogues` dependency. `getVenueDefaults` reads receipt languages and catalogue settings, and its answer has no default-menu field. Keep the actual default-menu flag, readers and transfer changes.

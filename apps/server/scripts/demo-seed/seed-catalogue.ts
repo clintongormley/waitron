@@ -29,7 +29,6 @@ import {
 import { inLanguages } from "./in-languages.js";
 
 export interface SeedCataloguesInput {
-  locationId: string;
   locale: SeedLocale;
   dataSet: DemoDataSet;
 }

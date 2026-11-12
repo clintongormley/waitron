@@ -23,7 +23,6 @@ import type { SeedLocale } from "./locale.js";
 import { demoPlainText, type DemoDataSet } from "./data-set.js";
 
 export interface SeedFloorInput {
-  locationId: string;
   locale: SeedLocale;
   departmentTradingNames: CountryDemoIdentity["departmentTradingNames"];
   dataSet: DemoDataSet;

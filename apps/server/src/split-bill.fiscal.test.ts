@@ -194,14 +194,14 @@ async function splitIntoThreeChecks(
   const { cfg, waterId, hamId, tableId, offers } = seeded;
   const water = { productId: waterId, quantity: "3" };
   const ham = { productId: hamId, quantity: "0.300" };
-  const { tabId } = await asApp( (tx) =>
+  const { tabId } = await asApp((tx) =>
     openPartyTab(tx, cfg, { tableId, lines: offers.toOfferLines([ham, water]) }),
   );
-  const { billId: a } = await asApp( (tx) =>
+  const { billId: a } = await asApp((tx) =>
     splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }, { lineNo: 2 }]),
   );
-  const { billId: b } = await asApp( (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 3 }]));
-  const { billId: c } = await asApp( (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 4 }]));
+  const { billId: b } = await asApp((tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 3 }]));
+  const { billId: c } = await asApp((tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 4 }]));
 
   // A check is a retrieved order, so req.lines is ignored — it files from its stored locked lines.
   const rA = await payWorkingOrder(deps, cfg, {
@@ -314,13 +314,13 @@ describe("split-bill: pay each check files its own registro", () => {
       { productId: waterId, quantity: "3" },
       { productId: hamId, quantity: "0.300" },
     ]);
-    const { tabId } = await asApp( async (tx) => {
+    const { tabId } = await asApp(async (tx) => {
       const opened = await openPartyTab(tx, cfg, { tableId });
       await writeGroupedLines(tx, cfg, opened.tabId, lines);
       return opened;
     });
-    const { billId: a } = await asApp( (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 2 }]));
-    const { billId: b } = await asApp( (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]));
+    const { billId: a } = await asApp((tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 2 }]));
+    const { billId: b } = await asApp((tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]));
     const rA = await payWorkingOrder(deps, cfg, {
       id: a,
       tender: { method: "cash", amount: "10.00" },

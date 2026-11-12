@@ -39,9 +39,9 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 
 describe("seedCatalogues", () => {
   it("stores a distinct colour on every top-level demo category", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const rows = await withTransaction(suite.db, async (tx) => {
-      await seedCatalogues(tx, { locationId, locale: LOCALE, dataSet: CASA_DELGADO_ES });
+      await seedCatalogues(tx, { locale: LOCALE, dataSet: CASA_DELGADO_ES });
       return (
         await tx.execute<{ name: string; color: string | null }>(sql`
         select c.name, d.color from categories c
@@ -63,7 +63,7 @@ describe("seedCatalogues", () => {
   });
 
   it("finds the provisioned default station by its default flag, whatever setup named it", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const stations = await withTransaction(suite.db, async (tx) => {
       // The setup station stays active but stops being the default; it comes first by name, by id
       // and by insertion, so a lookup that ignored the flag would find it instead.
@@ -75,7 +75,7 @@ describe("seedCatalogues", () => {
       await tx
         .insert(kitchenStations)
         .values({ name: "Galley", colour: "blue", isDefault: true, active: true });
-      await seedCatalogues(tx, { locationId, locale: LOCALE, dataSet: CASA_DELGADO_ES });
+      await seedCatalogues(tx, { locale: LOCALE, dataSet: CASA_DELGADO_ES });
       return (
         await tx.execute<{ name: string; is_default: number }>(sql`
         select name, is_default from kitchen_stations
@@ -90,10 +90,9 @@ describe("seedCatalogues", () => {
   });
 
   it("includes Drinks as a folder in both restaurant menus", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
       const { menuIds } = await seedCatalogues(tx, {
-        locationId,
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -114,10 +113,9 @@ describe("seedCatalogues", () => {
   });
 
   it("charges Drinks' beer price through the restaurant menu with its inherited source", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
       const { menuIds, productsByImage } = await seedCatalogues(tx, {
-        locationId,
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -142,10 +140,9 @@ describe("seedCatalogues", () => {
   });
 
   it("keeps each menu's own sections beside its included Drinks folder", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
       const { menuIds, productsByImage } = await seedCatalogues(tx, {
-        locationId,
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -190,9 +187,9 @@ describe("seedCatalogues", () => {
   });
 
   it("seeds no two categories with one parent, and no two Active products, sharing a name", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const { categories, products } = await withTransaction(suite.db, async (tx) => {
-      await seedCatalogues(tx, { locationId, locale: LOCALE, dataSet: CASA_DELGADO_ES });
+      await seedCatalogues(tx, { locale: LOCALE, dataSet: CASA_DELGADO_ES });
       const categories = await tx.execute<{ parent: string | null; name: string }>(sql`
         select d.parent_id as parent, c.name from categories c
         left join category_details d on d.category_id = c.id`);
@@ -211,10 +208,9 @@ describe("seedCatalogues", () => {
   });
 
   it("names each menu's top level after the menu, the provisioned one included", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
     const named = await withTransaction(suite.db, async (tx) => {
       const { menuIds } = await seedCatalogues(tx, {
-        locationId,
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -235,11 +231,10 @@ describe("seedCatalogues", () => {
   });
 
   it("creates restaurant, lunch and deli menus and routes each category to its preparation station", async () => {
-    const { locationId } = await provisionVenue();
+    await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {
       const out = await seedCatalogues(tx, {
-        locationId,
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
@@ -438,9 +433,9 @@ describe("seedCatalogues", () => {
 });
 
 it("seeds every dish and pricing unit with Spanish text for a Spanish demo", async () => {
-  const { locationId } = await provisionVenue();
+  await provisionVenue();
   const read = await withTransaction(suite.db, async (tx) => {
-    const seeded = await seedCatalogues(tx, { locationId, locale: "es", dataSet: CASA_DELGADO_ES });
+    const seeded = await seedCatalogues(tx, { locale: "es", dataSet: CASA_DELGADO_ES });
     const { rows } = await tx.execute<{ id: string; name: string; customer_es: string | null }>(sql`
       select id, name, customer_name->>'es' as customer_es from products`);
     const { rows: units } = await tx.execute<{
