@@ -13,12 +13,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fireGroup, readCurrentOrders } from "./order-groups.js";
-import {
-  createOpenOrder,
-  readBillLines,
-  readTabLines,
-  splitLinesWithinOrder,
-} from "./working-order.js";
+import { createOpenOrder, readTabLines, splitLinesWithinOrder } from "./working-order.js";
 import { placeOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { fireAll } from "./testing/serve-line.js";
@@ -161,7 +156,7 @@ it("records the current counter declaration when placed and leaves a replay unch
   await placeOrder({ ...v, admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
   await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: { eggs: {} } }));
   await placeOrder({ ...v, admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
-  expect((await inTx(v, (tx) => readBillLines(tx, id)))[0]!.nutrition).toEqual({
+  expect((await inTx(v, (tx) => readTabLines(tx, id)))[0]!.nutrition).toEqual({
     allergens: { milk: {} },
     dietaryDeclarations: [],
   });

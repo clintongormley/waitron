@@ -1179,7 +1179,6 @@ export interface VenueServiceContribution {
       hardwareUnit: "kg" | "g" | "mg" | null;
       vatClass: string;
       allergens: ZoneMenuOffer["allergens"];
-      sentNutrition: { allergens: AllergenMap | null; dietaryDeclarations: string[] } | null;
       diet: unknown;
       dietOverride: unknown;
     }[]

@@ -405,9 +405,8 @@ establish that it is suitable. There is no separate Allergens screen or printed 
 the till.
 
 Open a sent dish's details to check **Recorded when sent**. These declarations describe the dish
-when you sent it, even if you edit the product later. An older dish with no recorded declaration
-says so; check its ingredients yourself. Dishes on hold keep their current declarations until you
-release them. Use the kitchen's current information when preparing food.
+when you sent it, even if you edit the product later. Dishes on hold keep their current
+declarations until you release them. Use the kitchen's current information when preparing food.
 
 When you add a dish with an allergen exclusion active, you can choose only compatible sizes and
 extras whose declarations have been reviewed. Optional toppings do not hide the dish. If a

@@ -624,11 +624,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The menu patch window: split the file first** (bundle of 9, size M). [Detail](backlog/catalogue.md#bundle-the-menu-patch-window-split-the-file-first)
 
-- **A1150. Allergens and diet labels come from the live product, except sent-order history** (owner,
+- **A1150. Allergens and diet labels come from the live product on every screen** (owner,
   2026-10-27). Needs its own design before it is built. Today the till's menu and product info
   read them from the published menu version, while the kitchen screen, the table's allergy check
   and unsent table lines read the live product (`apps/server/src/line-nutrition.ts`). Sent till
-  lines retain their first-send declarations under the owner’s 11-November A1517 decision 6. So the live readers disagree
+  lines capture the live product at first sending under the owner’s 11-November A1517 decision 6,
+  even while the counter still displays an earlier published declaration. So the live readers disagree
   until the menu is published again, and nothing says which is which. The owner chose one source,
   the live product, the way availability already works. The design covers every reader of a
   version's `allergens`, `dietaryDeclarations` and `diet`, the publish warnings and change list

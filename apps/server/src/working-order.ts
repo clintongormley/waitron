@@ -4059,9 +4059,17 @@ export interface TabLine {
   portion: boolean;
 }
 
-/** Read an open tab's lines in line-number order, at their stored prices: no re-price. */
 export async function readTabLines(tx: Transaction, tabId: string): Promise<TabLine[]> {
-  await assertTabOpen(tx, tabId);
+  const [order] = await tx
+    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, tabId));
+  if (
+    order === undefined ||
+    (order.status !== "open" && !(order.status === "placed" && order.partyId === null))
+  ) {
+    throw new AppError("tab.not_open", { tabId });
+  }
   return readBillLines(tx, tabId);
 }
 

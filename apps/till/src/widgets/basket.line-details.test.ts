@@ -340,7 +340,16 @@ it.each([
     const store = new WorkingOrderStore();
     store.loadFrom(
       "wo-9",
-      [{ product: dish, quantity: "2", workingOrderLineId: "l-1" }],
+      [
+        {
+          product: dish,
+          quantity: "2",
+          workingOrderLineId: "l-1",
+          extras: [
+            { listId: "sides", productId: "side", name: "Side", quantity: 1, price: "1.00" },
+          ],
+        },
+      ],
       undefined,
       4,
     );
@@ -361,9 +370,20 @@ it.each([
             sentAt: "2026-11-12T08:00:00Z",
             nutrition,
           },
+          {
+            ...listedDish,
+            id: "l-extra",
+            lineNo: 2,
+            productId: "side",
+            parentLineNo: 1,
+            listId: "sides",
+            sentAt: "2026-11-12T08:00:00Z",
+            nutrition: { allergens: { eggs: {} }, dietaryDeclarations: ["kosher"] },
+          },
         ],
       },
     });
+    expect(el.shadowRoot!.querySelector(".extra-allergens")?.textContent?.trim()).toBe("Eggs");
     el.openLineDetails(store.lines[0]!);
     await el.updateComplete;
     const picker = pickerOf(el)!;

@@ -261,8 +261,7 @@ its own extras. **Comp** and **Void** work on the row and let you choose how man
 count. To reduce the count, use **Void…**, which opens **Cancel item**.
 
 To check a sent dish's allergens and diet labels, open its details and read **Recorded when
-sent**. If no declaration was recorded, check the ingredients yourself. A dish on hold still
-shows its current declaration until you release it.
+sent**. A dish on hold still shows its current declaration until you release it.
 
 A weighed dish is different, because each one is weighed on its own: adding the same weighed dish
 twice gives two lines rather than one of double the weight, and a weighed dish moves to another bill

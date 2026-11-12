@@ -213,6 +213,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
   /** The stored order in {@link store}, as the server lists its lines; see the basket's own. */
   @property({ attribute: false }) storedLines: StoredLines | null = null;
+  @property({ attribute: false }) nutritionLines: StoredLines | null = null;
   @property({ attribute: false }) stationMoveLines: StoredLines | null = null;
   @property({ attribute: false }) makeAtStations: Station[] = [];
   /** A pay, place or hold of {@link store}'s order is out; see the basket's own. */
@@ -410,6 +411,7 @@ export class TillCounterScreen extends LitElement {
             .draftParent=${this}
             .readOnly=${this.stage === "collect"}
             .storedLines=${this.storedLines}
+            .nutritionLines=${this.nutritionLines}
             .stationMoveLines=${this.stationMoveLines}
             .makeAtStations=${this.makeAtStations}
             .orderInFlight=${this.orderInFlight}

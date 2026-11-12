@@ -274,8 +274,8 @@ detalles de la fila, cambia todos los platos de la fila y permite aumentar la ca
 Para reducirla, usa **Cancelar…**.
 
 Para consultar los alérgenos y las etiquetas dietéticas de un plato enviado, abre sus detalles y
-lee **Registrado al enviar**. Si no se registró una declaración, comprueba los ingredientes. Un
-plato en espera sigue mostrando su declaración actual hasta que lo liberas.
+lee **Registrado al enviar**. Un plato en espera sigue mostrando su declaración actual hasta que
+lo liberas.
 
 Un plato al peso es distinto, porque cada uno se pesa por separado: si añades dos veces el mismo
 plato al peso tienes dos líneas, no una del doble de peso, y un plato al peso pasa entero a otra

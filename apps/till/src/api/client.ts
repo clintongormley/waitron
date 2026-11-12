@@ -4336,10 +4336,6 @@ export class TillApi {
     });
   }
 
-  /**
-   * Read one open tab's lines → `GET /api/working-orders/:orderId/lines`. A non-open or absent tab
-   * rejects with `tab.not_open`. `revision` is what an edit of this copy sends back.
-   */
   getTabLines(orderId: string, options: ReadOptions = {}): Promise<TabLines> {
     return this.#request<TabLines>(
       `/api/working-orders/${orderId}/lines`,

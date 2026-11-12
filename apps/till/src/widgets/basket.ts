@@ -454,6 +454,8 @@ export class TillBasket extends LitElement {
    * is known, a dish the kitchen has shows no × and no `−`, and the adjustments are offered only
    * while the basket is exactly what the listing lists. */
   @property({ attribute: false }) storedLines: StoredLines | null = null;
+  /** Collection keeps declarations visible while its adjustment listing is withheld. */
+  @property({ attribute: false }) nutritionLines: StoredLines | null = null;
   @property({ attribute: false }) stationMoveLines: StoredLines | null = null;
 
   /** A pay, place or hold of the basket's order is out, so no adjustment is offered. */
@@ -461,6 +463,8 @@ export class TillBasket extends LitElement {
 
   /** Built when {@link storedLines} changes, not searched for line by line on every render. */
   #listedById = new Map<string, TabLine>();
+  #nutritionById = new Map<string, TabLine>();
+  #nutritionExtraByPick = new Map<string, TabLine>();
   #listedExtras = new Map<number, TabLine[]>();
   #listedTotal: Decimal = decimal("0");
   @property({ attribute: false }) makeAtStations: Station[] = [];
@@ -689,22 +693,43 @@ export class TillBasket extends LitElement {
    */
   #extraOwnNutrition(
     line: OrderLine,
-    productId: string,
+    extra: SelectedExtra,
   ):
     | {
         addAllergens: ProductAllergens | null;
         suitableFor: readonly string[];
       }
     | undefined {
+    const dish = this.#sentLine(line);
+    if (dish !== undefined) {
+      const child = this.#nutritionExtraByPick.get(
+        JSON.stringify([dish.lineNo, extra.listId, extra.productId]),
+      );
+      return child?.nutrition === undefined
+        ? undefined
+        : {
+            addAllergens: child.nutrition.allergens,
+            suitableFor: child.nutrition.dietaryDeclarations,
+          };
+    }
     const item = (line.product.offeredModifiers ?? [])
       .flatMap((entry) => (entry.kind === "extras" ? entry.items : []))
-      .find((candidate) => candidate.productId === productId);
+      .find((candidate) => candidate.productId === extra.productId);
     return item === undefined
       ? undefined
       : { addAllergens: item.addAllergens, suitableFor: item.suitableFor };
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("nutritionLines") || changed.has("storedLines")) {
+      const nutritionRows = (this.nutritionLines ?? this.storedLines)?.lines ?? [];
+      this.#nutritionById = new Map(nutritionRows.map((row) => [row.id, row]));
+      this.#nutritionExtraByPick = new Map(
+        nutritionRows
+          .filter((row) => row.parentLineNo != null)
+          .map((row) => [JSON.stringify([row.parentLineNo, row.listId, row.productId]), row]),
+      );
+    }
     if (!changed.has("storedLines")) return;
     const rows = this.storedLines?.lines ?? [];
     this.#listedById = new Map(rows.map((row) => [row.id, row]));
@@ -947,7 +972,7 @@ export class TillBasket extends LitElement {
                   // No remove control: a pick goes only with its dish. Its own allergens and diet sit
                   // beside the dish's rows, never folded into them.
                   (extra, i) => {
-                    const own = this.#extraOwnNutrition(line, extra.productId);
+                    const own = this.#extraOwnNutrition(line, extra);
                     const listedExtra = this.#listedExtra(listed, extra);
                     return html`
                       <div class="option">
@@ -1340,7 +1365,11 @@ export class TillBasket extends LitElement {
   }
 
   #sentLine(line: OrderLine): TabLine | undefined {
-    const row = this.#listed(line, storedListing(this.store, this.storedLines));
+    const listing = storedListing(this.store, this.nutritionLines ?? this.storedLines);
+    const row =
+      listing === null || line.workingOrderLineId === undefined
+        ? undefined
+        : this.#nutritionById.get(line.workingOrderLineId);
     return row?.sentAt == null ? undefined : row;
   }
 

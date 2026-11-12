@@ -16,7 +16,7 @@ import {
   type ServiceStepInput,
 } from "./service-steps.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import {
   catalogues,
   departmentDayRanges,
@@ -1181,7 +1181,6 @@ export async function listWorkingLineContexts(
     hardwareUnit: "kg" | "g" | "mg" | null;
     vatClass: string;
     allergens: MenuOffer["allergens"];
-    sentNutrition: (typeof workingLineContexts.$inferSelect)["sentNutrition"];
     diet: unknown;
     dietOverride: unknown;
   }[]
@@ -1200,7 +1199,6 @@ export async function listWorkingLineContexts(
       hardwareUnit: workingLineContexts.hardwareUnit,
       vatClass: workingLineContexts.vatClass,
       allergens: workingLineContexts.allergens,
-      sentNutrition: workingLineContexts.sentNutrition,
       diet: workingLineContexts.diet,
       dietOverride: workingLineContexts.dietOverride,
     })
@@ -1278,12 +1276,7 @@ export async function recordSentLineNutrition(
     await tx
       .update(workingLineContexts)
       .set({ sentNutrition: row.nutrition })
-      .where(
-        and(
-          eq(workingLineContexts.workingOrderLineId, row.lineId),
-          isNull(workingLineContexts.sentNutrition),
-        ),
-      );
+      .where(eq(workingLineContexts.workingOrderLineId, row.lineId));
   }
 }
 

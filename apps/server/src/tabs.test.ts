@@ -691,7 +691,7 @@ describe("readTabLines", () => {
     expect(pending.find((line) => line.productId === coffeeId)!.sentAt).toBeNull();
   });
 
-  it("reads a selected variant's own nutrition rather than its parent's", async () => {
+  it("keeps a sent variant's declaration and captures inheritance for a later dish", async () => {
     const { cfg, coffeeId, tableId, coffeeOffer } = await setupVenue();
     const variantId = await asApp(cfg, async (tx) => {
       const [variant] = await setProductVariants(
@@ -731,8 +731,15 @@ describe("readTabLines", () => {
     await db.execute(
       sql`update products set allergens = null, dietary_declarations = null where id = ${variantId}`,
     );
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, variantId, quantity: "1" }]),
+    );
     const inherited = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(inherited[0]!.nutrition).toEqual({
+      allergens: { nuts: { kinds: ["almonds"] } },
+      dietaryDeclarations: ["kosher"],
+    });
+    expect(inherited[1]!.nutrition).toEqual({
       allergens: { milk: {} },
       dietaryDeclarations: ["halal"],
     });
@@ -1031,11 +1038,16 @@ describe("readTabLines", () => {
     expect(await asApp(cfg, (tx) => readTabLines(tx, tabId))).toEqual([]);
   });
 
-  it("refuses a settled tab and an absent id (tab.not_open — assertTabOpen, an UNLOCKED read)", async () => {
+  it("refuses a placed table bill, a settled tab and an absent id", async () => {
     const { cfg, tableId, coffeeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: coffeeOffer, quantity: "1" }] }),
     );
+    await db.execute(sql`update working_orders set status = 'placed' where id = ${tabId}`);
+    await expect(asApp(cfg, (tx) => readTabLines(tx, tabId))).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId },
+    });
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );

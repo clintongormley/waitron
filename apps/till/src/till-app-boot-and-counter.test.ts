@@ -6768,7 +6768,7 @@ describe("A1208 a retrieved counter order's portions", () => {
     signals: [],
   });
 
-  async function retrieved(overrides: Record<string, unknown> = {}) {
+  async function retrieved(overrides: Record<string, unknown> = {}, placed = false) {
     const updateWorkingOrder = vi.fn(async (_id: string, request: { revision: number }) => ({
       revision: request.revision + 1,
     }));
@@ -6776,6 +6776,7 @@ describe("A1208 a retrieved counter order's portions", () => {
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       retrieveWorkingOrder: vi.fn().mockResolvedValue(held()),
+      retrievePlacedOrder: vi.fn().mockResolvedValue(held()),
       getTabLines: vi
         .fn()
         .mockResolvedValue({ revision: 4, lines: ids.map((id, i) => listedLine(id, i + 1)) }),
@@ -6783,7 +6784,7 @@ describe("A1208 a retrieved counter order's portions", () => {
       ...overrides,
     });
     const c = await toCounter(mounted.el);
-    emit(c, "retrieve-order", { id: "wo-1" });
+    emit(c, placed ? "pay-waiting-order" : "retrieve-order", { id: "wo-1" });
     await flush(mounted.el);
     return { el: mounted.el, c, updateWorkingOrder };
   }
@@ -6804,29 +6805,41 @@ describe("A1208 a retrieved counter order's portions", () => {
     ]);
   });
 
-  it("shows a retrieved sent dish's recorded declaration through the counter", async () => {
-    const { c } = await retrieved({
-      getTabLines: vi.fn().mockResolvedValue({
-        revision: 4,
-        lines: ids.map((id, i) => ({
-          ...listedLine(id, i + 1),
-          sentAt: "2026-11-12T08:00:00Z",
-          nutrition: { allergens: { milk: {} }, dietaryDeclarations: ["halal"] },
-        })),
-      }),
-    });
-    const basket =
-      c.shadowRoot!.querySelector<import("./widgets/basket.js").TillBasket>("till-basket")!;
-    basket.openLineDetails(c.store.lines[0]!);
-    await basket.updateComplete;
-    const picker =
-      basket.shadowRoot!.querySelector<import("./widgets/modifier-picker.js").TillModifierPicker>(
-        "till-modifier-picker",
-      )!;
-    await picker.updateComplete;
-    expect(picker.shadowRoot!.textContent).toContain(t("allergens.recorded_when_sent"));
-    expect(picker.shadowRoot!.textContent).toContain(t("allergens.contains"));
-  });
+  it.each([false, true])(
+    "shows a retrieved sent dish's recorded declaration (placed: %s)",
+    async (placed) => {
+      const { c } = await retrieved(
+        {
+          getTabLines: vi.fn().mockResolvedValue({
+            revision: 4,
+            lines: ids.map((id, i) => ({
+              ...listedLine(id, i + 1),
+              sentAt: "2026-11-12T08:00:00Z",
+              nutrition: { allergens: { milk: {} }, dietaryDeclarations: ["halal"] },
+            })),
+          }),
+        },
+        placed,
+      );
+      expect(c.stage).toBe(placed ? "collect" : "order");
+      const basket =
+        c.shadowRoot!.querySelector<import("./widgets/basket.js").TillBasket>("till-basket")!;
+      if (placed) {
+        expect(c.storedLines).toBeNull();
+        expect(basket.readOnly).toBe(true);
+        expect(basket.shadowRoot!.querySelector("[data-comp-line]")).toBeNull();
+      }
+      basket.openLineDetails(c.store.lines[0]!);
+      await basket.updateComplete;
+      const picker =
+        basket.shadowRoot!.querySelector<import("./widgets/modifier-picker.js").TillModifierPicker>(
+          "till-modifier-picker",
+        )!;
+      await picker.updateComplete;
+      expect(picker.shadowRoot!.textContent).toContain(t("allergens.recorded_when_sent"));
+      expect(picker.shadowRoot!.textContent).toContain(t("allergens.contains"));
+    },
+  );
 
   it("parks an unchanged row without saving it", async () => {
     const { el, c, updateWorkingOrder } = await retrieved();

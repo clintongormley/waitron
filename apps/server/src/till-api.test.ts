@@ -3368,6 +3368,12 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
       sql`select state from ticket_items where working_order_id = ${id}`,
     );
     expect(ticket.rows[0]).toEqual({ state: "queued" });
+    const details = await app.request(`/api/working-orders/${id}/lines`, { headers: { cookie } });
+    expect(details.status).toBe(200);
+    expect((await details.json()).lines[0]).toMatchObject({
+      sentAt: expect.any(String),
+      nutrition: { allergens: { sulphites: {} }, dietaryDeclarations: [] },
+    });
   });
 
   it("POST repeats the original placed result when the first place already committed", async () => {
