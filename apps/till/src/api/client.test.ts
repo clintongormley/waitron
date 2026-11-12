@@ -3806,6 +3806,7 @@ describe("TillApi: a seated party", () => {
 
   it("recordUnpaidDeparture POSTs the revision, reason and override to the party's /unpaid-departure route", async () => {
     const request: UnpaidDepartureRequest = {
+      billId: "wo-1",
       expectedEdits: [],
       expectedPartyRevision: 4,
       reason: "Left without paying",
@@ -3848,6 +3849,7 @@ describe("TillApi: a seated party", () => {
 
     await expect(
       new TillApi("", fetchStub).recordUnpaidDeparture("v1", {
+        billId: "wo-1",
         expectedEdits: [],
         expectedPartyRevision: 4,
         reason: "Gone",

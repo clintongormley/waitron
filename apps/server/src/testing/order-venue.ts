@@ -161,6 +161,7 @@ export async function departed(venue: OrderVenue, ...names: string[]) {
     "POST",
     `/api/parties/${party.partyId}/unpaid-departure`,
     {
+      billId: party.tabId,
       expectedPartyRevision: party.revision,
       reason: "Se marcharon sin pagar",
     },

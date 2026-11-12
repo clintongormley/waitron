@@ -297,6 +297,7 @@ describe("direct economic orchestration before startup admission", () => {
               venue.cfg,
               partyId,
               {
+                billId: id,
                 expectedPartyRevision: 0,
                 expectedEdits: [await readBillEditState(tx, id)],
                 reason: "Guest left",
@@ -668,6 +669,7 @@ it.each([
           venue.cfg,
           partyId,
           {
+            billId: id,
             expectedPartyRevision: 0,
             expectedEdits: [await readBillEditState(tx, id)],
             reason: "Guest left",

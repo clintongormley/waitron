@@ -5225,7 +5225,7 @@ export class TillTableOrderScreen extends LitElement {
    * first, since the bill on screen is charged in the foot below. */
   #finishRefusal(): TemplateResult | typeof nothing {
     if (this.party === null || !this.finishRefused) return nothing;
-    const unpaid = this.#shownBills().filter(owing);
+    const unpaid = this.#shownBills().filter((bill) => !bill.leftUnpaid && owing(bill));
     const firstUnpaid = unpaid.find((bill) => bill.workingOrderId !== this.orderId) ?? unpaid[0];
     return html`<div class="finish-refusal" role="alert" data-finish-refusal>
       <span>${codeMessage("party.bill_outstanding")}</span>
@@ -5242,14 +5242,7 @@ export class TillTableOrderScreen extends LitElement {
                 >
                   ${t("table.take_payment")}
                 </wt-button>
-                <wt-button
-                  size="sm"
-                  variant="secondary"
-                  data-record-departure
-                  @click=${() => this.#dispatch("record-unpaid-departure", {})}
-                >
-                  ${t("departure.record")}
-                </wt-button>`
+                <span>${t("departure.finish_hint")}</span>`
         }
       </div>
     </div>`;
@@ -6612,6 +6605,7 @@ export class TillTableOrderScreen extends LitElement {
     const action = (name: string, key: StringKey, choose: () => void) =>
       html`<wt-button
         data-action=${name}
+        data-record-departure=${name === "left-unpaid" ? "" : nothing}
         variant="ghost"
         align="start"
         @click=${(event: Event) => this.#fromMenu(event, choose)}
@@ -6644,6 +6638,13 @@ export class TillTableOrderScreen extends LitElement {
               ...(shown.status !== "open" ? [] : [moveDishes, merge]),
               this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
               this.#compBill(),
+              owing(shown) && !shown.leftUnpaid
+                ? action("left-unpaid", "departure.record", () =>
+                    this.#dispatch("record-unpaid-departure", {
+                      workingOrderId: shown.workingOrderId,
+                    }),
+                  )
+                : nothing,
               ...this.#billDocumentItems(shown),
             ],
       tableItems: [

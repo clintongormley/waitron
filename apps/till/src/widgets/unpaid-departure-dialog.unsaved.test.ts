@@ -13,7 +13,7 @@ class DepartureLeaveApp extends LitElement {
   submitted: { reason: string }[] = [];
   override render() {
     return html`<till-unpaid-departure-dialog
-        .bills=${[{ workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" }]}
+        .bill=${{ workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" }}
         @unpaid-departure-close=${() => this.closes++}
         @unpaid-departure-continue=${(event: CustomEvent<{ reason: string }>) =>
           this.submitted.push(event.detail)}
@@ -107,7 +107,7 @@ it("departure submission sends the exact trimmed reason directly and a refusal k
   expect(app.submitted).toEqual([{ reason: "Ran off" }]);
   expect((await question(app)).open).toBe(false);
   form.refusal = { code: "management.request_invalid", field: "reason" };
-  form.bills = [{ workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "12.00" }];
+  form.bill = { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "12.00" };
   await form.updateComplete;
   expect(unload()).toBe(true);
   await userEvent.keyboard("{Escape}");

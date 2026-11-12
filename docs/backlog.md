@@ -277,7 +277,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **Reporting — the fiscal remainder (parked)** — left open by the modelo 303 work (#76, #91, #98, #1106).
   [Detail](backlog/fiscal.md#reporting--the-fiscal-remainder-parked)
 
-- **A231/A948. Full invoices at the till** — table bill payments and unpaid departures can issue F1; counter sales and collection remain refused until A555 carries the delivery choice.
+- **A231/A948. Full invoices at the till** — table bill payments and per-bill unpaid departures can issue F1; counter sales and collection remain refused until A555 carries the delivery choice.
   **Next action:** complete A555, A444, physical paper/QR qualification, the asesor's manual-remedy confirmation and current business-invoice delivery qualification as separate work. The owner removed these as switch prerequisites on 2026-10-27.
   An unpaid departure that issues the invoice of a presented bill loses the table name on it: `issueUnpaidInvoice` saves it only on an open bill (`apps/server/src/working-order.ts`), and neither `settleIssuedOwingNothing` nor the later collection sets it. A close by transfer now passes it to `settleIssuedOrder` (A275); a bill that leaves owing needs a decision on when to save it.
   [Issuance and remaining limits](backlog/fiscal.md#a231-full-invoices-at-the-till)

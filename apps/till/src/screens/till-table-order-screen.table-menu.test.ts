@@ -119,6 +119,18 @@ afterEach(() => {
 });
 
 describe("A803 single menu: one ⋮ for the bill on screen, then the whole table", () => {
+  it("records only the shown bill as left unpaid from its Bill menu", async () => {
+    const el = await mountScreen();
+    const seen = capture(el, "record-unpaid-departure");
+    const button = item(el, "[data-record-departure]");
+    expect(button).not.toBeNull();
+    button!.click();
+    expect(seen).toEqual([{ workingOrderId: "wo-2" }]);
+    el.bills = [bills[0]!, { ...bills[1]!, leftUnpaid: true }];
+    await el.updateComplete;
+    expect(item(el, "[data-record-departure]")).toBeNull();
+  });
+
   it("draws exactly one ⋮, named Table actions, and no Table actions button", async () => {
     const el = await mountScreen();
 
@@ -142,6 +154,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
           "Merge bills",
           "Move this bill",
           "Comp the bill",
+          "Record unpaid departure",
           "Full invoice",
         ],
       },
@@ -314,7 +327,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         const popup = menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
         await userEvent.click(trigger);
 
-        expect(groups(el).flatMap((group) => group.items)).toHaveLength(14);
+        expect(groups(el).flatMap((group) => group.items)).toHaveLength(15);
         const box = popup.getBoundingClientRect();
         const anchor = trigger.getBoundingClientRect();
         expect(box.top).toBeGreaterThanOrEqual(anchor.bottom - 0.5);
@@ -395,6 +408,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       expect(groups(el)[0]!.items).toEqual([
         "Name this bill",
         "Move this bill",
+        "Record unpaid departure",
         "Full invoice",
         "Cancel and credit",
       ]);

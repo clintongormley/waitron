@@ -12,10 +12,13 @@ export function owing(bill: Pick<PartyBill, "status">): boolean {
  * the bills read sends no line count, so an open bill whose lines total zero reads as not owing, and
  * the server's refusal of Finish table handles it.
  */
-export function stillToPay(bill: Pick<PartyBill, "status" | "outstanding">): boolean {
+export function stillToPay(
+  bill: Pick<PartyBill, "status" | "outstanding" | "leftUnpaid">,
+): boolean {
   return (
-    bill.status === "placed" ||
-    (bill.status === "open" && compareDecimal(decimal(bill.outstanding), decimal("0")) !== 0)
+    !bill.leftUnpaid &&
+    (bill.status === "placed" ||
+      (bill.status === "open" && compareDecimal(decimal(bill.outstanding), decimal("0")) !== 0))
   );
 }
 
@@ -53,8 +56,11 @@ export function billToShow(
   bills: readonly PartyBill[],
 ): string | undefined {
   const shown = shownBills(bills);
-  return (shown.find((bill) => bill.workingOrderId === kept) ?? shown.find(owing) ?? shown[0])
-    ?.workingOrderId;
+  return (
+    shown.find((bill) => bill.workingOrderId === kept) ??
+    shown.find((bill) => !bill.leftUnpaid && owing(bill)) ??
+    shown[0]
+  )?.workingOrderId;
 }
 
 /** "Bill 2", or "Bill" for a bill stored with no number. */

@@ -32,6 +32,8 @@ import {
   departed,
   type OrderVenue,
 } from "./testing/order-venue.js";
+import { combineParties } from "./testing/table-action-fixture.js";
+import { closingEditsForTest, partyRevision } from "./testing/party-close-fixture.js";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 
 import { readBillBalance, readPaymentsByBill, outstandingOf } from "./bill-payments.js";
@@ -427,6 +429,45 @@ describe("Find Bills SQL paging", () => {
       expect(row.stillOwed).toBe(outstandingOf(balance.total, payments.received.get(id)));
     });
   });
+  it("finds a selected bill’s debt while its table stays open for another bill", async () => {
+    const first = await seatedWith(venue, "Caña");
+    const second = await seatedWith(venue, "Tarta");
+    await inTx(venue, (tx) =>
+      combineParties(tx, venue.cfg, {
+        from: second.partyId,
+        into: first.partyId,
+        tables: "join",
+        operatorId: venue.operatorId,
+      }),
+    );
+    const response = await send(
+      venue.app,
+      venue.supervisorTill,
+      "POST",
+      `/api/parties/${first.partyId}/unpaid-departure`,
+      {
+        billId: first.tabId,
+        expectedPartyRevision: await partyRevision(store.db, first.partyId),
+        expectedEdits: await closingEditsForTest(store.db, first.partyId),
+        reason: "Guest left",
+      },
+    );
+    expect(response).toMatchObject({ status: 200, json: { state: "open" } });
+    const debt = await inTx(venue, (tx) => readFindBill(tx, first.tabId));
+    expect(debt).toMatchObject({
+      stillOwed: "3.00",
+      state: "unpaid",
+      orderStatus: "placed",
+      collectionStatus: "left_without_paying",
+    });
+    expect(debt.departedAt).not.toBeNull();
+    expect((await list()).rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ workingOrderId: first.tabId, stillOwed: "3.00" }),
+      ]),
+    );
+  });
+
   it("reads issued debt and fresh selection independently of filters", async () => {
     const id = await placedIssuedBill(venue, "Caña");
     const row = await inTx(venue, (tx) => readFindBill(tx, id));

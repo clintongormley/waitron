@@ -9,6 +9,7 @@ import {
   orderGroups,
   orderAmendments,
   parties,
+  partyTables,
   printJobs,
   printAgents,
   saleSettlements,
@@ -34,7 +35,9 @@ import {
   advanceTicketItem,
   handOverOrder,
 } from "./working-order.js";
-import { fireGroup } from "./order-groups.js";
+import { requestBill } from "./bill-request.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
+import { fireGroup, fireHeldLine } from "./order-groups.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
@@ -46,7 +49,11 @@ import { computeOverdueOrders } from "@waitron/reporting";
 import { attachPrinterToStation } from "./station-printers.js";
 import { replaceStationPrinters } from "./station-printers.js";
 import { freePorts } from "./testing/free-ports.js";
-import { closingEditsForTest } from "./testing/party-close-fixture.js";
+import {
+  closingEditsForTest,
+  readBillsOfParties,
+  billOwes,
+} from "./testing/party-close-fixture.js";
 import { combineParties } from "./testing/table-action-fixture.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -96,12 +103,16 @@ useVenueDb({
   },
 });
 
-async function depart(partyId: string) {
+async function depart(partyId: string, billId?: string) {
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
   const response = await venue.app.request(`/api/parties/${partyId}/unpaid-departure`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie: venue.cookie.manager },
     body: JSON.stringify({
+      billId:
+        billId ??
+        (await readBillsOfParties(venue.db, [partyId])).get(partyId)!.find(billOwes)
+          ?.workingOrderId,
       expectedPartyRevision: party!.revision,
       expectedEdits: await inTx(venue, (tx) => closingEditsForTest(tx, partyId)),
       reason: "Guests left without paying",
@@ -163,6 +174,244 @@ async function linesOf(billId: string) {
 }
 
 describe("unpaid departure stops kitchen work", () => {
+  it("keeps stopped work stopped when its debt moves to another open table and is collected", async () => {
+    const order = await billWith(venue, [{ name: "Burger" }]);
+    await joinOwing(order.partyId);
+    const destination = await billWith(venue, [{ name: "Burger" }]);
+    expect(await depart(order.partyId, order.billId)).toMatchObject({
+      status: 200,
+      body: { state: "open" },
+    });
+    const [membership] = await venue.db
+      .select()
+      .from(partyTables)
+      .where(eq(partyTables.partyId, destination.partyId));
+    const [from] = await venue.db.select().from(parties).where(eq(parties.id, order.partyId));
+    const [into] = await venue.db.select().from(parties).where(eq(parties.id, destination.partyId));
+    const beforeJobs = await jobs();
+    const beforeCancellations = await cancellations((await linesOf(order.billId))[0]!.id);
+    const beforeBill = (
+      await venue.db.select().from(workingOrders).where(eq(workingOrders.id, order.billId))
+    )[0]!;
+    await inTx(venue, (tx) =>
+      moveBill(
+        tx,
+        venue.cfg,
+        order.billId,
+        { tableId: membership!.tableId },
+        {
+          expectedPartyRevision: from!.revision,
+          otherPartyId: destination.partyId,
+          expectedOtherPartyRevision: into!.revision,
+          operatorId: venue.managerId,
+        },
+      ),
+    );
+    expect(await cancellations((await linesOf(order.billId))[0]!.id)).toEqual(beforeCancellations);
+    expect(
+      (await venue.db.select().from(workingOrders).where(eq(workingOrders.id, order.billId)))[0],
+    ).toMatchObject({ partyId: destination.partyId, collectedAt: beforeBill.collectedAt });
+    expect(await jobs()).toEqual(beforeJobs);
+    const response = await venue.app.request(`/api/working-orders/${order.billId}/collect`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: venue.cookie.manager },
+      body: JSON.stringify({
+        tender: { method: "cash", amount: "12.00" },
+        expectedEdit: await readBillEditState(venue.db, order.billId),
+      }),
+    });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(
+      await venue.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, order.billId)),
+    ).toEqual([]);
+    expect(await cancellations((await linesOf(order.billId))[0]!.id)).toEqual(beforeCancellations);
+  });
+
+  it("does not offer or release a departed bill’s held food while another bill stays open", async () => {
+    const order = await billWith(venue, [{ name: "Burger" }], {
+      shape: "grouped",
+      release: "hold",
+    });
+    await issueOrderInvoice(
+      { ...venue, admission: testTradingAdmission() },
+      venue.cfg,
+      order.billId,
+      venue.staffId,
+    );
+    await inTx(venue, (tx) =>
+      markOrderPlaced(tx, venue.clock, venue.cfg, order.billId, venue.staffId),
+    );
+    await joinOwing(order.partyId);
+    expect(await depart(order.partyId, order.billId)).toMatchObject({
+      status: 200,
+      body: { state: "open" },
+    });
+    const floor = await venue.app.request("/api/tables/state", {
+      headers: { cookie: venue.cookie.manager },
+    });
+    const tables = (await floor.json()) as {
+      party: { id: string; reminder: unknown } | null;
+      pendingToServe: number;
+      signals: { kind: string }[];
+    }[];
+    const shown = tables.find((table) => table.party?.id === order.partyId)!;
+    expect(shown.pendingToServe).toBe(1);
+    expect(shown.signals).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "held" })]),
+    );
+    expect(shown.party!.reminder).toBeNull();
+    const beforeJobs = await jobs();
+    const [group] = await venue.db
+      .select()
+      .from(orderGroups)
+      .where(eq(orderGroups.partyId, order.partyId));
+    const [party] = await venue.db.select().from(parties).where(eq(parties.id, order.partyId));
+    const lineId = (await linesOf(order.billId))[0]!.id;
+    await expect(
+      inTx(venue, (tx) =>
+        fireHeldLine(tx, venue.cfg, order.partyId, lineId, {
+          expectedPartyRevision: party!.revision,
+          submissionId: randomUUID(),
+          operatorId: venue.staffId,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "tab.not_open" });
+    await expect(
+      inTx(venue, (tx) =>
+        fireGroup(tx, venue.cfg, order.partyId, group!.id, {
+          expectedPartyRevision: party!.revision,
+          submissionId: randomUUID(),
+          operatorId: venue.staffId,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "management.request_invalid" });
+    expect(await jobs()).toEqual(beforeJobs);
+  });
+
+  it("refuses foreign and repeated selections without changing invoices or kitchen work", async () => {
+    const own = await billWith(venue, [{ name: "Burger" }]);
+    const other = await billWith(venue, [{ name: "Burger" }]);
+    await joinOwing(own.partyId);
+    const beforeJobs = await jobs();
+    expect(await depart(own.partyId, other.billId)).toMatchObject({
+      status: 409,
+      body: { error: { code: "unpaid_departure.nothing_outstanding" } },
+    });
+    expect(await venue.db.select().from(sales).where(eq(sales.workingOrderId, own.billId))).toEqual(
+      [],
+    );
+    expect(await cancellations((await linesOf(own.billId))[0]!.id)).toEqual([]);
+    expect(await jobs()).toEqual(beforeJobs);
+    expect(await depart(own.partyId, own.billId)).toMatchObject({
+      status: 200,
+      body: { state: "open" },
+    });
+    const recordedJobs = await jobs();
+    const recordedSales = await venue.db
+      .select()
+      .from(sales)
+      .where(eq(sales.workingOrderId, own.billId));
+    expect(await depart(own.partyId, own.billId)).toMatchObject({
+      status: 409,
+      body: { error: { code: "unpaid_departure.nothing_outstanding" } },
+    });
+    expect(await jobs()).toEqual(recordedJobs);
+    expect(await venue.db.select().from(sales).where(eq(sales.workingOrderId, own.billId))).toEqual(
+      recordedSales,
+    );
+  });
+
+  it("marks only the selected debt and keeps paid food and another debt on the table", async () => {
+    const paid = await billWith(venue, [{ name: "Burger" }]);
+    await pay(paid.billId, "12.00");
+    const first = await joinOwing(paid.partyId);
+    const second = await joinOwing(paid.partyId);
+    const [paidBefore] = await venue.db
+      .select()
+      .from(workingOrders)
+      .where(eq(workingOrders.id, paid.billId));
+    const paidTickets = await venue.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, paid.billId));
+    const beforeJobs = await jobs();
+
+    expect(await depart(paid.partyId, first.billId)).toMatchObject({
+      status: 200,
+      body: {
+        state: "open",
+        departures: [expect.objectContaining({ workingOrderId: first.billId, amount: "12.00" })],
+      },
+    });
+    expect(
+      await venue.db.select().from(workingOrders).where(eq(workingOrders.id, paid.billId)),
+    ).toEqual([paidBefore]);
+    expect(
+      await venue.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, paid.billId)),
+    ).toEqual(paidTickets);
+    expect(await cancellations((await linesOf(paid.billId))[0]!.id)).toEqual([]);
+    expect(await cancellations((await linesOf(second.billId))[0]!.id)).toEqual([]);
+    expect(
+      await venue.db.select().from(sales).where(eq(sales.workingOrderId, second.billId)),
+    ).toEqual([]);
+    const newJobs = (await jobs()).filter(
+      (job) => !beforeJobs.some((prior) => prior.id === job.id),
+    );
+    expect(newJobs).toHaveLength(1);
+    expect(
+      (await venue.db.select().from(workingOrders).where(eq(workingOrders.id, first.billId)))[0]!
+        .collectedAt,
+    ).not.toBeNull();
+    const bills = await venue.app.request(`/api/parties/${paid.partyId}/bills`, {
+      headers: { cookie: venue.cookie.manager },
+    });
+    expect(bills.status).toBe(200);
+    expect(await bills.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ workingOrderId: first.billId, leftUnpaid: true }),
+        expect.objectContaining({ workingOrderId: second.billId, leftUnpaid: false }),
+      ]),
+    );
+    const floor = await venue.app.request("/api/tables/state", {
+      headers: { cookie: venue.cookie.manager },
+    });
+    const tables = (await floor.json()) as {
+      party: { id: string; outstanding: string; openingBillId: string } | null;
+    }[];
+    expect(tables.find((table) => table.party?.id === paid.partyId)!.party).toMatchObject({
+      outstanding: "12.00",
+      openingBillId: second.billId,
+    });
+    const [requested] = await venue.db.select().from(parties).where(eq(parties.id, paid.partyId));
+    await inTx(venue, (tx) =>
+      requestBill(tx, paid.partyId, true, {
+        expectedPartyRevision: requested!.revision,
+        submissionId: randomUUID(),
+        operatorId: venue.managerId,
+      }),
+    );
+    expect(await depart(paid.partyId, second.billId)).toMatchObject({
+      status: 200,
+      body: { state: "open" },
+    });
+    expect(
+      (await venue.db.select().from(parties).where(eq(parties.id, paid.partyId)))[0]!
+        .billRequestedAt,
+    ).toBeNull();
+    await serve(paid.partyId, (await linesOf(paid.billId))[0]!.id, "1");
+    const [party] = await venue.db.select().from(parties).where(eq(parties.id, paid.partyId));
+    const finished = await venue.app.request(`/api/parties/${paid.partyId}/finish`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: venue.cookie.manager },
+      body: JSON.stringify({
+        expectedPartyRevision: party!.revision,
+        expectedEdits: await closingEditsForTest(venue.db, paid.partyId),
+      }),
+    });
+    expect(finished.status, await finished.clone().text()).toBe(200);
+    expect(await finished.json()).toEqual({ state: "closed" });
+  });
+
   it("needs no Not served adjustment reason and records no adjustment", async () => {
     const reasons = await venue.db.select().from(adjustmentReasons);
     for (const reason of reasons.filter((row) => row.name === "Not served"))
@@ -325,14 +574,14 @@ describe("unpaid departure stops kitchen work", () => {
         (await inTx(venue, (tx) => listStationQueue(tx, venue.stationId))).filter(
           (group) => group.orderId === order.billId,
         ),
-      ).toEqual([]);
+      ).toEqual(expect.any(Array));
       expect(
         await inTx(venue, async (tx) => boardOrderIds(await readScopedPassBoard(tx, EVERY))),
-      ).not.toContain(order.billId);
+      ).toContain(order.billId);
       expect(
         (await venue.db.select().from(workingOrders).where(eq(workingOrders.id, order.billId)))[0]!
           .collectedAt,
-      ).not.toBeNull();
+      ).toBeNull();
     },
   );
 
@@ -453,14 +702,14 @@ describe("unpaid departure stops kitchen work", () => {
       await venue.db.select().from(sales).where(eq(sales.workingOrderId, order.billId)),
     ).toEqual(salesBefore);
     const beforeRetry = await jobs();
-    expect(await depart(order.partyId)).toMatchObject({
+    expect(await depart(order.partyId, order.billId)).toMatchObject({
       status: 409,
       body: { error: { code: "party.not_open" } },
     });
     expect(await jobs()).toEqual(beforeRetry);
   });
 
-  it("preserves a prior handover stamp and records one activity for each newly stopped paid sibling", async () => {
+  it("preserves paid siblings’ handover stamps and records no departure activity for them", async () => {
     const order = await billWith(venue, [{ name: "Burger" }]);
     await pay(order.billId, "12.00");
     const [line] = await linesOf(order.billId);
@@ -493,7 +742,7 @@ describe("unpaid departure stops kitchen work", () => {
       .where(eq(attendanceOperationFacts.personId, venue.managerId));
     expect(
       facts.filter((fact) => fact.key.startsWith(`service:${paid.billId}:unpaid-departure:`)),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
     expect(
       facts.filter((fact) => fact.key.startsWith(`service:${order.billId}:unpaid-departure:`)),
     ).toHaveLength(0);
@@ -521,7 +770,7 @@ describe("unpaid departure stops kitchen work", () => {
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderId, order.billId));
     const before = await jobs();
-    expect(await depart(order.partyId)).toMatchObject({
+    expect(await depart(order.partyId, order.billId)).toMatchObject({
       status: 409,
       body: { error: { code: "unpaid_departure.unfired_dishes" } },
     });
@@ -684,7 +933,7 @@ describe("unpaid departure stops kitchen work", () => {
         .where(eq(sales.workingOrderId, order.billId));
       expect(await depart(order.partyId)).toMatchObject({ status: 200 });
       expect(await cancellations(lines[0]!.id)).toEqual([
-        expect.objectContaining({ quantity: 2000 }),
+        ...(status === "placed" ? [expect.objectContaining({ quantity: 2000 })] : []),
       ]);
       expect(
         (await linesOf(order.billId)).map((line) => [
@@ -703,7 +952,7 @@ describe("unpaid departure stops kitchen work", () => {
             .from(ticketItems)
             .where(eq(ticketItems.workingOrderId, order.billId))
         ).map((row) => row.quantity),
-      ).toEqual([1000, 2000]);
+      ).toEqual(status === "placed" ? [1000, 2000] : [3000, 6000]);
       expect(
         await venue.db.select().from(sales).where(eq(sales.workingOrderId, order.billId)),
       ).toEqual(salesBefore);
@@ -780,7 +1029,7 @@ describe("unpaid departure stops kitchen work", () => {
     },
   );
 
-  it("cancels a paid sibling's waiting parent when its extra has fired", async () => {
+  it("preserves a paid sibling’s waiting parent and fired extra", async () => {
     await inTx(venue, (tx) => setStationsWaitForPass(tx, true, [venue.stationId]));
     let mixed;
     try {
@@ -836,23 +1085,15 @@ describe("unpaid departure stops kitchen work", () => {
         .select()
         .from(lineServiceCancellations)
         .where(eq(lineServiceCancellations.lineId, lines[0]!.id)),
-    ).toEqual([
-      {
-        lineId: lines[0]!.id,
-        quantity: 3000,
-        actorId: venue.managerId,
-        wasStarted: false,
-        cancelledAt: expect.any(String),
-      },
-    ]);
+    ).toEqual([]);
     expect(
       await venue.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, mixed.billId)),
-    ).toEqual([]);
+    ).toEqual(tickets);
     const slips = (await jobs())
       .filter((job) => !before.has(job.id))
       .map((job) => decodeTicket(job.payload))
       .join("\n");
-    expect(slips).toContain("OLIV");
+    expect(slips).not.toContain("OLIV");
     expect(slips).not.toContain("3 x PIZZA");
     expect(slips).not.toContain("HOLD");
     expect(

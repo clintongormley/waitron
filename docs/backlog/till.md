@@ -539,10 +539,10 @@ Open:
   2b's review: with the account menu open, the menu covered the pop-up at 400 and 1280 px wide.
   Decide whether an arriving alert should close the menu.
 
-## Task 17 (#991, a table that leaves without paying)
+## Task 17 (#991, a bill left unpaid)
 
 Asesor Q28 was decided by the owner
-without the asesor (2026-10-01): the full simplified invoice is issued when the table leaves.
+without the asesor (2026-10-01): the full simplified invoice is issued when a bill is left unpaid.
 Open:
 
 - **Known limit, kept by the owner's decision of 2026-10-01 — a bill holding a payment cannot

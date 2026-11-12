@@ -1,5 +1,7 @@
 # A1403: Unpaid departure kitchen stop
 
+**2026-11-12 supersession:** R6-3’s per-bill departure replaces the whole-family stop below. See [the per-bill plan](2026-11-12-r6-3-bill-unpaid.md); paid siblings keep their kitchen work and stamps.
+
 **Goal:** Recording unpaid departure stops unserved kitchen work, prints the usual cancellation slips, removes every family bill from kitchen lists and the overdue report, and keeps the full amount unpaid. Paid siblings keep their charges; departure offers no refund or extra waiter questions.
 
 **Approval receipt:** The watcher recorded “Walk-outs: option A.” in Lane C questions, 2026-11-06 ~13:40. Its ~12:02 detail says “Dishes the kitchen was never making (not sent, or held): unchanged” and that later payment restores nothing. The watcher moved A1403 to H on 2026-11-08 05:49: “Plan first; new printed or screen words come to me before landing.” These local campaign records are outside this checkout.

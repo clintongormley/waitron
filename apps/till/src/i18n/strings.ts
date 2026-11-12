@@ -1777,12 +1777,14 @@ export const en = {
   "bill_refund.approvers_failed": "Could not read who can approve this. Try again.",
   "bill_refund.unconfirmed":
     "The refund got no answer, so it may have been made. Check this bill's payments before trying again.",
-  // Record unpaid departure: the party left without paying
+  // Record unpaid departure
   "departure.record": "Record unpaid departure",
   "departure.title": "Record unpaid departure",
   "departure.left_unpaid": "Left unpaid",
   "departure.scope":
-    "Each of these bills not yet invoiced is invoiced now for its full amount, and every one is recorded as unpaid. No receipt is printed. The table is then finished, as Finish table would.",
+    "This bill is recorded as unpaid. Its unserved food is stopped; other bills keep their food. No receipt is printed. The table stays open while other guests are still eating or have bills to close.",
+  "departure.finish_hint":
+    "If a guest left without paying, choose their bill, then Record unpaid departure in its Bill menu.",
   "departure.reason": "Reason",
   "departure.reason_invalid": "Say why the bill is left unpaid",
   "departure.reason_long": "Keep the reason to 500 characters or fewer",
@@ -1791,9 +1793,7 @@ export const en = {
   "departure.confirm": "Record {amount} unpaid",
   "departure.approvers_failed": "Could not read who can approve this. Try again.",
   "departure.unconfirmed":
-    "The departure got no answer, so it may have been recorded. Check the floor before trying again.",
-  "departure.probably_recorded":
-    "The first try got no answer and the table is now closed, so the departure was probably recorded. Look it up with Find a bill.",
+    "The departure got no answer, so it may have been recorded. Check this bill before trying again.",
   // Cancel and credit: an invoiced, unpaid bill is credited in full and cancelled
   "cancel_credit.action": "Cancel and credit",
   "cancel_credit.title": "Cancel and credit",
@@ -3738,7 +3738,9 @@ export const es: Record<StringKey, string> = {
   "departure.title": "Registrar salida sin pagar",
   "departure.left_unpaid": "Sin pagar",
   "departure.scope":
-    "Cada una de estas cuentas que aún no tenga factura se factura ahora por su importe completo, y todas quedan registradas como no pagadas. No se imprime ticket. Después se cierra la mesa, como con Cerrar mesa.",
+    "Esta cuenta queda registrada sin pagar. Se detiene su comida pendiente de servir; las demás cuentas conservan la suya. No se imprime ticket. La mesa sigue abierta mientras otros comensales sigan comiendo o tengan cuentas pendientes de cerrar.",
+  "departure.finish_hint":
+    "Si alguien se ha ido sin pagar, elige su cuenta y después Registrar salida sin pagar en el menú de esa cuenta.",
   "departure.reason": "Motivo",
   "departure.reason_invalid": "Indica por qué queda sin pagar",
   "departure.reason_long": "Usa 500 caracteres como mucho para el motivo",
@@ -3747,9 +3749,7 @@ export const es: Record<StringKey, string> = {
   "departure.confirm": "Registrar {amount} sin pagar",
   "departure.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
   "departure.unconfirmed":
-    "La salida no obtuvo respuesta, así que puede que se haya registrado. Revisa el plano antes de volver a intentarlo.",
-  "departure.probably_recorded":
-    "El primer intento no obtuvo respuesta y la mesa ya está cerrada, así que la salida probablemente se registró. Búscala con Buscar cuenta.",
+    "La salida no obtuvo respuesta, así que puede que se haya registrado. Revisa esta cuenta antes de volver a intentarlo.",
   "cancel_credit.action": "Cancelar y abonar",
   "cancel_credit.title": "Cancelar y abonar",
   "cancel_credit.scope":

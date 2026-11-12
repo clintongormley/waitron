@@ -27,7 +27,7 @@ describe.each(["light", "dark"] as const)(
     it.each(states)("%s has no violations", async (_, state) => {
       const { el, host } = await mountWidget<TillUnpaidDepartureDialog>(
         "till-unpaid-departure-dialog",
-        { bills, refusal: state.refusal, busy: state.busy },
+        { bill: bills[0], refusal: state.refusal, busy: state.busy },
         theme,
       );
       if (state.pressed) {

@@ -1,6 +1,6 @@
 # R6-3: Left unpaid per bill
 
-**Authority:** Lane F queue R6-3, 12 November: owner “Yes, per bill”. Claude reviewed the plan; watcher clearance is pending. The owner approved the outcome, not this design.
+**Authority:** Lane F queue R6-3, 12 November: owner “Yes, per bill”. Claude reviewed the plan; the watcher cleared this revised plan on 12 November at 15:23 in Lane F questions.md. The owner approved the outcome, not this design.
 
 **Outcome/reuse:** Mark one walk-out’s bill unpaid; stop only its unserved food, preserve other guests’ food, and close only when ready. Reuse departure rows, bill statuses, authorization/clock gates, issuance/cancellation helpers and `readPartyFinishReadiness`. No database change.
 

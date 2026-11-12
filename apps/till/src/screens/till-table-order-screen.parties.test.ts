@@ -482,20 +482,16 @@ describe("till-table-order-screen: Finish table", () => {
     expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
   });
 
-  it("offers Record unpaid departure beside Take payment in the refusal, which asks the app to record it", async () => {
+  it("directs staff from Finish to the selected bill’s existing menu action", async () => {
     const el = await mountScreen({ finishRefused: true });
-    const asked = capture(el, "record-unpaid-departure");
-
     const refusal = shadow(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
-    const actions = [...refusal.querySelectorAll<HTMLElement>("wt-button")];
-    expect(actions.map((button) => button.textContent!.trim())).toEqual([
-      t("table.take_payment"),
-      t("departure.record"),
-    ]);
-    expect(actions[1]!.getAttribute("variant")).toBe("secondary");
-    refusal.querySelector<HTMLElement>("[data-record-departure]")!.click();
-
-    expect(asked).toEqual([{}]);
+    expect(
+      [...refusal.querySelectorAll<HTMLElement>("wt-button")].map((button) =>
+        button.textContent!.trim(),
+      ),
+    ).toEqual([t("table.take_payment")]);
+    expect(refusal.textContent).toContain(t("departure.finish_hint"));
+    expect(refusal.querySelector("[data-record-departure]")).toBeNull();
   });
 
   it("offers no Record unpaid departure when no bill it shows is unpaid", async () => {

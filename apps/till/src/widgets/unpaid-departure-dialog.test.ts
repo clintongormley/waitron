@@ -16,7 +16,7 @@ const owing: DepartingBill[] = [
 
 async function mount(over: Partial<TillUnpaidDepartureDialog> = {}) {
   const { el } = await mountWidget<TillUnpaidDepartureDialog>("till-unpaid-departure-dialog", {
-    bills: owing,
+    bill: owing[0],
     ...over,
   });
   return el;
@@ -55,16 +55,16 @@ function capture<T>(el: TillUnpaidDepartureDialog, type: string): T[] {
 }
 
 describe("till-unpaid-departure-dialog: what it will do", () => {
-  it("lists each bill left unpaid with its amount, the total, and what happens to them and the table", async () => {
+  it("shows the selected bill and its unpaid amount", async () => {
     const el = await mount();
 
     const rows = [...root(el).querySelectorAll("[data-departure-bill]")].map(text);
-    expect(rows).toEqual([`4 · Bill 1 ${money("14.00")}`, `4 · Bill 2 ${money("30.00")}`]);
+    expect(rows).toEqual([`4 · Bill 1 ${money("14.00")}`]);
     expect(text(root(el).querySelector("[data-departure-total]"))).toBe(
-      `${t("departure.left_unpaid")} ${money("44.00")}`,
+      `${t("departure.left_unpaid")} ${money("14.00")}`,
     );
     expect(text(root(el).querySelector("[data-departure-scope]"))).toBe(t("departure.scope"));
-    expect(text(confirm(el))).toBe(t("departure.confirm").replace("{amount}", money("44.00")));
+    expect(text(confirm(el))).toBe(t("departure.confirm").replace("{amount}", money("14.00")));
   });
 
   it("says a supervisor or manager may be asked to approve it next", async () => {
@@ -80,9 +80,9 @@ describe("till-unpaid-departure-dialog: what it will do", () => {
     const el = await mount();
 
     expect(text(root(el).querySelector("[data-departure-scope]"))).toBe(
-      "Cada una de estas cuentas que aún no tenga factura se factura ahora por su importe completo, y todas quedan registradas como no pagadas. No se imprime ticket. Después se cierra la mesa, como con Cerrar mesa.",
+      "Esta cuenta queda registrada sin pagar. Se detiene su comida pendiente de servir; las demás cuentas conservan la suya. No se imprime ticket. La mesa sigue abierta mientras otros comensales sigan comiendo o tengan cuentas pendientes de cerrar.",
     );
-    expect(text(confirm(el))).toBe(`Registrar ${money("44.00")} sin pagar`);
+    expect(text(confirm(el))).toBe(`Registrar ${money("14.00")} sin pagar`);
   });
 });
 

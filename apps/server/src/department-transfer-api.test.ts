@@ -1363,6 +1363,7 @@ describe("department transfer tab lifecycle", () => {
       await setBuiltInRoleForTest(suite.db, personId, "supervisor");
       try {
         const departure = await post(f.source.cookie, `/api/parties/${party}/unpaid-departure`, {
+          billId: f.tab,
           expectedPartyRevision: 0,
           reason: "Guests left without paying",
         });

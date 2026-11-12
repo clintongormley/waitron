@@ -662,6 +662,7 @@ describe("an unpaid departure", () => {
       "POST",
       `/api/parties/${partyId}/unpaid-departure`,
       {
+        billId: tabId,
         expectedEdits: await closingEditsForTest(venue.db, partyId),
         expectedPartyRevision: partyRevision(partyId),
         reason: "Se marcharon",

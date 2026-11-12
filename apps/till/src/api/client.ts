@@ -1198,8 +1198,9 @@ export interface BillRefundResult {
   balance: BillBalance;
 }
 
-/** `POST /api/parties/:id/unpaid-departure`: the party's guests left without paying. */
+/** `POST /api/parties/:id/unpaid-departure`: one bill left unpaid. */
 export interface UnpaidDepartureRequest {
+  billId: string;
   expectedEdits: BillEditExpected[];
   expectedPartyRevision: number;
   reason: string;
@@ -1208,7 +1209,7 @@ export interface UnpaidDepartureRequest {
 
 /** Each bill the departure left unpaid, with the invoice it owes on. */
 export interface UnpaidDepartureResult {
-  state: "closed";
+  state: "open" | "closed";
   departures: {
     id: string;
     workingOrderId: string;
@@ -2133,6 +2134,7 @@ export interface PartyBill {
   /** The name staff gave the bill; null when it has none. */
   billName: string | null;
   status: "open" | "placed" | "settled" | "abandoned";
+  leftUnpaid?: boolean;
   total: string;
   outstanding: string;
   /** A payment is pending or received on the bill, which the single payment refuses. */
