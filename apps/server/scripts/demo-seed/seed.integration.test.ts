@@ -53,7 +53,6 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 interface Venue {
   nodeId: string;
   seriesId: string;
-  locationId: string;
 }
 
 function tillConfigFor(venue: Venue): OriginConfig {

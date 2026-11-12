@@ -259,12 +259,7 @@ describe("seedFloor", () => {
   });
 
   it("gives every zone with tables a default set layout and today's plan, every table placed and none overlapping", async () => {
-    const { locationId } = await provisionVenue();
-    const cfg = {
-      nodeId: "unused",
-      seriesId: "unused",
-      locationId: locationId,
-    } as unknown as Parameters<typeof defaultLayout>[1];
+    await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {
       await seedFloor(tx, {
@@ -277,7 +272,7 @@ describe("seedFloor", () => {
       );
       const plans = [];
       for (const { zone_id } of zones)
-        plans.push(await readLayout(tx, await defaultLayout(tx, cfg, zone_id)));
+        plans.push(await readLayout(tx, await defaultLayout(tx, undefined, zone_id)));
       const { rows: today } = await tx.execute<{
         label: string;
         zone_id: string;

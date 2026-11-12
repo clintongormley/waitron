@@ -153,7 +153,7 @@ pack marks the Canary tax territory unsupported.)
 A261 step 7's approved plan separately permits a named-zone override before dated history;
 its editor validates named zones and refuses numeric offsets. Importing configuration into an
 existing venue retains its saved zone (`packages/provisioning/src/configuration-transfer.ts`); importing venue details is a creation concern,
-not an edit through that applicator.
+not an edit.
 
 ## The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE; the text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN
 

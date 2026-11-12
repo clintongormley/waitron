@@ -1162,15 +1162,14 @@ the helper's constant status is not evidence of the write.
     it alone rebuilds `locations` (S17, #2415; A773-2 PR D plan D113). S28 also deletes the tests
     that still set it, listed in D113 and in [kitchen.md](kitchen.md). Server test helpers take the venue row's
     id through the test type `WithVenueRowId` (`apps/server/src/testing/venue-row-id.ts`), which
-    stays in fixtures that still read the venue row, including node, Cloud, backup, kitchen-setting and menu-name fixtures. `verifyCoreBackupData`
+    stays in fixtures that still read the venue row, including node, Cloud, backup, kitchen-setting
+    and menu-name fixtures. `verifyCoreBackupData`
     (`packages/db/src/backup-evidence.ts`) still reads `locations` and `nodes.location_id` (S18f).
     Until `venueLocationId` goes, boot takes the venue row's id for backup settings, recovery
     packs, the bucket stream and the Cloud connection, and `backup-data-placement.ts` and
     `backup-verification.ts` read it from a backup copy (`readCopyNodeAndVenue`) for backup
     settings, which `backup-verification-secrets.ts` is handed; S18e or S28 removes them (S18f).
-    The `locationId` brand stays in
-    `packages/shared/src/ids.ts` for the fiscal pair's `write-path.e2e.test.ts` alone, which is never
-    edited (S18f).
+    The `locationId` brand remains in `packages/shared/src/ids.ts` (S18f).
   - **Fixture lines the helpers could not take:** F5 (#2403), F2 (#2410) and F4 (#2412) list the
     lines they left (fixed ids the helpers cannot keep, second-location cases and standby copies)
     with their owning slice in their commit messages and PR bodies; F3 (#2427) lists its lines

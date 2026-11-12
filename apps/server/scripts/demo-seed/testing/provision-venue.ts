@@ -1,5 +1,5 @@
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
-import { venueLocationId, type Database } from "@waitron/db";
+import { type Database } from "@waitron/db";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
@@ -98,6 +98,6 @@ export function createDemoVenueProvisioner(
       { db: db(), modules: fixture.modules },
     );
     // planVenue puts the standard series before the rectificative one.
-    return { ...venue, seriesId: venue.seriesIds[0]!, locationId: await venueLocationId(db()) };
+    return { ...venue, seriesId: venue.seriesIds[0]! };
   };
 }
