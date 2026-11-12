@@ -53,6 +53,7 @@ async function mount(
     expired?: boolean;
     refusal?: string;
     activationMismatch?: boolean;
+    activationExpired?: boolean;
     statusUnavailable?: boolean;
     lostBeforeWrite?: boolean;
     changeBeforeDeclare?: boolean;
@@ -134,6 +135,10 @@ async function mount(
     }
     if (path.endsWith("/activate")) {
       attemptedActivation = true;
+      if (options.activationExpired)
+        return new Response(JSON.stringify({ error: { code: "password.invalid" } }), {
+          status: 401,
+        });
       if (options.activationMismatch)
         return new Response(JSON.stringify({ error: { code: "handover.copy_mismatch" } }), {
           status: 409,
@@ -448,4 +453,32 @@ it("shows a fresh copy and asks for confirmation again when it changed before de
     { identifier: preview.copy.identifier, lastChangeAtMs: null },
     { identifier: preview.copy.identifier, lastChangeAtMs: 1792152000000 },
   ]);
+});
+
+it("explains a second code expiry after replacing only the code and preparing again", async () => {
+  const { el, posts } = await mount({ saved: true, activationExpired: true });
+  await authenticate(el);
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  await startVenue(el);
+  await vi.waitFor(() =>
+    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+      t("handover.emergency.code_expired"),
+    ),
+  );
+  await edit(el, "handover-code", "654321");
+  q(el, "[data-test=authenticate]").click();
+  await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
+  await startVenue(el);
+  await vi.waitFor(() =>
+    expect(q(el, "wt-form-actions").shadowRoot!.textContent).toContain(
+      t("handover.emergency.code_expired"),
+    ),
+  );
+  expect(posts.filter(({ path }) => path.endsWith("/preview"))).toHaveLength(1);
+  expect(
+    posts
+      .filter(({ path }) => path.endsWith("/activate"))
+      .map(({ body }) => (body.signIn as { totp: string }).totp),
+  ).toEqual(["123456", "654321"]);
 });

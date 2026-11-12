@@ -491,7 +491,7 @@ export class SetupHandoverScreen extends LitElement {
         ?disabled=${this.busy}
         .error=${this.attempted && name !== "code" && (name === "email" ? !this.email.includes("@") : !this.password) ? t("handover.required") : ""}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          this.#signInChecked = false;
+          if (name !== "code") this.#signInChecked = false;
           this.#resetSelection();
           if (name === "email" && event.detail.value !== this.email) {
             this.password = this.code = "";
