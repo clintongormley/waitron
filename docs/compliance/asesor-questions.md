@@ -3827,7 +3827,7 @@ the stop. Sales that a clock running ahead stamped later than the real time are 
 till; see [Q61](#q61-a-system-that-corrects-its-own-clock-from-a-tills-clock-when-it-has-no-internet-added-2026-11-01)._
 
 **2026-11-12 (A1420 PR 6):** the stop, the confirmation that lifted it and the list of wrongly dated
-sales are removed; the clock now stops payments only when it reads before 28 October 2024 or, on a box that files records, while a start waits for its time to be confirmed.
+sales are removed.
 
 This records a question; no enquiry has been sent.
 
@@ -3877,7 +3877,7 @@ change nothing else; the restart and its proof stay in the append-only table Q51
 [Q60](#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24).
 
 **2026-11-12 (A1420 PR 6):** the stop, the confirmation that lifted it and the
-`clock.behind_chain_disproved` alert are removed; the clock now stops payments only when it reads before 28 October 2024 or, on a box that files records, while a start waits for its time to be confirmed.
+`clock.behind_chain_disproved` alert are removed.
 
 This records a question; no enquiry has been sent.
 
@@ -3943,7 +3943,7 @@ number, invoice date, time recorded, real time unknown, amount, and whether the 
 differ from the day the sale was made).
 
 **2026-11-12 (A1420 PR 6):** the stop, the confirmation that lifted it, the list of wrongly dated
-sales, its notes and its download are removed; the clock now stops payments only when it reads before 28 October 2024 or, on a box that files records, while a start waits for its time to be confirmed.
+sales, its notes and its download are removed.
 
 This records a question; no enquiry has been sent.
 

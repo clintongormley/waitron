@@ -176,7 +176,7 @@ Two consequences:
   addresses, or an administrator's own device — lifts the stop by itself, for one step back, with no
   limit on the gap; see
   [conventions-data.md](../developers/conventions-data.md#the-boxs-clock-and-fiscal-records).
-  **2026-11-12 (A1420 PR 6):** the stop and the confirmation that lifted it are removed; the clock now stops payments only when it reads before 28 October 2024 or, on a box that files records, while a start waits for its time to be confirmed.
+  **2026-11-12 (A1420 PR 6):** the stop and the confirmation that lifted it are removed.
 - **The two margins are different things.** One minute is the standard the system must be built
   to; 240 seconds is the tolerance a submission is judged against. Conflating them would lead to
   gating sales on a threshold that is not the one AEAT applies.

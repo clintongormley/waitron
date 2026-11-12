@@ -1307,7 +1307,7 @@ once released. Belongs with A1016.
 
 ## Bundle: Finish the clock work: a check at every start and every change
 
-3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but
   it can still sell.**
@@ -1315,8 +1315,6 @@ once released. Belongs with A1016.
   [Detail](box.md#a798-b-build-degraded-but-trading-what-the-box-does-and-tells-staff-when-a-part-fails-but-it-can-still-sell)
 - **The box's certificate issued under a wrong clock.**
   [Detail](box.md#the-boxs-certificate-issued-under-a-wrong-clock)
-- **What slice 9b leaves to a restart.**
-  [Detail](box.md#what-slice-9b-leaves-to-a-restart)
 
 ## Bundle: Qualify clock confirmation through remote access
 
@@ -1454,7 +1452,7 @@ except the last, added 2026-11-14.
 
 ## Bundle: Box status rows
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S.
 
 - **The email about a clock set before 28 October 2024 points to the internet where that may not help.**
   [Detail](box.md#the-email-about-a-clock-set-before-28-october-2024-points-to-the-internet-where-that-may-not-help)
@@ -2063,14 +2061,6 @@ the marker the stream writes when a generation opens (`#readBucketClock`,
 prune deletes nothing, every day, and logs nothing (a read that fails logs `stream.prune_failed`),
 so old generations can pile up in the bucket with no alert. Also not tested: a later generation whose marker cannot be read after an
 earlier one's could (read, not run). Left open by A798-B slice 9b, Task 15.
-
-## What slice 9b leaves to a restart.
-
-- A node promoted while running gets no start-up window until it restarts (`clockStartUp`'s
-  `primaryAtStart`, `apps/server/src/boot.ts`), so staff can set its clock from a till only until
-  the internet confirms its start (decision 14; stated, not fixed).
-
-Left open by A798-B slice 9b.
 
 ## timesyncd's clock file after a backward set has not been watched across a reboot.
 
