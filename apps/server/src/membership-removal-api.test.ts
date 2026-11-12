@@ -583,7 +583,7 @@ describe("removing the standby this box's pair link names", () => {
 
   it("a standby with a nodes row is still refused removal, and its pair link stays", async () => {
     const p = await primary();
-    const joinedId = await seedNode(p.db, p.locationId);
+    const joinedId = await seedNode(p.db);
     await holdChart(p, [self(p), standby(joinedId)]);
     await linkTo(p, joinedId);
 
