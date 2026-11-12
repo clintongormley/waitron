@@ -2708,6 +2708,8 @@ your form's checks. Decimal mode uses a text control with a decimal keyboard. Pr
 selection when converting a mark during typing. `parseDecimalInput` and `formatDecimalInput` from `@waitron/ui-core` (also
 exported by `@waitron/ui`) share this conversion. The server still receives its exact dot-decimal
 format. Keep the conversion in the browser so a Spanish keyboard does not change the amount stored.
+Server code that prints a quantity imports `formatDecimalInput` from `@waitron/ui-core/decimal-input`,
+which loads no component.
 
 A form says nothing about errors until the operator first presses its primary action (owner rule,
 2026-09-28). A device profile whose department has no active allowed zone left shows its

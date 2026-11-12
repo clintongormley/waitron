@@ -515,7 +515,7 @@ describe("the simplified receipt's own layout (A663)", () => {
         net: { unitPrice: "2.73", priceQuantity: "0.100", base: "8.18", tax: "0.82", rate: "10" },
       },
     ];
-    expect(rows(input)).toContainEqual(["0.300 kg  Jamón ibérico", "9,00", undefined]);
+    expect(rows(input)).toContainEqual(["0,300 kg  Jamón ibérico", "9,00", undefined]);
   });
 
   it("never draws two rules in a row, or a rule first or last, on a simplified receipt", () => {
@@ -657,7 +657,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     const rows = tableOf(buildReceiptDocument(input)).rows;
     expect(rows[0]).toMatchObject({ units: "1" });
     expect(rows.find((r) => r.item === "Jamón ibérico")).toMatchObject({
-      units: "0.35 kg",
+      units: "0,35 kg",
       price: "109,09",
       amount: "38,18",
     });
@@ -856,14 +856,14 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
 
   it("prints the jamón under a kilo at its price, with its own discount (owner, Q9)", () => {
     expect(hamRows(false)).toMatchObject([
-      { units: "0.123 kg", item: "Jamón ibérico", price: "21,82", amount: "2,68" },
+      { units: "0,123 kg", item: "Jamón ibérico", price: "21,82", amount: "2,68" },
       { item: "Descuento 10%", amount: "-0,27" },
     ]);
   });
 
   it("prints a comped jamón's value and Descuento 100%", () => {
     expect(hamRows(true)).toMatchObject([
-      { units: "0.123 kg", item: "Jamón ibérico", price: "21,82", amount: "2,68" },
+      { units: "0,123 kg", item: "Jamón ibérico", price: "21,82", amount: "2,68" },
       { item: "Descuento 100%", amount: "-2,68" },
     ]);
   });
@@ -941,7 +941,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
       },
     ];
     expect(amountRows(buildReceiptDocument(input))).toContainEqual([
-      "0.300 kg  Jamón ibérico (IVA incluido)",
+      "0,300 kg  Jamón ibérico (IVA incluido)",
       "9,00 €",
     ]);
   });
@@ -973,7 +973,7 @@ describe("the full invoice's heading, customer block, table and totals (A663)", 
     expect(amountRows(buildReceiptDocument(input))).toEqual(
       expect.arrayContaining([
         ["Pan 2", "1,00 €"],
-        ["Jamón 0.050 kg", "2,00 €"],
+        ["Jamón 0,050 kg", "2,00 €"],
       ]),
     );
   });
@@ -1369,8 +1369,8 @@ describe("identical dishes on the receipt (A803)", () => {
       gross: "4.50",
     };
     expect(simplified([ham, ham]).slice(2, 4)).toEqual([
-      ["0.150 kg  Jamón", "4,50"],
-      ["0.150 kg  Jamón", "4,50"],
+      ["0,150 kg  Jamón", "4,50"],
+      ["0,150 kg  Jamón", "4,50"],
     ]);
   });
 

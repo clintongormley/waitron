@@ -758,13 +758,21 @@ describe("quantityText", () => {
     [{ quantity: "3", unitName: { ca: "u" } }, "3"],
     [{ quantity: "1", unitName: null }, "1"],
     [{ quantity: "2", unitName: { es: "pzas" }, soldInEach: true as const }, "2"],
-    [{ quantity: "0.35", unitName: { es: "kg" } }, "0.35 kg"],
+    [{ quantity: "0.35", unitName: { es: "kg" } }, "0,35 kg"],
+    [{ quantity: "1.5", unitName: null }, "1,5"],
     [{ quantity: "4", unitName: { es: "pzas" } }, "4 pzas"],
     [{ quantity: "2", unitName: { es: "ud", en: "ea" } }, "2"],
     [{ quantity: "2", unitName: { es: "cajas", en: "ea" } }, "2 cajas"],
     [{ quantity: "2", unitName: { es: "ud", en: "pcs" } }, "2 ud"],
   ])("prints %j as %s", (line, expected) => {
-    expect(quantityText(line, "es-ES")).toBe(expected);
+    expect(quantityText(line, "es-ES", "es-ES")).toBe(expected);
+  });
+
+  it("keeps the dot of an English receipt", () => {
+    expect(quantityText({ quantity: "0.35", unitName: { en: "kg" } }, "en-GB", "en-GB")).toBe(
+      "0.35 kg",
+    );
+    expect(quantityText({ quantity: "1.5", unitName: null }, "en-GB", "en-GB")).toBe("1.5");
   });
 
   it("counts an extra priced per portion in portions, and falls back when that is not whole", () => {
@@ -773,8 +781,8 @@ describe("quantityText", () => {
       unitName: { es: "kg" },
       net: net("1.24", "2.48", "21.00", "0.050"),
     });
-    expect(quantityText(portion("0.100"), "es-ES")).toBe("2");
-    expect(quantityText(portion("0.075"), "es-ES")).toBe("0.075 kg");
+    expect(quantityText(portion("0.100"), "es-ES", "es-ES")).toBe("2");
+    expect(quantityText(portion("0.075"), "es-ES", "es-ES")).toBe("0,075 kg");
   });
 
   it("counts portions only when they divide the quantity exactly", () => {
@@ -784,11 +792,11 @@ describe("quantityText", () => {
       unitName: { es: "kg" },
       net: net("1.00", "2.00", "10", "3.000"),
     };
-    expect(quantityText(line, "es-ES")).toBe("6.001 kg");
+    expect(quantityText(line, "es-ES", "es-ES")).toBe("6,001 kg");
   });
 
   it("keeps the unit name of a filed line priced per one unit", () => {
     const line = { quantity: "4", unitName: { es: "pzas" }, net: net("2.00", "8.00", "10") };
-    expect(quantityText(line, "es-ES")).toBe("4 pzas");
+    expect(quantityText(line, "es-ES", "es-ES")).toBe("4 pzas");
   });
 });

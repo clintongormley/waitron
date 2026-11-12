@@ -27,6 +27,19 @@ export function dishLine(
   return `${quantityText(line.quantity)}${unit}× ${name}`;
 }
 
+/** A measured extra shows its amount and unit, as {@link dishLine} does; a counted one its count. */
+export function extraLine(extra: {
+  name: string;
+  quantity: string;
+  unitName: Record<string, string> | null;
+  soldInEach: boolean;
+  perDish: number;
+}): string {
+  if (extra.unitName !== null && !extra.soldInEach)
+    return `${extra.name} ${quantityText(extra.quantity)} ${snapshotDescriptionFor(extra.unitName, "")}`;
+  return extra.perDish > 1 ? `${extra.name} x${extra.perDish}` : extra.name;
+}
+
 /** Resolve live catalogue text against enabled languages and the configured content default. */
 export function descriptionFor(
   descriptions: Record<string, string>,

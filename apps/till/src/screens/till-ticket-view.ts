@@ -4,7 +4,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { live } from "lit/directives/live.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, formatDecimalInput } from "@waitron/ui";
 import {
   addDecimal,
   compareDecimal,
@@ -191,7 +191,7 @@ function netFacts(line: TillSaleLine, names: string, format: string, labels: Rec
       <span>${labels.netUnitPrice}</span
       ><span
         >${formatMoney(line.net.unitPrice, format)} /
-        ${line.net.priceQuantity.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}${unit}</span
+        ${formatDecimalInput(line.net.priceQuantity.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1"), format)}${unit}</span
       >
     </div>
     <div class="vat-row">
@@ -1268,7 +1268,7 @@ export class TillTicketView extends LitElement {
               <li class="line">
                 <span class="line-name">${lineName(group.dish.descriptions, names)}</span>
                 <span class="line-qty"
-                  >${group.dish.quantity}${
+                  >${formatDecimalInput(group.dish.quantity, format)}${
                     group.dish.unitName == null
                       ? ""
                       : ` ${resolveSnapshotText(group.dish.unitName, names, names)}`
@@ -1285,12 +1285,12 @@ export class TillTicketView extends LitElement {
                     option.unitName == null
                       ? ""
                       : ` ${resolveSnapshotText(option.unitName, names, names)}`;
-                  amount = ` ${option.quantity}${unit}`;
+                  amount = ` ${formatDecimalInput(option.quantity, format)}${unit}`;
                 } else if (option.unitName == null || option.soldInEach === true) {
                   const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
                   amount = perDish > 1 ? ` x${perDish}` : "";
                 } else {
-                  amount = ` ${option.quantity} ${resolveSnapshotText(option.unitName, names, names)}`;
+                  amount = ` ${formatDecimalInput(option.quantity, format)} ${resolveSnapshotText(option.unitName, names, names)}`;
                 }
                 return html`
                   <li class="line option">

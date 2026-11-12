@@ -748,3 +748,32 @@ describe("A931 a clash carried by an extra", () => {
     expect(clash(el)).toEqual({ section: false, reason: null, primary: "Send" });
   });
 });
+
+it.each([
+  ["en-GB", "0.350", "0.165"],
+  ["es-ES", "0,350", "0,165"],
+])(
+  "writes a weighed dish's and a measured extra's quantity with the %s till's decimal mark",
+  async (locale, dish, extra) => {
+    setLocale(locale);
+    const read = view("allergies");
+    const [first] = read.dishes;
+    read.dishes = [
+      { ...first!, name: "Octopus", quantity: "0.350", extras: [] },
+      {
+        ...first!,
+        line: { kind: "draft", id: "toast" },
+        name: "Toast",
+        quantity: "1.000",
+        extras: [{ name: "Ham", quantity: "0.165", allergens: {} }],
+      },
+    ];
+    const el = await mount("allergies", "send", read);
+    expect(el.shadowRoot!.querySelector('[data-dish="0"] strong')!.textContent).toBe(
+      `${dish} × Octopus`,
+    );
+    expect(el.shadowRoot!.querySelector('[data-extra="1:0"]')!.textContent).toContain(
+      `+ ${extra} × Ham`,
+    );
+  },
+);

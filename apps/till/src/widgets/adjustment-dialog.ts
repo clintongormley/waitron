@@ -8,7 +8,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import { compareDecimal, decimal, formatMoney, multiplyDecimal } from "@waitron/shared";
 import { trackDialog } from "./track-dialog.js";
-import { parseDecimalInput } from "@waitron/ui";
+import { formatDecimalInput, parseDecimalInput } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -762,7 +762,8 @@ export class TillAdjustmentDialog extends LitElement {
   }
 
   #scopeTitle(target: AdjustTarget): string {
-    const quantity = target.quantity === null ? "" : ` ×${target.quantity}`;
+    const quantity =
+      target.quantity === null ? "" : ` ×${formatDecimalInput(target.quantity, currentLocale())}`;
     return `${target.name}${quantity} · ${this.#money(target.total)}`;
   }
 

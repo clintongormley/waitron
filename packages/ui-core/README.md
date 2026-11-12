@@ -7,6 +7,8 @@ stay in your application.
 
 `@waitron/ui-core/theme` is the theme derivation; it takes Waitron's values as an argument.
 `@waitron/ui-core/theme/waitron` exports those values, read from the token files.
+`@waitron/ui-core/decimal-input` writes and reads decimals with a locale's decimal mark, without loading
+any component, so server code can use it.
 
 The package is private. Registry publication is a separate release step; this
 checkout builds and tests a local tarball without publishing it.

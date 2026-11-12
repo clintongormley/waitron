@@ -1284,7 +1284,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
   const catchUpFloor = (tx: Transaction) =>
     ensureToday(tx, deps.tableRemovals ?? [], deps.clock.now().instant);
-  app.use("/api/*", madeHereAnswer(deps.db, deps.cfg.locale));
+  app.use("/api/*", madeHereAnswer(deps.db));
   if (deps.boxClock !== undefined)
     mountTillBoxClockApi(
       app,

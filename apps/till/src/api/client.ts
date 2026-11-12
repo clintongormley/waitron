@@ -2405,6 +2405,14 @@ export interface TabLine {
   portion?: boolean;
 }
 
+export interface MadeHereExtra {
+  name: string;
+  quantity: string;
+  unitName: Record<string, string> | null;
+  soldInEach: boolean;
+  perDish: number;
+}
+
 export interface MadeHereItem {
   lineId: string;
   name: string;
@@ -2412,7 +2420,7 @@ export interface MadeHereItem {
   unitName: Record<string, string> | null;
   soldInEach: boolean;
   optionSnapshots: OptionSnapshot[];
-  extras: string[];
+  extras: MadeHereExtra[];
   note: string | null;
 }
 

@@ -7,6 +7,7 @@ import {
   inNumberOrder,
   leaveCoordinatorFor,
   focusFirstInvalid,
+  formatDecimalInput,
   submitOnEnter,
 } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
@@ -506,7 +507,7 @@ export class TillDepartmentTransfers extends LitElement {
               </h3>
               <h3>${t("department_transfer.lines")}</h3>
               <ul data-current-lines>
-                ${detail.lines.map((line) => html`<li><div class="description">${line.quantity} × ${staffPresentationName(line)}${line.note === null ? nothing : html`<p>${line.note}</p>`}</div></li>`)}
+                ${detail.lines.map((line) => html`<li><div class="description">${formatDecimalInput(line.quantity, currentLocale())} × ${staffPresentationName(line)}${line.note === null ? nothing : html`<p>${line.note}</p>`}</div></li>`)}
               </ul>
               <h3>${t("department_transfer.work")}</h3>
               <ul data-current-work>

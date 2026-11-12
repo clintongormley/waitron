@@ -11,13 +11,12 @@ import {
 import { staffPresentationName } from "@waitron/catalogue";
 import {
   AppError,
-  contentLanguageCode,
+  perDishOptionQuantity,
   thousandthsToDecimal,
   type OptionSnapshot,
 } from "@waitron/shared";
 import type { RequestEffects, TradingContext } from "./trading-context.js";
 import { requireLiveStation } from "./kitchen.js";
-import { extraLabel } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
@@ -27,6 +26,14 @@ declare module "hono" {
   }
 }
 
+export interface MadeHereExtra {
+  name: string;
+  quantity: string;
+  unitName: Record<string, string> | null;
+  soldInEach: boolean;
+  perDish: number;
+}
+
 export interface MadeHereItem {
   lineId: string;
   name: string;
@@ -34,7 +41,7 @@ export interface MadeHereItem {
   unitName: Record<string, string> | null;
   soldInEach: boolean;
   optionSnapshots: OptionSnapshot[];
-  extras: string[];
+  extras: MadeHereExtra[];
   note: string | null;
 }
 
@@ -60,7 +67,6 @@ export function madeHereSinkFor(c: Context): Set<string> {
 export async function readMadeHereItems(
   db: Database,
   lineIds: ReadonlySet<string>,
-  locale: string,
 ): Promise<MadeHereItem[]> {
   if (lineIds.size === 0) return [];
   const ids = [...lineIds];
@@ -106,21 +112,21 @@ export async function readMadeHereItems(
     optionSnapshots: row.optionSnapshots,
     extras: children
       .filter((child) => child.parentLineId === row.lineId)
-      .map((child) =>
-        extraLabel(
-          child.name,
+      .map((child) => ({
+        name: child.name,
+        quantity: thousandthsToDecimal(child.quantity),
+        unitName: child.unitName,
+        soldInEach: each.has(child.id),
+        perDish: perDishOptionQuantity(
           thousandthsToDecimal(child.quantity),
           thousandthsToDecimal(row.lineQuantity),
-          child.unitName === null || each.has(child.id)
-            ? undefined
-            : (child.unitName[contentLanguageCode(locale)] ?? Object.values(child.unitName)[0]),
         ),
-      ),
+      })),
     note: row.note,
   }));
 }
 
-export function madeHereAnswer(db: Database, locale: string): MiddlewareHandler {
+export function madeHereAnswer(db: Database): MiddlewareHandler {
   return async (c, next) => {
     await next();
     const ids = c.get("madeHereSink");
@@ -134,7 +140,7 @@ export function madeHereAnswer(db: Database, locale: string): MiddlewareHandler 
       return;
     const body: unknown = await c.res.clone().json();
     if (typeof body !== "object" || body === null || Array.isArray(body)) return;
-    const items = await readMadeHereItems(db, ids, locale);
+    const items = await readMadeHereItems(db, ids);
     if (items.length === 0) return;
     c.res = new Response(JSON.stringify({ ...body, madeHere: items }), {
       status: c.res.status,

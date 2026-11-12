@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { MadeHereItem } from "../api/client.js";
-import { dishLine } from "./dish-format.js";
+import { dishLine, extraLine } from "./dish-format.js";
 import { optionAnswers } from "./option-snapshot.js";
 
 @customElement("till-make-now")
@@ -68,7 +68,7 @@ export class TillMakeNow extends LitElement {
               ${optionAnswers(item.optionSnapshots, { reads: "staff" }).map(
                 (answer) => html`<span class="detail">${answer}</span>`,
               )}
-              ${item.extras.map((extra) => html`<span class="detail">+ ${extra}</span>`)}
+              ${item.extras.map((extra) => html`<span class="detail">+ ${extraLine(extra)}</span>`)}
               ${item.note ? html`<span class="detail">${item.note}</span>` : nothing}
             </li>`,
         )}

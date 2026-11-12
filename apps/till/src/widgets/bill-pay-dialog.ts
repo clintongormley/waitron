@@ -16,6 +16,7 @@ import {
 import {
   baseStyles,
   focusFirstInvalid,
+  formatDecimalInput,
   submitOnEnter,
   leaveCoordinatorFor,
   type WtButton,
@@ -910,7 +911,9 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #shownQuantity(line: PayLine, units: number): string {
-    return line.unitTotal === null ? line.quantity : String(units);
+    return line.unitTotal === null
+      ? formatDecimalInput(line.quantity, currentLocale())
+      : String(units);
   }
 
   #choice(): PayChoice {

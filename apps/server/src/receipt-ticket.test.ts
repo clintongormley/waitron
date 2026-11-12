@@ -419,7 +419,7 @@ it.each([
     expect(lines).toContain(priceLabel);
     // 0.32 kg is 3.2 portions of 0.100 kg, not whole, so the row keeps the quantity and unit and
     // prints the price alone.
-    expect(lines).toContain("0.32 kg Jamón 2,50 8,00");
+    expect(lines).toContain("0,32 kg Jamón 2,50 8,00");
     expect(lines).not.toContain("/ 0.1");
     expect(lines).not.toContain(" / ");
     expect(lines).toContain("8,00");
@@ -493,7 +493,7 @@ it.each([PRINTER_58, PRINTER_80])(
       const spanish = invoiceLocale === "es-ES";
       expect(content).toContain(spanish ? "1 Plato 10,00 10,00 21%" : "1 Dish 10.00 10.00 21%");
       expect(content).toContain(
-        spanish ? "0.32 kg Jamón 25,00 8,00 10%" : "0.32 kg Ham 25.00 8.00 10%",
+        spanish ? "0,32 kg Jamón 25,00 8,00 10%" : "0.32 kg Ham 25.00 8.00 10%",
       );
       const hamStart = content.indexOf(spanish ? "Jamón" : "Ham");
       const hamEnd = content.indexOf(
@@ -1158,7 +1158,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         printer: PRINTER_80,
       }),
     );
-    expect(text).toMatch(/0\.375 kg\s+Jamón[^\n]*4,50/u);
+    expect(text).toMatch(/0,375 kg\s+Jamón[^\n]*4,50/u);
   });
 
   it("prints a weighted extra's filed physical amount and frozen unit beneath its dish", () => {
@@ -1192,8 +1192,44 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         printer: PRINTER_80,
       }),
     );
-    expect(text).toMatch(/Tostada[\s\S]*Jamón 0\.150 kg[^\n]*0,03/u);
+    expect(text).toMatch(/Tostada[\s\S]*Jamón 0,150 kg[^\n]*0,03/u);
   });
+
+  it.each([
+    ["es-ES", /0,350 kg\s+Pescado[^\n]*9,10/u, /^ +Ensalada 1,000 rac[^\n]*2,00/mu],
+    ["en-GB", /0\.350 kg\s+Fish[^\n]*9\.10/u, /^ +Salad 1\.000 srv[^\n]*2\.00/mu],
+  ])(
+    "writes a weighed dish and a portioned extra with the %s decimal mark",
+    (invoiceLocale, dish, extra) => {
+      const result: TillSaleResult = {
+        ...FILED_SALE,
+        lines: [
+          {
+            descriptions: { "es-ES": "Pescado", "en-GB": "Fish" },
+            quantity: "0.350",
+            gross: "9.10",
+            unitName: { es: "kg", en: "kg" },
+            unitPrecision: 3,
+            parentLineNo: null,
+          },
+          {
+            descriptions: { "es-ES": "Ensalada", "en-GB": "Salad" },
+            quantity: "1.000",
+            gross: "2.00",
+            unitName: { es: "rac", en: "srv" },
+            unitPrecision: 2,
+            parentLineNo: 1,
+          },
+        ],
+        total: "11.10",
+      };
+      const text = decodeTicket(
+        formatReceipt({ result, issuer: ISSUER, receipt: {}, invoiceLocale, printer: PRINTER_80 }),
+      );
+      expect(text).toMatch(dish);
+      expect(text).toMatch(extra);
+    },
+  );
 
   it("prints the unit abbreviation of the invoice language, not whichever one is stored first", () => {
     // A unit's abbreviation map keeps bare content-language keys, never the invoice locales a line's
@@ -3448,7 +3484,7 @@ describe("the simplified receipt's own layout (A663)", () => {
         printer,
       );
       expect(lines.some((line) => line.startsWith("4 Agua, pan y aceite"))).toBe(true);
-      expect(lines.some((line) => line.startsWith("0.35 kg Jamón ibérico"))).toBe(true);
+      expect(lines.some((line) => line.startsWith("0,35 kg Jamón ibérico"))).toBe(true);
       expect(lines.some((line) => line.includes("4 ud"))).toBe(false);
     },
   );
@@ -3586,7 +3622,7 @@ describe("the simplified receipt's own layout (A663)", () => {
       },
       PRINTER_58,
     );
-    expect(lines).toContain("0.35 kg Jamón ibérico 8,40");
+    expect(lines).toContain("0,35 kg Jamón ibérico 8,40");
   });
 });
 

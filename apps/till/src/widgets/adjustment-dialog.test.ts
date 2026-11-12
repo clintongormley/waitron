@@ -182,6 +182,25 @@ describe("till-adjustment-dialog: the form", () => {
     );
   });
 
+  it.each([
+    ["en-GB", "0.35"],
+    ["es-ES", "0,35"],
+  ])("writes a weighed line's quantity with the %s till's decimal mark", async (locale, shown) => {
+    setLocale(locale);
+    const ham: AdjustTarget = {
+      lineId: "line-4",
+      name: "Ham",
+      quantity: "0.35",
+      total: "7.00",
+      unitTotal: null,
+      weighed: true,
+    };
+    const el = await mount({ kind: "cancel", target: ham });
+    expect(text(root(el).querySelector("[data-adjust-scope]")!)).toBe(
+      `Ham ×${shown} · ${money("7.00")}`,
+    );
+  });
+
   it("tells staff, above the action, to discount the whole of a weighed line rather than part", async () => {
     const ham: AdjustTarget = {
       lineId: "line-4",

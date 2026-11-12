@@ -45,6 +45,7 @@
     "./tokens/colors.css": "./src/tokens/colors.css",
     "./tokens/structure.css": "./src/tokens/structure.css",
     "./unsaved-changes": "./src/unsaved-changes.ts",
+    "./decimal-input": "./src/decimal-input.ts",
     "./theme": "./src/theme/index.ts",
     "./theme/waitron": "./src/theme/waitron.ts"
   },
@@ -120,6 +121,10 @@
       "./unsaved-changes": {
         "types": "./dist/types/unsaved-changes.d.ts",
         "import": "./dist/unsaved-changes.js"
+      },
+      "./decimal-input": {
+        "types": "./dist/types/decimal-input.d.ts",
+        "import": "./dist/decimal-input.js"
       },
       "./theme": {
         "types": "./dist/types/theme/index.d.ts",

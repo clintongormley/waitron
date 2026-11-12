@@ -770,7 +770,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Remove till code nothing reaches** (bundle of 3, size M). Holds A1007. [Detail](backlog/till.md#bundle-remove-till-code-nothing-reaches)
 
-- **Small till and floor wording fixes** (bundle of 8, size M). Holds A1259, A934, A920, A912, A470, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
+- **Small till and floor wording fixes** (bundle of 9, size M). Holds A1259, A934, A920, A912, A470, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
 - **A1052. A handheld's transfer accept list holds only counter zones.** Read, not run: a handheld
   fills it from `GET /api/default-service-zone/offers`, whose `zones` are the profile's counter
@@ -967,8 +967,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   shows a drawer shortfall at cash-up. **Owner decision 2026-09-25:** keep it here and decide it
   when the till's void screen is designed.
   [Detail](backlog/till.md#cash-handed-back-for-a-voided-cash-sale-is-recorded-nowhere)
-
-- **How a unit and its quantity read** (bundle of 2, 1 important, size S). [Detail](backlog/till.md#bundle-how-a-unit-and-its-quantity-read)
 
 - **On the till, opening a section from lower on the screen leaves the page scrolled**, so the
   breadcrumb is out of view. I believe this predates W93: neither `main`'s nor W93's

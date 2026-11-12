@@ -181,7 +181,7 @@ describe("device made-here stations", () => {
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [line]);
     });
     const app = new Hono();
-    app.use("/api/*", madeHereAnswer(suite.db, "es-ES"));
+    app.use("/api/*", madeHereAnswer(suite.db));
     app.get("/api/json", (c) => {
       madeHereSinkFor(c).add(lineId);
       c.header("Set-Cookie", "session=test; HttpOnly");
@@ -201,40 +201,58 @@ describe("device made-here stations", () => {
   });
 
   it("drops an id without a committed made-here record", async () => {
-    expect(await readMadeHereItems(suite.db, new Set([randomUUID()]), "es-ES")).toEqual([]);
+    expect(await readMadeHereItems(suite.db, new Set([randomUUID()]))).toEqual([]);
   });
-  it.each(["en-GB", "es-ES"])(
-    "shows a weighted extra's saved amount and unit in %s",
-    async (locale) => {
-      const venue = await setupVenue(suite.db);
-      const drinkId = await withTransaction(suite.db, async (tx) => {
-        const deviceId = await deviceAt(tx, venue.defaultStationId);
-        const orderId = randomUUID();
-        await createOpenOrder(tx, venue.cfg, orderId, [], null);
-        const drink = await rawLine(tx, orderId, venue.coffeeId, 1);
-        await tx.insert(workingOrderLines).values({
-          workingOrderId: orderId,
-          parentLineId: drink.id,
+  // The till writes these in its own screen language, as it writes the dish above them.
+  it("answers each extra as data: its saved amount and unit names, and its count per dish", async () => {
+    const venue = await setupVenue(suite.db);
+    const drinkId = await withTransaction(suite.db, async (tx) => {
+      const deviceId = await deviceAt(tx, venue.defaultStationId);
+      const orderId = randomUUID();
+      await createOpenOrder(tx, venue.cfg, orderId, [], null);
+      const drink = await rawLine(tx, orderId, venue.coffeeId, 1);
+      const extra = {
+        workingOrderId: orderId,
+        parentLineId: drink.id,
+        productId: venue.waterId,
+        priceQuantity: 50,
+        unitPriceGross: 1,
+        vatClass: "general",
+        lineTotal: 3,
+      };
+      await tx.insert(workingOrderLines).values([
+        {
+          ...extra,
           lineNo: 2,
-          productId: venue.waterId,
           name: "Jamón",
           descriptions: { "es-ES": "Jamón" },
           quantity: 150,
-          priceQuantity: 50,
-          unitName:
-            locale === "en-GB" ? { es: "wrong-unit", en: "kg" } : { en: "wrong-unit", es: "kg" },
-          unitPriceGross: 1,
-          vatClass: "general",
-          lineTotal: 3,
-        });
-        await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [drink]);
-        return drink.id;
-      });
-      const items = await readMadeHereItems(suite.db, new Set([drinkId]), locale);
-      expect(items).toHaveLength(1);
-      expect(items[0]!.extras).toEqual(["Jamón 0.150 kg"]);
-    },
-  );
+          unitName: { en: "srv", es: "rac" },
+        },
+        {
+          ...extra,
+          lineNo: 3,
+          name: "Lima",
+          descriptions: { "es-ES": "Lima" },
+          quantity: 2000,
+        },
+      ]);
+      await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [drink]);
+      return drink.id;
+    });
+    const items = await readMadeHereItems(suite.db, new Set([drinkId]));
+    expect(items).toHaveLength(1);
+    expect(items[0]!.extras).toEqual([
+      {
+        name: "Jamón",
+        quantity: "0.150",
+        unitName: { en: "srv", es: "rac" },
+        soldInEach: false,
+        perDish: 1,
+      },
+      { name: "Lima", quantity: "2.000", unitName: null, soldInEach: false, perDish: 2 },
+    ]);
+  });
   it("makes Bar work here and prints Grill work in the same send", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
