@@ -146,9 +146,8 @@ beside its reader in `scripts/write-path-tables.test.ts`.
   #622 could not touch: "regardless of database date display settings" in `print-api.test.ts`,
   "(the R-D dedupe)" in `kitchen-print.test.ts`, "(SP-B4 rehome)" in `receipt-print.test.ts`,
   "(SP-A.2 §16.4)" and "SP-C:" in `sale-till-source.receipt.test.ts`, "old per-taxpayer path"
-  and "path tenant" in `webhook.test.ts`, "(FIX 2 cascade / FIX 4 split)" in
-  `transfer-lines.test.ts`, "(the TS-4 shape)" in `move-merge.test.ts`, "TS-4's move guards" and
-  "TS-2 status" in `split-bill.test.ts`.
+  and "path tenant" in `webhook.test.ts`, "(FIX 2 cascade)" in `transfer-lines.test.ts`, "(the
+  TS-4 shape)" in `move-merge.test.ts`.
 
 ## Pointers outside `docs/` that #597 made stale
 

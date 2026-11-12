@@ -1259,6 +1259,9 @@ an operator configuration choice, not a code defect; flagged for the asesor, not
   > longer shows `Split (soon)`: `apps/till/src/i18n/strings.ts` offers `Split by item`.
   > **Update, 2026-11-01 (A803 slice 4a).** Split by item is gone; the till splits through **Move
   > dishes…** → **+ New bill** (`POST /api/bills/:id/move-dishes`).
+  > **Update, 2026-11-12 (A1196).** The server's split route (`POST /api/bills/:id/split`,
+  > `splitBill`) is gone too; `split-bill.fiscal.test.ts` now splits through Move dishes, whole
+  > dishes only.
 - **Guests who split the MONEY on one bill** are one operation. Either one invoice (with the payments
   as separate tenders, which the pay path does not yet support — `payWorkingOrder` takes a single
   `tender`), or the art. 14.2.a) duplicado route with a per-person base/cuota split. Open — Q17.

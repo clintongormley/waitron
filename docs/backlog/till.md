@@ -553,11 +553,10 @@ Left open:
 - An extra counts its dish's percentage under a reason's per-line cap, and a dish the largest
   of its extras', which errs toward refusing. **Next action:** none unless staff find it gets
   in the way.
-- **Only give-aways and discounts split part of a dish with its extras.** The server's split and
-  transfer routes (no till caller since A803 slice 4a) and moving part of a dish to another group
-  still refuse a partial move
-  of a line with extras (`tab.transfer_modifier_line`): part of a weighed dish.
-  **Next action:** decide whether those partial moves should split extras too.
+- **Only give-aways and discounts split part of a dish with its extras.** Moving part of a dish to
+  another group still refuses a partial move of a line with extras (`tab.transfer_modifier_line`):
+  part of a weighed dish.
+  **Next action:** decide whether that partial move should split extras too.
 - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
   each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
   presses, Chromium 153 let every Escape be refused, and a dialog without `closedby` passed the
@@ -2603,17 +2602,15 @@ Printer identity is separate from the till route inventory.
   whether the refusal offers Take over in place.
   [Detail](till.md#a1289-moving-dishes-onto-a-bill-with-someone-elses-unsent-dish-says-this-order-belongs-to-someone-else-reload-the-table-to-see-it)
 
-## Bundle: Remove the old split and transfer routes
+## Bundle: Retire the old grouped-line writer
 
-2 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06),
+except that it no longer waits on the retired split and transfer routes (A1196).
 
-- **A1196. Retire the partial-quantity server paths (left open by A803 slice 1, D12).** Retire the
-  paths with the server's split and transfer routes.
-  [Detail](till.md#a1196-retire-the-partial-quantity-server-paths)
 - **A1197. `addTabRound` still writes grouped table lines (left open by A803 slice 1, D26).** Only
   test helpers call it (`apps/server/src/testing/party-venue.ts`,
-  `testing/order-writer-fixture.ts`), as a writer of the old shape. Expand it or retire it with
-  A1196.
+  `testing/order-writer-fixture.ts`), as a writer of the old shape. Expand it into whole dishes or
+  retire it.
 
 ## Bundle: Do not offer a closed area as a destination
 
@@ -2720,10 +2717,13 @@ Printer identity is separate from the till route inventory.
   writes, locale and simulator cancellation. Their selling-action exceptions remain; reads,
   public bootstrap and logout retain their existing admission.
 
-- **Splitting sent dishes (owner, 2026-09-26).** A partial split gives the moved row its own
+- **Splitting sent dishes (owner, 2026-09-26).** A partial split gives the cut row its own
   ticket item and reduces the original ticket quantity by that part. A dish the kitchen has
   started may still be split. Moving sent work to another table is allowed and tells the kitchen.
-  These decisions remain covered in `apps/server/src/split-bill.test.ts`.
+  Since A1196 (2026-11-12) part of a dish is cut only inside its own bill, and only whole dishes
+  move to another bill. Covered in `apps/server/src/line-service-split.test.ts` ("financial splits
+  with charged service cancellations") and `apps/server/src/split-bill.test.ts` ("moving sent work
+  to another table tells the kitchen").
 
 - **No text-size warning in theme dialogs (A841, owner, 2026-10-25).** Switching or deleting a
   theme says nothing about the tills' text size.
@@ -4226,20 +4226,6 @@ A803 slice 4a's LOOK).** After a move, the dialog's totals updated but its list 
 dishes that left; paying one gave "Something went wrong, try again", and reopening the dialog put
 it right. I believe this predates slice 4a (Transfer items would leave it the same); not checked
 on `main`. It sits in A739's payment window files. Pictures `x-h-*` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
-
-## A1196. Retire the partial-quantity server paths
-
-**A1196. Retire the partial-quantity server paths (left open by A803 slice 1, D12).** Partial
-transfer and split (`carveLines`), `splitUnitsWithinOrder`, and partial serve, cancel,
-adjustment and item payment stay for measured lines and lines stored before portions, and their
-tests build grouped bills. Since slice 4a the till calls neither `/api/bills/:id/split` nor
-`/transfer` (Move dishes… sends whole dishes to `/move-dishes`); outside tests and the helpers
-under `apps/server/src/testing/`, only those two routes call `splitBill` and `transferItems`, and
-no till code calls the routes.
-Slice 4a refuses cutting a bound measured portion only on its way to another bill: a part of one
-can still be split inside its bill (a part discount, a move to another course group), as the
-in-bill case in `apps/server/src/order-portions.lifecycle.test.ts` pins. Retire the paths with
-the server's split and transfer routes.
 
 ## An unpaid table bill showed two "Full invoice" buttons
 
