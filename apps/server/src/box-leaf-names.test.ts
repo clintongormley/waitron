@@ -184,6 +184,82 @@ describe("ensureLeaf", () => {
     );
   });
 
+  describe("issues the client certificate again when the one on disk", () => {
+    const authority = () => new X509Certificate(own.caCertPem).publicKey;
+
+    /** A box whose stored client pair is `cert` and `key`; returns the box once `ensureLeaf` ran. */
+    async function ensuredWith(cert: string, key: string): Promise<string> {
+      const stateDir = await box(leafFrom(own, HOSTNAMES, ["127.0.0.1", ADDRESS]));
+      await writeFile(join(stateDir, "tls", "client.crt"), cert);
+      await writeFile(join(stateDir, "tls", "client.key"), key);
+      await ensure(stateDir);
+      return stateDir;
+    }
+
+    async function expectCurrentClientPair(stateDir: string, replaced: string) {
+      const pem = await tlsFile(stateDir, "client.crt");
+      expect(pem).not.toBe(replaced);
+      const cert = new X509Certificate(pem);
+      expect(cert.verify(authority())).toBe(true);
+      expect(cert.checkPrivateKey(createPrivateKey(await tlsFile(stateDir, "client.key")))).toBe(
+        true,
+      );
+      expect(cert.subjectAltName).toBe(`DNS:${OWN_NAME}`);
+      expect(cert.keyUsage).toEqual([CLIENT_AUTH]);
+      expect(cert.validFromDate.getTime()).toBeLessThanOrEqual(Date.now());
+      expect(cert.validToDate.getTime()).toBeGreaterThan(Date.now());
+    }
+
+    const issuedAt = (now: Date) =>
+      issueClientCert({
+        caCertPem: own.caCertPem,
+        caKeyPem: own.caKeyPem,
+        hostname: OWN_NAME,
+        now,
+      });
+
+    it("has expired", async () => {
+      const expired = issuedAt(new Date("2000-01-01T00:00:00Z"));
+      expect(new X509Certificate(expired.clientCertPem).validToDate.getTime()).toBeLessThan(
+        Date.now(),
+      );
+      const stateDir = await ensuredWith(expired.clientCertPem, expired.clientKeyPem);
+      await expectCurrentClientPair(stateDir, expired.clientCertPem);
+    });
+
+    it("is not valid yet, minted before the clock was set back", async () => {
+      const ahead = issuedAt(new Date(Date.now() + 3 * 86_400_000));
+      const stateDir = await ensuredWith(ahead.clientCertPem, ahead.clientKeyPem);
+      await expectCurrentClientPair(stateDir, ahead.clientCertPem);
+    });
+
+    it("is for serving only, not for a client", async () => {
+      const leaf = leafFrom(own, HOSTNAMES, ["127.0.0.1", ADDRESS]);
+      expect(new X509Certificate(leaf.serverCertPem).keyUsage).not.toContain(CLIENT_AUTH);
+      const stateDir = await ensuredWith(leaf.serverCertPem, leaf.serverKeyPem);
+      await expectCurrentClientPair(stateDir, leaf.serverCertPem);
+    });
+
+    it("has a key that cannot be read", async () => {
+      const current = issuedAt(new Date());
+      const stateDir = await ensuredWith(current.clientCertPem, "not a key\n");
+      await expectCurrentClientPair(stateDir, current.clientCertPem);
+    });
+
+    it("cannot be read itself", async () => {
+      const current = issuedAt(new Date());
+      const stateDir = await ensuredWith("not a certificate\n", current.clientKeyPem);
+      await expectCurrentClientPair(stateDir, "not a certificate\n");
+    });
+
+    it("control: is current, for a client, and paired with its key, so it is kept", async () => {
+      const current = issuedAt(new Date());
+      const stateDir = await ensuredWith(current.clientCertPem, current.clientKeyPem);
+      expect(await tlsFile(stateDir, "client.crt")).toBe(current.clientCertPem);
+      expect(await tlsFile(stateDir, "client.key")).toBe(current.clientKeyPem);
+    });
+  });
+
   it("does nothing on a box with no minted leaf", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-leaf-names-none-"));
     dirs.push(stateDir);

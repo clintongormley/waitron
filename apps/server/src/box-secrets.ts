@@ -9,7 +9,7 @@ import {
 } from "@waitron/store";
 import { chmod, lstat, open, readFile, type FileHandle } from "node:fs/promises";
 import { constants, existsSync } from "node:fs";
-import { X509Certificate, createPrivateKey } from "node:crypto";
+import { X509Certificate, createPrivateKey, type KeyObject } from "node:crypto";
 import { join } from "node:path";
 import { generateKeyRing, readDurableHostJson, type GeneratedKeyRing } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
@@ -222,8 +222,9 @@ async function reissueBoxLeafLocked(deps: {
  * Reissues the box's leaf with {@link reissueBoxLeaf} when it lacks one of `hostnames` or a current
  * permitted address, does not verify under the current `tls/ca.crt`, or is not the certificate of
  * `tls/server.pem`; otherwise leaves the file untouched. A box with no minted leaf is left alone.
- * Then keeps `tls/client.crt` and `tls/client.key` a pair under the current authority naming
- * `hostnames[0]`, the box's own name. The result is the server leaf's.
+ * Then keeps `tls/client.crt` and `tls/client.key` a pair under the current authority, for client
+ * authentication, naming `hostnames[0]` (the box's own name) and valid at `now()`, issuing both
+ * again otherwise. The result is the server leaf's.
  */
 export async function ensureLeaf(deps: {
   stateDir: string;
@@ -246,6 +247,35 @@ export async function ensureLeaf(deps: {
   return fits ? "kept" : "reissued";
 }
 
+const CLIENT_AUTH_USAGE = "1.3.6.1.5.5.7.3.2";
+
+/** Whether `certPem` and `keyPem` are a pair under `authority`, for a client, naming `name`, and
+ * valid at `at`; false for material that does not parse. */
+function clientPairFits(
+  certPem: string,
+  keyPem: string,
+  name: string,
+  authority: X509Certificate,
+  at: Date,
+): boolean {
+  let cert: X509Certificate;
+  let key: KeyObject;
+  try {
+    cert = new X509Certificate(certPem);
+    key = createPrivateKey(keyPem);
+  } catch {
+    return false;
+  }
+  return (
+    cert.verify(authority.publicKey) &&
+    cert.checkPrivateKey(key) &&
+    cert.checkHost(name, { subject: "never", wildcards: false }) === name &&
+    (cert.keyUsage?.includes(CLIENT_AUTH_USAGE) ?? false) &&
+    cert.validFromDate <= at &&
+    at < cert.validToDate
+  );
+}
+
 async function ensureClientCert(
   stateDir: string,
   name: string,
@@ -254,15 +284,18 @@ async function ensureClientCert(
 ): Promise<void> {
   const certFile = join(stateDir, TLS_CLIENT_CERT_FILE);
   const keyFile = join(stateDir, TLS_CLIENT_KEY_FILE);
-  if ((await fileExists(certFile)) && (await fileExists(keyFile))) {
-    const cert = new X509Certificate(await readFile(certFile, "utf8"));
-    if (
-      cert.verify(authority.publicKey) &&
-      cert.checkPrivateKey(createPrivateKey(await readFile(keyFile, "utf8"))) &&
-      cert.checkHost(name, { subject: "never", wildcards: false }) === name
+  if (
+    (await fileExists(certFile)) &&
+    (await fileExists(keyFile)) &&
+    clientPairFits(
+      await readFile(certFile, "utf8"),
+      await readFile(keyFile, "utf8"),
+      name,
+      authority,
+      now(),
     )
-      return;
-  }
+  )
+    return;
   const files = boxTlsPaths(stateDir);
   await withRecoveryLock(stateDir, async () => {
     await assertNoPendingTlsRepair(stateDir);
