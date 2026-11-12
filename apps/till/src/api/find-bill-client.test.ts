@@ -216,3 +216,36 @@ it("keeps a historical reprint refusal as a failed action", async () => {
     status: 403,
   });
 });
+
+it("routes orderless Invoice status and actions by escaped sale identity", async () => {
+  const fetcher = vi.fn<typeof fetch>(async () => response({ status: "done" }));
+  const api = new TillApi("", fetcher);
+  await api.getTransactionDeliveries("sale/id");
+  await api.getTransactionReceiptPrint("sale/id");
+  await api.printTransactionInvoice("sale/id", "printer", "key");
+  await api.transactionReceiptInstead("sale/id", "delivery/id", "key-2");
+  await api.retryTransactionReceipt("sale/id");
+  await api.confirmTransactionReceiptHandover("sale/id");
+  expect(
+    fetcher.mock.calls.map(([url, init]) => [
+      url,
+      init!.method,
+      init!.body === undefined ? undefined : JSON.parse(String(init!.body)),
+    ]),
+  ).toEqual([
+    ["/api/transactions/sale%2Fid/deliveries", "GET", undefined],
+    ["/api/transactions/sale%2Fid/receipt-print", "GET", undefined],
+    [
+      "/api/transactions/sale%2Fid/deliveries",
+      "POST",
+      { medium: "print", printerId: "printer", requestKey: "key" },
+    ],
+    [
+      "/api/transactions/sale%2Fid/deliveries/delivery%2Fid/to-receipt",
+      "POST",
+      { requestKey: "key-2" },
+    ],
+    ["/api/transactions/sale%2Fid/receipt-print/retry", "POST", {}],
+    ["/api/transactions/sale%2Fid/receipt-print/handover", "POST", {}],
+  ]);
+});

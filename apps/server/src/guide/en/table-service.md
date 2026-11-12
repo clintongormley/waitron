@@ -95,6 +95,10 @@ it. Choosing a document or printer, refreshing the list and going back print not
 asks for its language when more than one is available; cancelling prints nothing. After a failed
 save, choose **Retry**; use **Refresh** if the list could not load.
 
+For an older full invoice with no bill, open it from **Transactions** and choose **Invoice**.
+Use **Receipt** for a compact copy once an original has completed. If printing fails, check the
+destination named by **Retry original** or choose the named receipt printer instead.
+
 ## Avoid duplicate card slips {#reader-slips}
 
 Select **Print card slip** before taking the card if the payer wants one. It starts off for each payer and prints after the card is confirmed. If the reader answer is unclear or the box restarts before printing, use a copy instead.

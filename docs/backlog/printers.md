@@ -107,14 +107,14 @@ the cause was not found.
 
 ## A790: document and printer routing plan
 
-A790 remains open for orderless historical F1 Invoice delivery, dashboard routing and its separate
-browser preference, and subsequent integration checks. The [order-linked till slice](../superpowers/plans/2026-11-09-a790-till-document-printer.md)
+A790 remains open for dashboard routing and its separate browser preference, and subsequent
+integration checks. The [order-linked till slice](../superpowers/plans/2026-11-09-a790-till-document-printer.md)
 releases A739’s prerequisite for sales with an order (watcher approval, 9 November 2026 at23:14).
 A739 owns its payment window and final-entry changes, including the separate handheld paid view;
 A840/A842/A848 follow as one change.
 
-Today’s orderless path prints Receipt copies but has no Invoice delivery route. A later small slice
-extends that sale-id path using existing delivery actions; it does not add another protocol.
+From Transactions, an orderless historical F1 uses its device’s Invoice printer for an original
+or copy on A4 or receipt paper. Receipt offers a compact copy after an original completes.
 F2 A4 remains unavailable; A739 supplies order-linked Receipt Email. F2-to-F1 replacement remains separate fiscal work.
 
 The payment-time mixed-printer choice remains in A790: a printed full invoice should offer the

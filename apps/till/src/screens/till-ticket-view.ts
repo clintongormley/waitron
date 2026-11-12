@@ -625,6 +625,7 @@ export class TillTicketView extends LitElement {
   @property({ type: Boolean }) simulated = false;
   @property({ type: Boolean }) historical = false;
   @property({ type: Boolean }) historicalDelivery = false;
+  @property({ type: Boolean }) receiptCopiesOnly = false;
   @property({ type: Boolean }) refundable = false;
   /** True only while the issuance-time original action remains available on this completion screen. */
   @property({ type: Boolean }) originalReceiptAvailable = false;
@@ -690,7 +691,7 @@ export class TillTicketView extends LitElement {
     )
       return null;
     if (status === "done" || this.deliveries?.originalCompleted) return "duplicate";
-    return status === "not_queued" ? "original" : null;
+    return status === "not_queued" && !this.receiptCopiesOnly ? "original" : null;
   }
 
   #renderDocumentPrinter() {
@@ -718,12 +719,16 @@ export class TillTicketView extends LitElement {
               ${
                 this.printDocument === null
                   ? html`
-                      <wt-button
-                        data-test="document-receipt"
-                        variant="secondary"
-                        @click=${() => this.#documentChoice("receipt")}
-                        >${t("document.receipt")}</wt-button
-                      >
+                      ${
+                        !this.receiptCopiesOnly || designation === "duplicate"
+                          ? html`<wt-button
+                              data-test="document-receipt"
+                              variant="secondary"
+                              @click=${() => this.#documentChoice("receipt")}
+                              >${t("document.receipt")}</wt-button
+                            >`
+                          : nothing
+                      }
                       ${this.result.invoiceType === "F1" ? html`<wt-button data-test="document-invoice" variant="secondary" @click=${() => this.#documentChoice("invoice")}>${t("document.invoice")}</wt-button>` : nothing}
                     `
                   : html`
@@ -952,11 +957,20 @@ export class TillTicketView extends LitElement {
       : nothing;
   }
 
+  #retainedReceiptPrinterName(): string | undefined {
+    return this.originalReceiptPrint?.status === "not_queued"
+      ? undefined
+      : this.originalReceiptPrint?.printerName;
+  }
+
   protected renderDelivery() {
     const status = this.deliveries;
     const words = status?.current ? deliveryWords(status.current) : undefined;
     const busy = this.deliveryBusy || this.originalReceiptBusy;
     const instead = this.canPrintReceipt ? status?.actions.receiptInstead : null;
+    const retainedPrinter = this.#retainedReceiptPrinterName();
+    const insteadPrinter =
+      retainedPrinter ?? this.receiptEquipment?.resolved?.name ?? t("equipment.none");
     const email = this.canPrintReceipt ? status?.actions.email : null;
     const emailAgainId =
       this.canPrintReceipt && status?.actions.retryOriginal?.medium === "email"
@@ -1022,7 +1036,11 @@ export class TillTicketView extends LitElement {
                     composed: true,
                   }),
                 )}
-              >${t("invoice.receipt_instead")}</wt-button
+              >${
+                this.receiptCopiesOnly
+                  ? t("invoice.receipt_instead_on").replace("{printer}", () => insteadPrinter)
+                  : t("invoice.receipt_instead")
+              }</wt-button
             >`
           : nothing
       }
@@ -1031,6 +1049,7 @@ export class TillTicketView extends LitElement {
 
   protected renderReceiptRetry(failedButSuperseded: boolean) {
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
+    const printerName = this.#retainedReceiptPrinterName();
     return this.canPrintReceipt &&
       this.originalReceiptPrint?.status === "failed" &&
       this.originalReceiptPrint.canRetry &&
@@ -1042,7 +1061,11 @@ export class TillTicketView extends LitElement {
           size="lg"
           ?disabled=${receiptBusy}
           @click=${() => this.dispatchEvent(new CustomEvent("retry-receipt", { bubbles: true, composed: true }))}
-          >${t("invoice.retry_original")}</wt-button
+          >${
+            printerName === undefined
+              ? t("invoice.retry_original")
+              : t("invoice.retry_original_on").replace("{printer}", () => printerName)
+          }</wt-button
         >`
       : nothing;
   }

@@ -234,7 +234,8 @@ export function buildReceiptDocument({
   rule();
   align("left");
 
-  row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
+  if (result.orderLabel !== null || result.orderNumber !== 0)
+    row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
   if (simplified && result.operationDate === undefined) {
     const date =
       paperWidth === "58mm"

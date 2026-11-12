@@ -23,6 +23,21 @@ function withoutOperationDate(): ReceiptDocumentInput["result"] {
 }
 
 describe("format-neutral invoice content", () => {
+  it.each([false, true])(
+    "prints no invented order for an orderless invoice, duplicate=%s",
+    (duplicate) => {
+      const input = {
+        ...FULL_INVOICE_FIXTURE,
+        duplicate,
+        result: { ...FULL_INVOICE_FIXTURE.result, orderLabel: null, orderNumber: 0 },
+      };
+      const text = printedLines(formatReceipt(input)).join("\n");
+      expect(text).not.toContain("Pedido 0");
+      expect(text).toMatch(/^FACTURA +FF\/1$/m);
+      expect(text.includes("DUPLICADO")).toBe(duplicate);
+    },
+  );
+
   it("keeps separate filed discount families when two positions reuse the same line object", () => {
     const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
     const line = {
