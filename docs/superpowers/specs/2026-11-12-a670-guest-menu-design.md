@@ -51,8 +51,10 @@ References describe source inspection, not runtime verification.
 Default to inline allergen and dietary icons after dish names, reusing
 `packages/ui/src/nutrition-icons.ts`, which already has the six dietary symbols. Paper's written key
 names the used icons once, at the end of the **last page**, in separate allergen and dietary groups.
-Offer a key on each page for that page’s used icons, or inline words. Other paper pages carry a
-short “Allergen key on page N” footer. This keeps the owner’s quiet default visible while
+The 12:14 watcher relay quotes the owner: “often the key will be at the end of the last page,
+not on every page. but again, a choice”. This updates October’s per-page-key direction as a
+proposal for this presentation. Offer a key on each page for that page’s used icons, or inline words. Other paper pages carry a
+short “Allergen key on page N” footer. This follows the latest requested default while
 acknowledging the words-with-symbols constraint recorded in A670’s backlog; it is not a legal
 compliance conclusion. Online, labelled icon buttons open on click, Enter or Space, with accessible
 names and a dismissible explanation; focus alone opens nothing. Cereal/nut kinds stay written per item,
@@ -61,7 +63,8 @@ wheat/walnuts, Catalan **blat/nous**, Galician **trigo/noces**.
 
 Use published `dietaryDeclarations` for dietary marks. Show the most specific declared mark:
 vegan suppresses vegetarian/no-meat/no-fish; vegetarian suppresses no-meat/no-fish. Independent
-halal/kosher declarations remain. Do not expand one vegan declaration into four visible symbols.
+halal/kosher declarations remain. This guest-only recommendation goes to the owner as question 6;
+it does not change the editor’s October decision to show implied diets.
 Dietary marks represent positive declarations, not allergen absence. An absent icon says nothing
 about safety; unreviewed and reviewed-empty information never become “allergen-free”. Preserve
 A509's proposed allergen/diet filters in the later interactive work, without promising safe dishes.
@@ -183,18 +186,22 @@ added allergen/diet markers are explicitly illustrative, not verified recipes.
    examples make layout, colours, fonts and imagery editable immediately.
 2. Deliver styled paper output first, then the online menu with ordering? Recommend yes; do not
    build an online result guests cannot reach. Retain table/outside ordering in the full scope.
-3. Use inline icons with the last-page key by default, retaining each-page key and words as choices?
-   Recommend yes, with cereal/nut kinds always written per item.
+3. Follow the 12:14 last-page-key preference, changing October’s per-page default while retaining
+   that option and inline words? Recommend yes, with cereal/nut kinds written beside each item.
 
 4. Accept browser Print / Save as PDF for the first cut, or require one-click PDF download now?
    Recommend browser Save as PDF first; you can send that file to your printer, with a print dialog.
 5. Start outside ordering with counter collection (A509), then delivery (A1012)? Recommend yes;
    this is a proposed sequence, not an interpretation that removes delivery from your request.
 
+6. Show only the most specific guest dietary marks? Recommend one Vegan mark instead of Vegan,
+   Vegetarian, No meat and No fish together. The editor still shows implied diets as decided in October.
+
 ## Draft guest wording
 
 These are editorial translations, not statutory quotations. `{n}` is the last-page number.
-The kinds format is “Cereals containing gluten (Wheat)”, with both names localized using the tables.
+Beside an icon, the short kind is “Wheat”. The activated explanation and inline-words mode use
+“Cereals containing gluten (Wheat)”, with both names localized. The key names the general category.
 
 | Use | English | Español | Català | Galego |
 | --- | --- | --- | --- | --- |
