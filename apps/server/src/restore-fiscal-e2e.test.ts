@@ -1,4 +1,6 @@
-import { venueLocationId } from "@waitron/db";
+import { venueLocationId, readCloudVenueId, saveCloudVenueId } from "@waitron/db";
+import { cloudFixture } from "../test/cloud-fixture.js";
+import { createCloudConnection } from "./cloud-client.js";
 // Every database here is a real venue DIRECTORY migrated by the product's own `applyMigrations`,
 // so the append-only triggers on `registros_facturacion`, and the schema every assertion reads,
 // are the ones a box would carry.
@@ -355,6 +357,59 @@ afterAll(async () => {
 });
 
 describe("fiscal restore, end to end", () => {
+  it("connects again after restoring an archive made before Cloud pairing", async () => {
+    const f = await cloudFixture();
+    const dirs = { stateDir: f.stateDir, venueDir: join(f.stateDir, "venue") };
+    let store: Awaited<ReturnType<typeof openVenueDatabase>> | undefined;
+    try {
+      await drive(dirs);
+      store = await openVenueDatabase(dirs.venueDir);
+      const options = {
+        ...f.options,
+        readVenueId: () => readCloudVenueId(store!.venue),
+        recordVenueId: (id: string) =>
+          withTransaction(store!.venue, (tx) => saveCloudVenueId(tx, id)),
+      };
+      const client = createCloudConnection(options);
+      await client.start();
+      f.approve();
+      const approved = await client.check();
+      const choice = {
+        requestId: approved.requestId!,
+        organisationId: f.organisationId,
+        legalBusinessId: f.legalBusinessId,
+      };
+      await client.complete(choice, async () => {});
+      expect(await readCloudVenueId(store.venue)).toBe(f.venueId);
+      const path = join(f.stateDir, "cloud/connection.json");
+      const before = await readFile(path, "utf8");
+      await store.close();
+      store = undefined;
+      await drive(dirs);
+      store = await openVenueDatabase(dirs.venueDir);
+      expect(await readCloudVenueId(store.venue)).toBeNull();
+      const restarted = createCloudConnection(options);
+      expect((await restarted.status()).state).toBe("not_connected");
+      expect(await readCloudVenueId(store.venue)).toBeNull();
+      expect(await readFile(path, "utf8")).toBe(before);
+      f.patchReply({ state: "awaiting_cloud", registration: undefined });
+      const fresh = await restarted.start();
+      expect(fresh.requestId).not.toBe(approved.requestId);
+      expect(f.requests.at(-1)![5]).toBe("");
+      f.patchReply({ state: "awaiting_local", registration: undefined });
+      await restarted.check();
+      f.patchReply({});
+      expect(
+        (await restarted.complete({ ...choice, requestId: fresh.requestId! }, async () => {}))
+          .state,
+      ).toBe("complete");
+      expect(await readCloudVenueId(store.venue)).toBe(f.venueId);
+    } finally {
+      await store?.close();
+      await f.close();
+    }
+  });
+
   it("restores the SIF, replaces series, publishes trading identity, and keeps the ledger immutable", async () => {
     const dirs = await arrangeDirs();
     await drive(dirs);

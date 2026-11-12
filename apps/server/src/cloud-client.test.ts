@@ -461,36 +461,3 @@ it("treats a version-one connection file as not connected for status, refresh, r
     await f.close();
   }
 });
-
-it("refuses a completed pairing file when the database no longer holds its Cloud id", async () => {
-  const f = await fixture();
-  try {
-    const client = createCloudConnection(f.options);
-    await client.start();
-    f.approve();
-    const approved = await client.check();
-    await client.complete(
-      {
-        requestId: approved.requestId!,
-        organisationId: f.organisationId,
-        legalBusinessId: f.legalBusinessId,
-      },
-      async () => {},
-    );
-    const path = join(f.stateDir, "cloud/connection.json");
-    const before = await readFile(path, "utf8");
-    let stored: string | null = null;
-    const restarted = createCloudConnection({
-      ...f.options,
-      readVenueId: async () => stored,
-      recordVenueId: async (id) => {
-        stored = id;
-      },
-    });
-    await expect(restarted.check()).rejects.toMatchObject({ code: "cloud.state_invalid" });
-    expect(stored).toBeNull();
-    expect(await readFile(path, "utf8")).toBe(before);
-  } finally {
-    await f.close();
-  }
-});

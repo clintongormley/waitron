@@ -539,7 +539,8 @@ export const en = {
   "folders.close_named": "Close {name}",
 
   "nav.cloud": "Cloud services",
-  "cloud.intro": "Connect this venue to your Waitron Cloud account.",
+  "cloud.intro":
+    "Connect this venue to your Waitron Cloud account. If you restored a backup made before connecting, connect again.",
   "cloud.replacement_intro": "Reconnect this restored test server to its existing Cloud venue.",
   "cloud.replacement_request": "Request reconnection",
   "cloud.replacement_reissue": "Get a fresh reconnection request",
@@ -4688,7 +4689,8 @@ export const es: Record<StringKey, string> = {
   "folders.close_named": "Cerrar {name}",
 
   "nav.cloud": "Servicios Cloud",
-  "cloud.intro": "Conecta este local con tu cuenta de Waitron Cloud.",
+  "cloud.intro":
+    "Conecta este local con tu cuenta de Waitron Cloud. Si has restaurado una copia hecha antes de conectarlo, vuelve a conectarlo.",
   "cloud.replacement_intro":
     "Vuelve a conectar este servidor de prueba restaurado con su local existente en Cloud.",
   "cloud.replacement_request": "Solicitar reconexión",

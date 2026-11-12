@@ -257,3 +257,7 @@ Other accepted review corrections, implemented by the driver within the existing
 refuses an already-held different Cloud id; status projects the effective id while signing the
 original request binding. Added deletion controls cover reply/view binding, interrupted recovery,
 first stream save and the configured prefix. These are not additional claims about the 19:56 clearance.
+
+Watcher 2026-11-12 20:16 supersedes the null-id refusal above: a valid bound box file whose id the
+restored database lacks reads as not connected. Explicit Connect starts a fresh empty-id request;
+a real pre-pairing archive restore beside a completed file tests the full pairing-again sequence.

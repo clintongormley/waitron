@@ -210,7 +210,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         value.version !== 2 ||
         value.origin !== options.origin ||
         (value.venueId !== "" && !uuid(value.venueId)) ||
-        (value.venueId !== "" && value.venueId !== venueId) ||
+        (venueId !== null && value.venueId !== "" && value.venueId !== venueId) ||
         value.environment !== options.environment ||
         (value.remoteAccessEnabled !== undefined &&
           typeof value.remoteAccessEnabled !== "boolean") ||
@@ -237,6 +237,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       if (state.venueId === "" && venueId !== null) state.venueId = venueId;
       if (state.lifecycle !== undefined)
         state.lifecycle = readCloudInstallation(state.lifecycle, state);
+      if (venueId === null && state.venueId !== "") return undefined;
       return state;
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
