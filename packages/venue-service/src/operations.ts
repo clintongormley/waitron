@@ -1250,6 +1250,23 @@ export async function readLateSendMarks(
   return new Map(rows.map((row) => [row.workingOrderLineId, row.latePeriodName!]));
 }
 
+export async function readSentLineNutrition(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<
+  ReadonlyMap<string, NonNullable<(typeof workingLineContexts.$inferSelect)["sentNutrition"]>>
+> {
+  if (lineIds.length === 0) return new Map();
+  const rows = await tx
+    .select({
+      id: workingLineContexts.workingOrderLineId,
+      nutrition: workingLineContexts.sentNutrition,
+    })
+    .from(workingLineContexts)
+    .where(inArray(workingLineContexts.workingOrderLineId, [...lineIds]));
+  return new Map(rows.flatMap((row) => (row.nutrition === null ? [] : [[row.id, row.nutrition]])));
+}
+
 export async function recordSentLineNutrition(
   tx: Transaction,
   rows: readonly {

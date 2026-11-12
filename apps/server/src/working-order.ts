@@ -54,7 +54,7 @@ import {
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import {
   captureSentLineNutrition,
-  readLineNutrition,
+  readDisplayLineNutrition,
   type LineNutrition,
 } from "./line-nutrition.js";
 import {
@@ -4115,12 +4115,8 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
-  const nutrition = await readLineNutrition(
-    tx,
-    rows.filter((row) => row.sentAt === null).map((row) => row.id),
-  );
+  const nutrition = await readDisplayLineNutrition(tx, rows);
   const contexts = await VENUE_SERVICE.listLineContexts(tx, tabId);
-  const contextByLine = new Map(contexts.map((context) => [context.workingOrderLineId, context]));
   const menuItemByLine = new Map(
     contexts.map((context) => [context.workingOrderLineId, context.menuItemId]),
   );
@@ -4155,11 +4151,9 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
         },
         heldExtras.has(row.id),
       );
-    const declaration =
-      row.sentAt === null ? nutrition.get(row.id) : contextByLine.get(row.id)?.sentNutrition;
     return {
       id: row.id,
-      ...(declaration == null ? {} : { nutrition: declaration }),
+      ...(nutrition.has(row.id) ? { nutrition: nutrition.get(row.id)! } : {}),
       lineNo: row.lineNo,
       name: staffPresentationName({ name: row.name, variantName: row.variantName }),
       optionSnapshots: row.optionSnapshots,

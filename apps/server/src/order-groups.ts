@@ -1,4 +1,4 @@
-import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
+import { readDisplayLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import {
   readLineCancellations,
   serviceCompletedAt,
@@ -2100,10 +2100,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       asc(workingOrders.id),
       asc(workingOrderLines.lineNo),
     );
-  const nutrition = await readLineNutrition(
-    tx,
-    lines.map((line) => line.id),
-  );
+  const nutrition = await readDisplayLineNutrition(tx, lines);
   const extras = new Map<string, CurrentOrderExtra[]>();
   const cancellations = await readLineCancellations(
     tx,

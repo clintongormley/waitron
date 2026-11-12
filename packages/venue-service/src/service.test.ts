@@ -89,6 +89,7 @@ describe("VENUE_SERVICE", () => {
       "readReleaseReminderMinutesByZone",
       "readRetainedDepartmentReceipt",
       "readSaleReceiptHeader",
+      "readSentLineNutrition",
       "readServiceDay",
       "readStationScreens",
       "readTablesNeedingClearing",

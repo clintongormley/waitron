@@ -13,7 +13,6 @@ export interface LineNutrition {
   dietaryDeclarations: string[];
 }
 
-/** Like the kitchen queue, persisted table rows read the dish's effective live nutrition. */
 export async function readLineNutrition(
   tx: Transaction,
   lineIds: readonly string[],
@@ -26,6 +25,21 @@ export async function readLineNutrition(
         (Object.keys(row.allergens).length > 0 || row.dietaryDeclarations.length > 0),
     ),
   );
+}
+
+export async function readDisplayLineNutrition(
+  tx: Transaction,
+  lines: readonly { id: string; sentAt: string | null }[],
+): Promise<Map<string, LineNutrition>> {
+  const live = await readLineNutrition(
+    tx,
+    lines.filter((line) => line.sentAt === null).map((line) => line.id),
+  );
+  const saved = await VENUE_SERVICE.readSentLineNutrition(
+    tx,
+    lines.filter((line) => line.sentAt !== null).map((line) => line.id),
+  );
+  return new Map([...live, ...saved]);
 }
 
 export async function captureSentLineNutrition(

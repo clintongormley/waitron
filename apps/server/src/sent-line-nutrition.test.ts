@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { updateProduct } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { readCurrentOrders } from "./order-groups.js";
 import { readTabLines } from "./working-order.js";
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import {
@@ -46,4 +47,10 @@ it("keeps the dish declaration from its first send after the product changes", a
     allergens: { milk: {} },
     dietaryDeclarations: ["vegetarian"],
   });
+  const current = await inTx(v, (tx) => readCurrentOrders(tx, party.partyId));
+  expect(
+    [...current.ungrouped, ...current.groups.flatMap((group) => group.rows)].map(
+      (row) => row.nutrition,
+    ),
+  ).toEqual([{ allergens: { milk: {} }, dietaryDeclarations: ["vegetarian"] }]);
 });
