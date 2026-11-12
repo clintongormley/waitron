@@ -2867,15 +2867,15 @@ seat's `FiscalBackend.assertRecordableAt` (`packages/fiscal/src/backend.ts`). Th
 the issue reading, `issueMoment` (`apps/server/src/issue-moment.ts`), whose clock every
 `recordSale` call in `apps/server/src`, outside its tests and `src/testing/`, takes; before the
 reader for a new sale (`payIntegrated`); and on every bill payment, cash included
-(`beginBillPayment`). `refuseWhileClockBehind` (`packages/fiscal-verifactu/src/clock-behind.ts`,
-an old name kept because `chain.ts` imports it) checks this rule, and the seat's
+(`beginBillPayment`). `refuseWhileClockBehind` (`packages/fiscal-verifactu/src/clock-behind.ts`)
+checks this rule, and the seat's
 `refuseUntilRecordable` calls it, so each route that calls the seat, refunds and the dashboard's resolutions among them, refuses `clock.unusable` under such a
 clock; the refund loops' check at the start of each pass (`refundsPaused`) and `clockStopsRefund`
 (`apps/server/src/bill-refunds.ts`) ask `assertRecordableAt`, so under such a clock a pass asks the
 provider nothing and an outcome the provider answers is not written
 (`apps/server/src/tender-refund-recovery.test.ts`, "refund recovery under a clock before
 28-10-2024"); and the chain's append (`attemptAppend`, `packages/fiscal-verifactu/src/chain.ts`) refuses
-any record dated before it (`chain.earlier-time.test.ts`). Run 2026-10-23 on a 2001 clock, on
+any record dated before 28-10-2024 (`chain.earlier-time.test.ts`). Run 2026-10-23 on a 2001 clock, on
 `provisionBillVenue`'s venue: a tender refund, a bill payment's refund and a bill card payment each
 answered `409 clock.unusable`, and neither refund reached the provider.
 
@@ -2977,10 +2977,6 @@ status; this route was read, not run. The sign-in page, and the pages an email's
 show no privacy link, and the sign-in page offers no working Google sign-in. This is accepted: the
 page's locales read and password sign-in already go through `withTransaction` there (the S1b plan's
 decision 3).
-
-_2026-11-12, A1420 PR 6: both routes below are deleted._ Since A1088, the handled lists of wrongly dated sales (`GET /api/box/clock-misdated/handled`) and
-one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both in
-`apps/server/src/box-health-api.ts`, read in one `withWriteLock` turn with no drain.
 
 Since A1127 slice 3, the full-disk bar's read (`GET /management-api/disk-stop`,
 `apps/server/src/disk-stop-api.ts`) resolves the session with `touch: false` and reads in one
@@ -5711,31 +5707,6 @@ wrong. That trigger pair is the WHOLE of the enforcement — the engine has no p
 trigger whose table is still there) and a 10 s check while trading refuse to trade on a missing
 or changed trigger (`apps/server/src/append-only-watch.ts`) — weaker than its name: stored text
 only, and only the tables the start migrated.
-
-### While the box's clock reads more than a minute earlier than the latest fiscal record, no record is written and no route takes or gives back new money, unless a confirmation of the clock covers the reading (below).
-
-**Switched off (2026-11-12, A1420 PR 5).** This stop never holds; the code goes in A1420 PR 6.
-
-**While the box's clock reads more than a minute earlier than the latest fiscal record, no record
-is written and no route takes or gives back new money, unless a confirmation of the clock covers
-the reading (below).** The append refuses on its own
-(`clock.behind_chain`, `packages/fiscal-verifactu/src/chain.ts`); a money route calls the fiscal
-seat's `refuseWhileClockBehind` after its replay answer and before any reader, refund or drawer,
-and both refund recovery loops pause. A card refund's send and outcome are judged again in the
-transaction that dates them, after any provider wait. A payment whose money has already moved is
-still stored. Guards: `apps/server/src/clock-behind-stop.*.test.ts`,
-`apps/server/src/payments-api.clock-behind.test.ts` and
-`chain.clock-behind.test.ts`, weaker than the rule — they cover the
-routes they name; a new money route is seen by none. Receipt:
-[conventions-data.md](conventions-data.md#the-boxs-clock-and-fiscal-records).
-**A confirmation of the clock (`clock_confirmations`: AEAT's time, two agreeing devices from two
-addresses, or an administrator's own device, never one on the box outside development) lifts it
-for one step back**, with no limit on the gap; once a record is written under it every reading is
-held to the minute against the latest time written since. Guards:
-`clock-behind.restart.test.ts`, `clock-confirmation.test.ts` and
-`clock-confirm.route.test.ts` (all three deleted by A1420 PR 6), weaker than the rule — they cover the readings and
-requests they name. Receipt:
-[conventions-data.md](conventions-data.md#the-boxs-clock-and-fiscal-records).
 
 ### Never put our own metadata into a hash.
 
