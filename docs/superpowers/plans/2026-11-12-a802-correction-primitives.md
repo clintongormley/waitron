@@ -120,7 +120,7 @@ the leg that completes a correction; the gaps it adds are the gaps a part-paid b
 | **Land #2867, reshape before 5** | ~300 new, ~140 deleted | 4 (#2867, reshape, 5a, 5b) | Cash, card and mixed, from slice 5b |
 | Wait for A1308's refund merge | the same ~300, later | unknown | Nothing until A1308's last slice |
 
-Landing #2867 first (after its AEAT test run, as planned) keeps its reviewed fiscal core, the ~240 building-block
+Landing #2867 first (its AEAT test run passed on 2026-11-11, run 43110422275) keeps its reviewed fiscal core, the ~240 building-block
 lines; before go-live, replacing its table costs a venue reset, which #2867 already requires. Slice 5's window
 then shrinks to amount, dishes and reason, because the money goes back through the existing refund window (not
 measured on the till side). **One question for you:** file the corrective when the money is all back (your shape,
