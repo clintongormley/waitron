@@ -345,7 +345,7 @@ describe("the floor's attention signals", () => {
   it("shows a just-seated party's Take order step until dishes are drafted", async () => {
     const v = await setupPartyVenue(suite.db);
     const [takeOrder] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [TAKE_ORDER]);
-    const lucia = await person(v, "Lucía");
+    const lucia = await person(v, "Lucy");
     const quiet = await seat(v, await v.table("Mesa 1"));
     const drafting = await seat(v, await v.table("Mesa 3"));
     const takeOrderSignal = {
@@ -374,7 +374,7 @@ describe("the floor's attention signals", () => {
 
     expect((await floorRow(v, await tableOf(v, quiet.partyId))).signals).toEqual([takeOrderSignal]);
     expect((await floorRow(v, await tableOf(v, drafting.partyId))).signals).toEqual([
-      { kind: "unsent_draft", ownerNames: ["Lucía"] },
+      { kind: "unsent_draft", ownerNames: ["Lucy"] },
     ]);
   });
 
@@ -896,7 +896,7 @@ describe("the floor's attention signals", () => {
     const table2 = await v.table("Mesa 2");
     const { partyId, tabId } = await seat(v, table2);
     const mains = await holdGroup(v, partyId, "Burger", "Paella");
-    const lucia = await person(v, "Lucía");
+    const lucia = await person(v, "Lucy");
     await inTx(v, (tx) =>
       saveDraft(tx, v.cfg, partyId, lucia, {
         billId: tabId,
@@ -1034,7 +1034,7 @@ describe("the floor's attention signals", () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
     await inTx(v, (tx) => setReleaseReminderInEveryDepartment(tx, 10));
-    const lucia = await person(v, "Lucía");
+    const lucia = await person(v, "Lucy");
     const tabs = new Map<string, string>();
     const seatBusyTable = async (label: string) => {
       const tableId = await v.table(label);
