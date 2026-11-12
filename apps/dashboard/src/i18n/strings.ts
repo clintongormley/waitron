@@ -1,4 +1,21 @@
 export const en = {
+  "nav.handover_intervals": "Handover intervals",
+  "handover_intervals.title": "Handover intervals",
+  "handover_intervals.unconfirmed":
+    "Completeness and amounts remain unconfirmed here, even after a complete return. Open this list from Reports; cash-up and other reports show no warning beside their figures.",
+  "handover_intervals.zone": "Times in {zone}",
+  "handover_intervals.guide": "Read the handover guide",
+  "handover_intervals.empty": "No emergency handover intervals.",
+  "handover_intervals.loading": "Loading handover intervals…",
+  "handover_intervals.refresh": "Refresh intervals",
+  "handover_intervals.source": "Previous main box",
+  "handover_intervals.destination": "New main box",
+  "handover_intervals.copy": "Copy's latest dated activity",
+  "handover_intervals.declared": "Declared on the new box",
+  "handover_intervals.activated": "Activated on the new box",
+  "handover_intervals.reason": "Reason",
+  "handover_intervals.unknown": "Unknown",
+
   "problem_report.title": "Report a problem",
   "problem_report.description": "What happened?",
   "problem_report.scope":
@@ -3890,6 +3907,23 @@ export type StringKey = keyof typeof en;
 
 // Not Partial: an untranslated key fails typecheck rather than falling through to English.
 export const es: Record<StringKey, string> = {
+  "nav.handover_intervals": "Intervalos del traspaso",
+  "handover_intervals.title": "Intervalos del traspaso",
+  "handover_intervals.unconfirmed":
+    "Aquí, la integridad y los importes siguen sin confirmar, incluso tras una devolución completa. Abre esta lista desde Informes; el arqueo y los demás informes no muestran ningún aviso junto a sus cifras.",
+  "handover_intervals.zone": "Horas en {zone}",
+  "handover_intervals.guide": "Lee la guía del traspaso",
+  "handover_intervals.empty": "No hay intervalos de traspasos de emergencia.",
+  "handover_intervals.loading": "Cargando intervalos del traspaso…",
+  "handover_intervals.refresh": "Actualizar intervalos",
+  "handover_intervals.source": "Caja principal anterior",
+  "handover_intervals.destination": "Nueva caja principal",
+  "handover_intervals.copy": "Última actividad fechada de la copia",
+  "handover_intervals.declared": "Declarado en la nueva caja",
+  "handover_intervals.activated": "Activado en la nueva caja",
+  "handover_intervals.reason": "Motivo",
+  "handover_intervals.unknown": "Desconocida",
+
   "problem_report.title": "Informar de un problema",
   "problem_report.description": "¿Qué ha pasado?",
   "problem_report.scope":

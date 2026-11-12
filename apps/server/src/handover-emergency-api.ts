@@ -55,7 +55,7 @@ import { assertHeldDocumentReadable } from "./membership-trust.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 
-interface Declaration {
+export interface Declaration {
   binding: HandoverBinding;
   wordingVersion: "a1018-emergency-v1";
   locale: "en" | "es";

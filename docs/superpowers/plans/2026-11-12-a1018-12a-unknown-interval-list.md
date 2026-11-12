@@ -27,7 +27,7 @@ fiscal records, hashes, invoice allocation, series, filing, cash-up/close snapsh
 
 **Build, with failing behavioral cases first, observed red then minimal implementation and green.**
 
-- [ ] **Server projection/API (0–60 min).** Create `apps/server/src/handover-intervals.ts` with
+- [x] **Server projection/API (0–60 min).** Create `apps/server/src/handover-intervals.ts` with
   `readHandoverIntervals(tx: Transaction)` returning typed display rows; select venue emergency activations newest first, tie-break operation id.
   Reuse `nodes.name` for box labels; follow `handover-emergency-api.ts:226–230` to read the stored body; export its existing `Declaration` type from that file.
   No evidence cross-check/fallback branch, node.db dependency, current-chart requirement or guessed recovered status.
@@ -38,7 +38,7 @@ fiscal records, hashes, invoice allocation, series, filing, cash-up/close snapsh
   `useVenueDb`: “committed emergency history shows both box names without local operations; controlled activations stay out”;
   “the row remains listed and its activity stays null after sales return”; “signed-out and missing report.view cannot read the list”.
   Adapt `report-api.reports.test.ts:496–507`'s activation pattern for emergency/real evidence; reuse its session pattern at `:213–227`.
-- [ ] **Dashboard (60–120 min).** Create `apps/dashboard/src/screens/handover-intervals-screen.ts`; use `wt-data-table`
+- [x] **Dashboard (60–120 min).** Create `apps/dashboard/src/screens/handover-intervals-screen.ts`; use `wt-data-table`
   loading/empty/error states. State unconfirmed completeness and amounts once above the table; no constant columns or evidence dialog. Modify `apps/dashboard/src/api/client.ts` (typed list GET,
   explicit passive:true), `dashboard-app.ts` (core screen, Reports entry and direct-route permission), `i18n/strings.ts`
   (EN/ES) and `help-guide.ts` (`servers.reconciliation`). Navigation lives in `dashboard-app.ts:143,235`; generic routing

@@ -3401,3 +3401,18 @@ it("a DashboardApi action uses the shared gate but its background read never pro
   expect(await api.getBackupRecoveryKey()).toEqual({ key: "secret" });
   expect(prompt).toHaveBeenCalledTimes(1);
 });
+
+it("automatic interval GET is passive and returns its rows and venue zone", async () => {
+  const reply = { intervals: [], timeZone: "Europe/Madrid" };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(reply));
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  expect(await api.listHandoverIntervals()).toEqual(reply);
+  const [path, init] = fetchImpl.mock.calls[0]!;
+  expect(new URL(path, "http://localhost").pathname).toBe(
+    "/management-api/reports/handover-intervals",
+  );
+  expect(init.method).toBe("GET");
+  expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+  expect(active).not.toHaveBeenCalled();
+});

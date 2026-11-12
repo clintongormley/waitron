@@ -82,6 +82,7 @@ import type { ProfileScreen } from "./screens/profile-screen.js";
 import "./screens/my-schedule-screen.js";
 import "./screens/dashboard-overview-screen.js";
 import "./screens/dashboard-sales-screen.js";
+import "./screens/handover-intervals-screen.js";
 import "./screens/vat-return-screen.js";
 import "./screens/orders-screen.js";
 import "./screens/staff-screen.js";
@@ -146,6 +147,7 @@ const CORE_SCREENS = [
   "overview",
   "sales",
   "vat-return",
+  "handover-intervals",
   "orders",
   "staff",
   "catalogue",
@@ -238,6 +240,11 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { screen: "sales", labelKey: "nav.sales" },
       { screen: "vat-return", labelKey: "nav.vat_return", requiresPermission: "report.export" },
+      {
+        screen: "handover-intervals",
+        labelKey: "nav.handover_intervals",
+        requiresPermission: "report.view",
+      },
     ],
     itemsAfterModules: [{ screen: "orders", labelKey: "nav.orders" }],
   },
@@ -3013,6 +3020,10 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
           .canExport=${this.#sessionPermissions.includes("report.export")}
         ></dashboard-sales-screen>`;
+      case "handover-intervals":
+        return html`<dashboard-handover-intervals-screen
+          .api=${this.api}
+        ></dashboard-handover-intervals-screen>`;
       case "vat-return":
         return html`<dashboard-vat-return-screen .api=${this.api}></dashboard-vat-return-screen>`;
       case "orders":
