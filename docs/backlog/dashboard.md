@@ -97,7 +97,7 @@ Departments and zones and the other venue-service forms, and the till's forms on
 later batch before migrating it; leave single-job forms local. Preserve each form's field mapping
 and message behavior; keep domain-specific refusal clearing local. See the
 [second-slice inventory](../superpowers/plans/2026-11-12-d-form-plumbing-2.md) and the
-[remaining venue-form inventory](../superpowers/plans/2026-11-12-d-form-plumbing-provider-batch.md).
+[partial inventory of the later forms](../superpowers/plans/2026-11-12-d-form-plumbing-provider-batch.md).
 
 ## What C47 part 2 found and did not fix
 

@@ -305,6 +305,21 @@ describe("sumup-connect-form", () => {
     expect(connectDisabled(el)).toBe(false);
   });
 
+  it("forgets a failed press when the same form is removed and reopened", async () => {
+    const { el, host } = await mountWidget<SumUpConnectForm>("sumup-connect-form", {});
+    await connect(el);
+    expect(fieldError(el, "api-key")).toBe(t("payments.sumup.api_key_required"));
+    expect(connectDisabled(el)).toBe(true);
+
+    el.remove();
+    host.append(el);
+    await el.updateComplete;
+
+    expect(fieldError(el, "api-key")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(connectDisabled(el)).toBe(false);
+  });
+
   it("on an invalid press marks the key, says so above Connect, focuses the key and disables Connect", async () => {
     const request = vi.fn() as unknown as DashboardRequest;
     const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
