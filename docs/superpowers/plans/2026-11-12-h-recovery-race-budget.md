@@ -11,7 +11,7 @@ no new plan read was required. No owner approval of this design is claimed.
 changed `writeRecoveryState` to flush both file and folder; the watcher named it
 as the trigger. The diff proves the writer change; its latency on the failed
 runner was not measured. A child can immediately retake the polling lock for 25 updates while a
-waiter sits behind the other children's 75 updates. At 175 ms each that exceeds
+waiter sits behind the other children's 75 updates. At an injected 175 ms each that exceeds
 the production 10-second wait. The same hundred-update assertions must pass with
 that controlled delay; the unlocked control must still demonstrate lost updates.
 Production keeps its current timeout and nonblocking polling.
