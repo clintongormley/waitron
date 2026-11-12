@@ -89,6 +89,7 @@ import {
   dropAttachments,
   publishRestoreFlow,
   readRestoreFlow,
+  restoreDiscardPending,
   updateRestoreFlow,
   type RestoreFlowRecord,
 } from "./restore-flow.js";
@@ -280,8 +281,11 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
         await writeFileDurable(join(dir, ARTIFACT), request.artifact, 0o600);
         await writeFileDurable(join(dir, KEY), request.recoveryKey, 0o600);
       }
-      if (adminVerifiers !== undefined && adminVerifiers.length > 0)
-        await writeFileDurable(join(dir, "admin-verifiers"), JSON.stringify(adminVerifiers), 0o600);
+      await writeFileDurable(
+        join(dir, "admin-verifiers"),
+        JSON.stringify(adminVerifiers ?? []),
+        0o600,
+      );
       if (secret !== undefined) await writeFileDurable(join(dir, NODE_KEY), secret, 0o600);
     },
   );
@@ -360,6 +364,7 @@ export async function runStagedRestore(
 ): Promise<boolean> {
   const phase = await readRestoreFlowPhase(deps.stateDir);
   if (phase === "unreadable") {
+    if (!(await restoreDiscardPending(deps.stateDir))) return false;
     deps.log("error", "restore.flow_unreadable", {});
     throw new AppError("restore.flow_unreadable", {});
   }
@@ -630,6 +635,7 @@ export async function readRestoreAdminVerifiers(databasePath: string): Promise<r
       if (typeof row.password_hash === "string" && row.password_hash !== "")
         hashes.push(row.password_hash);
     }
+    if (hashes.length === 0) throw new AppError("restore.administrator_password_missing", {});
     return hashes;
   } finally {
     await opened.close();

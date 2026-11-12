@@ -170,6 +170,8 @@ A key that opens the backup does not bypass the history and clock checks. If the
 refuses, resolve its cause and try again. If the box then shows a page saying it could not make
 its new invoice series, connect it to the internet and press **Retry a normal boot**.
 
+If the backup has no active administrator with a password, choose another backup.
+
 ## If a recovery is interrupted {#resume}
 
 If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.

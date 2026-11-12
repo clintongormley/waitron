@@ -1,3 +1,4 @@
+import { resultFacts } from "./testing/restore-result-facts.js";
 import nativeFs, { readFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { syncBuiltinESMExports } from "node:module";
@@ -51,7 +52,7 @@ it.each(["archive", "stream"] as const)(
   },
 );
 it.each(["archive", "stream"] as const)(
-  "keeps the committed %s activation when trading publication fails and finishes without reallocation",
+  "restarts the %s restore from its backup after trading publication fails",
   async (kind) => {
     f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const retained = f.journal();
@@ -69,15 +70,15 @@ it.each(["archive", "stream"] as const)(
     await expect(readFile(join(f.stateDir, "credentials.key"))).rejects.toMatchObject({
       code: "ENOENT",
     });
-    await f.advanceCounters();
     const committed = await f.snapshot();
+    await f.advanceCounters();
     expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
       "0CNNY",
       "0CNQT",
     ]);
     expect(f.journal()).toBe(retained);
     await expect(f.run()).resolves.toBe(true);
-    expect(await f.snapshot()).toEqual(committed);
+    expect(resultFacts(await f.snapshot())).toEqual(resultFacts(committed));
     expect(f.journal()).toBe(retained);
   },
 );
@@ -164,14 +165,14 @@ it.each(["archive", "stream"] as const)(
       code: "ENOENT",
     });
     await expect(readFile(credential)).rejects.toMatchObject({ code: "ENOENT" });
-    await f.advanceCounters();
     const committed = await f.snapshot();
+    await f.advanceCounters();
     expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
       "0CNNY",
       "0CNQT",
     ]);
     expect(f.journal()).toBe(retained);
     await expect(f.run()).resolves.toBe(true);
-    expect(await f.snapshot()).toEqual(committed);
+    expect(resultFacts(await f.snapshot())).toEqual(resultFacts(committed));
   },
 );

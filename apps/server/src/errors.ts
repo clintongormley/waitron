@@ -1673,6 +1673,7 @@ declare module "@waitron/shared" {
     "box_network.join_connection_insecure": { reason: "unencrypted" | "other_origin" };
     "restore.request_waiting": Record<string, never>;
     "restore.flow_unreadable": Record<string, never>;
+    "restore.administrator_password_missing": Record<string, never>;
     /** A restored box's first start (a certificate for this machine, the next membership term)
      * failed, so the box sells but does not copy to the bucket. Built as data by
      * `firstStartAlertSource`, never thrown. */

@@ -1743,7 +1743,9 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   A1415's saved-activation decision. Once marked `placing`, retry removes the unfinished
   databases first; a corrupt partial copy does not require a manual move. Every failure keeps
   the request and stops the server, including Cloud completion. Completion removes the request
-  last and keeps the independent first-start obligation. An unreadable request stops the box too.
+  last and keeps the independent first-start obligation. An unreadable request stops the box while
+  its saved-hashes attachment remains. Boot removes it before serving; damage to a retained record
+  after that keeps first start pending without preventing boot.
   The HTTPS recovery page offers **Throw this restore away**, authenticated with an administrator
   password from the selected backup. Once copying began this removes the partial data and both
   identity files, so you can restore again or set up; it does not recover the previous database.

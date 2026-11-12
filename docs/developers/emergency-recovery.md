@@ -173,7 +173,9 @@ serving does not.
 
 If this restore cannot finish, open the recovery page over HTTPS and choose **Throw this restore
 away**. Enter an active administrator's password from the selected backup, or choose **Stop** to
-leave the restore waiting. An unreadable record also stops the box. For a setup-page restore,
+leave the restore waiting. An unreadable record stops the box while its saved-hashes attachment remains.
+After boot removes that attachment before serving, an unreadable record leaves first start pending
+and allows the box to start. For a setup-page restore,
 this choice remains available when its separately saved administrator hashes can be read.
 A readable request that has not begun copying keeps the destination database. A marked or
 unreadable request removes the destination databases, including any previous database put back

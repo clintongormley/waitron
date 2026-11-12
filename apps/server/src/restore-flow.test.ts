@@ -156,7 +156,9 @@ it("reports the first start independently of a waiting request", async () => {
 
 it("refuses to treat an unreadable flow as a completed restore", async () => {
   expect(await firstStartPending(stateDir)).toBeNull();
-  await publishRestoreFlow(stateDir, firstStart, async () => {});
+  await publishRestoreFlow(stateDir, firstStart, async (dir) => {
+    await writeFile(join(dir, "admin-verifiers"), "[]");
+  });
   await writeFile(join(stateDir, "flows", "restore", "record.json"), "{ torn");
   await expect(firstStartPending(stateDir)).rejects.toMatchObject({
     code: "restore.flow_unreadable",
@@ -224,4 +226,13 @@ it("logs an unexpected authentication read failure while withholding discard aut
   expect(lines).toEqual([
     { level: "warn", event: "recovery.restore_auth_unreadable", fields: { errno: "EIO" } },
   ]);
+});
+
+it("keeps first start pending after a served box's restore record becomes unreadable", async () => {
+  await publishRestoreFlow(stateDir, firstStart, async (dir) => {
+    await writeFile(join(dir, "admin-verifiers"), "[]");
+  });
+  await flow.disarmRestoreDiscard(stateDir);
+  await writeFile(join(stateDir, "flows/restore/record.json"), "{ torn");
+  expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
 });

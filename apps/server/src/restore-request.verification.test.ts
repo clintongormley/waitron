@@ -667,3 +667,17 @@ it("stages only the selected database's active administrator hashes, never reque
 const adminDb = useVenueDb({
   migrations: migrationOptionsFor(orderedMigrationSets(ALL_MODULES), null),
 });
+
+it("refuses staging a backup with no active administrator password before replacing a saved restore", async () => {
+  const f = await fixture();
+  const databasePath = join(f.root, "no-admin.db");
+  await adminDb.db.archiveTo(databasePath);
+  await stageRestoreRequest(f.stateDir, f.request);
+  const before = await f.marker();
+  await expect(
+    stageRestoreRequest(f.stateDir, f.request, () =>
+      requestRuntime.readRestoreAdminVerifiers(databasePath),
+    ),
+  ).rejects.toMatchObject({ code: "restore.administrator_password_missing" });
+  expect(await f.marker()).toBe(before);
+});

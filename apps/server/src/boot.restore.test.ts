@@ -614,6 +614,24 @@ describe("startServer, against a migrated venue directory", () => {
       expect(body.alerts.map((alert) => alert.code)).toContain("restore.first_start_failed");
       expect(body.alerts.map((alert) => alert.code)).not.toContain("backup.stream_stopped");
       expect(existsSync(join(stateDir, "flows/restore/record.json"))).toBe(true);
+      await server.close();
+      vi.restoreAllMocks();
+      await writeFile(join(stateDir, "flows/restore/record.json"), "{ torn after serving");
+      const restarted = await startServer({
+        ...KEY_ENV,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_VENUE_DIR: venue.directory,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "preproduction",
+      });
+      try {
+        const node = await fetch(`https://127.0.0.1:${httpPort()}/api/node`, via);
+        expect(node.status).toBe(200);
+        expect(await node.json()).toMatchObject({ acceptingSales: true });
+      } finally {
+        await restarted.close();
+      }
     } finally {
       await server.close();
       await close();

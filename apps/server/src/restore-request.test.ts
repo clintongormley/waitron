@@ -46,6 +46,9 @@ describe("staged restore requests", () => {
       environment: "preproduction",
       managedCloud,
     });
+    expect(
+      JSON.parse(await readFile(join(stateDir, "flows/restore/admin-verifiers"), "utf8")),
+    ).toEqual([]);
     const restore = vi.fn(async () => {});
     const onManagedCloudRestored = vi.fn(async () => {});
     await runStagedRestore(
@@ -302,6 +305,7 @@ describe("staged restore requests", () => {
   it("refuses an unreadable restore flow without starting the box", async () => {
     const stateDir = await fresh();
     await mkdir(join(stateDir, "flows/restore/record.json"), { recursive: true });
+    await writeFile(join(stateDir, "flows/restore/admin-verifiers"), "[]");
     const restore = vi.fn(async () => {});
     const log = vi.fn();
     await expect(
@@ -315,6 +319,22 @@ describe("staged restore requests", () => {
       code: "restore.flow_unreadable",
     });
     expect(restore).not.toHaveBeenCalled();
+  });
+
+  it("does not restart a restore after serving when its retained record becomes unreadable", async () => {
+    const stateDir = await fresh();
+    await mkdir(join(stateDir, "flows/restore"), { recursive: true });
+    await writeFile(join(stateDir, "flows/restore/record.json"), "{ torn");
+    const restore = vi.fn(async () => {
+      throw new Error("must not restore over a served venue");
+    });
+    expect(
+      await runStagedRestore(
+        { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: null, log: vi.fn() },
+        restore,
+      ),
+    ).toBe(false);
+    expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
   });
 
   it.each([

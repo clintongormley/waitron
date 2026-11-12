@@ -355,7 +355,7 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
   });
 
   if (startAgain !== undefined)
-    mountStartAgainChoice(app, startAgain, draw, deps.log, () => {
+    mountStartAgainChoice(app, startAgain, startAgainPage, deps.log, () => {
       kept = true;
     });
 

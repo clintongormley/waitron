@@ -211,7 +211,7 @@ it("a damaged counter reads as five failures", async () => {
   }
 });
 
-it("another attempt's counter starts at 0", async () => {
+it("another recovery form or setup attempt keeps the existing password wait", async () => {
   const stateDir = await scratch();
   const attemptId = randomUUID();
   await writeFile(
@@ -224,13 +224,10 @@ it("another attempt's counter starts at 0", async () => {
       waitUntil: at(8 * MINUTE).toISOString(),
     }),
   );
-  expect(await wrong(stateDir, attemptId, at(0))).toBeNull();
-  expect(await counter(stateDir)).toEqual({
-    version: 1,
-    attemptId,
-    failures: 1,
-    lastFailureAt: at(0).toISOString(),
-    waitUntil: null,
+  expect(await wrong(stateDir, attemptId, at(0))).toBe(8 * 60);
+  expect(await counter(stateDir)).toMatchObject({
+    failures: 9,
+    waitUntil: at(8 * MINUTE).toISOString(),
   });
 });
 

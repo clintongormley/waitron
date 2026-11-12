@@ -465,6 +465,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
   "restore.stream_integrity_failed": "shell.bucket.integrity_failed",
   "restore.stream_state_missing": "shell.bucket.state_missing",
   "restore.identity_unknown": "shell.bucket.identity_unknown",
+  "restore.administrator_password_missing": "shell.restore.administrator_password_missing",
   // One sentence for all three, as the command line gives (`DECRYPT_PHASE_CODES`,
   // apps/server/src/restore-command.ts).
   "recovery.passphrase_invalid": "shell.bucket.key_does_not_open",
@@ -491,6 +492,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
 const CLOUD_ERROR_MESSAGES: Record<string, StringKey> = {
   ...FIRST_SETUP_ERROR_MESSAGES,
   "restore.schema_too_new": "shell.cloud.other_version",
+  "restore.administrator_password_missing": "shell.restore.administrator_password_missing",
   "recovery.passphrase_invalid": "shell.cloud.unopenable",
   "backup.artifact_invalid": "shell.cloud.unopenable",
   "backup.archive_invalid": "shell.cloud.unopenable",
@@ -1800,15 +1802,17 @@ export class SetupApp extends LitElement {
           RESTORE_FIELD_PATHS,
         );
         this.restoreError =
-          code === "restore.environment_mismatch"
-            ? say("shell.restore.environment_mismatch")
-            : code === "restore.schema_too_new"
-              ? say("shell.restore.other_version")
-              : this.restoreInvalidField !== undefined
-                ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
-                : typeof code === "string"
-                  ? sayWith("shell.restore.staging_failed_code", { code })
-                  : say("shell.restore.staging_failed");
+          code === "restore.administrator_password_missing"
+            ? say("shell.restore.administrator_password_missing")
+            : code === "restore.environment_mismatch"
+              ? say("shell.restore.environment_mismatch")
+              : code === "restore.schema_too_new"
+                ? say("shell.restore.other_version")
+                : this.restoreInvalidField !== undefined
+                  ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
+                  : typeof code === "string"
+                    ? sayWith("shell.restore.staging_failed_code", { code })
+                    : say("shell.restore.staging_failed");
       }
       this.screen = "restore";
     }

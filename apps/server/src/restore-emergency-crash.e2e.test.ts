@@ -1,3 +1,4 @@
+import { resultFacts } from "./testing/restore-result-facts.js";
 import { spawn, spawnSync } from "node:child_process";
 import { emptyScratch } from "./scratch.js";
 import { firstStartPending } from "./restore-flow.js";
@@ -50,35 +51,6 @@ afterEach(async () => {
   await fixture?.cleanup();
   fixture = undefined;
 });
-function resultFacts(rows: Awaited<ReturnType<Awaited<ReturnType<typeof stage>>["snapshot"]>>) {
-  const sif = (id: string) => rows.registrations.find((row) => row.id === id)!.numeroInstalacion;
-  const series = (id: string) => rows.series.find((row) => row.id === id)!.code;
-  return {
-    ...rows,
-    chainHeads: rows.chainHeads.map((row) => ({ ...row, actualizadoEn: null })),
-    registrations: rows.registrations.map((row) => ({
-      ...row,
-      id: sif(row.id),
-      registradoEn: null,
-      revocadoEn: row.revocadoEn !== null,
-    })),
-    series: rows.series.map((row) => ({
-      ...row,
-      id: series(row.id),
-      retiredAt: row.retiredAt !== null,
-    })),
-    allocations: rows.allocations.map((row) => ({
-      ...row,
-      activatedAt: null,
-      sifId: sif(row.sifId),
-      result: {
-        ...row.result,
-        sifId: sif(row.result.sifId),
-        series: row.result.series.map((row) => ({ ...row, id: series(row.id) })),
-      },
-    })),
-  };
-}
 
 it.each([
   ["archive", "before-publication", true],

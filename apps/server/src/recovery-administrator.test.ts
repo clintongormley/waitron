@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 const password = "administrator password";
 const hashes = [hashPassword(password)];
-async function fixture(stateDir?: string) {
+async function fixture(stateDir?: string, throttleId = "b8b5b312-3ab7-40a0-bd98-a918b4c31fe7") {
   stateDir ??= await mkdtemp(join(tmpdir(), "recovery-admin-"));
   if (!roots.includes(stateDir)) roots.push(stateDir);
   const app = new Hono();
@@ -24,7 +24,7 @@ async function fixture(stateDir?: string) {
     {
       path: "/choose",
       stateDir,
-      throttleId: "b8b5b312-3ab7-40a0-bd98-a918b4c31fe7",
+      throttleId,
       onFinished: async () => {},
       choose: async (authorize) => {
         await authorize(hashes);
@@ -98,4 +98,20 @@ it("keeps failed-password throttling across recovery restarts", async () => {
   expect(answer.status).toBe(429);
   expect(Number(answer.headers.get("Retry-After"))).toBeGreaterThan(0);
   expect(f.changes()).toBe(0);
+});
+
+it("alternating recovery password forms cannot reset the shared wait", async () => {
+  const first = await fixture();
+  const second = await fixture(first.stateDir, "2272eac2-2e3b-4472-a7a9-f01f0ba802ed");
+  for (let index = 0; index < 6; index++)
+    expect(
+      (await (index % 2 === 0 ? first : second).post("choice=move&password=wrong")).status,
+    ).toBe(403);
+  const body = new URLSearchParams({ choice: "move", password }).toString();
+  for (const form of [first, second]) {
+    const answer = await form.post(body);
+    expect(answer.status).toBe(429);
+    expect(Number(answer.headers.get("Retry-After"))).toBeGreaterThan(0);
+    expect(form.changes()).toBe(0);
+  }
 });

@@ -250,6 +250,7 @@ describe("completeRebuild", () => {
     async (markerBody) => {
       const stateDir = await rebuiltStateDir(false);
       const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
+      await writeFile(join(stateDir, "flows/restore/admin-verifiers"), "[]");
       await writeFile(join(stateDir, RESTORE_RECORD), markerBody);
       await expect(runFirstStart(deps(stateDir))).rejects.toMatchObject({
         code: "restore.flow_unreadable",
@@ -274,6 +275,7 @@ describe("completeRebuild", () => {
 
   it("refuses first start when the restore record cannot be read", async () => {
     const stateDir = await rebuiltStateDir(false);
+    await writeFile(join(stateDir, "flows/restore/admin-verifiers"), "[]");
     await mkdir(join(stateDir, RESTORE_RECORD));
     await expect(completeRebuild(deps(stateDir))).rejects.toMatchObject({
       code: "restore.flow_unreadable",

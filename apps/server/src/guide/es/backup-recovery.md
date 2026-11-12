@@ -187,6 +187,8 @@ del reloj lo impide, resuelve la causa e inténtalo de nuevo. Si después el equ
 página que dice que no pudo crear sus nuevas series de facturas, conéctalo a internet y pulsa
 **Reintentar un arranque normal**.
 
+Si la copia no tiene ningún administrador activo con contraseña, elige otra copia de seguridad.
+
 ## Si una recuperación se interrumpe {#resume}
 
 Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.
