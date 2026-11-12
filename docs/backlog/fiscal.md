@@ -1091,7 +1091,9 @@ total with `fiscal.remedy_amount_changed` before writing anything (option A). A 
 invoice also refuses changed correction amounts (`ImporteRectificacion`; owner, 17:22, "correct"),
 and so does a fix that adds or removes non-zero ones. An amount error takes a new corrective
 invoice, which carries new amounts. Recorded in the campaign's `questions.md`, 2026-11-11 14:12,
-14:20 and 17:22.
+14:20 and 17:22. A fix that changes what a line is, its tax type, regime, taxed or not-subject class
+or exemption reason, is refused too, amounts equal or not, with `fiscal.remedy_class_changed`
+(owner, 2026-11-11, "Yes"; a missing tax type counts as IVA).
 
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 
