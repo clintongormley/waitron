@@ -2000,26 +2000,6 @@ describe("Update layout", () => {
     expect(await floorToday(live("two"))).toMatchObject({ needsMoving: false });
   });
 
-  it("still refuses Mark moved while the overlapping table stands one square off its own place", async () => {
-    const { d, live } = await overlappingDinner(80);
-    const partyId = await seatAt(live("two"));
-    await updateToDinner(d.zoneId);
-    await expectRevision(v, today(live("four"), "move", { x: 45, y: 0 }), d.zoneId);
-    await finish(partyId);
-    expect(await floorToday(live("two"))).toMatchObject({ needsMoving: true });
-
-    expect(await refusal(today(live("two"), "mark-moved"))).toEqual({
-      status: 409,
-      body: {
-        error: {
-          code: "table.new_place_taken",
-          params: { tableId: live("two"), standingId: live("four") },
-        },
-      },
-    });
-    expect(await todayRow(v, live("two"))).toMatchObject({ x: 0 });
-  });
-
   it("serves Back while the overlapping table stands exactly at its own saved place", async () => {
     const { d, live } = await overlappingDinner(44);
     await updateToDinner(d.zoneId);
@@ -2028,24 +2008,5 @@ describe("Update layout", () => {
     await expectRevision(v, today(live("two"), "back"), d.zoneId);
 
     expect(await todayRow(v, live("two"))).toMatchObject({ x: 40 });
-  });
-
-  it("refuses Back while the overlapping table stands one square off its own place", async () => {
-    const { d, live } = await overlappingDinner(44);
-    await updateToDinner(d.zoneId);
-    await expectRevision(v, today(live("two"), "move", { x: 0, y: 0 }), d.zoneId);
-    await expectRevision(v, today(live("four"), "move", { x: 45, y: 0 }), d.zoneId);
-    const before = await everything();
-
-    expect(await refusal(today(live("two"), "back"))).toEqual({
-      status: 409,
-      body: {
-        error: {
-          code: "table.place_taken",
-          params: { tableId: live("two"), standingId: live("four") },
-        },
-      },
-    });
-    expect(await everything()).toEqual(before);
   });
 });

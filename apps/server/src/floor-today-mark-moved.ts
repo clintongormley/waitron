@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, or, type SQLWrapper } from "drizzle-orm";
+import { and, eq, inArray, or, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   diningTables,
@@ -6,20 +6,12 @@ import {
   floorResetTables,
   floorTodayJoinTables,
   floorTodaySplitParts,
-  floorTodayTables,
-  joinedOutOfService,
   needsMoving,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { blocksPlace } from "./joined-split-layout.js";
-import {
-  catchUpZone,
-  layoutPlacesIn,
-  placementOf,
-  refuseDeliveryPending,
-} from "./floor-today-store.js";
+import { catchUpZone, refuseDeliveryPending } from "./floor-today-store.js";
 import { refuseUnfree, zoneOfTable } from "./floor-today-table.js";
 import { refusedByAModule } from "./table-removal.js";
 import "./errors.js";
@@ -37,9 +29,7 @@ export async function tableNeedsMoving(tx: Transaction, tableId: string): Promis
 
 /**
  * Applies the change of a table that needs moving, with every row of a pending joined group
- * holding it, and clears their marks. Refused `table.new_place_taken` while a
- * drawn table outside the group that does not itself need moving blocks one of the group's new
- * places (`blocksPlace`). A table that does not need moving is left as it is.
+ * holding it, and clears their marks. A table that does not need moving is left as it is.
  */
 export async function markMoved(
   tx: Transaction,
@@ -60,61 +50,12 @@ export async function markMoved(
   const group = await tx
     .select({
       row: floorResetTables,
-      todayTakenOff: floorTodayTables.takenOff,
     })
     .from(floorResetTables)
-    .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, floorResetTables.tableId))
     .where(and(inArray(floorResetTables.id, [...groupIds]), eq(floorResetTables.pending, true)));
   const groupTables = new Set(
     group.flatMap(({ row }) => (row.tableId === null ? [] : [row.tableId])),
   );
-
-  const drawn = await tx
-    .select({ today: floorTodayTables })
-    .from(floorTodayTables)
-    .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
-    .where(
-      and(
-        eq(diningTables.zoneId, zoneId),
-        isNotNull(floorTodayTables.x),
-        eq(floorTodayTables.takenOff, false),
-      ),
-    );
-  const others = drawn.filter(({ today }) => !groupTables.has(today.tableId));
-  const exempt = new Set(
-    others.length === 0
-      ? []
-      : (
-          await tx
-            .select({ id: diningTables.id })
-            .from(diningTables)
-            .where(
-              and(
-                inArray(
-                  diningTables.id,
-                  others.map(({ today }) => today.tableId),
-                ),
-                or(needsMoving(diningTables.id), joinedOutOfService(diningTables.id)),
-              ),
-            )
-        ).map((row) => row.id),
-  );
-  const standing = others.filter(({ today }) => !exempt.has(today.tableId));
-  const layoutPlaces = await layoutPlacesIn(tx, zoneId);
-  for (const { row, todayTakenOff } of group) {
-    const place = placementOf(row);
-    // A marked table taken off goes to its new place still off, so stands in nothing.
-    if (row.placed || place === null || todayTakenOff === true) continue;
-    const blocker = standing.find(({ today }) =>
-      blocksPlace(place, placementOf(today)!, layoutPlaces.get(today.tableId) ?? null),
-    );
-    if (blocker !== undefined) {
-      throw new AppError("table.new_place_taken", {
-        tableId: row.tableId ?? tableId,
-        standingId: blocker.today.tableId,
-      });
-    }
-  }
 
   await catchUpZone(tx, removals, zoneId, now, {
     inReset: false,

@@ -1161,13 +1161,10 @@ Overdue's or Waiting's outline, which outrank the dashes, and with the cue “Mo
 most urgent state (`apps/till/src/state/floor-look.ts`); its list card says "Needs moving" and carries
 Leave it here then Mark moved, both small and secondary. While one of the two is being sent for a
 table, the card draws the pressed button busy and the other disabled, and any other press of either
-for that table (card, question or offer) is ignored. Tapping the table on the map asks Cancel
+for that table (card or question) is ignored. Tapping the table on the map asks Cancel
 (ghost), Leave it here (secondary) and Mark moved (primary), in that order; the till's Needs
 clearing question keeps its secondary Cancel. On a device that cannot change today's plan neither
-Leave it here nor Mark moved is shown. When Mark moved, or Back to its saved place on a table that
-needs moving, is refused `table.new_place_taken`, a small secondary Leave it here button for the
-table pressed sits under the refusal line, as wide as its words, for as long as that refusal is
-shown and the table still needs moving, and only in the table's own room.
+Leave it here nor Mark moved is shown.
 
 The tab of a zone not on screen takes the most urgent state, above Held, among that zone's tables
 (`topTabKind`, `apps/till/src/state/floor-look.ts`), and the zone on screen takes none. Its button

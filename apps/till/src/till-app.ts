@@ -688,7 +688,6 @@ const TABLE_REFUSALS = new Set([
   "group.held_leaves_party",
   "table.needs_clearing",
   "table.needs_moving",
-  "table.new_place_taken",
   "table.not_found",
   "table.not_on_today_plan",
   "table.taken_off",

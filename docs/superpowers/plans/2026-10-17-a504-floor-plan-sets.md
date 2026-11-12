@@ -1,5 +1,7 @@
 # A504 Floor plan sets, one per service period — implementation plan
 
+> Superseded 2026-11-11 by [fk4-hands](2026-11-11-a1308-fk4-hands.md): Mark moved, Back to its saved place and Reset table accept occupied places. Automatic reset keeps its place check. The refusal-only Leave it here offer is retired.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax. Every task is test-first: write the failing test, run it, see it fail

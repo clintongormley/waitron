@@ -106,16 +106,6 @@ async function refusal(answer: Promise<Response>): Promise<{ status: number; bod
   return { status: settled.status, body: await settled.json() };
 }
 
-const newPlaceTaken = (tableId: string, standingId: string) => ({
-  status: 409,
-  body: { error: { code: "table.new_place_taken", params: { tableId, standingId } } },
-});
-
-const placeTaken = (tableId: string, standingId: string) => ({
-  status: 409,
-  body: { error: { code: "table.place_taken", params: { tableId, standingId } } },
-});
-
 async function seatAt(tableId: string): Promise<string> {
   const answer = await send("POST", `/api/tables/${tableId}/seat`, {});
   expect(answer.status).toBe(200);
@@ -302,16 +292,22 @@ describe("Mark moved", () => {
     await seatAt(z.t5);
   });
 
-  it("takes 4+5 apart is refused while a table that does not need moving stands in 4's place", async () => {
+  it("takes 4+5 apart while an unmoved table stands in 4's place", async () => {
     const z = await fourPlusFiveSeatedAcrossStandard([{ key: "t8", standard: 120, dinner: 120 }]);
     const t8 = z.live("t8");
     await setToday(t8, { x: 0 });
     expect(await needsMoving(t8)).toBe(false);
-    const before = await everything();
+    const blocker = await todayRow(t8);
 
-    expect(await refusal(markMoved(z.t45))).toEqual(newPlaceTaken(z.t4, t8));
+    await expectRevision(v, markMoved(z.t45), z.d.zoneId);
 
-    expect(await everything()).toEqual(before);
+    expect(await todayRow(z.t45)).toMatchObject({ x: null });
+    expect(await apart(z.t45)).toBe(true);
+    expect(await todayRow(z.t4)).toMatchObject({ x: 0, takenOff: false });
+    expect(await todayRow(z.t5)).toMatchObject({ x: 20, takenOff: false });
+    for (const id of [z.t45, z.t4, z.t5])
+      expect(await readyOf(id)).toEqual({ pending: false, readyToMove: false });
+    expect(await todayRow(t8)).toEqual(blocker);
   });
 
   it("takes 4+5 apart keeping 4 off, taken off before the layouts changed, where nothing stands in its way", async () => {
@@ -339,7 +335,7 @@ describe("Mark moved", () => {
     expect(await todayRow(t45)).toMatchObject({ x: null });
   });
 
-  it("names the table pressed when the place taken is a joined table's still to be made", async () => {
+  it("creates the pending joined table even while another table stands in its place", async () => {
     const z = await plannedZone(
       v,
       [
@@ -351,6 +347,7 @@ describe("Mark moved", () => {
     );
     const [c3, c4, t8] = [z.table.c3!, z.table.c4!, z.table.t8!];
     const partyId = await seatAt(c3);
+    const label = fresh("Long");
     await inTx(v, async (tx) => {
       const layout = await defaultLayout(tx, v.cfg, z.zoneId);
       const plan = await readLayout(tx, layout);
@@ -372,7 +369,7 @@ describe("Mark moved", () => {
             })),
             {
               key: "long",
-              label: fresh("Long"),
+              label,
               seats: 8,
               fixed: false,
               placement: { x: 0, y: 40, width: 8, height: 8, shape: "rect" as const, rotation: 0 },
@@ -388,7 +385,17 @@ describe("Mark moved", () => {
     expect(await needsMoving(c4)).toBe(true);
     await setToday(t8, { x: 0, y: 40 });
 
-    expect(await refusal(markMoved(c4))).toEqual(newPlaceTaken(c4, t8));
+    const blocker = await todayRow(t8);
+    await expectRevision(v, markMoved(c4), z.zoneId);
+
+    const joined = [...(await readStates()).values()].find((table) => table.label === label)!;
+    expect(await todayRow(joined.id)).toMatchObject({ x: 0, y: 40, seats: 8, takenOff: false });
+    for (const id of [c3, c4, joined.id]) {
+      expect(await readyOf(id)).toEqual({ pending: false, readyToMove: false });
+    }
+    expect(await todayRow(c3)).toMatchObject({ x: null });
+    expect(await todayRow(c4)).toMatchObject({ x: null });
+    expect(await todayRow(t8)).toEqual(blocker);
   });
 
   it("is refused, writing nothing, while guests sit at a part of the group with no place today", async () => {
@@ -539,28 +546,31 @@ describe("Mark moved", () => {
     expect(await readyOf(z.t3)).toEqual({ pending: false, readyToMove: false });
   });
 
-  it("Back to its saved place on a table that needs moving is refused as Mark moved is", async () => {
+  it("Back to its saved place carries a table that needs moving onto an occupied place", async () => {
     const z = await threeNeedsMoving([{ key: "t8", standard: 120, dinner: 120 }]);
     const t8 = z.live("t8");
     await setToday(t8, { x: 40 });
-    const before = await everything();
+    const blocker = await todayRow(t8);
 
-    expect(await refusal(back(z.t3))).toEqual(newPlaceTaken(z.t3, t8));
+    await expectRevision(v, back(z.t3), z.d.zoneId);
 
-    expect(await everything()).toEqual(before);
+    expect(await todayRow(z.t3)).toMatchObject({ x: 40, takenOff: false });
+    expect(await readyOf(z.t3)).toEqual({ pending: false, readyToMove: false });
+    expect(await todayRow(t8)).toEqual(blocker);
   });
 
-  it("is refused while a table that does not need moving stands in the new place", async () => {
+  it("accepts a table that does not need moving standing in the new place", async () => {
     const z = await threeNeedsMoving([{ key: "t8", standard: 120, dinner: 120 }]);
     const t8 = z.live("t8");
     await setToday(t8, { x: 36 });
     expect(await needsMoving(t8)).toBe(false);
-    const before = await everything();
+    const blocker = await todayRow(t8);
 
-    expect(await refusal(markMoved(z.t3))).toEqual(newPlaceTaken(z.t3, t8));
+    await expectRevision(v, markMoved(z.t3), z.d.zoneId);
 
-    expect(await everything()).toEqual(before);
-    expect(await needsMoving(z.t3)).toBe(true);
+    expect(await todayRow(z.t3)).toMatchObject({ x: 40 });
+    expect(await needsMoving(z.t3)).toBe(false);
+    expect(await todayRow(t8)).toEqual(blocker);
   });
 
   it("is not blocked by a part out of service inside a joined table", async () => {
@@ -666,12 +676,12 @@ describe("Mark moved", () => {
 describe("Leave it here", () => {
   const ended = { pending: false, readyToMove: false, placed: true };
 
-  /** Table 3 needs moving and table 8 stands in its new place, so Mark moved is refused. */
+  /** Table 3 needs moving while table 8 stands in its new place. */
   async function threeBlocked(more: Placed[] = []) {
     const z = await threeNeedsMoving([{ key: "t8", standard: 120, dinner: 120 }, ...more]);
     const t8 = z.live("t8");
     await setToday(t8, { x: 36 });
-    expect(await refusal(markMoved(z.t3))).toEqual(newPlaceTaken(z.t3, t8));
+    expect(await needsMoving(z.t3)).toBe(true);
     return { ...z, t8 };
   }
 
@@ -725,7 +735,7 @@ describe("Leave it here", () => {
     return z;
   }
 
-  it("leaves a table whose Mark moved was refused where it stands, seatable, and the saved layout unchanged", async () => {
+  it("leaves a table where it stands, seatable, and the saved layout unchanged", async () => {
     const z = await threeBlocked();
     const saved = await inTx(v, (tx) => readLayout(tx, { setId: z.d.dinner, zoneId: z.d.zoneId }));
     const before = (await zoneRevisionOf(v, z.d.zoneId))!;
@@ -1034,7 +1044,7 @@ describe("Leave it here", () => {
     }
   });
 
-  it("after Leave it here on 2 of a swap, Mark moved on 3 is refused naming 2, and 3 can be left too", async () => {
+  it("after Leave it here on 2 of a swap, Mark moved on 3 moves it over 2", async () => {
     const s = await standardAndDinner([
       { key: "t2", standard: 0, dinner: 40 },
       { key: "t3", standard: 40, dinner: 0 },
@@ -1050,11 +1060,12 @@ describe("Leave it here", () => {
     expect(await needsMoving(t3)).toBe(true);
 
     await expectRevision(v, leaveHere(t2), s.d.zoneId);
-    expect(await refusal(markMoved(t3))).toEqual(newPlaceTaken(t3, t2));
-    await expectRevision(v, leaveHere(t3), s.d.zoneId);
+    await expectRevision(v, markMoved(t3), s.d.zoneId);
+    const moved = (await zoneRevisionOf(v, s.d.zoneId))!;
+    await expectRevision(v, leaveHere(t3), s.d.zoneId, moved);
 
     expect(await todayRow(t2)).toMatchObject({ x: 0 });
-    expect(await todayRow(t3)).toMatchObject({ x: 40 });
+    expect(await todayRow(t3)).toMatchObject({ x: 0 });
     expect(await needsMoving(t2)).toBe(false);
     expect(await needsMoving(t3)).toBe(false);
   });
@@ -1105,7 +1116,7 @@ describe("Leave it here", () => {
   });
 });
 
-describe("Back to its saved place checks what stands there", () => {
+describe("Back to its saved place accepts an occupied place", () => {
   const move = (tableId: string, x: number, y: number) =>
     send("POST", `/api/tables/${tableId}/today/move`, { x, y });
 
@@ -1119,27 +1130,17 @@ describe("Back to its saved place checks what stands there", () => {
     return { ...z, t8 };
   }
 
-  it("after Leave it here, Back is refused while the table that blocked it stands there", async () => {
+  it("after Leave it here, Back succeeds while the table that blocked it stands there", async () => {
     const z = await threeNeedsMoving([{ key: "t8", standard: 120, dinner: 120 }]);
     const t8 = z.live("t8");
     await setToday(t8, { x: 36 });
-    expect(await refusal(markMoved(z.t3))).toEqual(newPlaceTaken(z.t3, t8));
     await expectRevision(v, leaveHere(z.t3), z.d.zoneId);
-    const before = await everything();
+    const blocker = await todayRow(t8);
 
-    expect(await refusal(back(z.t3))).toEqual(placeTaken(z.t3, t8));
+    await expectRevision(v, back(z.t3), z.d.zoneId);
 
-    expect(await everything()).toEqual(before);
-  });
-
-  it("Back after an ordinary drag is refused while another table stands in the saved place", async () => {
-    const z = await threeDraggedOff();
-    await expectRevision(v, move(z.t8, 36, 0), z.d.zoneId);
-    const before = await everything();
-
-    expect(await refusal(back(z.t3))).toEqual(placeTaken(z.t3, z.t8));
-
-    expect(await everything()).toEqual(before);
+    expect(await todayRow(z.t3)).toMatchObject({ x: 40 });
+    expect(await todayRow(t8)).toEqual(blocker);
   });
 
   it("Back is still served when nothing stands in the saved place", async () => {

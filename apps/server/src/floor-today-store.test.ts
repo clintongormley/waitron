@@ -7,6 +7,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   tableInService,
+  parties,
+  partyTables,
   diningTables,
   floorPlanPlacements,
   floorPlans,
@@ -317,6 +319,50 @@ async function resave(
 }
 
 describe("building today's plan from a zone's layout", () => {
+  it("Mark moved accepts an occupied place while its unmoved blocker has a pending reset row", async () => {
+    const z = await zone();
+    const moving = await v.table("Moving", z);
+    const blocker = await v.table("Blocker", z);
+    const other = await v.table("Other", z);
+    const masters = await masterOf(z, [
+      { label: "Moving", place: place(0, 0), live: moving },
+      { label: "Blocker", place: place(40, 0), live: blocker },
+      { label: "Other", place: place(80, 0), live: other },
+    ]);
+    await reset(z);
+    const { partyId } = await seat(v, blocker);
+    await editMaster(masters.get("Moving")!, { x: 40 });
+    await editMaster(masters.get("Blocker")!, { x: 120 });
+    await reset(z);
+    await catchUp(z);
+    expect(await todayRow(moving)).toMatchObject({ x: 0 });
+    expect(await readyToMoveIn(z)).toEqual([moving]);
+    const pending = await pendingRows(z);
+    expect(pending.find((r) => r.tableId === blocker)).toMatchObject({ readyToMove: false });
+    const before = {
+      blocker: await todayRow(blocker),
+      other: await todayRow(other),
+      party: await inTx(v, (tx) => tx.select().from(parties).where(eq(parties.id, partyId))),
+      seats: await inTx(v, (tx) =>
+        tx.select().from(partyTables).where(eq(partyTables.partyId, partyId)),
+      ),
+    };
+
+    await inTx(v, (tx) => markMoved(tx, NONE, moving, NOW));
+
+    expect(await todayRow(moving)).toMatchObject({ x: 40 });
+    expect(await readyToMoveIn(z)).toEqual([]);
+    expect(await pendingRows(z)).toEqual(pending.filter((r) => r.tableId !== moving));
+    expect(await todayRow(blocker)).toEqual(before.blocker);
+    expect(await todayRow(other)).toEqual(before.other);
+    expect(await inTx(v, (tx) => tx.select().from(parties).where(eq(parties.id, partyId)))).toEqual(
+      before.party,
+    );
+    expect(
+      await inTx(v, (tx) => tx.select().from(partyTables).where(eq(partyTables.partyId, partyId))),
+    ).toEqual(before.seats);
+  });
+
   it("builds today's plan from the master on the first reset", async () => {
     const z = await zone();
     const t1 = await v.table("First 1", z);

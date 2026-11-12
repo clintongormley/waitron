@@ -1052,8 +1052,6 @@ export const en = {
   "floor.split_guests_move": "Guests move to {table}",
   "floor.reset_table": "Reset table",
   "floor.reset_table_title": "Reset {table}",
-  "floor.place_taken":
-    "{table} is standing in {joined}'s place. Move {table}, then Reset table again.",
   "floor.tables_in_group": "{tables} are in {group}. Split them off first, then Reset table.",
   "floor.table_in_group": "{table} is in {group}. Split it off first, then Reset table.",
   "floor.split_off_reset": "That table was split off. Reset {joined} first.",
@@ -1100,7 +1098,6 @@ export const en = {
   "floor.move_title_named": "{table} needs moving",
   "floor.move_body":
     "Mark it moved once it stands, is put away or is taken apart as the new layout has it.",
-  "floor.new_place_taken": "{other} is standing in {table}'s new place. Move {other} first.",
   "floor.needs_moving_first": "Table {table} needs moving. Mark it moved first.",
   "floor.needs_moving_first_named": "{table} needs moving. Mark it moved first.",
   "floor.booked_first": "Table {table} has a booking. Move or cancel it first.",
@@ -3014,7 +3011,6 @@ export const es: Record<StringKey, string> = {
   "floor.split_guests_move": "Los clientes pasan a {table}",
   "floor.reset_table": "Restablecer mesa",
   "floor.reset_table_title": "Restablecer {table}",
-  "floor.place_taken": "{table} ocupa el sitio de {joined}. Muévela y vuelve a restablecer.",
   "floor.tables_in_group": "{tables} están en {group}. Sepáralas primero y luego restablece.",
   "floor.table_in_group": "{table} está en {group}. Sepárala primero y luego restablece.",
   "floor.split_off_reset": "Esa mesa está separada. Restablece {joined} primero.",
@@ -3059,7 +3055,6 @@ export const es: Record<StringKey, string> = {
   "floor.move_title_named": "{table} está por mover",
   "floor.move_body":
     "Márcala como movida cuando esté colocada, guardada o separada como indica el plano nuevo.",
-  "floor.new_place_taken": "{other} ocupa el nuevo sitio de {table}. Mueve {other} primero.",
   "floor.needs_moving_first": "La mesa {table} está por mover. Márcala como movida primero.",
   "floor.needs_moving_first_named": "{table} está por mover. Márcala como movida primero.",
   "floor.booked_first": "La mesa {table} tiene una reserva. Muévela o cancélala primero.",

@@ -560,9 +560,6 @@ const inBarGroup = () => {
   ];
 };
 
-/** Counter 5 split off and free, with Terrace 9 standing where Long table was saved. */
-const standingInPlace = () => [...oneFree(), table("t9", "Terrace 9", 10)];
-
 describe("till-floor-screen: Reset table's refusals name the tables", () => {
   it.each([
     [
@@ -602,40 +599,6 @@ describe("till-floor-screen: Reset table's refusals name the tables", () => {
       expect(floorRefusal(el)).toBe(words);
     },
   );
-
-  it.each([
-    ["en", "Terrace 9 is standing in Long table's place. Move Terrace 9, then Reset table again."],
-    ["es", "Terrace 9 ocupa el sitio de Long table. Muévela y vuelve a restablecer."],
-  ])("in %s, a table standing in the joined table's place is named", async (locale, words) => {
-    setLocale(locale);
-    const api = stubApi();
-    api.resetTableToday.mockRejectedValueOnce({
-      code: "table.place_taken",
-      status: 409,
-      tableId: "long",
-      standingId: "t9",
-    });
-    const el = await mount(standingInPlace(), api);
-
-    await pressResetTable(el);
-    expect(floorRefusal(el)).toBe(words);
-  });
-
-  it("names a standing table exactly as typed when its name spells the joined table's slot", async () => {
-    const api = stubApi();
-    api.resetTableToday.mockRejectedValueOnce({
-      code: "table.place_taken",
-      status: 409,
-      tableId: "long",
-      standingId: "t9",
-    });
-    const el = await mount([...oneFree(), table("t9", "Terrace {joined}", 10)], api);
-
-    await pressResetTable(el);
-    expect(floorRefusal(el)).toBe(
-      "Terrace {joined} is standing in Long table's place. Move Terrace {joined}, then Reset table again.",
-    );
-  });
 
   it("names a table in a group exactly as typed when its name spells the group's slot", async () => {
     const api = stubApi();
@@ -729,41 +692,34 @@ describe("till-floor-screen: Reset table's refusals name the tables", () => {
 
   it("a named refusal shows at the window's foot, and moves to the floor when the window closes", async () => {
     const api = stubApi();
+    // Simulate another till seating Counter 5 after this read.
     api.resetTableToday.mockRejectedValueOnce({
-      code: "table.place_taken",
+      code: "joined_table.tables_in_group",
       status: 409,
       tableId: "long",
-      standingId: "t9",
+      partIds: ["c3"],
     });
-    const el = await mount([...counter3Busy(), table("t9", "Terrace 9", 10)], api);
+    const tables = counter3Busy().map((each) =>
+      each.id === "c3" ? { ...each, today: { ...each.today!, joinId: "g" } } : each,
+    );
+    const el = await mount([...tables, table("bar", "Bar", 80, { joinId: "g" }, held)], api);
     const opened = (await pressResetTable(el, "c4"))!;
     send(opened, "reset-table-confirm", { seats: 6 });
     await settle(el);
     await opened.updateComplete;
 
-    const words =
-      "Terrace 9 is standing in Long table's place. Move Terrace 9, then Reset table again.";
+    const words = "Counter 3 is in Bar+Counter 3. Split it off first, then Reset table.";
     expect(windowOf(el)).toBe(opened);
     expect(footError(el)).toBe(words);
     expect(floorRefusal(el)).toBeNull();
 
-    el.tables = [...allFree(), table("t9", "Terrace 9", 10)];
+    el.tables = allFree();
     await settle(el);
     expect(windowOf(el)).toBeNull();
     expect(floorRefusal(el)).toBe(words);
   });
 
   it.each([
-    [
-      "a table standing in its place",
-      { code: "table.place_taken", tableId: "long", standingId: "gone" },
-      oneFree,
-    ],
-    [
-      "the joined table",
-      { code: "table.place_taken", tableId: "gone", standingId: "t9" },
-      standingInPlace,
-    ],
     [
       "a table in the group",
       { code: "joined_table.tables_in_group", tableId: "long", partIds: ["c4", "gone"] },
@@ -845,24 +801,6 @@ describe("till-floor-screen: Reset table names tables by today's names", () => {
     ).toContain("Corner stays apart");
   });
 
-  it("names the table standing in a renamed joined table's place by their names for today", async () => {
-    const api = stubApi();
-    api.resetTableToday.mockRejectedValueOnce({
-      code: "table.place_taken",
-      status: 409,
-      tableId: "long",
-      standingId: "t9",
-    });
-    const el = await mount(
-      renamed(standingInPlace(), { long: { name: "Window table" }, t9: { name: "Patio" } }),
-      api,
-    );
-    await pressResetTable(el);
-    expect(floorRefusal(el)).toBe(
-      "Patio is standing in Window table's place. Move Patio, then Reset table again.",
-    );
-  });
-
   it("names a renamed table in a renamed group by its own name and the group's", async () => {
     const api = stubApi();
     api.resetTableToday.mockRejectedValueOnce({
@@ -885,31 +823,6 @@ describe("till-floor-screen: Reset table names tables by today's names", () => {
       "Window is in García birthday. Split it off first, then Reset table.",
     );
   });
-
-  it.each(["en", "es"])(
-    "in %s, says Back's place-taken refusal in the code's own words, offering nothing",
-    async (locale) => {
-      setLocale(locale);
-      const api = { ...stubApi(), backToSavedToday: vi.fn<TillApi["backToSavedToday"]>() };
-      api.backToSavedToday.mockRejectedValueOnce({
-        code: "table.place_taken",
-        status: 409,
-        tableId: "t3",
-        standingId: "t4",
-      });
-      const el = await mount([table("t3", "3", 10), table("t4", "4", 30)], api);
-      send(el.shadowRoot!.querySelector("wt-floor-map")!, "wt-table-details", { tableId: "t3" });
-      await el.updateComplete;
-      const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
-      await sheet.updateComplete;
-      sheet.shadowRoot!.querySelector<HTMLElement>('[data-today-action="back"]')!.click();
-      await settle(el);
-
-      expect(api.backToSavedToday).toHaveBeenCalledExactlyOnceWith("t3", 0);
-      expect(floorRefusal(el)).toBe(codeMessage("table.place_taken", locale));
-      expect(el.shadowRoot!.querySelector("[data-leave-here-offer]")).toBeNull();
-    },
-  );
 
   it("names the renamed joined table a table was split off from", async () => {
     const api = { ...stubApi(), backToSavedToday: vi.fn<TillApi["backToSavedToday"]>() };
