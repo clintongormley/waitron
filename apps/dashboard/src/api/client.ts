@@ -4424,6 +4424,15 @@ export class DashboardApi {
     );
   }
 
+  downloadAccountantExport(range: { from: string; to: string }): Promise<Blob> {
+    return this.#request<Blob>(
+      `/management-api/reports/accountant-export?from=${range.from}&to=${range.to}`,
+      "POST",
+      undefined,
+      { as: "blob" },
+    );
+  }
+
   getCategorySales(
     from: string,
     to: string,

@@ -2606,6 +2606,9 @@ export const en = {
   "sales.printer": "Printer",
   "sales.print_categories": "Print category sales",
   "sales.export_transfer": "Export deferred payments (CSV)",
+  "sales.export_accountant": "Download for accountant (XLSX)",
+  "sales.accountant_dates":
+    "Issued invoices and recorded purchases for your accountant. From and To include both calendar dates, regardless of the trading-day cut-off.",
   "sales.print_sent": "Category sales sent to {printer}.",
   "sales.no_printers": "No active printer at this venue. Ask a manager to add one under Printers.",
 
@@ -6533,6 +6536,9 @@ export const es: Record<StringKey, string> = {
   "sales.printer": "Impresora",
   "sales.print_categories": "Imprimir ventas por categoría",
   "sales.export_transfer": "Exportar pagos aplazados (CSV)",
+  "sales.export_accountant": "Descargar para tu gestor (XLSX)",
+  "sales.accountant_dates":
+    "Facturas emitidas y compras registradas para tu gestor. Desde y Hasta incluyen ambas fechas naturales, independientemente de la hora de cierre del día de trabajo.",
   "sales.print_sent": "Ventas por categoría enviadas a {printer}.",
   "sales.no_printers":
     "No hay ninguna impresora activa en este local. Pide a un encargado que añada una en Impresoras.",

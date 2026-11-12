@@ -1602,14 +1602,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 ### Purchasing, recipes, stock and reports
 
-- **A1511. An export for the venue's accountant (owner, 2026-11-11; was SP17).** Wanted at go-live or
-  soon after. Almost every Spanish venue hands its books to an outside accountant (_gestor_ or
-  _asesor_), who today would have to type in Waitron's sales and purchase invoices by hand.
-  The owner chose [the generic workbook](superpowers/specs/2026-11-11-a1511-accountant-export-proposal.md#owner-decision-2026-11-11)
-  on 11 November: one download per period, with issued invoices and recorded purchases in separate
-  sheets. The remaining Sales & takings action is slice 2 of the cleared
-  [build plan](superpowers/plans/2026-11-11-a1511-accountant-export.md). Named-program import support
-  needs a real accountant's import trial.
+- **Qualify the accountant workbook with a real accountant's import trial** before claiming
+  support for a named accounting program. The generic two-sheet period download is available from
+  **Sales & takings**; [recorded-data limits](superpowers/specs/2026-11-11-a1511-accountant-export-proposal.md)
+  remain, including editable purchases and no automatic accounting sync.
 
 - **One design for supplier invoices and credit notes** (bundle of 2, 2 important, size M, needs the owner). Holds A1326. [Detail](backlog/back-office.md#bundle-one-design-for-supplier-invoices-and-credit-notes)
 

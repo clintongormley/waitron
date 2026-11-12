@@ -9,6 +9,7 @@ import type {
   SalesPeriodDto,
 } from "../api/client.js";
 import { today } from "../date-utils.js";
+import { t } from "../i18n/t.js";
 
 const close: DailyCloseDto = {
   businessDay: "2026-08-29",
@@ -258,6 +259,32 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=export-transfer]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=export-error]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the accountant download and its refusal accessibly", async () => {
+    const { el, host } = await mountWidget<SalesScreen>(
+      "dashboard-sales-screen",
+      {
+        api: stubApi({
+          downloadAccountantExport: vi
+            .fn()
+            .mockRejectedValue({ code: "authorization.not_permitted" }),
+        }),
+        canExport: true,
+      },
+      theme,
+    );
+    await flush(el);
+    const action = el.shadowRoot!.querySelector<HTMLElement>("[data-test=export-accountant]");
+    expect(action).not.toBeNull();
+    await expect
+      .element(action!.shadowRoot!.querySelector("button")!)
+      .toHaveAccessibleDescription(t("sales.accountant_dates"));
+    await expectNoA11yViolations(host);
+    action!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=accountant-error]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

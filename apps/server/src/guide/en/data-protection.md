@@ -313,7 +313,8 @@ details, and Waitron can email them the invoice.
   address, with each invoice record; your email provider, for each invoice you email, which carries
   the invoice as a PDF with the customer's name, tax number and address; and your accountant, when
   you give them the file of deferred payments from **Sales & takings**, which lists each such
-  invoice's customer name and tax number.
+  invoice's customer name and tax number. **Download for accountant (XLSX)** on the same screen
+  also includes the recorded customer address. Share these files only with the intended recipient.
 - How long: _set with your adviser_. Waitron never changes or deletes an issued invoice. It also
   keeps every receipt and ticket it sends to a receipt or kitchen printer and deletes none of them,
   so the customer's details on an invoice printed at the till stay in the database too. An A4
@@ -326,7 +327,8 @@ supplier's name and tax number are personal data if the supplier is a sole trade
 - Purpose: keep supplier invoices for your VAT reporting.
 - Whose data: suppliers who are sole traders.
 - What data: the supplier's name and tax number, with the invoice's number, dates and amounts.
-- Who receives it: _anyone you share it with, such as your tax adviser_.
+- Who receives it: _anyone you share it with, such as your tax adviser_. **Download for accountant
+  (XLSX)** in **Sales & takings** includes these recorded supplier details and invoice amounts.
 - How long: _set with your adviser_.
 - Security: as for every entry.
 
