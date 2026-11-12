@@ -1,4 +1,4 @@
-// Reads the Dockerfile, the test server and the image-smoke workflow as TEXT, and imports the setup
+// Reads the Dockerfile, the test server, the spare's store and the image-smoke workflow as TEXT, and imports the setup
 // script's pin, which makes it weaker than its name: it proves the copies of the pin agree, not that any
 // of them downloads or runs. What runs the binary is the image build's own `versitygw --version` check
 // (deploy/Dockerfile, the `versitygw` stage), the image-smoke step that runs it in the shipped image,
