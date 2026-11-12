@@ -3805,12 +3805,6 @@ export class TillApi {
     );
   }
 
-  /**
-   * The party's guests left without paying → `POST /api/parties/:partyId/unpaid-departure`: each
-   * bill still to pay with no invoice yet is invoiced for its full amount, each invoice still owing
-   * is recorded unpaid and one owing nothing is settled, and the party closes as Finish closes it.
-   * Refusals: the route in `apps/server/src/unpaid-departure-api.ts` and what it calls.
-   */
   recordUnpaidDeparture(
     partyId: string,
     request: UnpaidDepartureRequest,

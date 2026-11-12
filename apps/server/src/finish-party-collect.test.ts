@@ -1074,7 +1074,7 @@ describe("a finished table's paid bills are collected (A1344)", () => {
     expect((await billRow(t.billIds[0]!)).collectedAt).toBeNull();
   });
 
-  it("stamps only the unpaid bill after a departure, preserving the paid bill’s stamp", async () => {
+  it("hands over paid, served bills when the last unpaid departure closes the table", async () => {
     const t = await table([{ name: "Burger" }, { name: "Burger" }], "fire", [[2]], ["12.00", null]);
     const [paid, unpaid] = t.billIds as [string, string];
     await serveAll(t, paid);
@@ -1097,7 +1097,7 @@ describe("a finished table's paid bills are collected (A1344)", () => {
     expect(await cardsFor(paid)).toEqual([]);
     expect(await billRow(paid)).toMatchObject({
       status: "settled",
-      collectedAt: null,
+      collectedAt: expect.any(String),
     });
     expect(await cardsFor(unpaid)).toEqual([]);
     expect(await billRow(unpaid)).toMatchObject({

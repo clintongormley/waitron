@@ -555,6 +555,9 @@ describe("unpaid departure stops kitchen work", () => {
       const heldJobs = (await jobs()).map((job) => decodeTicket(job.payload));
       expect(heldJobs.some((text) => text.includes("PIZZA") && text.includes("ESPERA"))).toBe(true);
       const before = new Set((await jobs()).map((job) => job.id));
+      const stationBefore = (
+        await inTx(venue, (tx) => listStationQueue(tx, venue.stationId))
+      ).filter((group) => group.orderId === order.billId);
       expect(await depart(order.partyId)).toMatchObject({ status: 200 });
       expect(await cancellations(lines[0]!.id)).toEqual([]);
       expect(await linesOf(order.billId)).toEqual(lines);
@@ -574,7 +577,12 @@ describe("unpaid departure stops kitchen work", () => {
         (await inTx(venue, (tx) => listStationQueue(tx, venue.stationId))).filter(
           (group) => group.orderId === order.billId,
         ),
-      ).toEqual(expect.any(Array));
+      ).toEqual(
+        stationBefore.map((group) => ({
+          ...group,
+          party: { ...group.party!, revision: group.party!.revision + 1 },
+        })),
+      );
       expect(
         await inTx(venue, async (tx) => boardOrderIds(await readScopedPassBoard(tx, EVERY))),
       ).toContain(order.billId);
@@ -709,7 +717,7 @@ describe("unpaid departure stops kitchen work", () => {
     expect(await jobs()).toEqual(beforeRetry);
   });
 
-  it("preserves paid siblings’ handover stamps and records no departure activity for them", async () => {
+  it("closes with paid siblings handed over, preserving prior stamps and their activity", async () => {
     const order = await billWith(venue, [{ name: "Burger" }]);
     await pay(order.billId, "12.00");
     const [line] = await linesOf(order.billId);
@@ -721,6 +729,8 @@ describe("unpaid departure stops kitchen work", () => {
       .where(eq(workingOrders.id, order.billId));
     const paid = await billWith(venue, [{ name: "Burger" }]);
     await pay(paid.billId, "12.00");
+    const [paidLine] = await linesOf(paid.billId);
+    await serve(paid.partyId, paidLine!.id, "1");
     await inTx(venue, (tx) =>
       combineParties(tx, venue.cfg, {
         from: paid.partyId,
@@ -730,7 +740,11 @@ describe("unpaid departure stops kitchen work", () => {
       }),
     );
     const owing = await joinOwing(order.partyId);
-    expect(await depart(order.partyId)).toMatchObject({ status: 200 });
+    expect(await depart(order.partyId)).toMatchObject({ status: 200, body: { state: "closed" } });
+    expect(
+      (await venue.db.select().from(workingOrders).where(eq(workingOrders.id, paid.billId)))[0]!
+        .collectedAt,
+    ).not.toBeNull();
     expect(
       (await venue.db.select().from(workingOrders).where(eq(workingOrders.id, order.billId)))[0]!
         .collectedAt,

@@ -17,7 +17,13 @@ import { authorize } from "@waitron/identity";
 import type { Override, PinAttempts } from "@waitron/identity";
 import { AppError, decimalToCents } from "@waitron/shared";
 import type { Decimal, DeviceId, SaleId } from "@waitron/shared";
-import { billOwes, checkAndBumpParty, closeParty, readBillsOfParties } from "./parties.js";
+import {
+  billOwes,
+  checkAndBumpParty,
+  closeParty,
+  handOverFinishedBills,
+  readBillsOfParties,
+} from "./parties.js";
 import { parseBillEditExpecteds, requireBillEditors } from "./bill-editing.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readPartyFinishReadiness } from "./finish-party-service.js";
@@ -179,6 +185,7 @@ export async function recordUnpaidDeparture(
     deps.attendance === undefined ? undefined : { recorder: deps.attendance },
     expectedEdits,
   );
+  await handOverFinishedBills(tx, partyId);
   return { ...closed, departures };
 }
 

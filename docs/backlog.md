@@ -1062,7 +1062,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Loose ends left by service Task 17 (#991, a table that leaves without paying).**
   Collecting PART of the debt later is not built. Collecting it in full uses
   `POST /api/working-orders/:id/collect`.
-  [Detail](backlog/till.md#task-17-991-a-table-that-leaves-without-paying)
+  [Detail](backlog/till.md#task-17-991-a-bill-left-unpaid)
 
 - **Reads and saves with no time limit** (bundle of 2, size S). [Detail](backlog/till.md#bundle-reads-and-saves-with-no-time-limit)
 

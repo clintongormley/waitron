@@ -40,7 +40,7 @@ on the [Box status page](box-status.md#clock-behind). Just after the server star
 server's clock reads more than a minute earlier than the last sale it recorded. Until it reads no more
 than a minute earlier, or the server's clock is confirmed, the server refuses payments, refunds and
 anything else that would record a sale or settle money: payments in cash or by card, at the counter
-or at a table, refunds and retried refunds, a table leaving without paying, cancelling an order that
+or at a table, refunds and retried refunds, recording a bill as left unpaid, cancelling an order that
 already has an invoice, and a change or a kitchen send that would finish paying a bill already paid
 in part. On the dashboard, managers cannot sort out stuck or held payments and refunds either.
 

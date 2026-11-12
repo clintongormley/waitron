@@ -624,10 +624,6 @@ declare module "@waitron/shared" {
      */
     "party.bill_outstanding": { partyId: string };
     "party.unserved_dishes": { partyId: string; dishes: UnservedDish[] };
-    /**
-     * Record unpaid departure found no bill of the party's family still to pay — none presented,
-     * and none open with items on it. Finish table is the action then.
-     */
     "unpaid_departure.nothing_outstanding": { partyId: string };
     /**
      * Record unpaid departure found a bill it would invoice — open, or presented with no invoice

@@ -9,14 +9,15 @@ import type { DepartingBill, TillUnpaidDepartureDialog } from "./unpaid-departur
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));
 
-const owing: DepartingBill[] = [
-  { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
-  { workingOrderId: "wo-check", name: "4 · Bill 2", outstanding: "30.00" },
-];
+const bill: DepartingBill = {
+  workingOrderId: "wo-4",
+  name: "4 · Bill 1",
+  outstanding: "14.00",
+};
 
 async function mount(over: Partial<TillUnpaidDepartureDialog> = {}) {
   const { el } = await mountWidget<TillUnpaidDepartureDialog>("till-unpaid-departure-dialog", {
-    bill: owing[0],
+    bill,
     ...over,
   });
   return el;
