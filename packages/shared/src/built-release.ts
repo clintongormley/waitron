@@ -4,8 +4,9 @@ declare const __WAITRON_RELEASE__: unknown;
 
 const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
-/** Run from source, the server has no stamp; every bundle `scripts/bundle-node.mjs`'s command line
- * builds carries one, `null` when the build is not a release. */
+/** No stamp means run from source, or bundled by calling `bundle()` without `releaseVersion` as
+ * test support does; every bundle `scripts/bundle-node.mjs`'s command line builds carries one,
+ * `null` when the build is not a release. */
 export function builtRelease(): BuiltRelease {
   if (typeof __WAITRON_RELEASE__ === "undefined") return { bundled: false };
   const stamp: unknown = __WAITRON_RELEASE__;

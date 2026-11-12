@@ -1,7 +1,8 @@
 // Weaker than its name for 1.b) and 1.c). For 1.b) the test registers the node under
 // `WAITRON_ID_SISTEMA` itself, so it does not check the code a real setup registers. For 1.c) the
-// second case stands in a bundle stamped `1.2.3` and checks the recorded sale's version against the
-// declaration prepared for `1.2.3`; it does not build a bundle or read a committed `v1.2.3.md`.
+// first case gives the record and the declaration the same `softwareVersion()`, so they cannot
+// disagree; the second stubs a bundle stamped `1.2.3` and checks the recorded sale's version against
+// the declaration prepared for `1.2.3`, building no bundle and reading no committed `v1.2.3.md`.
 import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { expect, it, onTestFinished, vi } from "vitest";
