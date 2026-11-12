@@ -990,7 +990,7 @@ async function closedAt(partyId: string) {
   return party!.closedAt;
 }
 
-describe("a finished table's paid food leaves the kitchen screens (A1344)", () => {
+describe("a finished table's paid bills are collected (A1344)", () => {
   it("a served, paid bill's card is off the station once served, and the bill is collected when the table finishes", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
     const billId = t.billIds[0]!;
@@ -1008,7 +1008,7 @@ describe("a finished table's paid food leaves the kitchen screens (A1344)", () =
     expect((await billRow(billId)).collectedAt).toBe(at);
   });
 
-  it("takes every paid bill of a split table off the station", async () => {
+  it("collects every paid bill of a split table when it finishes", async () => {
     const t = await table(
       [{ name: "Burger" }, { name: "Burger" }],
       "fire",
@@ -1019,7 +1019,10 @@ describe("a finished table's paid food leaves the kitchen screens (A1344)", () =
 
     expect(await post(t.partyId, await bodyFor(t))).toMatchObject({ status: 200 });
 
-    for (const billId of t.billIds) expect(await cardsFor(billId)).toEqual([]);
+    for (const billId of t.billIds) {
+      expect(await cardsFor(billId)).toEqual([]);
+      expect((await billRow(billId)).collectedAt).not.toBeNull();
+    }
   });
 
   it("a combined table's served cards are off the station, and every bill is collected when the surviving table finishes", async () => {

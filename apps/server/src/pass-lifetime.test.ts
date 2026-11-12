@@ -368,6 +368,11 @@ describe("a dish the waiter serves leaves the station's screen, as it leaves the
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
     );
     expect(others).toEqual([]);
+    expect(item).toMatchObject(
+      options.waitsForPass
+        ? { passControlled: true, requestedAt: expect.any(String), firedAt: null }
+        : { passControlled: false, firedAt: expect.any(String) },
+    );
     const command = { ...(await commandFor(v, party.partyId)), submissionId: randomUUID() };
     await inTx(v, (tx) =>
       markServed(
