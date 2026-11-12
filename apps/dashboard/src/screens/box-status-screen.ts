@@ -12,6 +12,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import type {
   AlertView,
   BoxHealth,
+  BoxNetwork,
   ClockMisdatedHandledView,
   ClockMisdatedView,
   DashboardApi,
@@ -230,12 +231,35 @@ export class BoxStatusScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
       }
       .misdated,
+      .box-network,
       .box-restart {
         margin: 0 0 var(--wt-space-4);
       }
       .box-restart > p {
         margin: 0 0 var(--wt-space-2);
       }
+      .box-network {
+        padding: var(--wt-space-3);
+        background: var(--wt-color-surface);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+      .box-network dl {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: var(--wt-space-2) var(--wt-space-3);
+      }
+      .box-network dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .box-network dt {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .box-network a {
+        color: var(--wt-color-primary-text);
+      }
+      .box-network h2,
       .misdated h2,
       .box-restart h2 {
         margin: 0 0 var(--wt-space-2);
@@ -267,6 +291,8 @@ export class BoxStatusScreen extends LitElement {
   /** Whether the session may restart the box's server (`person.admin`). */
   @property({ attribute: false }) canRestart = false;
 
+  @state() private network: BoxNetwork | null = null;
+  @state() private networkState: "loading" | "ready" | "failed" | "unavailable" = "loading";
   @state() private health: BoxHealth | null = null;
   /** The bell's own list, as last read; null until it has been read once. */
   @state() private alerts: AlertView[] | null = null;
@@ -329,6 +355,14 @@ export class BoxStatusScreen extends LitElement {
       this.#readFailed("getBoxHealth");
     },
   );
+  readonly #networkQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.network = null;
+      this.networkState = codeOf(error) === "box_host.unavailable" ? "unavailable" : "failed";
+    },
+  );
   readonly #alertQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -347,6 +381,12 @@ export class BoxStatusScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    void this.#networkQueries
+      .watch("getBoxNetwork", [], (network) => {
+        this.network = network;
+        this.networkState = "ready";
+      })
+      .catch(() => undefined);
     void this.#healthQueries
       .watch("getBoxHealth", [], (health) => {
         this.health = health;
@@ -1315,10 +1355,45 @@ export class BoxStatusScreen extends LitElement {
     </wt-dialog>`;
   }
 
+  #renderNetwork(): TemplateResult | typeof nothing {
+    if (this.networkState === "unavailable") return nothing;
+    const network = this.network;
+    return html`<section
+      class="box-network"
+      data-test="box-network"
+      aria-labelledby="network-title"
+    >
+      <h2 id="network-title">${t("box_status.network.title")}</h2>
+      ${
+        network === null
+          ? html`<p role="status">
+              ${t(this.networkState === "failed" ? "box_status.network.failed" : "box_status.network.loading")}
+            </p>`
+          : html`<dl>
+              <dt>${t("box_status.network.wired")}</dt>
+              <dd>
+                ${!network.wired.connected ? t("box_status.network.disconnected") : (network.wired.address ?? t("box_status.network.no_address"))}
+              </dd>
+              <dt>${t("box_status.network.wifi")}</dt>
+              <dd>
+                ${network.wifi.connectedSsidHex === null ? t("box_status.network.disconnected") : ssidName(network.wifi.connectedSsidHex)}
+              </dd>
+              <dt>${t("box_status.network.saved")}</dt>
+              <dd>
+                ${network.wifi.savedSsidHex === null ? t("box_status.network.not_reported") : ssidName(network.wifi.savedSsidHex)}
+              </dd>
+            </dl>`
+      }
+      <a href=${guideHref("box-status.network")} target="_blank" rel="noopener"
+        >${t("box_status.network.guide")}</a
+      >
+    </section>`;
+  }
+
   override render(): TemplateResult {
     return html`
       <h1 class="title">${t("box_status.title")}</h1>
-      ${this.#renderError()} ${this.#renderBody()} ${this.#renderRestart()}
+      ${this.#renderError()} ${this.#renderBody()} ${this.#renderNetwork()} ${this.#renderRestart()}
       ${this.#renderClockCheckDialog()} ${this.#renderRestartDialog()} ${this.#renderNoteDialog()}
     `;
   }
@@ -1393,4 +1468,10 @@ declare global {
   interface HTMLElementTagNameMap {
     "dashboard-box-status-screen": BoxStatusScreen;
   }
+}
+
+function ssidName(hex: string): string {
+  return new TextDecoder().decode(
+    Uint8Array.from(hex.match(/../g) ?? [], (byte) => Number.parseInt(byte, 16)),
+  );
 }

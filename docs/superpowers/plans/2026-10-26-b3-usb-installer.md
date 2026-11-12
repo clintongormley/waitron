@@ -236,7 +236,7 @@ No boot-side backups, per-profile history or arbitrary-directory cleanup.
 
 ### Task 3.2: network page and display-only local till enrolment
 
-> 2026-11-12: watcher05:52/05:54 moved the read-only network display to existing Settings → Box status, with its EN/ES guide section there; no `this-box.md` guides are planned. [B3-20](2026-11-12-b3-20-network-screen.md) records the cleared cut. Watcher06:01 requires visible working-card screenshots in both themes on a box or VM built by the B3 recipe before its PR; the network display is not built yet.
+> 2026-11-12: watcher05:52/05:54 moved the read-only network display to existing Settings → Box status, with its EN/ES guide section there; no `this-box.md` guides are planned. [B3-20](2026-11-12-b3-20-network-screen.md) records the cleared cut. Watcher06:01 requires visible working-card screenshots in both themes on a box or VM built by the B3 recipe before its PR; the read-only display is implemented by B3-20; network-changing controls remain later work.
 
 **Interfaces:** `this-box-screen.ts` consumes the typed server client and `draftScopeFor`; only Red and start-screen choice ship here. New self-enrol action calls the real join-window/request/number-check/manager-acceptance flow under `device.manage`, not a new bypass. Existing session APIs are traced before binding; no new cookie names prescribed.
 

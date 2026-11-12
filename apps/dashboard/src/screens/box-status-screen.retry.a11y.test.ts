@@ -52,6 +52,7 @@ const LAST = "2026-10-22T18:00:00.000Z";
 
 function stubApi(answer: BoxHealth): DashboardApi {
   return {
+    getBoxNetwork: vi.fn().mockRejectedValue({ code: "box_host.unavailable" }),
     getBoxHealth: vi.fn().mockResolvedValue(answer),
     listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
     freeBoxSpace: vi.fn(),

@@ -71,6 +71,13 @@ If the alerts could not be read, the page still shows every row and says that a 
 fine when it is not. If some checks could not be made, the page says it may not show every
 problem.
 
+## Check the network {#network}
+
+On an installed Waitron box, **Network** shows the wired connection and its address,
+the current Wi-Fi name and the saved Wi-Fi name. Use it to check which network the
+box is using. The card refreshes about once a minute; you cannot change the network here.
+If a read fails, wait for the next automatic attempt.
+
 ## Try the waiting records again {#retry-now}
 
 On a box that sends records to the tax agency, the **Tax agency** row has a **Retry now** button.

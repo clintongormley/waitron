@@ -113,6 +113,7 @@ function stubApi(
   alerts: AlertView[] = [],
 ): DashboardApi {
   return {
+    getBoxNetwork: vi.fn().mockRejectedValue({ code: "box_host.unavailable" }),
     getBoxHealth: vi.fn().mockResolvedValue(answer),
     listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts } satisfies AlertsResponse),
     freeBoxSpace: vi.fn().mockResolvedValue(FREED),

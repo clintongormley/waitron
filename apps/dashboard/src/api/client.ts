@@ -1796,6 +1796,11 @@ export interface AlertView {
   deviceName?: string | null;
 }
 
+export interface BoxNetwork {
+  wired: { connected: boolean; address: string | null };
+  wifi: { connectedSsidHex: string | null; savedSsidHex: string | null };
+}
+
 /** LOCAL copy of the server's `BoxHealth` (`apps/server/src/box-health.ts`). */
 export interface BoxHealth {
   at: string;
@@ -4607,6 +4612,10 @@ export class DashboardApi {
 
   retryFiscalSubmissions(): Promise<FiscalRetryView> {
     return this.#request<FiscalRetryView>("/management-api/fiscal-outbox/retry", "POST", {});
+  }
+
+  getBoxNetwork(): Promise<BoxNetwork> {
+    return this.#request<BoxNetwork>("/api/box/network", "GET");
   }
 
   getBoxHealth(): Promise<BoxHealth> {

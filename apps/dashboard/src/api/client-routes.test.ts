@@ -38,6 +38,19 @@ function callsOf(fetchImpl: ReturnType<typeof vi.fn>): Call[] {
 }
 
 describe("DashboardApi routes", () => {
+  it("reads the box network without a request body", async () => {
+    const answer = {
+      wired: { connected: true, address: "192.0.2.8" },
+      wifi: { connectedSsidHex: null, savedSsidHex: null },
+      change: null,
+      bootCopy: { state: "absent", reason: "cable-only", failure: null },
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getBoxNetwork()).toEqual(answer);
+    expect(callsOf(fetchImpl)).toEqual([["/api/box/network", "GET", undefined]]);
+  });
+
   it("counts the menus the products are on, sending each id encoded", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ menus: 3 }));
     const api = new DashboardApi("", fetchImpl);

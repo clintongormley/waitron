@@ -1409,3 +1409,27 @@ it("subscribes the sales overview to the clock document once", () => {
     { type: "settings.business_day" },
   ]);
 });
+
+it("refreshes the host network every minute even while connected, passively after the first read", async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response("{}"),
+  );
+  const active = vi.fn();
+  const query = dashboardQuery(
+    new DashboardApi("", fetchImpl, undefined, active),
+    "getBoxNetwork",
+    [],
+  );
+  expect(query.dependencies).toEqual([]);
+  expect(query.refreshMs).toBe(60_000);
+  expect(query.quietWhileConnected).toBe(false);
+  await query.read();
+  await query.read();
+  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
+    "/api/box/network",
+    "/api/box/network",
+  ]);
+  expect(new Headers(fetchImpl.mock.calls[0]![1].headers).has("x-waitron-live")).toBe(false);
+  expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+  expect(active).toHaveBeenCalledOnce();
+});
