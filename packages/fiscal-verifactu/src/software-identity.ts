@@ -1,5 +1,11 @@
 import "./errors.js";
-import { AppError, isAppError, readSoftwareProducer } from "@waitron/shared";
+import {
+  AppError,
+  builtRelease,
+  isAppError,
+  readSoftwareProducer,
+  type BuiltRelease,
+} from "@waitron/shared";
 import { buildAltaRecord, validate, type SiNo } from "@waitron/verifactu";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 
@@ -51,7 +57,13 @@ function stampedCommit(): string | null {
 
 export const BUILD_COMMIT: string | null = stampedCommit();
 
-export function softwareVersion(commit: string | null = BUILD_COMMIT): string {
+export const BUILD_RELEASE: BuiltRelease = builtRelease();
+
+export function softwareVersion(
+  commit: string | null = BUILD_COMMIT,
+  release: BuiltRelease = BUILD_RELEASE,
+): string {
+  if (release.bundled && release.version !== null) return release.version;
   return commit === null ? "0.0.0-dev" : `0.0.0-dev+${commit}`;
 }
 

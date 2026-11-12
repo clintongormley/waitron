@@ -2,13 +2,17 @@ import { readFileSync } from "node:fs";
 import type { DeclarationProducer } from "../src/declaration/render.js";
 import { prepareDeclarationSource } from "../src/declaration/source.js";
 
-export function declarationSourceFor(version: string): string {
+export function declarationSourceFor(
+  version: string,
+  { date = "2026-10-22", releasable = false }: { date?: string; releasable?: boolean } = {},
+): string {
+  const template = readFileSync(new URL("../declarations/template.md", import.meta.url), "utf8");
   return prepareDeclarationSource({
-    template: readFileSync(new URL("../declarations/template.md", import.meta.url), "utf8"),
+    template: releasable ? template.replace(/^<!-- release-blocker: .* -->\n/gm, "") : template,
     functions: readFileSync(new URL("../declarations/functions.md", import.meta.url), "utf8"),
     version,
     libraryVersion: "0.2.1",
-    date: "2026-10-22",
+    date,
     place: "Elche",
   });
 }

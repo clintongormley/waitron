@@ -80,15 +80,22 @@ box has started in production yet (CLAUDE.md §5, the 2026-11-08 producer except
    a released version's tag is missing"). Nothing in a checkout says which versions were released
    except the tags, so the rule is: every `declarations/v*.md` except the highest version must have
    its tag, and every `v*` tag must have its file, unchanged. The highest may lack a tag (prepared,
-   not yet tagged). A checkout without tags therefore fails as soon as a second version is
-   prepared, which is when the guard first has something to protect.
+   not yet tagged). **Watcher, 2026-11-12 17:59, against design §8:** the guard also fails when
+   the checkout holds no tags at all and any `declarations/v*.md` exists, because a tagless
+   checkout cannot tell a prepared version from a released one. The repository's own checkout is
+   never tagless: `git ls-remote --tags origin` lists `refs/tags/pre-sqlite-migration`
+   (2026-11-12), which `root-guards` fetches once Task 8 sets `fetch-tags: true`.
 7. **The tag must be on `main`.** §5.1 defines a release as a tag "on a commit of `main`"; only
    `pnpm release tag` enforced it. The publish job refuses a tag whose commit is not an ancestor of
    `origin/main`.
 8. **The GitHub Release is made by its own job** (`release`), the only one given
    `contents: write`, after `publish`. It pulls the published image by its tag and copies the two
    files out of it, so the archive's PDF is the box's PDF byte for byte (§5.3). A re-run replaces
-   the two files from the image the tag names then (`gh release upload --clobber`).
+   the two files from the image the tag names then (`gh release upload --clobber`). **Watcher,
+   2026-11-12 17:59:** the publish step refuses when `:X.Y.Z` already exists on the registry, so a
+   re-run never replaces a published image (Task 5's case). Re-running the whole workflow therefore
+   stops at Publish; re-running only the failed `release` job (`gh run rerun <run> --failed`)
+   redoes the Release upload.
 9. **What `releasedOn` is read from.** `release.json`'s `releasedOn` is the day in item 1.l)'s
    "Fecha" line of the committed `v<version>.md`, read back from its Spanish words
    (`3 de diciembre de 2026` → `2026-12-03`) and accepted only when `spanishDate` of the result
@@ -109,14 +116,16 @@ box has started in production yet (CLAUDE.md §5, the 2026-11-08 producer except
 - English only outside `packages/fiscal-verifactu` (CLAUDE.md §3); the declaration's Spanish stays
   in that package. Error codes name the concept; `server.*` is for facts about the process.
 - New error codes: `server.unreleased_build` (apps/server, `Record<string, never>`),
-  `declaration.date_unreadable` (fiscal-verifactu, `{ line: string }`). Each throwing file imports
+  `declaration.date_unreadable` (fiscal-verifactu, `{ line: string }`), `declaration.folder_not_empty`
+  (fiscal-verifactu, `{ folder: string }`). Each throwing file imports
   its registry; `scripts/errors-reachable.test.ts` must pass.
 - The recovery page's title and action are fixed strings chosen by the code (CLAUDE.md §3):
   `server.unreleased_build` → EN title "This box is running a test build.", action "Install a
   release."; ES title «Este equipo ejecuta una versión de prueba.», action «Instala una versión
   publicada.» No word suggests removing anything.
-- The release version's form: `^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$` (the package command's
-  `VERSION`, `src/declaration/command.ts`). Anything else refuses the bundle build.
+- The release version's form: `isReleaseVersion` (`packages/shared/src/built-release.ts`),
+  `^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$` and at most 50 characters; `scripts/bundle-node.mjs`
+  holds a copy tied to it by a test. Anything else refuses the bundle build.
 - The four files and their names are slice 3's decision 1: `declaration.html` (exactly
   `renderDeclaration(source, producer).html`), `declaration.pdf`, `declaration.txt`, and
   `release.json` = `{"version":"1.2.3","releasedOn":"2026-12-03"}` plus a newline, all from one
@@ -133,12 +142,14 @@ box has started in production yet (CLAUDE.md §5, the 2026-11-08 producer except
    before the push).
 2. **A tag like `v1.2.3-rc1` or `v01.2.3`** → refused before publishing (bundle refuses the form;
    Task 1 case), never published as `:1.2.3-rc1`.
-3. **A re-run of a tag's workflow after the Release exists** → the Release's two files are
-   replaced from the image the tag names, no duplicate Release, no failure (Task 6 case).
+3. **A re-run of only the `release` job after the Release exists** → the Release's two files are
+   replaced from the image the tag names, no duplicate Release (Task 6 case); **a re-run of the
+   whole workflow** → Publish refuses the existing `:X.Y.Z` and pushes nothing (Task 5 case).
 4. **`waitron.sh install v1.2` or `install some-branch`** → unchanged: built from source as
    today; only a full `vX.Y.Z` pulls (Task 7 cases).
-5. **A checkout with no tags at all, one prepared version** → the guard passes; **two prepared
-   versions, the lower untagged** → it fails naming the missing tag (Task 8 cases).
+5. **A checkout with no tags at all and any prepared version** → the guard fails (departure 6);
+   **one prepared version and some other tag** → it passes; **two prepared versions, the lower
+   untagged** → it fails naming the missing tag (Task 8 cases).
 
 ---
 
@@ -152,32 +163,41 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
 - Create: `packages/shared/src/built-release.ts`, `packages/shared/src/built-release.test.ts`
 - Modify: `packages/shared/src/index.ts` (export), `scripts/bundle-node.mjs` (define),
   `scripts/bundle-node.test.mjs`,
-  `packages/fiscal-verifactu/src/software-identity.ts:54-56` (`softwareVersion`),
+  `packages/fiscal-verifactu/src/software-identity.ts` (`softwareVersion`),
   `packages/fiscal-verifactu/src/software-identity.test.ts`,
   `packages/fiscal-verifactu/src/declaration/agree.e2e.test.ts` (header comment and one case)
 
 **Interfaces:**
+- Produces: `isReleaseVersion(value: string): boolean` in `packages/shared/src/built-release.ts`:
+  plain `major.minor.patch` with no leading zeros, at most 50 characters (the record's
+  `SistemaInformatico.Version` bound, `@waitron/verifactu` 0.2.1 `dist/validate.js:459`). The
+  declaration command's `--version` uses it; `bundle-node.mjs` keeps a copy, held to the same
+  answers by a case in `bundle-node.test.mjs`.
 - Produces: `type BuiltRelease = { bundled: false } | { bundled: true; version: string | null }`;
-  `builtRelease(): BuiltRelease` reading the global `__WAITRON_RELEASE__` (undefined → not bundled;
-  `null` → bundled, no release; `{ version }` with a valid version → that version; any other shape →
-  bundled, no release).
+  `builtRelease(): BuiltRelease` reading the global `__WAITRON_RELEASE_VERSION__` (undefined → not
+  bundled; `null` → bundled, no release; `{ version }` with a valid version → that version; any
+  other shape → bundled, no release).
 - Produces: `releaseDefine(env: Record<string, string | undefined>): string` in `bundle-node.mjs`,
   answering the JSON literal (`null` or `{"version":"1.2.3"}`) from `env.WAITRON_RELEASE_VERSION`
   (unset or `""` → `null`, per `isUnset`'s rule), throwing `Not a release version: <value>` for a
   malformed one; `bundle()` takes `releaseVersion` and, when it is given (`null` included), adds
-  `--define:__WAITRON_RELEASE__=__waitronRelease` with the frozen literal in the banner, as the hour
-  stamp is added (`bundle-node.mjs:42`); the command-line block always gives it, so every image
-  bundle is stamped and a test's direct `bundle()` call is not (departure 3).
-- Produces: `softwareVersion(commit = BUILD_COMMIT, release = builtRelease())`: a release's version
-  when `release.bundled && release.version !== null`, otherwise today's `0.0.0-dev[+commit]`.
+  `--define:__WAITRON_RELEASE_VERSION__=__waitronReleaseVersion` with the frozen literal in the
+  banner, as the hour stamp is added (`bundle()` in `bundle-node.mjs`); the command-line block always gives
+  it, so every image bundle is stamped and a test's direct `bundle()` call is not (departure 3).
+- Produces: `softwareVersion(commit = BUILD_COMMIT, release = BUILD_RELEASE)`, where
+  `BUILD_RELEASE = builtRelease()` is read once when the module loads, as `BUILD_COMMIT` is: a
+  release's version when `release.bundled && release.version !== null`, otherwise today's
+  `0.0.0-dev[+commit]`.
 
-- [ ] **Step 1: Failing tests.** `built-release.test.ts`: with `__WAITRON_RELEASE__` undefined →
+- [ ] **Step 1: Failing tests.** `built-release.test.ts`: with `__WAITRON_RELEASE_VERSION__`
+  undefined →
   `{ bundled: false }`; `null` → `{ bundled: true, version: null }`; `{ version: "1.2.3" }` →
   version `"1.2.3"`; `{ version: "1.2" }` and `"1.2.3"` (a string) → version `null` (use
   `vi.stubGlobal`). Bundler test: `releaseDefine({})` and `({ WAITRON_RELEASE_VERSION: "" })` →
   `"null"`; `"1.2.3"` → `'{"version":"1.2.3"}'`; `"1.2.3-rc1"`, `"v1.2.3"`, `"01.2.3"` throw; the
-  esbuild arguments `bundle()` passes contain `--define:__WAITRON_RELEASE__=__waitronRelease` when
-  given `releaseVersion` `null` and `"1.2.3"`, and not when given none (the stub `run` records them);
+  esbuild arguments `bundle()` passes contain
+  `--define:__WAITRON_RELEASE_VERSION__=__waitronReleaseVersion` when given `releaseVersion`
+  `null` and `"1.2.3"`, and not when given none (the stub `run` records them);
   the command-line block passes `releaseDefine(process.env)` (a case that runs the script with the
   stub, as the file's other CLI cases do). `software-identity.test.ts`:
   `softwareVersion(null, { bundled: true, version: "1.2.3" })` → `"1.2.3"`; with a commit and a
@@ -195,9 +215,14 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
   unedited:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts inmutabilidad`.
   Deletion control: make `softwareVersion` ignore the release; the agree case fails. Record it.
 - [ ] **Step 5: Measure the bundle.** `WAITRON_RELEASE_VERSION=1.2.3 pnpm --filter @waitron/server build`
-  then `grep -c '__waitronRelease = Object.freeze({"version":"1.2.3"})' apps/server/dist/server.js`
+  then `grep -c '__waitronReleaseVersion = Object.freeze({"version":"1.2.3"})' apps/server/dist/server.js`
   prints 1; unset, the same grep for `Object.freeze(null)` prints 1. (A failing case would print 0.)
 - [ ] **Step 6: Commit** (`git commit -s`).
+
+**As built (PR 1):** the command-line block passes the raw setting as `releaseVersion` and
+`bundle()` checks it through `releaseDefine`, rather than passing `releaseDefine(process.env)`'s
+answer; the agree case stubs the bundle stamp and loads the record's modules afresh, rather than
+mocking `builtRelease`.
 
 ### Task 2: `declaration render` writes the four files
 
@@ -210,24 +235,28 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
   `date` defaults to today's value there; `releasable: true` drops the `release-blocker` lines, which
   the real template keeps for Q53 even after Task 9), `apps/server/src/testing/declaration-folder.ts`
   (render with `releasable: true` and the `releasedOn` it is given, call `writeReleaseFolder`, then
-  overwrite `release.json` only when its caller passes a release unlike the rendered one; its five
-  callers keep passing unchanged). The blocker refusal stays in `writeReleaseFolder`.
+  overwrite `release.json` only when its caller passes a release unlike the rendered one; its callers
+  in `apps/server/src/declaration-pages.test.ts` keep passing unchanged). The blocker refusal stays in `writeReleaseFolder`.
 
 **Interfaces:**
 - Produces: `declarationDate(source: string): string` — the `YYYY-MM-DD` of item 1.l)'s first
   bullet, whose words wrap so the date sits on the template's next line (`template.md:78-79`, "…
   suscribe esta declaración / responsable del mismo: ‹fecha›."): read the bullet joined into one
-  line and take the text after its last `: ` up to the final `.`; throws
+  line and take the text after its last `: ` (the whole bullet when it has none) up to the final
+  `.`; throws
   `declaration.date_unreadable { line }` (`line` = that text) when the words are not a date
   `spanishDate` writes back identically.
 - Produces: `writeReleaseFolder(dir: string, source: string, producer: DeclarationProducer): Promise<{ version: string; releasedOn: string }>`
   in `folder.ts`: refuses blockers (`declaration.release_blocked`), takes `version` from item 1.c),
-  writes the four files of the Global Constraints (creating `dir`), answers what it wrote to
-  `release.json`.
+  writes the four files of the Global Constraints into a new folder beside `dir` and moves it to
+  `dir` in one rename, so a failed write leaves `dir` as it was; refuses a `dir` that already holds
+  files (`declaration.folder_not_empty`); answers what it wrote to `release.json`.
 - Produces: `declaration render --version <v> --out <dir>`: reads `declarations/v<v>.md`, runs the
   same agreement check as `check` (refactor `check`'s comparison into one function both call), takes
   the producer as `show` does (refusing in production terms when unset), calls `writeReleaseFolder`,
-  prints `wrote <dir>`. Missing file → the read's error, exit non-zero.
+  prints `wrote <dir>`. A relative `--out` is refused (`declaration.argument_invalid`): under
+  `pnpm --filter` it would be read from the package's folder. Missing file → the read's error, exit
+  non-zero.
 
 - [ ] **Step 1: Failing tests.** `source.test.ts`: a source prepared with date `2026-12-03` →
   `declarationDate` answers `"2026-12-03"`; `2026-03-01` (`1 de marzo de 2026`) → `"2026-03-01"`;
@@ -287,7 +316,11 @@ Branch `feat/a940-4-release-image`. Path: FULL (the box's start path).
   stamped `null` started with `WAITRON_ENV: "production"` and a fresh state folder fails its start
   with `server.unreleased_build` (read from its recovery state or its output, whichever the existing
   built-server cases read), and one stamped `1.2.3` gets past that check (the case that must still
-  start: it fails later or serves, but never with that code).
+  start: it fails later or serves, but never with that code). **The setup wizard's "live" choice
+  (watcher, 2026-11-12 17:59):** choosing live makes first setup write `WAITRON_ENV=production` into
+  `trading.env` (`apps/server/src/trading-config.ts:35`), so on a test build the start after setup
+  refuses. One case shows it: a first setup that saves live on a bundle stamped `null`, then the
+  next start reaches the recovery page with `server.unreleased_build`'s EN words.
 - [ ] **Step 2: Run; each fails.**
   `pnpm --filter @waitron/server exec vitest run src/release-check.test.ts src/recovery-surface.test.ts`
   and `-t "unreleased"` on `src/boot.test.ts`.
@@ -378,7 +411,9 @@ Branch `feat/a940-4-release-publish`. Path: FULL.
   `git merge-base --is-ancestor "$GITHUB_SHA" origin/main`, comes before the first build; a step "Check the release inside the built image",
   only for tags, runs `timeout 120 docker run --rm --pull never --network none --entrypoint node
   "$CHECK_IMAGE" /app/server.js check-release "$RELEASE_VERSION"` after the build for checking and
-  before "Publish to GHCR".
+  before "Publish to GHCR"; and "Publish to GHCR", on a tag, first asks the registry for
+  `:<release_version>` (`docker manifest inspect`, bounded) and refuses when it exists (departure 8,
+  watcher 17:59), one guard case pinning that the check precedes the push.
 - [ ] **Step 2: Run; they fail.** `pnpm exec vitest run scripts/ci-workflow.test.mjs`.
 - [ ] **Step 3: Implement.** `release_version` is set in the existing `refs/tags/v*` branch of the
   case statement; a tag whose rest is not `X.Y.Z` is refused there (`exit 1`, naming it), before the
@@ -433,11 +468,13 @@ Branch `feat/a940-4-release-publish`. Path: FULL.
 - Produces: `releasedDeclarationProblems(repo: string): string[]` — each problem one line: a `v*`
   tag (form `vX.Y.Z`) whose `declarations/v<v>.md` is absent at `HEAD` or differs from
   `git show v<v>:packages/fiscal-verifactu/declarations/v<v>.md`; a `v<v>.md` below the highest
-  version with no tag `v<v>`. Git runs with `GIT_*` cleared.
+  version with no tag `v<v>`; any `v<v>.md` when the checkout holds no tags at all. Git runs with
+  `GIT_*` cleared.
 
 - [ ] **Step 1: Failing tests** in a scratch repository per case (`mktemp -d`, `git init`): no
-  files, no tags → `[]`; one file, no tag → `[]`; `v1.0.0` and `v1.0.1` files, no tags → one problem
-  naming `v1.0.0`; tag `v1.0.0` and its file unchanged → `[]`; the file edited after the tag → one
+  files, no tags → `[]`; one file, no tags at all → one problem (departure 6, watcher 17:59);
+  one file, no tag of its own but another tag such as `pre-sqlite-migration` → `[]`; `v1.0.0` and `v1.0.1` files and only the tag
+  `pre-sqlite-migration` → one problem naming `v1.0.0`; tag `v1.0.0` and its file unchanged → `[]`; the file edited after the tag → one
   problem; the file deleted after the tag → one problem; a tag `pre-sqlite-migration` → ignored. One
   case runs against the real repository and expects `[]`. Run the file once with `GIT_DIR` set to
   another repository; it still reads the scratch one.

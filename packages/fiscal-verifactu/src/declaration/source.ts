@@ -66,6 +66,11 @@ export function releaseBlockers(source: string): string[] {
   return [...source.matchAll(/^<!-- release-blocker: (.*?) -->$/gm)].map((match) => match[1]!);
 }
 
+export function refuseBlockers(source: string): void {
+  const count = releaseBlockers(source).length;
+  if (count > 0) throw new AppError("declaration.release_blocked", { count });
+}
+
 /** Each `**<n>.<x>) …**` paragraph's text after its closing `**`, keyed `"<n>.<x>"`. */
 export function declarationItems(source: string): ReadonlyMap<string, string> {
   const items = new Map<string, string>();
@@ -76,16 +81,49 @@ export function declarationItems(source: string): ReadonlyMap<string, string> {
   return items;
 }
 
+const SPANISH_DATE = new Intl.DateTimeFormat("es-ES", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
 export function spanishDate(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00Z`);
   // `Date` moves an impossible day (2026-02-30) on into the next month rather than refusing it.
-  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== isoDate) {
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== isoDate ||
+    date.getUTCFullYear() < 1000
+  ) {
     throw new AppError("declaration.date_invalid", { date: isoDate });
   }
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(date);
+  return SPANISH_DATE.format(date);
+}
+
+const SPANISH_MONTHS = Array.from(
+  { length: 12 },
+  (_, month) =>
+    SPANISH_DATE.formatToParts(Date.UTC(2000, month, 1)).find((part) => part.type === "month")!
+      .value,
+);
+
+/** The `YYYY-MM-DD` that item 1.l)'s first bullet states, in the words `spanishDate` writes. */
+export function declarationDate(source: string): string {
+  const bullet = /^\*\*1\.l\)\*\*\s*\n- ((?:.+\n?)(?: {2}.+\n?)*)/m.exec(source)?.[1] ?? "";
+  const joined = bullet.replace(/\s+/g, " ").trim();
+  const at = joined.lastIndexOf(": ");
+  const line = (at < 0 ? joined : joined.slice(at + 2)).replace(/\.$/, "");
+  const words = /^(\d{1,2}) de (\p{L}+) de (\d{4})$/u.exec(line);
+  const month = words ? SPANISH_MONTHS.indexOf(words[2]!) + 1 : 0;
+  if (words && month > 0) {
+    const [, day, , year] = words;
+    const date = `${year!}-${String(month).padStart(2, "0")}-${day!.padStart(2, "0")}`;
+    try {
+      if (spanishDate(date) === line) return date;
+    } catch {
+      // `spanishDate` refuses an impossible day, such as 31 de febrero: it is unreadable too.
+    }
+  }
+  throw new AppError("declaration.date_unreadable", { line: bullet === "" ? "" : line });
 }

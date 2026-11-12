@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { declarationSourceFor } from "../../test/declaration.js";
 import {
+  declarationDate,
   declarationItems,
   parseFunctions,
   prepareDeclarationSource,
@@ -124,9 +126,57 @@ describe("spanishDate", () => {
     "22/10/2026",
     "2026-10-22T00:00",
     " 2026-10-22",
+    "0999-02-28",
+    "0000-01-01",
   ])("refuses %j, which is not a calendar date written YYYY-MM-DD", (date) => {
     expect(() => spanishDate(date)).toThrow(
       expect.objectContaining({ code: "declaration.date_invalid", params: { date } }),
+    );
+  });
+});
+
+describe("declarationDate", () => {
+  it.each([
+    ["2026-12-03", "3 de diciembre de 2026"],
+    ["2026-03-01", "1 de marzo de 2026"],
+  ])("reads %s back from item 1.l)'s %j", (date, words) => {
+    const source = declarationSourceFor("1.2.3", { date });
+    expect(source).toContain(`responsable del mismo: ${words}.`);
+
+    expect(declarationDate(source)).toBe(date);
+  });
+
+  it.each([
+    ["an impossible day", "31 de febrero de 2026"],
+    ["a slot never filled", "‹fecha›"],
+    ["a day with a leading zero", "03 de diciembre de 2026"],
+    ["a month that is not one", "3 de brumario de 2026"],
+  ])("refuses %s", (_name, line) => {
+    const source = declarationSourceFor("1.2.3").replace("22 de octubre de 2026", line);
+
+    expect(() => declarationDate(source)).toThrow(
+      expect.objectContaining({ code: "declaration.date_unreadable", params: { line } }),
+    );
+  });
+
+  it("refuses a bullet with no `: `, naming the whole bullet", () => {
+    const source = declarationSourceFor("1.2.3").replace(
+      /(\*\*1\.l\)\*\*\s*\n- )[\s\S]*?22 de octubre de 2026\./,
+      "$1x3 de diciembre de 2026",
+    );
+    expect(source).toContain("- x3 de diciembre de 2026\n");
+
+    expect(() => declarationDate(source)).toThrow(
+      expect.objectContaining({
+        code: "declaration.date_unreadable",
+        params: { line: "x3 de diciembre de 2026" },
+      }),
+    );
+  });
+
+  it("refuses a source with no 1.l) bullet", () => {
+    expect(() => declarationDate("**1.k)** nada\n")).toThrow(
+      expect.objectContaining({ code: "declaration.date_unreadable", params: { line: "" } }),
     );
   });
 });

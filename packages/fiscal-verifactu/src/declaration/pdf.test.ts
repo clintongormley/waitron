@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { declarationSource as source, testProducer as producer } from "../../test/declaration.js";
+import { pdfPages as pages } from "../../test/declaration-pdf.js";
 import { renderDeclarationPdf } from "./pdf.js";
 
 const missing = vi.hoisted(() => new Set<number>());
@@ -20,29 +20,6 @@ vi.mock("fontkit", async (importOriginal) => {
 });
 
 afterEach(() => missing.clear());
-
-async function pages(bytes: Uint8Array) {
-  const task = getDocument({
-    data: bytes.slice(),
-    useSystemFonts: false,
-    disableFontFace: true,
-    useWorkerFetch: false,
-    useWasm: false,
-  });
-  const pdf = await task.promise;
-  const read = [];
-  for (let number = 1; number <= pdf.numPages; number++) {
-    const page = await pdf.getPage(number);
-    const size = page.getViewport({ scale: 1 });
-    const text = (await page.getTextContent()).items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ")
-      .replace(/\s+/g, " ");
-    read.push({ width: size.width, height: size.height, text });
-  }
-  await task.destroy();
-  return read;
-}
 
 describe("renderDeclarationPdf", () => {
   it("draws the real template on A4 pages with the producer's values", async () => {

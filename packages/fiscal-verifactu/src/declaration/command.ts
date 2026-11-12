@@ -2,19 +2,21 @@ import "../errors.js";
 import { readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { AppError, isAppError, readSoftwareProducer } from "@waitron/shared";
+import { AppError, isAppError, isReleaseVersion, readSoftwareProducer } from "@waitron/shared";
 import {
   refuseProducerSettings,
   runningProducer,
   SOFTWARE_IDENTITY,
 } from "../software-identity.js";
+import { writeReleaseFolder } from "./folder.js";
 import { BREAK_OR_CONTROL, renderDeclaration, type DeclarationProducer } from "./render.js";
 import {
   declarationItems,
   prepareDeclarationSource,
+  refuseBlockers,
   releaseBlockers,
   SI_NO,
   spanishDate,
@@ -40,6 +42,7 @@ const OPTIONS = {
   show: ["draft", "version", "place", "date"],
   write: ["version", "place", "date"],
   check: ["version"],
+  render: ["version", "out"],
 } as const;
 
 type Subcommand = keyof typeof OPTIONS;
@@ -49,9 +52,8 @@ interface Arguments {
   version: string;
   place: string;
   date: string;
+  out: string;
 }
-
-const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 function refuse(argument: string): never {
   throw new AppError("declaration.argument_invalid", { argument });
@@ -84,7 +86,7 @@ function parse(argv: string[]): { command: Subcommand; args: Arguments } {
     if (name !== "draft" && values[name] === undefined) refuse(`--${name}`);
   }
   const args = values as Partial<Arguments>;
-  if (!VERSION.test(args.version!)) refuse("--version");
+  if (!isReleaseVersion(args.version!)) refuse("--version");
   // The place is written into the source before its markup is read, so it may carry none.
   if (
     args.place !== undefined &&
@@ -92,6 +94,7 @@ function parse(argv: string[]): { command: Subcommand; args: Arguments } {
   ) {
     refuse("--place");
   }
+  if (args.out !== undefined && !isAbsolute(args.out)) refuse("--out");
   if (args.date !== undefined) spanishDate(args.date);
   return {
     command: command as Subcommand,
@@ -100,13 +103,9 @@ function parse(argv: string[]): { command: Subcommand; args: Arguments } {
       version: args.version!,
       place: args.place ?? "",
       date: args.date ?? "",
+      out: args.out ?? "",
     },
   };
-}
-
-function refuseBlockers(source: string): void {
-  const count = releaseBlockers(source).length;
-  if (count > 0) throw new AppError("declaration.release_blocked", { count });
 }
 
 function libraryVersion(): string {
@@ -146,33 +145,48 @@ async function show(io: DeclarationIo, args: Arguments): Promise<void> {
 async function write(io: DeclarationIo, args: Arguments): Promise<void> {
   const source = await prepared(io, args);
   refuseBlockers(source);
-  const name = `declarations/v${args.version}.md`;
+  const name = writtenName(args.version);
   await writeFile(join(io.root, name), source);
   io.stdout(`wrote ${name}\n`);
 }
 
-async function check(io: DeclarationIo, args: Arguments): Promise<void> {
-  const name = `declarations/v${args.version}.md`;
-  const source = await readFile(join(io.root, name), "utf8");
+function writtenName(version: string): string {
+  return `declarations/v${version}.md`;
+}
+
+async function agreeingSource(io: DeclarationIo, version: string): Promise<string> {
+  const source = await readFile(join(io.root, writtenName(version)), "utf8");
   refuseBlockers(source);
   const items = declarationItems(source);
   const expected: Record<string, string> = {
     "1.a": SOFTWARE_IDENTITY.name,
     "1.b": SOFTWARE_IDENTITY.code,
-    "1.c": args.version,
+    "1.c": version,
     "1.e": SI_NO[SOFTWARE_IDENTITY.onlyVerifactu],
     "1.f": SI_NO[SOFTWARE_IDENTITY.multipleTaxpayersPossible],
   };
   for (const [item, value] of Object.entries(expected)) {
     if (items.get(item) !== value) throw new AppError("declaration.disagrees", { item });
   }
-  io.stdout(`${name} agrees\n`);
+  return source;
+}
+
+async function check(io: DeclarationIo, args: Arguments): Promise<void> {
+  await agreeingSource(io, args.version);
+  io.stdout(`${writtenName(args.version)} agrees\n`);
+}
+
+async function render(io: DeclarationIo, args: Arguments): Promise<void> {
+  const source = await agreeingSource(io, args.version);
+  await writeReleaseFolder(args.out, source, producer(io.env));
+  io.stdout(`wrote ${args.out}\n`);
 }
 
 const RUN: Record<Subcommand, (io: DeclarationIo, args: Arguments) => Promise<void>> = {
   show,
   write,
   check,
+  render,
 };
 
 export async function runDeclarationCommand(argv: string[], io: DeclarationIo): Promise<number> {
