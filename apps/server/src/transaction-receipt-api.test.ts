@@ -576,7 +576,7 @@ it("orderless writes require device proof while reads and handover need no print
 });
 it("orderless delivery checks every source zone before any status or action", async () => {
   const firstSale = await saleOf(await placedIssuedBill(venue, "Croquettes"));
-  const secondSale = await saleOf(await placedIssuedBill(venue, "Caña"));
+  const secondSale = await saleOf(await placedIssuedBill(venue, "Croquettes"));
   const own = await projectionInvoice({
     counterpartyTaxId: "B00000000",
     counterpartyLegalName: "Recipient",
