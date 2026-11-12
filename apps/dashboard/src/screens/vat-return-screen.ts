@@ -1,3 +1,4 @@
+import "../widgets/handover-report-warning.js";
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { capitaliseFirst } from "@waitron/shared";
@@ -153,6 +154,7 @@ export class VatReturnScreen extends LitElement {
       : (this.refused.declarationType ?? "");
     const marked = typeError !== "" || Object.keys(this.refused).length > 0;
     return html`<h1>${t("vat_return.title")}</h1>
+      <dashboard-handover-report-warning .api=${this.api}></dashboard-handover-report-warning>
       <p class="intro">${t("vat_return.intro")}</p>
       <div class="form">
         <wt-combobox

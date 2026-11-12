@@ -1,8 +1,14 @@
 export const en = {
+  "handover_warning.unconfirmed":
+    "An emergency handover is recorded. Its return remains unconfirmed. Check the handover dates.",
+  "handover_warning.unavailable":
+    "Handover status could not be checked. Try Refresh handover status.",
+  "handover_warning.check": "Check handover intervals",
+  "handover_warning.refresh": "Refresh handover status",
   "nav.handover_intervals": "Handover intervals",
   "handover_intervals.title": "Handover intervals",
   "handover_intervals.unconfirmed":
-    "Completeness and amounts remain unconfirmed here, even after a complete return. Open this list from Reporting; cash-up and other reports show no warning beside their figures.",
+    "Completeness and amounts remain unconfirmed here, even after a complete return.",
   "handover_intervals.zone": "Times in {zone}",
   "handover_intervals.guide": "Read the handover guide",
   "handover_intervals.empty": "No emergency handover intervals.",
@@ -3899,10 +3905,16 @@ export type StringKey = keyof typeof en;
 
 // Not Partial: an untranslated key fails typecheck rather than falling through to English.
 export const es: Record<StringKey, string> = {
+  "handover_warning.unconfirmed":
+    "Hay un traspaso de emergencia registrado. Su devolución sigue sin confirmar. Comprueba las fechas del traspaso.",
+  "handover_warning.unavailable":
+    "No se pudo comprobar el estado del traspaso. Pulsa Actualizar el estado del traspaso.",
+  "handover_warning.check": "Comprobar los intervalos del traspaso",
+  "handover_warning.refresh": "Actualizar el estado del traspaso",
   "nav.handover_intervals": "Intervalos del traspaso",
   "handover_intervals.title": "Intervalos del traspaso",
   "handover_intervals.unconfirmed":
-    "Aquí, la integridad y los importes siguen sin confirmar, incluso tras una devolución completa. Abre esta lista desde Informes; el arqueo y los demás informes no muestran ningún aviso junto a sus cifras.",
+    "Aquí, la integridad y los importes siguen sin confirmar, incluso tras una devolución completa.",
   "handover_intervals.zone": "Horas en {zone}",
   "handover_intervals.guide": "Lee la guía del traspaso",
   "handover_intervals.empty": "No hay intervalos de traspasos de emergencia.",

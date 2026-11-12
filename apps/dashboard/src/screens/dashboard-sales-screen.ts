@@ -1,3 +1,4 @@
+import "../widgets/handover-report-warning.js";
 import {
   renderDepartmentTakings,
   departmentTakingsStyles,
@@ -462,6 +463,7 @@ export class SalesScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1>${t("sales.title")}</h1>
+      <dashboard-handover-report-warning .api=${this.api}></dashboard-handover-report-warning>
       <div class="pickers">
         <wt-input
           type="date"
