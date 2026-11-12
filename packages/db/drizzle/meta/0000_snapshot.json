@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3b1514df-5aab-435a-bbb4-d2dd41f33c87",
+  "id": "7cc10c8b-73c5-4a08-8491-13cbf93546e4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -5747,20 +5747,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "corrective_sale_id": {
-          "name": "corrective_sale_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tender_refund_id": {
-          "name": "tender_refund_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "submission_id": {
           "name": "submission_id",
           "type": "text",
@@ -5775,27 +5761,119 @@
           "notNull": true,
           "autoincrement": false
         },
+        "gross": {
+          "name": "gross",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "line_ids": {
+          "name": "line_ids",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requested_by": {
+          "name": "requested_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "authorized_by": {
+          "name": "authorized_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "via_override": {
+          "name": "via_override",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "corrective_sale_id": {
+          "name": "corrective_sale_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ended_by": {
+          "name": "ended_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
-        "invoice_corrections_submission_idx": {
-          "name": "invoice_corrections_submission_idx",
+        "invoice_corrections_open_key": {
+          "name": "invoice_corrections_open_key",
+          "columns": [
+            "original_sale_id"
+          ],
+          "isUnique": true,
+          "where": "\"invoice_corrections\".\"state\" = 'open'"
+        },
+        "invoice_corrections_submission_key": {
+          "name": "invoice_corrections_submission_key",
           "columns": [
             "original_sale_id",
             "submission_id"
-          ],
-          "isUnique": false
-        },
-        "invoice_corrections_tender_refund_key": {
-          "name": "invoice_corrections_tender_refund_key",
-          "columns": [
-            "tender_refund_id"
           ],
           "isUnique": true
         }
@@ -5827,9 +5905,139 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "invoice_corrections_tender_refund_fk": {
-          "name": "invoice_corrections_tender_refund_fk",
+        "invoice_corrections_device_fk": {
+          "name": "invoice_corrections_device_fk",
           "tableFrom": "invoice_corrections",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "invoice_corrections_node_fk": {
+          "name": "invoice_corrections_node_fk",
+          "tableFrom": "invoice_corrections",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "invoice_corrections_source_ck": {
+          "name": "invoice_corrections_source_ck",
+          "value": "\"invoice_corrections\".\"source\" in ('device', 'demo_seed', 'readiness_test', 'operator_script')"
+        },
+        "invoice_corrections_source_device_ck": {
+          "name": "invoice_corrections_source_device_ck",
+          "value": "(\"invoice_corrections\".\"source\" = 'device') = (\"invoice_corrections\".\"device_id\" is not null)"
+        },
+        "invoice_corrections_state_ck": {
+          "name": "invoice_corrections_state_ck",
+          "value": "\"invoice_corrections\".\"state\" in ('open', 'filed', 'discarded', 'closed')"
+        },
+        "invoice_corrections_gross_ck": {
+          "name": "invoice_corrections_gross_ck",
+          "value": "typeof(\"invoice_corrections\".\"gross\") = 'integer' and \"invoice_corrections\".\"gross\" > 0"
+        },
+        "invoice_corrections_filed_ck": {
+          "name": "invoice_corrections_filed_ck",
+          "value": "(\"invoice_corrections\".\"state\" = 'filed') = (\"invoice_corrections\".\"corrective_sale_id\" is not null)"
+        },
+        "invoice_corrections_ended_ck": {
+          "name": "invoice_corrections_ended_ck",
+          "value": "(\"invoice_corrections\".\"state\" = 'open') = (\"invoice_corrections\".\"ended_at\" is null)"
+        },
+        "invoice_corrections_ended_by_ck": {
+          "name": "invoice_corrections_ended_by_ck",
+          "value": "(\"invoice_corrections\".\"state\" <> 'open' or \"invoice_corrections\".\"ended_by\" is null) and (\"invoice_corrections\".\"state\" not in ('discarded', 'closed') or \"invoice_corrections\".\"ended_by\" is not null)"
+        }
+      }
+    },
+    "invoice_correction_refunds": {
+      "name": "invoice_correction_refunds",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "invoice_correction_id": {
+          "name": "invoice_correction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tender_refund_id": {
+          "name": "tender_refund_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "invoice_correction_refunds_request_idx": {
+          "name": "invoice_correction_refunds_request_idx",
+          "columns": [
+            "invoice_correction_id",
+            "request_id"
+          ],
+          "isUnique": false
+        },
+        "invoice_correction_refunds_tender_refund_key": {
+          "name": "invoice_correction_refunds_tender_refund_key",
+          "columns": [
+            "tender_refund_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "invoice_correction_refunds_correction_fk": {
+          "name": "invoice_correction_refunds_correction_fk",
+          "tableFrom": "invoice_correction_refunds",
+          "tableTo": "invoice_corrections",
+          "columnsFrom": [
+            "invoice_correction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "invoice_correction_refunds_tender_refund_fk": {
+          "name": "invoice_correction_refunds_tender_refund_fk",
+          "tableFrom": "invoice_correction_refunds",
           "tableTo": "tender_refunds",
           "columnsFrom": [
             "tender_refund_id"
