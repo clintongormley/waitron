@@ -312,7 +312,7 @@ for (const add of [false, true]) {
       kind: "comp",
       actions: add ? ["comp"] : ["comp", "discount_percent"],
       maxPercentBp: null,
-      maxAmount: add ? null : "30.00",
+      maxAmount: add ? "0" : "30.00",
 
       noteRequired: !add,
     };

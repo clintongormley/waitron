@@ -625,7 +625,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       actions: kind === "comp" ? [...(reason?.actions ?? [])] : [],
       maxPercent:
         reason?.maxPercentBp == null ? "" : localDecimal(String(reason.maxPercentBp / 100)),
-      maxAmount: reason?.maxAmount == null ? "" : localDecimal(reason.maxAmount),
+      maxAmount: !reason ? "0" : reason.maxAmount == null ? "" : localDecimal(reason.maxAmount),
       noteRequired: reason?.noteRequired ?? false,
     };
     const draft = draftScopeFor(this, {

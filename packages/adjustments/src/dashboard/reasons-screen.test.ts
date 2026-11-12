@@ -999,8 +999,8 @@ describe("the editor", () => {
     [
       "en",
       "No limit",
-      "Counts every discount on the item. 0 means every comp with this reason needs approval.",
-      "0 means every comp with this reason needs approval.",
+      "Leave blank for no limit. Counts every discount on the item. 0 means every comp with this reason needs approval.",
+      "Leave blank for no limit. 0 means every comp with this reason needs approval.",
     ],
     [
       "es",
@@ -1036,7 +1036,7 @@ describe("the editor", () => {
         [
           "maxAmount",
           "About most off one bill",
-          "0 means every comp with this reason needs approval.",
+          "Leave blank for no limit. 0 means every comp with this reason needs approval.",
         ],
       ],
     ],
@@ -1248,6 +1248,7 @@ describe("the editor", () => {
     await press(el, "add-reason");
     expect(modal(el)!.getAttribute("heading")).toBe("Add reason");
     await type(el, "name", "Birthday");
+    await type(el, "maxAmount", "");
     await toggleAction(el, "comp");
     await press(el, "save-editor");
     expect(api.createReason).toHaveBeenCalledWith({
@@ -1567,7 +1568,7 @@ describe("the editor", () => {
       expect(signLeft < box.left + box.width / 2 ? "before" : "after").toBe(side);
       expect(helpTip(el, "maxAmount").textContent!.trim()).toBe(
         locale === "en"
-          ? "0 means every comp with this reason needs approval."
+          ? "Leave blank for no limit. 0 means every comp with this reason needs approval."
           : ES["adjustments.field.max_amount_hint"],
       );
     },
@@ -2135,7 +2136,7 @@ describe("the bill comp limit", () => {
       heading: "Limit on a bill's comps",
       label: "Most comped on one bill",
       placeholder: "No limit",
-      hint: "Every comp on the bill counts. 0 means every comp on a bill needs approval.",
+      hint: "Leave blank for no limit. Every comp on the bill counts. 0 means every comp on a bill needs approval.",
       value: "40.00",
       save: "Save limit",
     },
@@ -2441,6 +2442,24 @@ it.each([
 });
 
 describe("permission-based limits", () => {
+  it("creates a Comp reason with a zero limit until the venue changes it", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "add-reason");
+    await type(el, "name", "Celebration");
+    await toggleAction(el, "comp");
+    await press(el, "save-editor");
+    expect(api.createReason).toHaveBeenCalledWith({
+      name: "Celebration",
+      names: {},
+      kind: "comp",
+      actions: ["comp"],
+      maxPercentBp: null,
+      maxAmount: "0",
+      noteRequired: false,
+    });
+  });
+
   it("saves a reason with a zero amount limit", async () => {
     const api = fakeApi();
     const el = await mount(api);
