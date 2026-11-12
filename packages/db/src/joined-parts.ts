@@ -11,7 +11,7 @@ type ResetRowColumns = Record<
 
 /**
  * `movesTable`'s rule (apps/server/src/floor-reset-plan.ts) in SQL, for reset row `row`: its table
- * has a today's row, drawn and not taken off, and is in a merge, split off, or not exactly at the
+ * is on today's map, drawn and not taken off, and is in a merge, split off, or not exactly at the
  * row's placement.
  */
 export function resetRowMoves(row: ResetRowColumns): SQL {

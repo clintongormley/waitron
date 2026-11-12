@@ -36,6 +36,7 @@ import {
   catchUpZone,
   ensureToday,
   moveToday,
+  putBackToday,
   resetZone,
   todayBusinessDay,
 } from "./floor-today-store.js";
@@ -2229,4 +2230,14 @@ it("late saved-group formation restores a contained manual group's reset slots",
   expect((await mergeOf(v, table.b!))!.members.map((m) => m.tableId).sort()).toEqual(
     [table.a!, table.b!, table.c!].sort(),
   );
+});
+
+it("refuses putting a table outside today's map back on it", async () => {
+  const id = await v.table(`Off map ${floorLabelSuffix()}`, v.tables.zoneId, { today: false });
+  await expect(inTx(v, (tx) => putBackToday(tx, id))).rejects.toMatchObject({
+    code: "table.not_on_today_plan",
+    params: { tableId: id },
+  });
+  expect((await tableRow(v, id)).onFloor).toBe(false);
+  expect(await todayRow(id)).toBeUndefined();
 });

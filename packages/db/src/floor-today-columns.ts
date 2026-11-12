@@ -1,7 +1,6 @@
 import { diningTables } from "./schema/dining-tables.js";
 
 const fields = {
-  tableId: "id",
   seats: "todaySeats",
   fixed: "todayFixed",
   x: "todayX",
@@ -14,7 +13,9 @@ const fields = {
   name: "todayName",
 } as const;
 type TableRow = typeof diningTables.$inferSelect;
-export type TodayRow = { [K in keyof typeof fields]: TableRow[(typeof fields)[K]] };
+export type TodayRow = { tableId: TableRow["id"] } & {
+  [K in keyof typeof fields]: TableRow[(typeof fields)[K]];
+};
 export const todayColumns = {
   tableId: diningTables.id,
   seats: diningTables.todaySeats,
@@ -34,7 +35,9 @@ export function todaySet(
   return {
     onFloor: true,
     ...Object.fromEntries(
-      Object.entries(values).map(([key, value]) => [fields[key as keyof typeof values], value]),
+      Object.entries(fields)
+        .filter(([key]) => Object.hasOwn(values, key))
+        .map(([key, column]) => [column, values[key as keyof typeof fields]]),
     ),
   };
 }

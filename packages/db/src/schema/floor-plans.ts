@@ -24,6 +24,7 @@ import { diningTables } from "./dining-tables.js";
 import { departments } from "./venue-service/service.js";
 import { floorZones } from "./floor-zones.js";
 
+// Schema imports form a cycle, so this factory must be a function declaration.
 export function floorPlanShape(name: string) {
   return enumType(["rect", "round"])(name);
 }

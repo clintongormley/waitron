@@ -16,7 +16,7 @@ export interface Today {
   tableId: string;
   zoneId: string;
   row: TodayRow;
-  /** Every member's today's row, this table's included, by table id; null when the table is in no merge. */
+  /** Every member's today values, this table's included, by table id; null when the table is in no merge. */
   merge: { joinId: string; members: TodayRow[] } | null;
 }
 
@@ -110,7 +110,7 @@ export async function refuseNeedsMoving(
   if (first !== undefined) throw new AppError("table.needs_moving", { tableId: first });
 }
 
-/** Any of the tables taken off today, the first in the caller's order named; a table with no today's row never is. */
+/** Any of the tables taken off today, the first in the caller's order named; a table outside today's map never is. */
 export async function refuseTakenOff(tx: Transaction, tableIds: readonly string[]): Promise<void> {
   const rows = await tx
     .select({ tableId: diningTables.id })

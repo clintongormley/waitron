@@ -83,7 +83,6 @@ export const QUERY_DEPENDENCIES = {
     "routing_cells",
     "routing_cell_periods",
     "floor_zones",
-
     "floor_today_join_tables",
     "floor_today_joins",
   ],

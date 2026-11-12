@@ -187,7 +187,6 @@ export const QUERY_DEPENDENCIES = {
     "bill_payment_refunds",
     "working_orders",
     "dining_tables",
-
     "floor_zones",
     "party_tables",
     "products",
@@ -204,7 +203,6 @@ export const QUERY_DEPENDENCIES = {
     "dining_tables",
     "party_tables",
     "parties",
-
     "floor_today_join_tables",
     "floor_today_joins",
   ],
@@ -472,7 +470,6 @@ export const QUERY_DEPENDENCIES = {
     "routing_cells",
     "routing_cell_periods",
     "floor_zones",
-
     "floor_today_join_tables",
     "floor_today_joins",
   ],

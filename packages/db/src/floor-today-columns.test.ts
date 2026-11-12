@@ -50,3 +50,25 @@ it("maps every today field and clears a placed table back off the floor", async 
   ]);
   expect((await suite.db.select().from(diningTables))[0]!.onFloor).toBe(false);
 });
+
+it("copies today's values without changing either table's identity", async () => {
+  const zone = await seedZone(suite.db, { name: "Copy" });
+  await suite.db.insert(diningTables).values([
+    { id: "first", label: "First", zoneId: zone.id, onFloor: true, todaySeats: 4 },
+    { id: "second", label: "Second", zoneId: zone.id },
+  ]);
+  const [source] = await suite.db
+    .select(todayColumns)
+    .from(diningTables)
+    .where(eq(diningTables.id, "first"));
+  await suite.db.update(diningTables).set(todaySet(source!)).where(eq(diningTables.id, "second"));
+  expect(
+    await suite.db
+      .select({ id: diningTables.id, seats: diningTables.todaySeats })
+      .from(diningTables)
+      .orderBy(diningTables.id),
+  ).toEqual([
+    { id: "first", seats: 4 },
+    { id: "second", seats: 4 },
+  ]);
+});

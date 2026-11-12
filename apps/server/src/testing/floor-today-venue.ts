@@ -374,7 +374,7 @@ export async function mergeOf(
   });
 }
 
-/** The room's stored revision; undefined with no row. */
+/** The room's stored revision; undefined before a recorded business day. */
 export async function zoneRevisionOf(v: PartyVenue, zoneId: string): Promise<number | undefined> {
   const [row] = await inTx(v, (tx) =>
     tx

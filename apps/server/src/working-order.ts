@@ -8922,7 +8922,7 @@ async function readTodayTables(tx: Transaction): Promise<Map<string, TableToday>
         takenOff: row.takenOff,
         joinId: row.joinId,
         joinSeats: row.joinSeats,
-        zoneRevision: row.zoneRevision ?? 0,
+        zoneRevision: row.zoneRevision,
         name: row.name,
         joinName: row.joinName,
         needsMoving: row.needsMoving,
