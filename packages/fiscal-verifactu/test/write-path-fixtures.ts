@@ -1,9 +1,12 @@
+import { eq } from "drizzle-orm";
 import type { RecordSaleInput } from "@waitron/core";
+import type { Database } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { jobOrigin } from "@waitron/shared";
 import type { NodeId, SeriesId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { VerifactuClient } from "@waitron/verifactu";
+import { registrosFacturacion } from "../src/schema/registros.js";
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
@@ -86,4 +89,20 @@ export function saleInput(
     clock: steadyClock,
     ...overrides,
   };
+}
+
+/** The stored invoice number and generation time of the record `recordId` names, for suites
+ * outside this package that may not name its Spanish columns. */
+export async function storedRecord(
+  db: Database,
+  recordId: string,
+): Promise<{ invoiceNumber: string; generatedAt: Date } | undefined> {
+  const [row] = await db
+    .select({
+      invoiceNumber: registrosFacturacion.numSerieFactura,
+      generatedAt: registrosFacturacion.fechaHoraHusoGenRegistro,
+    })
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, recordId));
+  return row;
 }

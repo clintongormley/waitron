@@ -41,12 +41,12 @@ import { eq, sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import { seriesId } from "@waitron/shared";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
 import {
   fakeClient,
   saleInput,
   staticResolver,
   steadyClock,
+  storedRecord,
 } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 
 it("persists a recovery hour before the real configured restore runner activates it", async () => {
@@ -871,16 +871,9 @@ describe("a restore whose clock is before or past the backup's newest record", (
         saleInput({ nodeId: node.nodeId, seriesId: seriesId(standard!.id), clock: boxClock }),
       ),
     );
-    const [written] = await suite.db
-      .select({
-        series: registrosFacturacion.numSerieFactura,
-        at: registrosFacturacion.fechaHoraHusoGenRegistro,
-      })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.id, fiscal.recordId));
-    expect(written).toEqual({
-      series: `A-${selected.identity}/1`,
-      at: new Date(Math.floor(clock.wall() / 1000) * 1000),
+    expect(await storedRecord(suite.db, fiscal.recordId)).toEqual({
+      invoiceNumber: `A-${selected.identity}/1`,
+      generatedAt: new Date(Math.floor(clock.wall() / 1000) * 1000),
     });
   });
 
