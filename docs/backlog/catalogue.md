@@ -878,7 +878,7 @@ tests. Media still validates required image names and translates its refusal to
 
 ## Bundle: wt-data-table: heading wrap, long names, odds and ends
 
-11 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+10 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **The Products tree's hidden counts may be placed against the page at narrow width** — not measured; left open by A453.
   [Detail](catalogue.md#the-products-trees-hidden-counts-may-be-placed-against-the-page-at-narrow-width)
@@ -910,9 +910,7 @@ tests. Media still validates required image names and translates its refusal to
   answers false for a row the table draws open** (`aria-expanded="true"`) — OPEN, found by A539's
   mutation tests, not fixed. Outside a search it answers true for the same row
   (`packages/ui/src/components/wt-data-table.ts`).
-- **A890. A tree `wt-data-table` draws a row's activator in its first column even when that column
-  sets `activatesRow: false`**
-  [Detail](dashboard.md#a890-a-tree-wt-data-table-draws-a-rows-activator-in-its-first-column-even-when-that-column-sets-activatesrow-false)
+
 
 ## Bundle: Translate all followups
 

@@ -1588,6 +1588,41 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     expect(await nativeSaveDisabled(el)).toBe(true);
   });
 
+  it.each(["firstNames", "lastNames"])(
+    "drops a taken generated display name when %s changes it",
+    async (name) => {
+      const profile = await apiStub().getProfile();
+      const { el } = await mount({
+        getProfile: vi.fn().mockResolvedValue({ ...profile, displayName: "Alex Rivera" }),
+        saveProfile: vi.fn().mockRejectedValue({ code: "person.display_name_taken" }),
+      });
+      await editDetails(el);
+      input(el, "telephone", "+34 611 222 333");
+      await click(el, "save");
+      expect(field(el, "displayName").error).toBe(codeMessage("person.display_name_taken"));
+      input(el, name, name === "firstNames" ? "Sam" : "Taylor");
+      await flush(el);
+      expect(field(el, "displayName").value).toBe(
+        name === "firstNames" ? "Sam Rivera" : "Alex Taylor",
+      );
+      expect(field(el, "displayName").error).toBe("");
+      expect(await bottomOf(el)).toBe("");
+    },
+  );
+
+  it("keeps a taken customised display name when a given name changes", async () => {
+    const { el } = await mount({
+      saveProfile: vi.fn().mockRejectedValue({ code: "person.display_name_taken" }),
+    });
+    await editDetails(el);
+    input(el, "displayName", "Captain");
+    await click(el, "save");
+    input(el, "firstNames", "Sam");
+    await flush(el);
+    expect(field(el, "displayName").value).toBe("Captain");
+    expect(field(el, "displayName").error).toBe(codeMessage("person.display_name_taken"));
+  });
+
   it("re-checks a refused field once it changes", async () => {
     const { el } = await mount({
       saveProfile: vi.fn().mockRejectedValue({ code: "person.display_name_taken" }),

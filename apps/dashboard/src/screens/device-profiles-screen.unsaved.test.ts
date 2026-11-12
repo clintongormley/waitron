@@ -870,3 +870,40 @@ it("W100 a department saved before a refused reader save is not sent again", asy
   expect(writes).toHaveLength(2);
   expect(writes[1]![6]).toBeUndefined();
 });
+
+it("the profile parent link keeps the item heading and protects unsaved edits", async () => {
+  const { app, screen } = await mount();
+  expect([...screen.shadowRoot!.querySelectorAll("h1")].map((h) => h.textContent!.trim())).toEqual([
+    "Counter",
+  ]);
+  const parent = screen.shadowRoot!.querySelector<HTMLAnchorElement>("nav a")!;
+  expect(parent.getAttribute("href")).toBe("/manage/device-profiles");
+  expect(parent.textContent!.trim()).toBe(t("device_profiles.title"));
+  expect(parent.closest("nav")!.getAttribute("aria-label")).toBeTruthy();
+  const modified = new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true });
+  parent.addEventListener(
+    "click",
+    (event) => {
+      expect(event.defaultPrevented).toBe(false);
+      event.preventDefault();
+    },
+    { once: true },
+  );
+  parent.dispatchEvent(modified);
+  expect(q(screen, "editor-form")).not.toBeNull();
+  for (const name of ["New counter", "", "   "]) {
+    change(screen, "profile-name", name);
+    await screen.updateComplete;
+    expect(screen.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Counter");
+  }
+  change(screen, "profile-name", "New counter");
+  parent.click();
+  await choose(app, "keep");
+  expect((q(screen, "profile-name") as HTMLElementTagNameMap["wt-input"]).value).toBe(
+    "New counter",
+  );
+  parent.click();
+  await choose(app, "discard");
+  await expect.poll(() => q(screen, "editor-form")).toBeNull();
+  expect(unload()).toBe(false);
+});

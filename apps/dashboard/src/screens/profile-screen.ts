@@ -461,7 +461,6 @@ export class ProfileScreen extends LitElement {
         const value = event.detail.value;
         this.fields = { ...this.fields, [field]: value };
         if (field in this.requestRefused) this.requestRefused = {};
-        // deriveDisplayName leaves a customised display name alone, judged from the previous values.
         if (field === "firstNames" || field === "lastNames") {
           const nextFirst = field === "firstNames" ? value : prev.firstNames;
           const nextLast = field === "lastNames" ? value : prev.lastNames;
@@ -476,6 +475,8 @@ export class ProfileScreen extends LitElement {
             ),
           };
         }
+        if (this.fields.displayName !== prev.displayName && "displayName" in this.requestRefused)
+          this.requestRefused = {};
         this.#scope?.changed();
       }}
     >

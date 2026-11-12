@@ -791,21 +791,10 @@ The per-form classifications remain in the [A331 plan](../superpowers/plans/2026
   and no theme writes `--wt-color-danger-hover`, `--wt-color-danger-disabled` or
   `--wt-color-on-danger-disabled`.
 
-## A398 — device-profile editor heading remains to align with the sub-page pattern.
-
-The editor repeats the list title and has no parent link above the heading
-  (`apps/dashboard/src/screens/device-profiles-screen.ts`, `#renderEditor`). Deferred from lane E's
-  canvas-heading change because lane A's A366-5A changes that screen. Re-check its landed editor,
-  then apply the parent link and one item-name `h1` while retaining the unsaved-changes check.
-
-
 ## What C38 left as it was (a generated display name is the first given name and first surname, #827, owner decision 2026-09-28).
 
-Left as they were, from #827's review: unlike the two staff
-  forms, the profile screen keeps a taken-name message beside the display name when a first- or
-  last-name change regenerates that name (`apps/dashboard/src/screens/profile-screen.ts` drops only
-  the changed field's refusal); and the two staff forms turn the refusal into a field message
-  inside the form, where other dashboard forms receive field messages from their parent screen.
+The two staff forms turn the refusal into a field message inside the form, where other dashboard
+forms receive field messages from their parent screen.
 
 
 ## Loose ends left by C47 (#838/#839/#840/#841).
@@ -836,24 +825,6 @@ Left as they were, from #827's review: unlike the two staff
   real hardware; a physical authenticator ceremony; live SMTP through `startServer`; whether an
   intermediary cache honours `Vary: Accept-Language`. #328's overlapping-dialog state was reached
   from code only; nobody has shown a real pointer can get there.
-
-
-## Opening hours' create texts say "New …" and "+ …"
-
-- **Opening hours' create texts say "New …" and "+ …"** — `special.new` ("New special day") and
-  `season.add` ("+ Season", the Seasons window's add button) in
-  `packages/venue-service/src/dashboard/strings.ts`, against design-system.md → Wording's
-  "Add …". The "+" label comes from the A506 seasons spec.
-  Seen by A546's review; not changed there.
-
-
-## A890. A tree `wt-data-table` draws a row's activator in its first column even when that column sets `activatesRow: false`
-
-- **A890. A tree `wt-data-table` draws a row's activator in its first column even when that column
-  sets `activatesRow: false`** — OPEN, left by A813. A flat table now draws it in the first shown
-  column that does not opt out; tree mode still draws it at `ci === 0`
-  (`packages/ui/src/components/wt-data-table.ts`). No tree table sets the option on its first
-  column today; what a click on that cell's blank space then does was not tested.
 
 
 ## A1227. Check screens that add live subscriptions after an awaited read
