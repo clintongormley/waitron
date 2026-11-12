@@ -484,7 +484,6 @@ export interface UnsnoozeGroupDetail {
 }
 
 export interface AdjustDetail {
-  combined?: true;
   kind: AdjustKind;
   target: AdjustTarget;
   /** Pressed in the counter's basket, on the stored order it holds, rather than on the table's
@@ -3610,7 +3609,7 @@ export class TillTableOrderScreen extends LitElement {
               .filter((row) => row.parentLineNo === line.lineNo)
               .map((row) => lineAdjustTarget(row, this.lines, this.#adjustName(row)))
               .filter(priced);
-      this.#dispatch("adjust", { kind: "comp", combined: true, target });
+      this.#dispatch("adjust", { kind: "comp", target });
     } else if (action === "void")
       this.#dispatch("cancel-item", { lineId: slice.row.lineId, ...lineIds });
     else

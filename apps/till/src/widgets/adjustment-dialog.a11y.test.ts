@@ -36,6 +36,13 @@ const steaks: AdjustTarget = {
   total: "50.00",
   unitTotal: "25.00",
 };
+const wholeBill: AdjustTarget = {
+  lineId: null,
+  name: "Whole bill",
+  quantity: null,
+  total: "50.00",
+  unitTotal: null,
+};
 
 /** Continue, answered as the app answers it: the choice previewed, and the preview. */
 async function previewed(el: TillAdjustmentDialog, preview: AdjustmentPreview): Promise<void> {
@@ -62,13 +69,13 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
       theme,
     );
 
-  it("has no violations when a give-away opens", async () => {
+  it("has no violations when the Comp window opens", async () => {
     const { host } = await mount({});
     await expectNoA11yViolations(host);
   });
 
   it("has no violations with every field of a discount marked after an empty submission", async () => {
-    const { el, host } = await mount({ kind: "discount" });
+    const { el, host } = await mount({ kind: "discount", target: wholeBill });
     await pressed(el, "[data-adjust-continue]");
     await expectNoA11yViolations(host);
   });
@@ -108,8 +115,15 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
 
   it("has no violations asking for approval of one of two units before confirming", async () => {
     const { el, host } = await mount({});
-    await pressed(el, 'input[name="quantity"][value="1"]');
     await pressed(el, 'input[name="reason"]');
+    const quantity = el.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >('wt-number-stepper[name="adjustQuantity"]')!;
+    await quantity.updateComplete;
+    const count = quantity.shadowRoot!.querySelector("input")!;
+    count.value = "1";
+    count.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
     await previewed(el, {
       reduction: "50.00",
       nominalValue: "50.00",
@@ -124,7 +138,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
   });
 
   it("has no violations saying a discount takes the bill past its limit", async () => {
-    const { el, host } = await mount({ kind: "discount" });
+    const { el, host } = await mount({ kind: "discount", target: wholeBill });
     await pressed(el, 'input[name="reason"]');
     const input = el
       .shadowRoot!.querySelector('wt-input[name="percent"]')!
@@ -166,7 +180,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
   });
 
   it("has no violations showing the nearest amount and a refusal before confirming", async () => {
-    const { el, host } = await mount({ kind: "discount" });
+    const { el, host } = await mount({ kind: "discount", target: wholeBill });
     await pressed(el, 'input[name="discountKind"][value="amount"]');
     await pressed(el, 'input[name="reason"]');
     const input = el

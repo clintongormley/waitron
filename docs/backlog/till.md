@@ -2316,15 +2316,6 @@ the remaining till unit and tab edges joined on 2026-11-12.
   only, not queued to a lane.
   [Detail](till.md#a1013-online-booking-for-customers-owner-2026-10-22)
 
-## Bundle: Remove till code nothing reaches
-
-1 entry, size M. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
-
-- **A1007. The till's adjustment window keeps a give-away and a line discount nothing opens (left
-  open by A758-5).** Retire the two modes, make `kind: "comp"` mean the Comp window, and move the
-  table's comp tests in `till-app-adjustments.test.ts` onto it.
-  [Detail](till.md#a1007-the-tills-adjustment-window-keeps-a-give-away-and-a-line-discount-nothing-opens)
-
 ## Bundle: Table screen panels that do not fit
 
 3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -3828,21 +3819,6 @@ line and firing members one by one would start a fire group and a ticket for eac
 build review left for the owner: accept, word the button differently on a grouped row, or let the
 route take a list. Slice 4a's picker (Move dishes…) takes a row's first portions and is for moves
 only; comp, void and Fire now are unchanged.
-
-## A1007. The till's adjustment window keeps a give-away and a line discount nothing opens
-
-Since A758-5 a dish or extra is comped only through the Comp window
-(`combined`), on the table and at the counter; the window's separate `kind: "comp"` mode and its
-line `kind: "discount"` mode remain, with their titles (`adjust.comp_title`,
-`adjust.comp_extra_title`, `adjust.discount_title`, `adjust.discount_extra_title`,
-`adjust.do_comp`) and most of `adjustment-dialog.test.ts`; and `till-app-adjustments.test.ts`
-drives the table's comps through that separate mode (`requestAdjustment` emits no `combined`,
-`apps/till/src/till-app-adjustments.test.ts:356`) though the table screen sends `combined: true`
-(`apps/till/src/screens/till-table-order-screen.ts:2652`) — both since A773-1. Retire the two
-modes, make `kind: "comp"` mean the Comp window, and move those app tests onto it. The
-one-or-all choice (`#quantityChoice`, `apps/till/src/widgets/adjustment-dialog.ts:894`) and
-`adjust.quantity_one`, `adjust.quantity_all` and `adjust.quantity_shown` are not theirs alone:
-the cancel mode, which stays, uses them, so they stay unless the cancel moves too.
 
 ## A1020. The owner looks at A758-6's words and choices
 

@@ -12,7 +12,6 @@ class CompLeaveApp extends LitElement {
   previews: AdjustmentChoice[] = [];
   override render() {
     return html`<till-adjustment-dialog
-        .combined=${true}
         .target=${{ lineId: "dish", name: "Burger", quantity: "3", total: "36.00", unitTotal: "12.00", extras: [{ lineId: "extra", name: "Cheese", quantity: "3", total: "6.00", unitTotal: null, extra: true }] }}
         .reasons=${[{ id: "reason", name: "Complaint", actions: ["comp", "discount_percent", "discount_amount"], noteRequired: false, maxPercentBp: null, maxAmount: null, kind: "comp" }]}
         @adjust-close=${() => this.closes++}
@@ -28,7 +27,7 @@ afterEach(() => {
   setLocale("en");
 });
 it.each(["Cancel", "Escape"])(
-  "combined Comp %s preserves all choices until explicit Discard",
+  "Comp %s preserves all choices until explicit Discard",
   async (action) => {
     const { el: app } = await mountWidget<CompLeaveApp>("comp-leave-test-app", {});
     const form = app.shadowRoot!.querySelector<TillAdjustmentDialog>("till-adjustment-dialog")!;

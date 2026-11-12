@@ -158,13 +158,11 @@ describe("till-table-order-screen: comping a dish", () => {
     const asked = capture(el);
     expect(el.shadowRoot!.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
     for (const lineNo of [1, 2, 4, 5]) await comp(el, lineNo);
-    expect(
-      asked.map(({ kind, combined, target }) => [kind, combined, target.lineId, target.name]),
-    ).toEqual([
-      ["comp", true, "line-1", "Steak"],
-      ["comp", true, "line-2", "Pizza"],
-      ["comp", true, "line-4", "Ham"],
-      ["comp", true, "line-5", "Bread"],
+    expect(asked.map(({ kind, target }) => [kind, target.lineId, target.name])).toEqual([
+      ["comp", "line-1", "Steak"],
+      ["comp", "line-2", "Pizza"],
+      ["comp", "line-4", "Ham"],
+      ["comp", "line-5", "Bread"],
     ]);
     expect(asked[1]!.target.extras!.map((extra) => [extra.lineId, extra.name])).toEqual([
       ["line-3", olivesWithPizza()],
@@ -219,7 +217,6 @@ describe("till-table-order-screen: comping a dish", () => {
     expect(asked).toEqual([
       {
         kind: "comp",
-        combined: true,
         target: {
           lineId: "line-1",
           name: "Steak",
@@ -309,7 +306,7 @@ describe("till-table-order-screen: cancelling a dish", () => {
     ]);
     await comp(el, 2);
     expect(asked).toEqual([
-      { kind: "comp", combined: true, target: expect.objectContaining({ unitTotal: "9.75" }) },
+      { kind: "comp", target: expect.objectContaining({ unitTotal: "9.75" }) },
     ]);
   });
 
@@ -328,7 +325,6 @@ describe("till-table-order-screen: cancelling a dish", () => {
     await comp(el, 2);
     expect(asked).toHaveLength(1);
     expect(asked[0]!.kind).toBe("comp");
-    expect(asked[0]!.combined).toBe(true);
     expect(asked[0]!.target.extras).toEqual([
       {
         lineId: "line-3",

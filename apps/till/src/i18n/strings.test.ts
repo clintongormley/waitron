@@ -261,15 +261,6 @@ describe("the till's comp words follow the Comp window's (design D10)", () => {
   it.each([
     ["en", en],
     ["es", es],
-  ])("titles a comp with the Comp window's word (%s)", (_, strings) => {
-    const word = strings["comp.title"].replace(/…$/, "");
-    expect(strings["adjust.comp_title"].startsWith(word)).toBe(true);
-    expect(strings["adjust.comp_extra_title"].startsWith(word)).toBe(true);
-  });
-
-  it.each([
-    ["en", en],
-    ["es", es],
   ])("titles the bill's comp with the Comp window's word (%s)", (_, strings) => {
     const word = strings["comp.title"].replace(/…$/, "");
     expect(strings["table.discount_bill"].startsWith(word)).toBe(true);
@@ -291,7 +282,6 @@ describe("the till's comp words follow the Comp window's (design D10)", () => {
   ])("names a free comp with the Free choice's word (%s)", (_, strings) => {
     const free = strings["comp.free"].toLowerCase();
     expect(strings["comp.make_free"].toLowerCase()).toContain(free);
-    expect(strings["adjust.do_comp"].toLowerCase()).toContain(free);
   });
 
   it("has no Spanish comp string that says invitar", () => {

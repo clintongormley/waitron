@@ -208,7 +208,6 @@ it("A803 portion grouping: Comp on a grouped row offers the row's total, a count
   expect(events).toEqual([
     {
       kind: "comp",
-      combined: true,
       target: expect.objectContaining({
         lineId: "s-1",
         lineIds: ["s-1", "s-2", "s-3"],

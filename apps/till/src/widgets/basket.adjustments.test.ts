@@ -388,7 +388,7 @@ describe("till-basket: a stored counter order", () => {
       started: false,
       extra: true,
     };
-    expect(heard).toEqual([{ kind: "comp", combined: true, counter: true, target }]);
+    expect(heard).toEqual([{ kind: "comp", counter: true, target }]);
   });
 
   it("names an extra exactly as typed when its name spells the dish's slot", async () => {
@@ -580,7 +580,6 @@ describe("till-basket: a stored counter order", () => {
     expect(heard.map(({ kind, target }) => [kind, target.total, target.unitTotal])).toEqual([
       ["comp", "23.00", "11.50"],
     ]);
-    expect(heard[0]!.combined).toBe(true);
   });
 
   it("comps the whole order as the server listed it", async () => {
@@ -739,7 +738,6 @@ describe("A1208 a retrieved row of identical portions", () => {
     expect(heard).toEqual([
       {
         kind: "comp",
-        combined: true,
         counter: true,
         target: {
           lineId: "b-1",
@@ -782,7 +780,6 @@ describe("A1208 a retrieved row of identical portions", () => {
     expect(heard).toEqual([
       {
         kind: "comp",
-        combined: true,
         counter: true,
         target: {
           lineId: "c-1",

@@ -55,7 +55,6 @@ const extra: AdjustTarget = {
 async function mount(over: Record<string, unknown> = {}) {
   const { el } = await mountWidget<TillAdjustmentDialog>("till-adjustment-dialog", {
     kind: "comp",
-    combined: true,
     target: dish,
     reasons,
     ...over,

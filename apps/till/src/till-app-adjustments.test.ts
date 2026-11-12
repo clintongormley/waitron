@@ -340,8 +340,21 @@ async function press(el: TillApp, target: HTMLElement): Promise<void> {
 async function chooseReason(el: TillApp, name: string): Promise<void> {
   const radio = [
     ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="reason"]'),
-  ].find((candidate) => candidate.closest("label")!.textContent!.trim() === name)!;
+  ].find((candidate) => candidate.closest("label")!.textContent!.trim().split(" · ")[0] === name)!;
   await press(el, radio);
+}
+
+/** Sets how many of the dish the Comp window takes. */
+async function compCount(el: TillApp, count: string): Promise<void> {
+  const stepper = inDialog(el, '[name="adjustQuantity"]') as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await stepper.updateComplete;
+  await userEvent.fill(
+    page.elementLocator(stepper.shadowRoot!.querySelector<HTMLInputElement>("input")!),
+    count,
+  );
+  await flush(el);
 }
 
 async function requestAdjustment(
@@ -367,7 +380,7 @@ const requestComp = (el: TillApp, order: TillTableOrderScreen, lineNo = 1) =>
 const requestCancel = (el: TillApp, order: TillTableOrderScreen, lineNo: number) =>
   requestAdjustment(el, order, "cancel", lineNo);
 
-/** Opens Give away on the wine, chooses Complaint and presses Continue. */
+/** Opens Comp on the wine, chooses Complaint and presses Continue. */
 async function previewComp(el: TillApp, order: TillTableOrderScreen): Promise<void> {
   await requestComp(el, order, 1);
   await chooseReason(el, "Complaint");
@@ -429,7 +442,7 @@ describe("till-app: giving away a dish", () => {
     const names = [
       ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="reason"]'),
     ].map((radio) => radio.closest("label")!.textContent!.trim());
-    expect(names).toEqual(["Complaint"]);
+    expect(names).toEqual([`Complaint · ${t("comp.free")}, %`]);
     await chooseReason(el, "Complaint");
     await press(el, inDialog(el, "[data-adjust-continue]"));
 
@@ -821,7 +834,7 @@ describe("till-app: a refused adjustment", () => {
       [...dialog(el)!.shadowRoot!.querySelectorAll('input[name="reason"]')].map((radio) =>
         radio.closest("label")!.textContent!.trim(),
       ),
-    ).toEqual(["Guest recovery"]);
+    ).toEqual([`Guest recovery · ${t("comp.free")}, %`]);
     expect(
       dialog(el)!.shadowRoot!.querySelector('[data-error-for="reason"]')!.textContent!.trim(),
     ).toBe(codeMessage("adjustment_reason.not_found"));
@@ -907,7 +920,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     return { promise, resolve, reject };
   }
 
-  it("reads the reasons once however often Give away is pressed while they load", async () => {
+  it("reads the reasons once however often Comp is pressed while they load", async () => {
     const reasons = deferred<AdjustmentReason[]>();
     const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => reasons.promise) });
     const order = await openTable4(el);
@@ -1123,16 +1136,19 @@ describe("till-app: what is confirmed is what was previewed (review fix I1)", ()
     const order = await openTable4(el);
     await requestComp(el, order, 1);
     await chooseReason(el, "Complaint");
-    await press(el, inDialog(el, 'input[name="quantity"][value="1"]'));
+    await compCount(el, "1");
     await press(el, inDialog(el, "[data-adjust-continue]"));
 
-    // Pressed while the preview is out: it must change nothing that is confirmed.
-    await press(el, inDialog(el, 'input[name="quantity"][value="all"]'));
+    // Changed while the preview is out: it must change nothing that is confirmed.
+    inDialog(el, '[name="adjustQuantity"]').dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "2" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
     answer(preview({ reduction: "25.00" }));
     await flush(el);
 
     expect(inDialog(el, "[data-quantity-shown]").textContent!.trim()).toBe(
-      t("adjust.quantity_shown").replace("{n}", "2"),
+      t("comp.quantity_shown").replace("{count}", "1").replace("{n}", "2"),
     );
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     expect(applied()).toEqual([
@@ -1353,7 +1369,7 @@ describe("till-app: cancelling a dish", () => {
       const order = await openTable4(el);
       await requestComp(el, order, 1);
       await chooseReason(el, "Complaint");
-      await press(el, inDialog(el, 'input[name="quantity"][value="1"]'));
+      await compCount(el, "1");
       await press(el, inDialog(el, "[data-adjust-continue]"));
       await press(el, inDialog(el, "[data-adjust-confirm]"));
 
@@ -4741,7 +4757,7 @@ it.each([
   ["es", "dark", 390],
   ["es", "dark", 1280],
 ] as const)(
-  "combined Comp previews and applies one whole extra through the existing financial seam (%s, %s, %i)",
+  "Comp previews and applies one whole extra through the existing financial seam (%s, %s, %i)",
   async (locale, theme, width) => {
     await page.viewport(width, 1100);
     setLocale(locale);
@@ -4820,7 +4836,7 @@ it.each([
     await openSentMore(order);
     await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-comp]")!);
     await flush(el);
-    expect(dialog(el)?.combined).toBe(true);
+    expect(dialog(el)?.kind).toBe("comp");
     await press(el, inDialog(el, 'input[name="reason"][value="r-complaint"]'));
     await press(el, inDialog(el, 'input[name="adjustTarget"][value="extra"]'));
     expect(dialog(el)!.target!.total).toBe("36.00");
@@ -4870,7 +4886,7 @@ it.each([
   },
 );
 
-it("a combined amount refusal returns to its amount field and permits correction", async () => {
+it("a Comp amount refusal returns to its amount field and permits correction", async () => {
   const { el } = await mountApp({
     listAdjustmentReasons: vi
       .fn()
@@ -4880,7 +4896,6 @@ it("a combined amount refusal returns to its amount field and permits correction
   const order = await openTable4(el);
   emit(order, "adjust", {
     kind: "comp",
-    combined: true,
     target: { lineId: "line-1", name: "Wine", quantity: "1", total: "30.00", unitTotal: null },
   });
   await flush(el);
@@ -4902,12 +4917,11 @@ it("a combined amount refusal returns to its amount field and permits correction
   ).toBe(false);
 });
 
-it("a combined Comp preview cannot become a write after its bill is paid", async () => {
+it("a Comp preview cannot become a write after its bill is paid", async () => {
   const { el } = await mountApp();
   const order = await openTable4(el);
   emit(order, "adjust", {
     kind: "comp",
-    combined: true,
     target: { lineId: "line-1", name: "Wine", quantity: "1", total: "30.00", unitTotal: null },
   });
   await flush(el);
@@ -4965,7 +4979,7 @@ describe("A803 portion grouping: Comp on a grouped row", () => {
   async function compRow(count?: string) {
     const { el } = await mountApp();
     const order = await openTable4(el);
-    emit(order, "adjust", { kind: "comp", combined: true, target: row });
+    emit(order, "adjust", { kind: "comp", target: row });
     await flush(el);
     await press(el, inDialog(el, 'input[name="reason"][value="r-complaint"]'));
     if (count !== undefined) {
