@@ -2151,8 +2151,11 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Small till and floor wording fixes
 
-8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
+- **The default Kitchen title, and legacy unit maps (A379/A385 run-it review).** The Kitchen
+  title stays English in a synthetic Spanish probe; legacy unit maps cover English and Spanish only.
+  [Detail](till.md#remaining-till-unit-and-tab-edges-open-unqueued-a379a385-run-it-review)
 - **A1259. Two till strings have no user: `table.pending_title` and `table.none_pending`.** Delete
   both, in English and Spanish.
   [Detail](till.md#a1259-two-till-strings-have-no-user-tablepending_title-and-tablenone_pending)

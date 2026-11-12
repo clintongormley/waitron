@@ -386,16 +386,6 @@ full invoice; it does pad the hour to two digits as paper does.
   a further page shows no header there. Keep the header with the first row, and repeat it at the
   top of each continuation page.
 
-## Quantities print with "." whatever the receipt language
-
-- **Quantities print with "." whatever the receipt language** («0.35 kg» on a Spanish receipt).
-  `buildReceiptDocument` (`apps/server/src/receipt-document.ts`) writes quantities into the
-  receipt as their digits: an item's quantity in its line or in the full invoice's table, and an
-  option's quantity in its caption. Print the language's decimal mark there
-  («0,35 kg»). A663 keeps today's form. The till has the same gap: "Quantity-display follow-ups
-  found while tracing A313" in
-  [backlog.md → Users, sign-in and the dashboard shell](../backlog.md#users-sign-in-and-the-dashboard-shell).
-
 ## A command queued behind a slow pair can run out of time
 
 The 120 seconds count from queueing
@@ -500,7 +490,6 @@ only the app keeps from deletion; no trigger protects it either.
 - [The till's on-screen receipt is a second copy of the layout](#the-tills-on-screen-receipt-is-a-second-copy-of-the-layout).
 - [On an A4 full invoice, a caption and its amount can split across pages](#on-an-a4-full-invoice-a-caption-and-its-amount-can-split-across-pages).
 - [The A4 item table's header can sit alone at a page foot](#the-a4-item-tables-header-can-sit-alone-at-a-page-foot).
-- [Quantities print with "." whatever the receipt language](#quantities-print-with--whatever-the-receipt-language).
 - Equipment labels draw their double-size heading by hand (Part 1a).
   `apps/server/src/equipment-label.ts` scales a `drawTextBand` picture itself; `@waitron/printing`
   now draws double-size lines (`line(…, { double: true })`). Move the heading onto it and check
