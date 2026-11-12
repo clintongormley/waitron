@@ -324,6 +324,9 @@ export class PrintersScreen extends LitElement {
         max-width: 28vw;
         overflow-wrap: anywhere;
       }
+      wt-data-table::part(bluetooth-address) {
+        overflow-wrap: normal;
+      }
       wt-data-table::part(discovered-page-printer),
       wt-data-table::part(page-printer-hint) {
         color: var(--wt-color-text-muted);
@@ -682,6 +685,8 @@ export class PrintersScreen extends LitElement {
   }
 
   @state() private submitting = false;
+  @state() private acceptingChoice: string | null = null;
+  @state() private allowingAgentId: string | null = null;
   @state() private agents: PrintAgentRow[] = [];
   @state() private printers: Printer[] = [];
   @state() private pagePrinters: PagePrinterRow[] = [];
@@ -982,7 +987,7 @@ export class PrintersScreen extends LitElement {
   @state() private commands: Record<string, TrackedCommand> = {};
   /** Command key to answerBy for each pairing that succeeded while Add a printer or Pair again is open. */
   @state() private pairedDevices: Record<string, number> = {};
-  @state() private forgetting = false;
+  @state() private forgettingKey: string | null = null;
   #commandTimer?: ReturnType<typeof setInterval>;
   #commandReadInFlight = false;
   /** Rebuilt in `willUpdate`, so a row's cells look these up instead of scanning per row. */
@@ -1313,6 +1318,7 @@ export class PrintersScreen extends LitElement {
     if (this.submitting) return;
     this.errorKey = null;
     this.submitting = true;
+    this.acceptingChoice = choice;
     try {
       await this.api.acceptPrintAgentJoinRequest(request.id, { choice });
       this.openRequestId = null;
@@ -1330,6 +1336,7 @@ export class PrintersScreen extends LitElement {
       }
     } finally {
       this.submitting = false;
+      this.acceptingChoice = null;
     }
   }
 
@@ -1350,11 +1357,13 @@ export class PrintersScreen extends LitElement {
 
   async #allowAgent(id: string): Promise<void> {
     this.submitting = true;
+    this.allowingAgentId = id;
     await this.#mutate(async () => {
       await this.api.allowAgent(id);
       await this.#closeModal("new-agent-modal");
     });
     this.submitting = false;
+    this.allowingAgentId = null;
   }
 
   // ── Printers ───────────────────────────────────────────────────────────────────────────────────
@@ -1558,7 +1567,7 @@ export class PrintersScreen extends LitElement {
     return { kind: "repoint", entry, agentGone: match.agentId === null };
   }
 
-  #officeKey(device: DiscoveredPrinter): string {
+  #rowKey(device: DiscoveredPrinter): string {
     return `${device.agentId}:${this.#deviceKey(device)}`;
   }
 
@@ -2160,14 +2169,14 @@ export class PrintersScreen extends LitElement {
 
   async #forget(device: DiscoveredPrinter): Promise<void> {
     this.errorKey = null;
-    this.forgetting = true;
+    this.forgettingKey = this.#commandKeyOf(device);
     try {
       const { command } = await this.api.forgetBluetoothPairing(device.agentId, device.localKey!);
       this.#trackCommand(device.agentId, command);
     } catch (error) {
       this.errorKey = codeOf(error);
     } finally {
-      this.forgetting = false;
+      this.forgettingKey = null;
     }
   }
 
@@ -2449,6 +2458,7 @@ export class PrintersScreen extends LitElement {
                       size="lg"
                       data-choice=${number}
                       ?disabled=${this.submitting}
+                      ?loading=${this.acceptingChoice === number}
                       aria-label=${fill("printers.join_choice_label", { number })}
                       @click=${() => void this.#accept(request, number)}
                       >${number}</wt-button
@@ -2571,6 +2581,7 @@ export class PrintersScreen extends LitElement {
                         variant="primary"
                         data-test=${`allow-agent-${agent.id}`}
                         ?disabled=${this.submitting}
+                        ?loading=${this.allowingAgentId === agent.id}
                         @click=${() => void this.#allowAgent(agent.id)}
                         >${t("action.add")}</wt-button
                       >
@@ -2817,7 +2828,8 @@ export class PrintersScreen extends LitElement {
       >
       <wt-button
         data-test=${`print-test-page-${p.id}`}
-        ?disabled=${!p.active || this.testPagesPrinting.has(p.id)}
+        ?disabled=${!p.active}
+        ?loading=${this.testPagesPrinting.has(p.id)}
         @click=${() => void this.#printTestPage(p)}
         >${t("printers.print_test_page")}</wt-button
       >
@@ -2843,7 +2855,8 @@ export class PrintersScreen extends LitElement {
     return html`<wt-button
       variant="danger"
       data-test=${`forget-pairing-${p.id}`}
-      ?disabled=${this.forgetting || this.#printerCommands.get(p.id)?.[1].state === "pending"}
+      ?disabled=${this.forgettingKey !== null || this.#printerCommands.get(p.id)?.[1].state === "pending"}
+      ?loading=${this.forgettingKey === this.#commandKeyOf(device)}
       @click=${() => void this.#forget(device)}
       >${t("printers.bluetooth_forget")}</wt-button
     >`;
@@ -3316,6 +3329,7 @@ export class PrintersScreen extends LitElement {
         variant=${action.variant}
         data-test="save-printer-details"
         ?disabled=${action.unchanged || draft.saving || invalid}
+        ?loading=${draft.saving}
         @click=${save}
         >${t("action.save")}</wt-button
       >
@@ -3844,7 +3858,7 @@ export class PrintersScreen extends LitElement {
               j.canResend
                 ? html`<wt-button
                     data-test=${`resend-job-${j.id}`}
-                    ?disabled=${this.reprintsSending.has(j.id)}
+                    ?loading=${this.reprintsSending.has(j.id)}
                     @click=${() => {
                       if (!this.reprintsSending.has(j.id)) this.reprintJob = j;
                     }}
@@ -4168,13 +4182,15 @@ export class PrintersScreen extends LitElement {
         >
           <h2 class="title">${t("printers.calibration_receipt")}</h2>
           <p>${t("printers.sample_hint")}</p>
-          <wt-button
-            variant="primary"
-            data-test=${`print-sample-receipt-${p.id}`}
-            ?loading=${this.printingSample}
-            @click=${() => void this.#sampleReceipt(p)}
-            >${t("printers.sample_receipt")}</wt-button
-          >
+          <div class="print-row">
+            <wt-button
+              variant="primary"
+              data-test=${`print-sample-receipt-${p.id}`}
+              ?loading=${this.printingSample}
+              @click=${() => void this.#sampleReceipt(p)}
+              >${t("printers.sample_receipt")}</wt-button
+            >
+          </div>
         </div>
         <div
           data-test="calibration-step-3"
@@ -4196,12 +4212,14 @@ export class PrintersScreen extends LitElement {
           ${
             p.hasCashDrawer
               ? html`
-                  <wt-button
-                    data-test="test-printer-drawer"
-                    ?loading=${this.testingDrawer}
-                    @click=${() => void this.#testDrawer(p)}
-                    >${t("printers.drawer_test")}</wt-button
-                  >
+                  <div class="print-row">
+                    <wt-button
+                      data-test="test-printer-drawer"
+                      ?loading=${this.testingDrawer}
+                      @click=${() => void this.#testDrawer(p)}
+                      >${t("printers.drawer_test")}</wt-button
+                    >
+                  </div>
                   ${
                     this.drawerTestSent
                       ? html`<fieldset>
@@ -4312,6 +4330,14 @@ export class PrintersScreen extends LitElement {
       return `${device.host}:${device.port ?? 9100}`;
     const queue = device.office ?? device.ipp;
     return `${device.host}:${queue?.port ?? device.port ?? 9100}${queue?.resourcePath ?? ""}`;
+  }
+
+  #discoveredAddressLine(device: DiscoveredPrinter): TemplateResult {
+    const address = this.#discoveredAddress(device);
+    if (device.transport !== "bluetooth") return html`<div>${address}</div>`;
+    // A cut inside a two-character group reads as a different address, so it breaks only after a colon.
+    const groups = address.split(":").map((group, i) => (i === 0 ? group : html`:<wbr />${group}`));
+    return html`<div part="bluetooth-address">${groups}</div>`;
   }
 
   #discoveredLabel(device: DiscoveredPrinter): string {
@@ -4460,8 +4486,9 @@ export class PrintersScreen extends LitElement {
     if (hidesUnpair(command)) return nothing;
     return html`<wt-button
       variant="danger"
-      data-test=${`forget-device-${this.#deviceKey(d)}`}
-      ?disabled=${this.forgetting || command?.state === "pending"}
+      data-test=${`forget-device-${this.#rowKey(d)}`}
+      ?disabled=${this.forgettingKey !== null || command?.state === "pending"}
+      ?loading=${this.forgettingKey === this.#commandKeyOf(d)}
       @click=${() => void this.#forget(d)}
       >${t("printers.bluetooth_forget")}</wt-button
     >`;
@@ -4502,9 +4529,9 @@ export class PrintersScreen extends LitElement {
   }
 
   #officeAction(d: DiscoveredPrinter, row: OfficeRow): TemplateResult {
-    const key = this.#officeKey(d);
+    const key = this.#rowKey(d);
     if (row.kind === "refused")
-      return html`<span part="page-printer-hint" data-test=${`page-printer-${this.#deviceKey(d)}`}
+      return html`<span part="page-printer-hint" data-test=${`page-printer-${this.#rowKey(d)}`}
         >${t(row.reason)}</span
       >`;
     if (row.kind === "added")
@@ -4610,12 +4637,12 @@ export class PrintersScreen extends LitElement {
         cell: (d) =>
           html`<div
             part=${refused(d) ? "discovered-details discovered-page-printer" : "discovered-details"}
-            data-test=${`discovered-row-${this.#deviceKey(d)}`}
+            data-test=${`discovered-row-${this.#rowKey(d)}`}
           >
             <strong>${this.#discoveredLabel(d)}</strong>
             <div part="printer-meta">
               <div>${transportName(d.transport)}</div>
-              <div>${this.#discoveredAddress(d)}</div>
+              ${this.#discoveredAddressLine(d)}
               ${d.agentName ? html`<div>${fill("printers.discovered_seen_on", { agent: d.agentName })}</div>` : nothing}
               ${this.#repointNote(office.get(d))}
               ${lost.has(d) && !listed.has(this.#commandKeyOf(d)) ? html`<div>${t("printers.bluetooth_not_seen")}</div>` : nothing}
@@ -4630,7 +4657,7 @@ export class PrintersScreen extends LitElement {
           if (officeRow) return this.#officeAction(d, officeRow);
           const add = html`<wt-button
             variant="primary"
-            data-test=${`register-${this.#deviceKey(d)}`}
+            data-test=${`register-${this.#rowKey(d)}`}
             ?disabled=${this.submitting}
             @click=${() => {
               if (this.submitting) return;
@@ -4641,11 +4668,7 @@ export class PrintersScreen extends LitElement {
           if (d.transport !== "bluetooth") return add;
           const key = this.#commandKeyOf(d);
           const command = this.commands[key];
-          const status = this.#renderCommand(
-            key,
-            command,
-            `discovered-command-${this.#deviceKey(d)}`,
-          );
+          const status = this.#renderCommand(key, command, `discovered-command-${this.#rowKey(d)}`);
           if (lost.has(d)) return html`<div part="bluetooth-actions">${status}</div>`;
           // A succeeded pairing counts as paired before the agent's own paired report arrives, except
           // on a pair-only row, which keeps Pair so a pairing the agent never confirms can be retried.
@@ -4656,7 +4679,7 @@ export class PrintersScreen extends LitElement {
                 ? html`${add}${this.#forgetDeviceAction(d, command)}`
                 : html`<wt-button
                     variant="primary"
-                    data-test=${`pair-${this.#deviceKey(d)}`}
+                    data-test=${`pair-${this.#rowKey(d)}`}
                     ?disabled=${command?.state === "pending"}
                     @click=${() => this.#openPair(d, this.#addressScope?.id)}
                     >${pairOnly.has(d) ? t("printers.bluetooth_pair_only") : t("printers.bluetooth_pair")}</wt-button
@@ -4802,7 +4825,7 @@ export class PrintersScreen extends LitElement {
         aria-label=${t("printers.discovered_title")}
         .columns=${columns}
         .rows=${[...rows, ...lost]}
-        .rowKey=${(d: DiscoveredPrinter) => `${d.agentId}:${this.#deviceKey(d)}`}
+        .rowKey=${(d: DiscoveredPrinter) => this.#rowKey(d)}
         .emptyMessage=${t(this.scanning ? "printers.scan_empty" : "printers.no_discovered")}
         .errorMessage=${this.#unreadMessage(
           rows.length + lost.size === 0 &&

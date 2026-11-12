@@ -576,8 +576,10 @@ describe("the calibration wizard's Save, when an add opened it", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await vi.waitFor(() => expect(q(el, "[data-test=open-add-printer]")).not.toBeNull());
     q(el, "[data-test=open-add-printer]")!.click();
-    await vi.waitFor(() => expect(q(el, `[data-test=register-${device.localKey}]`)).not.toBeNull());
-    q(el, `[data-test=register-${device.localKey}]`)!.click();
+    await vi.waitFor(() =>
+      expect(q(el, `[data-test="register-a1:${device.localKey}"]`)).not.toBeNull(),
+    );
+    q(el, `[data-test="register-a1:${device.localKey}"]`)!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=confirm-add-printer]")).not.toBeNull());
     q(el, "[data-test=confirm-add-printer]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=calibration-step-1]")).not.toBeNull());
@@ -710,8 +712,10 @@ describe("the name dialog's Add, which opening it already asks for", () => {
   async function openName(device: DiscoveredPrinter) {
     const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([printer, switchedOff]) });
     const el = await openAddPrinter([device], api);
-    await vi.waitFor(() => expect(q(el, `[data-test=register-${device.localKey}]`)).not.toBeNull());
-    q(el, `[data-test=register-${device.localKey}]`)!.click();
+    await vi.waitFor(() =>
+      expect(q(el, `[data-test="register-a1:${device.localKey}"]`)).not.toBeNull(),
+    );
+    q(el, `[data-test="register-a1:${device.localKey}"]`)!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=confirm-add-printer]")).not.toBeNull());
     return { el, api };
   }
@@ -744,8 +748,8 @@ describe("the Bluetooth Pair dialog's Pair", () => {
   async function openPair(api: DashboardApi = stubApi()) {
     vi.mocked(api).pairBluetooth = vi.fn().mockResolvedValue({ command: pairCommand });
     const el = await openAddPrinter([bluetoothDevice], api);
-    await vi.waitFor(() => expect(q(el, '[data-test="pair-00:11:22:33:44:55"]')).not.toBeNull());
-    q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+    await vi.waitFor(() => expect(q(el, '[data-test="pair-a1:00:11:22:33:44:55"]')).not.toBeNull());
+    q(el, '[data-test="pair-a1:00:11:22:33:44:55"]')!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=confirm-pair]")).not.toBeNull());
     return { el, api };
   }
@@ -904,8 +908,8 @@ describe("under the dashboard's leave coordinator", () => {
     app.append(el);
     await vi.waitFor(() => expect(q(el, "[data-test=open-add-printer]")).not.toBeNull());
     q(el, "[data-test=open-add-printer]")!.click();
-    await vi.waitFor(() => expect(q(el, '[data-test="pair-00:11:22:33:44:55"]')).not.toBeNull());
-    q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+    await vi.waitFor(() => expect(q(el, '[data-test="pair-a1:00:11:22:33:44:55"]')).not.toBeNull());
+    q(el, '[data-test="pair-a1:00:11:22:33:44:55"]')!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=confirm-pair]")).not.toBeNull());
     expect(await state(el, "confirm-pair")).toEqual(quiet);
     await typeInto(el, "[data-test=bluetooth-pin]", "8472");
@@ -921,7 +925,7 @@ describe("under the dashboard's leave coordinator", () => {
     await closed;
     await vi.waitFor(() => expect(q(el, "[data-test=pair-printer-modal]")).toBeNull());
 
-    q(el, "[data-test=register-SN-1]")!.click();
+    q(el, "[data-test='register-a1:SN-1']")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=confirm-add-printer]")).not.toBeNull());
     expect(await state(el, "confirm-add-printer")).toEqual(ready);
   });

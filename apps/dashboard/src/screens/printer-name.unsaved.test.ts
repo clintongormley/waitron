@@ -81,12 +81,12 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
   const screen = app.shadowRoot!.querySelector("dashboard-printers-screen")!;
   await expect.poll(() => q(screen, "[data-test=open-add-printer]")).not.toBeNull();
   q(screen, "[data-test=open-add-printer]")!.click();
-  await expect.poll(() => q(screen, "[data-test=register-SN-1]")).not.toBeNull();
+  await expect.poll(() => q(screen, "[data-test='register-a1:SN-1']")).not.toBeNull();
   await open(screen, "SN-1");
   return { app, screen };
 }
 async function open(screen: PrintersScreen, id: string) {
-  q(screen, `[data-test=register-${id}]`)!.click();
+  q(screen, `[data-test="register-a1:${id}"]`)!.click();
   await screen.updateComplete;
   await modal(screen)!.updateComplete;
 }

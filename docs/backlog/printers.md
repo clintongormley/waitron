@@ -674,21 +674,8 @@ Hardware and inbox checks to complete in the owner session.
 
 ## Bundle: Printers screen leftovers
 
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
-- Choose one reset-on-dismiss policy for armed destructive row actions across printers and agents;
-  migrate `?disabled=${busy}` buttons to `loading`; the seen-status is as of the last read, not a live
-  presence light.
-- **Calibration's step 2 and step 3 buttons span the whole dialog; step 1's ends with its fields**
-  (found by A404's look, 2026-11-05). "Print sample receipt" and "Test open drawer" could end at
-  `--wt-field-max-width`, right-aligned, as "Print width test" does
-  (`apps/dashboard/src/screens/printers-screen.ts`, `#renderEditPrinter`).
-- **At phone width a Bluetooth address breaks mid-group** ("00:11:22:33:44:5" then "5"), because
-  of the width limit on the device details added on 2026-09-11.
-- **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,
-  #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
-  so a lookup by name finds the first row drawn for that device. Left open by W74 (deleting a
-  category warns about exactly what will go, #1196).
 - **Loose ends left by A331 batch 3b (#1415).**
   [Detail](printers.md#loose-ends-left-by-a331-batch-3b-1415)
 

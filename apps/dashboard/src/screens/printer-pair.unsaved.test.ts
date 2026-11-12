@@ -87,12 +87,12 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
   const screen = app.shadowRoot!.querySelector("dashboard-printers-screen")!;
   await expect.poll(() => q(screen, "[data-test=open-add-printer]")).not.toBeNull();
   q(screen, "[data-test=open-add-printer]")!.click();
-  await expect.poll(() => q(screen, `[data-test="pair-${address}"]`)).not.toBeNull();
+  await expect.poll(() => q(screen, `[data-test="pair-a1:${address}"]`)).not.toBeNull();
   await open(screen, address);
   return { app, screen };
 }
 async function open(screen: PrintersScreen, key: string) {
-  q(screen, `[data-test="pair-${key}"]`)!.click();
+  q(screen, `[data-test="pair-a1:${key}"]`)!.click();
   await screen.updateComplete;
   await modal(screen)!.updateComplete;
 }
@@ -234,7 +234,7 @@ for (const route of ["cancel", "escape"] as const) {
     expect(unload()).toBe(false);
     finish({ command });
     await expect
-      .poll(() => q(screen, `[data-test="discovered-command-${address}"]`)?.textContent)
+      .poll(() => q(screen, `[data-test="discovered-command-a1:${address}"]`)?.textContent)
       .toContain(t("printers.bluetooth_pairing"));
   });
 }
@@ -352,8 +352,8 @@ it("submitted Bluetooth discovery close stays direct and does not track the late
   await expect.poll(() => modal(screen)).toBeNull();
   expect(unload()).toBe(false);
   q(screen, "[data-test=open-add-printer]")!.click();
-  await expect.poll(() => q(screen, `[data-test="pair-${address}"]`)).not.toBeNull();
-  expect(q(screen, `[data-test="discovered-command-${address}"]`)).toBeNull();
+  await expect.poll(() => q(screen, `[data-test="pair-a1:${address}"]`)).not.toBeNull();
+  expect(q(screen, `[data-test="discovered-command-a1:${address}"]`)).toBeNull();
 });
 it("a submitted Bluetooth request still protects the parent's independent address", async () => {
   let finish!: (value: { command: typeof command }) => void;
