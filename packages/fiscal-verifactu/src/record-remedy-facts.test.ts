@@ -617,7 +617,7 @@ it.each(
   },
 );
 
-describe("a fix never changes the invoice's amounts", () => {
+describe("a fix never changes the invoice's amounts or what a line is", () => {
   const twelveTen = [
     {
       Impuesto: "01",
@@ -635,8 +635,8 @@ describe("a fix never changes the invoice's amounts", () => {
     BaseImponibleOimporteNoSujeto: "5.00",
   } as const;
 
-  /** Points `send` at a refused €12.10 invoice filed at 21% (10.00 + 2.10), or at `lines`. */
-  async function targetRefusedTwelveTenInvoice(
+  /** Points `send` at a refused invoice filed with `lines` (by default €12.10 at 21%: 10.00 + 2.10). */
+  async function targetRefusedInvoice(
     lines: readonly DetalleDesgloseInput[] = twelveTen,
     total = "12.10",
   ) {
@@ -676,7 +676,7 @@ describe("a fix never changes the invoice's amounts", () => {
   }
 
   it("refuses a €12.10 invoice filed at 21% (10.00 + 2.10) re-filed at 10% (11.00 + 1.10)", async () => {
-    await targetRefusedTwelveTenInvoice();
+    await targetRefusedInvoice();
     const before = await snapshot();
     const res = await send({
       breakdown: [
@@ -700,7 +700,7 @@ describe("a fix never changes the invoice's amounts", () => {
   });
 
   it("accepts a fix restating the stored 12.10 total as 12.1", async () => {
-    await targetRefusedTwelveTenInvoice();
+    await targetRefusedInvoice();
     const row = await storedFix(
       await send({ total: "12.1", description: "Corrected restaurant service" }),
     );
@@ -804,7 +804,7 @@ describe("a fix never changes the invoice's amounts", () => {
   });
 
   it("accepts a fix of the same invoice that changes only its description", async () => {
-    await targetRefusedTwelveTenInvoice();
+    await targetRefusedInvoice();
     const row = await storedFix(await send({ description: "Corrected restaurant service" }));
     expect(row).toMatchObject({
       descripcionOperacion: "Corrected restaurant service",
@@ -864,7 +864,7 @@ describe("a fix never changes the invoice's amounts", () => {
   ])(
     "refuses a fix that changes what a line is, amounts equal, without a write: %j",
     async ({ lines, field, line }) => {
-      await targetRefusedTwelveTenInvoice(filed, "19.10");
+      await targetRefusedInvoice(filed, "19.10");
       const before = await snapshot();
       const res = await send({ breakdown: lines, description: "Corrected restaurant service" });
       expect(res.status).toBe(400);
@@ -879,7 +879,7 @@ describe("a fix never changes the invoice's amounts", () => {
   );
 
   it("accepts a fix that omits the IVA tax type the invoice filed as 01", async () => {
-    await targetRefusedTwelveTenInvoice();
+    await targetRefusedInvoice();
     const row = await storedFix(
       await send({
         breakdown: [{ ...taxed, Impuesto: undefined }],
@@ -887,6 +887,8 @@ describe("a fix never changes the invoice's amounts", () => {
       }),
     );
     expect(row).toMatchObject({ descripcionOperacion: "Corrected restaurant service" });
+    expect(row?.desglose).toEqual([{ ...taxed, Impuesto: undefined }]);
+    expect((row?.desglose as Record<string, string>[])[0]).not.toHaveProperty("Impuesto");
   });
 
   it("accepts a fix that states IVA as 01 on a line filed without a tax type", async () => {
@@ -899,5 +901,6 @@ describe("a fix never changes the invoice's amounts", () => {
       }),
     );
     expect(row).toMatchObject({ descripcionOperacion: "Corrected restaurant service" });
+    expect(row?.desglose).toEqual([{ ...filed[0], Impuesto: "01" }]);
   });
 });
