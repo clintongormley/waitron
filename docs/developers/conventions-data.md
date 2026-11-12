@@ -4686,8 +4686,9 @@ devices or a person confirm its time as it stands (plan D12).
 Guards: `apps/server/src/start-clock-check.test.ts`, `apps/server/src/start-clock-gate.test.ts`,
 `apps/server/src/clock-unconfirmed-gate.test.ts`, `apps/server/src/boot.start-clock-gate.test.ts`,
 `apps/server/src/clock-watch.start-up.test.ts` and `apps/server/src/till-box-clock-api.test.ts`,
-covering the seat's four writers and the money routes in the gate table, weaker than the rule: a
-new money route is covered only once it is added to that table.
+weaker than the rule: `clock-unconfirmed-gate.test.ts` calls the seat's four writers and sends the
+money routes it lists through a seat wrapped as boot wraps it, and `boot.start-clock-gate.test.ts`
+sends one cash sale through boot itself; a new money route is covered only once that file lists it.
 
 ### The box sets its own clock
 

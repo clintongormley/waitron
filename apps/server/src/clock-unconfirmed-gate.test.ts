@@ -60,7 +60,6 @@ import {
   stripeSessionEvent,
   verifyingStripe,
 } from "./testing/fake-stripe-webhook.js";
-import { TradingAdmission } from "./trading-admission.js";
 import { mountWebhook } from "./webhook.js";
 import { parkOrder } from "./working-order.js";
 import "./errors.js";
@@ -82,7 +81,7 @@ useVenueDb({
     counter = await inTx(venue, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
-    // Every till profile may close by transfer, so that route's row reaches its clock check.
+    // The first till's profile may close by transfer, so that route's row reaches its clock check.
     await inTx(venue, async (tx) => {
       const [device] = await tx
         .select({ profileId: devices.deviceProfileId })
@@ -249,7 +248,6 @@ function rowCount(table: string, where = sql`1 = 1`): number {
   return row!.n;
 }
 
-/** Everything a money route could write or set moving, counted or read whole. */
 function moneyState() {
   return {
     records: rowCount("registros_facturacion"),
@@ -384,7 +382,7 @@ async function counterOrder(issued: boolean): Promise<string> {
 
 const LOST = { kind: "uncertain", reason: "timeout" } as const;
 
-// Each row builds its own order, bill or sale through the ungated routes, so rows never share one.
+// Each row builds its own order, bill or sale, so rows never share one.
 const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
   "POST /api/pay, a counter card sale with no saved order": async () => {
     const id = randomUUID();
@@ -655,7 +653,7 @@ async function pendingRefund(kind: "bill" | "tender"): Promise<string> {
 
 const NOT_CHARGED = { outcome: "failed", cancelledAtProvider: true } as const;
 
-// Each row builds its own payment, hold or refund through the ungated till, so rows never share one.
+// Each row builds its own payment, hold or refund, so rows never share one.
 const dashboardResolutions: Record<string, () => Promise<MoneyRoute>> = {
   "a stuck card payment's resolve": async () => {
     const orderId = await tabWith(venue, "Caña");
@@ -899,8 +897,6 @@ describe("money already moved while the start waits", () => {
 
   it("the webhook stores a hosted payment, with no seat to refuse it", async () => {
     // The webhook takes no fiscal seat (`WebhookDeps`), so no gate can stand in front of it.
-    const state = startClockState();
-    expect(state.unconfirmed()).toBe(true);
     const orderId = await tabWith(venue, "Caña");
     const sessionId = `cs_${randomUUID()}`;
     await withTransaction(venue.db, (tx) =>
@@ -914,8 +910,6 @@ describe("money already moved while the start waits", () => {
         amount: decimal("3.00"),
       }),
     );
-    const admission = new TradingAdmission();
-    admission.admit();
     const app = new Hono();
     mountWebhook(
       app,
@@ -923,7 +917,7 @@ describe("money already moved while the start waits", () => {
         db: venue.db,
         ring: RING,
         nodeId: venue.cfg.nodeId,
-        admission,
+        admission: testTradingAdmission(),
         environment: "preproduction",
         makeStripe: () => verifyingStripe(),
       },
