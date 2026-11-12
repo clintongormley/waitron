@@ -12,7 +12,6 @@ import {
   staffingBlocks,
   staffingDays,
 } from "@waitron/workforce";
-import { persons } from "@waitron/identity";
 import { createLabelComparator } from "@waitron/shared";
 import { seedVenueWithStaff } from "../test/seed.js";
 import {
