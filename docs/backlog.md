@@ -2267,7 +2267,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   delivery, published-menu sale and unroutable-dish staff samples use Cashier.
   Local box-host, box-health, disk-stop and clock set/confirm route fixtures use Martha, Anna
   and Simon for their manager, administrator and supervisor samples; the clock suites' administrators remain Mario and Berta.
-  Local alert, box-host call, attendance-fact, bill-editor transition, transfer-close and orders
+  Local alert, box-host call, attendance-fact, bill-editor transition, deferred-close and orders
   route fixtures use English staff display-name samples.
   Local portion-sale projection, station-queue and station-move staff samples use Anna and Lewis.
   Local adjustment-report staff use Lucy, Paul and Rose; `till-session.person` and box-alert-email samples use Anna.

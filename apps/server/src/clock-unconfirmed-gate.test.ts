@@ -88,7 +88,8 @@ useVenueDb({
     counter = await inTx(venue, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
     );
-    // The first till's profile may close by transfer, so that route's row reaches its clock check.
+    // The first till's profile may close bills as deferred payments, so that route's row reaches
+    // its clock check.
     await inTx(venue, async (tx) => {
       const [device] = await tx
         .select({ profileId: devices.deviceProfileId })
@@ -100,7 +101,7 @@ useVenueDb({
         .where(eq(deviceProfiles.id, device!.profileId));
       await tx
         .update(deviceProfiles)
-        .set({ capabilities: [...(profile!.capabilities as string[]), "close-by-transfer"] })
+        .set({ capabilities: [...(profile!.capabilities as string[]), "close-deferred"] })
         .where(eq(deviceProfiles.id, device!.profileId));
     });
     const session = await withTransaction(db, (tx) =>
@@ -267,7 +268,7 @@ function moneyState() {
     providerRefunds: rowCount("payment_refunds"),
     adjustments: rowCount("adjustments"),
     departures: rowCount("unpaid_departures"),
-    transferClosures: rowCount("transfer_closures"),
+    deferredClosures: rowCount("deferred_closures"),
     holdOutcomes: rowCount("payment_hold_outcomes"),
     settledRefunds:
       rowCount("bill_payment_refunds", sql`state <> 'pending'`) +
@@ -615,7 +616,7 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
       grows: ["departures", "records"],
     };
   },
-  "a close by bank transfer": async () => {
+  "a close as a deferred payment": async () => {
     const id = await counterOrder(false);
     const [order] = await inTx(venue, (tx) =>
       tx
@@ -635,8 +636,8 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
       partyFinish: null,
     };
     return {
-      send: (app) => as(app, "POST", `/api/working-orders/${id}/close-by-transfer`, body),
-      grows: ["transferClosures", "records"],
+      send: (app) => as(app, "POST", `/api/working-orders/${id}/close-deferred`, body),
+      grows: ["deferredClosures", "records"],
     };
   },
   "a cancel's credit of an order whose invoice was filed": async () => {
