@@ -22,7 +22,7 @@ Use `bottomMessage` directly with the existing ordered conditional messages; do 
 
 `cd apps/dashboard && pnpm test src/widgets/{menu-copy-dialog,attendance-export-dialog}*.test.ts`
 
-`pnpm --filter @waitron/media test src/dashboard/image-library*.test.ts`
+`pnpm --filter @waitron/media test src/dashboard/image-library` (from repository root)
 
 Caller suites own invalid-field/footer/focus, refusal edit/retry, reopen, drafts and save-state behavior. Media already asserts mixed general/field message order and file/default-language focus. Add one standalone menu-copy test: enter an already-used name, focus Copy, press, assert Name receives focus. Do not expand its screenshot matrix. Pure refactor; new behavior needs red/green first. No dependency retesting or extra visual matrix; normal hook, scoped CI and finish-branch follow.
 
