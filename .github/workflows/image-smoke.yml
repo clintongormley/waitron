@@ -289,6 +289,31 @@ jobs:
           grep -q 'id="variants"' guide.html
           grep -q '<html lang="es">' guide.html
 
+      # This job builds with no release version, so the image carries no declaration folder at all.
+      - name: The image serves no declaration, being no release
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+
+          code=$(curl -sk -o declaration.html -w '%{http_code}' https://127.0.0.1/legal/declaration)
+          [ "$code" = "404" ]
+          code=$(curl -sk -o about.json -w '%{http_code}' https://127.0.0.1/legal/about)
+          cat about.json
+          echo
+          [ "$code" = "200" ]
+          jq -e 'has("release") and .release == null' about.json
+
+      - name: check-release refuses the image's bundle, being no release
+        run: |
+          set -euo pipefail
+          app=$(docker compose ps -q app)
+          status=0
+          docker exec "$app" node /app/server.js check-release 0.0.0 > "$RUNNER_TEMP/check-release.txt" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/check-release.txt"
+          [ "$status" = "1" ]
+          grep -qx "bundle version none" "$RUNNER_TEMP/check-release.txt"
+          grep -qx "declaration folder none" "$RUNNER_TEMP/check-release.txt"
+
       - name: The box binds 443 as a non-root process, under host networking
         run: |
           set -euo pipefail

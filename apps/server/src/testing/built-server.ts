@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll } from "vitest";
 import { bundle } from "../../../../scripts/bundle-node.mjs";
+import { writeDeclarationFolder } from "./declaration-folder.js";
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const SERVER_ENTRY = "src/bin.ts";
@@ -19,9 +20,17 @@ function bundleName(entry: string): string {
  * running at once cannot collide and a bundle is never older than the source; it sits under
  * `apps/server` so the `sharp` external resolves with no linked `node_modules`, through which
  * `copy-migrations.mjs` would replace the real `@waitron/ui-core` link.
+ *
+ * `releaseVersion`, when given (`null` included), is stamped as the command line stamps a build;
+ * left out, the bundles carry no stamp. `declaration` writes the folder `declaration render` writes,
+ * for that release, at `declaration/` beside the bundles, where `declarationRoot()` finds it.
  */
 export function useBuiltServer(
   entries: readonly string[] = [SERVER_ENTRY],
+  options: {
+    releaseVersion?: string | null;
+    declaration?: { version: string; releasedOn: string };
+  } = {},
 ): (entry?: string) => string {
   let directory: string | undefined;
   beforeAll(async () => {
@@ -37,8 +46,19 @@ export function useBuiltServer(
         entry: join(packageRoot, entry),
         outfile: join(target, bundleName(entry)),
       })),
-      { writeNotices: () => {} },
+      {
+        writeNotices: () => {},
+        ...(options.releaseVersion === undefined ? {} : { releaseVersion: options.releaseVersion }),
+      },
     );
+    if (options.declaration !== undefined) {
+      await writeDeclarationFolder(
+        join(target, "declaration"),
+        options.declaration,
+        undefined,
+        options.declaration.version,
+      );
+    }
   });
   afterAll(async () => {
     if (directory !== undefined) await rm(directory, { recursive: true, force: true });

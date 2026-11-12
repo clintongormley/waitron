@@ -6,7 +6,7 @@ import "./errors.js";
 
 const args = process.argv.slice(2);
 if (args.length > 0) {
-  process.exitCode = runServerCommand(args, console);
+  process.exitCode = await runServerCommand(args, console);
 } else {
   nameVenueHolder("server", process.env);
   const server = await startServerOrFirstSetupResolution(process.env);

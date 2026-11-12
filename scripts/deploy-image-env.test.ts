@@ -289,6 +289,45 @@ describe("the producer's settings", () => {
   });
 });
 
+// Weaker than its name: it reads the Dockerfile and image-smoke.yml as text. image-smoke shows a
+// test build carries no folder; only a release build shows the render runs.
+describe("the release's declaration folder", () => {
+  it("is stamped into the bundles from a build argument the build stage declares first", () => {
+    const build = stage("build");
+    const declared = build.search(/^ARG WAITRON_RELEASE_VERSION$/m);
+    expect(declared).toBeGreaterThan(-1);
+    expect(declared).toBeLessThan(build.indexOf("RUN pnpm --filter @waitron/server build"));
+  });
+
+  it("is rendered in a stage of its own, only when the build is a release", () => {
+    const declaration = stage("declaration");
+    expect(declaration).toMatch(/^FROM build AS declaration$/m);
+    for (const setting of ["WAITRON_RELEASE_VERSION", ...PRODUCER_SETTINGS]) {
+      expect(declaration).toMatch(new RegExp(`^ARG ${setting}$`, "m"));
+    }
+    expect(declaration).toContain("mkdir /release-root;");
+    expect(declaration).toContain(
+      'if [ -n "${WAITRON_RELEASE_VERSION:-}" ]; then \\\n' +
+        '    pnpm --filter @waitron/fiscal-verifactu declaration render --version "$WAITRON_RELEASE_VERSION" --out /release-root/declaration; \\\n' +
+        "  fi",
+    );
+  });
+
+  it("reaches /app/declaration/ in the app image, and nowhere in the print agent's", () => {
+    expect(stage("runtime")).toContain(
+      "COPY --from=declaration --chown=waitron:waitron /release-root/ /app/",
+    );
+    expect(stage("print-agent")).not.toMatch(/declaration|release-root/);
+  });
+
+  it("is absent from the image image-smoke builds, whose bundle check-release refuses", () => {
+    expect(IMAGE_SMOKE).toContain("https://127.0.0.1/legal/declaration");
+    expect(IMAGE_SMOKE).toContain(`jq -e 'has("release") and .release == null' about.json`);
+    expect(IMAGE_SMOKE).toContain("node /app/server.js check-release 0.0.0");
+    expect(IMAGE_SMOKE).toContain("bundle version none");
+  });
+});
+
 describe("the print-agent image and its compose wiring", () => {
   it("builds a print-agent target from deploy/Dockerfile", () => {
     expect(DOCKERFILE).toContain("FROM node:26-slim AS print-agent");

@@ -37,6 +37,8 @@ RUN set -eux; \
   bounded() { for attempt in 1 2 3; do timeout -k 10 300 "$@" && return 0; echo "attempt $attempt of 3 failed or stalled: $*" >&2; done; return 1; }; \
   bounded pnpm install --frozen-lockfile
 
+# Empty or unset, the bundles are stamped as no release (scripts/bundle-node.mjs).
+ARG WAITRON_RELEASE_VERSION
 # `@waitron/server`'s build emits dist/server.js, dist/node-entry.js (this image's ENTRYPOINT), the
 # four operator CLIs, dist/drizzle/ and dist/node_modules/@waitron/ui-core/ (copy-migrations.mjs);
 # the three web apps emit dist/ via vite.
@@ -71,6 +73,22 @@ RUN set -eux; \
   mkdir -p /third-party/libvips; \
   cp "$1/README.md" /third-party/libvips/NOTICES.md; \
   cp "$1/versions.json" /third-party/libvips/versions.json
+
+# ---------------------------------------------------------------------------
+# Declaration stage — a release's declaration folder, which the runtime stage copies to
+# /app/declaration/. A build with no release version leaves /release-root/ empty, so the image has no
+# folder at all. A render that refuses fails the build.
+# ---------------------------------------------------------------------------
+FROM build AS declaration
+ARG WAITRON_RELEASE_VERSION
+ARG WAITRON_PRODUCER_NAME
+ARG WAITRON_PRODUCER_TAX_ID
+ARG WAITRON_PRODUCER_ADDRESS
+RUN set -eu; \
+  mkdir /release-root; \
+  if [ -n "${WAITRON_RELEASE_VERSION:-}" ]; then \
+    pnpm --filter @waitron/fiscal-verifactu declaration render --version "$WAITRON_RELEASE_VERSION" --out /release-root/declaration; \
+  fi
 
 # ---------------------------------------------------------------------------
 # Print-agent stage — the box-local bridge to USB/network/Bluetooth printers.
@@ -261,6 +279,8 @@ COPY --from=build --chown=waitron:waitron /src/apps/till/dist/THIRD-PARTY-NOTICE
 COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/THIRD-PARTY-NOTICES.txt /app/third-party/npm/dashboard/THIRD-PARTY-NOTICES.txt
 COPY --from=build --chown=waitron:waitron /src/apps/setup/dist/THIRD-PARTY-NOTICES.txt /app/third-party/npm/setup/THIRD-PARTY-NOTICES.txt
 COPY --from=build --chown=waitron:waitron /third-party/libvips/ /app/third-party/libvips/
+# Copying the root rather than the folder lets a build that is not a release copy nothing.
+COPY --from=declaration --chown=waitron:waitron /release-root/ /app/
 
 # Fixed in the image, never operator-set: the server's own defaults for these sit beside the bundle,
 # which is a read-only layer — every writable path is a volume. WAITRON_BACKUP_DIR is deliberately

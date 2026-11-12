@@ -549,6 +549,7 @@ describe("curated operator text", () => {
     ];
     const persistedByRunEntry = [
       "server.config_missing",
+      "server.unreleased_build",
       "migrations.apply_failed",
       "provisioning.database_ahead",
       "restore.database_set_aside",
@@ -629,6 +630,15 @@ describe("curated operator text", () => {
         "El equipo comprueba primero su hora con internet. Conecta el equipo a internet y pulsa «Reintentar un arranque normal».",
       ),
     );
+  });
+
+  it("names a test build refused in production, in both languages", async () => {
+    const english = await pageFor("server.unreleased_build");
+    expect(english).toContain(escapeHtml("This box is running a test build."));
+    expect(english).toContain(escapeHtml("Install a release."));
+    const spanish = await pageFor("server.unreleased_build", undefined, SPANISH);
+    expect(spanish).toContain(escapeHtml("Este equipo ejecuta una versión de prueba."));
+    expect(spanish).toContain(escapeHtml("Instala una versión publicada."));
   });
 
   it("says the box has already deleted what it could, in both languages", async () => {

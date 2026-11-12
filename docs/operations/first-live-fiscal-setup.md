@@ -7,6 +7,10 @@ coordination matters even when both clocks are correct.
 
 ## Review the business and clock
 
+The box must run a Waitron release. None has been published yet. On any other build, the start
+after a Live setup stops on the recovery page with `server.unreleased_build` ("This box is running a
+test build.").
+
 Choose Live in the local setup wizard. Enter the business, venue and administrator details.
 If you imported a prepared configuration, review whether it belongs to this same taxpayer before
 continuing. Complete the applicable certificate, email and separate preproduction readiness steps.

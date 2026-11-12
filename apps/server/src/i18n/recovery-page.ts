@@ -321,6 +321,16 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Es un fallo de la instalación de Waitron en este equipo: falta un ajuste que el equipo necesita.",
     },
   },
+  "server.unreleased_build": {
+    "en-GB": {
+      title: "This box is running a test build.",
+      action: "Install a release.",
+    },
+    "es-ES": {
+      title: "Este equipo ejecuta una versión de prueba.",
+      action: "Instala una versión publicada.",
+    },
+  },
   "server.config_invalid": {
     "en-GB": {
       title: "The box's configuration is invalid.",
