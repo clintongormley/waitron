@@ -5,6 +5,7 @@ import {
   devices,
   deviceProfiles,
   drawerOpens,
+  invoiceCorrectionRefunds,
   invoiceCorrections,
   sales,
   saleLines,
@@ -30,6 +31,7 @@ import {
   type OrderVenue,
 } from "./testing/order-venue.js";
 import { inTx, send } from "./testing/bill-venue.js";
+import { readCorrectionMoney } from "./invoice-correction-legs.js";
 import { fingerprint } from "./parties.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 
@@ -594,13 +596,13 @@ it("does not expose a refund command or its reads on a shared kitchen display", 
   expect(venue.card.refundCalls).toHaveLength(1);
   expect(venue.card.lookupCalls).toHaveLength(0);
 });
-it("refuses a refund with 409 while the ticket has an unfinished correction, naming it", async () => {
-  const t = await target();
+/** A €5.00 correction of `saleId`, open, or discarded by the operator. */
+async function seededCorrection(saleId: string, state: "open" | "discarded" = "open") {
   const [correction] = await inTx(venue, (tx) =>
     tx
       .insert(invoiceCorrections)
       .values({
-        originalSaleId: t.saleId,
+        originalSaleId: saleId,
         submissionId: randomUUID(),
         fingerprint: "seeded",
         gross: 500,
@@ -611,18 +613,84 @@ it("refuses a refund with 409 while the ticket has an unfinished correction, nam
         source: "device",
         deviceId: venue.deviceId,
         nodeId: venue.cfg.nodeId,
-        state: "open",
+        state,
+        ...(state === "open"
+          ? {}
+          : { endedAt: new Date().toISOString(), endedBy: venue.operatorId }),
       })
       .returning({ id: invoiceCorrections.id }),
   );
+  return correction!.id;
+}
+it("refuses a refund with 409 while the ticket has an unfinished correction, naming it", async () => {
+  const t = await target();
+  const correctionId = await seededCorrection(t.saleId);
 
   expect(await create(t.saleId, ask(t.tenderId))).toEqual({
     status: 409,
     json: {
       code: "invoice_correction.already_open",
-      params: { saleId: t.saleId, correctionId: correction!.id },
+      params: { saleId: t.saleId, correctionId },
     },
   });
+  expect((await effects()).refunds).toHaveLength(0);
+});
+it("takes a reader refund as a correction's leg, counting it in the correction's money back", async () => {
+  const t = await target("card");
+  const correctionId = await seededCorrection(t.saleId);
+
+  const answer = await create(t.saleId, { ...ask(t.tenderId), invoiceCorrectionId: correctionId });
+
+  expect(answer).toMatchObject({
+    status: 200,
+    json: { state: "completed", appliedAmount: "2.00" },
+  });
+  expect(await inTx(venue, (tx) => tx.select().from(invoiceCorrectionRefunds))).toMatchObject([
+    { invoiceCorrectionId: correctionId, tenderRefundId: answer.json.id },
+  ]);
+  expect(await inTx(venue, (tx) => readCorrectionMoney(tx, correctionId))).toMatchObject({
+    completed: 200,
+    pending: 0,
+  });
+});
+it("refuses a reader refund over what the correction has left with 409, naming what is left", async () => {
+  const t = await target("card");
+  const correctionId = await seededCorrection(t.saleId);
+
+  expect(
+    await create(t.saleId, {
+      ...ask(t.tenderId, { appliedAmount: "5.01" }),
+      invoiceCorrectionId: correctionId,
+    }),
+  ).toEqual({
+    status: 409,
+    json: { code: "invoice_correction.leg_too_large", params: { correctionId, left: "5.00" } },
+  });
+  expect((await effects()).refunds).toHaveLength(0);
+  expect(venue.card.refundCalls).toHaveLength(0);
+});
+it("refuses a refund naming a correction that does not exist with 404", async () => {
+  const t = await target("card");
+  const correctionId = randomUUID();
+
+  expect(await create(t.saleId, { ...ask(t.tenderId), invoiceCorrectionId: correctionId })).toEqual(
+    { status: 404, json: { code: "invoice_correction.not_found", params: { correctionId } } },
+  );
+  expect((await effects()).refunds).toHaveLength(0);
+});
+it("refuses a refund naming a discarded correction with 409", async () => {
+  const t = await target("card");
+  const correctionId = await seededCorrection(t.saleId, "discarded");
+
+  expect(await create(t.saleId, { ...ask(t.tenderId), invoiceCorrectionId: correctionId })).toEqual(
+    {
+      status: 409,
+      json: {
+        code: "invoice_correction.not_open",
+        params: { correctionId, state: "discarded" },
+      },
+    },
+  );
   expect((await effects()).refunds).toHaveLength(0);
 });
 it.each(["bad", 42, null])("refuses a malformed invoiceCorrectionId %j", async (value) => {
