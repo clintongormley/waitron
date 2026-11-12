@@ -80,6 +80,7 @@ import {
   readPairLink,
   setSingletonRole,
 } from "@waitron/node-db";
+import { readVenueAuthority } from "./boot-peer-check.js";
 import { startSpareStore } from "./spare-store.js";
 import { startStoreListener } from "./spare-pipe.js";
 import { finishPromotedRole } from "./promoted-role.js";
@@ -2120,16 +2121,20 @@ async function bootServer(
   if (initialAxes.mode !== "mirror") {
     const peer = await readMirrorLink(store.node, config.node.nodeId);
     if (peer !== null) {
-      const [trustSet, held] = await Promise.all([
+      const [trustSet, held, authority] = await Promise.all([
         readMembershipTrustSet(db),
         readNodeMembership(db),
+        readVenueAuthority(config.stateDir),
       ]);
+      const listed = held?.body.nodes.find((n) => n.nodeId === peer.originNodeId)?.contactUrl;
+      const origin = listed === undefined || listed === "" ? peer.originUrl : listed;
       await reconcileMembershipOnBoot({
         held,
         nodeId: config.node.nodeId,
-        // The mirror link is owner-written trusted config, so no SSRF screen.
-        peerUrl: `${peer.originUrl.replace(/\/+$/, "")}/management-api/membership`,
-        fetchPeerMembership: fetchPeerMembershipDocument,
+        // The held chart and the mirror link are this box's own trusted records, so no SSRF screen.
+        peerUrl: `${origin.replace(/\/+$/, "")}/management-api/membership`,
+        fetchPeerMembership: (url) =>
+          fetchPeerMembershipDocument(url, { authority, timeoutMs: 5_000 }),
         // Persist-if-accepted, so a newer verified chart is held even when it does not fence this node.
         // Judged against the chart held BEFORE it, never the incoming one: a retirement chart is
         // signed by the node it evicts.
