@@ -76,12 +76,15 @@ describe("option label availability", () => {
     expect(await run((tx) => getOptionList(tx, created.id))).toEqual(created);
   });
 
-  it("allows an inactive list to have no available choice", async () => {
+  it("refuses the last till choice even when its stored list is inactive", async () => {
     const created = await run((tx) =>
       createOptionList(tx, { name: "Cooking", active: false, labels: [{ name: "Medium" }] }, "en"),
     );
-    await run((tx) => setOptionLabelAvailability(tx, created.id, created.labels[0]!.id, false));
-    expect((await run((tx) => getOptionList(tx, created.id))).labels[0]!.available).toBe(false);
+    const error = await refusal((tx) =>
+      setOptionLabelAvailability(tx, created.id, created.labels[0]!.id, false),
+    );
+    expect(error).toMatchObject({ code: "options.invalid", params: { field: "labels" } });
+    expect(await run((tx) => getOptionList(tx, created.id))).toEqual(created);
   });
 
   it("refuses a label belonging to another list without changing either list", async () => {

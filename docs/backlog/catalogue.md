@@ -1167,7 +1167,8 @@ is built by the proposal. It distinguishes the narrower measured cases from thes
   on a take-orders device can stop and restore availability, with no new permission. Restoration
   is manual, never a next-day reset. A running-down quantity (“only 5 left”) stays parked.
   [Delivery 2](../superpowers/plans/2026-11-12-a1516-modifier-availability.md) keeps stored defaults
-  and the stored active list's last-choice refusal; older published versions may contain fewer choices.
+  and the till setter's last-choice refusal, including disabled lists still published; older published
+  versions may contain fewer choices.
   To make the displayed fallback the new preference while the saved preference is sold out, restore
   the saved preference and save first, then select the new default and save again.
 

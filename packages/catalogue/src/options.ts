@@ -123,11 +123,7 @@ export async function setOptionLabelAvailability(
   if (!list.labels.some((label) => label.id === labelId)) {
     throw new AppError("options.not_found", { optionListId });
   }
-  if (
-    list.active &&
-    !available &&
-    !list.labels.some((label) => label.id !== labelId && label.available)
-  ) {
+  if (!available && !list.labels.some((label) => label.id !== labelId && label.available)) {
     throw new AppError("options.invalid", { field: "labels" });
   }
   await tx

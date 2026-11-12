@@ -247,3 +247,22 @@ it("refuses a choice added to the stored list after the menu was published", asy
   expect(answer).toMatchObject({ status: 404, json: { code: "options.not_found" } });
   expect(await withTransaction(suite.db, (tx) => getOptionList(tx, listId))).toEqual(stored);
 });
+
+it("refuses the last published choice after its stored list is disabled", async () => {
+  const stored = await withTransaction(suite.db, async (tx) => {
+    const { id, ...current } = await getOptionList(tx, listId);
+    return updateOptionList(tx, id, { ...current, active: false }, "es");
+  });
+  expect((await send(app, cookie, "PUT", optionPath(), { available: false })).status).toBe(200);
+  const answer = await send(
+    app,
+    cookie,
+    "PUT",
+    optionPath().replace(labelId, stored.labels[1]!.id),
+    { available: false },
+  );
+  expect(answer).toMatchObject({
+    status: 400,
+    json: { code: "options.invalid", params: { field: "labels" } },
+  });
+});

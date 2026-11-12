@@ -74,7 +74,8 @@ still possible, and a reader of `defaultLabelId` has to accept one.
 Till dish information keeps every published modifier row in `modifierAvailability`; the ordering
 picker uses the filtered `offeredModifiers`. Its availability routes admit published extras and
 choices, including unavailable rows, and apply the change across menus. The option setter changes
-only availability, keeps the preferred default and refuses the stored active list's last choice.
+only availability, keeps the preferred default and refuses the stored list's last choice even if
+the list was disabled after publication. Ordinary inactive-list management can still withdraw every choice.
 Older published versions may contain fewer choices; this is not a published-version guarantee.
 
 An **extras list** bounds how many picks it takes — `minPicks` 0 makes it optional, 1 or more makes

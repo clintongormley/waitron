@@ -446,4 +446,5 @@ orders. The change applies to every menu in this venue. A sold-out dish stays vi
 
 Choose **Back on sale** when it is ready again; nothing resets the switch the next day.
 Restoring the dish keeps any individually sold-out sizes off sale.
-For an option list, put another choice back on sale before marking its last available choice sold out.
+For an option list, put another choice back on sale before marking its last available choice sold out,
+even if the list has been disabled on the dashboard but is still on your menu.
