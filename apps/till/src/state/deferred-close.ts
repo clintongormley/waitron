@@ -23,6 +23,9 @@ export interface DeferredOfferInput {
   currentOrders: { groups: { rows: DeferredDishRow[] }[]; ungrouped: DeferredDishRow[] } | null;
   /** The last read of Current orders failed. */
   currentOrdersUnread: boolean;
+  /** A Counter bill, which skips the served check (its food is handed over after paying) and can
+   * close only with a simplified invoice. */
+  counter?: { fullInvoice: boolean };
 }
 
 function servedOrCancelled(row: DeferredDishRow): boolean {
@@ -42,6 +45,10 @@ export function deferredOffered(input: DeferredOfferInput): DeferredOffer {
     return { state: "hidden" };
   if (input.paymentUnconfirmed)
     return { state: "off", reason: "deferred_close.payment_unconfirmed" };
+  if (input.counter !== undefined)
+    return input.counter.fullInvoice
+      ? { state: "off", reason: "deferred_close.counter_full_invoice" }
+      : { state: "offered" };
   if (currentOrders === null)
     return {
       state: "off",
@@ -71,8 +78,21 @@ export function deferredGoneReason(
   return undefined;
 }
 
+/** What a close repeats of the bill it closes. */
+export type DeferredBill = Pick<
+  PartyBill,
+  | "workingOrderId"
+  | "revision"
+  | "total"
+  | "invoiceType"
+  | "recipient"
+  | "invoiceNumber"
+  | "receiptLanguage"
+  | "invoiceDelivery"
+>;
+
 export interface DeferredRequestInput {
-  bill: PartyBill;
+  bill: DeferredBill;
   offeredLanguages: readonly string[];
   expectedEdit: BillEditExpected | null;
   party: { id: string; revision: number; expectedEdits: BillEditExpected[] } | null;

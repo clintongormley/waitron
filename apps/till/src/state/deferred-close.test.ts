@@ -94,6 +94,26 @@ describe("deferredOffered", () => {
         { currentOrders: null, currentOrdersUnread: true },
         { state: "off", reason: "deferred_close.orders_unread" },
       ],
+      [
+        "a Counter bill, whose dishes are not checked",
+        { counter: { fullInvoice: false }, currentOrders: null, currentOrdersUnread: true },
+        { state: "offered" },
+      ],
+      [
+        "a Counter bill staged for a full invoice",
+        { counter: { fullInvoice: true }, currentOrders: null },
+        { state: "off", reason: "deferred_close.counter_full_invoice" },
+      ],
+      [
+        "a Counter bill whose payment's outcome is unknown",
+        { counter: { fullInvoice: false }, currentOrders: null, paymentUnconfirmed: true },
+        { state: "off", reason: "deferred_close.payment_unconfirmed" },
+      ],
+      [
+        "a Counter bill with payments",
+        { counter: { fullInvoice: true }, bill: billOf({ hasPayments: true }) },
+        { state: "hidden" },
+      ],
     ];
     for (const [name, over, expected] of cases)
       expect([name, deferredOffered(input(over))]).toEqual([name, expected]);
