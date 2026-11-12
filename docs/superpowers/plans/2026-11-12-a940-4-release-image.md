@@ -55,13 +55,19 @@ box has started in production yet (CLAUDE.md §5, the 2026-11-08 producer except
    is a build setting, never a box setting, and "release" says what it marks. The bundle carries
    it; the running box's environment never sets it.
 3. **The production refusal applies only to a bundled build.** Run from source (Vitest, `tsx`,
-   `wa-wt`), the server has no bundle stamp and the check lets it start. Reason: about 140 start
-   calls in 15 `apps/server` test files boot in production from source
-   (`git grep -l 'WAITRON_ENV: "production"' -- 'apps/server/src/*.test.ts'`, counted 2026-11-12);
+   `wa-wt`), the server has no bundle stamp and the check lets it start. Reason: 26 server test
+   files name a production environment, and 15 of them make 135 start calls
+   (`git grep -l 'WAITRON_ENV: "production"\|WAITRON_ENV=production' -- 'apps/server/src/*.test.ts' 'apps/server/test'`,
+   then `grep -c 'startServer\b\|startServerOrFirstSetupResolution'` over those files, 2026-11-12);
    each would otherwise need a stand-in release. A box runs only the image's bundles
-   (`deploy/Dockerfile:231-240` copies `dist/*.js` and no source), and `scripts/bundle-node.mjs`
-   gives every bundle the stamp, `null` when not a release (Task 1 pins that). The same shape
-   already decides `BUILD_COMMIT` (`packages/fiscal-verifactu/src/software-identity.ts:41-52`).
+   (`deploy/Dockerfile:231-240` copies `dist/*.js` and no source), and every image bundle is built
+   by `scripts/bundle-node.mjs`'s command line (`apps/server/package.json:16`), which always passes
+   a release value, `null` when not a release (Task 1 pins that). `bundle()` called directly by test
+   support (`apps/server/src/testing/built-server.ts:35`, `zone-process-matrix.ts:87`) gives no
+   value, so those bundles carry no stamp and count as source runs (`testing/certificate-diagnosis-snapshot.ts:67`
+   runs the command line instead, so its bundle is stamped `null`; it bundles the diagnosis entry,
+   not a server start, which Task 3 Step 4 confirms by running its users), as the hour stamp already works (`scripts/bundle-node.mjs:42`). The same shape
+   decides `BUILD_COMMIT` (`packages/fiscal-verifactu/src/software-identity.ts:41-52`).
 4. **The refusal checks the version stamp only, not the folder.** A release build without a sound
    declaration folder cannot be made: the image build renders the folder in the same step that
    stamps the version and fails if the render fails (Task 4), and the tag's publish runs
@@ -87,6 +93,16 @@ box has started in production yet (CLAUDE.md §5, the 2026-11-08 producer except
    "Fecha" line of the committed `v<version>.md`, read back from its Spanish words
    (`3 de diciembre de 2026` → `2026-12-03`) and accepted only when `spanishDate` of the result
    gives the same words back. No new field in the committed file.
+10. **A release build given no producer fails, rather than rendering nothing** (§5.3: "a build
+    given none renders no declaration (its production start refuses anyway)"). With a release
+    version set, the render runs and refuses without the producer's settings, failing the build: an
+    image stamped `1.2.3` without its declaration would be a release that breaks §5.1's promise.
+    A build with no release version renders nothing, as §5.3 says.
+11. **The render has its own build stage** (`FROM build AS declaration`). Measured by the plan
+    review with a throwaway two-target Dockerfile: a build setting declared in the shared build
+    stage and passed to one target but not the other made the second re-run that stage. With the
+    render in its own stage, both targets get the same settings and the print-agent build reuses the
+    cache on a tag.
 
 ## Global Constraints
 
@@ -148,9 +164,10 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
 - Produces: `releaseDefine(env: Record<string, string | undefined>): string` in `bundle-node.mjs`,
   answering the JSON literal (`null` or `{"version":"1.2.3"}`) from `env.WAITRON_RELEASE_VERSION`
   (unset or `""` → `null`, per `isUnset`'s rule), throwing `Not a release version: <value>` for a
-  malformed one; `bundle()` takes `releaseVersion` and always adds
+  malformed one; `bundle()` takes `releaseVersion` and, when it is given (`null` included), adds
   `--define:__WAITRON_RELEASE__=__waitronRelease` with the frozen literal in the banner, as the hour
-  stamp is added.
+  stamp is added (`bundle-node.mjs:42`); the command-line block always gives it, so every image
+  bundle is stamped and a test's direct `bundle()` call is not (departure 3).
 - Produces: `softwareVersion(commit = BUILD_COMMIT, release = builtRelease())`: a release's version
   when `release.bundled && release.version !== null`, otherwise today's `0.0.0-dev[+commit]`.
 
@@ -159,8 +176,10 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
   version `"1.2.3"`; `{ version: "1.2" }` and `"1.2.3"` (a string) → version `null` (use
   `vi.stubGlobal`). Bundler test: `releaseDefine({})` and `({ WAITRON_RELEASE_VERSION: "" })` →
   `"null"`; `"1.2.3"` → `'{"version":"1.2.3"}'`; `"1.2.3-rc1"`, `"v1.2.3"`, `"01.2.3"` throw; the
-  esbuild arguments `bundle()` passes contain `--define:__WAITRON_RELEASE__=__waitronRelease` both
-  with and without a version (the stub `run` records them). `software-identity.test.ts`:
+  esbuild arguments `bundle()` passes contain `--define:__WAITRON_RELEASE__=__waitronRelease` when
+  given `releaseVersion` `null` and `"1.2.3"`, and not when given none (the stub `run` records them);
+  the command-line block passes `releaseDefine(process.env)` (a case that runs the script with the
+  stub, as the file's other CLI cases do). `software-identity.test.ts`:
   `softwareVersion(null, { bundled: true, version: "1.2.3" })` → `"1.2.3"`; with a commit and a
   version → `"1.2.3"`; `{ bundled: true, version: null }` with a commit → `0.0.0-dev+<commit>`.
   Agree guard: a second case that mocks `builtRelease` to `1.2.3` and checks the recorded sale's
@@ -187,13 +206,20 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
   `source.test.ts`, `command.ts` (`render` subcommand), `command.test.ts`,
   `packages/fiscal-verifactu/src/errors.ts` (`declaration.date_unreadable`)
 - Create: `packages/fiscal-verifactu/src/declaration/folder.ts`, `folder.test.ts`
-- Modify: `apps/server/src/testing/declaration-folder.ts` (call `writeReleaseFolder`, then overwrite
-  `release.json` only when its caller passes a release unlike the rendered one)
+- Modify: `packages/fiscal-verifactu/test/declaration.ts` (`declarationSourceFor(version, { date?, releasable? })`:
+  `date` defaults to today's value there; `releasable: true` drops the `release-blocker` lines, which
+  the real template keeps for Q53 even after Task 9), `apps/server/src/testing/declaration-folder.ts`
+  (render with `releasable: true` and the `releasedOn` it is given, call `writeReleaseFolder`, then
+  overwrite `release.json` only when its caller passes a release unlike the rendered one; its five
+  callers keep passing unchanged). The blocker refusal stays in `writeReleaseFolder`.
 
 **Interfaces:**
-- Produces: `declarationDate(source: string): string` — the `YYYY-MM-DD` of item 1.l)'s "Fecha"
-  line; throws `declaration.date_unreadable { line }` when the words are not a date `spanishDate`
-  writes back identically.
+- Produces: `declarationDate(source: string): string` — the `YYYY-MM-DD` of item 1.l)'s first
+  bullet, whose words wrap so the date sits on the template's next line (`template.md:78-79`, "…
+  suscribe esta declaración / responsable del mismo: ‹fecha›."): read the bullet joined into one
+  line and take the text after its last `: ` up to the final `.`; throws
+  `declaration.date_unreadable { line }` (`line` = that text) when the words are not a date
+  `spanishDate` writes back identically.
 - Produces: `writeReleaseFolder(dir: string, source: string, producer: DeclarationProducer): Promise<{ version: string; releasedOn: string }>`
   in `folder.ts`: refuses blockers (`declaration.release_blocked`), takes `version` from item 1.c),
   writes the four files of the Global Constraints (creating `dir`), answers what it wrote to
@@ -207,7 +233,7 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
   `declarationDate` answers `"2026-12-03"`; `2026-03-01` (`1 de marzo de 2026`) → `"2026-03-01"`;
   a source whose line reads `31 de febrero de 2026` and one with `‹fecha›` unfilled → throw
   `declaration.date_unreadable`. `folder.test.ts` (the test pins slice 3's decision 1): for
-  `declarationSourceFor("1.2.3")` prepared on `2026-12-03`, the folder holds exactly the four
+  `declarationSourceFor("1.2.3", { date: "2026-12-03", releasable: true })`, the folder holds exactly the four
   names; `release.json` parses to `{ version: "1.2.3", releasedOn: "2026-12-03" }` and ends in a
   newline; `declaration.html` equals `renderDeclaration(source, producer).html`;
   `declaration.txt` equals `.text` and has one `1.c) ` line ending `: 1.2.3`; the PDF starts
@@ -240,7 +266,9 @@ Branch `feat/a940-4-release-image`. Path: FULL (the box's start path).
 - Modify: `apps/server/src/errors.ts` (`server.unreleased_build`), `apps/server/src/boot.ts`
   (`StartServerSeams.builtRelease?: BuiltRelease`; call right after `loadConfig` at `:1107`),
   `apps/server/src/i18n/recovery-page.ts` (the entry), `apps/server/src/recovery-surface.test.ts`
-  (one case), `apps/server/src/boot.test.ts` (two cases)
+  (one case), `apps/server/src/boot.test.ts` (two cases), `apps/server/src/testing/built-server.ts`
+  (`useBuiltServer` takes an optional release version, passed to `bundle()` as `releaseVersion`, and
+  an optional declaration folder written beside the bundle), and one built-server case (below)
 
 **Interfaces:**
 - Consumes: `builtRelease()` (Task 1).
@@ -255,14 +283,23 @@ Branch `feat/a940-4-release-image`. Path: FULL (the box's start path).
   before opening the venue (no `venue.db` created in its fresh state dir); the same case with
   `version: "1.2.3"` starts (the case that must still start). `recovery-surface.test.ts`: a recovery
   state with `lastErrorCode: "server.unreleased_build"` renders the EN and ES title and action of the
-  Global Constraints.
+  Global Constraints. A built-server case (beside the existing `useBuiltServer` users): a bundle
+  stamped `null` started with `WAITRON_ENV: "production"` and a fresh state folder fails its start
+  with `server.unreleased_build` (read from its recovery state or its output, whichever the existing
+  built-server cases read), and one stamped `1.2.3` gets past that check (the case that must still
+  start: it fails later or serves, but never with that code).
 - [ ] **Step 2: Run; each fails.**
   `pnpm --filter @waitron/server exec vitest run src/release-check.test.ts src/recovery-surface.test.ts`
   and `-t "unreleased"` on `src/boot.test.ts`.
 - [ ] **Step 3: Implement.** The failure reaches the recovery page by the path
   `server.config_missing` already takes from `bootServer` (`node-entry.test.ts:1097-1112` shows it).
-- [ ] **Step 4: Run** the three files whole, `scripts/errors-reachable.test.ts` and the
-  recovery-surface never-delete cases. Deletion controls: remove the `bundled` test → the
+- [ ] **Step 4: Run** the three files whole, `scripts/errors-reachable.test.ts`, the
+  recovery-surface never-delete cases, and every file that bundles through `bundle()` directly:
+  `first-fiscal-hour-boot.e2e.test.ts` (it starts a built bundle in production at `:30`; it must
+  stay green, which shows test bundles are unstamped), `bin.commands.test.ts`, the
+  `zone-process-matrix` users, and the three `certificate-diagnosis` test files that use
+  `testing/certificate-diagnosis-snapshot.ts` (stamped `null`, so they must not start a production
+  server; if one does, stop and report). Deletion controls: remove the `bundled` test → the
   not-bundled case fails; remove the call in `bootServer` → the boot refusal case fails.
 - [ ] **Step 5: Commit.**
 
@@ -280,6 +317,8 @@ Branch `feat/a940-4-release-image`. Path: FULL (the box's start path).
 - Consumes: `builtRelease()`, `readDeclarationFolder(declarationRoot())`
   (`apps/server/src/declaration-pages.ts:92`).
 - Produces: `checkRelease(version: string, release: BuiltRelease, folder: DeclarationFolder, out: CheckOutput): 0 | 1`
+  (pure; the caller reads the folder). `runServerCommand` becomes `async` (the folder read is
+  async), and `apps/server/src/bin.ts` awaits it.
   — 0 only when `release.bundled`, `release.version === version`, `folder.kind === "release"` and
   `folder.version === version`; each failure prints one line naming which (`bundle version <v|none>`,
   `declaration folder none|damaged <file>|version <v>`), never a producer value.
@@ -288,20 +327,25 @@ Branch `feat/a940-4-release-image`. Path: FULL (the box's start path).
 
 - [ ] **Step 1: Failing tests.** `release-command.test.ts`: the passing case and one case per
   failure line, using `writeDeclarationFolder` for real folders. `bin.commands.test.ts`: the USAGE
-  pin gains the new form (a whole-shape pin gaining a key: allowed, named in the PR);
-  `check-release 1.2.3` from source exits 1 with `bundle version none` (not bundled).
+  pin gains the new form (a whole-shape pin gaining a key: allowed, named in the PR); the file runs
+  a test bundle, which is unstamped (departure 3), so `check-release 1.2.3` exits 1 with
+  `bundle version none`; with Task 3's `useBuiltServer` release option (a bundle stamped `1.2.3` and
+  a folder from `writeDeclarationFolder` beside it), `check-release 1.2.3` exits 0 and
+  `check-release 1.2.4` exits 1 — the automated passing case.
   `deploy-image-env.test.ts`: the Dockerfile's build stage declares `WAITRON_RELEASE_VERSION` and the
   three producer `ARG`s; the render runs only when the version is non-empty; the runtime stage copies
   the folder to `/app/declaration/` from a parent that holds it only on a release (below).
 - [ ] **Step 2: Run; each fails.**
-- [ ] **Step 3: Implement.** Dockerfile: the build stage writes into `/release-root/`, creating
-  `/release-root/declaration/` only when `WAITRON_RELEASE_VERSION` is non-empty, by
+- [ ] **Step 3: Implement.** Dockerfile: the build stage declares `ARG WAITRON_RELEASE_VERSION`
+  before the app-build `RUN`, so the bundles see it. A new stage `FROM build AS declaration`
+  declares the producer's three `ARG`s and `WAITRON_RELEASE_VERSION`, makes `/release-root/`, and
+  only when the version is non-empty runs
   `pnpm --filter @waitron/fiscal-verifactu declaration render --version "$WAITRON_RELEASE_VERSION" --out /release-root/declaration`
-  (the producer `ARG`s are in its environment; it fails the build on any refusal); the runtime stage
-  `COPY --from=build --chown=waitron:waitron /release-root/ /app/`, so a test build has no
-  `/app/declaration/` at all (slice 3's "none", not "damaged"). The bundles must be built with the
-  same `WAITRON_RELEASE_VERSION` in their environment (an `ARG` is in every later `RUN`'s
-  environment; declare it before the build `RUN`). image-smoke (a test build): `/legal/declaration`
+  (it fails the build on any refusal; departure 10). The runtime stage
+  `COPY --from=declaration --chown=waitron:waitron /release-root/ /app/`, so a test build has no
+  `/app/declaration/` at all (slice 3's "none", not "damaged"; the plan review measured an empty
+  `/release-root/` copying nothing and leaving `/app` root-owned). The print-agent target never
+  reads the declaration stage. image-smoke (a test build): `/legal/declaration`
   answers 404 and `/legal/about` answers JSON with `"release":null`; and
   `docker run … node /app/server.js check-release 0.0.0` exits 1 printing `bundle version none`.
 - [ ] **Step 4: Measure the release path locally, once.** Build the image with
@@ -326,10 +370,12 @@ Branch `feat/a940-4-release-publish`. Path: FULL.
 
 - [ ] **Step 1: Failing guard cases** in `scripts/ci-workflow.test.mjs`: the "Work out the tags"
   step outputs `release_version` (the tag without `v`, empty on `main`); both app-image builds pass
-  `WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}`; the print-agent build does
-  not; a step "Refuse a release tag that is not on main", which runs only for `refs/tags/v*`, fetches
-  `main` (bounded, as the checkout steps are) and runs `git merge-base --is-ancestor "$GITHUB_SHA"
-  origin/main`, comes before the first build; a step "Check the release inside the built image",
+  `WAITRON_RELEASE_VERSION=${{ steps.tags.outputs.release_version }}`, and so does the print-agent
+  build (departure 11: the same settings keep its cache); a step "Refuse a release tag that is not
+  on main", which runs only for `refs/tags/v*`, fetches `main` with no `--depth` (the plan review
+  measured a depth-1 fetch answering "not an ancestor" for a tag behind main's tip; the guard case
+  refuses `--depth` in that step), bounded as the checkout steps are, and runs
+  `git merge-base --is-ancestor "$GITHUB_SHA" origin/main`, comes before the first build; a step "Check the release inside the built image",
   only for tags, runs `timeout 120 docker run --rm --pull never --network none --entrypoint node
   "$CHECK_IMAGE" /app/server.js check-release "$RELEASE_VERSION"` after the build for checking and
   before "Publish to GHCR".
@@ -345,8 +391,11 @@ Branch `feat/a940-4-release-publish`. Path: FULL.
 **Files:**
 - Modify: `.github/workflows/ci.yml` (new job `release`), `scripts/ci-workflow.test.mjs`
 
-- [ ] **Step 1: Failing guard cases:** a job `release` with `needs: [publish]`, `if:` a `v*` tag and
-  `needs.publish.result == 'success'`, `timeout-minutes` set, `permissions: { contents: write,
+- [ ] **Step 1: Failing guard cases:** a job `release` with `needs: [publish]`,
+  `if: always() && !cancelled() && needs.publish.result == 'success' && startsWith(github.ref, 'refs/tags/v')`
+  (as `publish` does, `ci.yml:4317`, so an intended upstream skip cannot drop it), `timeout-minutes` set,
+  the bounded two-attempt checkout (it runs a script from the repository), `GH_TOKEN` from
+  `secrets.GITHUB_TOKEN` on the step that calls `gh`, `permissions: { contents: write,
   packages: read }` and no other job granted `contents: write`; it logs in to GHCR, pulls
   `ghcr.io/<owner lowercased>/waitron:<version>` (bounded, two attempts), `docker create`s it, copies
   `/app/declaration/declaration.pdf` and `.txt` out as `waitron-<version>-declaration.pdf` and `.txt`,
@@ -396,7 +445,9 @@ Branch `feat/a940-4-release-publish`. Path: FULL.
   a scratch bare repository with a tagged commit behind its tip, run the fetch `actions/checkout`
   runs with `fetch-depth: 1` and `fetch-tags: true` (read the action's log on this PR's own run for
   the exact command) and check `git show v1.0.0:<file>` answers. The failing case it must also show:
-  the same fetch without the tags answers "unknown revision". Record both.
+  the same fetch without the tags fails (assert its exit status, not its words: git prints "invalid
+  object name"). Record both. Add `scripts/released-declarations.mjs` to the root project's
+  `coverage.include`.
 - [ ] **Step 5: Commit.**
 
 ### Task 9: Delete the slice-4 blocker; the runbook, the backlog, CLAUDE.md
@@ -415,8 +466,10 @@ Branch `feat/a940-4-release-publish`. Path: FULL.
 
 - [ ] **Step 1:** edit; run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/declaration`
   and `pnpm exec vitest run scripts/release scripts/claude-md-pointers.test.ts`; all pass.
-- [ ] **Step 2:** `pnpm release prepare 9.9.9 --place Test` on a scratch branch, with the producer
-  settings set, still refuses with `declaration.release_blocked {"count":1}` (Q53's line). Record it.
+- [ ] **Step 2:** `pnpm --filter @waitron/fiscal-verifactu declaration show --version 9.9.9 --place Test --date 2026-12-03`,
+  with the producer settings set, still refuses with `declaration.release_blocked {"count":1}`
+  (Q53's line). (`pnpm release prepare` would stop earlier, off a clean `release/9.9.9` branch.)
+  Record it.
 - [ ] **Step 3: Commit.** Then `/finish-branch` for PR 3.
 
 ## Root guards and sweeps
