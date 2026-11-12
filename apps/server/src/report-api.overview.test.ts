@@ -1,4 +1,4 @@
-import { floorTodayTables, venueLocationId } from "@waitron/db";
+import { floorTodayTables } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -35,7 +35,6 @@ const noopLog: Logger = () => {};
 let deviceId: string;
 let nodeId: string;
 let secondNodeId: string;
-let locationId: string;
 let seriesId: string;
 let managerCookie: string;
 let staffCookie: string;
@@ -148,7 +147,6 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    locationId = await venueLocationId(db);
     ({ deviceId } = await seedDevice(db));
     nodeId = await seedNode(db);
     // A SECOND node at the SAME location — no sales of its own. The venue-wide vs node-scoped test
@@ -240,10 +238,7 @@ describe("mountReportApi — /reports/overview", () => {
   });
 
   it("counts a group's real tables under their own ids", async () => {
-    const [zone] = await suite.db
-      .insert(floorZones)
-      .values({ name: "Counter" })
-      .returning();
+    const [zone] = await suite.db.insert(floorZones).values({ name: "Counter" }).returning();
     const tables = await suite.db
       .insert(diningTables)
       .values(
