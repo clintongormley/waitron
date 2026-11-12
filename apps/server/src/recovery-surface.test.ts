@@ -549,6 +549,7 @@ describe("curated operator text", () => {
     ];
     const persistedByRunEntry = [
       "server.config_missing",
+      "server.unreleased_build",
       "migrations.apply_failed",
       "provisioning.database_ahead",
       "restore.database_set_aside",
