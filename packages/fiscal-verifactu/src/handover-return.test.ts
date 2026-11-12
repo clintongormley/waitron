@@ -183,6 +183,158 @@ it("keeps a held sale's different payments unaccounted when accepting its only r
   expect(receiver.db.all<ReturnRow>(sql`select * from tenders`)).toEqual(existing.tenders);
 });
 
+it("reports a held sale's imported payment without asking for manual entry (F4-4)", async () => {
+  const main = await seedNode(suite.db, "Main");
+  const source = await original("Source", 1, copyBase);
+  const now = new Date("2026-07-20T17:22:00.000Z");
+  const first = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, source.nodeId, first, now),
+  );
+  await recordTakeover(receiver.db, source.nodeId, main.nodeId);
+  for (const [db, node] of [
+    [suite.db, source],
+    [receiver.db, main],
+  ] as const) {
+    const pending = altaFor(node, source.saleId, 1, 3);
+    pending.input.IDEmisorFactura = source.issuerTaxId;
+    pending.input.NumSerieFactura = "Source/1";
+    pending.input.Subsanacion = "S";
+    await withTransaction(db, (tx) =>
+      appendToChain(tx, node.nodeId, { ...pending, correctsRegistroId: source.recordId }),
+    );
+  }
+  await suite.db.insert(tenders).values({
+    id: "old-box-cash",
+    saleId: source.saleId,
+    method: "cash",
+    amount: 3000,
+    tipAmount: 0,
+    settledAt: "2026-07-20T17:21:30.000Z",
+  });
+  const returned = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  const inspect = () =>
+    VERIFACTU_HANDOVER.returnRecords!.inspect!(
+      receiver.db,
+      source.nodeId,
+      returned as unknown as CanonicalValue,
+    );
+  const [clash] = await inspect();
+  expect(clash!.kind).toBe("record");
+  expect(
+    await withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, returned, now, [clash!.fingerprint]),
+    ),
+  ).toEqual({ complete: true });
+  expect(receiver.db.all(sql`select id, amount from tenders`)).toEqual([
+    { id: "old-box-cash", amount: 3000 },
+  ]);
+  const [after] = await inspect();
+  expect(after!.readable).not.toContain("Handle these facts manually");
+  expect(after!.readable).toContain(`Sale ${source.saleId} is held by the new main`);
+  expect(after!.readable).toContain("Tender old-box-cash\nRow on the new main: present");
+  expect(clash!.readable).toContain("Tender old-box-cash\nRow on the new main: absent");
+});
+
+it("downloads totals, tax and payment facts for a sale blocked behind a clash (F4-2)", async () => {
+  const source = await original("Source", 1, copyBase);
+  await appendOriginal(source, "Source", 2);
+  const prefix = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
+  const existing = structuredClone(prefix);
+  const second = existing.records[1]!;
+  const discarded = second.sale_id;
+  second.id = "held-middle";
+  second.sale_id = "held-middle-sale";
+  existing.sales.find((row) => row.id === discarded)!.id = "held-middle-sale";
+  existing.heads[0]!.ultimo_registro_id = "held-middle";
+  const now = new Date("2026-07-20T17:22:00.000Z");
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, source.nodeId, existing, now),
+  );
+  const later = await appendOriginal(source, "Source", 3);
+  const order = await seedWorkingOrder(suite.db, {
+    nodeId: source.nodeId,
+    status: "settled",
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
+  await suite.db.insert(tenders).values({
+    id: "later-cash",
+    saleId: later.saleId,
+    method: "cash",
+    amount: 4500,
+    tipAmount: 0,
+    settledAt: "2026-07-20T17:21:30.000Z",
+  });
+  await suite.db.insert(tenders).values({
+    id: "later-card",
+    saleId: later.saleId,
+    method: "card",
+    amount: 1000,
+    tipAmount: 0,
+    settledAt: "2026-07-20T17:21:30.000Z",
+  });
+  await suite.db.insert(tenderRefunds).values({
+    id: "later-refund",
+    saleId: later.saleId,
+    tenderId: "later-card",
+    submissionId: "later-submission",
+    fingerprint: "later-fingerprint",
+    appliedAmount: 100,
+    tipAmount: 0,
+    reason: "Goodwill",
+    authorizedBy: "manager",
+    requestedBy: "operator",
+    source: "device",
+    deviceId: source.deviceId,
+    nodeId: source.nodeId,
+    locationId: order.locationId,
+    method: "card",
+    provider: "recorded-provider",
+    providerPaymentRef: "later-charge",
+    state: "pending",
+    createdAt: "2026-07-20T17:21:31.000Z",
+  });
+  await suite.db.execute(sql`insert into payments
+    (id, working_order_id, source, device_id, node_id, sale_id, provider, payment_ref,
+      amount, state, settled_at, created_at, updated_at)
+    values ('later-capture', ${order.id}, 'device', ${source.deviceId}, ${source.nodeId}, ${later.saleId},
+      'recorded-provider', 'later-charge', 1000, 'captured',
+      '2026-07-20T17:21:30.000Z', '2026-07-20T17:21:30.000Z', '2026-07-20T17:21:30.000Z')`);
+  const returned = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  const inspect = () =>
+    VERIFACTU_HANDOVER.returnRecords!.inspect!(
+      receiver.db,
+      source.nodeId,
+      returned as unknown as CanonicalValue,
+    );
+  const [clash] = await inspect();
+  expect(
+    await withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, returned, now, [clash!.fingerprint]),
+    ),
+  ).toEqual({ complete: false });
+  expect(receiver.db.all(sql`select id from tenders`)).toEqual([]);
+  const [after] = await inspect();
+  const waitingRecords = after!.readable!.split("Records in this batch still waiting")[1]!;
+  expect(waitingRecords).toContain("Invoice: Source/3");
+  const waiting = waitingRecords.split("Invoice: Source/3\n")[1]!;
+  expect(waiting).toContain("Total: 123.45\nTax total: 21.43");
+  expect(waiting).toContain("Tax breakdown: [{");
+  expect(waiting).toContain(
+    "Tender later-cash\nRow on the new main: absent\nMethod: cash\nAmount: 45.00",
+  );
+  expect(waiting).toContain(
+    "Refund later-refund\nRow on the new main: absent\nTender: later-card\nMethod: card\nApplied amount: 1.00",
+  );
+  expect(waiting).toContain("Capture later-capture\nRow on the new main: absent\nAmount: 10.00");
+  expect(waiting).toContain(`Sale ${later.saleId} is not held by the new main`);
+  expect(waiting).toContain("Handle these facts manually");
+});
+
 it.each([false, true])(
   "keeps every missing suffix record blocked after an accepted middle clash (split batches: %s)",
   async (split) => {

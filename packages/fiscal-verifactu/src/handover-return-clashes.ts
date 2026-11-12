@@ -68,14 +68,34 @@ function readableRecord(record: ReturnRow, delivery: ReturnRow | undefined): str
   ].join("\n");
 }
 
-function readablePayments(returned: ReturnedOriginals, saleId: ReturnRow[string]): string {
+function readablePayments(
+  tx: Transaction,
+  returned: ReturnedOriginals,
+  saleId: ReturnRow[string],
+): string {
   const own = (rows: ReturnRow[]) => rows.filter((row) => row.sale_id === saleId);
+  const saleHeld = tx.all(sql`select id from sales where id = ${saleId}`).length > 0;
+  const present = new Set(
+    tx
+      .all<{ kind: string; id: string }>(
+        sql`
+        select 'tender' as kind, id from tenders where sale_id = ${saleId}
+        union all select 'refund', id from tender_refunds where sale_id = ${saleId}
+        union all select 'capture', id from payments where sale_id = ${saleId}`,
+      )
+      .map((row) => `${row.kind}:${row.id}`),
+  );
+  const presence = (kind: string, row: ReturnRow) =>
+    `Row on the new main: ${present.has(`${kind}:${row.id}`) ? "present" : "absent"}`;
   return [
     "\nOld-box payment facts for this sale",
-    "Tenders, refunds and captures belonging only to a discarded sale are not imported. Handle these facts manually before resetting the old box.",
+    saleHeld
+      ? `Sale ${saleId} is held by the new main. Its payments are compared and imported separately. Check the row presence below and any reported payment differences before entering a payment again.`
+      : `Sale ${saleId} is not held by the new main. Its payment facts below are not imported. Handle these facts manually before resetting the old box.`,
     ...own(returned.tenders).map((row) =>
       [
         `Tender ${row.id}`,
+        presence("tender", row),
         `Method: ${row.method}`,
         `Amount: ${rawCentsToDecimal(String(row.amount))}`,
         `Tip: ${rawCentsToDecimal(String(row.tip_amount))}`,
@@ -85,6 +105,7 @@ function readablePayments(returned: ReturnedOriginals, saleId: ReturnRow[string]
     ...own(returned.refunds).map((row) =>
       [
         `Refund ${row.id}`,
+        presence("refund", row),
         `Tender: ${row.tender_id}`,
         `Method: ${row.method}`,
         `Applied amount: ${rawCentsToDecimal(String(row.applied_amount))}`,
@@ -98,6 +119,7 @@ function readablePayments(returned: ReturnedOriginals, saleId: ReturnRow[string]
     ...own(returned.captures).map((row) =>
       [
         `Capture ${row.id}`,
+        presence("capture", row),
         `Amount: ${rawCentsToDecimal(String(row.amount))}`,
         `State: ${row.state}`,
         `Provider: ${row.provider}`,
@@ -141,11 +163,16 @@ export function inspectReturnedRecords(
             tx.all<ReturnRow>(sql`select * from envios where registro_id = ${row.id}`)[0],
           ),
       ),
-      readablePayments(returned, record.sale_id),
+      readablePayments(tx, returned, record.sale_id),
       "\nRecords in this batch still waiting",
       ...pending.map(
         (row) =>
-          `Invoice ${row.num_serie_factura}, date ${row.fecha_expedicion_factura}, record ${row.id}, node ${row.node_id}, position ${row.secuencia}`,
+          "\n" +
+          readableRecord(
+            row,
+            returned.deliveries.find((delivery) => delivery.registro_id === row.id),
+          ) +
+          readablePayments(tx, returned, row.sale_id),
       ),
     ].join("\n");
     return [

@@ -31,7 +31,7 @@ import { returnDigest, returnVenue, type ReturnRecordsDeps } from "./return-reco
 import "./errors.js";
 
 const RECORD_WARNING =
-  "The new main will not submit the old box's conflicting record. Check its filing status and tax-agency receipt; it may already have been submitted. Tenders, refunds and captures belonging only to a discarded sale are not imported; check those rows in the download and handle them manually. Later records may remain blocked. Later batches have not been downloaded. Resetting the old box deletes those records too, including sale lines and local backups.";
+  "The new main will not submit the old box's conflicting record. Check its filing status and tax-agency receipt; it may already have been submitted. Check each sale and payment row's presence on the new main in the download. Handle payment facts manually only for a sale the new main does not hold; check reported payment differences for held sales before entering a payment again. Later records may remain blocked. Later batches have not been downloaded. Resetting the old box deletes those records too, including sale lines and local backups.";
 
 type Deps = ReturnRecordsDeps & { requireWritable(): void };
 export function refuseReturn(reason: string): never {

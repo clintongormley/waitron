@@ -97,9 +97,11 @@ pantalla para hacerlo.
 Antes de aceptar una diferencia de factura, descarga ambas versiones con GET
 `/management-api/return-clashes/:clashId/download`. El archivo de texto tiene etiquetas en inglés
 y conserva los valores fiscales originales. Comprueba el estado de envío, el CSV y el error de
-cada versión. También se enumeran los cobros, reembolsos y cargos de la venta anterior. Los que
-solo pertenecen a una venta descartada no se importan: gestiónalos manualmente antes de restablecer
-el equipo anterior. La versión anterior puede haberse enviado ya; el principal no enviará esa versión
+cada versión. Comprueba el total, los impuestos y los datos de pago de cada registro aún pendiente
+en este lote, no solo de la factura en conflicto. El archivo indica si el principal conserva cada
+venta y cada fila de pago. Gestiona manualmente los pagos de las ventas que no conserva. Para las
+ventas que sí conserva, comprueba las diferencias de pago indicadas antes de introducir otro pago,
+para no contar el dinero dos veces. La versión anterior puede haberse enviado ya; el principal no enviará esa versión
 en conflicto. Conserva la descarga para gestionarla manualmente: las pruebas locales sobreviven
 al reinicio, pero no se incluyen en las copias de seguridad del local ni en el próximo traspaso.
 

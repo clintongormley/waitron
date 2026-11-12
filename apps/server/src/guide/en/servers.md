@@ -88,8 +88,10 @@ data intact. An administrator can inspect eligible differences with GET
 Before accepting an invoice difference, download both versions with GET
 `/management-api/return-clashes/:clashId/download`. The text file has English labels and preserves
 the original fiscal values. Check each version's filing status, tax-agency receipt and error.
-It also lists the old sale's tenders, refunds and captures. Those belonging only to a discarded
-sale are not imported: handle them manually before resetting the old box.
+Check the total, tax and payment facts for each record still waiting in this batch, not just the
+clashing invoice. The file says whether the new main holds each sale and payment row. Handle
+payment facts manually for sales it does not hold. For held sales, check the reported payment
+differences before entering a payment again, so you do not count money twice.
 The old version may already have been submitted; the new main will not submit that conflicting
 version. Keep the download for manual handling: the local evidence survives a restart, but is not
 included in venue backups or the next handover.
