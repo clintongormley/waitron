@@ -1,9 +1,9 @@
 # A1018 Slice 12a: unknown-interval list
 
 **Request/authority.** Lane J queue A1018: “Simple controlled and emergency handover, with Cloud only a placement”.
-Watcher `questions.md`, 2026-11-12 10:10, clears planning only: derive from `handover_activations.evidence`, reuse A1342,
-leave Task 10.6 there; archive/reset stay out. This is neither owner approval nor build clearance.
-Parent checks/commits, obtains Claude's plan read, then watcher clearance. Source: [original Slice 12a](2026-11-02-a1018-handover-build.md#slice-12a--the-reconciliation-list-and-lines-beside-the-reports)
+Watcher `questions.md`, 2026-11-12 10:10, set the boundary: derive from `handover_activations.evidence`, reuse A1342,
+leave Task 10.6 there; archive/reset stay out. Claude reviewed the plan (309 seconds) and corrections (123 seconds).
+The watcher cleared this corrected plan on 2026-11-12 at 11:06 with the two limits below. No owner approval of this plan is claimed. Source: [original Slice 12a](2026-11-02-a1018-handover-build.md#slice-12a--the-reconciliation-list-and-lines-beside-the-reports)
 and [design §5](../specs/2026-10-23-a1018-simple-handover-design.md#5-point-3-fiscal-only-return-with-a-visible-business-gap), narrowed by the [later returned-fact/reset decisions](../../backlog/replication-cloud.md#returned-originals-and-their-recorded-facts-a1342-2026-11-10).
 
 **Smallest usable finish.** With `report.view`, you can open Reports → Handover intervals and inspect committed emergency
@@ -22,7 +22,7 @@ A1342 inserts absent sales (`packages/fiscal-verifactu/src/handover-return.ts:29
 **Storage decision/exclusions.** No new table: committed evidence supplies this read-only list. Leave original 12a's persistent
 acknowledgement, responsible-person assignment, resolution, correction references, completion matching, returned-invoice detail
 rows and report annotations unavailable pending watcher review. No originals store/relay, batch protocol, audit ledger, duplicate
-source records or archive/reset changes. Watcher must explicitly clear two limits: no lines beside cash-up/reports, and intervals stay unconfirmed here even after a complete return. Task 10.6 stays with A1342, including “never overwrite receiver verdicts”. Do not alter
+source records or archive/reset changes. Two cleared limits: nothing warns beside cash-up or affected reports, so staff open Reports, then Handover intervals; an interval stays unconfirmed in this cut even after a complete return. One later bounded slice, **12a follow-up: report warnings and return completion**, covers both report adjacency and closure, with its own plan and review. Task 10.6 stays with A1342, including “never overwrite receiver verdicts”. Do not alter
 fiscal records, hashes, invoice allocation, series, filing, cash-up/close snapshots or meanings, promotion/activation, schemas or module seats.
 
 **Build, with failing behavioral cases first, observed red then minimal implementation and green.**
@@ -49,7 +49,7 @@ fiscal records, hashes, invoice allocation, series, filing, cash-up/close snapsh
   owns “report.view shows navigation/direct address; without it the list does not load”; existing
   `apps/dashboard/src/api/client.test.ts` owns “automatic interval GET carries x-waitron-live:1”. Restore locale per case.
 - [ ] **Docs/finish (120–180 min).** Update `apps/server/src/guide/en/servers.md` and `apps/server/src/guide/es/servers.md`
-  with shared `{#reconciliation}`; say what you can inspect, that this list stays unconfirmed after a return, and: if the old box returns, check the return status on its page before deciding whether to reset it. Update only A1018's
+  with shared `{#reconciliation}`; state both cleared limits above plainly, say what you can inspect, and: if the old box returns, check the return status on its page before deciding whether to reset it. Update only A1018's
   scope in `docs/backlog.md`, `docs/backlog/replication-cloud.md` and this plan. Support: existing
   `apps/dashboard/src/widgets/test-helpers.ts` and suite-local server seeds; no new support file. Focused commands:
   `pnpm --filter @waitron/server exec vitest run src/report-api.handover-intervals.test.ts`;
@@ -60,4 +60,4 @@ fiscal records, hashes, invoice allocation, series, filing, cash-up/close snapsh
   CI may finish later. At three active hours without the usable PR, stop/report to watcher; no scaffold-only finish.
 
 **Estimate, added/removed lines.** Production +245/−5; tests +300/−0; support +20/−0 (suite-local); docs +35/−5; generated 0/0;
-total 610 changed lines. Stop for watcher/outside opinion before 1.5× (915) or persistent state/report growth. Settle exclusions before build.
+total 610 changed lines. Stop for watcher/outside opinion before 1.5× (915) or persistent state/report growth. The watcher cleared these exclusions at 11:06 on 2026-11-12.
