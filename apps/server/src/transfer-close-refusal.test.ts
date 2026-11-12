@@ -285,6 +285,37 @@ describe("closeBillByTransferTx refuses, before writing anything", () => {
     expect(error).toMatchObject(ineligible(party.tabId, "prior_payment"));
   });
 
+  it("a bill whose payment was given back in full", async () => {
+    const party = await seatedWith(t.venue, "House salad");
+    const paid = await payPart(party, "5.00");
+    expect(paid.status).toBe(200);
+    const paymentId = (paid.json.payment as { id: string }).id;
+    const refunded = await send(
+      t.venue.app,
+      t.venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "5.00",
+        tipAmount: "0.00",
+        reason: "Customer requested it",
+        override: { personId: t.venue.adminId, pin: "1234" },
+      },
+    );
+    expect(refunded.status).toBe(200);
+    expect(refunded.json).toMatchObject({
+      refund: { appliedAmount: "5.00", state: "completed" },
+      balance: { received: "0.00" },
+    });
+
+    const error = await refusedWithNothingWritten(async () =>
+      t.close(await t.requestFor(party.tabId, "12.00", party.partyId)),
+    );
+
+    expect(error).toMatchObject(ineligible(party.tabId, "prior_payment"));
+  });
+
   it("a bill whose only payment was a declined card still closes as a deferred payment", async () => {
     const party = await seatedWith(t.venue, "House salad");
     const expectedEdit = await inTx(t.venue, (tx) => readBillEditState(tx, party.tabId));
