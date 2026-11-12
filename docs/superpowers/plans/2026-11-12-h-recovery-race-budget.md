@@ -4,13 +4,17 @@ Lane H's `CI-recovery-race` queue item asks to investigate CI 43228135671 attemp
 reproduce its busy failure under load, and fix the lock or the four-start test's wait;
 no retry loop or skip. Codex wrote this plan. Claude reviewed its first version in
 `~/waitron-campaign-h/receipts/ci-recovery-race/plan-review.md` (148 seconds).
-The watcher clears it before building; no owner approval of this design is claimed.
+Watcher 2026-11-12 15:41 cleared building after the trigger/history and Linux
+measurement below were added; no new plan read was required. No owner design approval is claimed.
 
 **Finish line:** four children complete all 100 recovery updates in the controlled
 slow schedule, and the unlocked control still demonstrates lost updates. Production
 keeps its existing 10-second refusal and nonblocking polling.
 
-**Cause and history:** `withRecoveryLock` polls every 25 ms; the child that releases
+**Cause and history:** #2777 (`b1a93be193`, merged 10 November 23:26:08 UTC /
+11 November in Rome) changed `writeRecoveryState` from `writeFileAtomic` to
+`writeFileDurable`, adding file and folder flushes to every update. This is the
+trigger named by the watcher; its git diff confirms the change. `withRecoveryLock` polls every 25 ms; the child that releases
 it can immediately reacquire it for its next update before another child polls.
 One waiter can therefore wait behind many of the other children's 75 updates.
 A 175 ms hold per update reproduced errcode 5 at `recovery-lock.ts:31` and the
@@ -22,9 +26,20 @@ The CI case has the same error after 15.527 seconds but no per-lock timings, so 
 specific timing cause remains an inference. Retained history: 24 recent runs, attempt
 1/2 of the named run, and failed logs from 43215712748, 43208119577 and 43203880502;
 none of those older failed logs names this race. The baseline lock/race files pass
-all 11 cases. A traced run at ambient load 12.77 passed: each child acquired 25 times in a row;
+all 11 cases. The widened history retains 40 runs before and 40 after #2777, plus failed logs
+from all 7 failures in those samples. No matching failure appears in those logs;
+a post-trigger run, 42957142327, passed this case in 7,886 ms.
+A traced run at ambient load 12.77 passed: each child acquired 25 times in a row;
 the longest wait was 1,557 ms. This observes unfair reacquisition under real ambient
 load, but only the injected 175 ms hold reproduced the timeout.
+
+**Linux measurement (watcher condition):** unchanged production `readRecoveryState`
++ `afterFailure` + durable write, bundled and run in an owned throwaway node:26-slim
+container, Node 26.13.0/Linux overlayfs. Ten unloaded updates: max 2.21 ms. One
+hundred updates alongside two 64 KiB fsync writers: p95 4.16 ms, max 4.67 ms,
+well below 400 ms. This measures that Linux filesystem, not the failed CI runner.
+The two workers completed about 87,000 flushes; container exit 0, removed by its
+recorded id. Raw timings: receipts/ci-recovery-race/linux-flush.log outside the repo.
 
 **Scope:** change only `apps/server/src/recovery-race.test.ts`. Give the `many` role
 an explicit 30,000 ms wait through a child-local wrapper around `withRecoveryLock`,
