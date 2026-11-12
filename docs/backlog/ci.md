@@ -418,9 +418,9 @@ save-only screenshot calls from product-list’s alignment and root-controls mat
 keeping every row, frame wait and assertion. The watcher’s 2026-11-12 03:30 cut
 removes the Menus structure matrix’s six save-only captures per row, retaining
 settleStructure, both animation frames, and every row, action and assertion.
-The watcher’s 2026-11-12 05:30 cut removes only the two save-only captures in
-the printer pick-up-role matrix, keeping every interaction, flush, geometry and
-accessibility assertion. The larger axe cost remains to be diagnosed.
+The printer pick-up-role matrix runs without its two save-only captures, keeping
+every interaction, flush, geometry and accessibility assertion. The larger axe
+cost remains to be diagnosed.
 The other product-editor, product-list and menu costs still need a demonstrated cause before another cut.
 Judge the first cut by drafts' own file time in its PR run; do not compare coverage-off
 PR timings with those coverage-on timings as a measured speed gain. Bring the next
