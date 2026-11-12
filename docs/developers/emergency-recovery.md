@@ -183,7 +183,9 @@ after a failed attempt. Discard removes the restored configuration and both iden
 (`trading.env` and `trading.env.replaced`); it does not recover old data. It keeps the box's TLS
 files, so your browser can reconnect. You can then restore another backup or set up again.
 
-This choice covers restores started from setup. If a command-line restore is stuck at first start, or its first-start record is unreadable,
+This choice covers restores started from setup. If the first-start record becomes unreadable
+after the box has served, the box starts by itself and leaves first start pending. A successful
+first start removes the unreadable record. If a command-line restore is stuck at first start,
 run `waitron-restore restore` again with the backup and its recovery credentials. The command
 retries the restore over the pending first-start record. Its within-attempt file rollback is
 unchanged.

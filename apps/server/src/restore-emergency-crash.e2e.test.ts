@@ -115,7 +115,9 @@ it.each([
     if (corrupt) await writeFile(join(f.venueDir, "venue.db"), "corrupt partial database");
     else await f.advanceCounters();
     await expect(f.run()).resolves.toBe(true);
-    expect(resultFacts(await f.snapshot())).toEqual(resultFacts(committed));
+    expect(resultFacts(await f.snapshot(), "numeroInstalacion")).toEqual(
+      resultFacts(committed, "numeroInstalacion"),
+    );
     expect(f.journal()).toBe(journal);
     expect(await readFile(join(f.stateDir, "trading.env.replaced"), "utf8")).toBe(previousIdentity);
     await expectFinishedRetry(f, journal);

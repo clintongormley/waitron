@@ -3,8 +3,11 @@ import type { stagedHourCrash } from "./staged-hour-crash.js";
 type Snapshot = Awaited<ReturnType<Awaited<ReturnType<typeof stagedHourCrash>>["snapshot"]>>;
 type RestoreRows = Pick<Snapshot, "registrations" | "series" | "allocations"> &
   Partial<Pick<Snapshot, "chainHeads">>;
-export function resultFacts<T extends RestoreRows>(rows: T) {
-  const sif = (id: string) => rows.registrations.find((row) => row.id === id)!.numeroInstalacion;
+export function resultFacts<T extends RestoreRows>(
+  rows: T,
+  installationName: keyof Snapshot["registrations"][number],
+) {
+  const sif = (id: string) => rows.registrations.find((row) => row.id === id)![installationName];
   const series = (id: string) => rows.series.find((row) => row.id === id)!.code;
   return {
     ...rows,

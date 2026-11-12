@@ -1549,8 +1549,8 @@ A wrong candidate backup continues to use the setup preview's existing refusal.
 The Move inventory derives from `STATE_LAYOUT` and `FIRST_SETUP_HOST_FILES`, keeping locks,
 records, logs and spare files. An unjoined box keeps its TLS authority; a joined box sets that
 authority aside too. The durable Move record is resumed before setup inspection. The server uses
-the unchanged Start again guesses file under a fixed recovery UUID. Switching recovery families
-resets that counter; retries and restarts within this recovery keep it.
+the unchanged Start again guesses file under a fixed recovery UUID. Every password form on the
+recovery page shares one wrong-password count, including across retries and restarts.
 
 The entry/restart test runs three real refused boots before using the recovery page, then opens
 first setup over HTTPS with the retained CA and previews an encrypted backup after rejecting the

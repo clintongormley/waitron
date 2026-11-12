@@ -1,3 +1,4 @@
+import { hashPassword, persons } from "@waitron/identity";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { nodeDumpEntry } from "./testing/node-copy.js";
@@ -72,6 +73,11 @@ const modules = [
   },
 ];
 beforeEach(async () => {
+  await suite.db.insert(persons).values({
+    displayName: "Backup administrator",
+    role: "admin",
+    passwordHash: hashPassword("fixture-restore-password"),
+  });
   await stampDeployment(suite.db, "preproduction");
   scratch = await mkdtemp(join(tmpdir(), "recovery-preview-"));
   await suite.db

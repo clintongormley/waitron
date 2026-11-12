@@ -1,3 +1,4 @@
+import { hashPassword, persons } from "@waitron/identity";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { readdirSync } from "node:fs";
 import { copyFile, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -128,6 +129,11 @@ let fixtureDb: string;
 
 beforeAll(async () => {
   const db = suite.db;
+  await db.insert(persons).values({
+    displayName: "Backup administrator",
+    role: "admin",
+    passwordHash: hashPassword("fixture-restore-password"),
+  });
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: VENUE.taxId, legalName: VENUE.legalName });
@@ -1309,7 +1315,12 @@ describe("restoreFromStream (the command line's whole path)", () => {
 });
 
 describe("stageStreamRestore (the setup wizard's path)", () => {
-  const STAGED = ["flows/restore/entries", "flows/restore/record.json", "flows/restore/venue.db"];
+  const STAGED = [
+    "flows/restore/admin-verifiers",
+    "flows/restore/entries",
+    "flows/restore/record.json",
+    "flows/restore/venue.db",
+  ];
 
   async function stageDeps(
     overrides: Partial<PrepareStreamDeps> & { venueConfirmed?: string | null } = {},
@@ -1353,16 +1364,9 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
         try {
           selected
             .prepare(
-              "insert into persons (id, display_name, role, status, password_hash, created_at) values (?, ?, ?, ?, ?, ?)",
+              "update persons set password_hash = ? where role = 'admin' and status = 'active'",
             )
-            .run(
-              "b27c0642-6311-44ec-80cc-7868717ca4b3",
-              "Selected administrator",
-              "admin",
-              "active",
-              "stream-password-hash",
-              "2026-11-11T12:00:00.000Z",
-            );
+            .run("stream-password-hash");
         } finally {
           selected.close();
         }
@@ -1422,7 +1426,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     expect(
       JSON.parse(await readFile(join(deps.stateDir, "flows/restore/record.json"), "utf8")),
     ).toEqual({ version: 1, phase: "first-start", firstStart: { source: "stream" } });
-    expect(await leftovers(deps.stateDir)).toEqual([]);
+    expect(await leftovers(deps.stateDir)).toEqual(["flows/restore/admin-verifiers"]);
   });
 
   it("a real busy lock retains the staged database and retry then restores it", async () => {
@@ -1469,7 +1473,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     } finally {
       await placed.close();
     }
-    expect(await leftovers(deps.stateDir)).toEqual([]);
+    expect(await leftovers(deps.stateDir)).toEqual(["flows/restore/admin-verifiers"]);
     expect(await readFile(join(deps.stateDir, "trading.env"), "utf8")).toContain(T.nodeId);
   });
 

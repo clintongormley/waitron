@@ -367,7 +367,9 @@ it("restarts from the backup after trading-settings publication is interrupted",
   await f.advanceCounters();
   expect(before.allocations).toHaveLength(2);
   expect(await f.run()).toBe(true);
-  expect(resultFacts(await f.snapshot())).toEqual(resultFacts(before));
+  expect(resultFacts(await f.snapshot(), "numeroInstalacion")).toEqual(
+    resultFacts(before, "numeroInstalacion"),
+  );
   expect(before.records).toEqual(f.original);
   expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
     `WAITRON_NODE_ID=${f.node.nodeId}`,

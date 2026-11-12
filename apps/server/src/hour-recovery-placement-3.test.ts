@@ -1,3 +1,4 @@
+import { hashPassword, persons } from "@waitron/identity";
 import {
   external,
   suite,
@@ -622,6 +623,11 @@ describe("selected-hour admission before archive placement", () => {
 
   it("carries the bucket HTTP selection and isolation through the real staging adapter", async () => {
     const history = await recoveryInvoices();
+    await suite.db.insert(persons).values({
+      displayName: "Backup administrator",
+      role: "admin",
+      passwordHash: hashPassword("fixture-restore-password"),
+    });
     const { f, command, deps, kit } = await bucketCommand();
     const operation = JSON.parse(await readFile(command.operationPath, "utf8"));
     const context = {

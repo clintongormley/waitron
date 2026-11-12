@@ -78,7 +78,9 @@ it.each(["archive", "stream"] as const)(
     ]);
     expect(f.journal()).toBe(retained);
     await expect(f.run()).resolves.toBe(true);
-    expect(resultFacts(await f.snapshot())).toEqual(resultFacts(committed));
+    expect(resultFacts(await f.snapshot(), "numeroInstalacion")).toEqual(
+      resultFacts(committed, "numeroInstalacion"),
+    );
     expect(f.journal()).toBe(retained);
   },
 );
@@ -173,6 +175,8 @@ it.each(["archive", "stream"] as const)(
     ]);
     expect(f.journal()).toBe(retained);
     await expect(f.run()).resolves.toBe(true);
-    expect(resultFacts(await f.snapshot())).toEqual(resultFacts(committed));
+    expect(resultFacts(await f.snapshot(), "numeroInstalacion")).toEqual(
+      resultFacts(committed, "numeroInstalacion"),
+    );
   },
 );
