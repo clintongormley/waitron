@@ -246,7 +246,7 @@ describe("till-invoice-recipient-dialog delivery choice", () => {
     },
   );
 
-  it("sends the printed receipt by default, and A4 on the invoice printer once chosen", async () => {
+  it("sends the receipt printer by default, and A4 on the invoice printer once chosen", async () => {
     const el = await mountWithPrinter();
     const sent = confirmations(el);
     await fillValid(el);
@@ -290,7 +290,7 @@ describe("till-invoice-recipient-dialog delivery choice", () => {
     expect(sent[0]!.delivery).toEqual({ medium: "a4", pagePrinterId: "pp-office" });
   });
 
-  it("opens a saved A4 on the printed receipt when the read found no invoice printer, with Save active", async () => {
+  it("opens a saved A4 on the receipt printer when the read found no invoice printer, with Save active", async () => {
     const { el } = await mountWidget<TillInvoiceRecipientDialog>("till-invoice-recipient-dialog", {
       deliveryOptions: { invoicePrinter: null, emailAvailable: false },
       savedDelivery: { medium: "a4", pagePrinterId: "pp-retired" },
@@ -337,7 +337,7 @@ describe("till-invoice-recipient-dialog keeps a saved delivery it does not offer
   const optionValues = (el: TillInvoiceRecipientDialog) =>
     deliveryField(el)!.options.map((option) => [option.value, option.label]);
 
-  it("shows no field and sends a saved printed receipt back unchanged", async () => {
+  it("shows no field and sends a saved receipt printer choice back unchanged", async () => {
     const { el } = await mountWidget<TillInvoiceRecipientDialog>("till-invoice-recipient-dialog", {
       savedDelivery: { medium: "receipt" },
     });
@@ -394,7 +394,7 @@ describe("till-invoice-recipient-dialog keeps a saved delivery it does not offer
     ]);
   });
 
-  it("follows a re-read invoice printer, and falls back to what was saved (else the printed receipt) when the chosen one goes", async () => {
+  it("follows a re-read invoice printer, and falls back to what was saved (else the receipt printer) when the chosen one goes", async () => {
     const el = await mountWithPrinter();
     const sent = confirmations(el);
     await fillValid(el);
@@ -618,7 +618,7 @@ describe("till-invoice-recipient-dialog email delivery", () => {
     ]);
   });
 
-  it("falls back to the printed receipt when a re-read says email is no longer available", async () => {
+  it("falls back to the receipt printer when a re-read says email is no longer available", async () => {
     const el = await mountWithPrinter({ deliveryOptions: withEmail });
     const sent = confirmations(el);
     await fillValid(el);

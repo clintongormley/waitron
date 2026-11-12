@@ -145,7 +145,9 @@ Waitron data fault; no second charge, fabricated end, fiscal repair or recovery-
 Partial service and prepay remain **S3/A447**. Placing, taking an early part, firing, handing
 over an order, or requesting F1 identity cannot stamp a whole-meal end. Preserve their existing
 issuance behavior pending S3, without describing its provisional date as A444 completion.
-Counter F1 expansion remains A555; do not reinterpret collection as consumption. A444 qualifies
+Counter F1 expansion remains A555 (2026-11-12, A555: closed; the counter's Pay window has issued F1
+since #2725, and the owner chose to keep that; see [the A555 decision](../../backlog/fiscal.md#a555-counter-full-invoices-stay-as-the-pay-window-issues-them-owner-2026-11-12));
+do not reinterpret collection as consumption. A444 qualifies
 completed-meal issuance, not every future advance-payment or replacement policy.
 
 ## Why the differing day must reach the fiscal record

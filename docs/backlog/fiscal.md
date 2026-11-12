@@ -1069,11 +1069,11 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 The owner chose to keep counter full invoices through the shared Pay window as main issues them:
 "keep what works, fix the printer choice". The Full invoice choice, with an Email or A4 original,
 is saved before Pay and the invoice is issued on the last payment; paper is printed after payment,
-from Print in the window that follows it. Direct `POST /api/sales`, `POST /api/pay`, unissued
+from **Print on {printer}** in the window that follows it. Direct `POST /api/sales`, `POST /api/pay`, unissued
 `/collect`, closing a counter bill by transfer and zero-total counter bills still refuse F1 with
 `sale.full_invoice_unavailable`. Pinned by the full-invoice cases in
-`apps/server/src/counter-bill-payments.test.ts`. Recorded in the campaign's `questions.md`,
-2026-11-12 11:31.
+`apps/server/src/counter-bill-payments.test.ts`. Relayed by the watcher in lane L's
+`questions.md` (2026-11-12 11:31) and the watcher handoff (2026-11-12 11:58).
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 

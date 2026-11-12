@@ -2157,11 +2157,11 @@ describe("till-app simplified-invoice limit", () => {
   it.each([
     [
       "en-GB",
-      "This payment cannot issue a full invoice. Pay the whole order with Pay to issue it. An order with nothing to pay cannot have a full invoice.",
+      "This payment cannot issue a full invoice. An order with nothing to pay cannot have one. Otherwise, open the order on the Counter and pay it with Pay to issue the invoice.",
     ],
     [
       "es-ES",
-      "Este cobro no puede emitir una factura completa. Cobra el pedido entero con Cobrar para emitirla. Un pedido sin nada que cobrar no puede tener factura completa.",
+      "Este cobro no puede emitir una factura completa. Un pedido sin nada que cobrar no puede tenerla. Si no es el caso, abre el pedido en el Mostrador y cóbralo con Cobrar para emitir la factura.",
     ],
   ])("explains the counter F1 refusal in %s and keeps its basket", async (locale, message) => {
     try {

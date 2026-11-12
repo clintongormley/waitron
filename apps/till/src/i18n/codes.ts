@@ -358,8 +358,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pedido supera el límite de una factura simplificada. Elige Factura completa o quita artículos.",
   },
   "sale.full_invoice_unavailable": {
-    en: "This payment cannot issue a full invoice. Pay the whole order with Pay to issue it. An order with nothing to pay cannot have a full invoice.",
-    es: "Este cobro no puede emitir una factura completa. Cobra el pedido entero con Cobrar para emitirla. Un pedido sin nada que cobrar no puede tener factura completa.",
+    en: "This payment cannot issue a full invoice. An order with nothing to pay cannot have one. Otherwise, open the order on the Counter and pay it with Pay to issue the invoice.",
+    es: "Este cobro no puede emitir una factura completa. Un pedido sin nada que cobrar no puede tenerla. Si no es el caso, abre el pedido en el Mostrador y cóbralo con Cobrar para emitir la factura.",
   },
   "receipt.not_printed": {
     en: "The original has not finished printing. Check its status before confirming handover",
