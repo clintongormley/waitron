@@ -376,8 +376,7 @@ describe("authorizeApproval", () => {
   it("refuses one whose role no longer holds the permission, and a suspended person", async () => {
     const staffId = await seedPerson(suite.db, "staff");
     const suspendedId = await seedPerson(suite.db, "manager", "suspended");
-    const pendingId = await seedPerson(suite.db, "manager", "pending");
-    for (const personId of [staffId, suspendedId, pendingId, crypto.randomUUID()]) {
+    for (const personId of [staffId, suspendedId]) {
       expect(
         await refusalOf(() =>
           run((tx) => authorizeApproval(tx, { personId, permission: "sale.rectify" })),

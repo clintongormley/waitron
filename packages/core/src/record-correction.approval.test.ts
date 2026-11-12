@@ -22,6 +22,7 @@ const suite = useVenueDb({
   setup: (db) => FakeFiscalBackend.install(db),
 });
 let approverId: string;
+let requesterId: string;
 let otherSaleId: SaleId;
 let nodeId: string;
 let deviceId: string;
@@ -57,6 +58,12 @@ beforeEach(async () => {
       pinHash: hashPin("2468"),
     });
     approverId = person!.id;
+    const [requester] = await seedPersons(tx, {
+      displayName: "Requesting staff member",
+      role: "staff",
+      pinHash: hashPin("1357"),
+    });
+    requesterId = requester!.id;
   });
   input = {
     origin: deviceOrigin(seed.deviceId),
@@ -100,7 +107,7 @@ async function openCorrection(values: { originalSaleId?: SaleId; gross?: number 
       fingerprint: "fingerprint",
       gross: values.gross ?? 605,
       reason: "Wrong item",
-      requestedBy: approverId,
+      requestedBy: requesterId,
       authorizedBy: approverId,
       viaOverride: false,
       source: "device",
@@ -140,6 +147,7 @@ it("files on an open correction's approval with no session, recording its approv
   expect(await suite.db.select().from(managementSessions)).toEqual([]);
   const result = await apply(correctionId);
   const [row] = await suite.db.select().from(sales).where(eq(sales.id, result.saleId));
+  expect(approverId).not.toBe(requesterId);
   expect(row).toMatchObject({
     authorizedBy: approverId,
     correctsSaleId: input.correctsSaleId,

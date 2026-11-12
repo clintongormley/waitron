@@ -84,7 +84,8 @@ export async function authorizeByPin(
 }
 
 /** Refused `authorization.not_permitted` unless `personId` is an active person who holds
- * `permission` now. Reads only. */
+ * `permission` now. Reads only. `viaOverride` is false: this does not know whether the earlier
+ * approval was an override (`invoice_corrections.via_override` does). */
 export async function authorizeApproval(
   tx: Transaction,
   args: { personId: string; permission: Permission | (string & {}) },

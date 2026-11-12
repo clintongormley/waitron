@@ -9,7 +9,8 @@ import type { SaleId } from "@waitron/shared";
 /** Reads the invoice_corrections row and refuses `sale.correction_approval_invalid`
  * { invoiceCorrectionId, reason } unless it exists (`not_found`), is open (`not_open`), corrects
  * `correctsSaleId` (`other_sale`), and the R5's amount, −total, is no more than its gross
- * (`over_amount`); then authorizeApproval(authorized_by, "sale.rectify"). */
+ * (`over_amount`); then authorizeApproval(authorized_by, "sale.rectify"). Callers pass the
+ * corrective's negative total, so −total is the amount credited. */
 export async function authorizeCorrectionApproval(
   tx: Transaction,
   args: { invoiceCorrectionId: string; correctsSaleId: SaleId; total: string },
