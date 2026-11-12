@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -907,22 +908,29 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
     });
 
-    it("does not replace a link that became streaming after the first check", async () => {
+    const joinedLink = () => ({
+      role: "streams" as const,
+      state: "pending" as const,
+      peerNodeId: crypto.randomUUID(),
+      peerPublicKey: STANDBY_PUB,
+      storeUrl: "https://box-0000.waitron.local:7443",
+      venueId: "joined-venue",
+      accessKeyId: "waitron0000000000000000",
+      secretAccessKey: "joined-secret",
+    });
+
+    it("refuses a join whose link another spare's became streaming part-way through, changing neither the chart nor any reservation", async () => {
       const { designated, adminPersonId } = await setupVenue();
       const app = mountApp(designated);
-      const joined = {
-        role: "streams" as const,
-        state: "pending" as const,
-        peerNodeId: crypto.randomUUID(),
-        peerPublicKey: STANDBY_PUB,
-        storeUrl: "https://box-0000.waitron.local:7443",
-        venueId: "joined-venue",
-        accessKeyId: "waitron0000000000000000",
-        secretAccessKey: "joined-secret",
+      const joined = joinedLink();
+      await holdChartWithStandby(designated, joined.peerNodeId);
+      const before = {
+        chart: await readNodeMembership(db),
+        allocation: await allocationSnapshot(),
       };
-      // After the first check and the reservation, before the chart is appended: another spare's
-      // join finishes and its link is marked streaming.
-      pause.beforeChartMint = async () => {
+      // After the request's early refusals and before its reservation: another spare's join
+      // finishes and its link is marked streaming.
+      pause.beforeModuleConfigRead = async () => {
         await withNodeTransaction(suite.node, async (tx) => {
           await writePairLinkTx(tx, RING, designated.nodeId, joined);
           await setPairLinkStateTx(tx, designated.nodeId, "streaming");
@@ -935,10 +943,15 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         ...validStandby(),
       });
 
+      expect(pause.beforeModuleConfigRead).toBeUndefined();
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
         error: { code: "mirror.spare_already_joined", params: {} },
       });
+      expect({
+        chart: await readNodeMembership(db),
+        allocation: await allocationSnapshot(),
+      }).toEqual(before);
       expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
         state: "streaming",
         peerNodeId: joined.peerNodeId,
@@ -946,6 +959,48 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         accessKeyId: joined.accessKeyId,
       });
       expect(await readPairSecret(suite.node, RING, designated.nodeId)).toBe("joined-secret");
+    });
+
+    it("holds node.db's write lock from its link check to its link write, so a link marked streaming meanwhile waits and the join is never refused after listing its spare", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated);
+      const joined = joinedLink();
+      // Run from the test's own context, not the request's, so the write queues as another
+      // caller's would rather than being refused as the request re-entering its own lock.
+      const outsideTheRequest = AsyncLocalStorage.snapshot();
+      let marked: Promise<void> | undefined;
+      let markedDuringChartWrite: boolean | undefined;
+      pause.beforeChartMint = async () => {
+        let done = false;
+        marked = outsideTheRequest(() =>
+          withNodeTransaction(suite.node, async (tx) => {
+            await writePairLinkTx(tx, RING, designated.nodeId, joined);
+            await setPairLinkStateTx(tx, designated.nodeId, "streaming");
+          }),
+        ).then(() => {
+          done = true;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        markedDuringChartWrite = done;
+      };
+      const standby = validStandby();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...standby,
+      });
+
+      expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+      expect(markedDuringChartWrite).toBe(false);
+      await marked;
+      expect(
+        (await readNodeMembership(db))?.body.nodes.map((n) => [n.nodeId, n.standing]),
+      ).toContainEqual([standby.standbyNodeId, "serving-secondary"]);
+      expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
+        state: "streaming",
+        peerNodeId: joined.peerNodeId,
+      });
     });
   });
 

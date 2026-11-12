@@ -167,36 +167,36 @@ export function mountMirrorBundleApi(
         }
 
         const store = mintPairStoreKey();
-        const bundle = await assembleMirrorBundle({
-          appDb: deps.appDb,
-          node: deps.node,
-          ring: deps.ring,
-          stateDir: deps.stateDir,
-          primaryUrl: ownContactUrl(deps.advertisedOrigin, deps.designated.nodeId),
-          store,
-          boxHostname: deps.boxHostname,
-          designated: deps.designated,
-          standby,
-          accountKey: deps.accountKey,
-          moduleOperations,
-          primaryPrivateKey: signingKey,
-        });
-        // Before the response, so no bundle is handed out for a node the chart omits: a till reroutes by
-        // the chart's `contactUrl`. Deliberately a separate transaction: assembly's reservation has already
-        // committed.
-        await appendStandbyToChart(
-          deps,
-          signingKey,
-          standby.nodeId,
-          standbyContactUrl,
-          bundle.reservedIdentity.endorsement,
-        );
-        // venue.db first, node.db after: a crash between leaves a chart entry and no link, which a
-        // second join replaces.
-        await withNodeTransaction(deps.node, async (tx) => {
-          // The first check ran before the reservation; another spare's link may be streaming now.
+        // node.db's lock is taken before venue.db's and held to the link write, so no other link
+        // turns streaming between this check and that write. venue.db commits first: a crash
+        // before the link write leaves the chart listing a spare that was never sent its bundle.
+        const bundle = await withNodeTransaction(deps.node, async (tx) => {
+          // One pair link per box: a second spare would replace a joined one's.
           if ((await readPairLink(tx, deps.designated.nodeId))?.state === "streaming")
             throw new AppError("mirror.spare_already_joined", {});
+          const assembled = await assembleMirrorBundle({
+            appDb: deps.appDb,
+            node: deps.node,
+            ring: deps.ring,
+            stateDir: deps.stateDir,
+            primaryUrl: ownContactUrl(deps.advertisedOrigin, deps.designated.nodeId),
+            store,
+            boxHostname: deps.boxHostname,
+            designated: deps.designated,
+            standby,
+            accountKey: deps.accountKey,
+            moduleOperations,
+            primaryPrivateKey: signingKey,
+          });
+          // Before the response, so no bundle is handed out for a node the chart omits: a till
+          // reroutes by the chart's `contactUrl`.
+          await appendStandbyToChart(
+            deps,
+            signingKey,
+            standby.nodeId,
+            standbyContactUrl,
+            assembled.reservedIdentity.endorsement,
+          );
           await writePairLinkTx(tx, deps.ring, deps.designated.nodeId, {
             role: "streams",
             state: "pending",
@@ -205,6 +205,7 @@ export function mountMirrorBundleApi(
             storeUrl: standbyStoreUrl,
             ...store,
           });
+          return assembled;
         });
 
         return c.json(bundle);
@@ -279,9 +280,6 @@ async function refuseBeforeReserving(
       standbyAt: new Date(standbyAt).toISOString(),
     });
   }
-  // One pair link per box: a second spare would replace a joined one's.
-  if ((await readPairLink(deps.node, deps.designated.nodeId))?.state === "streaming")
-    throw new AppError("mirror.spare_already_joined", {});
   if ((await readStreamSettings(deps.appDb, deps.ring)) !== null)
     throw new AppError("mirror.bucket_stream_active", {});
   if (
