@@ -985,7 +985,7 @@ Real code does write them, legitimately: the setup-mode provision route reaches 
 those six `node.db` tables under another node id; the main box's joining route
 (`apps/server/src/mirror-bundle-api.ts`) reaches `node_pair_link`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
-`waitron-credentials rotate` reach `node_signing_key`, and the rotation also reaches `node_pair_link`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
+`waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through

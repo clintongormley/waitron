@@ -168,33 +168,35 @@ export function nodeSigningPublicKey(privateKey: string): string {
 }
 
 /**
- * Re-seals every signing-key row not on the ring's current key, each under its own node id, one
- * node transaction per row. Returns how many it re-sealed and how many were already current.
+ * Re-seals, inside `tx`, every signing-key row not on the ring's current key, each under its own
+ * node id. Returns how many it re-sealed and how many were already current.
  */
-export async function rotateNodeSigningKeys(
-  node: NodeDatabase,
+export async function rotateNodeSigningKeysTx(
+  tx: NodeTransaction,
   ring: KeyRing,
 ): Promise<{ rotated: number; alreadyCurrent: number }> {
   const result = { rotated: 0, alreadyCurrent: 0 };
-  // `waitron-credentials rotate` opens node.db without migrating it, after committing the venue's
-  // rotation; a node.db no start has migrated yet has nothing to re-seal.
-  if (!(await tableExists(node, "node_signing_key"))) return result;
+  // `waitron-credentials rotate` opens node.db without migrating it; a node.db no start has
+  // migrated yet has nothing to re-seal.
+  if (!(await tableExists(tx, "node_signing_key"))) return result;
   // Every row, not only this box's: a re-key must leave nothing on the old key, and each row still
   // opens only under its own node id.
-  const rows = await node
-    .select({ nodeId: nodeSigningKey.nodeId, keyVersion: nodeSigningKey.keyVersion })
+  const rows = await tx
+    .select({
+      nodeId: nodeSigningKey.nodeId,
+      ciphertext: nodeSigningKey.ciphertext,
+      iv: nodeSigningKey.iv,
+      authTag: nodeSigningKey.authTag,
+      keyVersion: nodeSigningKey.keyVersion,
+    })
     .from(nodeSigningKey);
-  for (const { nodeId, keyVersion } of rows) {
-    if (keyVersion === ring.current.version) {
+  for (const { nodeId, ...row } of rows) {
+    if (row.keyVersion === ring.current.version) {
       result.alreadyCurrent += 1;
       continue;
     }
-    await withNodeTransaction(node, async (tx) => {
-      const privateKey = await readNodeSigningKey(tx, ring, nodeId);
-      if (privateKey === null) return;
-      await sealNodeSigningKeyTx(tx, ring, nodeId, privateKey);
-      result.rotated += 1;
-    });
+    await sealNodeSigningKeyTx(tx, ring, nodeId, openNodeSigningKeyRow(row, ring, nodeId));
+    result.rotated += 1;
   }
   return result;
 }

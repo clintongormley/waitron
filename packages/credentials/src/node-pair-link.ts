@@ -1,12 +1,11 @@
 import { eq, ne } from "drizzle-orm";
+import { now, tableExists, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import {
-  now,
-  tableExists,
-  withNodeTransaction,
-  type NodeDatabase,
-  type NodeTransaction,
-} from "@waitron/db";
-import { nodePairLink, type PairLink, type PairLinkState } from "@waitron/node-db";
+  nodePairLink,
+  type PairLink,
+  type PairLinkRole,
+  type PairLinkState,
+} from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { aadFor, openSealedRow, seal } from "./cipher.js";
 import type { KeyRing } from "./keyring.js";
@@ -85,54 +84,13 @@ export async function readPairSecret(
   return openSealedRow(ring, PURPOSE, aadForPair(nodeId, row.peerNodeId), row);
 }
 
-/**
- * Re-seals every pair link's secret not on the ring's current key, each under its own two node
- * ids, one node transaction per row. Only the secret and its key version change: the ring version
- * records what the spare was handed, and the start time is the pairing's. Returns how many it
- * re-sealed and how many were already current.
- */
-export async function rotateNodePairLinks(
-  node: NodeDatabase,
-  ring: KeyRing,
-): Promise<{ rotated: number; alreadyCurrent: number }> {
-  const result = { rotated: 0, alreadyCurrent: 0 };
-  // As `rotateNodeSigningKeys`: a node.db no start has migrated yet has nothing to re-seal.
-  if (!(await tableExists(node, "node_pair_link"))) return result;
-  const rows = await node
-    .select({ nodeId: nodePairLink.nodeId, keyVersion: nodePairLink.keyVersion })
-    .from(nodePairLink);
-  for (const { nodeId, keyVersion } of rows) {
-    if (keyVersion === ring.current.version) {
-      result.alreadyCurrent += 1;
-      continue;
-    }
-    await withNodeTransaction(node, async (tx) => {
-      const row = await readSealedRow(tx, nodeId);
-      if (row === null) return;
-      const secret = openSealedRow(ring, PURPOSE, aadForPair(nodeId, row.peerNodeId), row);
-      const sealed = seal(ring.current.key, aadForPair(nodeId, row.peerNodeId), secret);
-      await tx
-        .update(nodePairLink)
-        .set({
-          secretCiphertext: sealed.ciphertext,
-          secretIv: sealed.iv,
-          secretAuthTag: sealed.authTag,
-          keyVersion: ring.current.version,
-          updatedAt: now(),
-        })
-        .where(eq(nodePairLink.nodeId, nodeId));
-      result.rotated += 1;
-    });
-  }
-  return result;
-}
-
-/** Whether `node` holds any pair link, under any node id: every one is a row `rotate` would
- * re-seal. */
-export async function holdsPairLink(node: NodeDatabase): Promise<boolean> {
-  if (!(await tableExists(node, "node_pair_link"))) return false;
-  const [row] = await node.select({ nodeId: nodePairLink.nodeId }).from(nodePairLink).limit(1);
-  return row !== undefined;
+/** The role of a pair link `node` holds under any node id, or null when it holds none. */
+export async function heldPairLinkRole(
+  node: NodeDatabase | NodeTransaction,
+): Promise<PairLinkRole | null> {
+  if (!(await tableExists(node, "node_pair_link"))) return null;
+  const [row] = await node.select({ role: nodePairLink.role }).from(nodePairLink).limit(1);
+  return row?.role ?? null;
 }
 
 /** Moves this node's pair link to `state`; the table's check refuses a state outside its role. */

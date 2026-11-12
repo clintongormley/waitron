@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withNodeTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withNodeTransaction, type NodeDatabase } from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { runCli, type CliDeps } from "./cli.js";
 import { loadKeyRing, type KeyRing } from "./keyring.js";
-import { writePairLinkTx } from "./node-pair-link.js";
+import { writePairLinkTx, type NewPairLink } from "./node-pair-link.js";
 import { sealNodeSigningKeyTx } from "./node-signing-key.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 
@@ -32,9 +32,11 @@ const STRIPE_JSON = JSON.stringify({
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 
-// Listing reads the whole vault, so each case starts with an empty credential table.
+// Listing reads the whole vault, and rotation refuses under a pair link, so each case starts with
+// an empty credential table and no pair link.
 beforeEach(async () => {
   await suite.db.execute(sql`delete from tenant_credentials`);
+  suite.node.run(sql`delete from node_pair_link`);
 });
 
 interface Harness {
@@ -51,6 +53,7 @@ function harness(stdin = "", files: Record<string, string> = {}, ring: KeyRing =
     err,
     deps: {
       db: suite.db,
+      node: suite.node,
       ring,
       io: {
         stdout: (line) => out.push(line),
@@ -349,7 +352,6 @@ describe("waitron-credentials rotate", () => {
     const SIGNING_KEY = "MC4CAQAwBQYDK2VwBCIEIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     beforeEach(async () => {
-      await suite.node.execute(sql`delete from node_pair_link`);
       await suite.node.execute(sql`delete from node_signing_key`);
       await runCli(["set", "--purpose", "payments.stripe"], harness(STRIPE_JSON).deps);
       await withNodeTransaction(suite.node, (tx) =>
@@ -365,27 +367,28 @@ describe("waitron-credentials rotate", () => {
       ];
     }
 
+    const LINK: NewPairLink = {
+      role: "streams",
+      state: "streaming",
+      peerNodeId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      peerPublicKey: "peer-public-key",
+      storeUrl: "https://spare.example:7443",
+      venueId: "venue-a",
+      accessKeyId: "waitron0123456789abcdef",
+      secretAccessKey: "0f".repeat(32),
+    };
+
     it("rotate refuses while a spare is joined and re-seals nothing", async () => {
-      await withNodeTransaction(suite.node, (tx) =>
-        writePairLinkTx(tx, RING, NODE, {
-          role: "streams",
-          state: "streaming",
-          peerNodeId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
-          peerPublicKey: "peer-public-key",
-          storeUrl: "https://spare.example:7443",
-          venueId: "venue-a",
-          accessKeyId: "waitron0123456789abcdef",
-          secretAccessKey: "0f".repeat(32),
-        }),
-      );
+      await withNodeTransaction(suite.node, (tx) => writePairLinkTx(tx, RING, NODE, LINK));
 
       const h = harness("", {}, ROTATED_RING);
-      const code = await runCli(["rotate"], { ...h.deps, node: suite.node });
+      const code = await runCli(["rotate"], h.deps);
 
       expect(code).toBe(1);
       expect(h.out).toEqual([]);
       expect(h.err).toEqual([
-        "credentials.rotation_spare_joined {}",
+        'credentials.rotation_spare_joined {"role":"streams"}',
+
         "This box has a standby server, which holds this key ring too. Rotating here would leave " +
           "the standby unable to open the venue's keys. Nothing was changed. If the standby never " +
           "finished joining, remove it in the dashboard (Servers, then Remove on its row) and " +
@@ -395,9 +398,67 @@ describe("waitron-credentials rotate", () => {
       expect(keyVersions()).toEqual([{ key_version: 1 }, { key_version: 1 }, { key_version: 1 }]);
     });
 
+    it("rotate on a standby refuses in a standby's words and re-seals nothing", async () => {
+      await withNodeTransaction(suite.node, (tx) =>
+        writePairLinkTx(tx, RING, NODE, { ...LINK, role: "serves", state: "copied" }),
+      );
+
+      const h = harness("", {}, ROTATED_RING);
+      const code = await runCli(["rotate"], h.deps);
+
+      expect(code).toBe(1);
+      expect(h.out).toEqual([]);
+      expect(h.err).toEqual([
+        'credentials.rotation_spare_joined {"role":"serves"}',
+        "This box joined another server as its standby, so it holds that server's key ring. " +
+          "Nothing was changed. A key ring that two servers hold cannot be rotated in this " +
+          "version, because nothing sends the new one to the other server.",
+      ]);
+      expect(keyVersions()).toEqual([{ key_version: 1 }, { key_version: 1 }, { key_version: 1 }]);
+    });
+
+    it("rotate waits for a pair link being written, then refuses and re-seals nothing", async () => {
+      // A join in the server holds node.db's write lock with its link written but not committed.
+      let written!: () => void;
+      let commit!: () => void;
+      const linkWritten = new Promise<void>((resolve) => (written = resolve));
+      const committing = new Promise<void>((resolve) => (commit = resolve));
+      const joining = withNodeTransaction(suite.node, async (tx) => {
+        await writePairLinkTx(tx, RING, NODE, { ...LINK, state: "pending" });
+        written();
+        await committing;
+      });
+      await linkWritten;
+
+      // The join commits once rotation has asked for node.db's write lock, or has finished
+      // without asking.
+      let asked!: () => void;
+      const lockAsked = new Promise<void>((resolve) => (asked = resolve));
+      const node = new Proxy(suite.node, {
+        get(target, property, receiver) {
+          if (property !== "withWriteLock")
+            return Reflect.get(target, property, receiver) as unknown;
+          const withWriteLock: NodeDatabase["withWriteLock"] = (body) => {
+            asked();
+            return target.withWriteLock(body);
+          };
+          return withWriteLock;
+        },
+      });
+      const h = harness("", {}, ROTATED_RING);
+      const rotating = runCli(["rotate"], { ...h.deps, node });
+      await Promise.race([lockAsked, rotating]);
+      commit();
+      await joining;
+
+      expect(await rotating).toBe(1);
+      expect(h.err[0]).toBe('credentials.rotation_spare_joined {"role":"streams"}');
+      expect(keyVersions()).toEqual([{ key_version: 1 }, { key_version: 1 }, { key_version: 1 }]);
+    });
+
     it("rotate runs with no pair link", async () => {
       const h = harness("", {}, ROTATED_RING);
-      const code = await runCli(["rotate"], { ...h.deps, node: suite.node });
+      const code = await runCli(["rotate"], h.deps);
 
       expect(code).toBe(0);
       expect(h.out).toEqual(["rotated 2, already current 0"]);

@@ -3,6 +3,7 @@ import { eq, exists } from "drizzle-orm";
 import {
   nowIso,
   tenants,
+  withNodeTransaction,
   withTransaction,
   type Database,
   type NodeDatabase,
@@ -12,8 +13,8 @@ import {
 import { AppError } from "@waitron/shared";
 import { aadFor, openSealedRow, seal } from "./cipher.js";
 import type { KeyRing } from "./keyring.js";
-import { rotateNodePairLinks } from "./node-pair-link.js";
-import { rotateNodeSigningKeys } from "./node-signing-key.js";
+import { heldPairLinkRole } from "./node-pair-link.js";
+import { rotateNodeSigningKeysTx } from "./node-signing-key.js";
 import { isPurpose, validatePayload, type Purpose } from "./purposes.js";
 import "./errors.js";
 
@@ -224,48 +225,53 @@ export interface RotationResult {
 }
 
 /**
- * Re-seals every credential onto the ring's current key.
+ * Re-seals every credential, and every row of `node`'s `node_signing_key`, onto the ring's current
+ * key, counting both in one result.
  *
- * One transaction per row, so a failure part-way keeps the rows already re-sealed. An interrupted
- * run leaves a readable vault because reads select their key by the row's own version; re-running
- * finishes it.
+ * Refuses `credentials.rotation_spare_joined`, re-sealing nothing, while `node` holds a pair link
+ * under any node id: the other box of the pair holds the same ring, and nothing sends it a new one
+ * (decision D7, `docs/superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md`). The check and
+ * every re-seal run under node.db's write lock, which a pair link's writer also takes, so a link
+ * being written is waited for and then seen.
+ *
+ * One venue.db transaction per row, so a failure part-way keeps the rows already re-sealed. An
+ * interrupted run leaves a readable vault because reads select their key by the row's own version;
+ * re-running finishes it.
  *
  * Re-sealing goes through `putCredential`, so every payload it re-seals is re-checked against the
  * CURRENT `PURPOSES` (rows already on the current version are skipped unchecked): a field added to
  * or renamed on a provisioned purpose makes `rotate` throw `credentials.invalid_payload` at that
  * row and stop, until the purpose is re-provisioned. Kept deliberately: re-sealing a payload the
  * package would now refuse is its own trap.
- *
- * Given `node`, every row in its `node_signing_key` and `node_pair_link` tables is re-sealed too,
- * after the vault, and counted in the same result.
  */
 export async function rotateCredentials(
   db: Database,
   ring: KeyRing,
-  node?: NodeDatabase,
+  node: NodeDatabase,
 ): Promise<RotationResult> {
-  const result: RotationResult = { rotated: 0, alreadyCurrent: 0 };
-  const rows = await withTransaction(db, (tx) => listCredentials(tx));
-  for (const row of rows) {
-    if (!isPurpose(row.purpose)) continue;
-    if (row.keyVersion === ring.current.version) {
-      result.alreadyCurrent += 1;
-      continue;
+  // node.db's lock outside venue.db's (CLAUDE.md §3).
+  return withNodeTransaction(node, async (nodeTx) => {
+    const role = await heldPairLinkRole(nodeTx);
+    if (role !== null) throw new AppError("credentials.rotation_spare_joined", { role });
+    const result: RotationResult = { rotated: 0, alreadyCurrent: 0 };
+    const rows = await withTransaction(db, (tx) => listCredentials(tx));
+    for (const row of rows) {
+      if (!isPurpose(row.purpose)) continue;
+      if (row.keyVersion === ring.current.version) {
+        result.alreadyCurrent += 1;
+        continue;
+      }
+      const purpose = row.purpose;
+      await withTransaction(db, async (tx) => {
+        const value = await tryGetCredential(tx, ring, { purpose });
+        if (value === null) return;
+        await putCredential(tx, ring, { purpose, value });
+        result.rotated += 1;
+      });
     }
-    const purpose = row.purpose;
-    await withTransaction(db, async (tx) => {
-      const value = await tryGetCredential(tx, ring, { purpose });
-      if (value === null) return;
-      await putCredential(tx, ring, { purpose, value });
-      result.rotated += 1;
-    });
-  }
-  if (node !== undefined) {
-    for (const rotate of [rotateNodeSigningKeys, rotateNodePairLinks]) {
-      const rows = await rotate(node, ring);
-      result.rotated += rows.rotated;
-      result.alreadyCurrent += rows.alreadyCurrent;
-    }
-  }
-  return result;
+    const keys = await rotateNodeSigningKeysTx(nodeTx, ring);
+    result.rotated += keys.rotated;
+    result.alreadyCurrent += keys.alreadyCurrent;
+    return result;
+  });
 }

@@ -2,6 +2,7 @@
 // `Database`, so passing it where the venue handle belongs compiles; the round trip below is what
 // holds the vault to the venue file.
 import { spawn } from "node:child_process";
+import { sql } from "drizzle-orm";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -181,4 +182,55 @@ setInterval(() => db, 1000);`;
       await after.close();
     }
   });
+
+  it("rotate waits for another process's uncommitted pair link, then refuses and re-seals nothing", async () => {
+    async function keyVersions(): Promise<unknown[]> {
+      const store = await openVenueDatabase(venueDir, { exclusive: false });
+      try {
+        return [
+          ...store.venue.all(sql`select key_version from tenant_credentials`),
+          ...store.node.all(sql`select key_version from node_signing_key`),
+        ];
+      } finally {
+        await store.close();
+      }
+    }
+    const before = await keyVersions();
+    expect(before).not.toEqual([]);
+    // As the server's join does: node.db's write lock held with the link written, committed a
+    // second later by the writer's own clock, since the command's wait for the lock blocks this
+    // process.
+    const script = `import { DatabaseSync } from "node:sqlite";
+const db = new DatabaseSync(process.argv[1]);
+db.exec("begin immediate");
+const at = new Date().toISOString();
+db.prepare("insert into node_pair_link (node_id, role, state, peer_node_id, peer_public_key, store_url, venue_id, access_key_id, secret_ciphertext, secret_iv, secret_auth_tag, key_version, ring_version, created_at, updated_at) values ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'streams', 'pending', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'pub', 'https://spare.example:7443', 'venue-a', 'key', x'00', zeroblob(12), zeroblob(16), 1, 1, ?, ?)").run(at, at);
+process.stdout.write("written");
+setTimeout(() => { db.exec("commit"); db.close(); }, 1000);`;
+    const writer = spawn(
+      process.execPath,
+      ["--input-type=module", "-e", script, join(venueDir, "node.db")],
+      { stdio: ["ignore", "pipe", "inherit"] },
+    );
+    const exited = new Promise<number | null>((resolve) => writer.on("exit", resolve));
+    try {
+      await new Promise<void>((resolve, reject) => {
+        writer.stdout.on("data", (c: Buffer) => c.toString().includes("written") && resolve());
+        writer.on("exit", (code) => reject(new Error(`writer exited early (${code})`)));
+      });
+      const h = capture();
+      const ringEnv = {
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 6).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "3",
+        WAITRON_CREDENTIALS_KEY_PREVIOUS: Buffer.alloc(32, 5).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "2",
+      };
+      expect(await runBin(["rotate"], { ...ringEnv, WAITRON_VENUE_DIR: venueDir }, h.io)).toBe(1);
+      expect(h.err[0]).toBe('credentials.rotation_spare_joined {"role":"streams"}');
+      expect(await exited).toBe(0);
+      expect(await keyVersions()).toEqual(before);
+    } finally {
+      writer.kill("SIGKILL");
+    }
+  }, 20_000);
 });
