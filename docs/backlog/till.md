@@ -2250,7 +2250,7 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Status words on the pass and beside it
 
-6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **The pass's "screen has been refreshed" line after a Fire appears above the columns, out of view
   after a Fire low on the screen (seen in A773-2 B4a's look).** The old pass screen put its line in
@@ -2258,9 +2258,6 @@ Printer identity is separate from the till route inventory.
   [Detail](till.md#the-passs-refreshed-line-after-a-fire-is-out-of-view)
 - **The pass's header does not say what the pass covers (left open by A773-2 B4a).** A797 §3.5 asks
   for a line naming the stations and zones a pass covers; it needs new words.
-- **Department transfers call a held dish "Waiting" (left open by A773-2 B4b, its plan's D81).**
-  Since B4b a dish waiting for the pass says "Waiting for the pass"; a held dish still says
-  "Waiting", though nothing is cooking it (`apps/till/src/widgets/department-transfers.ts`).
 - **A card holding both held dishes and dishes asked for says "Held, not released", and the
   asked-for dish carries no mark (left open by A773-2 B4b, its plan's D78).** It can happen once a
   station waits for the pass (PR C), when a waiter fires one held dish of a held group.

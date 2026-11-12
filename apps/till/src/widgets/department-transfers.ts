@@ -521,7 +521,7 @@ export class TillDepartmentTransfers extends LitElement {
                             : staffPresentationName(line);
                         })()}
                         · ${work.stationName ?? t("department_transfer.unrecorded_station")} ·
-                        ${work.requestedAt !== null && work.firedAt === null ? t("pass.waiting_for_pass") : t(`station.state.${work.state}`)}${work.note === null ? nothing : html`<p>${work.note}</p>`}
+                        ${work.firedAt === null ? t(work.requestedAt !== null ? "pass.waiting_for_pass" : "pass.column.held") : t(`station.state.${work.state}`)}${work.note === null ? nothing : html`<p>${work.note}</p>`}
                       </div>
                     </li>`,
                 )}

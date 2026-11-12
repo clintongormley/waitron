@@ -194,7 +194,7 @@ for (const locale of ["en-GB", "es-ES"]) {
 }
 
 for (const locale of ["en-GB", "es-ES"]) {
-  it(`says a dish waiting for the pass is waiting for it, and a released dish its state, in ${locale}`, async () => {
+  it(`says a dish waiting for the pass is waiting for it, a held dish Held, and a released dish its state, in ${locale}`, async () => {
     const previous = currentLocale();
     try {
       setLocale(locale);
@@ -246,7 +246,8 @@ for (const locale of ["en-GB", "es-ES"]) {
         );
       await vi.waitFor(() => expect(rows()).toHaveLength(3));
       expect(rows()[0]).toContain(words["pass.waiting_for_pass"]);
-      expect(rows()[1]).toContain(words["station.state.queued"]);
+      expect(rows()[1]).toContain(words["pass.column.held"]);
+      expect(rows()[1]).not.toContain(words["station.state.queued"]);
       expect(rows()[1]).not.toContain(words["pass.waiting_for_pass"]);
       expect(rows()[2]).toContain(words["station.state.preparing"]);
       expect(rows()[2]).not.toContain(words["pass.waiting_for_pass"]);
