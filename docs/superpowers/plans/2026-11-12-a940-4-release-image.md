@@ -114,7 +114,8 @@ box has started in production yet (CLAUDE.md §5, the 2026-11-08 producer except
 - English only outside `packages/fiscal-verifactu` (CLAUDE.md §3); the declaration's Spanish stays
   in that package. Error codes name the concept; `server.*` is for facts about the process.
 - New error codes: `server.unreleased_build` (apps/server, `Record<string, never>`),
-  `declaration.date_unreadable` (fiscal-verifactu, `{ line: string }`). Each throwing file imports
+  `declaration.date_unreadable` (fiscal-verifactu, `{ line: string }`), `declaration.folder_exists`
+  (fiscal-verifactu, `{ folder: string }`). Each throwing file imports
   its registry; `scripts/errors-reachable.test.ts` must pass.
 - The recovery page's title and action are fixed strings chosen by the code (CLAUDE.md §3):
   `server.unreleased_build` → EN title "This box is running a test build.", action "Install a
@@ -222,17 +223,21 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
 - Produces: `declarationDate(source: string): string` — the `YYYY-MM-DD` of item 1.l)'s first
   bullet, whose words wrap so the date sits on the template's next line (`template.md:78-79`, "…
   suscribe esta declaración / responsable del mismo: ‹fecha›."): read the bullet joined into one
-  line and take the text after its last `: ` up to the final `.`; throws
+  line and take the text after its last `: ` (the whole bullet when it has none) up to the final
+  `.`; throws
   `declaration.date_unreadable { line }` (`line` = that text) when the words are not a date
   `spanishDate` writes back identically.
 - Produces: `writeReleaseFolder(dir: string, source: string, producer: DeclarationProducer): Promise<{ version: string; releasedOn: string }>`
   in `folder.ts`: refuses blockers (`declaration.release_blocked`), takes `version` from item 1.c),
-  writes the four files of the Global Constraints (creating `dir`), answers what it wrote to
-  `release.json`.
+  writes the four files of the Global Constraints into a new folder beside `dir` and moves it to
+  `dir` in one rename, so a failed write leaves `dir` as it was; refuses a `dir` that already holds
+  files (`declaration.folder_exists`); answers what it wrote to `release.json`.
 - Produces: `declaration render --version <v> --out <dir>`: reads `declarations/v<v>.md`, runs the
   same agreement check as `check` (refactor `check`'s comparison into one function both call), takes
   the producer as `show` does (refusing in production terms when unset), calls `writeReleaseFolder`,
-  prints `wrote <dir>`. Missing file → the read's error, exit non-zero.
+  prints `wrote <dir>`. A relative `--out` is refused (`declaration.argument_invalid`): under
+  `pnpm --filter` it would be read from the package's folder. Missing file → the read's error, exit
+  non-zero.
 
 - [ ] **Step 1: Failing tests.** `source.test.ts`: a source prepared with date `2026-12-03` →
   `declarationDate` answers `"2026-12-03"`; `2026-03-01` (`1 de marzo de 2026`) → `"2026-03-01"`;

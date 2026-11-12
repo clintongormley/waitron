@@ -81,32 +81,44 @@ export function declarationItems(source: string): ReadonlyMap<string, string> {
   return items;
 }
 
+const SPANISH_DATE = new Intl.DateTimeFormat("es-ES", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
 export function spanishDate(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00Z`);
   // `Date` moves an impossible day (2026-02-30) on into the next month rather than refusing it.
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== isoDate) {
     throw new AppError("declaration.date_invalid", { date: isoDate });
   }
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(date);
+  return SPANISH_DATE.format(date);
 }
+
+const SPANISH_MONTHS = Array.from(
+  { length: 12 },
+  (_, month) =>
+    SPANISH_DATE.formatToParts(Date.UTC(2000, month, 1)).find((part) => part.type === "month")!
+      .value,
+);
 
 /** The `YYYY-MM-DD` that item 1.l)'s first bullet states, in the words `spanishDate` writes. */
 export function declarationDate(source: string): string {
   const bullet = /^\*\*1\.l\)\*\*\s*\n- ((?:.+\n?)(?: {2}.+\n?)*)/m.exec(source)?.[1] ?? "";
   const joined = bullet.replace(/\s+/g, " ").trim();
-  const line = joined.slice(joined.lastIndexOf(": ") + 2).replace(/\.$/, "");
-  const words = /^(\d{1,2}) de \p{L}+ de (\d{4})$/u.exec(line);
-  for (let month = 1; words && month <= 12; month += 1) {
-    const date = `${words[2]}-${String(month).padStart(2, "0")}-${words[1]!.padStart(2, "0")}`;
+  const at = joined.lastIndexOf(": ");
+  const line = (at < 0 ? joined : joined.slice(at + 2)).replace(/\.$/, "");
+  const words = /^(\d{1,2}) de (\p{L}+) de (\d{1,4})$/u.exec(line);
+  const month = words ? SPANISH_MONTHS.indexOf(words[2]!) + 1 : 0;
+  if (words && month > 0) {
+    const [, day, , year] = words;
+    const date = `${year!.padStart(4, "0")}-${String(month).padStart(2, "0")}-${day!.padStart(2, "0")}`;
     try {
       if (spanishDate(date) === line) return date;
     } catch {
-      // An impossible day in this month: try the next.
+      // `spanishDate` refuses an impossible day, such as 31 de febrero: it is unreadable too.
     }
   }
   throw new AppError("declaration.date_unreadable", { line: bullet === "" ? "" : line });

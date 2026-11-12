@@ -2,7 +2,7 @@ import "../errors.js";
 import { readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { AppError, isAppError, readSoftwareProducer } from "@waitron/shared";
@@ -96,7 +96,7 @@ function parse(argv: string[]): { command: Subcommand; args: Arguments } {
   ) {
     refuse("--place");
   }
-  if (args.out === "") refuse("--out");
+  if (args.out !== undefined && !isAbsolute(args.out)) refuse("--out");
   if (args.date !== undefined) spanishDate(args.date);
   return {
     command: command as Subcommand,

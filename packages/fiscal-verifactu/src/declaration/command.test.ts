@@ -166,6 +166,11 @@ describe("runDeclarationCommand", () => {
     ["a missing option", ["check"], invalid("--version")],
     ["a render with no folder", ["render", "--version", "1.0.0"], invalid("--out")],
     ["an empty folder", ["render", "--version", "1.0.0", "--out", ""], invalid("--out")],
+    [
+      "a folder given relative to wherever the command runs",
+      ["render", "--version", "1.0.0", "--out", "out/declaration"],
+      invalid("--out"),
+    ],
     ["a version with a leading zero", ["check", "--version", "1.01.0"], invalid("--version")],
     ["a version with a suffix", ["check", "--version", "1.0.0-rc.1"], invalid("--version")],
     ["an empty place", place(" "), invalid("--place")],

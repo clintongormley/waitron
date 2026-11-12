@@ -137,6 +137,7 @@ describe("declarationDate", () => {
   it.each([
     ["2026-12-03", "3 de diciembre de 2026"],
     ["2026-03-01", "1 de marzo de 2026"],
+    ["0999-02-28", "28 de febrero de 999"],
   ])("reads %s back from item 1.l)'s %j", (date, words) => {
     const source = declarationSourceFor("1.2.3", { date });
     expect(source).toContain(`responsable del mismo: ${words}.`);
@@ -154,6 +155,21 @@ describe("declarationDate", () => {
 
     expect(() => declarationDate(source)).toThrow(
       expect.objectContaining({ code: "declaration.date_unreadable", params: { line } }),
+    );
+  });
+
+  it("refuses a bullet with no `: `, naming the whole bullet", () => {
+    const source = declarationSourceFor("1.2.3").replace(
+      /(\*\*1\.l\)\*\*\s*\n- )[\s\S]*?22 de octubre de 2026\./,
+      "$1x3 de diciembre de 2026",
+    );
+    expect(source).toContain("- x3 de diciembre de 2026\n");
+
+    expect(() => declarationDate(source)).toThrow(
+      expect.objectContaining({
+        code: "declaration.date_unreadable",
+        params: { line: "x3 de diciembre de 2026" },
+      }),
     );
   });
 
