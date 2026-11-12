@@ -529,7 +529,12 @@ export class TillModifierPicker extends LitElement {
    * them, so one render computes each once and shares it with {@link #renderExtras}.
    */
   #satisfied(stale: readonly SelectedExtra[], totals: ReadonlyMap<string, number>): boolean {
-    if (this.#variants.length > 0 && this.#chosenVariant === undefined) return false;
+    if (
+      !this.inline &&
+      (this.product.variants?.length ?? 0) > 0 &&
+      this.#chosenVariant === undefined
+    )
+      return false;
     if (stale.length > 0 || this.removedDefaults.length > 0) return false;
     return this.#offered.every((entry) => {
       if (entry.kind === "options")

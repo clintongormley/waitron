@@ -490,7 +490,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
   the recommendations; still to build: design A670's guest menu and preserve sent-order declarations.
-  These remaining follow-ups are queued separately.
   The [cleared new-selection plan](superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.
   [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/catalogue.md#a1517-allergen-points-to-revisit-before-go-live)
 

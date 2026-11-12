@@ -265,7 +265,7 @@ declaraciones, no rechaza la publicación. Si cancelas la confirmación de progr
 fecha y la hora que introdujiste.
 
 Mientras alguien en la caja usa **Filtros** para ocultar un alérgeno, también se ocultan los platos
-y tamaños sin revisar. Declara los alérgenos de cada tamaño que vendes, o elige **No contiene
+y tamaños sin revisar. Revisa los alérgenos de cada tamaño que vendes, o elige **No contiene
 ninguno de los 14**, y vuelve a publicar cada carta en la que esté.
 
 Los datos de compras existentes y los datos registrados de los pedidos siguen disponibles, pero los

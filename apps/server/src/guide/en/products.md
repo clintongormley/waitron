@@ -253,7 +253,7 @@ still publish or schedule: the warning asks you to check the declarations, rathe
 the publication. Cancelling the scheduled confirmation keeps the date and time you entered.
 
 While someone at the till uses **Filter** to hide an allergen, unreviewed dishes and sizes are
-hidden too. Enter the declarations for each size you sell, or choose **Contains none of the 14**,
+hidden too. Review the declarations for each size you sell, or choose **Contains none of the 14**,
 and publish each menu it is on again.
 
 Existing purchasing data and recorded order facts remain available, but you maintain live

@@ -1,6 +1,6 @@
 import type { AllergenCode, Kind, ProductAllergens } from "@waitron/shared";
 import type { TillProduct } from "./api/client.js";
-import { offeredListsOf, productAsVariant } from "./state/order-line.js";
+import { offeredListsOf } from "./state/order-line.js";
 
 /**
  * Only the grid is filtered: a screen keeps the full product set for name and allergen lookups,
@@ -107,17 +107,14 @@ export function visibleProducts(
   const exclusions = Object.entries(filters.exclude);
   if (!exclusions.some(([, selected]) => isActiveExclusion(selected))) return byDiet;
   return byDiet.flatMap((product) => {
+    if (!hasCompatibleExtras(product, filters)) return [];
     if ((product.variants?.length ?? 0) > 0) {
-      const variants = product.variants!.filter(
-        (variant) =>
-          allowsAllergenChoice(variant.allergens, filters) &&
-          hasCompatibleExtras(productAsVariant(product, variant), filters),
+      const variants = product.variants!.filter((variant) =>
+        allowsAllergenChoice(variant.allergens, filters),
       );
       return variants.length > 0 ? [{ ...product, variants }] : [];
     }
-    return allowsAllergenChoice(product.allergens, filters) && hasCompatibleExtras(product, filters)
-      ? [product]
-      : [];
+    return allowsAllergenChoice(product.allergens, filters) ? [product] : [];
   });
 }
 
