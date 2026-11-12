@@ -523,7 +523,7 @@ describe("the staff roles page", () => {
     const request = await mount(fakeRequest(() => [cook]));
     await choose("delete-role-c");
     expect(dialogText()).toContain(
-      "1 person holds this role. Deleting it removes it from them, from every device and from the staffing plan. Shifts that used it keep its name.",
+      "1 person holds this role. Deleting it removes it from them and from the staffing plan. Shifts that used it keep its name.",
     );
     expect(dialogLines()).toEqual([]);
     expect(confirmDelete().disabled).toBe(false);
@@ -536,7 +536,7 @@ describe("the staff roles page", () => {
     const request = await mount(
       fakeRequest(() => [{ ...cook, shiftCount: 0 }], {
         [`DELETE ${BASE}/role-c`]: () => {
-          throw { code: "staffing.invalid", params: { staffRoleId: "role-c", shiftCount: 1 } };
+          throw { code: "connection.failed" };
         },
       }),
     );
@@ -547,7 +547,7 @@ describe("the staff roles page", () => {
     await settle();
     expect(request).toHaveBeenCalledWith(`${BASE}/role-c`, "DELETE");
     expect(await deleteMessage()).toBe(
-      `Could not delete the staff role: ${codeMessage("staffing.invalid")}`,
+      `Could not delete the staff role: ${codeMessage("connection.failed")}`,
     );
     expect(confirmDelete().disabled).toBe(false);
     expect(deleteDialog()).not.toBeNull();
@@ -662,7 +662,7 @@ describe("the staff roles page", () => {
       await settle();
       el.remove();
       if (outcome === "answers") settleDelete.resolve();
-      else settleDelete.reject({ code: "staffing.invalid" });
+      else settleDelete.reject({ code: "connection.failed" });
       await new Promise((resolve) => setTimeout(resolve, 20));
       host.append(el);
       await settle();

@@ -121,7 +121,7 @@ const states: Record<string, () => Promise<void>> = {
   },
   "a refused delete inside the question": async () => {
     const el = await screen(async () => ({ staffRoles: staffRoleList }), {
-      write: refuse("staffing.invalid"),
+      write: refuse("connection.failed"),
     });
     await press(el, "delete-role-grey");
     deleteDialog(el).shadowRoot!.querySelector<HTMLElement>("[data-test=delete-confirm]")!.click();

@@ -151,6 +151,15 @@ describe("staff roles", () => {
       subjectId: role.id,
       data: { name: "Waiter" },
     });
+    const ordered = await suite.db.execute<{ kind: string }>(
+      sql`select kind from activity_log where kind like 'job_role.%' order by rowid`,
+    );
+    expect(ordered.rows.map((row) => row.kind).slice(-4)).toEqual([
+      "job_role.member_removed",
+      "job_role.member_removed",
+      "job_role.member_removed",
+      "job_role.hidden",
+    ]);
   });
 
   it("refuses stale per-person saves and treats reordered sets as no change", async () => {
@@ -445,6 +454,16 @@ describe("staff roles", () => {
     ).toEqual([{ staffRoleId: role.id }]);
     expect(await inTx(listStaffRoles)).toEqual([]);
     expect(await inTx(listStaffRolesWithHolderNames)).toEqual([]);
+    await expect(
+      inTx((tx) =>
+        setPersonStaffRoles(tx, {
+          personId: v.ana,
+          staffRoleIds: [role.id],
+          expectedStaffRoleIds: [],
+          actorId: v.marc,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "staff_role.not_found", params: { staffRoleId: role.id } });
     const replacement = await inTx((tx) =>
       createStaffRole(tx, { name: "Waiter", colour: "red" }, { personId: null }),
     );

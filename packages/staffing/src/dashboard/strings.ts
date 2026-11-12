@@ -146,9 +146,9 @@ const en = {
   "staffing.role.move_error": "Could not move the staff role: {reason}",
   "staffing.role.delete": "Delete",
   "staffing.role.delete_question_one":
-    "1 person holds this role. Deleting it removes it from them, from every device and from the staffing plan. Shifts that used it keep its name.",
+    "1 person holds this role. Deleting it removes it from them and from the staffing plan. Shifts that used it keep its name.",
   "staffing.role.delete_question":
-    "{count} people hold this role. Deleting it removes it from them, from every device and from the staffing plan. Shifts that used it keep its name.",
+    "{count} people hold this role. Deleting it removes it from them and from the staffing plan. Shifts that used it keep its name.",
   "staffing.role.delete_heading": "Delete staff role",
   "staffing.role.delete_error": "Could not delete the staff role: {reason}",
   "staffing.role.holders_none": "No people",
@@ -368,9 +368,9 @@ const es: Record<keyof typeof en, string> = {
   "staffing.role.move_error": "No se pudo mover el rol de personal: {reason}",
   "staffing.role.delete": "Eliminar",
   "staffing.role.delete_question_one":
-    "1 persona tiene este puesto. Al eliminarlo se quita de ella, de todos los dispositivos y del plan de personal. Los turnos que lo usaron conservan su nombre.",
+    "1 persona tiene este puesto. Al eliminarlo se quita de ella y del plan de personal. Los turnos que lo usaron conservan su nombre.",
   "staffing.role.delete_question":
-    "{count} personas tienen este puesto. Al eliminarlo se quita de ellas, de todos los dispositivos y del plan de personal. Los turnos que lo usaron conservan su nombre.",
+    "{count} personas tienen este puesto. Al eliminarlo se quita de ellas y del plan de personal. Los turnos que lo usaron conservan su nombre.",
   "staffing.role.delete_heading": "Eliminar rol de personal",
   "staffing.role.delete_error": "No se pudo eliminar el rol de personal: {reason}",
   "staffing.role.holders_none": "Nadie",

@@ -337,7 +337,17 @@ it("warns about job-role edits even after the person's details were saved", asyn
   await form.updateComplete;
   await expect.poll(() => roles().disabled).toBe(false);
   expect(roles().values).toEqual(["chef"]);
-  expect(form.closeSaved({ ...person })).toBe(false);
+  expect(
+    form.closeSaved({
+      displayName: "Ada",
+      firstNames: "Ada",
+      lastNames: "Lovelace",
+      telephone: null,
+      email: "ada@example.com",
+      role: "manager",
+      status: "active",
+    }),
+  ).toBe(false);
   const email = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
     '[data-test="edit-email"]',
   )!;

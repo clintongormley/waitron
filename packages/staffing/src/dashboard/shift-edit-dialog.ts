@@ -139,7 +139,11 @@ export class ShiftEditDialog extends LitElement {
       return t("staffing.shift.invalid_personId");
     if (
       field === "staffRoleId" &&
-      !this.week.staffRoles.some((r) => r.id === this.draft.staffRoleId && !r.hidden)
+      !this.week.staffRoles.some(
+        (r) =>
+          r.id === this.draft.staffRoleId &&
+          (!r.hidden || (this.shiftId && r.id === this.baseline.staffRoleId)),
+      )
     )
       return t("staffing.shift.invalid_staffRoleId");
     if (
@@ -278,16 +282,18 @@ export class ShiftEditDialog extends LitElement {
       this.busy ||
       !!this.confirmation ||
       (this.attempted && fields.some((f) => !!this.ownError(f)));
-    const choices: Record<"personId" | "area" | "staffRoleId", { value: string; label: string }[]> =
-      {
-        personId: this.week.people.map((p) => ({ value: p.personId, label: p.name })),
-        area: this.week.areas
-          .filter((a) => a.active)
-          .map((a) => ({ value: areaKey(a.area), label: a.name })),
-        staffRoleId: this.week.staffRoles
-          .filter((r) => !r.hidden)
-          .map((r) => ({ value: r.id, label: r.name })),
-      };
+    const choices: Record<
+      "personId" | "area" | "staffRoleId",
+      { value: string; label: string; disabled?: boolean }[]
+    > = {
+      personId: this.week.people.map((p) => ({ value: p.personId, label: p.name })),
+      area: this.week.areas
+        .filter((a) => a.active)
+        .map((a) => ({ value: areaKey(a.area), label: a.name })),
+      staffRoleId: this.week.staffRoles
+        .filter((r) => !r.hidden || (this.shiftId && r.id === this.baseline.staffRoleId))
+        .map((r) => ({ value: r.id, label: r.name, disabled: r.hidden === true })),
+    };
     return keyed(
       identity,
       html`<wt-modal

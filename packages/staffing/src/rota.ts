@@ -199,14 +199,24 @@ export async function readRotaWeek(tx: Transaction, week: string): Promise<RotaW
     staffRoles: roles,
   };
 }
-async function assignmentTargets(tx: Transaction, area: AreaRef, staffRoleId: string) {
+async function assignmentTargets(
+  tx: Transaction,
+  area: AreaRef,
+  staffRoleId: string,
+  currentStaffRoleId?: string,
+) {
   parseArea(area, "area");
   if (!(await listStaffingAreas(tx)).some((a) => areaKey(a.area) === areaKey(area)))
     throw new AppError("staffing_area.not_found", { area: areaKey(area) });
   const [role] = await tx
     .select({ id: staffRoles.id })
     .from(staffRoles)
-    .where(and(eq(staffRoles.id, staffRoleId), isNull(staffRoles.hiddenAt)));
+    .where(
+      and(
+        eq(staffRoles.id, staffRoleId),
+        staffRoleId === currentStaffRoleId ? undefined : isNull(staffRoles.hiddenAt),
+      ),
+    );
   if (!role) throw new AppError("staff_role.not_found", { staffRoleId });
 }
 async function times(tx: Transaction, businessDay: string, startsAt: string, endsAt: string) {
@@ -317,7 +327,7 @@ export async function updateRotaShift(
     const staffRoleId = patch.staffRoleId ?? prior?.staffRoleId;
     if (!area) throw invalid("area");
     if (!staffRoleId) throw invalid("staffRoleId");
-    await assignmentTargets(tx, area, staffRoleId);
+    await assignmentTargets(tx, area, staffRoleId, prior?.staffRoleId);
     await tx
       .insert(shiftAssignments)
       .values({ shiftId, ...assignment(area, staffRoleId) })

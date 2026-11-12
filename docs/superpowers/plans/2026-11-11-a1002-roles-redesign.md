@@ -844,6 +844,8 @@ Tests: `apps/server/src/till-api.profile-actions.test.ts`, `till-api.profile-zon
 
 ### Task 7.3: Profile screen and API
 
+**Watcher, 2026-11-12 19:56:** PR4 omits the device clauses in its EN/ES job-role hint and delete confirmation until device admission is built. Restore “on the devices that take that job” and “from every device” (and their Spanish twins) in this task, once those behaviours work.
+
 **Files:** `apps/server/src/management-api.ts:570-660` (`ProfileBody`, `parseProfileAdmission`,
 `withProfileAccess`) and its device-profile routes `:1294-1430`;
 `apps/dashboard/src/screens/device-profiles-screen.ts` (admission around `:330-365`, `:1190-1200`,

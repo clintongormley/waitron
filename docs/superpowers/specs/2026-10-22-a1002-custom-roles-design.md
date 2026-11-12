@@ -1,5 +1,7 @@
 # A1002: roles you can define, privileges you can trust
 
+> **2026-11-12, A1002 PR4:** the [11 November roles redesign](2026-11-11-a1002-roles-redesign-design.md) replaces the job-role deletion preview and `staff_role.in_use` refusal below. Used job roles are hidden, with their existing shifts retained; unused roles are deleted.
+
 **Status: design OWNER APPROVED, 2026-11-07 22:51, with the corrections below and the
 activity-log/email addition at 22:53. Incorporated 2026-11-08.**
 Design only, 2026-10-22; **revision 2026-10-28** incorporates the owner's separate answers;

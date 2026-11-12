@@ -182,6 +182,27 @@ async function addSeason(_cfg: Cfg, name: string, startsOn: string) {
 const hours = (r: RotaWeek) => r.days.map((d) => [d.businessDay, d.hasHours]);
 
 describe("the rota week", () => {
+  it("keeps an existing hidden job role when the shift's time or person changes", async () => {
+    const v = await venue();
+    const shiftId = await add(v);
+    await tx((t) => deleteStaffRole(t, v.staffRoleId, { personId: null }));
+    await tx((t) =>
+      api.updateRotaShift(t, shiftId, {
+        personId: v.marc,
+        startsAt: "01:00",
+        endsAt: "03:30",
+        area: v.area,
+        staffRoleId: v.staffRoleId,
+      }),
+    );
+    const updated = (await read()).shifts.find((s) => s.shiftId === shiftId)!;
+    expect(updated).toMatchObject({
+      personId: v.marc,
+      staffRoleId: v.staffRoleId,
+      endsAt: "2026-12-07T02:30:00Z",
+    });
+  });
+
   it("a future shift in a hidden role still shows its name and outside-role warning", async () => {
     const v = await venue();
     const shiftId = await add(v);
