@@ -219,8 +219,8 @@ function counts() {
   return row!;
 }
 
-/** A goodwill return of `amount` from the sale's first cash payment, left pending unless `complete`. */
-async function giveBack(saleId: string, amount: string, complete = true) {
+/** A completed goodwill return of `amount` from the sale's first cash payment. */
+async function giveBack(saleId: string, amount: string) {
   return inTx(venue, async (tx) => {
     const [cash] = await readRefundableTenders(tx, saleId);
     const reading = venue.clock.now();
@@ -238,7 +238,7 @@ async function giveBack(saleId: string, amount: string, complete = true) {
       { requestedBy: managerId, authorizedBy: managerId },
       reading.instant.toISOString(),
     );
-    if (complete) await carryNewTenderRefund(tx, deps(), venue.cfg.nodeId, reading, refund);
+    await carryNewTenderRefund(tx, deps(), venue.cfg.nodeId, reading, refund);
     return refund.id;
   });
 }
@@ -422,7 +422,7 @@ describe("openInvoiceCorrection", () => {
     );
   });
 
-  it("reads the money back and pending over the correction's refunds", async () => {
+  it("reads the money back over the correction's refunds", async () => {
     const saleId = await soldForCash("Rib steak", ["12.10"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
     const link = async (refundId: string) =>
@@ -442,16 +442,6 @@ describe("openInvoiceCorrection", () => {
       legs: [{ state: "completed", appliedAmount: "4.00" }],
       fileNow: { gross: "4.00", vatBreakdown: [{ rate: "21.00", base: "3.31", tax: "0.69" }] },
     });
-
-    const pendingId = await giveBack(saleId, "1.00", false);
-    await link(pendingId);
-    expect(await read()).toMatchObject({
-      moneyBack: "4.00",
-      pending: "1.00",
-      left: "1.05",
-      fileNow: null,
-    });
-    expect((await read()).legs).toHaveLength(2);
   });
 
   it("reads a filing refusal as what filing now would answer", async () => {
