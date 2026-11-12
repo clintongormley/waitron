@@ -39,7 +39,7 @@ the copy holds; Slice 12a will derive the unknown-interval list from these rows.
 deferred both gap tables and the preview, and accepted no declaration withdrawal for this
 simulated-only slice. Slice 8’s page and real-box qualification remain open. The bounded
 [page plan](../superpowers/plans/2026-11-12-a1018-8-emergency-page.md) was cleared by the watcher on 12 November;
-its landing depends on A947 3b-5a retaining the last checked address across restarts.
+the last checked address it needs is kept across restarts since A947 3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898)), so it no longer waits on that.
 
 Left for the slices that add the callers:
 - A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
