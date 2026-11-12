@@ -48,10 +48,7 @@ as the watcher cleared at 03:59. Real-box and Cloud qualification remain open. T
 the last checked address it needs is kept across restarts since A947 3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898)), so it no longer waits on that.
 
 The read-only interval list shows both current box names, the copy’s latest sale/order time or Unknown, labelled
-venue-zone declaration and activation times, and the entered reason. **12a follow-up: report
-warnings and return completion** remains one bounded slice: no warning currently appears beside
-cash-up or affected reports, and this list keeps an interval unconfirmed even after a complete
-return. Acknowledgement, assignment, resolution and returned-invoice detail remain outside this cut.
+venue-zone declaration and activation times, and the entered reason. **12a follow-up PR 1** is [cleared by the watcher](../superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md) for warnings beside sales/cash-up/category reports and VAT, without wire, storage or operation changes. These warnings are not built yet. Durable receiver completion needs its own later short plan, using receiver-owned takeover binding and plain venue-transaction facts. This list keeps an interval unconfirmed even after a complete return. Acknowledgement, assignment, resolution and returned-invoice detail remain outside this cut.
 
 Left for the slices that add the callers:
 - A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
