@@ -5,12 +5,26 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorZones, isUniqueViolation, constraintTarget, withTransaction } from "@waitron/db";
+import {
+  billPayments,
+  floorZones,
+  isUniqueViolation,
+  constraintTarget,
+  withTransaction,
+} from "@waitron/db";
 import { captureAttempting, failAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { inTx, provisionBillVenue, send, statusOf, type BillVenue } from "./testing/bill-venue.js";
+import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
+import {
+  inTx,
+  provisionBillVenue,
+  seatedWith,
+  send,
+  statusOf,
+  type BillVenue,
+} from "./testing/bill-venue.js";
 import {
   paymentAttemptIsLive,
   payWorkingOrderIntegratedOrchestration,
@@ -322,6 +336,143 @@ describe("a placed order's bill payment while its card is in flight", () => {
     expect(snapshot()).toEqual(before);
     expect(await statusOf(venue, id)).toBe("placed");
     expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "attempting", saleId: null }]);
+  });
+});
+
+describe("giving back a part payment on a sent bill before its invoice", () => {
+  async function partCash(id: string): Promise<string> {
+    const part = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+      submissionId: randomUUID(),
+      ...cashAsk,
+      amount: "1.00",
+      tendered: "1.00",
+      applied: "1.00",
+    });
+    expect(part.status).toBe(200);
+    return (part.json.payment as { id: string }).id;
+  }
+
+  function refundOf(id: string, paymentId: string) {
+    return send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "1.00",
+        tipAmount: "0.00",
+        reason: "Guest changed their mind",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+  }
+
+  function refundCount(paymentId: string): number {
+    return venue.db.all<{ n: number }>(
+      sql`select count(*) as n from bill_payment_refunds where bill_payment_id = ${paymentId}`,
+    )[0]!.n;
+  }
+
+  it("refunds a cash part payment of a sent counter order, leaving nothing received", async () => {
+    const id = await placed("uninvoiced");
+    const paymentId = await partCash(id);
+
+    const refunded = await refundOf(id, paymentId);
+
+    expect(refunded.status).toBe(200);
+    expect(refunded.json).toMatchObject({
+      refund: { paymentId, appliedAmount: "1.00", state: "completed" },
+      balance: { total: "3.00", received: "0.00", outstanding: "3.00" },
+    });
+    expect(await statusOf(venue, id)).toBe("placed");
+    expect(salesOf(id)).toEqual([]);
+  });
+
+  it("refunds a part payment of a sent counter order moved to a table, where it is presented", async () => {
+    const party = await seatedWith(venue);
+    const id = await placed("uninvoiced");
+    const paymentId = await partCash(id);
+    const [row] = venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${party.partyId}`,
+    );
+    const moved = await send(venue.app, venue.cookie, "POST", `/api/bills/${id}/move`, {
+      to: { tableId: party.tableId },
+      expectedEdits: await inTx(venue, async (tx) => {
+        const edits = [];
+        for (const billId of [id, ...(await readPartyBillIds(tx, [party.partyId]))].sort())
+          edits.push(await readBillEditState(tx, billId));
+        return edits;
+      }),
+      otherPartyId: party.partyId,
+      expectedOtherPartyRevision: row!.revision,
+    });
+    expect(moved.status).toBe(200);
+
+    const refunded = await refundOf(id, paymentId);
+
+    expect(refunded.status).toBe(200);
+    expect(refunded.json).toMatchObject({
+      balance: { total: "3.00", received: "0.00", outstanding: "3.00" },
+    });
+    expect(await statusOf(venue, id)).toBe("placed");
+    expect(salesOf(id)).toEqual([]);
+  });
+
+  it("refuses the refund while the sent bill records a card part payment still pending", async () => {
+    const id = await placed("uninvoiced");
+    const paymentId = await partCash(id);
+    await inTx(venue, (tx) =>
+      tx.insert(billPayments).values({
+        workingOrderId: id,
+        submissionId: randomUUID(),
+        fingerprint: "f",
+        kind: "contribution",
+        method: "card",
+        applied: 100,
+        tip: 0,
+        tendered: null,
+        state: "pending",
+        receivedAt: null,
+        requestedBy: venue.operatorId,
+        source: "device",
+        deviceId: venue.deviceId,
+      }),
+    );
+
+    const refused = await refundOf(id, paymentId);
+
+    expect(refused).toEqual(refusedInFlight(id));
+    expect(refundCount(paymentId)).toBe(0);
+  });
+
+  it("refuses the refund while a reader takes a card part payment of the sent bill", async () => {
+    const id = await placed("uninvoiced");
+    const paymentId = await partCash(id);
+    const calls = venue.card.collectCalls.length;
+    const release = venue.card.holdNextCollect();
+    let paying: ReturnType<typeof send> | undefined;
+    let refused;
+    try {
+      paying = send(venue.app, venue.cookie2, "POST", `/api/working-orders/${id}/payments`, {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "1.00",
+        method: "card",
+        entry: "reader",
+        applied: "1.00",
+        tip: "0.00",
+        expectedEdit: null,
+      });
+      await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
+      refused = await refundOf(id, paymentId);
+    } finally {
+      release();
+    }
+    expect((await paying).status).toBe(200);
+
+    expect(refused).toEqual(refusedInFlight(id));
+    expect(refundCount(paymentId)).toBe(0);
   });
 });
 

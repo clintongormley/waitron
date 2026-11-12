@@ -44,7 +44,7 @@ import {
   findSubmission,
   readBillBalance,
   readOnePaymentMoney,
-  requireOpenBill,
+  requireRefundableBill,
   toRefundView,
 } from "./bill-payments.js";
 import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.js";
@@ -54,7 +54,12 @@ import { enqueueBillRefundDrawer } from "./receipt-print.js";
 import type { TenderKind } from "./device-session.js";
 import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
 import { fingerprint } from "./parties.js";
-import { refusePaymentInFlight } from "./working-order.js";
+import {
+  refusePaymentInFlight,
+  refusePendingPartPayment,
+  refuseRefundInProgress,
+} from "./working-order.js";
+import { refusePlacedPaymentInFlight } from "./till-sale.js";
 import type { TillSaleDeps } from "./working-order.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import "./errors.js";
@@ -717,8 +722,13 @@ export async function refundBillPayment(
         await deps.backend.refuseWhileClockBehind(tx, reading);
         await deps.backend.refuseNewRefund(tx, cfg.nodeId);
 
-        await requireOpenBill(tx, workingOrderId);
-        await refusePaymentInFlight(tx, [workingOrderId]);
+        if ((await requireRefundableBill(tx, workingOrderId)) === "placed") {
+          await refuseRefundInProgress(tx, [workingOrderId]);
+          await refusePendingPartPayment(tx, [workingOrderId], "any");
+          await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId]);
+        } else {
+          await refusePaymentInFlight(tx, [workingOrderId]);
+        }
 
         const held = await readOnePaymentMoney(tx, payment);
         const [refundable, refundableTip] =

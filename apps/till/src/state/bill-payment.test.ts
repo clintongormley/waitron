@@ -594,7 +594,16 @@ describe("a payment's refunds", () => {
     expect(refundableOf(refunded)).toEqual({ applied: "30.00", tip: "5.00" });
   });
 
-  it("offers a refund only of a received payment on an open bill with money left on it and no refund waiting", () => {
+  it("offers a refund of a received payment on a sent or presented bill, as on an open one, and none on an abandoned bill", () => {
+    expect(refundOffered(payment(), "placed")).toBe(true);
+    expect(refundOffered(payment({ state: "pending" }), "placed")).toBe(false);
+    expect(
+      refundOffered(payment({ refunds: [refund("10.00", "0.00", "pending")] }), "placed"),
+    ).toBe(false);
+    expect(refundOffered(payment(), "abandoned")).toBe(false);
+  });
+
+  it("offers a refund only of a received payment on a bill not yet paid with money left on it and no refund waiting", () => {
     expect(refundOffered(payment(), "open")).toBe(true);
     expect(refundOffered(payment({ state: "pending" }), "open")).toBe(false);
     expect(refundOffered(payment({ state: "declined" }), "open")).toBe(false);

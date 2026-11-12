@@ -992,6 +992,30 @@ export async function requireOpenBill(tx: Transaction, workingOrderId: string): 
   }
 }
 
+async function hasInvoice(tx: Transaction, workingOrderId: string): Promise<boolean> {
+  const [invoice] = await tx
+    .select({ id: sales.id })
+    .from(sales)
+    .where(eq(sales.workingOrderId, workingOrderId))
+    .limit(1);
+  return invoice !== undefined;
+}
+
+/** A bill whose payments can still be refunded before its invoice: open, or sent or presented with
+ * no invoice issued. */
+export async function requireRefundableBill(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<"open" | "placed"> {
+  const [order] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, workingOrderId));
+  if (order?.status === "placed" && !(await hasInvoice(tx, workingOrderId))) return "placed";
+  await requireOpenBill(tx, workingOrderId);
+  return "open";
+}
+
 async function requirePayableBill(
   tx: Transaction,
   workingOrderId: string,
@@ -1001,14 +1025,7 @@ async function requirePayableBill(
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order?.status === "placed") {
-    if (order.partyId === null) {
-      const [invoice] = await tx
-        .select({ id: sales.id })
-        .from(sales)
-        .where(eq(sales.workingOrderId, workingOrderId))
-        .limit(1);
-      if (invoice === undefined) return "placed";
-    }
+    if (order.partyId === null && !(await hasInvoice(tx, workingOrderId))) return "placed";
     const [part] = await tx
       .select({ id: billPayments.id })
       .from(billPayments)
