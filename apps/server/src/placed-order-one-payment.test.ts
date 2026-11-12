@@ -254,6 +254,77 @@ describe("a placed order's collect while its card is in flight", () => {
   });
 });
 
+const cashAsk = {
+  kind: "contribution",
+  amount: "3.00",
+  method: "cash",
+  tendered: "3.00",
+  applied: "3.00",
+  tip: "0.00",
+  expectedEdit: null,
+};
+
+function billCash(id: string) {
+  return send(venue.app, venue.cookie2, "POST", `/api/working-orders/${id}/payments`, {
+    submissionId: randomUUID(),
+    ...cashAsk,
+  });
+}
+
+function previewCash(id: string) {
+  return send(
+    venue.app,
+    venue.cookie2,
+    "POST",
+    `/api/working-orders/${id}/payments/preview`,
+    cashAsk,
+  );
+}
+
+describe("a placed order's bill payment while its card is in flight", () => {
+  it("refuses a cash bill payment and its preview while the first till's card is at the reader", async () => {
+    const id = await placed("uninvoiced");
+    const calls = venue.card.collectCalls.length;
+    const release = venue.card.holdNextCollect();
+    let paying: ReturnType<typeof pay> | undefined;
+    let observed;
+    try {
+      paying = pay(id);
+      await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
+      const before = snapshot();
+      const preview = await previewCash(id);
+      const cash = await billCash(id);
+      observed = { preview, cash, before, after: snapshot(), status: await statusOf(venue, id) };
+    } finally {
+      release();
+    }
+    const paid = await paying;
+
+    expect(observed.preview).toEqual(refusedInFlight(id));
+    expect(observed.cash).toEqual(refusedInFlight(id));
+    expect(observed.after).toEqual(observed.before);
+    expect(observed.status).toBe("placed");
+    expect(paid.status).toBe(200);
+    expect(paid.json.outcome).toBe("captured");
+    expect(tendersOf(id)).toEqual([{ method: "card", amount: 300 }]);
+  });
+
+  it("refuses a cash bill payment while a reader that timed out leaves its payment unresolved", async () => {
+    const id = await placed("uninvoiced");
+    venue.card.stallNextCollect();
+    const timedOut = await pay(id);
+    expect(timedOut).toEqual({ status: 200, json: { outcome: "timeout" } });
+    const before = snapshot();
+
+    const cash = await billCash(id);
+
+    expect(cash).toEqual(refusedInFlight(id));
+    expect(snapshot()).toEqual(before);
+    expect(await statusOf(venue, id)).toBe("placed");
+    expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "attempting", saleId: null }]);
+  });
+});
+
 /** A card payment of `id` through the orchestration, with `provider` as its reader. */
 function payWith(provider: FakePaymentProvider, id: string, disk?: DiskFullState) {
   return payWorkingOrderIntegratedOrchestration(

@@ -99,6 +99,7 @@ import {
   readOutstandingSaleForOrder,
   readTenderBlock,
   receiptQr,
+  refusePlacedPaymentInFlight,
 } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { fingerprint } from "./parties.js";
@@ -991,7 +992,10 @@ export async function requireOpenBill(tx: Transaction, workingOrderId: string): 
   }
 }
 
-async function requirePayableBill(tx: Transaction, workingOrderId: string): Promise<void> {
+async function requirePayableBill(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<"open" | "placed"> {
   const [order] = await tx
     .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
@@ -1003,7 +1007,7 @@ async function requirePayableBill(tx: Transaction, workingOrderId: string): Prom
         .from(sales)
         .where(eq(sales.workingOrderId, workingOrderId))
         .limit(1);
-      if (invoice === undefined) return;
+      if (invoice === undefined) return "placed";
     }
     const [part] = await tx
       .select({ id: billPayments.id })
@@ -1012,9 +1016,10 @@ async function requirePayableBill(tx: Transaction, workingOrderId: string): Prom
         and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")),
       )
       .limit(1);
-    if (part !== undefined) return;
+    if (part !== undefined) return "placed";
   }
   await requireOpenBill(tx, workingOrderId);
+  return "open";
 }
 
 /** Design §3.6: what a payment of the bill would be, writing nothing. */
@@ -1026,7 +1031,9 @@ export async function previewBillPayment(
   operatorId: string | undefined,
 ): Promise<AllocationPreview> {
   return withTransaction(deps.db, async (tx) => {
-    await requirePayableBill(tx, workingOrderId);
+    if ((await requirePayableBill(tx, workingOrderId)) === "placed") {
+      await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId]);
+    }
     await requireOrderBillEditor(tx, workingOrderId, {
       operatorId,
       expectedEdit: ask.expectedEdit,
@@ -1160,7 +1167,7 @@ async function beginBillPayment(
   await deps.backend.refuseWhileClockBehind(tx, reading);
   await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
-  await requirePayableBill(tx, workingOrderId);
+  const payable = await requirePayableBill(tx, workingOrderId);
   await requireOrderBillEditor(tx, workingOrderId, {
     operatorId: operator.personId,
     expectedEdit: req.expectedEdit,
@@ -1168,6 +1175,7 @@ async function beginBillPayment(
   await assertBillHasNoUnsent(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
+  if (payable === "placed") await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId]);
   const held = await readPaymentMoney(tx, [workingOrderId]);
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await billPaymentTotal(tx, workingOrderId);
