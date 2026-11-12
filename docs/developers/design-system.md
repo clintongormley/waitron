@@ -742,6 +742,8 @@ the one exception, by the owner's decision (A263, 2026-10-03): each is `--wt-ste
 number between them keeps them apart and 24 by 24 CSS px is WCAG 2.2's level AA minimum (criterion
 2.5.8; the 44px figure is the level AAA criterion 2.5.5).
 
+Owner reaffirmed this exception on 2026-11-12 (A1358): “Keep 24 px”.
+
 A `wt-help-tooltip` in help mode is also below `--wt-tap-min`, by the approved A582 spec (§3.2):
 while help is on its target is `--wt-help-badge-target` (24px), again WCAG 2.2's
 level AA minimum. Its always-mode button stays `--wt-tap-min` square, and so does a help-mode
