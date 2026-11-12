@@ -3,7 +3,6 @@ import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -66,9 +65,9 @@ const gate = () => {
   return { release, promise };
 };
 
-for (const enabled of [true, false]) {
-  describe(`attendance boot with workforce ${enabled ? "enabled" : "never migrated"}`, () => {
-    const disabled = new Set(["fiscal-none", "workforce-es", ...(enabled ? [] : ["workforce"])]);
+describe("attendance boot with permanent workforce", () => {
+  describe("real listener", () => {
+    const disabled = new Set(["fiscal-none", "workforce-es"]);
     const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
     const suite = useVenueDb({
       migrations: migrationOptionsFor(
@@ -110,198 +109,163 @@ for (const enabled of [true, false]) {
         },
       };
     }
-    it(
-      enabled
-        ? "starts both real duties, catches up, captures a real login and reopens with retained discovery progress"
-        : "refuses disabled workforce before starting duties or making workforce SQL queries",
-      async () => {
-        const f = await prepared();
-        let server: StartedServer | undefined;
-        const sender = vi.fn<MailTransport>(async () => ({ status: "sent" }));
-        const sendSpy = vi.spyOn(smtpSend, "sendSmtpMessage").mockImplementation(sender);
-        const loopSpy = vi.spyOn(attendance, "runAttendanceLoop");
-        const mailSpy = vi.spyOn(mailSender, "startMailSender");
-        const discoverSpy = vi.spyOn(discovery, "beginAttendanceDiscovery");
-        const deviceSpy = vi.spyOn(deviceApi, "mountDeviceApi");
-        let other: string | undefined;
-        if (enabled) {
-          await withTransaction(suite.db, async (tx) => {
-            const [person] = await seedPersons(tx, {
-              displayName: "Missing worker",
-              email: "missing@example.test",
-              locale: "es-ES",
-            });
-            other = person!.id;
-            await new WorkforceBackend().clockIn(tx, {
-              nodeId: f.venue.cfg.nodeId,
-              personId: f.venue.personId,
-              at: "2026-01-05T09:00:00Z",
+    it("starts both real duties, catches up, captures a real login and reopens with retained discovery progress", async () => {
+      const f = await prepared();
+      let server: StartedServer | undefined;
+      const sender = vi.fn<MailTransport>(async () => ({ status: "sent" }));
+      const sendSpy = vi.spyOn(smtpSend, "sendSmtpMessage").mockImplementation(sender);
+      const loopSpy = vi.spyOn(attendance, "runAttendanceLoop");
+      const mailSpy = vi.spyOn(mailSender, "startMailSender");
+      const discoverSpy = vi.spyOn(discovery, "beginAttendanceDiscovery");
+      const deviceSpy = vi.spyOn(deviceApi, "mountDeviceApi");
+      let other: string | undefined;
+      {
+        await withTransaction(suite.db, async (tx) => {
+          const [person] = await seedPersons(tx, {
+            displayName: "Missing worker",
+            email: "missing@example.test",
+            locale: "es-ES",
+          });
+          other = person!.id;
+          await new WorkforceBackend().clockIn(tx, {
+            nodeId: f.venue.cfg.nodeId,
+            personId: f.venue.personId,
+            at: "2026-01-05T09:00:00Z",
+            offsetMinutes: 60,
+            origin: jobOrigin("dashboard"),
+          });
+          for (const personId of [f.venue.personId, other])
+            await recordAttendanceFact(tx, {
+              source: "order",
+              key: `old-order:${personId}`,
+              personId,
+              kind: "order",
+              at: "2026-01-05T16:40:00Z",
               offsetMinutes: 60,
-              origin: jobOrigin("dashboard"),
+              outcome: "qualified",
             });
-            for (const personId of [f.venue.personId, other])
-              await recordAttendanceFact(tx, {
-                source: "order",
-                key: `old-order:${personId}`,
-                personId,
-                kind: "order",
-                at: "2026-01-05T16:40:00Z",
-                offsetMinutes: 60,
-                outcome: "qualified",
-              });
-            await putCredential(tx, ring, {
-              purpose: "email.smtp",
-              value: { url: "smtp://127.0.0.1:1025", from: "venue@example.test" },
-            });
+          await putCredential(tx, ring, {
+            purpose: "email.smtp",
+            value: { url: "smtp://127.0.0.1:1025", from: "venue@example.test" },
           });
-        }
-        const statements: string[] = [],
-          original = DatabaseSync.prototype.prepare;
-        const sqlSpy = vi.spyOn(DatabaseSync.prototype, "prepare").mockImplementation(function (
-          this: DatabaseSync,
-          query: string,
-        ) {
-          statements.push(query);
-          return original.call(this, query);
         });
-        try {
-          const started = await startServer(f.env).then(
-            (server) => ({ server, error: null }),
-            (error: unknown) => ({ server: undefined, error }),
+      }
+      try {
+        const started = await startServer(f.env).then(
+          (server) => ({ server, error: null }),
+          (error: unknown) => ({ server: undefined, error }),
+        );
+        expect(started.error).toBeNull();
+        server = started.server!;
+        await awaitListening(httpPort());
+        const catalogue = await fetch(`http://127.0.0.1:${httpPort()}/management-api/modules`, {
+          headers: { cookie: f.managementCookie },
+        });
+        expect(catalogue.status).toBe(200);
+        const moduleRows = (await catalogue.json()) as { id: string; enabled: boolean }[];
+        expect(moduleRows.find((row) => row.id === "workforce")).toBeUndefined();
+        expect(loopSpy).toHaveBeenCalledTimes(1);
+        expect(mailSpy).toHaveBeenCalledTimes(1);
+        expect(
+          mailSpy.mock.calls[0]![0].owners.some((owner) => owner.kind === "attendance_question"),
+        ).toBe(true);
+        expect(discoverSpy).toHaveBeenCalledTimes(1);
+        const deviceDeps = deviceSpy.mock.calls[0]![1];
+        expect(deviceDeps.attendance).toBe(recordAttendanceFact);
+        expect(deviceDeps.attendanceClock).toBeDefined();
+        const deviceCookie = f.venue.cookie
+          .split("; ")
+          .find((cookie) => cookie.startsWith(`${DEVICE_COOKIE}=`))!;
+        const login = await fetch(`http://127.0.0.1:${httpPort()}/api/session`, {
+          method: "POST",
+          headers: { cookie: deviceCookie, "Content-Type": "application/json" },
+          body: JSON.stringify({ personId: f.venue.personId, pin: "5555" }),
+        });
+        expect(login.status).toBe(200);
+        {
+          await vi.waitFor(
+            async () => {
+              expect(await suite.db.select().from(timeEntries)).toMatchObject([
+                { entryKind: "in" },
+                {
+                  entryKind: "out",
+                  eventAt: "2026-01-05T16:40:00.000Z",
+                  authorKind: "automatic",
+                },
+              ]);
+              expect(await attendanceMailRows(suite.db)).toMatchObject([
+                { status: "sent", recipient: "missing@example.test" },
+              ]);
+            },
+            { timeout: 45_000, interval: 50 },
           );
-          server = started.server;
-          if (!enabled) {
-            expect(started.error).toMatchObject({
-              code: "module.mandatory_not_disableable",
-              params: { module: "workforce" },
-            });
-            expect(loopSpy).not.toHaveBeenCalled();
-            expect(mailSpy).not.toHaveBeenCalled();
-            expect(discoverSpy).not.toHaveBeenCalled();
-            expect(
-              statements.filter((query) =>
-                /\b(?:from|join|into|update)\s+["\x60[]?(?:attendance_\w*|time_entries|shifts|roster_versions)\b/i.test(
-                  query,
-                ),
-              ),
-            ).toEqual([]);
-            expect(sender).not.toHaveBeenCalled();
-            expect(sendSpy).not.toHaveBeenCalled();
-            return;
-          }
-          expect(started.error).toBeNull();
-          server = started.server!;
-          await awaitListening(httpPort());
-          const catalogue = await fetch(`http://127.0.0.1:${httpPort()}/management-api/modules`, {
-            headers: { cookie: f.managementCookie },
+          expect(sender).toHaveBeenCalledTimes(1);
+          expect(sender.mock.calls[0]![1]).toEqual({
+            to: "missing@example.test",
+            ...attendanceReminderMessage({
+              locale: "es",
+              businessDay: "2026-01-05",
+              venueName: "Clock venue",
+              missingKinds: ["in", "out"],
+            }),
           });
-          expect(catalogue.status).toBe(200);
-          const moduleRows = (await catalogue.json()) as { id: string; enabled: boolean }[];
-          expect(moduleRows.find((row) => row.id === "workforce")).toBeUndefined();
-          expect(loopSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
-          expect(mailSpy).toHaveBeenCalledTimes(1);
           expect(
-            mailSpy.mock.calls[0]![0].owners.some((owner) => owner.kind === "attendance_question"),
-          ).toBe(enabled);
-          expect(discoverSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
-          const deviceDeps = deviceSpy.mock.calls[0]![1];
-          expect(deviceDeps.attendance).toBe(enabled ? recordAttendanceFact : undefined);
-          expect(deviceDeps.attendanceClock).toBeDefined();
-          const deviceCookie = f.venue.cookie
-            .split("; ")
-            .find((cookie) => cookie.startsWith(`${DEVICE_COOKIE}=`))!;
-          const login = await fetch(`http://127.0.0.1:${httpPort()}/api/session`, {
-            method: "POST",
-            headers: { cookie: deviceCookie, "Content-Type": "application/json" },
-            body: JSON.stringify({ personId: f.venue.personId, pin: "5555" }),
+            (await suite.db.select().from(attendanceOperationFacts)).some(
+              (fact) => fact.source === "session" && fact.personId === f.venue.personId,
+            ),
+          ).toBe(true);
+          expect(
+            (await suite.db.select().from(attendanceQuestions)).some((q) => q.personId === other),
+          ).toBe(true);
+          await server.close();
+          server = undefined;
+          beforeServerStarts();
+          const before = await readChain(suite.db, {
+            nodeId: f.venue.cfg.nodeId,
           });
-          expect(login.status).toBe(200);
-          if (enabled) {
-            await vi.waitFor(
-              async () => {
-                expect(await suite.db.select().from(timeEntries)).toMatchObject([
-                  { entryKind: "in" },
-                  {
-                    entryKind: "out",
-                    eventAt: "2026-01-05T16:40:00.000Z",
-                    authorKind: "automatic",
-                  },
-                ]);
-                expect(await attendanceMailRows(suite.db)).toMatchObject([
-                  { status: "sent", recipient: "missing@example.test" },
-                ]);
-              },
-              { timeout: 45_000, interval: 50 },
-            );
-            expect(sender).toHaveBeenCalledTimes(1);
-            expect(sender.mock.calls[0]![1]).toEqual({
-              to: "missing@example.test",
-              ...attendanceReminderMessage({
-                locale: "es",
-                businessDay: "2026-01-05",
-                venueName: "Clock venue",
-                missingKinds: ["in", "out"],
-              }),
-            });
-            expect(
-              (await suite.db.select().from(attendanceOperationFacts)).some(
-                (fact) => fact.source === "session" && fact.personId === f.venue.personId,
-              ),
-            ).toBe(true);
-            expect(
-              (await suite.db.select().from(attendanceQuestions)).some((q) => q.personId === other),
-            ).toBe(true);
-            await server.close();
-            server = undefined;
-            beforeServerStarts();
-            const before = await readChain(suite.db, {
-              nodeId: f.venue.cfg.nodeId,
-            });
-            const generation = (await suite.db.select().from(attendanceSourceState)).find(
-              (s) => s.recordKind === "scan",
-            )!.generation;
-            const rotaScan = (await suite.db.select().from(attendanceSourceState)).find(
-              (row) => row.recordKind === "scan" && row.source === "rota" && row.key === "shifts",
-            )!;
-            const storedVersions = (
-              JSON.parse(JSON.parse(rotaScan.fingerprint!).store) as unknown[]
-            )[3];
-            expect(storedVersions).toEqual(
-              Object.entries(
-                await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES),
-              ).sort(([a], [b]) => a.localeCompare(b)),
-            );
+          const generation = (await suite.db.select().from(attendanceSourceState)).find(
+            (s) => s.recordKind === "scan",
+          )!.generation;
+          const rotaScan = (await suite.db.select().from(attendanceSourceState)).find(
+            (row) => row.recordKind === "scan" && row.source === "rota" && row.key === "shifts",
+          )!;
+          const storedVersions = (
+            JSON.parse(JSON.parse(rotaScan.fingerprint!).store) as unknown[]
+          )[3];
+          expect(storedVersions).toEqual(
+            Object.entries(
+              await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES),
+            ).sort(([a], [b]) => a.localeCompare(b)),
+          );
 
-            server = await startServer(f.env);
-            await awaitListening(httpPort());
-            expect(discoverSpy).toHaveBeenCalledTimes(2);
-            const reopened = (await suite.db.select().from(attendanceSourceState)).find(
-              (s) => s.recordKind === "scan",
-            )!.generation;
-            expect(reopened).toBe(generation);
-            await server.close();
-            server = undefined;
-            beforeServerStarts();
-            expect(
-              await readChain(suite.db, {
-                nodeId: f.venue.cfg.nodeId,
-              }),
-            ).toEqual(before);
-            expect(sender).toHaveBeenCalledTimes(1);
-          }
-        } finally {
-          await server?.close();
-          sqlSpy.mockRestore();
-          sendSpy.mockRestore();
-          loopSpy.mockRestore();
-          mailSpy.mockRestore();
-          discoverSpy.mockRestore();
-          deviceSpy.mockRestore();
-          await rm(f.scratch, { recursive: true, force: true });
+          server = await startServer(f.env);
+          await awaitListening(httpPort());
+          expect(discoverSpy).toHaveBeenCalledTimes(2);
+          const reopened = (await suite.db.select().from(attendanceSourceState)).find(
+            (s) => s.recordKind === "scan",
+          )!.generation;
+          expect(reopened).toBe(generation);
+          await server.close();
+          server = undefined;
+          beforeServerStarts();
+          expect(
+            await readChain(suite.db, {
+              nodeId: f.venue.cfg.nodeId,
+            }),
+          ).toEqual(before);
+          expect(sender).toHaveBeenCalledTimes(1);
         }
-      },
-    );
-    if (enabled) {
+      } finally {
+        await server?.close();
+        sendSpy.mockRestore();
+        loopSpy.mockRestore();
+        mailSpy.mockRestore();
+        discoverSpy.mockRestore();
+        deviceSpy.mockRestore();
+        await rm(f.scratch, { recursive: true, force: true });
+      }
+    });
+    {
       it.each(["mirror", "fenced", "secondary", "setup"] as const)(
         "does not start attendance work in %s mode",
         async (mode) => {
@@ -482,4 +446,4 @@ for (const enabled of [true, false]) {
       });
     }
   });
-}
+});

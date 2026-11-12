@@ -1208,33 +1208,6 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("refuses a trading boot that disables workforce before migrating", async () => {
-    const port = await freePort();
-    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-depmissing-state-"));
-    try {
-      await writeFile(
-        join(stateDir, "modules.json"),
-        JSON.stringify({ modules: { workforce: false } }),
-      );
-      await expect(
-        startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: sharedVenueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_STATE_DIR: stateDir,
-          WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
-        }),
-      ).rejects.toMatchObject({
-        code: "module.mandatory_not_disableable",
-        params: { module: "workforce" },
-      });
-    } finally {
-      await rm(stateDir, { recursive: true, force: true });
-    }
-  }, 60_000);
-
   it("refuses a trading boot whose enabled set fills no fiscal slot (fiscal off) — module.fiscal_slot_empty", async () => {
     // The fiscal backend comes from whichever enabled module fills the `fiscal` seat; with neither
     // fiscal-slot member enabled, a trading boot must refuse rather than mount till routes that

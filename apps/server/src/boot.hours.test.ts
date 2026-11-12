@@ -1,7 +1,6 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -34,9 +33,9 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
-for (const enabled of [true, false]) {
-  describe(`hours actual boot workforce=${enabled}`, () => {
-    const disabled = new Set(["fiscal-none", "workforce-es", ...(enabled ? [] : ["workforce"])]);
+describe("hours boot with permanent workforce", () => {
+  describe("real listener", () => {
+    const disabled = new Set(["fiscal-none", "workforce-es"]);
     const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
     const suite = useVenueDb({
       migrations: migrationOptionsFor(
@@ -44,11 +43,7 @@ for (const enabled of [true, false]) {
         null,
       ),
     });
-    it.each(
-      enabled
-        ? (["primary", "mirror", "fenced", "secondary", "setup"] as const)
-        : (["primary"] as const),
-    )(
+    it.each(["primary", "mirror", "fenced", "secondary", "setup"] as const)(
       "only exposes the migrated writable hours surface in %s mode",
       async (mode) => {
         beforeServerStarts();
@@ -83,15 +78,6 @@ for (const enabled of [true, false]) {
         const scratch = await mkdtemp(join(tmpdir(), "waitron-hours-boot-"));
         let server: StartedServer | undefined;
         let tls: ReturnType<typeof httpsVia> | undefined;
-        const statements: string[] = [],
-          original = DatabaseSync.prototype.prepare;
-        const spy = vi.spyOn(DatabaseSync.prototype, "prepare").mockImplementation(function (
-          this: DatabaseSync,
-          query: string,
-        ) {
-          statements.push(query);
-          return original.call(this, query);
-        });
         let result: AttendanceCommandResult | undefined;
         try {
           await copyMigrationsRoot(join(scratch, "migrations"));
@@ -101,7 +87,7 @@ for (const enabled of [true, false]) {
           );
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const [port] = await freePorts(1);
-          const starting = startServer({
+          server = await startServer({
             WAITRON_HTTP_LANDING_PORT: "0",
             WAITRON_HTTP_PORT: String(port),
             WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -111,25 +97,7 @@ for (const enabled of [true, false]) {
             WAITRON_NODE_ID: mode === "setup" ? undefined : venue.cfg.nodeId,
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
-          }).then((started) => {
-            server = started;
-            return started;
           });
-          if (!enabled) {
-            await expect(starting).rejects.toMatchObject({
-              code: "module.mandatory_not_disableable",
-              params: { module: "workforce" },
-            });
-            expect(
-              statements.filter((q) =>
-                /\b(?:from|join|into|update)\s+["`[]?(?:attendance_\w*|time_entries|workforce_chains|pay_period_\w*)\b/i.test(
-                  q,
-                ),
-              ),
-            ).toEqual([]);
-            return;
-          }
-          await starting;
           await awaitListening(httpPort());
           if (mode === "setup") tls = httpsVia(await readFile(join(scratch, "tls", "ca.crt")));
           const origin = `${mode === "setup" ? "https" : "http"}://127.0.0.1:${httpPort()}`;
@@ -149,7 +117,7 @@ for (const enabled of [true, false]) {
             `/management-api/me/attendance/commands/${crypto.randomUUID()}`,
             `/management-api/attendance/hours?kind=pay-period`,
           ];
-          if (enabled && mode === "primary") {
+          if (mode === "primary") {
             const own = await get(paths[1]!);
             expect(own.status).toBe(200);
             const inbox = (await own.json()) as AttendanceInbox;
@@ -224,11 +192,10 @@ for (const enabled of [true, false]) {
         } finally {
           await server?.close();
           await tls?.close();
-          spy.mockRestore();
           await rm(scratch, { recursive: true, force: true });
         }
         beforeServerStarts();
-        if (enabled) {
+        {
           const entries = await suite.db.select().from(timeEntries);
           expect(entries).toHaveLength(mode === "primary" ? 2 : 0);
           if (result) expect(entries.map((e) => e.id).sort()).toEqual([...result.entryIds].sort());
@@ -237,4 +204,4 @@ for (const enabled of [true, false]) {
       60_000,
     );
   });
-}
+});

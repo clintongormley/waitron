@@ -40,9 +40,9 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
-for (const enabled of [true, false]) {
-  describe(`attendance response real boot workforce=${enabled}`, () => {
-    const disabled = new Set(["fiscal-none", "workforce-es", ...(enabled ? [] : ["workforce"])]);
+describe("attendance response boot with permanent workforce", () => {
+  describe("real listener", () => {
+    const disabled = new Set(["fiscal-none", "workforce-es"]);
     const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
     const suite = useVenueDb({
       migrations: migrationOptionsFor(
@@ -50,11 +50,7 @@ for (const enabled of [true, false]) {
         null,
       ),
     });
-    it.each(
-      enabled
-        ? (["primary", "mirror", "fenced", "secondary", "setup"] as const)
-        : (["primary"] as const),
-    )(
+    it.each(["primary", "mirror", "fenced", "secondary", "setup"] as const)(
       "serves only the writable migrated attendance surface in %s mode",
       async (mode) => {
         beforeServerStarts();
@@ -73,7 +69,7 @@ for (const enabled of [true, false]) {
           .set({ lastSeenAt: oldSeenAt })
           .where(eq(managementSessions.tokenHash, hashSessionToken(management.token)));
         let targetId: string | undefined;
-        if (enabled) {
+        {
           await withTransaction(suite.db, async (tx) => {
             const backend = new WorkforceBackend();
             const common = {
@@ -133,7 +129,7 @@ for (const enabled of [true, false]) {
           );
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const [port] = await freePorts(1);
-          const starting = startServer({
+          server = await startServer({
             WAITRON_HTTP_LANDING_PORT: "0",
             WAITRON_HTTP_PORT: String(port),
             WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -143,25 +139,7 @@ for (const enabled of [true, false]) {
             WAITRON_NODE_ID: mode === "setup" ? undefined : venue.cfg.nodeId,
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
-          }).then((started) => {
-            server = started;
-            return started;
           });
-          if (!enabled) {
-            await expect(starting).rejects.toMatchObject({
-              code: "module.mandatory_not_disableable",
-              params: { module: "workforce" },
-            });
-            expect(
-              statements.filter((q) =>
-                /\b(?:from|join|into|update)\s+["`[]?(?:attendance_\w*|time_entries|workforce_chains|shifts|roster_versions)\b/i.test(
-                  q,
-                ),
-              ),
-            ).toEqual([]);
-            return;
-          }
-          await starting;
           await awaitListening(httpPort());
           if (mode === "setup") tls = httpsVia(await readFile(join(scratch, "tls", "ca.crt")));
           const origin = `${mode === "setup" ? "https" : "http"}://127.0.0.1:${httpPort()}`;
@@ -180,7 +158,7 @@ for (const enabled of [true, false]) {
             `/management-api/attendance/day?personId=${venue.personId}&date=2026-01-05`,
             `/management-api/attendance/commands/${crypto.randomUUID()}`,
           ];
-          if (enabled && mode === "primary") {
+          if (mode === "primary") {
             const inboxResponse = await get(paths[0]!, venue.cookie);
             expect(inboxResponse.status).toBe(200);
             const inbox = (await inboxResponse.json()) as AttendanceInbox;
@@ -267,7 +245,7 @@ for (const enabled of [true, false]) {
           await rm(scratch, { recursive: true, force: true });
         }
         beforeServerStarts();
-        if (enabled && mode === "primary")
+        if (mode === "primary")
           expect(
             (
               await suite.db
@@ -276,7 +254,7 @@ for (const enabled of [true, false]) {
                 .where(eq(managementSessions.tokenHash, hashSessionToken(management.token)))
             )[0]!.lastSeenAt,
           ).not.toBe(oldSeenAt);
-        if (enabled) {
+        {
           const rows = await suite.db.select().from(timeEntries);
           expect(rows).toHaveLength(mode === "primary" ? 3 : 2);
           if (resultIds.length)
@@ -291,4 +269,4 @@ for (const enabled of [true, false]) {
       60_000,
     );
   });
-}
+});

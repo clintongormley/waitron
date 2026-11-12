@@ -29,13 +29,9 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
-for (const state of ["provider", "workforce-only", "disabled"] as const) {
+for (const state of ["provider", "workforce-only"] as const) {
   describe(`actual export boot ${state}`, () => {
-    const disabled = new Set([
-      "fiscal-none",
-      ...(state === "provider" ? [] : ["workforce-es"]),
-      ...(state === "disabled" ? ["workforce"] : []),
-    ]);
+    const disabled = new Set(["fiscal-none", ...(state === "provider" ? [] : ["workforce-es"])]);
     const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
     const suite = useVenueDb({
       migrations: migrationOptionsFor(
@@ -97,7 +93,7 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
           );
           const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
           const [port] = await freePorts(1);
-          const starting = startServer({
+          server = await startServer({
             WAITRON_HTTP_LANDING_PORT: "0",
             WAITRON_HTTP_PORT: String(port),
             WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -108,21 +104,6 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
           });
-          if (state === "disabled") {
-            await expect(starting).rejects.toMatchObject({
-              code: "module.mandatory_not_disableable",
-              params: { module: "workforce" },
-            });
-            expect(
-              statements.filter((q) =>
-                /\b(?:from|join|into|update)\s+["`[]?(?:attendance_\w*|time_entries|workforce_chains|pay_period_\w*)\b/i.test(
-                  q,
-                ),
-              ),
-            ).toEqual([]);
-            return;
-          }
-          server = await starting;
           await awaitListening(httpPort());
           if (mode === "setup") tls = httpsVia(await readFile(join(scratch, "tls", "ca.crt")));
           const origin = `${mode === "setup" ? "https" : "http"}://127.0.0.1:${httpPort()}`;
