@@ -784,7 +784,8 @@ Hardware and inbox checks to complete in the owner session.
 - **Sample wording (owner, 2026-10-28, A965).** The table and product names follow the sample receipt language. English uses “Outside 6” and “Coffee and toast”; Spanish uses “Terraza 6” and “Café y tostada”. The table name does not repeat the table caption. The synthetic number remains.
 
 - **A receipt's header rows (owner, 2026-10-19, A754).** The first row is the table on the left and
-  «Pedido N» on the right (the order alone on the right when there is no table). Then:
+  «Pedido N» on the right (the order alone on the right when there is no table); a printed
+  document with no table and order number 0 has no such row (A790). Then:
   - **A simplified receipt** puts its number on the left and the date and time on the right, with
     no captions: the date in words on 80 mm paper and on an A4 page (`18 ago 2026, 11:21`), in
     numbers on 58 mm paper (`18/08/2026 11:21`).
