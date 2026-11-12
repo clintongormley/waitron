@@ -2126,7 +2126,7 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: One rule for a booking when the evening's layout changes
 
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A474 — today's floor changes on the till: follow-ups (2026-10-11).** A booking seated from
   the dashboard skips the taken-off check, the map's drag works out its target the slow way, and
@@ -2186,7 +2186,7 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Small till and floor wording fixes
 
-9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A1259. Two till strings have no user: `table.pending_title` and `table.none_pending`.** Delete
   both, in English and Spanish.

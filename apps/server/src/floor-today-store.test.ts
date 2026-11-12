@@ -2182,43 +2182,41 @@ it.each(["guests", "clearing", "food"] as const)(
   },
 );
 
-it.each(["contained", "outside"] as const)(
-  "late saved-group formation handles a %s manual group",
-  async (kind) => {
-    const { zoneId, table, master } = await plannedZone(
-      v,
-      [
-        { key: "a", place: null },
-        { key: "b", place: null },
-        { key: "c", place: null },
-        { key: "spare", place: { x: 80, y: 80 } },
-        { key: "long", seats: 10, place: { x: 10, y: 20 }, partKeys: ["a", "b", "c"] },
-      ],
-      NOW,
-    );
-    const other = await inTx(v, (tx) =>
-      createTable(tx, v.cfg, { label: `Held ${floorLabelSuffix()}`, zoneId: v.tables.zoneId }),
-    );
-    const heldLabel = (await tableRow(v, other.id)).label;
-    await editMaster(master.c!, { label: heldLabel });
-    await reset(zoneId);
-    const targetId = kind === "contained" ? table.a! : table.spare!;
-    await inTx(v, (tx) =>
-      writeMerge(tx, v.cfg, { movingId: table.b!, targetId, side: "right", seats: 8, free: true }),
-    );
-    const before = await mergeOf(v, table.b!);
-    await inTx(v, (tx) =>
-      tx
-        .update(diningTables)
-        .set({ label: `${heldLabel} freed` })
-        .where(eq(diningTables.id, other.id)),
-    );
-    await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
-    const after = await mergeOf(v, table.b!);
-    if (kind === "outside") expect(after).toEqual(before);
-    else
-      expect(after!.members.map((m) => m.tableId).sort()).toEqual(
-        [table.a!, table.b!, table.c!].sort(),
-      );
-  },
-);
+it("late saved-group formation restores a contained manual group's reset slots", async () => {
+  const { zoneId, table, master } = await plannedZone(
+    v,
+    [
+      { key: "a", place: null },
+      { key: "b", place: null },
+      { key: "c", place: null },
+      { key: "long", seats: 10, place: { x: 10, y: 20 }, partKeys: ["a", "b", "c"] },
+    ],
+    NOW,
+  );
+  const other = await inTx(v, (tx) =>
+    createTable(tx, v.cfg, { label: `Held ${floorLabelSuffix()}`, zoneId: v.tables.zoneId }),
+  );
+  const heldLabel = (await tableRow(v, other.id)).label;
+  await editMaster(master.c!, { label: heldLabel });
+  await reset(zoneId);
+  await inTx(v, (tx) =>
+    writeMerge(tx, v.cfg, {
+      movingId: table.b!,
+      targetId: table.a!,
+      side: "left",
+      seats: 8,
+      free: true,
+    }),
+  );
+  await inTx(v, (tx) =>
+    tx
+      .update(diningTables)
+      .set({ label: `${heldLabel} freed` })
+      .where(eq(diningTables.id, other.id)),
+  );
+  await inTx(v, (tx) => ensureToday(tx, NONE, NOW));
+  expect(await todayRow(table.b!)).toMatchObject({ x: 18, y: 20 });
+  expect((await mergeOf(v, table.b!))!.members.map((m) => m.tableId).sort()).toEqual(
+    [table.a!, table.b!, table.c!].sort(),
+  );
+});

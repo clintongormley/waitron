@@ -382,28 +382,34 @@ it("reset applies an edited saved membership, leaving its former member separate
   ).toEqual([]);
 });
 
-it("Update layout keeps a taken-off member out of its saved group until Put back", async () => {
-  const { table, zoneId } = await LONG_TABLE();
-  await inTx(v, (tx) =>
-    splitOff(tx, v.cfg, REMOVALS, NOW, {
-      tableId: table.c3!,
-      partIds: [table.c5!],
-      seats: 6,
-      expectedParties: [],
-    }),
-  );
-  await inTx(v, (tx) => takeOffToday(tx, table.c5!));
-  await inTx(v, async (tx) => {
-    const key = await defaultLayout(tx, v.cfg, zoneId);
-    const layout = await readLayout(tx, key);
-    await updateLayout(tx, REMOVALS, zoneId, await todayBusinessDay(tx, NOW), NOW, {
-      setId: key.setId,
-      layoutRevision: layout.revision,
+it.each([false, true])(
+  "Update layout keeps a taken-off member out; outside group after Put back: %s",
+  async (outside) => {
+    const { table, zoneId } = await LONG_TABLE();
+    await inTx(v, (tx) =>
+      splitOff(tx, v.cfg, REMOVALS, NOW, {
+        tableId: table.c3!,
+        partIds: [table.c5!],
+        seats: 6,
+        expectedParties: [],
+      }),
+    );
+    await inTx(v, (tx) => takeOffToday(tx, table.c5!));
+    await inTx(v, async (tx) => {
+      const key = await defaultLayout(tx, v.cfg, zoneId);
+      const layout = await readLayout(tx, key);
+      await updateLayout(tx, REMOVALS, zoneId, await todayBusinessDay(tx, NOW), NOW, {
+        setId: key.setId,
+        layoutRevision: layout.revision,
+      });
     });
-  });
-  expect(await mergeOf(v, table.c3!)).toBeNull();
-  expect(await todayRow(v, table.c5!)).toMatchObject({ takenOff: true });
-  await inTx(v, (tx) => putBackToday(tx, table.c5!));
-  await inTx(v, (tx) => catchUpZone(tx, REMOVALS, zoneId, NOW));
-  expect(await membersOf(table.c3!)).toEqual(sorted([table.c3!, table.c4!, table.c5!]));
-});
+    expect(await mergeOf(v, table.c3!)).toBeNull();
+    expect(await todayRow(v, table.c5!)).toMatchObject({ takenOff: true });
+    if (outside) await push(table.bar!, table.c3!, "left");
+    const before = await mergeOf(v, table.c3!);
+    await inTx(v, (tx) => putBackToday(tx, table.c5!));
+    await inTx(v, (tx) => catchUpZone(tx, REMOVALS, zoneId, NOW));
+    if (outside) expect(await mergeOf(v, table.c3!)).toEqual(before);
+    else expect(await membersOf(table.c3!)).toEqual(sorted([table.c3!, table.c4!, table.c5!]));
+  },
+);
