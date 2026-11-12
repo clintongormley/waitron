@@ -111,18 +111,18 @@ a build plan.** These are source-inspection findings, not runtime verification.
 
 | Existing piece | Works today, unchanged | Small change to an existing piece | Truly new behavior |
 | --- | --- | --- | --- |
-| **Variants at €18/€21** | Select a variant and save its price on the parent line. | None removes the remaining gaps. | A separate €3 breakdown and dish choices. A “with hake” variant is not linked to the main pick. Extras already retain a priced child. [1] |
+| **Variants at €18/€21** | Select a variant and save its price on the parent line. | Not enough on its own. | A separate €3 breakdown and dish choices. A “with hake” variant is not linked to the main pick. Extras already retain a priced child. [1] |
 | **Extras and options** | Extras select products, override prices and enforce min/max picks and quantity caps; each course can use a one-pick list. Enter **€0 explicitly** for included dishes; blank uses the ordinary price. Options are text labels, not priced children. | Adapt the existing picker and basket for lunch. | Remember an outstanding **choose later** course. Required extras currently block Add; optional lists permit omission without remembering it. [2] |
-| **Kitchen** | Reuse routing and ticket rendering. Set lunch to No preparation; give choices explicit station cells (product, folder or zone-wide). Default-station fallback follows the parent, so a no-preparation parent alone sends nothing. | Reuse the existing station and ticket presentation. | Give children their own courses, fire them independently and accept later coffee without recalling earlier work. Normal edits refuse a changed selection after a lunch part is served; editing fired work before cooking recalls and resends it. Close an untaken course at payment without repricing. [3] |
-| **Bill and receipt** | Parent/child grouping keeps €18 and €3. Extras currently display prices, including €0. | Show the same hake child as a €3 supplement line and an unpriced dish description, charged once. Hide included-dish prices. Skip basket and receipt merging for lunches so each diner keeps an item. | No new receipt data needed. [4] |
+| **Kitchen** | Reuse routing and ticket rendering. Set lunch to No preparation; give choices explicit station cells (product, folder or zone-wide). Default-station fallback follows the parent, so a no-preparation parent alone sends nothing. | None. | Give children their own courses, fire them independently and accept later coffee without recalling earlier work. Normal edits refuse a changed selection once any lunch part has started or been served, or where the station disallows changes after sending. Otherwise a fired-line edit recalls and resends it. Close an untaken course at payment without repricing. [3] |
+| **Bill and receipt** | Parent/child grouping keeps €18 and €3. Extras currently display prices, including €0. | Show the same hake child as a €3 supplement line and an unpriced dish description, charged once. Hide included-dish prices. Skip basket and receipt merging for lunches so each diner keeps an item. | Price/name data already exists; untaken-course wording uses the new choice state above. [4] |
 | **Ordinary extra starter** | Croquettes already has its own product line, ordinary €7.80 demo price and kitchen route. Keep it outside lunch choices on till and receipt. | None. | Nothing new. [5] |
 
 The owner’s answers stand: one lunch item, later choice allowed, supplement priced separately.
 The proposed display is **House lunch €18 + hake supplement €3 + ordinary Croquettes €7.80 =
 €28.80**, with the lunch’s selected dishes beneath it unpriced. Add the second €18 lunch and the
 two-diner example totals **€46.80**. Adviser S10 remains open; no VAT treatment is chosen and the
-full invoice waits. Both approaches currently put €18 at the lunch rate and €3 at the hake rate;
-adviser answer B would require a new allocation step with either approach.
+full invoice waits. With extras, €18 is at the lunch’s rate and €3 at the hake’s. A €21 variant puts all €21 at its own
+rate. Adviser answer B needs a new allocation step either way.
 
 The local gallery is linked from Lane D’s `receipts/a1515-mockups/README.md`; mock-ups stay
 outside the repository. The displayed choices remain as drawn; the recommendation reuses extras
@@ -139,6 +139,7 @@ underneath them and adds later-course service.
 `apps/server/src/kitchen-print.ts::buildTicketItems`.
 [4] `apps/till/src/widgets/basket.ts::TillBasket.render`;
 `apps/till/src/state/working-order.ts::WorkingOrderStore.addMerging`;
-`apps/server/src/receipt-lines.ts::{groupByParent,mergeIdenticalGroups,ticketLinesFrom}`.
+`apps/server/src/receipt-lines.ts::{groupByParent,mergeIdenticalGroups,ticketLinesFrom}`;
+`apps/till/src/screens/till-ticket-view.ts::{groupByParent,mergeIdenticalGroups}`.
 [5] `apps/server/src/working-order.ts::{addTabRound,priceTabRound,priceOrderLines,fireLines}`;
 `packages/country-es/src/demo/menu.ts:610–634`.
