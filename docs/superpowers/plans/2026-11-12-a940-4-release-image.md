@@ -93,7 +93,9 @@ box has started in production yet (CLAUDE.md §5, the 2026-11-08 producer except
    files out of it, so the archive's PDF is the box's PDF byte for byte (§5.3). A re-run replaces
    the two files from the image the tag names then (`gh release upload --clobber`). **Watcher,
    2026-11-12 17:59:** the publish step refuses when `:X.Y.Z` already exists on the registry, so a
-   re-run never replaces a published image and only redoes the Release upload (Task 5's case).
+   re-run never replaces a published image (Task 5's case). Re-running the whole workflow therefore
+   stops at Publish; re-running only the failed `release` job (`gh run rerun <run> --failed`)
+   redoes the Release upload.
 9. **What `releasedOn` is read from.** `release.json`'s `releasedOn` is the day in item 1.l)'s
    "Fecha" line of the committed `v<version>.md`, read back from its Spanish words
    (`3 de diciembre de 2026` → `2026-12-03`) and accepted only when `spanishDate` of the result
@@ -139,12 +141,14 @@ box has started in production yet (CLAUDE.md §5, the 2026-11-08 producer except
    before the push).
 2. **A tag like `v1.2.3-rc1` or `v01.2.3`** → refused before publishing (bundle refuses the form;
    Task 1 case), never published as `:1.2.3-rc1`.
-3. **A re-run of a tag's workflow after the Release exists** → the Release's two files are
-   replaced from the image the tag names, no duplicate Release, no failure (Task 6 case).
+3. **A re-run of only the `release` job after the Release exists** → the Release's two files are
+   replaced from the image the tag names, no duplicate Release (Task 6 case); **a re-run of the
+   whole workflow** → Publish refuses the existing `:X.Y.Z` and pushes nothing (Task 5 case).
 4. **`waitron.sh install v1.2` or `install some-branch`** → unchanged: built from source as
    today; only a full `vX.Y.Z` pulls (Task 7 cases).
-5. **A checkout with no tags at all, one prepared version** → the guard passes; **two prepared
-   versions, the lower untagged** → it fails naming the missing tag (Task 8 cases).
+5. **A checkout with no tags at all and any prepared version** → the guard fails (departure 6);
+   **one prepared version and some other tag** → it passes; **two prepared versions, the lower
+   untagged** → it fails naming the missing tag (Task 8 cases).
 
 ---
 
@@ -158,7 +162,7 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
 - Create: `packages/shared/src/built-release.ts`, `packages/shared/src/built-release.test.ts`
 - Modify: `packages/shared/src/index.ts` (export), `scripts/bundle-node.mjs` (define),
   `scripts/bundle-node.test.mjs`,
-  `packages/fiscal-verifactu/src/software-identity.ts:54-56` (`softwareVersion`),
+  `packages/fiscal-verifactu/src/software-identity.ts` (`softwareVersion`),
   `packages/fiscal-verifactu/src/software-identity.test.ts`,
   `packages/fiscal-verifactu/src/declaration/agree.e2e.test.ts` (header comment and one case)
 
@@ -177,7 +181,7 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
   (unset or `""` → `null`, per `isUnset`'s rule), throwing `Not a release version: <value>` for a
   malformed one; `bundle()` takes `releaseVersion` and, when it is given (`null` included), adds
   `--define:__WAITRON_RELEASE_VERSION__=__waitronReleaseVersion` with the frozen literal in the
-  banner, as the hour stamp is added (`bundle-node.mjs:42`); the command-line block always gives
+  banner, as the hour stamp is added (`bundle()` in `bundle-node.mjs`); the command-line block always gives
   it, so every image bundle is stamped and a test's direct `bundle()` call is not (departure 3).
 - Produces: `softwareVersion(commit = BUILD_COMMIT, release = BUILD_RELEASE)`, where
   `BUILD_RELEASE = builtRelease()` is read once when the module loads, as `BUILD_COMMIT` is: a
@@ -213,6 +217,11 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
   then `grep -c '__waitronReleaseVersion = Object.freeze({"version":"1.2.3"})' apps/server/dist/server.js`
   prints 1; unset, the same grep for `Object.freeze(null)` prints 1. (A failing case would print 0.)
 - [ ] **Step 6: Commit** (`git commit -s`).
+
+**As built (PR 1):** the command-line block passes the raw setting as `releaseVersion` and
+`bundle()` checks it through `releaseDefine`, rather than passing `releaseDefine(process.env)`'s
+answer; the agree case stubs the bundle stamp and loads the record's modules afresh, rather than
+mocking `builtRelease`.
 
 ### Task 2: `declaration render` writes the four files
 
@@ -458,12 +467,13 @@ Branch `feat/a940-4-release-publish`. Path: FULL.
 - Produces: `releasedDeclarationProblems(repo: string): string[]` — each problem one line: a `v*`
   tag (form `vX.Y.Z`) whose `declarations/v<v>.md` is absent at `HEAD` or differs from
   `git show v<v>:packages/fiscal-verifactu/declarations/v<v>.md`; a `v<v>.md` below the highest
-  version with no tag `v<v>`. Git runs with `GIT_*` cleared.
+  version with no tag `v<v>`; any `v<v>.md` when the checkout holds no tags at all. Git runs with
+  `GIT_*` cleared.
 
 - [ ] **Step 1: Failing tests** in a scratch repository per case (`mktemp -d`, `git init`): no
   files, no tags → `[]`; one file, no tags at all → one problem (departure 6, watcher 17:59);
-  one file, no tag of its own but another tag such as `pre-sqlite-migration` → `[]`; `v1.0.0` and `v1.0.1` files, no tags → one problem
-  naming `v1.0.0`; tag `v1.0.0` and its file unchanged → `[]`; the file edited after the tag → one
+  one file, no tag of its own but another tag such as `pre-sqlite-migration` → `[]`; `v1.0.0` and `v1.0.1` files and only the tag
+  `pre-sqlite-migration` → one problem naming `v1.0.0`; tag `v1.0.0` and its file unchanged → `[]`; the file edited after the tag → one
   problem; the file deleted after the tag → one problem; a tag `pre-sqlite-migration` → ignored. One
   case runs against the real repository and expects `[]`. Run the file once with `GIT_DIR` set to
   another repository; it still reads the scratch one.
