@@ -164,7 +164,7 @@ When a table has paid for a dish that is not coming, cancel it so the kitchen st
 the guest can have the money back. Among the table's sent dishes, choose **Void…** from the dish's **More** menu.
 On a paid bill, it is offered only for what has not been served yet.
 
-The **Cancel item** window says **This bill is paid**. Choose **How many**, up to the number not
+The **Cancel item** window says **This bill is closed**. Choose **How many**, up to the number not
 yet served. If the dish has gone to the kitchen but nobody has marked it started, answer **Has
 preparation started?**. Then choose a **Reason**.
 
@@ -469,7 +469,7 @@ cannot be changed, moved or charged again. Refund its payment first**, and nothi
 move would leave the bill owing less than has been paid, the till says how much and offers a
 **Refund** button for that amount. If the move is refused because a card payment or refund is
 still going through on the bill you chose, or because that bill was presented or paid in the
-meantime, the till names that bill before the reason, such as **Bill 2: This bill is paid**. If
+meantime, the till names that bill before the reason, such as **Bill 2: This bill is closed**. If
 someone else has unsent dishes on either bill, take over their order first. Open **Move dishes…**
 again to choose afresh.
 

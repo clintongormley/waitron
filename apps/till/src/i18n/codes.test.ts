@@ -305,8 +305,8 @@ it("words the presented, paid and other-party refusals of an order sent to a bil
   expect(codeMessage("bill.presented", "es")).toBe(
     "Esta cuenta ya se ha presentado, así que no se puede cambiar",
   );
-  expect(codeMessage("bill.paid", "en")).toBe("This bill is paid");
-  expect(codeMessage("bill.paid", "es")).toBe("Esta cuenta ya está pagada");
+  expect(codeMessage("bill.paid", "en")).toBe("This bill is closed");
+  expect(codeMessage("bill.paid", "es")).toBe("Esta cuenta ya está cerrada");
   expect(codeMessage("bill.other_party", "en")).toBe("That bill belongs to other guests");
   expect(codeMessage("bill.other_party", "es")).toBe("Esa cuenta es de otros clientes");
 });

@@ -66,7 +66,7 @@ export const en = {
   "cancel_item.started": "Already being prepared or served",
   "cancel_item.refund_at_till":
     "Refund the payment at a till: choose Refund a payment on the receipt.",
-  "cancel_item.paid": "This bill is paid",
+  "cancel_item.paid": "This bill is closed",
   "cancel_item.choice": "What happens to the charge?",
   "cancel_item.still_charge": "Cancel, still charge",
   "cancel_item.dont_charge": "Cancel, don't charge",
@@ -2041,7 +2041,7 @@ export const es: Record<StringKey, string> = {
   "cancel_item.no": "No",
   "cancel_item.started": "Ya se está preparando o se ha servido",
   "cancel_item.refund_at_till": "Devuelve el dinero en una caja: Devolver un pago, en el recibo.",
-  "cancel_item.paid": "Esta cuenta está pagada",
+  "cancel_item.paid": "Esta cuenta ya está cerrada",
   "cancel_item.choice": "¿Qué pasa con el cobro?",
   "cancel_item.still_charge": "Cancelar y cobrar",
   "cancel_item.dont_charge": "Cancelar sin cobrar",

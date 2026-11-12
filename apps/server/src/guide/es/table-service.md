@@ -171,7 +171,7 @@ Cuando una mesa ha pagado un plato que no va a llegar, cancélalo para que la co
 prepararlo y el cliente pueda recuperar el dinero. Entre los platos enviados de la mesa, elige
 **Cancelar…** en el menú **Más** del plato. En una cuenta pagada solo se ofrece para lo que aún no se ha servido.
 
-La ventana **Cancelar plato** indica **Esta cuenta está pagada**. Elige **Cuántos**, hasta los que
+La ventana **Cancelar plato** indica **Esta cuenta ya está cerrada**. Elige **Cuántos**, hasta los que
 aún no se han servido. Si el plato ha pasado a cocina pero nadie lo ha marcado como empezado,
 responde a **En preparación**. Después elige un **Motivo**.
 
@@ -497,7 +497,7 @@ mueve nada. Si el cambio dejara la cuenta por debajo de lo que ya se ha pagado, 
 y ofrece un botón **Devolver** por ese importe. Si se rechaza el cambio porque la cuenta que
 elegiste tiene un cobro o una devolución con tarjeta en curso, o porque entretanto se ha presentado
 o pagado, la caja nombra esa cuenta antes del motivo, por ejemplo **Cuenta 2: Esta cuenta ya está
-pagada**. Si otra persona tiene platos sin enviar en alguna de las dos cuentas, toma antes su
+cerrada**. Si otra persona tiene platos sin enviar en alguna de las dos cuentas, toma antes su
 pedido. Abre otra vez **Mover platos…** para elegir de nuevo.
 
 ## Separar una mesa {#split-table}

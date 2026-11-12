@@ -450,8 +450,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esa cuenta ya no está abierta. Elige otra cuenta y vuelve a enviar el pedido",
   },
   "bill.paid": {
-    en: "This bill is paid",
-    es: "Esta cuenta ya está pagada",
+    en: "This bill is closed",
+    es: "Esta cuenta ya está cerrada",
   },
   "bill.other_party": {
     en: "That bill belongs to other guests",
