@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { venueLocationId, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -256,14 +256,12 @@ it("omits the source operator's dependent rows while preserving another person's
 
 it("imports printers disabled with fresh agent credentials and no page-printer agent binding", async () => {
   await seed();
-  const venueId = await venueLocationId(suite.db);
   const bundle = configurationBundle();
   bundle.modules = { "synthetic-transfer": 1 };
   bundle.tables = {
     print_agents: [
       {
         id: "source-agent",
-        location_id: "source-location",
         name: "Source worker",
         token_hash: "synthetic-source-token",
         active: true,
@@ -273,7 +271,6 @@ it("imports printers disabled with fresh agent credentials and no page-printer a
     printers: [
       {
         id: "source-receipt",
-        location_id: "source-location",
         name: "Receipt printer",
         transport: "network_tcp",
         host: "192.0.2.10",
@@ -283,7 +280,6 @@ it("imports printers disabled with fresh agent credentials and no page-printer a
     page_printers: [
       {
         id: "source-page",
-        location_id: "source-location",
         name: "Office printer",
         host: "192.0.2.11",
         port: 631,
@@ -306,23 +302,20 @@ it("imports printers disabled with fresh agent credentials and no page-printer a
     importConfigurationTables(tx, bundle, [module], bundle.modules),
   );
   expect(
-    (await suite.db.execute(sql`select id, location_id, token_hash, active from print_agents`))
-      .rows,
+    (await suite.db.execute(sql`select id, token_hash, active from print_agents`)).rows,
   ).toEqual([
     {
       id: expect.any(String),
-      location_id: venueId,
       token_hash: expect.stringMatching(/^disabled-import:/),
       active: 0,
     },
   ]);
+  expect((await suite.db.execute(sql`select name, active from printers`)).rows).toEqual([
+    { name: "Receipt printer", active: 0 },
+  ]);
   expect(
-    (await suite.db.execute(sql`select name, location_id, active from printers`)).rows,
-  ).toEqual([{ name: "Receipt printer", location_id: venueId, active: 0 }]);
-  expect(
-    (await suite.db.execute(sql`select name, location_id, active, agent_id from page_printers`))
-      .rows,
-  ).toEqual([{ name: "Office printer", location_id: venueId, active: 0, agent_id: null }]);
+    (await suite.db.execute(sql`select name, active, agent_id from page_printers`)).rows,
+  ).toEqual([{ name: "Office printer", active: 0, agent_id: null }]);
   expect((await suite.db.execute(sql`pragma foreign_key_check`)).rows).toEqual([]);
 });
 
