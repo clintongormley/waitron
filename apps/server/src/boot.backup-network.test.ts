@@ -1,6 +1,6 @@
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -17,6 +17,7 @@ import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ARCHIVE_PURPOSE, writeArchiveSettings } from "./archive-settings.js";
+import { parseBackupArchiveKey } from "./backup-keys.js";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -400,6 +401,7 @@ describe("trading with dashboard archive settings the box cannot use", () => {
 describe("trading with environment backup settings beside a sealed record", () => {
   it("takes the environment's settings and never reads a sealed record that would not decrypt", async () => {
     let cookie = "";
+    let archiveDir = "";
     await bootAndTrade(
       async (scratch) => {
         const otherRing = loadKeyRing({
@@ -408,8 +410,9 @@ describe("trading with environment backup settings beside a sealed record", () =
         });
         await storeArchiveRecord(otherRing, join(scratch, "sealed-backups"));
         cookie = await managerCookie();
+        archiveDir = join(scratch, "env-backups");
         return {
-          WAITRON_BACKUP_DIR: join(scratch, "env-backups"),
+          WAITRON_BACKUP_DIR: archiveDir,
           WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
         };
       },
@@ -417,6 +420,9 @@ describe("trading with environment backup settings beside a sealed record", () =
         expect(await waitForEvent(lines, "backup.destination_completed")).toMatchObject({
           destination: "primary",
         });
+        const archives = await readdir(archiveDir);
+        expect(archives).toHaveLength(1);
+        expect(parseBackupArchiveKey(archives[0]!)?.nodeId).toBe(venue.cfg.nodeId);
         const status = await fetch(`${base}/api/backup/status`, { ...via, headers: { cookie } });
         expect(await status.json()).toMatchObject({
           enabled: true,
