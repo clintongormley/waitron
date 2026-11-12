@@ -155,8 +155,9 @@ it("refuses a canonical write request without starting a host command", async ()
   const run = vi.fn();
   const join =
     'network.join {"ssidHex":"41","keyMgmt":"wpa-psk","psk":"restaurant-key","hidden":false,"actor":{"source":"person","person":"waiter-1"}}';
-  expect(await handleNetworkRead(join, { run })).toBe('{"ok":false,"reason":"unknown_request"}\n');
+  const reply = await handleNetworkRead(join, { run });
   expect(run).not.toHaveBeenCalled();
+  expect(reply).toBe('{"ok":false,"reason":"unknown_request"}\n');
 });
 
 it("reads connected Ethernet and exact Wi-Fi bytes, preferring its active infrastructure profile", async () => {
