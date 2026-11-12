@@ -22,7 +22,6 @@ import {
   readInvoiceCorrection,
   type InvoiceCorrectionRequest,
   type InvoiceCorrectionView,
-  type SplitLine,
 } from "./invoice-corrections.js";
 import type { Logger } from "./logger.js";
 import { withCheck } from "./pin-check-ahead.js";
@@ -128,18 +127,14 @@ export function mountInvoiceCorrectionApi(
       const ask = parseCorrectionCash({ submissionId: body.submissionId, amount: body.amount });
       const override = overrideOf(body);
       const { saleId, tenderId } = await withTransaction(deps.db, async (tx) => {
-        const [row] = await tx
-          .select({ saleId: invoiceCorrections.originalSaleId })
-          .from(invoiceCorrections)
-          .where(eq(invoiceCorrections.id, correctionId));
-        if (row === undefined) throw new AppError("invoice_correction.not_found", { correctionId });
-        const [holding] = await readCashLeft(tx, row.saleId);
+        const saleId = await saleOfCorrection(tx, correctionId);
+        const [holding] = await readCashLeft(tx, saleId);
         const [oldest] = await tx
           .select({ id: tenders.id })
           .from(tenders)
-          .where(and(eq(tenders.saleId, row.saleId), eq(tenders.method, "cash")))
+          .where(and(eq(tenders.saleId, saleId), eq(tenders.method, "cash")))
           .orderBy(asc(tenders.settledAt), asc(tenders.id));
-        return { saleId: row.saleId, tenderId: holding?.tenderId ?? oldest?.id ?? "" };
+        return { saleId, tenderId: holding?.tenderId ?? oldest?.id ?? "" };
       });
       const result = await withTenderRefundAuthorization(
         deps.db,
@@ -177,13 +172,14 @@ export function mountInvoiceCorrectionApi(
       return c.json(result);
     }),
   );
-  const endingRoute = (
+  const endingRoute = <R>(
     path: "file" | "close",
+    parse: (body: Record<string, unknown>) => R,
     end: (
       tx: Transaction,
       cfg: ReturnType<typeof requestCfg>,
       correctionId: string,
-      body: Record<string, unknown>,
+      request: R,
       actor: { personId: string; authz: AuthzInput },
     ) => Promise<InvoiceCorrectionView>,
   ) =>
@@ -194,7 +190,7 @@ export function mountInvoiceCorrectionApi(
         const cfg = requestCfg(deps.cfg, session);
         const correctionId = correctionIdOf(c.req.param("id"));
         const body = asObject(await readRawJsonBody<unknown>(c));
-        if (path === "file") expectedSplitOf(body.expectedSplit);
+        const request = parse(body);
         const override = overrideOf(body);
         const saleId = await withTransaction(deps.db, (tx) => saleOfCorrection(tx, correctionId));
         const result = await withCorrectionAuthorization(
@@ -209,7 +205,7 @@ export function mountInvoiceCorrectionApi(
           },
           async (tx, _authorization, checked) => {
             await requireEconomicWrite(tx, cfg, deps.admission);
-            return end(tx, cfg, correctionId, body, {
+            return end(tx, cfg, correctionId, request, {
               personId: session.personId,
               authz: { sessionId: session.sessionId, override: withCheck(override, checked) },
             });
@@ -219,30 +215,24 @@ export function mountInvoiceCorrectionApi(
       }),
     );
   const correctionDeps = { backend: deps.backend, clock: deps.clock, attendance: deps.attendance };
-  endingRoute("file", (tx, cfg, correctionId, body, actor) =>
-    fileInvoiceCorrectionNow(
-      tx,
-      correctionDeps,
-      cfg,
-      correctionId,
-      { expectedSplit: body.expectedSplit as SplitLine[] },
-      actor,
-    ),
+  endingRoute(
+    "file",
+    (body) => ({ expectedSplit: expectedSplitOf(body.expectedSplit) }),
+    (tx, cfg, correctionId, request, actor) =>
+      fileInvoiceCorrectionNow(tx, correctionDeps, cfg, correctionId, request, actor),
   );
-  endingRoute("close", (tx, cfg, correctionId, _body, actor) =>
-    closeInvoiceCorrection(tx, correctionDeps, cfg, correctionId, { personId: actor.personId }),
+  endingRoute(
+    "close",
+    () => undefined,
+    (tx, cfg, correctionId, _request, actor) =>
+      closeInvoiceCorrection(tx, correctionDeps, cfg, correctionId, { personId: actor.personId }),
   );
   app.get("/api/invoice-corrections/:id", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { passive: true });
       const correctionId = correctionIdOf(c.req.param("id"));
       const result = await withTransaction(deps.db, async (tx) => {
-        const [row] = await tx
-          .select({ saleId: invoiceCorrections.originalSaleId })
-          .from(invoiceCorrections)
-          .where(eq(invoiceCorrections.id, correctionId));
-        if (row === undefined) throw new AppError("invoice_correction.not_found", { correctionId });
-        await checkAccess(tx, session, row.saleId);
+        await checkAccess(tx, session, await saleOfCorrection(tx, correctionId));
         return readInvoiceCorrection(tx, deps.backend, requestCfg(deps.cfg, session), correctionId);
       });
       return c.json(result);

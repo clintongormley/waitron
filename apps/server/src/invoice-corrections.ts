@@ -26,6 +26,7 @@ import {
   seriesId as brandSeriesId,
   sumDecimals,
   type Decimal,
+  type ErrorParams,
   type SaleId,
 } from "@waitron/shared";
 import { invalid, MONEY } from "./bill-allocation.js";
@@ -271,23 +272,29 @@ export async function fileCorrectionIn(
   correctionId: string,
   authz: RecordCorrectionInput["authz"],
   endedBy: string | null,
+  expectedSplit?: readonly SplitLine[],
 ): Promise<SaleId> {
-  const [correction] = await tx
-    .select()
-    .from(invoiceCorrections)
-    .where(eq(invoiceCorrections.id, correctionId));
-  if (correction === undefined)
-    throw new AppError("invoice_correction.not_found", { correctionId });
-  if (correction.state !== "open")
-    throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  const correction = await openCorrection(tx, correctionId);
   const { completed } = await readCorrectionMoney(tx, correctionId);
   if (completed === 0) throw new AppError("invoice_correction.nothing_back", { correctionId });
-  const gross = centsToDecimal(completed);
   const saleId = correction.originalSaleId as SaleId;
   const preview = await previewCorrectionAmounts(tx, deps.backend, saleId, cfg.nodeId, {
-    gross,
+    gross: centsToDecimal(completed),
     ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
   });
+  if (expectedSplit !== undefined) {
+    const split = preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax }));
+    if (splitKey(split) !== splitKey(expectedSplit))
+      throw new AppError("invoice_correction.split_changed", {
+        saleId,
+        gross: preview.gross,
+        vatBreakdown: split,
+        moneyRefundable: sumDecimals([
+          ZERO,
+          ...(await readRefundableTenders(tx, saleId)).map((row) => decimal(row.appliedRemaining)),
+        ]),
+      });
+  }
   if ((await deps.backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
 
@@ -338,32 +345,26 @@ export async function fileInvoiceCorrectionNow(
   request: { expectedSplit: SplitLine[] },
   actor: { personId: string; authz: AuthzInput },
 ): Promise<InvoiceCorrectionView> {
-  const expectedSplit = expectedSplitOf(request.expectedSplit);
-  const correction = await openCorrection(tx, correctionId);
-  const { completed } = await readCorrectionMoney(tx, correctionId);
-  if (completed === 0) throw new AppError("invoice_correction.nothing_back", { correctionId });
-  const saleId = correction.originalSaleId as SaleId;
-  const preview = await previewCorrectionAmounts(tx, deps.backend, saleId, cfg.nodeId, {
-    gross: centsToDecimal(completed),
-    ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
-  });
-  const split = preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax }));
-  if (splitKey(split) !== splitKey(expectedSplit))
-    throw new AppError("invoice_correction.split_changed", {
-      saleId,
-      gross: preview.gross,
-      vatBreakdown: split,
-      moneyRefundable: sumDecimals([
-        ZERO,
-        ...(await readRefundableTenders(tx, saleId)).map((row) => decimal(row.appliedRemaining)),
-      ]),
-    });
-  await fileCorrectionIn(tx, deps, cfg, correctionId, actor.authz, actor.personId);
+  await fileCorrectionIn(
+    tx,
+    deps,
+    cfg,
+    correctionId,
+    actor.authz,
+    actor.personId,
+    expectedSplitOf(request.expectedSplit),
+  );
   return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
 }
 
 /** The refusals of a filing that no later attempt on this box can get past. */
-const NEVER_FILEABLE = new Set(["replaced", "voided", "wrong_node", "not_simplified"]);
+type NotAdmitted = ErrorParams["sale.correction_not_admitted"];
+const NEVER_FILEABLE = new Set<NotAdmitted["reason"]>([
+  "replaced",
+  "voided",
+  "wrong_node",
+  "not_simplified",
+]);
 
 /**
  * Ends the open correction `correctionId` without filing: discarded when nothing has gone back;
@@ -399,7 +400,7 @@ export async function closeInvoiceCorrection(
     );
     if (
       refusal?.code !== "sale.correction_not_admitted" ||
-      !NEVER_FILEABLE.has((refusal.params as { reason: string }).reason)
+      !NEVER_FILEABLE.has((refusal.params as NotAdmitted).reason)
     )
       throw new AppError("invoice_correction.still_correctable", { correctionId });
   }
