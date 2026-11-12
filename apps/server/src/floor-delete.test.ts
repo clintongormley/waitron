@@ -110,7 +110,7 @@ async function snapshot(tx: Transaction) {
   return result;
 }
 
-async function planned(z: string, prefix: string, locationId = v.cfg.locationId as string) {
+async function planned(z: string, prefix: string) {
   return inTx(v, async (tx) => {
     const [set] = await tx.insert(floorPlanSets).values({}).returning();
     const [plan] = await tx
@@ -130,7 +130,6 @@ async function planned(z: string, prefix: string, locationId = v.cfg.locationId 
       .insert(diningTables)
       .values(
         masters.map((master, i) => ({
-          locationId,
           zoneId: z,
           label: `${prefix} live ${["C", "A", "B"][i]}`,
           planTableId: master.id,

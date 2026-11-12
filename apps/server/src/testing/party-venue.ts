@@ -40,7 +40,6 @@ import { memberTables, seatTable, setPartyName } from "../parties.js";
 import { joinTables } from "./table-action-fixture.js";
 import { createTable } from "./live-table.js";
 import type { DeviceRequestConfig } from "../trading-context.js";
-import type { WithVenueRowId } from "./venue-row-id.js";
 import { systemClock } from "../till-backend.js";
 import { payWorkingOrder } from "./whole-payment-fixture.js";
 import { listTablesWithState, parkOrder } from "../working-order.js";
@@ -72,7 +71,7 @@ export interface PartyVenue {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   /** {@link OPERATOR}'s open session on the venue's device, which a bill payment is taken under. */
   operator: { personId: string; sessionId: string };
   /** The "tables" zone. */
@@ -134,7 +133,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
   const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -144,7 +142,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
   };
   const { tables, counter, productIds } = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: `Party menu ${cfg.locationId}` });
+    const cat = await createCatalogue(tx, { name: `Party menu ${venueId}` });
     const platos = await createCategory(tx, { name: "Platos" });
     for (const product of MENU) {
       await createProduct(tx, {

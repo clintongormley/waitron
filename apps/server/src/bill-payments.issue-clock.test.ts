@@ -28,7 +28,6 @@ import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { readSettledTicket } from "./testing/whole-payment-fixture.js";
 import "./errors.js";
@@ -57,7 +56,7 @@ let backend: FiscalBackend;
 let clock: TrustedClock;
 
 interface Venue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   /** OPERATOR's open session on the venue's device, which a bill payment is taken under. */
   operator: { personId: string; sessionId: string };
   offers: ZoneOffers;
@@ -130,7 +129,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
-    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -147,7 +145,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   };
   return withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, {
-      name: `Bill payments issue clock menu ${cfg.locationId}`,
+      name: `Bill payments issue clock menu ${venueId}`,
     });
     const dishes = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();

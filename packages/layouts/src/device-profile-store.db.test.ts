@@ -76,7 +76,7 @@ async function purgeProfiles(): Promise<void> {
 
 /** Through drizzle, for the `$defaultFn` reason `seedSession` states. */
 async function seedBoundDevice(profileId: string, active = true): Promise<string> {
-  const [location] = await suite.db.insert(locations).values({}).returning({ id: locations.id });
+  await suite.db.insert(locations).values({});
   await seedVenueSettings(suite.db, {
     name: "Loc",
     invoiceLocales: ["es"],

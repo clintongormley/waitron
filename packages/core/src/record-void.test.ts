@@ -26,7 +26,6 @@ import { recordVoid } from "./record-void.js";
 import { seedTenant } from "../test/fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
-let locationId: string;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -46,7 +45,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ locationId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
   managerId = await seedPerson("manager");
   supervisorId = await seedPerson("supervisor");
   const staffId = await seedPerson("staff");

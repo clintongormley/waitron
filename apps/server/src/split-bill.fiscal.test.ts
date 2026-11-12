@@ -162,8 +162,7 @@ async function setupVenue(): Promise<Seeded> {
   return { cfg, ...seeded };
 }
 
-function asApp<T>(cfg: DeviceRequestConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
     return fn(tx);
   });
@@ -195,14 +194,14 @@ async function splitIntoThreeChecks(
   const { cfg, waterId, hamId, tableId, offers } = seeded;
   const water = { productId: waterId, quantity: "3" };
   const ham = { productId: hamId, quantity: "0.300" };
-  const { tabId } = await asApp(cfg, (tx) =>
+  const { tabId } = await asApp( (tx) =>
     openPartyTab(tx, cfg, { tableId, lines: offers.toOfferLines([ham, water]) }),
   );
-  const { billId: a } = await asApp(cfg, (tx) =>
+  const { billId: a } = await asApp( (tx) =>
     splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }, { lineNo: 2 }]),
   );
-  const { billId: b } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 3 }]));
-  const { billId: c } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 4 }]));
+  const { billId: b } = await asApp( (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 3 }]));
+  const { billId: c } = await asApp( (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 4 }]));
 
   // A check is a retrieved order, so req.lines is ignored — it files from its stored locked lines.
   const rA = await payWorkingOrder(deps, cfg, {
@@ -247,7 +246,6 @@ function seqOf(result: TillSaleResult): number {
 describe("split-bill: pay each check files its own registro", () => {
   it("splits a mixed-VAT tab into 3 checks; paying all files EXACTLY 3 registros with contiguous numbers", async () => {
     const seeded = await setupVenue();
-    const { cfg } = seeded;
     const deps = { db: suite.db, backend, clock };
 
     const { a, b, c, rA, rB, rC } = await splitIntoThreeChecks(seeded, {
@@ -256,7 +254,7 @@ describe("split-bill: pay each check files its own registro", () => {
     });
 
     // (1) EXACTLY THREE registros_facturacion for this tenant — one per check, none from the origin.
-    const rows = await asApp(cfg, (tx) => tx.select().from(registrosFacturacion));
+    const rows = await asApp((tx) => tx.select().from(registrosFacturacion));
     expect(rows.length).toBe(3);
 
     // (2) Contiguous invoice numbers from the tab's series (fresh series ⇒ 1,2,3 in pay order).
@@ -291,13 +289,13 @@ describe("split-bill: pay each check files its own registro", () => {
     expect(rC.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
 
     // (5) Each registro is tied to its OWN check via sales.working_order_id (the idempotency key).
-    const filedFor = await asApp(cfg, (tx) =>
+    const filedFor = await asApp((tx) =>
       tx.select({ workingOrderId: sales.workingOrderId }).from(sales),
     );
     expect(new Set(filedFor.map((s) => s.workingOrderId))).toEqual(new Set([a, b, c]));
 
     // (6) Each check's agua row stands for exactly one portion, and the three are different ones.
-    const waterLinks = await asApp(cfg, (tx) =>
+    const waterLinks = await asApp((tx) =>
       tx
         .select({ workingOrderId: sales.workingOrderId, portionId: saleLinePortions.portionId })
         .from(saleLinePortions)
@@ -316,13 +314,13 @@ describe("split-bill: pay each check files its own registro", () => {
       { productId: waterId, quantity: "3" },
       { productId: hamId, quantity: "0.300" },
     ]);
-    const { tabId } = await asApp(cfg, async (tx) => {
+    const { tabId } = await asApp( async (tx) => {
       const opened = await openPartyTab(tx, cfg, { tableId });
       await writeGroupedLines(tx, cfg, opened.tabId, lines);
       return opened;
     });
-    const { billId: a } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 2 }]));
-    const { billId: b } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]));
+    const { billId: a } = await asApp( (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 2 }]));
+    const { billId: b } = await asApp( (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]));
     const rA = await payWorkingOrder(deps, cfg, {
       id: a,
       tender: { method: "cash", amount: "10.00" },
@@ -334,7 +332,7 @@ describe("split-bill: pay each check files its own registro", () => {
       lines: [],
     });
 
-    const { records, originLines, filed } = await asApp(cfg, async (tx) => ({
+    const { records, originLines, filed } = await asApp(async (tx) => ({
       records: await tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion),
       originLines: await tx
         .select({ id: workingOrderLines.id })
@@ -369,7 +367,6 @@ describe("split-bill: pay each check files its own registro", () => {
 
   it("partitions the items — every unit filed on exactly ONE check, quantity conserved, origin emptied", async () => {
     const seeded = await setupVenue();
-    const { cfg } = seeded;
     const deps = { db: suite.db, backend, clock };
 
     const { tabId, a } = await splitIntoThreeChecks(seeded, {
@@ -377,7 +374,7 @@ describe("split-bill: pay each check files its own registro", () => {
       admission: testTradingAdmission(),
     });
 
-    const { originLines, filed, filedForOrigin } = await asApp(cfg, async (tx) => {
+    const { originLines, filed, filedForOrigin } = await asApp(async (tx) => {
       // The emptied origin: 0 working_order_lines, and it files NOTHING (never paid → no sales row).
       const originLines = await tx
         .select({ id: workingOrderLines.id })
@@ -428,13 +425,13 @@ describe("split-bill: pay each check files its own registro", () => {
     const { cfg, waterId, tableId, offers } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
     // Open a 2× agua tab and split ONE agua onto a detached check — the working order under proof.
-    const { tabId } = await asApp(cfg, (tx) =>
+    const { tabId } = await asApp((tx) =>
       openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([{ productId: waterId, quantity: "2" }]),
       }),
     );
-    const { billId: checkId } = await asApp(cfg, (tx) =>
+    const { billId: checkId } = await asApp((tx) =>
       splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
     );
 
@@ -458,7 +455,7 @@ describe("split-bill: pay each check files its own registro", () => {
 
     // Exactly one registro is tied to this check after both payments. The returned
     // invoice number also stays the same on replay.
-    const forCheck = await asApp(cfg, (tx) =>
+    const forCheck = await asApp((tx) =>
       tx
         .select({ id: registrosFacturacion.id })
         .from(registrosFacturacion)

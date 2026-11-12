@@ -65,10 +65,10 @@ beforeEach(() => {
       sql`insert into device_profiles (id,name,form_factor,capabilities,created_at,updated_at) values ('profile','Counter','till','[]','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into devices (id,location_id,device_profile_id,label,token_hash,created_at,enrolled_at) values ('device','venue','profile','Till','synthetic','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,
+      sql`insert into devices (id,device_profile_id,label,token_hash,created_at,enrolled_at) values ('device','profile','Till','synthetic','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into working_orders (id,source,location_id,order_number,opened_at) values ('order','operator_script','venue',1,'2026-10-20T08:00:00.000Z')`,
+      sql`insert into working_orders (id,source,order_number,opened_at) values ('order','operator_script',1,'2026-10-20T08:00:00.000Z')`,
     );
     db.run(
       sql`insert into card_readers (id,provider,provider_ref,name,active,created_at) values ('reader','stripe','terminal_synthetic','Retained reader',0,'2026-10-20T08:00:00.000Z'),('other-reader','stripe','other','Other reader',0,'2026-10-20T08:00:00.000Z')`,

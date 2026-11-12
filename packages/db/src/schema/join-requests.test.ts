@@ -7,10 +7,8 @@ import { captureError } from "../testing/errors.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
-import { venueLocationId } from "../venue.js";
 import { joinRequests } from "./join-requests.js";
 
-let LOCATION_A: string;
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 describe("join_requests", () => {
@@ -22,7 +20,6 @@ describe("join_requests", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION_A = await venueLocationId(suite.db);
   });
 
   it("accepts a device request and a print_agent request", async () => {
@@ -61,9 +58,9 @@ describe("join_requests", () => {
       withTransaction(suite.db, async (tx) => {
         await tx.run(sql`
           insert into join_requests
-            (id, node_id, location_id, kind, label, token_hash, verification_number, decoy_numbers,
+            (id, node_id, kind, label, token_hash, verification_number, decoy_numbers,
              created_at)
-          values ('jr-bad', ${NODE}, ${LOCATION_A}, 'kitchen_sink', 'x', 'h', '00', '["01","02"]',
+          values ('jr-bad', ${NODE}, 'kitchen_sink', 'x', 'h', '00', '["01","02"]',
                   ${new Date().toISOString()})`);
       }),
     );

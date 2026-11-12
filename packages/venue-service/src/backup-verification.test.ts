@@ -47,10 +47,10 @@ beforeEach(() => {
       sql`insert into sale_receipt_headers (sale_id,department_id,trading_name,print_trading_name) values ('sale','department','Issued business',1)`,
     );
     db.run(
-      sql`insert into floor_zones (id,location_id,name,created_at) values ('zone','venue','Room','2026-10-20T08:00:00.000Z')`,
+      sql`insert into floor_zones (id,name,created_at) values ('zone','Room','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into working_orders (id,source,location_id,order_number,opened_at) values ('order','operator_script','venue',1,'2026-10-20T08:00:00.000Z')`,
+      sql`insert into working_orders (id,source,order_number,opened_at) values ('order','operator_script',1,'2026-10-20T08:00:00.000Z')`,
     );
     db.run(
       sql`insert into order_service_contexts (working_order_id, zone_id, department_id, service_mode) values ('order', 'zone', 'department', 'table_tab')`,

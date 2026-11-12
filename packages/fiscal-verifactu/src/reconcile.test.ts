@@ -131,7 +131,7 @@ async function altaIdentityFor(saleId: string): Promise<{ id: string; facturaKey
  */
 async function fileThenVoid(options: { submitAnulacion: boolean }) {
   const period = { year: "2026", month: "03" };
-  const { locationId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
+  const { nodeId, seriesId } = await seedTenantWithSif(suite.db);
   // recordVoid requires `sale.void`: a manager session authorizes it.
   const { rows: mgr } = await suite.db.execute<{ id: string }>(
     // `id` and `created_at` have no SQL DEFAULT (drizzle's `$defaultFn` runs only for a builder

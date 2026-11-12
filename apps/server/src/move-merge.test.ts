@@ -215,8 +215,7 @@ function offersOf(cfg: OriginConfig): ZoneOffers {
   return offersByCfg.get(cfg)!;
 }
 
-function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     return fn(tx);
   });
@@ -225,7 +224,7 @@ function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promi
 /** Create one active dining table in the venue's tables zone; returns its id. */
 async function seedTable(cfg: OriginConfig, label: string): Promise<string> {
   const zoneId = offersOf(cfg).zoneId;
-  return asApp(cfg, (tx) => createTable(tx, cfg, { label, zoneId }).then((r) => r.id));
+  return asApp((tx) => createTable(tx, cfg, { label, zoneId }).then((r) => r.id));
 }
 
 /** Open a tab on a table with the given lines; returns the tab (working_order) id. */
@@ -234,7 +233,7 @@ async function openTabOn(
   tableId: string,
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
-  return asApp(cfg, (tx) =>
+  return asApp((tx) =>
     openPartyTab(tx, cfg, { tableId, lines: offersOf(cfg).toOfferLines(lines) }).then(
       (r) => r.tabId,
     ),
@@ -268,7 +267,7 @@ describe("moveOrderLines", () => {
     const to = await openTabOn(cfg, t2, [{ productId: waterId, quantity: "1" }]);
     const sourceLineId = (await linesOf(from))[0]!.id;
 
-    await asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, undefined));
+    await asApp((tx) => moveOrderLines(tx, cfg, from, to, undefined));
 
     const dest = await linesOf(to);
     expect(dest).toHaveLength(2);
@@ -288,7 +287,7 @@ describe("moveOrderLines", () => {
     ]);
     const to = await openTabOn(cfg, t2, []);
 
-    await asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, [2]));
+    await asApp((tx) => moveOrderLines(tx, cfg, from, to, [2]));
 
     expect(await linesOf(to)).toHaveLength(1);
     expect((await linesOf(to))[0]!.productId).toBe(waterId);
@@ -304,7 +303,7 @@ describe("moveOrderLines", () => {
     const from = await openTabOn(cfg, t1, []); // empty tab
     const to = await openTabOn(cfg, t2, [{ productId: waterId, quantity: "1" }]);
 
-    await asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, undefined));
+    await asApp((tx) => moveOrderLines(tx, cfg, from, to, undefined));
     expect(await linesOf(to)).toHaveLength(1); // unchanged
   });
 
@@ -316,18 +315,18 @@ describe("moveOrderLines", () => {
     const to = await openTabOn(cfg, t2, []);
     // Abandon the destination (owner write, fixture setup).
     await db.execute(sql`update working_orders set status = 'abandoned' where id = ${to}`);
-    await expect(
-      asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, undefined)),
-    ).rejects.toMatchObject({
-      code: "tab.not_open",
-      params: { tabId: to },
-    });
-    await expect(
-      asApp(cfg, (tx) => moveOrderLines(tx, cfg, to, from, undefined)),
-    ).rejects.toMatchObject({
-      code: "tab.not_open",
-      params: { tabId: to },
-    });
+    await expect(asApp((tx) => moveOrderLines(tx, cfg, from, to, undefined))).rejects.toMatchObject(
+      {
+        code: "tab.not_open",
+        params: { tabId: to },
+      },
+    );
+    await expect(asApp((tx) => moveOrderLines(tx, cfg, to, from, undefined))).rejects.toMatchObject(
+      {
+        code: "tab.not_open",
+        params: { tabId: to },
+      },
+    );
     expect(await linesOf(from)).toHaveLength(1);
   });
 
@@ -340,12 +339,12 @@ describe("moveOrderLines", () => {
     ]);
     // `mergeBills` guards this at its own top, but `moveOrderLines` is exported and must self-guard:
     // a "move all" onto itself would wipe the tab.
-    await expect(
-      asApp(cfg, (tx) => moveOrderLines(tx, cfg, tab, tab, undefined)),
-    ).rejects.toMatchObject({
-      code: "tab.merge_self",
-      params: { tabId: tab },
-    });
+    await expect(asApp((tx) => moveOrderLines(tx, cfg, tab, tab, undefined))).rejects.toMatchObject(
+      {
+        code: "tab.merge_self",
+        params: { tabId: tab },
+      },
+    );
     // The guard fires BEFORE any read/write, so the tab still holds both original lines.
     expect(await linesOf(tab)).toHaveLength(2);
   });

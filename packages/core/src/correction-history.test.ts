@@ -122,8 +122,7 @@ let rectSeriesId: SeriesId;
 let sessionId: string;
 
 beforeEach(async () => {
-  let locationId: string;
-  ({ locationId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   const till = (await seedDevice(suite.db, {})).deviceId;
   const [person] = await suite.db

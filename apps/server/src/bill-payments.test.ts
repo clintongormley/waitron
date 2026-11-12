@@ -85,7 +85,6 @@ import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   collectOrderOrchestration as collectOrder,
   payWorkingOrder,
@@ -121,7 +120,7 @@ let backend: FiscalBackend;
 let clock: TrustedClock;
 
 interface Venue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   /** OPERATOR's open session on the venue's device, which a bill payment is taken under. */
   operator: { personId: string; sessionId: string };
   offers: ZoneOffers;
@@ -194,7 +193,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
-    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -210,7 +208,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
   };
   return withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: `Bill payments menu ${cfg.locationId}` });
+    const cat = await createCatalogue(tx, { name: `Bill payments menu ${venueId}` });
     const dishes = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
@@ -410,7 +408,7 @@ describe("invoice selection before reserving new bill money", () => {
 
   async function pay(
     billId: string,
-    cfg: WithVenueRowId<DeviceRequestConfig>,
+    cfg: DeviceRequestConfig,
     method: "cash" | "manual" | "reader",
     amount = "1.00",
   ) {
@@ -3096,12 +3094,11 @@ describe("the invoice at full payment", () => {
       const selects = vi.spyOn(suite.db, "select");
       try {
         await printSalePaymentSlip(suite.db, { ...venue.cfg, locale }, billId);
-        // The venue's row, which the slips' print jobs are filed under, is read once for both slips.
         expect(
           selects.mock.calls.filter(
             ([fields]) => fields !== undefined && "id" in fields && fields.id === locations.id,
           ),
-        ).toHaveLength(1);
+        ).toHaveLength(0);
       } finally {
         selects.mockRestore();
       }

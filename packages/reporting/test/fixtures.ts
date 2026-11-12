@@ -35,14 +35,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import {
-  seedKitchenStation,
-  seedNode,
-  seedDevice,
-  seedVenue,
-  seedVenueSettings,
-  seedBusinessDay,
-} from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import type { TenderMethod } from "../src/types.js";
 
 /**
@@ -58,8 +51,7 @@ export interface SeededVenue {
   seriesId: SeriesId;
 }
 
-/** Seeds the venue (a second call writes a second location, for the cross-location cases A1301's
- * code slices delete), a till device and a node with invoice series "A" there. */
+/** Seeds the venue, a till device and a node with invoice series "A". */
 export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
   const venue = {
     name: "Main",
@@ -68,19 +60,8 @@ export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
     dayCutover: "05:00:00",
   };
   const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
-  let locationId: string;
-  if (existing === undefined) {
-    await seedVenue(db, venue);
-    locationId = await venueLocationId(db);
-  } else {
-    const [location] = await db.insert(locations).values({}).returning({ id: locations.id });
-    await seedVenueSettings(db, {
-      invoiceLocales: venue.invoiceLocales,
-      operationDescription: venue.operationDescription,
-    });
-    await seedBusinessDay(db, { dayCutover: venue.dayCutover });
-    locationId = location!.id;
-  }
+  if (existing === undefined) await seedVenue(db, venue);
+  const locationId = existing?.id ?? (await venueLocationId(db));
   const { deviceId } = await seedDevice(db, {});
   const nodeId = await seedNode(db, locationId);
   const [series] = await db
@@ -107,8 +88,8 @@ export async function seedNodeAndSeries(
   return { nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
-/** Another device at `locationId`, for a test that needs money taken on two. */
-export async function seedVenueDevice(db: Database, locationId: string): Promise<DeviceId> {
+/** Another device, for a test that needs money taken on two. */
+export async function seedVenueDevice(db: Database): Promise<DeviceId> {
   return (await seedDevice(db, {})).deviceId;
 }
 

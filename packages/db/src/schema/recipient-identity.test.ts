@@ -11,10 +11,8 @@ import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
 import { parties } from "./parties.js";
 import { invoiceSeries } from "./series.js";
-import { venueLocationId } from "../venue.js";
 
 const AT = "2026-10-28T12:00:00Z";
-let LOCATION: string;
 const IDENTITY_REFUSAL = "recipient identity is incomplete";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 let node = "";
@@ -39,7 +37,6 @@ beforeEach(async () => {
     invoiceLocales: ["en"],
     operationDescription: "Restaurant services",
   });
-  LOCATION = await venueLocationId(db);
   node = await seedNode(db);
   const [seriesRow] = await db
     .insert(invoiceSeries)
@@ -60,10 +57,10 @@ beforeEach(async () => {
 async function order(identity = FOREIGN, status = "placed", delivery = false): Promise<string> {
   const id = randomUUID();
   await suite.db.run(sql`insert into working_orders
-    (id, source, location_id, node_id, order_number, status, opened_at, settled_at,
+    (id, source, node_id, order_number, status, opened_at, settled_at,
      invoice_type, recipient_tax_id, recipient_legal_name, recipient_address, recipient_country_code,
      recipient_identifier_type, recipient_identifier_country_code, party_id, delivery_table_id)
-    values (${id}, 'dashboard', ${LOCATION}, ${node}, ${++number}, ${status}, ${AT},
+    values (${id}, 'dashboard', ${node}, ${++number}, ${status}, ${AT},
       ${status === "settled" ? AT : null}, ${identity.value === null ? "F2" : "F1"},
       ${identity.value}, ${identity.value === null ? null : "Customer"},
       ${identity.value === null ? null : "2 Main Street, Paris"}, ${identity.value === null ? null : "FR"},

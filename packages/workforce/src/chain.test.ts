@@ -63,7 +63,7 @@ function clockEvent(): TimeEntryAppend {
   return inputAt("2026-01-05T09:00:00Z");
 }
 
-async function seedDeviceAt(location: string): Promise<string> {
+async function seedDeviceAt(): Promise<string> {
   const { deviceId } = await seedDevice(suite.db, {});
   return deviceId;
 }
@@ -417,7 +417,7 @@ describe("appendToChain commits the correction and capture content to the hash",
   }
 
   it("re-verifies a device + reason + actor round-trip untampered (the negative control)", async () => {
-    const deviceId = await seedDeviceAt(locationId);
+    const deviceId = await seedDeviceAt();
     const chain = await chainWithCorrection(deviceId);
     expect(chain.map((e) => [e.capturedBySource, e.capturedByDeviceId])).toEqual([
       ["device", deviceId],
@@ -427,13 +427,13 @@ describe("appendToChain commits the correction and capture content to the hash",
   });
 
   it("flags a correction whose stored reason was rewritten (teeth-test)", async () => {
-    const chain = await chainWithCorrection(await seedDeviceAt(locationId));
+    const chain = await chainWithCorrection(await seedDeviceAt());
     const tampered = [chain[0]!, { ...chain[1]!, correctionReason: "approved overtime" }];
     expect(verifyChain(tampered)).toEqual({ ok: false, reason: "hash_mismatch", sequenceNo: 2 });
   });
 
   it("flags a correction whose stored actor was swapped (teeth-test)", async () => {
-    const chain = await chainWithCorrection(await seedDeviceAt(locationId));
+    const chain = await chainWithCorrection(await seedDeviceAt());
     const tampered = [
       chain[0]!,
       { ...chain[1]!, correctionActorId: "99999999-9999-4999-8999-999999999999" },
@@ -468,11 +468,8 @@ describe("appendToChain commits the correction and capture content to the hash",
   });
 
   it("flags a base event whose stored capturing device was swapped (teeth-test)", async () => {
-    const chain = await chainWithCorrection(await seedDeviceAt(locationId));
-    const tampered = [
-      { ...chain[0]!, capturedByDeviceId: await seedDeviceAt(locationId) },
-      chain[1]!,
-    ];
+    const chain = await chainWithCorrection(await seedDeviceAt());
+    const tampered = [{ ...chain[0]!, capturedByDeviceId: await seedDeviceAt() }, chain[1]!];
     expect(verifyChain(tampered)).toEqual({ ok: false, reason: "hash_mismatch", sequenceNo: 1 });
   });
 });

@@ -1882,9 +1882,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
         { id: expect.any(String), name: "Postres", displayOrder: 2, heldUntilFired: true },
       ]);
     } finally {
-      await suite.db.execute(
-        sql`delete from kitchen_courses where location_id = ${cfg.locationId}`,
-      );
+      await suite.db.execute(sql`delete from kitchen_courses`);
     }
   });
 
@@ -3058,13 +3056,11 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       status: string;
       source: string;
       device_id: string;
-      location_id: string;
-    }>(sql`select status, source, device_id, location_id from working_orders where id = ${id}`);
+    }>(sql`select status, source, device_id from working_orders where id = ${id}`);
     expect(rows.rows[0]).toEqual({
       status: "open",
       source: "device",
       device_id: sessionDeviceId,
-      location_id: cfg.locationId,
     });
   });
 

@@ -1136,7 +1136,7 @@ describe("venue detail consumer reads", () => {
         { stationId: rows[2]!.id, businessDay: "2026-10-02", open: false },
       ]);
       const defaults = await tx.execute<{ id: string }>(
-        sql`select id from kitchen_stations where location_id = ${venue.cfg.locationId} and is_default`,
+        sql`select id from kitchen_stations where is_default`,
       );
       expect(defaults.rows).toHaveLength(1);
       return [...rows.map((row) => row.id), defaults.rows[0]!.id];

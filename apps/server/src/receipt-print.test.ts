@@ -408,8 +408,7 @@ function logos(payload: Uint8Array): number[][] {
 }
 
 /** The one filed sale's id; the database is emptied after each test. */
-async function onlySaleId(cfg: DeviceRequestConfig): Promise<string> {
-  void cfg;
+async function onlySaleId(): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx.select({ id: sales.id }).from(sales);
     return rows[0]!.id;
@@ -459,7 +458,7 @@ describe("the words around a receipt's QR come from the venue's fiscal backend",
       },
       OPERATOR,
     );
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
     await withTransaction(suite.db, (tx) => enqueueOriginalReceipt(tx, cfg, ticket, saleId));
     const papers = (await printJobsFor(cfg)).map((job) => new Uint8Array(job.payload));
     const receipt = papers.find((payload) => decodeTicket(payload).includes("TOTAL"))!;
@@ -921,7 +920,7 @@ describe("simplified invoice original requests", () => {
         OPERATOR,
       );
       await printSaleReceipt(deps(), cfg, workingOrderId, false);
-      const saleId = await onlySaleId(cfg);
+      const saleId = await onlySaleId();
       await withTransaction(suite.db, (tx) =>
         tx
           .update(printJobs)
@@ -965,7 +964,7 @@ describe("simplified invoice original requests", () => {
     const jobs = await suite.db.select().from(printJobs);
     expect(jobs).toHaveLength(1);
     expect(jobs[0]).toMatchObject({
-      saleId: await onlySaleId(cfg),
+      saleId: await onlySaleId(),
       receiptCopy: false,
       kind: "document",
     });
@@ -1121,7 +1120,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
       deviceId: cfg.origin.deviceId,
       printerId,
     });
-    expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
+    expect(opens[0]!.saleId).toBe(await onlySaleId());
   });
 
   it("ignores the venue footer while printing the filed invoice", async () => {
@@ -1217,7 +1216,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(await drawerOpensFor(cfg)).toEqual([
       {
         reason: "card_slip",
-        saleId: await onlySaleId(cfg),
+        saleId: await onlySaleId(),
         personId: OPERATOR,
         deviceId: cfg.origin.deviceId,
         printerId,
@@ -1317,7 +1316,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(await drawerOpensFor(cfg)).toEqual([
       {
         reason: "card_slip",
-        saleId: await onlySaleId(cfg),
+        saleId: await onlySaleId(),
         personId: OPERATOR,
         deviceId: cfg.origin.deviceId,
         printerId,
@@ -1502,7 +1501,7 @@ describe("receipt commands and cash drawer jobs after filing", () => {
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({ reason: "cash_sale", personId: OPERATOR });
     // The `sale_id` back-reference is PINNED to the settled invoice's sale.
-    expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
+    expect(opens[0]!.saleId).toBe(await onlySaleId());
   });
 });
 
@@ -1765,7 +1764,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
 
     await sell(cfg, product, "cash");
 
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
     const jobs = await allJobs();
     expect(jobs.map((job) => [job.printerId, job.kind])).toEqual([
       [drawer, "drawer"],
@@ -1800,7 +1799,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     expect(await drawerOpensFor(cfg)).toEqual([
       {
         reason: "card_slip",
-        saleId: await onlySaleId(cfg),
+        saleId: await onlySaleId(),
         personId: OPERATOR,
         deviceId: cfg.origin.deviceId,
         printerId: drawer,
@@ -2188,7 +2187,7 @@ describe("receipt issuer", () => {
       tender: { method: "card", amount: "1.50" },
     });
     await printSaleReceipt(deps(), cfg, explicitPrintOrder9, false);
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
     const original = (await printJobsFor(cfg)).map((job) =>
       printedLines(new Uint8Array(job.payload)).map((line) => line.trim()),
     )[0]!;
@@ -2220,7 +2219,7 @@ describe("receipt issuer", () => {
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "card", amount: "1.50" },
     });
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
     await withTransaction(suite.db, (tx) => tx.delete(tenants));
 
     await expect(
@@ -2239,7 +2238,7 @@ describe("receipt issuer", () => {
     });
     const withoutIssuer = { ...filed, issuer: undefined };
     const taxpayer = (await withTransaction(suite.db, (tx) => readTenant(tx)))!;
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
 
     await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, withoutIssuer, saleId));
     const [fallback] = (await printJobsFor(cfg)).map((job) =>
@@ -2794,7 +2793,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter() });
     const filed = await sellOne(cfg, each, zoneId);
-    const saleId = await onlySaleId(cfg);
+    const saleId = await onlySaleId();
     await storeReceipt({
       logo: LOGO,
       phone: "910000000",
@@ -3535,7 +3534,7 @@ describe("department receipt presentation on thermal jobs", () => {
 
       await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, OWN_PAIR);
       const ticket = await sell();
-      const saleId = await onlySaleId(cfg);
+      const saleId = await onlySaleId();
       await suite.db
         .update(departmentReceipts)
         .set({ receipt: {}, logoRasters: null })
@@ -3760,7 +3759,7 @@ describe("department receipt presentation on thermal jobs", () => {
     const { cfg, departmentId, sell, documents } = await setupReceipt();
     await storeDepartmentReceipt(departmentId, { headerSubtitle: { "es-ES": "Before edit" } });
     const ticket = await sell();
-    const id = await onlySaleId(cfg);
+    const id = await onlySaleId();
     await suite.db
       .update(departments)
       .set({ active: false, tradingName: "New mutable brand" })
@@ -3797,7 +3796,7 @@ describe("department receipt presentation on thermal jobs", () => {
         footerMessage: { [printed]: "Printed footer", "es-ES": "Current footer" },
       });
       const ticket = await sell();
-      const id = await onlySaleId(cfg);
+      const id = await onlySaleId();
       await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id, printed));
       const text = decodeTicket((await documents())[1]!.payload);
@@ -3822,7 +3821,7 @@ describe("department receipt presentation on thermal jobs", () => {
         footerMessage: { "es-ES": "Spanish footer", "gl-ES": "Galician footer" },
       });
       const ticket = await sell();
-      const id = await onlySaleId(cfg);
+      const id = await onlySaleId();
       await seedVenueSettings(suite.db, { invoiceLocales: [current] });
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id, printed));
       const text = decodeTicket((await documents())[1]!.payload);
@@ -3870,7 +3869,7 @@ describe("the theme's logo on thermal receipts", () => {
         (job) => job.saleId !== null && job.kind === "document",
       );
     const reprint = async (ticket: Awaited<ReturnType<typeof sell>>) => {
-      const saleId = await onlySaleId(cfg);
+      const saleId = await onlySaleId();
       const before = new Set((await documents()).map((job) => job.id));
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
       const copies = (await documents()).filter((job) => !before.has(job.id));

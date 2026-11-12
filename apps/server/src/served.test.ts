@@ -41,7 +41,6 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
@@ -114,7 +113,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   zoneId: string;
   offer(dish: Dish): string;
   /** The Steak's extras list, whose one pick is the sauce. */
@@ -158,14 +157,13 @@ async function setupVenue(): Promise<Venue> {
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
   return inTx(async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: `Served menu ${cfg.locationId}` });
+    const catalogue = await createCatalogue(tx, { name: `Served menu ${venueId}` });
     const category = await createCategory(tx, { name: "Platos" });
     const productId = {} as Record<Dish, string>;
     for (const [dish, unitPrice] of Object.entries(DISHES) as [Dish, string][]) {

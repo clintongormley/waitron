@@ -37,7 +37,7 @@ async function setup(): Promise<PrintConfig> {
   return { locationId: venueId };
 }
 
-async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
+async function seedAgent(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
     .values({ name, tokenHash: "scrypt$fixture" })
@@ -99,10 +99,10 @@ async function parkedThenRelease<A, B>(
 
 describe("double-pull race", () => {
   it("marks printing atomically so two agents don't double-print", async () => {
-    const cfg = await setup();
+    await setup();
     // Two agent RUNS will both try to pull the one queued job — the reimaged-agent / two-boxes
     // topology.
-    const agentId = await seedAgent(cfg, "Kitchen");
+    const agentId = await seedAgent("Kitchen");
     const printerId = await withTransaction(suite.db, (tx: Transaction) =>
       createPrinter(tx, {
         name: "Kitchen",
@@ -153,9 +153,9 @@ describe("double-pull race", () => {
   it("two DISTINCT agents claiming one network printer's queue never double-claim a job", async () => {
     // A network printer carries no agent binding, so BOTH agents in the venue are eligible for the
     // same queue. Distinct agentIds so the claim's `claimed_by` stamp differs per winner.
-    const cfg = await setup();
-    const agentA = await seedAgent(cfg, "Kitchen A");
-    const agentB = await seedAgent(cfg, "Kitchen B");
+    await setup();
+    const agentA = await seedAgent("Kitchen A");
+    const agentB = await seedAgent("Kitchen B");
     const printerId = await withTransaction(suite.db, (tx: Transaction) =>
       createPrinter(tx, { name: "Kitchen", transport: "network_tcp", host: "10.0.0.9" }).then(
         (p) => p.id,

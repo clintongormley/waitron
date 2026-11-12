@@ -30,7 +30,6 @@ import {
   printJobs,
   products,
   ticketItems,
-  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -59,7 +58,6 @@ import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { centsToDecimal, nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import {
   advanceTicket,
   advanceTicketItem,
@@ -139,7 +137,7 @@ beforeAll(() => {
 });
 
 interface SeededVenue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   /** The catalogue assigned to this venue's location — where the KDS routing tests add more products. */
   catalogueId: string;
   /** The `each`-priced "Espresso" product (VAT general/21%, category "ES drinks"). */
@@ -195,7 +193,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     invoiceLocales: [LOCALE],
     operationDescription: "On-premises sale",
   });
-  const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
 
   const { coffeeId, waterId, catalogueId, zoneId, coffeeOfferId, premiumCoffeeOfferId } =
@@ -242,8 +239,8 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
         (id, name, trading_name, created_at)
       values (${departmentId}, 'Restaurant', 'Restaurant', ${createdAt})`);
       await tx.execute(sql`
-      insert into floor_zones (id, location_id, name, created_at)
-      values (${zoneId}, ${locationId}, 'Counter', ${createdAt})`);
+      insert into floor_zones (id, name, created_at)
+      values (${zoneId}, 'Counter', ${createdAt})`);
       await tx.execute(sql`
       insert into zone_service_policies
         (zone_id, department_id, is_counter_default)
@@ -275,7 +272,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     nodeId: brandNodeId(nodeId),
     // `parkOrder` reads neither series nor locale/invoiceLocales; fresh values keep the shape whole.
     seriesId: brandSeriesId(randomUUID()),
-    locationId: locationId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -309,13 +305,13 @@ interface ProductLine {
  * Every product the venue's catalogue holds now, offered in its counter zone (`setupVenue`'s) from
  * the test helper's own menu at the product's own price. Call it after the catalogue is final.
  */
-function counterOffers(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<ZoneOffers> {
+function counterOffers(cfg: DeviceRequestConfig): Promise<ZoneOffers> {
   return withTransaction(db, (tx) => offerProducts(tx, cfg));
 }
 
 /** `parkOrder` for a basket named by product, sold through each product's counter-zone offer. */
 async function parkProducts(
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   req: { id: string; label?: string; lines: ProductLine[] },
 ): Promise<{ id: string; orderNumber: number }> {
   const offers = await counterOffers(cfg);
@@ -328,7 +324,7 @@ async function parkProducts(
 
 /** `updateHeldOrder` for a basket named by product, each line naming its counter-zone offer. */
 async function updateProducts(
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   id: string,
   req: {
     label?: string;
@@ -817,7 +813,6 @@ describe("parkOrder", () => {
       nodeId: cfg.nodeId,
       source: "device",
       deviceId: cfg.origin.deviceId,
-      locationId: cfg.locationId,
       settledAt: null,
     });
 
@@ -1057,7 +1052,7 @@ describe("seating from order start", () => {
         sql`update department_sale_policies set order_start = 'table' where department_id in (select id from departments )`,
       );
       await tx.execute(
-        sql`insert into dining_tables (id, location_id, label, zone_id, created_at) values (${tableId}, ${cfg.locationId}, 'New table service', ${zoneId}, ${nowIso()})`,
+        sql`insert into dining_tables (id, label, zone_id, created_at) values (${tableId}, 'New table service', ${zoneId}, ${nowIso()})`,
       );
       await tx.insert(floorTodayTables).values({ tableId });
       const opened = await openPartyTab(tx, cfg, { tableId });
@@ -1090,7 +1085,7 @@ describe("seating from order start", () => {
           );
         }
         await tx.execute(
-          sql`insert into dining_tables (id, location_id, label, zone_id, created_at) values (${tableId}, ${cfg.locationId}, 'Counter table', ${zoneId}, ${nowIso()})`,
+          sql`insert into dining_tables (id, label, zone_id, created_at) values (${tableId}, 'Counter table', ${zoneId}, ${nowIso()})`,
         );
         await tx.insert(floorTodayTables).values({ tableId });
       });
@@ -1111,8 +1106,8 @@ describe("openTab service context", () => {
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
         where department_id in (select id from departments )`);
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, zone_id, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Offer table', ${zoneId}, ${nowIso()})
+        insert into dining_tables (id, label, zone_id, created_at)
+        values (${randomUUID()}, 'Offer table', ${zoneId}, ${nowIso()})
         returning id`);
       await tx.insert(floorTodayTables).values({ tableId: table.rows[0]!.id });
 
@@ -1144,8 +1139,8 @@ describe("openTab service context", () => {
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
         where department_id in (select id from departments )`);
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, zone_id, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Round table', ${zoneId}, ${nowIso()})
+        insert into dining_tables (id, label, zone_id, created_at)
+        values (${randomUUID()}, 'Round table', ${zoneId}, ${nowIso()})
         returning id`);
       await tx.insert(floorTodayTables).values({ tableId: table.rows[0]!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
@@ -1169,8 +1164,8 @@ describe("openTab service context", () => {
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
         where department_id in (select id from departments )`);
       const downstairsZone = await tx.execute<{ id: string }>(sql`
-        insert into floor_zones (id, location_id, name, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Downstairs', ${nowIso()}) returning id`);
+        insert into floor_zones (id, name, created_at)
+        values (${randomUUID()}, 'Downstairs', ${nowIso()}) returning id`);
       await tx.execute(sql`
         insert into zone_service_policies (zone_id, department_id)
         values (${downstairsZone.rows[0]!.id}, ${department.rows[0]!.id})`);
@@ -1193,13 +1188,13 @@ describe("openTab service context", () => {
       });
 
       const upstairsTable = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, zone_id, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Upstairs', ${zoneId}, ${nowIso()})
+        insert into dining_tables (id, label, zone_id, created_at)
+        values (${randomUUID()}, 'Upstairs', ${zoneId}, ${nowIso()})
         returning id`);
       await tx.insert(floorTodayTables).values({ tableId: upstairsTable.rows[0]!.id });
       const downstairsTable = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, zone_id, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Downstairs', ${downstairsZone.rows[0]!.id},
+        insert into dining_tables (id, label, zone_id, created_at)
+        values (${randomUUID()}, 'Downstairs', ${downstairsZone.rows[0]!.id},
           ${nowIso()})
         returning id`);
       await tx.insert(floorTodayTables).values({ tableId: downstairsTable.rows[0]!.id });
@@ -1237,8 +1232,8 @@ describe("openTab service context", () => {
         { kind: "no_preparation" },
       );
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, zone_id, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Deli shelf', ${zoneId}, ${nowIso()})
+        insert into dining_tables (id, label, zone_id, created_at)
+        values (${randomUUID()}, 'Deli shelf', ${zoneId}, ${nowIso()})
         returning id`);
       await tx.insert(floorTodayTables).values({ tableId: table.rows[0]!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
@@ -1257,8 +1252,8 @@ describe("openTab service context", () => {
     const { cfg, zoneId } = await setupVenue("prepay");
     await withTransaction(db, async (tx) => {
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, zone_id, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Counter table', ${zoneId}, ${nowIso()})
+        insert into dining_tables (id, label, zone_id, created_at)
+        values (${randomUUID()}, 'Counter table', ${zoneId}, ${nowIso()})
         returning id`);
       await tx.insert(floorTodayTables).values({ tableId: table.rows[0]!.id });
       await expect(openPartyTab(tx, cfg, { tableId: table.rows[0]!.id })).rejects.toMatchObject({
@@ -1347,12 +1342,12 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
  * venue-wide (#259): a promoted node inherits the venue's open tabs even though they are
  * tagged with the dead node's id (swap spec §4.3). `node_id` is the foreign node's on purpose.
  */
-async function seedForeignNodeOrder(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<string> {
+async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
   const id = randomUUID();
   const otherNode = await seedNode(db);
   await db.execute(sql`
-    insert into working_orders (id, source, device_id, location_id, node_id, order_number, status, opened_at)
-    values (${id}, 'device', ${cfg.origin.deviceId}, ${cfg.locationId}, ${otherNode}, 1, 'open', ${nowIso()})`);
+    insert into working_orders (id, source, device_id, node_id, order_number, status, opened_at)
+    values (${id}, 'device', ${cfg.origin.deviceId}, ${otherNode}, 1, 'open', ${nowIso()})`);
   return id;
 }
 
@@ -2872,7 +2867,6 @@ describe("updateHeldOrder", () => {
       nodeId: cfg.nodeId,
       source: "device",
       deviceId: cfg.origin.deviceId,
-      locationId: cfg.locationId,
       settledAt: null,
     });
 
@@ -3180,23 +3174,17 @@ async function attachedPrinter(
 }
 
 /** The helper's table-service zone, every current product offered in it. */
-function tableOffers(
-  tx: Transaction,
-  cfg: WithVenueRowId<DeviceRequestConfig>,
-): Promise<ZoneOffers> {
+function tableOffers(tx: Transaction, cfg: DeviceRequestConfig): Promise<ZoneOffers> {
   return offerProducts(tx, cfg, { zone: "tables" });
 }
 
 /** Insert an active dining table in the table-service zone and return its id (for the openTab →
  *  addRound path). */
-async function makeTable(
-  tx: Transaction,
-  cfg: WithVenueRowId<DeviceRequestConfig>,
-): Promise<string> {
+async function makeTable(tx: Transaction, cfg: DeviceRequestConfig): Promise<string> {
   const { zoneId } = await tableOffers(tx, cfg);
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into dining_tables (id, location_id, label, zone_id, created_at)
-    values (${randomUUID()}, ${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}, ${zoneId},
+    insert into dining_tables (id, label, zone_id, created_at)
+    values (${randomUUID()}, ${`T-${randomUUID().slice(0, 8)}`}, ${zoneId},
       ${nowIso()})
     returning id`);
   await tx.insert(floorTodayTables).values({ tableId: rows[0]!.id });
@@ -3206,7 +3194,7 @@ async function makeTable(
 /** `addTabRound` for a round named by product, each line sold through its table-zone offer. */
 async function addRound(
   tx: Transaction,
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   tabId: string,
   lines: (ProductLine & { courseId?: string | null; hold?: boolean })[],
 ): Promise<void> {
@@ -3217,7 +3205,7 @@ async function addRound(
 /** `createOpenOrder` for a basket named by product, sold through each product's counter-zone offer. */
 async function createOfferedOrder(
   tx: Transaction,
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   id: string,
   lines: ProductLine[],
   shape: "portions" | "grouped" = "portions",
@@ -3238,7 +3226,7 @@ async function createOfferedOrder(
  *  without the fiscal machinery. Returns the order's id. */
 async function placeOrderWith(
   tx: Transaction,
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   // `note` is the per-line KDS customisation (spec §2/§3, NON-FISCAL) — `createOpenOrder` validates
   // and persists it on the parent dish line, and `fireLines` snapshots it onto the ticket.
   lines: ProductLine[],
@@ -3268,7 +3256,7 @@ async function placeOrderWith(
  */
 async function fireContextless(
   tx: Transaction,
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   productIds: string[],
 ): Promise<{ id: string }> {
   const id = randomUUID();
@@ -3875,8 +3863,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       });
       await republishMenus(tx);
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, zone_id, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Two of a kind', ${zoneId}, ${nowIso()})
+        insert into dining_tables (id, label, zone_id, created_at)
+        values (${randomUUID()}, 'Two of a kind', ${zoneId}, ${nowIso()})
         returning id`);
       await tx.insert(floorTodayTables).values({ tableId: table.rows[0]!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
@@ -6256,8 +6244,8 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
       // A party's tab at a known-labelled table.
       const { zoneId } = await tableOffers(tx, cfg);
       const { rows } = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, zone_id, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Table 5', ${zoneId}, ${nowIso()})
+        insert into dining_tables (id, label, zone_id, created_at)
+        values (${randomUUID()}, 'Table 5', ${zoneId}, ${nowIso()})
         returning id`);
       await tx.insert(floorTodayTables).values({ tableId: rows[0]!.id });
       const tableId = rows[0]!.id;
@@ -6285,8 +6273,8 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const coffeeProduct = await makeProduct(tx, catalogueId, {});
       const { rows } = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, zone_id, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Terrace 8', ${(await offerProducts(tx, cfg)).zoneId}, ${nowIso()})
+        insert into dining_tables (id, label, zone_id, created_at)
+        values (${randomUUID()}, 'Terrace 8', ${(await offerProducts(tx, cfg)).zoneId}, ${nowIso()})
         returning id`);
       await tx.insert(floorTodayTables).values({ tableId: rows[0]!.id });
       const { id } = await placeOrderWith(tx, cfg, [line(coffeeProduct)]);
@@ -6407,7 +6395,7 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
  *  shape `bumpCourseReady` must sweep in one UPDATE (`listStationQueue` would need two reads to see both). */
 async function firedCourseAcrossTwoStations(
   tx: Transaction,
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   catalogueId: string,
 ): Promise<{ orderId: string; courseId: string }> {
   await createStation(tx, { name: "Kitchen", isDefault: true });
@@ -6877,7 +6865,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
    *  is required. */
   async function openExtrasTab(
     tx: Transaction,
-    cfg: WithVenueRowId<DeviceRequestConfig>,
+    cfg: DeviceRequestConfig,
     tableId: string,
     lines: ProductLine[],
   ): Promise<string> {
@@ -7351,10 +7339,7 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
 // Exercised through `addTabRound`; the order paths run the same `priceOrderLines` code.
 describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   /** Open a fresh empty tab in the venue and return its id — the addTabRound host these cases fire on. */
-  async function openEmptyTab(
-    tx: Transaction,
-    cfg: WithVenueRowId<DeviceRequestConfig>,
-  ): Promise<string> {
+  async function openEmptyTab(tx: Transaction, cfg: DeviceRequestConfig): Promise<string> {
     const tableId = await makeTable(tx, cfg);
     const { tabId } = await openPartyTab(tx, cfg, { tableId });
     return tabId;
@@ -7752,7 +7737,7 @@ it("does not let an omitted payload waive a required extras list it cannot satis
  */
 describe("order path — extras and options", () => {
   interface Seeded {
-    cfg: WithVenueRowId<DeviceRequestConfig>;
+    cfg: DeviceRequestConfig;
     dishId: string;
     wineId: string;
     extraListId: string;

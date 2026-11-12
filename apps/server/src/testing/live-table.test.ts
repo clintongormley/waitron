@@ -26,7 +26,6 @@ describe("test live tables", () => {
       return { row, zoneId: zone!.id };
     });
     expect(result.row).toMatchObject({
-      locationId: v.cfg.locationId,
       label: "Fixture table",
       zoneId: result.zoneId,
     });

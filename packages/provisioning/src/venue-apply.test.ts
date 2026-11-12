@@ -16,7 +16,6 @@ import {
   readSettings,
   deviceProfiles,
   settings as businessDaySettingsTable,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { STARTER_ZONE_NAMES } from "@waitron/venue-service";
@@ -60,11 +59,10 @@ it("A725 fresh provisioning starts with one red default kitchen", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   expect(
     (
       await suite.db.execute(sql`
-    select name, colour, is_default from kitchen_stations where location_id = ${venueId}
+    select name, colour, is_default from kitchen_stations
   `)
     ).rows,
   ).toEqual([{ name: STARTER_STATION_NAMES.Kitchen.es, colour: "red", is_default: 1 }]);
@@ -77,11 +75,10 @@ it("an English venue's default kitchen station is named in English", async () =>
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
   expect(
     (
       await suite.db.execute(sql`
-    select name, is_default from kitchen_stations where location_id = ${venueId}
+    select name, is_default from kitchen_stations
   `)
     ).rows,
   ).toEqual([{ name: "Kitchen", is_default: 1 }]);
@@ -137,7 +134,6 @@ it("uses the explicit English working language for module starters while keeping
 it("a new venue's first station starts at the default late flags and keeps a station's edit when the plan is retried", async () => {
   const plan = planVenue(request("B10000007"), ALL_MODULES);
   await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
-  const venueId = await venueLocationId(suite.db);
   const stations = () =>
     suite.db.execute<{
       name: string;
@@ -145,7 +141,7 @@ it("a new venue's first station starts at the default late flags and keeps a sta
       overdue_after_minutes: number;
       forgotten_after_minutes: number;
     }>(sql`select name, warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
-      from kitchen_stations where location_id = ${venueId}`);
+      from kitchen_stations`);
   expect((await stations()).rows).toEqual([
     {
       name: STARTER_STATION_NAMES.Kitchen.es,
@@ -439,7 +435,6 @@ describe("applyVenue", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
 
     const counts = await suite.db.execute<{
       tenants: number;
@@ -458,7 +453,7 @@ describe("applyVenue", () => {
         (select count(*) from invoice_series where node_id = ${result.nodeId}) as series,
         (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null) as sif,
         (select count(*) from kitchen_stations
-           where location_id = ${venueId} and is_default and active) as default_stations,
+           where is_default and active) as default_stations,
         (select count(*) from departments
            where is_default and active) as default_departments,
         (select count(*) from zone_service_policies

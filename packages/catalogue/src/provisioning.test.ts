@@ -370,10 +370,7 @@ it.each(STARTER_VENUES)(
     const node = await venue(country, province, receipt);
     await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
     const name = staffLanguage === "en" ? FIRST_MENU_NAME : STARTER_MENU_NAMES[FIRST_MENU_NAME].es;
-    const [location] = await suite.db
-      .select({ catalogueId: locations.catalogueId })
-      .from(locations)
-      .where(eq(locations.id, node.locationId));
+    const location = { catalogueId: await readDefaultCatalogueId(suite.db) };
     const menus = await suite.db
       .select({ name: catalogues.name })
       .from(catalogues)

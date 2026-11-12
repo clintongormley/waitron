@@ -84,11 +84,7 @@ async function enrolTill(): Promise<string> {
 
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
-  await inTx(v, async (tx) =>
-    tx.run(
-      sql`update kitchen_stations set active = 0 where location_id = ${v.cfg.locationId} and is_default`,
-    ),
-  );
+  await inTx(v, async (tx) => tx.run(sql`update kitchen_stations set active = 0 where is_default`));
   app = new Hono();
   mountTillApi(
     app,
@@ -947,9 +943,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     });
 
     await inTx(v, async (tx) =>
-      tx.run(
-        sql`update kitchen_stations set active = 1 where location_id = ${v.cfg.locationId} and is_default`,
-      ),
+      tx.run(sql`update kitchen_stations set active = 1 where is_default`),
     );
 
     for (const sent of [await round(missing), await round(stranded)])

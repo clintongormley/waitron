@@ -47,7 +47,7 @@ async function setup(): Promise<PrintConfig> {
   return { locationId: venueId };
 }
 
-async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
+async function seedAgent(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
     .values({ name, tokenHash: "scrypt$fixture" })
@@ -97,9 +97,9 @@ const ENDED = { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: PR
 
 describe("endDeletedPrinterJobs", () => {
   it("ends every live job of the printer, whoever claimed it and however old the claim, and leaves finished jobs as they were", async () => {
-    const cfg = await setup();
-    const agent = await seedAgent(cfg, "Box");
-    const other = await seedAgent(cfg, "Other box");
+    await setup();
+    const agent = await seedAgent("Box");
+    const other = await seedAgent("Other box");
     const printerId = await printer();
     const keptPrinter = await printer("USB-SERIAL-2");
 
@@ -183,9 +183,9 @@ describe("endDeletedPrinterJobs", () => {
 
 describe("a deleted printer's late work", () => {
   it("refuses every late report on an ended job, and a live printer's job is claimed and reported as usual", async () => {
-    const cfg = await setup();
-    const agent = await seedAgent(cfg, "Box");
-    const other = await seedAgent(cfg, "Other box");
+    await setup();
+    const agent = await seedAgent("Box");
+    const other = await seedAgent("Other box");
     const printerId = await printer();
     const livePrinter = await printer("USB-SERIAL-2");
     const deletedJob = await job(printerId);
@@ -225,8 +225,8 @@ describe("a deleted printer's late work", () => {
   });
 
   it("hands out only new jobs after Add restores a registration, and an old report touches neither", async () => {
-    const cfg = await setup();
-    const agent = await seedAgent(cfg, "Box");
+    await setup();
+    const agent = await seedAgent("Box");
     const oldPrinter = await printer();
     const oldJob = await job(oldPrinter);
     await withTransaction(suite.db, (tx) => claimPrintJobs(tx, agent, { visibleKeys: [USB_KEY] }));
@@ -250,8 +250,8 @@ describe("a deleted printer's late work", () => {
   });
 
   it("never claims a deleted printer's job, even one left waiting on a row still marked active", async () => {
-    const cfg = await setup();
-    const agent = await seedAgent(cfg, "Box");
+    await setup();
+    const agent = await seedAgent("Box");
     const printerId = await printer();
     await deletePrinterRow(printerId);
     // Neither state is one the delete leaves; each isolates the deleted-row predicate.
@@ -270,8 +270,8 @@ describe("a deleted printer's late work", () => {
   });
 
   it("leaves a deleted Bluetooth printer's jobs alone when its address is reported unpaired", async () => {
-    const cfg = await setup();
-    const agent = await seedAgent(cfg, "Box");
+    await setup();
+    const agent = await seedAgent("Box");
     const oldPrinter = await printer(MAC, "bluetooth");
     await deletePrinterRow(oldPrinter);
     await suite.db.update(printers).set({ active: true }).where(eq(printers.id, oldPrinter));

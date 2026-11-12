@@ -606,9 +606,7 @@ describe("transaction-time and persisted history checks", () => {
     expect((await request("PUT", "/business-day-start", proposal())).status).toBe(200);
     const before = await clockRows();
     await inTx((tx) => createOpenOrder(tx, venue.cfg, randomUUID(), [], null));
-    await suite.db.execute(
-      sql`update working_orders set opened_at = '2026-11-03T02:00:00.000Z' where location_id = ${venue.cfg.locationId}`,
-    );
+    await suite.db.execute(sql`update working_orders set opened_at = '2026-11-03T02:00:00.000Z'`);
     await expectRefusal(
       await request(
         "PUT",
@@ -631,9 +629,7 @@ describe("transaction-time and persisted history checks", () => {
   });
   it("refuses a later start when an order was opened between the stored and the new changeover", async () => {
     await inTx((tx) => createOpenOrder(tx, venue.cfg, randomUUID(), [], null));
-    await suite.db.execute(
-      sql`update working_orders set opened_at = '2026-11-03T05:00:00.000Z' where location_id = ${venue.cfg.locationId}`,
-    );
+    await suite.db.execute(sql`update working_orders set opened_at = '2026-11-03T05:00:00.000Z'`);
     const response = await request("PUT", "/business-day-start", proposal({ dayCutover: "07:00" }));
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
@@ -888,9 +884,7 @@ describe("the preview chooses the changeover itself", () => {
     });
     async function orderOpenedAt(instant: string) {
       await inTx((tx) => createOpenOrder(tx, venue.cfg, randomUUID(), [], null));
-      await suite.db.execute(
-        sql`update working_orders set opened_at = ${instant} where location_id = ${venue.cfg.locationId}`,
-      );
+      await suite.db.execute(sql`update working_orders set opened_at = ${instant}`);
     }
     it("previews an order inside Tuesday under both the stored and the new start", async () => {
       await orderOpenedAt("2026-10-21T10:00:00.000Z");
@@ -1130,9 +1124,7 @@ describe("a Save takes the next changeover", () => {
     describe("history is measured from the stored 21:00, not from the passed 05:00", () => {
       async function orderOpenedAt(instant: string) {
         await inTx((tx) => createOpenOrder(tx, venue.cfg, randomUUID(), [], null));
-        await suite.db.execute(
-          sql`update working_orders set opened_at = ${instant} where location_id = ${venue.cfg.locationId}`,
-        );
+        await suite.db.execute(sql`update working_orders set opened_at = ${instant}`);
       }
       const replace = proposal({
         effectiveBusinessDay: "2026-10-21",
@@ -1192,8 +1184,8 @@ describe("a keep-open for tonight past the new changeover", () => {
     const zoneId = randomUUID();
     await inTx(async (tx) => {
       await tx.execute(
-        sql`insert into floor_zones (id, location_id, name, created_at)
-            values (${zoneId}, ${venue.cfg.locationId}, 'Terrace', ${at.toISOString()})`,
+        sql`insert into floor_zones (id, name, created_at)
+            values (${zoneId}, 'Terrace', ${at.toISOString()})`,
       );
       await tx.execute(
         sql`insert into zone_service_policies (zone_id, department_id)

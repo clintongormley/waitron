@@ -212,7 +212,7 @@ describe("staged configuration import", () => {
     ],
     ["pre-payment-policy-retirement export without it", { version: 16 }],
     ["pre-receipt-policy-retirement export", { version: 17 }],
-    ["future version", { version: 19 }],
+    ["future version", { version: 20 }],
     ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));

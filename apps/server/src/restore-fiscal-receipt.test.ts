@@ -56,7 +56,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   await db.insert(sales).values({
     id: F.saleId,
     source: "device",
-    deviceId: sql`(select id from devices where location_id = ${F.locationId})`,
+    deviceId: sql`(select id from devices)`,
     nodeId: F.nodeId,
     seriesId: F.seriesId,
     invoiceNumber: 1,
@@ -78,7 +78,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   });
   await db.insert(registrosFacturacion).values({
     source: "device",
-    deviceId: sql`(select id from devices where location_id = ${F.locationId})`,
+    deviceId: sql`(select id from devices)`,
     nodeId: F.nodeId,
     sifId: F.sifId,
     saleId: F.saleId,

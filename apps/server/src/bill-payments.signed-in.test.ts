@@ -43,7 +43,6 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import "./errors.js";
 
 // Synchronous work runs from case to case; let the venue watchdog tick between them.
@@ -66,7 +65,7 @@ let clock: TrustedClock;
 
 interface Venue {
   seriesId: ReturnType<typeof brandSeriesId>;
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   offers: ZoneOffers;
   cana: string;
 }
@@ -131,7 +130,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
-    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
@@ -139,7 +137,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
   });
   return withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, {
-      name: `Bill payments signed in menu ${cfg.locationId}`,
+      name: `Bill payments signed in menu ${venueId}`,
     });
     const bebidas = await createCategory(tx, { name: "Drinks" });
     const cana = await createProduct(tx, {
@@ -167,7 +165,7 @@ const fiscal = () => ({ db: suite.db, backend, clock });
 
 interface Till {
   seriesId: ReturnType<typeof brandSeriesId>;
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   operator: { personId: string; sessionId: string };
   printerId: string;
 }

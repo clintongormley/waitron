@@ -66,7 +66,6 @@ import {
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";
@@ -135,7 +134,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   zoneId: string;
   offer(dish: Dish): string;
   extrasListId: string;
@@ -178,14 +177,13 @@ async function setupVenue(): Promise<Venue> {
   const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: venueId,
     locale: LOCALE,
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
   return inTx(async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: `Current orders menu ${cfg.locationId}` });
+    const catalogue = await createCatalogue(tx, { name: `Current orders menu ${venueId}` });
     const category = await createCategory(tx, { name: "Platos" });
     const productId = {} as Record<Dish, string>;
     // Three different names, so a row showing the customer's or the kitchen's name fails.

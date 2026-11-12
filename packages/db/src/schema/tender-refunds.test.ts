@@ -78,10 +78,10 @@ describe("settled-tender refund ledger", () => {
     await withTransaction(db, async (tx) => {
       await tx.run(sql`insert into tender_refunds
         (id, sale_id, tender_id, submission_id, fingerprint, applied_amount, tip_amount, reason,
-         authorized_by, requested_by, source, device_id, node_id, location_id, method, provider, provider_payment_ref,
+         authorized_by, requested_by, source, device_id, node_id, method, provider, provider_payment_ref,
          state, created_at)
         values (${REFUND}, ${saleId}, ${tenderId}, ${SUBMISSION}, 'normalized-request', 500, 0, 'Goodwill',
-         ${PERSON}, ${PERSON}, 'device', ${deviceId}, ${nodeId}, ${LOCATION}, 'card', 'stripe', 'pi_original', 'pending', ${AT})`);
+         ${PERSON}, ${PERSON}, 'device', ${deviceId}, ${nodeId}, 'card', 'stripe', 'pi_original', 'pending', ${AT})`);
     });
     expect(
       db.all(
@@ -142,12 +142,12 @@ describe("settled-tender refund ledger", () => {
     return withTransaction(suite.db, async (tx) => {
       await tx.run(sql`insert into tender_refunds
         (id, sale_id, tender_id, submission_id, fingerprint, applied_amount, tip_amount, reason,
-         authorized_by, requested_by, source, device_id, node_id, location_id, method, manual,
+         authorized_by, requested_by, source, device_id, node_id, method, manual,
          provider, provider_payment_ref, state, created_at, completed_at, failed_at, sent_at, send_count,
          refs_before_send, provider_refund_ref, provider_status, last_lookup_at, next_retry_at, attested_by, attestation_note)
         values (${r.id}, ${r.sale_id}, ${r.tender_id}, ${r.submission_id}, ${r.fingerprint}, ${r.applied_amount},
          ${r.tip_amount}, ${r.reason}, ${r.authorized_by}, ${r.requested_by}, ${r.source}, ${r.device_id},
-         ${r.node_id}, ${r.location_id}, ${r.method}, ${r.manual}, ${r.provider}, ${r.provider_payment_ref},
+         ${r.node_id}, ${r.method}, ${r.manual}, ${r.provider}, ${r.provider_payment_ref},
          ${r.state}, ${r.created_at}, ${r.completed_at}, ${r.failed_at}, ${r.sent_at}, ${r.send_count},
          ${r.refs_before_send}, ${r.provider_refund_ref}, ${r.provider_status}, ${r.last_lookup_at},
          ${r.next_retry_at}, ${r.attested_by}, ${r.attestation_note})`);
@@ -280,7 +280,6 @@ describe("settled-tender refund ledger", () => {
     ["source", "operator_script"],
     ["device_id", null],
     ["node_id", "another-node"],
-    ["location_id", "another-location"],
     ["method", "cash"],
     ["manual", 1],
     ["provider", "sumup"],

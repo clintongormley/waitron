@@ -11,7 +11,6 @@ import {
   saleVoids,
   tenderRefunds,
   tenders,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -20,7 +19,6 @@ import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { deviceOrigin } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 
@@ -33,7 +31,7 @@ const store = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   resetPerTest: true,
 });
-let cfg: WithVenueRowId<DeviceRequestConfig>;
+let cfg: DeviceRequestConfig;
 let seriesId: string;
 let orderId: string;
 let number: number;
@@ -44,7 +42,7 @@ beforeEach(async () => {
     invoiceLocales: ["en-GB"],
     operationDescription: "Meals",
   });
-  const placeId = await venueLocationId(db);
+
   const nodeId = await seedNode(db);
   const { deviceId } = await seedDevice(db);
   const [series] = await db
@@ -56,7 +54,6 @@ beforeEach(async () => {
   orderId = order.id;
   cfg = {
     nodeId,
-    locationId: placeId,
     origin: deviceOrigin(deviceId),
     locale: "en-GB",
     tipsEnabled: true,
@@ -224,7 +221,6 @@ describe("settled-tender reservation inside the caller's transaction", () => {
       source: "device",
       deviceId: cfg.origin.deviceId,
       nodeId: cfg.nodeId,
-      locationId: cfg.locationId,
       method: "cash",
       manual: false,
       provider: null,

@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 /** The device join, enrolment and management surface end to end. */
@@ -28,7 +29,6 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { deploymentEnvironment } from "./config.js";
 
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createStation } from "./kitchen.js";
 import { deleteStation } from "./station-delete.js";
 import { parkOrder } from "./working-order.js";
@@ -188,12 +188,11 @@ async function deviceBindings(deviceId: string): Promise<{
   return row!;
 }
 
-async function seedNamedPrinters(cfg: WithVenueRowId, names: string[]): Promise<string[]> {
+async function seedNamedPrinters(names: string[]): Promise<string[]> {
   const rows = await suite.db
     .insert(printers)
     .values(
       names.map((name) => ({
-        locationId: cfg.locationId,
         name,
         transport: "network_tcp" as const,
         host: "10.0.0.7",
@@ -238,7 +237,7 @@ async function openTillSession(deviceId: string): Promise<string> {
 const windows = new WeakMap<Hono, PairingMode>();
 
 function mountApp(
-  cfg: WithVenueRowId,
+  cfg: TradingContext,
   enrolRateLimiter?: EnrolRateLimiter,
   pairingMode: PairingMode = createPairingMode(),
 ): Hono {
@@ -255,7 +254,7 @@ function mountApp(
 }
 
 /** A device API mounted with an explicit `devMode` flag. */
-function mountDevApp(cfg: WithVenueRowId, devMode: boolean): Hono {
+function mountDevApp(cfg: TradingContext, devMode: boolean): Hono {
   const app = new Hono();
   const pairingMode = createPairingMode();
   windows.set(app, pairingMode);
@@ -1998,7 +1997,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
 
   /** A till on a profile listing receipt [Bar, Counter] and slip [Bar, Counter], choosing Bar for both. */
   async function tillOnListedProfile(venue: Venue, app: Hono, name = "Till") {
-    const [bar, counter] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter"]);
+    const [bar, counter] = await seedNamedPrinters(["Bar", "Counter"]);
     const profileId = await seedProfile("till");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
@@ -2131,7 +2130,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
   it("changes the profile and sets the printers in the same request", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const [p1, p2, p3] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter", "Portable"]);
+    const [p1, p2, p3] = await seedNamedPrinters(["Bar", "Counter", "Portable"]);
     const from = await seedProfile("till");
     const to = await seedProfile("till");
     await withTransaction(suite.db, async (tx) => {
@@ -2189,7 +2188,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await tillOnListedProfile(venue, app);
-    const [elsewhere] = await seedNamedPrinters(venue.cfg, ["Terrace"]);
+    const [elsewhere] = await seedNamedPrinters(["Terrace"]);
     const other = await seedProfile("till");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, other, {
@@ -3336,11 +3335,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
 describe("a device's current printers", () => {
   /** A till on a profile listing receipt [Counter, Bar] and slip [Portable, Bar], choosing the first of each. */
   async function listedTill(venue: Venue, app: Hono) {
-    const [bar, counter, portable] = await seedNamedPrinters(venue.cfg, [
-      "Bar",
-      "Counter",
-      "Portable",
-    ]);
+    const [bar, counter, portable] = await seedNamedPrinters(["Bar", "Counter", "Portable"]);
     const profileId = await seedProfile("till");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, profileId, {
@@ -3642,7 +3637,7 @@ describe("a device's current printers", () => {
 
 describe("PUT /api/device/battery", () => {
   /** A device API whose clock reads `clock.at`, so a test can move time past the one-minute limit. */
-  function mountClockedApp(cfg: WithVenueRowId, clock: { at: Date }): Hono {
+  function mountClockedApp(cfg: TradingContext, clock: { at: Date }): Hono {
     const app = new Hono();
     const pairingMode = createPairingMode();
     windows.set(app, pairingMode);
@@ -4407,11 +4402,7 @@ describe("a device's approved profiles and switching its active one", () => {
     /** A till on profile `from`, with `to` approved; `from` lists [Bar, Counter] for receipts and
      * [Bar] for slips, and the device holds Counter and Bar. */
     async function switchable(app: Hono, venue: Venue) {
-      const [bar, counter, kitchen] = await seedNamedPrinters(venue.cfg, [
-        "Bar",
-        "Counter",
-        "Kitchen",
-      ]);
+      const [bar, counter, kitchen] = await seedNamedPrinters(["Bar", "Counter", "Kitchen"]);
       const from = await seedProfile("till");
       const to = await seedProfile("till");
       await withTransaction(suite.db, async (tx) => {
@@ -4859,7 +4850,7 @@ describe("while a save refused for a full disk stands", () => {
     return disk;
   }
 
-  function mountWithDisk(cfg: WithVenueRowId, disk: DiskFullState): Hono {
+  function mountWithDisk(cfg: TradingContext, disk: DiskFullState): Hono {
     const app = new Hono();
     const pairingMode = createPairingMode();
     windows.set(app, pairingMode);

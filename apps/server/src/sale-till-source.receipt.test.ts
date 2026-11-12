@@ -290,8 +290,7 @@ interface Registro {
 }
 
 /** Every fiscal record filed for the tenant, oldest first — one per sale, this tenant's alone. */
-async function registrosFor(cfg: TradingContext): Promise<Registro[]> {
-  void cfg;
+async function registrosFor(): Promise<Registro[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
       .select({
@@ -310,8 +309,7 @@ async function registrosFor(cfg: TradingContext): Promise<Registro[]> {
 
 /** Each sale's stored `sales.device_id`, ordered by the per-series `invoice_number` (1, 2, …) so it
  *  lines up with the registros ordered by `secuencia`. */
-async function saleDeviceIds(cfg: TradingContext): Promise<(string | null)[]> {
-  void cfg;
+async function saleDeviceIds(): Promise<(string | null)[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
       .select({ deviceId: sales.deviceId, invoiceNumber: sales.invoiceNumber })
@@ -363,7 +361,7 @@ describe("H2 receipt: a sale's device resolves from the request, the chain does 
       product.menuItemId,
     );
 
-    const registros = await registrosFor(cfg);
+    const registros = await registrosFor();
     expect(registros).toHaveLength(2);
     const [first, second] = registros;
 
@@ -372,7 +370,7 @@ describe("H2 receipt: a sale's device resolves from the request, the chain does 
     expect(second!.deviceId).toBe(deviceIdOf(deviceY));
     expect(first!.deviceId).not.toBe(second!.deviceId);
     // The same movement on the `sales` row itself.
-    expect(await saleDeviceIds(cfg)).toEqual([deviceIdOf(deviceX), deviceIdOf(deviceY)]);
+    expect(await saleDeviceIds()).toEqual([deviceIdOf(deviceX), deviceIdOf(deviceY)]);
 
     // BOTH records file under `cfg.nodeId` — the SIF anchor — whichever device rang them; a device
     // that influenced `nodeId` would silently fork the SIF.
@@ -419,7 +417,7 @@ describe("SP-C: a sale posted with the dev-override header files under THAT devi
     expect(res.status).toBe(200);
 
     // The one sale filed under the overridden device.
-    expect(await saleDeviceIds(cfg)).toEqual([deviceY]);
+    expect(await saleDeviceIds()).toEqual([deviceY]);
   });
 });
 

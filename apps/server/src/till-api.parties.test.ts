@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
@@ -15,7 +16,6 @@ import {
   sales,
   parties,
   serviceCommands,
-  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -37,7 +37,6 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -46,7 +45,7 @@ import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP surface of seating and finishing a table: the session guard, the body and id screens and
 // the status each refusal answers. The verbs themselves are pinned in `parties.test.ts`.
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let ana: { id: string };
 
 // `resetPerTest: false`: the venue, till, node and person are seeded once; each case seats its own
@@ -69,7 +68,6 @@ const suite = useVenueDb({
     ana = { id: person!.id };
     cfg = {
       nodeId: brandNodeId(nodeId),
-      locationId: await venueLocationId(db),
       locale: "es-ES",
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,

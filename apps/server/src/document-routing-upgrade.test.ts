@@ -31,7 +31,7 @@ it("routing upgrade preserves populated predecessor rows", async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  const venue = await venueLocationId(db);
+  await venueLocationId(db);
   const node = await seedNode(db);
   const { deviceId } = await seedDevice(db);
   const series = randomUUID();
@@ -47,10 +47,10 @@ it("routing upgrade preserves populated predecessor rows", async () => {
   await db.execute(sql`insert into sales (id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state)
     values (${sale}, 'device', ${deviceId}, ${node}, ${series}, 1, '2026-11-04T12:00:00.000Z', 0, 1450, '[]', 'es', '["es"]', 'none', 'recorded')`);
   await db.execute(
-    sql`insert into printers (id, location_id, name, transport, host) values (${printer}, ${venue}, 'Bar', 'network_tcp', '10.0.0.7')`,
+    sql`insert into printers (id, name, transport, host) values (${printer}, 'Bar', 'network_tcp', '10.0.0.7')`,
   );
   await db.execute(
-    sql`insert into print_jobs (id, location_id, printer_id, payload, created_at) values (${job}, ${venue}, ${printer}, x'0102', '2026-11-04T12:00:00.000Z')`,
+    sql`insert into print_jobs (id, printer_id, payload, created_at) values (${job}, ${printer}, x'0102', '2026-11-04T12:00:00.000Z')`,
   );
   await db.execute(
     sql`insert into invoice_deliveries (id, sale_id, print_job_id, request_key, medium, designation, generation, person_id, created_at, next_attempt_at) values (${delivery}, ${sale}, ${job}, ${randomUUID()}, 'receipt', 'duplicate', 1, ${person}, '2026-11-04T12:00:00.000Z', '2026-11-04T12:00:00.000Z')`,

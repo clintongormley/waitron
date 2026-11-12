@@ -43,7 +43,6 @@ import { decimal } from "@waitron/shared";
 import { offerProducts } from "./testing/zone-offers.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createTable } from "./testing/live-table.js";
 import { fingerprint, seatTable } from "./parties.js";
 import { payWorkingOrderIntegratedOrchestration } from "./testing/whole-payment-fixture.js";
@@ -78,7 +77,7 @@ interface Venue {
   menuItemId: string;
   db: Database;
   backend: VerifactuBackend;
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   staffId: string;
   counterZone: string;
   tablesZone: string;
@@ -130,7 +129,6 @@ async function venue(db: Database): Promise<Venue> {
     ...loadTillAppSettings({
       WAITRON_NODE_ID: allocated.nodeId,
     }),
-    locationId: venueId,
     simplifiedInvoiceLimit: null,
   });
   const {
@@ -145,7 +143,7 @@ async function venue(db: Database): Promise<Venue> {
     tableFreeItemId,
   } = await withTransaction(db, async (tx) => {
     const menu = await createCatalogue(tx, {
-      name: `Receipt guests routes menu ${cfg.locationId}`,
+      name: `Receipt guests routes menu ${venueId}`,
     });
     const category = await createCategory(tx, { name: "Tapas" });
     const product = await createProduct(tx, {

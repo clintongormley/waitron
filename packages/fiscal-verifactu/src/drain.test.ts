@@ -109,7 +109,7 @@ async function sellAndVoid(options: {
   nif?: string;
   identity?: SoftwareIdentity;
 }): Promise<{ nodeId: string }> {
-  const { locationId, nodeId, seriesId } = await seedTenantWithSif(
+  const { nodeId, seriesId } = await seedTenantWithSif(
     suite.db,
     options.nif === undefined ? {} : { nif: options.nif },
   );

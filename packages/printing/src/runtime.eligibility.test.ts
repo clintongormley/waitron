@@ -30,7 +30,7 @@ async function setup(): Promise<PrintConfig> {
   return { locationId: venueId };
 }
 
-async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
+async function seedAgent(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
     .values({ name, tokenHash: "scrypt$fixture" })
@@ -40,8 +40,8 @@ async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
 
 describe("claim eligibility — derived from transport and visible keys", () => {
   it("a printer-specific pull leaves another visible printer's job queued", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg, "Demo printer");
+    await setup();
+    const agentId = await seedAgent("Demo printer");
     await withTransaction(suite.db, async (tx: Transaction) => {
       const selected = await createPrinter(tx, {
         name: "Selected",
@@ -71,9 +71,9 @@ describe("claim eligibility — derived from transport and visible keys", () => 
   });
 
   it("claims a network_tcp job for any agent in the venue", async () => {
-    const cfg = await setup();
+    await setup();
     // An agent that registered nothing: a network printer's job is any agent's to claim.
-    const otherAgentId = await seedAgent(cfg, "Other");
+    const otherAgentId = await seedAgent("Other");
     await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, {
         name: "IP",
@@ -92,8 +92,8 @@ describe("claim eligibility — derived from transport and visible keys", () => 
   });
 
   it("claims a usb job only for an agent that reports its serial", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg, "Kitchen");
+    await setup();
+    const agentId = await seedAgent("Kitchen");
     await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, { name: "USB", transport: "usb", localKey: "SN-9" });
       const { jobId } = await enqueuePrintJob(tx, p.id, esc(SETTING).line("x").bytes());
@@ -114,8 +114,8 @@ describe("claim eligibility — derived from transport and visible keys", () => 
   });
 
   it("claims a bluetooth job by its visible key too (usb/bluetooth share the branch)", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg, "Kitchen");
+    await setup();
+    const agentId = await seedAgent("Kitchen");
     await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, {
         name: "BT",
@@ -133,9 +133,9 @@ describe("claim eligibility — derived from transport and visible keys", () => 
   });
 
   it("stamps claimed_by and lets only the claimer report", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg, "Kitchen");
-    const otherAgentId = await seedAgent(cfg, "Other");
+    await setup();
+    const agentId = await seedAgent("Kitchen");
+    const otherAgentId = await seedAgent("Other");
     await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, {
         name: "IP",
@@ -160,8 +160,8 @@ describe("claim eligibility — derived from transport and visible keys", () => 
   });
 
   it("never hands out a moved job when its printer is back", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg, "Bar");
+    await setup();
+    const agentId = await seedAgent("Bar");
     await withTransaction(suite.db, async (tx: Transaction) => {
       const p = await createPrinter(tx, { name: "USB", transport: "usb", localKey: "SER-BACK" });
       const moved = await enqueuePrintJob(tx, p.id, esc(SETTING).line("moved").bytes());

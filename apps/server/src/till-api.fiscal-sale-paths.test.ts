@@ -1,3 +1,4 @@
+import type { TradingContext } from "./trading-context.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
@@ -19,7 +20,6 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -71,7 +71,6 @@ import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { OrderFlow } from "./till-config.js";
 
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
@@ -128,10 +127,9 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    locationId: venueId,
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
@@ -144,7 +142,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
  * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(): Promise<{
-  cfg: WithVenueRowId;
+  cfg: TradingContext;
   catalogueId: string;
   available: (AvailableProduct & { menuItemId: string })[];
   operatorId: string;
@@ -180,8 +178,7 @@ async function setupVenue(): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
-  const cfg = tillConfigFromVenue(venue, venueId);
+  const cfg = tillConfigFromVenue(venue);
   const [department] = await suite.db.select().from(departments);
   await suite.db.insert(departmentReceipts).values({
     departmentId: department!.id,
@@ -227,7 +224,7 @@ async function setupVenue(): Promise<{
     await offerMenuThroughZone(tx, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);
     const defaultStation = sql`(select id from kitchen_stations
-           where location_id = ${cfg.locationId} and is_default)`;
+           where is_default)`;
     await tx.insert(routingCells).values([
       { categoryId: foodCategory.id, stationId: defaultStation },
       { categoryId: drinkCategory.id, stationId: defaultStation },
@@ -257,7 +254,7 @@ async function setupVenue(): Promise<{
 /** The till API's deps for a provisioned venue: the suite's one database handle, the real fiscal
  * backend + system clock the sale path files through, and `secureCookies:false` so the session
  * cookie rides the non-TLS `app.request`. */
-function apiDeps(cfg: WithVenueRowId): TillApiDeps {
+function apiDeps(cfg: TradingContext): TillApiDeps {
   return {
     admission: testTradingAdmission(),
     db: suite.db,
@@ -307,7 +304,7 @@ function fakePool(client: FakeStripe): CardProviderPool {
 /** `apiDeps` plus a `CardProviderPool`, for the `POST /api/pay` reader-routing tests. Threads the
  * real composition list so the pay path resolves a reader's provider `credentialPurpose` from its
  * seat, exactly as boot does. */
-function apiDepsWithPool(cfg: WithVenueRowId, pool: CardProviderPool): TillApiDeps {
+function apiDepsWithPool(cfg: TradingContext, pool: CardProviderPool): TillApiDeps {
   return {
     admission: testTradingAdmission(),
     db: suite.db,
@@ -383,7 +380,7 @@ async function readerIdOnPayment(workingOrderId: string): Promise<string | null>
  */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(
-  cfg: WithVenueRowId,
+  cfg: TradingContext,
   deviceProfileId: string | null = null,
 ): Promise<string> {
   tillDeviceCounter += 1;
@@ -399,7 +396,7 @@ async function enrolTillCookie(
  *  cookie. The login is device-gated, so without one it enrols a throwaway `till` device. */
 async function loginSession(
   app: Hono,
-  cfg: WithVenueRowId,
+  cfg: TradingContext,
   operatorId: string,
   deviceCookie?: string,
 ): Promise<string> {
@@ -1338,7 +1335,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     }
 
     async function declinedPay(
-      mount: (cfg: WithVenueRowId, log: Logger) => Hono,
+      mount: (cfg: TradingContext, log: Logger) => Hono,
       prepare: (deviceCookie: string) => Promise<void>,
       body: Record<string, unknown>,
     ) {
@@ -1702,7 +1699,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
 describe("place → station queue → per-line advance → collect (KDS-1 ticket model, over HTTP)", () => {
   it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const modeCfg: WithVenueRowId = { ...cfg };
+    const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
 
     const app = new Hono();
@@ -2072,7 +2069,7 @@ describe("handheld sales and device capability gates", () => {
   /** Enrol a handheld device and return its `waitron_device=<id>.<token>` cookie. Its default
    * profile takes cash and nothing else. */
   async function enrolHandheldCookie(
-    cfg: WithVenueRowId,
+    cfg: TradingContext,
     capabilities: string[] = ["take-cash"],
   ): Promise<string> {
     const profileId = await seedProfileFF("phone-portrait", capabilities);
@@ -2085,7 +2082,7 @@ describe("handheld sales and device capability gates", () => {
 
   async function loginOperator(
     app: Hono,
-    cfg: WithVenueRowId,
+    cfg: TradingContext,
     operatorId: string,
     deviceCookie?: string,
   ): Promise<string> {
@@ -2381,7 +2378,7 @@ describe("handheld sales and device capability gates", () => {
     await suite.db.execute(sql`
       update department_sale_policies set paid_when = 'ticket_then_pay'
       where department_id in (select id from departments )`);
-    const modeCfg: WithVenueRowId = { ...cfg };
+    const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -2447,7 +2444,7 @@ describe("handheld sales and device capability gates", () => {
 
   it("a handheld collects a placed Mode-T order in cash for an operator holding only the payment permission, settling it and filing one record under itself, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const modeCfg: WithVenueRowId = { ...cfg };
+    const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -2542,7 +2539,7 @@ describe("handheld sales and device capability gates", () => {
 
     it("refuses a cash collect from a device whose profile lacks take-cash, leaving the order placed", async () => {
       const { cfg, available, operatorId } = await setupVenue();
-      const modeCfg: WithVenueRowId = { ...cfg };
+      const modeCfg: TradingContext = { ...cfg };
       const each = available.find((p) => p.pricingUnit === "each")!;
       const app = new Hono();
       mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -3051,7 +3048,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
   it("fires the order to its station queue and answers 200 with an empty body", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     // A ticket_then_pay venue settles a walk-up sale without firing it, which leaves prep to do.
-    const modeCfg: WithVenueRowId = { ...cfg };
+    const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -3067,7 +3064,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     // the prep call lets that call send the same stored dish.
     await suite.db.execute(sql`
       update kitchen_stations set active = 0
-      where location_id = ${cfg.locationId} and is_default`);
+      where is_default`);
     const sale = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -3088,7 +3085,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
 
     await suite.db.execute(sql`
       update kitchen_stations set active = 1
-      where location_id = ${cfg.locationId} and is_default`);
+      where is_default`);
     const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -3100,7 +3097,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
   });
   it("fires a paid order whose product has since sold out: a settled order's lines cannot be removed", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const modeCfg: WithVenueRowId = { ...cfg };
+    const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -3111,7 +3108,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     // the prep call lets that call send the same stored dish.
     await suite.db.execute(sql`
       update kitchen_stations set active = 0
-      where location_id = ${cfg.locationId} and is_default`);
+      where is_default`);
     const sale = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -3126,7 +3123,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
 
     await suite.db.execute(sql`
       update kitchen_stations set active = 1
-      where location_id = ${cfg.locationId} and is_default`);
+      where is_default`);
     const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -3165,11 +3162,11 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   /** Another device's receipt and drawer printer here, with a drawer that device may open: the
    *  printer a lookup by location rather than by device would pick. */
-  const otherDevicesDrawerPrinter = async (cfg: WithVenueRowId) =>
+  const otherDevicesDrawerPrinter = async (cfg: TradingContext) =>
     deviceReceiptPrinter(await enrolDrawerTill(cfg), true);
 
   /** A till device whose profile allows the drawer. */
-  async function enrolDrawerTill(cfg: WithVenueRowId): Promise<string> {
+  async function enrolDrawerTill(cfg: TradingContext): Promise<string> {
     return enrolTillCookie(cfg, await seedProfileFF("till", ["open-cash-drawer", "take-cash"]));
   }
 
@@ -3208,7 +3205,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   async function venueWithTill(orderFlow: OrderFlow = "prepay") {
     const venue = await setupVenue();
-    const cfg: WithVenueRowId = { ...venue.cfg };
+    const cfg: TradingContext = { ...venue.cfg };
     await withTransaction(suite.db, (tx) =>
       offerProducts(tx, cfg, {
         orderStart: "counter",
