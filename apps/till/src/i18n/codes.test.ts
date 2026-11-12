@@ -923,11 +923,11 @@ it.each([
   expect(codeMessage(code, "es")).toBe(spanish);
 });
 
-it("words the merge refusal for invoice details that changed while staff chose, in both languages", () => {
+it("words the merge refusal for invoice details that changed, in both languages", () => {
   expect(codeMessage("bill.merge_invoice_choice_required", "en")).toBe(
-    "The bills' invoice details changed while you were choosing. Check them and merge again.",
+    "The bills' invoice details have changed. Check them and merge again.",
   );
   expect(codeMessage("bill.merge_invoice_choice_required", "es")).toBe(
-    "Los datos de factura de las cuentas han cambiado mientras elegías. Revísalos y vuelve a juntarlas.",
+    "Los datos de factura de las cuentas han cambiado. Revísalos y vuelve a juntarlas.",
   );
 });

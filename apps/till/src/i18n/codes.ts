@@ -382,8 +382,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta cuenta ya ha recibido pagos, por lo que no se puede añadir a otra cuenta.",
   },
   "bill.merge_invoice_choice_required": {
-    en: "The bills' invoice details changed while you were choosing. Check them and merge again.",
-    es: "Los datos de factura de las cuentas han cambiado mientras elegías. Revísalos y vuelve a juntarlas.",
+    en: "The bills' invoice details have changed. Check them and merge again.",
+    es: "Los datos de factura de las cuentas han cambiado. Revísalos y vuelve a juntarlas.",
   },
   "working_order.not_placed": {
     en: "This bill is no longer waiting for payment",

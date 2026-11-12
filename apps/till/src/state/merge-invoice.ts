@@ -1,12 +1,23 @@
+import { countryNameFor } from "@waitron/country-packs";
 import type { InvoiceIdentity, MergeInvoiceChoice, PartyBill } from "../api/client.js";
+import { currentLocale, t } from "../i18n/t.js";
 
 /** What merging `from` into `into` asks before it is sent. */
 export interface MergeInvoiceQuestion {
   into: PartyBill;
   from: PartyBill;
-  /** The receiving bill's full-invoice customer; null when it is simplified. */
-  intoName: string | null;
-  fromName: string;
+}
+
+function customerOf(bill: PartyBill): string {
+  return `${bill.recipient!.legalName} · ${bill.recipient!.taxId}`;
+}
+
+function identifierOf(bill: PartyBill): string {
+  const { identifierType, identifierCountryCode } = bill.recipient!;
+  const type = t(`invoice.identifier.${identifierType ?? "tax-number"}`);
+  return identifierCountryCode === undefined
+    ? type
+    : `${type} · ${countryNameFor(identifierCountryCode, currentLocale())}`;
 }
 
 function identityOf(bill: PartyBill): InvoiceIdentity | null {
@@ -43,11 +54,24 @@ export function mergeInvoiceQuestion(
   if (into === undefined || from === undefined) return null;
   const fromIdentity = identityOf(from);
   if (fromIdentity === null || sameIdentity(fromIdentity, identityOf(into))) return null;
+  return { into, from };
+}
+
+/** Each bill's customer as the question names it, in the till's current language: legal name and
+ * tax number, plus identifier type and issuing country when those alone tell the two apart. The
+ * receiving bill's is null when it is simplified. */
+export function mergeInvoiceNames(question: MergeInvoiceQuestion): {
+  intoName: string | null;
+  fromName: string;
+} {
+  const { into, from } = question;
+  const fromName = customerOf(from);
+  if (identityOf(into) === null) return { intoName: null, fromName };
+  const intoName = customerOf(into);
+  if (intoName !== fromName) return { intoName, fromName };
   return {
-    into,
-    from,
-    intoName: identityOf(into) === null ? null : into.recipient!.legalName,
-    fromName: from.recipient!.legalName,
+    intoName: `${intoName} · ${identifierOf(into)}`,
+    fromName: `${fromName} · ${identifierOf(from)}`,
   };
 }
 

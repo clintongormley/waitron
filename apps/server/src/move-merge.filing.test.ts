@@ -338,35 +338,79 @@ describe("parties combined, bills merged → one fiscal record (H2)", () => {
   });
 });
 
-describe("a full-invoice bill merged away (R4-merge)", () => {
-  it("a merged bill keeping Acme files one F1 naming Acme", async () => {
-    const { cfg, coffee, water } = await setupVenue();
+describe("a full-invoice bill merged away", () => {
+  async function fullInvoiceVenue() {
+    const venue = await setupVenue();
     // A full invoice names the issuer's domicile; this file's venue plan sets none.
     await suite.db.update(tenants).set({ taxpayerDomicile: "Calle Mayor 1, 28013 Madrid" });
-    const tInto = await seedTable(cfg, "R4-into");
-    const tFrom = await seedTable(cfg, "R4-from");
-    const intoTab = await openTabOn(cfg, tInto, [{ productId: coffee.id, quantity: "1" }]);
-    const fromTab = await openTabOn(cfg, tFrom, [{ productId: water.id, quantity: "1" }]);
-    const acme = nextNif();
-    const operatorId = randomUUID();
-    const [fromRow] = (
+    const tInto = await seedTable(venue.cfg, "FI-into");
+    const tFrom = await seedTable(venue.cfg, "FI-from");
+    const intoTab = await openTabOn(venue.cfg, tInto, [
+      { productId: venue.coffee.id, quantity: "1" },
+    ]);
+    const fromTab = await openTabOn(venue.cfg, tFrom, [
+      { productId: venue.water.id, quantity: "1" },
+    ]);
+    return { ...venue, tInto, intoTab, fromTab };
+  }
+
+  async function chooseFullInvoice(
+    cfg: DeviceRequestConfig,
+    tab: string,
+    legalName: string,
+    taxId: string,
+  ): Promise<void> {
+    const [row] = (
       await suite.db.execute<{ revision: number }>(
-        sql`select revision from working_orders where id = ${fromTab}`,
+        sql`select revision from working_orders where id = ${tab}`,
       )
     ).rows;
-    await setOrderInvoiceChoice(suite.db, backend, cfg, fromTab, {
-      revision: fromRow!.revision,
+    await setOrderInvoiceChoice(suite.db, backend, cfg, tab, {
+      revision: row!.revision,
       invoiceType: "F1",
       recipient: {
-        taxId: acme,
-        legalName: "Acme Travel SL",
+        taxId,
+        legalName,
         address: "2 Main Street, 08001 Barcelona, Barcelona",
         countryCode: "ES",
       },
-      operatorId,
-      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, fromTab)),
+      operatorId: randomUUID(),
+      expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tab)),
     });
+  }
 
+  async function pay(cfg: DeviceRequestConfig, tab: string, amount: string) {
+    const { rows: admins } = await suite.db.execute<{ id: string }>(
+      sql`select id from persons where role = 'admin'`,
+    );
+    const personId = admins[0]!.id;
+    return takeBillPayment(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      tab,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount,
+        method: "cash",
+        tendered: amount,
+        applied: amount,
+        tip: "0.00",
+      },
+      {
+        personId,
+        sessionId: await openTillSession(suite.db, { deviceId: cfg.origin.deviceId, personId }),
+      },
+    );
+  }
+
+  async function mergeInto(
+    cfg: DeviceRequestConfig,
+    tInto: string,
+    intoTab: string,
+    fromTab: string,
+    invoiceChoice: unknown,
+  ): Promise<void> {
     const move = await tableAction(fromTab, intoTab);
     await withTransaction(suite.db, async (tx) => {
       await moveGuests(tx, cfg, move.partyId, tInto, move.options);
@@ -375,44 +419,95 @@ describe("a full-invoice bill merged away (R4-merge)", () => {
         partyId: into.id,
         expectedPartyRevision: into.revision,
         operatorId: move.options.operatorId,
-        invoiceChoice: { keep: "from", into: null, from: { taxId: acme } },
+        invoiceChoice,
       });
     });
-    const { rows: admins } = await suite.db.execute<{ id: string }>(
-      sql`select id from persons where role = 'admin'`,
-    );
-    const personId = admins[0]!.id;
-    const { invoice } = await takeBillPayment(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      intoTab,
-      {
-        submissionId: randomUUID(),
-        kind: "contribution",
-        amount: "3.50",
-        method: "cash",
-        tendered: "3.50",
-        applied: "3.50",
-        tip: "0.00",
-      },
-      {
-        personId,
-        sessionId: await openTillSession(suite.db, { deviceId: cfg.origin.deviceId, personId }),
-      },
-    );
-    expect(invoice).not.toBeNull();
+  }
 
+  async function paymentsOf(tab: string): Promise<Record<string, unknown>[]> {
+    const { rows } = await suite.db.execute<Record<string, unknown>>(
+      sql`select * from bill_payments where working_order_id = ${tab} order by id`,
+    );
+    return rows;
+  }
+
+  async function invoiceOf(tab: string) {
+    const { rows } = await suite.db.execute<{
+      invoice_type: string;
+      recipient_tax_id: string | null;
+      recipient_legal_name: string | null;
+    }>(
+      sql`select invoice_type, recipient_tax_id, recipient_legal_name
+          from working_orders where id = ${tab}`,
+    );
+    return rows[0]!;
+  }
+
+  async function filedRecords(intoTab: string, fromTab: string) {
     const { rows } = await suite.db.execute<{ tipo_factura: string; destinatarios: string }>(sql`
       select r.tipo_factura, r.destinatarios from registros_facturacion r
       join sales s on s.id = r.sale_id
       where s.working_order_id in (${intoTab}, ${fromTab})
     `);
+    return rows;
+  }
+
+  it("a merged bill keeping Acme files one F1 naming Acme", async () => {
+    const { cfg, tInto, intoTab, fromTab } = await fullInvoiceVenue();
+    const acme = nextNif();
+    await chooseFullInvoice(cfg, fromTab, "Acme Travel SL", acme);
+
+    await mergeInto(cfg, tInto, intoTab, fromTab, {
+      keep: "from",
+      into: null,
+      from: { taxId: acme },
+    });
+    expect((await pay(cfg, intoTab, "3.50")).invoice).toBeDefined();
+
+    const rows = await filedRecords(intoTab, fromTab);
     expect(rows.map((row) => row.tipo_factura)).toEqual(["F1"]);
     expect(JSON.parse(rows[0]!.destinatarios)).toMatchObject({
       IDDestinatario: [{ NombreRazon: "Acme Travel SL", NIF: acme }],
     });
     expect(await filedSaleTotal(intoTab)).toBe("3.50");
   });
+
+  it.each([
+    ["simplified", null],
+    ["a full invoice to another customer", "Bar Sol SL"],
+  ] as const)(
+    "a part-paid receiving bill (%s) keeping Acme keeps its payments and files one F1 naming Acme",
+    async (_, intoName) => {
+      const { cfg, tInto, intoTab, fromTab } = await fullInvoiceVenue();
+      const acme = nextNif();
+      await chooseFullInvoice(cfg, fromTab, "Acme Travel SL", acme);
+      const intoNif = intoName === null ? null : nextNif();
+      if (intoName !== null) await chooseFullInvoice(cfg, intoTab, intoName, intoNif!);
+      expect((await pay(cfg, intoTab, "1.00")).invoice).toBeUndefined();
+      const payments = await paymentsOf(intoTab);
+      expect(payments).toHaveLength(1);
+
+      await mergeInto(cfg, tInto, intoTab, fromTab, {
+        keep: "from",
+        into: intoNif === null ? null : { taxId: intoNif },
+        from: { taxId: acme },
+      });
+
+      expect(await paymentsOf(intoTab)).toEqual(payments);
+      expect(await invoiceOf(intoTab)).toEqual({
+        invoice_type: "F1",
+        recipient_tax_id: acme,
+        recipient_legal_name: "Acme Travel SL",
+      });
+      expect((await pay(cfg, intoTab, "2.50")).invoice).toBeDefined();
+      const rows = await filedRecords(intoTab, fromTab);
+      expect(rows.map((row) => row.tipo_factura)).toEqual(["F1"]);
+      expect(JSON.parse(rows[0]!.destinatarios)).toMatchObject({
+        IDDestinatario: [{ NombreRazon: "Acme Travel SL", NIF: acme }],
+      });
+      expect(await filedSaleTotal(intoTab)).toBe("3.50");
+    },
+  );
 });
 
 describe("tables joined across parties, bills merged → one bill covering both tables", () => {

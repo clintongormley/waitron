@@ -382,9 +382,9 @@ Unir una mesa, o mover clientes a otra, conserva todas las cuentas: las que lleg
 siguientes números del grupo que las recibe. Para juntar dos cuentas, abre la cuenta que debe
 recibir la otra y elige **Juntar cuentas**. La cuenta que recibe puede tener un pago parcial;
 la que añades no puede tener pagos. Si la cuenta que añades tiene factura completa a nombre de un
-cliente que no figura en la cuenta que conservas, la caja pregunta a qué cliente se factura la
-cuenta juntada, o te deja no juntarlas. Si mueves la última cuenta de la mesa, la caja sigue en la
-mesa con una cuenta nueva y vacía.
+cliente que no figura en la cuenta que recibe, la caja pregunta antes: elige a qué cliente se
+factura la cuenta juntada, o **No juntar**. Si mueves la última cuenta de la mesa, la caja sigue en
+la mesa con una cuenta nueva y vacía.
 
 Si otra caja junta la cuenta que tienes en pantalla con otra, o la mueve a otra mesa, tu pantalla
 pasa a otra de las cuentas de la mesa y lo indica, por

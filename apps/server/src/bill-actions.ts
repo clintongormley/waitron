@@ -147,8 +147,6 @@ export async function mergeBills(
  * {@link mergeBills} after its checks, for a caller that has made them itself: both bills are
  * open bills of one party, in one service mode, with no payment on the bill merged away.
  * `known.invoiceChoice` is the request's, checked here by {@link checkMergeInvoice}.
- * `known.kitchenTold` is set by a caller that tells the kitchen of `fromBillId`'s sent dishes itself,
- * from what it read before `fromBillId` joined the party.
  */
 export async function mergeCheckedBills(
   tx: Transaction,
@@ -158,7 +156,6 @@ export async function mergeCheckedBills(
   known: {
     operatorId: string;
     expectedEdits: BillEditExpected[];
-    kitchenTold?: boolean;
     attendance?: { recorder: AttendanceRecorder; at: string };
     invoiceChoice: unknown;
   },
@@ -167,7 +164,7 @@ export async function mergeCheckedBills(
   await requireBillEditors(tx, [fromBillId, intoBillId], known.operatorId, known.expectedEdits);
   // Before the lines move: their check of the simplified-invoice limit reads the kept invoice type.
   await carryMergeInvoice(tx, intoBillId, invoices);
-  const before = known.kitchenTold === true ? null : await readSentWork(tx, fromBillId);
+  const before = await readSentWork(tx, fromBillId);
   await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined, {
     actorId: known.operatorId,
   });
@@ -186,7 +183,7 @@ export async function mergeCheckedBills(
     .set({ status: "abandoned" })
     .where(eq(workingOrders.id, fromBillId));
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [fromBillId]);
-  if (before !== null) await enqueueMovedSlips(tx, cfg, before, intoBillId);
+  await enqueueMovedSlips(tx, cfg, before, intoBillId);
 }
 
 /**

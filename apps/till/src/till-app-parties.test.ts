@@ -14033,7 +14033,7 @@ it.each(["en-GB", "es-ES"] as const)(
   },
 );
 
-describe("till-app: merging a bill set for a full invoice (R4-merge)", () => {
+describe("till-app: merging a bill set for a full invoice", () => {
   const acme = {
     taxId: "B11111111",
     legalName: "Acme Travel SL",
@@ -14083,9 +14083,9 @@ describe("till-app: merging a bill set for a full invoice (R4-merge)", () => {
 
     expect(question(el)!.heading).toBe("Bill 2 has a full invoice");
     expect(question(el)!.textContent).toContain(
-      "Bill 2 is set for a full invoice to Acme Travel SL. Merging puts every dish on Bill 1, invoiced to Acme Travel SL.",
+      "Bill 2 is set for a full invoice to Acme Travel SL · B11111111. Merging puts every dish on Bill 1, invoiced to Acme Travel SL · B11111111.",
     );
-    expect(buttons(el)).toEqual(["Do not merge", "Merge and invoice Acme Travel SL"]);
+    expect(buttons(el)).toEqual(["Do not merge", "Merge and invoice Acme Travel SL · B11111111"]);
     expect(api.mergeBills).not.toHaveBeenCalled();
   });
 
@@ -14095,9 +14095,9 @@ describe("till-app: merging a bill set for a full invoice (R4-merge)", () => {
 
       expect(question(el)!.heading).toBe("La cuenta 2 tiene factura completa");
       expect(question(el)!.textContent).toContain(
-        "La cuenta 2 está a nombre de Acme Travel SL para factura completa. Al juntarlas, todos los platos pasan a la cuenta 1, facturada a Acme Travel SL.",
+        "La cuenta 2 está a nombre de Acme Travel SL · B11111111 para factura completa. Al juntarlas, todos los platos pasan a la cuenta 1, facturada a Acme Travel SL · B11111111.",
       );
-      expect(buttons(el)).toEqual(["No juntar", "Juntar y facturar a Acme Travel SL"]);
+      expect(buttons(el)).toEqual(["No juntar", "Juntar y facturar a Acme Travel SL · B11111111"]);
     } finally {
       setLocale("en");
     }
@@ -14130,9 +14130,13 @@ describe("till-app: merging a bill set for a full invoice (R4-merge)", () => {
 
     expect(question(el)!.heading).toBe("Each bill has a full invoice");
     expect(question(el)!.textContent).toContain(
-      "Bill 1 is invoiced to Bar Sol SL and Bill 2 to Acme Travel SL. The merged bill can have only one.",
+      "Bill 1 is invoiced to Bar Sol SL · B22222222 and Bill 2 to Acme Travel SL · B11111111. The merged bill can have only one.",
     );
-    expect(buttons(el)).toEqual(["Invoice Bar Sol SL", "Invoice Acme Travel SL", "Do not merge"]);
+    expect(buttons(el)).toEqual([
+      "Do not merge",
+      "Invoice Bar Sol SL · B22222222",
+      "Invoice Acme Travel SL · B11111111",
+    ]);
     expect(api.mergeBills).not.toHaveBeenCalled();
   });
 
@@ -14142,13 +14146,83 @@ describe("till-app: merging a bill set for a full invoice (R4-merge)", () => {
 
       expect(question(el)!.heading).toBe("Cada cuenta tiene factura completa");
       expect(question(el)!.textContent).toContain(
-        "La cuenta 1 se factura a Bar Sol SL y la cuenta 2 a Acme Travel SL. La cuenta juntada solo puede tener una.",
+        "La cuenta 1 se factura a Bar Sol SL · B22222222 y la cuenta 2 a Acme Travel SL · B11111111. La cuenta juntada solo puede tener una.",
       );
       expect(buttons(el)).toEqual([
-        "Facturar a Bar Sol SL",
-        "Facturar a Acme Travel SL",
         "No juntar",
+        "Facturar a Bar Sol SL · B22222222",
+        "Facturar a Acme Travel SL · B11111111",
       ]);
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("tells apart two customers with the same legal name by their tax numbers", async () => {
+    const acmeMadrid: PartyBill = {
+      ...tabBill,
+      invoiceType: "F1",
+      recipient: { ...barSol, legalName: acme.legalName },
+    };
+    const el = await mergeCheckInto([acmeMadrid, acmeCheck]);
+    const keepText = (side: string) =>
+      question(el)!.querySelector<HTMLElement>(`[data-merge-keep="${side}"]`)!.textContent!.trim();
+
+    expect(question(el)!.textContent).toContain(
+      "Bill 1 is invoiced to Acme Travel SL · B22222222 and Bill 2 to Acme Travel SL · B11111111.",
+    );
+    expect(keepText("into")).toBe("Invoice Acme Travel SL · B22222222");
+    expect(keepText("from")).toBe("Invoice Acme Travel SL · B11111111");
+
+    await press(el, '[data-merge-keep="into"]');
+    expect(api.mergeBills).toHaveBeenLastCalledWith("wo-4", "wo-check", mergeEdits, {
+      keep: "into",
+      into: { taxId: "B22222222" },
+      from: { taxId: "B11111111" },
+    });
+    emit(tableOrder(el)!, "merge-bills", { fromBillId: "wo-check" });
+    await flush(el);
+    await press(el, '[data-merge-keep="from"]');
+    expect(api.mergeBills).toHaveBeenLastCalledWith("wo-4", "wo-check", mergeEdits, {
+      keep: "from",
+      into: { taxId: "B22222222" },
+      from: { taxId: "B11111111" },
+    });
+  });
+
+  it("tells apart two customers with the same legal name and tax number by identifier type and country", async () => {
+    try {
+      const otherDocument = {
+        ...acme,
+        identifierType: "other-document" as const,
+        identifierCountryCode: "FR",
+      };
+      const acmeSpain: PartyBill = { ...tabBill, invoiceType: "F1", recipient: acme };
+      const el = await mergeCheckInto([acmeSpain, { ...acmeCheck, recipient: otherDocument }]);
+      const keepText = (side: string) =>
+        question(el)!
+          .querySelector<HTMLElement>(`[data-merge-keep="${side}"]`)!
+          .textContent!.trim();
+
+      expect(question(el)!.textContent).toContain(
+        "Bill 1 is invoiced to Acme Travel SL · B11111111 · Spanish tax ID and Bill 2 to Acme Travel SL · B11111111 · Other document · France.",
+      );
+      expect(keepText("into")).toBe("Invoice Acme Travel SL · B11111111 · Spanish tax ID");
+      expect(keepText("from")).toBe("Invoice Acme Travel SL · B11111111 · Other document · France");
+
+      setLocale("es");
+      await flush(el);
+      expect(keepText("into")).toBe("Facturar a Acme Travel SL · B11111111 · NIF español");
+      expect(keepText("from")).toBe(
+        "Facturar a Acme Travel SL · B11111111 · Otro documento · Francia",
+      );
+
+      await press(el, '[data-merge-keep="from"]');
+      expect(api.mergeBills).toHaveBeenLastCalledWith("wo-4", "wo-check", mergeEdits, {
+        keep: "from",
+        into: { taxId: "B11111111" },
+        from: { taxId: "B11111111", identifierType: "other-document", identifierCountryCode: "FR" },
+      });
     } finally {
       setLocale("en");
     }
@@ -14221,7 +14295,7 @@ describe("till-app: merging a bill set for a full invoice (R4-merge)", () => {
 
     expect(question(el)).toBeNull();
     expect(banner(el)!.textContent).toContain(
-      "The bills' invoice details changed while you were choosing. Check them and merge again.",
+      "The bills' invoice details have changed. Check them and merge again.",
     );
     expect(api.mergeBills).toHaveBeenCalledOnce();
   });

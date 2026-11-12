@@ -55,6 +55,13 @@ differs from the receiving bill's (or the receiving bill is F2).
 
 **Server: the rules** (checks in `mergeBills`, before `mergeCheckedBills`):
 
+_2026-11-12, as built: the check runs inside `mergeCheckedBills`, before `requireBillEditors`
+(commit "Check the merge's invoice choice on every merge"), and #2866 landed first; this branch was
+rebased onto it. The refusal's wording below dropped "while you were choosing", since the till also
+shows it when nobody chose anything. In the dialog below, each customer is shown as its legal name
+and tax number (two customers can share a legal name), and **Do not merge** comes first in both
+forms, as in the different-people confirmation._
+
 - Question applies and `invoiceChoice` absent → refused **`bill.merge_invoice_choice_required`**
   (409, params `{ workingOrderId, intoWorkingOrderId }`; no names, so the personal-data log rule is
   not touched).

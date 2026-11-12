@@ -322,6 +322,7 @@ import type {
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import {
   billLabel,
+  billLabelInText,
   billName,
   billNumberLabel,
   billToShow,
@@ -409,6 +410,7 @@ import type {
 import { menuOfferToTillProduct } from "./api/client.js";
 import {
   mergeInvoiceChoice,
+  mergeInvoiceNames,
   mergeInvoiceQuestion,
   type MergeInvoiceQuestion,
 } from "./state/merge-invoice.js";
@@ -770,12 +772,6 @@ function billWriteError(error: unknown, lineChange = false): CounterError {
   return refused?.code === "bill.received_exceeds_total" && typeof refused.excess === "string"
     ? { excess: refused.excess, ...(lineChange ? { lineChange: true } : {}) }
     : tableWriteError(error);
-}
-
-/** A bill's label as a catalogue that writes it lowercase inside a sentence reads it: Spanish's
- * "la cuenta 2". */
-function inText(label: string): string {
-  return label.charAt(0).toLocaleLowerCase() + label.slice(1);
 }
 
 function isPaymentsReceived(error: unknown): boolean {
@@ -15599,15 +15595,16 @@ export class TillApp extends LitElement {
     const ask = this.mergeInvoiceAsk;
     if (ask === null) return nothing;
     const { question } = ask;
+    const { intoName, fromName } = mergeInvoiceNames(question);
     const into = billLabel(question.into);
     const from = billLabel(question.from);
     const bills = {
       into,
       from,
-      intoInText: inText(into),
-      fromInText: inText(from),
-      intoName: question.intoName ?? "",
-      fromName: question.fromName,
+      intoInText: billLabelInText(into),
+      fromInText: billLabelInText(from),
+      intoName: intoName ?? "",
+      fromName,
     };
     const cancel = html`<wt-button
       variant="secondary"
@@ -15622,7 +15619,7 @@ export class TillApp extends LitElement {
         @click=${() => void this.#answerMergeInvoice(side)}
         >${text}</wt-button
       >`;
-    const simplified = question.intoName === null;
+    const simplified = intoName === null;
     return html`<wt-dialog
       ${trackDialog()}
       data-merge-invoice
@@ -15636,17 +15633,16 @@ export class TillApp extends LitElement {
       <p>
         ${fill(
           t(simplified ? "table.merge_invoice_text" : "table.merge_invoice_both_text"),
-          simplified ? { ...bills, name: question.fromName } : bills,
+          simplified ? { ...bills, name: fromName } : bills,
         )}
       </p>
       <div slot="footer">
+        ${cancel}
         ${
           simplified
-            ? html`${cancel}
-              ${keep("from", fill(t("table.merge_invoice_action"), { name: question.fromName }))}`
+            ? keep("from", fill(t("table.merge_invoice_action"), { name: fromName }))
             : html`${keep("into", fill(t("table.merge_invoice_keep"), { name: bills.intoName }))}
-              ${keep("from", fill(t("table.merge_invoice_keep"), { name: question.fromName }))}
-              ${cancel}`
+              ${keep("from", fill(t("table.merge_invoice_keep"), { name: fromName }))}`
         }
       </div>
     </wt-dialog>`;
