@@ -497,7 +497,8 @@ the split; 3b-6b and 3b-6c come after 3b-6a). A venue with the Veri*Factu module
 proves 3b-6 end to end without 3b-F (in 3b-6b's two-box test): the main box's own modules are what
 the join checks (D12), and with
 `{"fiscal-verifactu": false}` the refusal does not fire, while the stream loop's
-`{"fiscal-none": false}` refuses `module.operation_invalid` (probe P24).
+`{"fiscal-none": false}` refuses `module.operation_invalid` (probe P24; _2026-11-12, review of 3b-5a:
+that refusal's code is now `mirror.standby_series_unsupported`_).
 
 **Sizes (2026-11-10 (watcher)).** Lines changed (added plus removed), production code and tests apart.
 
@@ -807,6 +808,10 @@ the A1018 plan, not run.
   adopt route already answers that code with 409 (`setup-api.ts:291`; the existing 409 in
   `adoption-allocation-refusal.test.ts:173-197` comes from the spare's own check after the fetch,
   which stays). Its words (Task 5.6) say nothing was changed and what Back does.
+  _2026-11-12, review of 3b-5a: this refusal now has a code of its own,
+  `mirror.standby_series_unsupported` `{ module }`, which `assertAdoptionModules` throws on both
+  boxes and at a pending adoption's start; `module.operation_invalid` keeps meaning a malformed
+  operation (400), and the setup app maps the new code by code alone._
 - **D13 — Resetting a box that joined another empties `tls/` and removes `secrets.env`.** Both the
   staged reset and `waitron.sh reset` do this when `tls/joined.json` exists (the staged reset runs
   only after a join, so for it the marker is a check, not a choice). Both files hold the old venue's
@@ -2101,7 +2106,8 @@ designated.nodeId, peerPublicKey: bundle.primaryPublicKey, … })`; the mirror l
 D15 — so `AdoptDeps` gains `spareStorePort`), `config.ts` (`WAITRON_SPARE_STORE_PORT`, default 7443,
 D11; Task 5.8's listener reads the same setting), `boot.ts` (the setup start passes it to adopt),
 `packages/node-db/src/mirror-link.ts` (the TypeScript field `relayUrl` becomes
-`originUrl`; the column `relay_url` keeps its name, so no migration). Tests `adopt.test.ts`,
+`originUrl`; the column `relay_url` keeps its name, so no migration; _2026-11-12, review of 3b-5a: the
+column was renamed `origin_url` too, since this part already rebuilds node.db's starting migration_). Tests `adopt.test.ts`,
 `packages/node-db/src/mirror-link.test.ts`.
 
 **Changed checks:** the 3a cases naming `relayUrl` on the mirror link (`git grep -n "relayUrl" --
@@ -3464,6 +3470,11 @@ measurement leaves open into its own short entry (CLAUDE.md §6, the docs rule).
 
 Waits for Q1. Full review path; the fiscal suites run unedited unless a row says otherwise.
 
+_2026-11-12, review of 3b-5a:_ the setup wizard words `mirror.standby_series_unsupported` by its
+code alone (`shell.adopt.standby_series_unsupported`), and those words name Veri*Factu whichever
+module the refusal carries. That is true while Veri*Factu is the only module whose standby series
+starts on activation; 3b-F, or a second such module, rewords it.
+
 ### Task F.0: The trace so far, and what remains
 
 **Run now (2026-11-04):**
@@ -3515,7 +3526,8 @@ Task F.1 runs the first of these under the option the owner picks.
 - [ ] `assertAdoptionModules` (`finish-adoption.ts:17-23`) and Task 5.3's check let through a module
   whose standby series is `on-activation` and whose dormant setup is written at switch-on (today:
   `fiscal-verifactu`); `reserved.series` stays empty for it. The setup app's words for
-  `module.operation_invalid` on the adopt path go (Task 5.6), and their test with them. Every fiscal
+  `mirror.standby_series_unsupported` (D12's code since 2026-11-12) go (Task 5.6), and their test
+  with them. Every fiscal
   suite runs unedited, or each changed check has a row marked FISCAL — owner rules. Run F.1 — PASS;
   then `pnpm --filter @waitron/fiscal-verifactu exec vitest run` and the golden and immutability
   suites. One line in the backlog's A947 4b entry and the A1018 plan's Slice 5 and 7 notes, by the
@@ -3539,8 +3551,8 @@ The phases, with box C a third server folder booted in setup mode:
 4. `spare-copy`: C restarts as a mirror holding B's sales and its own `nodes` row.
 5. `start-check`: B restarts and counts C's verified answer.
 
-- [ ] **Step 1: Write the phases.** Before F.2, phase 3 fails with `module.operation_invalid`
-  `{ module: "fiscal-verifactu" }`: run it once and record that as the failing state.
+- [ ] **Step 1: Write the phases.** Before F.2, phase 3 fails with
+  `mirror.standby_series_unsupported` `{ module: "fiscal-verifactu" }`: run it once and record that as the failing state.
 - [ ] **Step 2: Run** `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/stream-loop.e2e.test.ts`
   with F.2 in place — PASS, every new phase `ok`; check the stream job's time on CI as Task 6.9.
 - [ ] **Step 3: Commit** `git commit -s -m "test: the stream loop's Veri*Factu box adds a spare"`.

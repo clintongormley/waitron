@@ -284,7 +284,7 @@ beforeAll(async () => {
   await stampDeployment(b, "preproduction");
   await setNodeMode({ venue: b, node: storeB.node }, NODE_B, "mirror");
   await writeMirrorLink(storeB.node, NODE_B, {
-    relayUrl: "http://127.0.0.1:1/",
+    originUrl: "http://127.0.0.1:1/",
     boxHostname: "reroute-box.local",
     boxCaPem: mintSelfSignedServerCert({
       hostnames: ["reroute-box.local"],

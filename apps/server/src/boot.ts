@@ -345,7 +345,7 @@ import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { refundProvidersOf } from "./bill-refunds.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { adoptFromPrimary } from "./adopt.js";
-import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
+import { fetchMirrorBundle, rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./trading-config.js";
@@ -449,7 +449,7 @@ import {
 } from "./stream-host.js";
 import { mountStreamApi } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
-import { writeRecoveryKey } from "./backup-env-writer.js";
+import { replaceBackupSettings, writeRecoveryKey } from "./backup-env-writer.js";
 import {
   createS3ObjectStore,
   parseRecoveryKit,
@@ -1024,24 +1024,27 @@ export async function startServer(
   seams: StartServerSeams = {},
 ): Promise<StartedServer> {
   const undoOnFailure: Array<() => Promise<void>> = [];
+  const beforeClose: Array<() => Promise<void>> = [];
   let waiting: StartedServer | undefined;
   let announced: () => void = () => {};
   const waitBegan = new Promise<void>((resolve) => (announced = resolve));
-  const booted = bootServer(env, base, seams, undoOnFailure, (whileWaiting) => {
+  const booted = bootServer(env, base, seams, undoOnFailure, beforeClose, (whileWaiting) => {
     waiting = whileWaiting;
     announced();
-  }).catch(async (error: unknown) => {
-    // Newest first, so anything that runs on the venue store stops before the store closes. An undo
-    // that fails is dropped: the boot's own error is the one the supervisor has to see.
-    for (const undo of undoOnFailure.reverse()) {
-      try {
-        await undo();
-      } catch {
-        // Dropped; see above.
+  })
+    .then((server) => closingAlso(server, beforeClose))
+    .catch(async (error: unknown) => {
+      // Newest first, so anything that runs on the venue store stops before the store closes. An undo
+      // that fails is dropped: the boot's own error is the one the supervisor has to see.
+      for (const undo of undoOnFailure.reverse()) {
+        try {
+          await undo();
+        } catch {
+          // Dropped; see above.
+        }
       }
-    }
-    throw error;
-  });
+      throw error;
+    });
   await Promise.race([booted, waitBegan]);
   if (waiting === undefined) return await booted;
   // A box that waits for its peers has started: it answers while the rest of its start waits.
@@ -1056,7 +1059,7 @@ export async function startServer(
     health: whileWaiting.health,
     fullyStarted,
     close: async () => {
-      await whileWaiting.close();
+      await closeAll([...beforeClose, () => whileWaiting.close()]);
       // A shutdown after the wait ended waits for the rest of the start, up to the shutdown deadline.
       await continued;
       await current.close();
@@ -1064,15 +1067,26 @@ export async function startServer(
   };
 }
 
+/** `server`, whose `close()` first runs each of `beforeClose` in turn, closing it even when one fails. */
+function closingAlso(
+  server: StartedServer,
+  beforeClose: Array<() => Promise<void>>,
+): StartedServer {
+  return { ...server, close: () => closeAll([...beforeClose, () => server.close()]) };
+}
+
 /**
  * `startServer`'s body. Whatever it starts that must be stopped if a later step throws is pushed onto
  * `undoOnFailure`; nothing there runs once it has returned a server, whose own `close()` takes over.
+ * What `beforeClose` holds runs before the returned server's own `close()`, whichever mode returned
+ * it, so it must leave the server able to finish closing.
  */
 async function bootServer(
   env: Record<string, string | undefined>,
   base: NodeJS.ProcessEnv,
   seams: StartServerSeams,
   undoOnFailure: Array<() => Promise<void>>,
+  beforeClose: Array<() => Promise<void>>,
   announceWaiting: (whileWaiting: StartedServer) => void,
 ): Promise<StartedServer> {
   const now = () => new Date();
@@ -1187,6 +1201,7 @@ async function bootServer(
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   let attendanceSchemaBeforeMigrations: number | undefined;
+  let letGoOfCheckedAddresses: () => Promise<void>;
   try {
     // The first moment this start holds a node handle.
     if (placement?.kind === "copy_placed_owed") {
@@ -1208,6 +1223,14 @@ async function bootServer(
     // Only once this process holds the venue folder: a second process must not delete a running
     // process's restore working folders.
     await emptyScratch(config.stateDir, log);
+    // In every mode: a mirror skips the start's peer check but still asks the main box later.
+    letGoOfCheckedAddresses = await rememberCheckedAddressesIn(config.stateDir, (error) =>
+      log("warn", "mirror.checked_address_unsaved", { errorCode: codeOf(error) }),
+    );
+    undoOnFailure.push(letGoOfCheckedAddresses);
+    // Before the server's own close, which gives up the venue folder: an address kept by a call
+    // still running while it closes then stays in memory, never written into a folder not held.
+    beforeClose.push(letGoOfCheckedAddresses);
     await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(
       stampProbe.venue,
@@ -1240,6 +1263,8 @@ async function bootServer(
   // beside it.
   const store = await openVenueDatabase(config.venueDir);
   undoOnFailure.push(() => store.close());
+  // Again, because undoing runs newest first: saving stops before the store gives up the venue folder.
+  undoOnFailure.push(letGoOfCheckedAddresses);
   const released = () => spareReleased(config.stateDir, log);
   const restoreSpare = spareRestorer({
     stateDir: config.stateDir,
@@ -1642,8 +1667,10 @@ async function bootServer(
               ownerNode: store.node,
               ring,
               persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
+              persistBackupSettings: (s) => replaceBackupSettings(config.stateDir, s),
               fetchBundle: fetchMirrorBundle,
               advertisedOrigin: config.advertisedOrigin,
+              spareStorePort: config.spareStorePort,
               environment: config.environment,
               persistTrading,
               persistModuleConfig: async (c) => {
@@ -2049,7 +2076,7 @@ async function bootServer(
         held,
         nodeId: config.node.nodeId,
         // The mirror link is owner-written trusted config, so no SSRF screen.
-        peerUrl: `${peer.relayUrl.replace(/\/+$/, "")}/management-api/membership`,
+        peerUrl: `${peer.originUrl.replace(/\/+$/, "")}/management-api/membership`,
         fetchPeerMembership: fetchPeerMembershipDocument,
         // Persist-if-accepted, so a newer verified chart is held even when it does not fence this node.
         // Judged against the chart held BEFORE it, never the incoming one: a retirement chart is
@@ -3618,8 +3645,6 @@ async function bootServer(
         node: store.node,
         ring,
         stateDir: config.stateDir,
-        // Staff access carries no standby protocol; adoption remains refused without a relay.
-        relayUrl: undefined,
         boxHostname: BOX_HOSTNAME,
         advertisedOrigin: config.advertisedOrigin,
         designated: config.node,

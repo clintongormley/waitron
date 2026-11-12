@@ -70,7 +70,7 @@ import { VENUE_SERVER_FIELDS } from "./server-fields.js";
 import { LocaleChangeController } from "./i18n/locale-controller.js";
 import { matchBrowserLocale } from "./i18n/match-browser-locale.js";
 import type { StringKey } from "./i18n/strings.js";
-import { currentLocale, format, setLocale, t } from "./i18n/t.js";
+import { currentLocale, format, localTime, setLocale, t } from "./i18n/t.js";
 
 const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" : "en");
 
@@ -305,7 +305,27 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   "password.invalid": "shell.adopt.login_failed",
   "setup.request_invalid": "shell.adopt.request_invalid",
   "setup.not_ready": "shell.not_ready",
+  "mirror.bucket_stream_active": "shell.adopt.bucket_stream_active",
+  "mirror.standby_name_taken": "shell.adopt.standby_name_taken",
+  "mirror.spare_already_joined": "shell.adopt.spare_already_joined",
+  "mirror.standby_series_unsupported": "shell.adopt.standby_series_unsupported",
 };
+
+/** A join's refusal in words; the clocks refusal shows both servers' times in the wizard's language. */
+function adoptErrorWords(code: string, params: Record<string, unknown> | undefined): Message {
+  const { primaryAt, standbyAt } = params ?? {};
+  if (
+    code === "mirror.clocks_apart" &&
+    typeof primaryAt === "string" &&
+    typeof standbyAt === "string"
+  )
+    return () =>
+      format("shell.adopt.clocks_apart", {
+        primaryAt: localTime(primaryAt) ?? primaryAt,
+        standbyAt: localTime(standbyAt) ?? standbyAt,
+      });
+  return say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
+}
 
 /**
  * The repair page's steps before activation, the claim included; activation keeps the first-setup
@@ -2146,7 +2166,7 @@ export class SetupApp extends LitElement {
         ADOPT_FIELD_PATHS,
       );
       if (this.connectInvalidField === undefined) {
-        this.connectError = say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
+        this.connectError = adoptErrorWords(code, error.params);
         this.connectErrorAboutLogin = code === "password.invalid";
       }
       this.connectRequest = body;

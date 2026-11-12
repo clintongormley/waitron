@@ -13,6 +13,7 @@ import {
   readRecoveryKey,
   readRecoveryKeyName,
   readRecoveryKeyVerifier,
+  deleteNodeRecoveryKeyOtherThanTx,
   setRecoveryKeyTx,
 } from "./recovery-key.js";
 
@@ -127,5 +128,19 @@ describe("the node recovery-key check", () => {
       ),
     );
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+  });
+});
+
+describe("deleteNodeRecoveryKeyOtherThanTx", () => {
+  const sweep = useVenueDb({ migrations: [NODE_MIGRATIONS] });
+
+  it("deletes every row but this node id's, and keeps this one's", async () => {
+    for (const nodeId of [NODE, OTHER, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
+      await withNodeTransaction(sweep.node, (tx) =>
+        setRecoveryKeyTx(tx, nodeId, `verifier-${nodeId}`, `key-${nodeId}`),
+      );
+    }
+    await withNodeTransaction(sweep.node, (tx) => deleteNodeRecoveryKeyOtherThanTx(tx, NODE));
+    expect(sweep.node.all(sql`select node_id from node_recovery_key`)).toEqual([{ node_id: NODE }]);
   });
 });

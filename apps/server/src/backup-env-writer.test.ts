@@ -5,7 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { assertStorableKey } from "./backup-api.js";
-import { assertStorableRecord, writeRecoveryKey } from "./backup-env-writer.js";
+import {
+  assertStorableRecord,
+  checkBackupSettings,
+  replaceBackupSettings,
+  writeRecoveryKey,
+} from "./backup-env-writer.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { syncsAndRenames as recordSyncsAndRenames } from "./testing/durable-writes.js";
 
@@ -142,5 +147,86 @@ describe("writeRecoveryKey", () => {
     expect(await readFile(join(dir, "backup.env"), "utf8")).toBe(
       "WAITRON_BACKUP_RECOVERY_KEY=kept-key-012345\n",
     );
+  });
+});
+
+const SECRET = "secret-recovery-key-0123456789";
+
+const REFUSED: ReadonlyArray<[string, unknown, string]> = [
+  ["a name outside WAITRON_BACKUP_", { WAITRON_BACKUP_RECOVERY_KEY: SECRET, PATH: "/bin" }, "name"],
+  ["a lower-case name", { waitron_backup_dir: SECRET }, "name"],
+  ["a value that is not text", { WAITRON_BACKUP_RETAIN: 7 }, "value"],
+  ["a value holding a tab", { WAITRON_BACKUP_RECOVERY_KEY: `${SECRET}\tx` }, "control_char"],
+  ["a value holding a newline", { WAITRON_BACKUP_RECOVERY_KEY: `${SECRET}\nX=1` }, "control_char"],
+  ["a value the file would not round-trip", { WAITRON_BACKUP_DIR: `${SECRET} ` }, "round_trip"],
+  ["an array", [SECRET], "shape"],
+];
+
+describe("replaceBackupSettings", () => {
+  it("replaces the settings whole and owner-only", async () => {
+    const dir = tempDir();
+    await writeFile(
+      join(dir, "backup.env"),
+      "WAITRON_BACKUP_DIR=/srv/old\nWAITRON_BACKUP_RETAIN=7\n",
+    );
+    await replaceBackupSettings(dir, {
+      WAITRON_BACKUP_RECOVERY_KEY: SECRET,
+      WAITRON_BACKUP_DIR: "/srv/new",
+    });
+    expect(parseEnvFile(await readFile(join(dir, "backup.env"), "utf8"))).toEqual({
+      WAITRON_BACKUP_RECOVERY_KEY: SECRET,
+      WAITRON_BACKUP_DIR: "/srv/new",
+    });
+    expect((await stat(join(dir, "backup.env"))).mode & 0o777).toBe(0o600);
+  });
+
+  it("syncs backup.env before renaming it into place, and the folder after", async () => {
+    const dir = tempDir();
+    const path = join(dir, "backup.env");
+    const events = await syncsAndRenames(() =>
+      replaceBackupSettings(dir, { WAITRON_BACKUP_DIR: "/srv/new" }),
+    );
+    expect(events).toEqual([`sync ${path}.tmp`, `rename ${path}.tmp ${path}`, `sync ${dir}`]);
+  });
+
+  it("null removes the file, and removing a missing file is not an error", async () => {
+    const dir = tempDir();
+    await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_DIR=/srv\n");
+    await replaceBackupSettings(dir, null);
+    await expect(stat(join(dir, "backup.env"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(replaceBackupSettings(dir, null)).resolves.toBeUndefined();
+  });
+
+  it.each(REFUSED)(
+    "refuses %s, writing nothing and naming no value",
+    async (_label, record, reason) => {
+      const dir = tempDir();
+      await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_DIR=/srv/kept\n");
+      const refusal = await replaceBackupSettings(dir, record as Record<string, string>).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(refusal).toMatchObject({ code: "spare.settings_invalid", params: { reason } });
+      expect(Object.keys((refusal as { params: object }).params)).toEqual(["reason"]);
+      expect(JSON.stringify(refusal)).not.toContain("secret-recovery");
+      expect(String((refusal as Error).message)).not.toContain("secret-recovery");
+      expect(await readFile(join(dir, "backup.env"), "utf8")).toBe(
+        "WAITRON_BACKUP_DIR=/srv/kept\n",
+      );
+    },
+  );
+
+  it.each(REFUSED)("the check refuses %s exactly as the writer does", (_label, record, reason) => {
+    expect(checkBackupSettings(record)).toEqual({ ok: false, reason });
+  });
+
+  it("the check refuses null and text, which are no settings record", () => {
+    expect(checkBackupSettings(null)).toEqual({ ok: false, reason: "shape" });
+    expect(checkBackupSettings(SECRET)).toEqual({ ok: false, reason: "shape" });
+  });
+
+  it("control: the check passes a clean record through", () => {
+    const record = { WAITRON_BACKUP_RECOVERY_KEY: SECRET, WAITRON_BACKUP_DIR: "/srv" };
+    expect(checkBackupSettings(record)).toEqual({ ok: true, settings: record });
   });
 });

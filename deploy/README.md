@@ -486,8 +486,10 @@ restarts and, before the server opens the database, removes the venue's database
 `pending-adoption.json`, the record of the stopped join and, last, its own request file,
 `reset-request.json`. If the join got far enough to write `tls/joined.json`, the box may already
 hold the other server's certificate authority and key ring, so it also removes everything in `tls/`
-and `secrets.env`, and the next boot makes a new set; devices then have to trust the box again.
-Otherwise the box's own files in `tls/` and `secrets.env` are kept. `backup.env` is always kept. It does nothing if the box has meanwhile got a `trading.env` or
+and `secrets.env`, and the next boot makes a new set; devices then have to trust the box again. It
+also removes `backup.env`, which may hold the other server's backup settings and recovery key; the
+box then has no backup settings until someone sets them. Otherwise the box's own files in `tls/`,
+`secrets.env` and `backup.env` are kept. It does nothing if the box has meanwhile got a `trading.env` or
 holds a venue. It does not remove this box from the other server's list of machines, nor release
 the installation number reserved for it there. To take the box off that list, open the other
 server's dashboard, then Settings, then Servers, and in the box's row menu choose Remove and then

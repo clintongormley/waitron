@@ -15,6 +15,7 @@ import { NODE_MIGRATIONS } from "./migrations.js";
 import {
   readNodeMode,
   setNodeMode,
+  deleteNodeModeOtherThanTx,
   setNodeModeTx,
   setPrimaryRoleTx,
   setSingletonRole,
@@ -259,5 +260,17 @@ describe("the role in node.db", () => {
       mode: "mirror",
       singletonRole: "secondary",
     });
+  });
+});
+
+describe("deleteNodeModeOtherThanTx", () => {
+  const sweep = useVenueDb({ migrations: [NODE_MIGRATIONS] });
+
+  it("deletes every row but this node id's, and keeps this one's", async () => {
+    for (const nodeId of [NODE, OTHER, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
+      await withNodeTransaction(sweep.node, (tx) => setNodeModeTx(tx, nodeId, "primary"));
+    }
+    await withNodeTransaction(sweep.node, (tx) => deleteNodeModeOtherThanTx(tx, NODE));
+    expect(sweep.node.all(sql`select node_id from node_mode`)).toEqual([{ node_id: NODE }]);
   });
 });

@@ -121,7 +121,7 @@ it.each(["account", "key"])(
     await stampDeployment(suite.db, "preproduction");
     await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror");
     await writeMirrorLink(suite.node, NODE, {
-      relayUrl: "https://127.0.0.1:1/",
+      originUrl: "https://127.0.0.1:1/",
       boxHostname: "box.test",
       boxCaPem: "unused-ca",
       originNodeId: SOURCE,

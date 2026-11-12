@@ -42,7 +42,7 @@ const suite = useVenueDb({
 });
 let LOCATION: string;
 const PRIMARY = "f1000000-0000-4000-8000-000000000002";
-const TARGET = "f1000000-0000-4000-8000-000000000003";
+const TARGET = "f2000000-0000-4000-8000-000000000003";
 const ADMIN = "f1000000-0000-4000-8000-000000000004";
 const PASSWORD = "public-test-admin";
 const HASH = hashPassword(PASSWORD);
@@ -113,7 +113,6 @@ beforeEach(async () => {
       },
       provisioning: {
         standby: {
-          series: "on-activation",
           async reserve(tx, primary, standby, operation) {
             if (operation === undefined)
               throw new AppError("module.operation_invalid", { module: "test-regime" });
@@ -189,7 +188,6 @@ async function bundleApp() {
     node: suite.node,
     ring: RING,
     stateDir: stateDir!,
-    relayUrl: "https://relay.test",
     boxHostname: "waitron.local",
     advertisedOrigin: "https://box.test",
     designated: { nodeId: PRIMARY },
@@ -219,6 +217,8 @@ function bundleBody() {
     standbyNodeId: TARGET,
     standbyPublicKey: generateNodeKeyPair().publicKey,
     standbyContactUrl: "https://spare.test",
+    standbyStoreUrl: "https://spare.test:7443",
+    standbyAt: Date.now(),
     moduleOperation: { binding: scope("reserve"), input },
   };
 }

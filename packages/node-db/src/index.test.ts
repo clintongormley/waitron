@@ -21,6 +21,7 @@ describe("the public surface", () => {
         "nodeHandoverRestriction",
         "nodeMirrorLink",
         "nodeMode",
+        "nodePairLink",
         "nodePrimaryKey",
         "nodeRecoveryKey",
         "nodeSigningKey",
@@ -39,6 +40,11 @@ describe("the public surface", () => {
         "setRecoveryKeyTx",
         "pinPrimaryKeyTx",
         "readPinnedPrimaryKey",
+        "readPairLink",
+        "deleteNodeMirrorLinkOtherThanTx",
+        "deleteNodeModeOtherThanTx",
+        "deleteNodePrimaryKeyOtherThanTx",
+        "deleteNodeRecoveryKeyOtherThanTx",
       ].sort(),
     );
   });

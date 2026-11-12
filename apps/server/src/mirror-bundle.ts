@@ -26,9 +26,11 @@ import {
   serializeModuleConfig,
   snapshotModuleOperations,
   withPreparedModuleOperations,
+  type ModuleConfig,
   type ModuleOperations,
 } from "@waitron/module";
 import { caCertPath, caKeyPath, type EncodedKeyRing } from "./box-secrets.js";
+import { readBackupSettings } from "./backup-env-writer.js";
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -45,10 +47,18 @@ export interface ReservedIdentity {
   endorsement: Endorsement;
 }
 
+/** The access key the main box will use to stream into the spare's store. */
+export interface PairStoreKey {
+  accessKeyId: string;
+  secretAccessKey: string;
+  venueId: string;
+}
+
 /**
- * Three secrets travel in this bundle, which is sent only to an authenticated admin: `accountKey`,
- * `credentialsRing` (the key ring every sealed row on the main box opens with) and `boxCaKeyPem`
- * (the private key of the main box's certificate authority).
+ * Five secrets travel in this bundle, which is sent only to an authenticated admin: `accountKey`,
+ * `credentialsRing` (the key ring every sealed row on the main box opens with), `boxCaKeyPem`
+ * (the private key of the main box's certificate authority), `store.secretAccessKey` (the pair's
+ * key to the spare's store) and the backup recovery key in `backupSettings`.
  */
 export interface MirrorBundle {
   designated: AdoptResult;
@@ -59,7 +69,9 @@ export interface MirrorBundle {
   environment: "production" | "preproduction";
   boxHostname: string;
   boxCaPem: string;
-  relayUrl: string;
+  /** The main box's own contact URL. */
+  primaryUrl: string;
+  store: PairStoreKey;
   /** Venue-wide key for encrypted account factors; transferred only inside this authenticated bundle. */
   accountKey: string;
   reservedIdentity: ReservedIdentity;
@@ -70,6 +82,8 @@ export interface MirrorBundle {
   /** The designated node's identity public key, which signed `reservedIdentity.endorsement`. */
   primaryPublicKey: string;
   credentialsRing: EncodedKeyRing;
+  /** The main box's `backup.env`, its values only; `null` when it holds none. */
+  backupSettings: Record<string, string> | null;
   boxCaKeyPem: string;
 }
 
@@ -93,13 +107,16 @@ export interface AssembleDeps {
   node: NodeDatabase;
   ring: KeyRing;
   stateDir: string;
-  relayUrl: string;
+  primaryUrl: string;
+  store: PairStoreKey;
   boxHostname: string;
   designated: AdoptResult;
   standby: { nodeId: string; publicKey: string };
   accountKey: string;
   wireguardPublicKey?: string;
   moduleOperations?: ModuleOperations;
+  /** `modules.json` as the caller read it for this request; read here when absent. */
+  moduleConfig?: ModuleConfig;
   /** The designated node's private key, when the caller has already unsealed it. */
   primaryPrivateKey?: string;
 }
@@ -157,8 +174,9 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
 
   // Read fresh, not from boot: the operator may have edited modules.json since, and a malformed file
   // must fail before collecting or writing any reservation.
-  const moduleConfig = await readModuleConfig(deps.stateDir);
+  const moduleConfig = deps.moduleConfig ?? (await readModuleConfig(deps.stateDir));
   const modules = enabledModules(ALL_MODULES, moduleConfig);
+  const backupSettings = await readBackupSettings(deps.stateDir);
 
   for (const name of operations.keys()) {
     if (
@@ -218,13 +236,15 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     environment,
     boxHostname: deps.boxHostname,
     boxCaPem,
-    relayUrl: deps.relayUrl,
+    primaryUrl: deps.primaryUrl,
+    store: deps.store,
     accountKey: deps.accountKey,
     reservedIdentity: { ...reserved, endorsement },
     moduleOverrides: serializeModuleConfig(moduleConfig),
     wireguardPublicKey: deps.wireguardPublicKey,
     primaryPublicKey: nodeSigningPublicKey(primaryPrivateKey),
     credentialsRing: encodeKeyRing(deps.ring),
+    backupSettings,
     boxCaKeyPem,
   };
 }

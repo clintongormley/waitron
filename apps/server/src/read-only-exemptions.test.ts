@@ -227,7 +227,7 @@ function sellOnlyChart(nodeId: string): SignedMembershipDocument {
 
 async function linkMirror(node: NodeDatabase, nodeId: string): Promise<void> {
   await writeMirrorLink(node, nodeId, {
-    relayUrl: "http://127.0.0.1:1/",
+    originUrl: "http://127.0.0.1:1/",
     boxHostname: "mirror-box.local",
     boxCaPem: mintSelfSignedServerCert({
       hostnames: ["mirror-box.local"],

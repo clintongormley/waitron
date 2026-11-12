@@ -25,6 +25,7 @@ export const START_AGAIN_GUESSES_FILE = "first-setup-start-again-guesses.json";
 export const SECRETS_ENV_FILE = "secrets.env";
 export const TRADING_ENV_FILE = "trading.env";
 export const BACKUP_ENV_FILE = "backup.env";
+export const CHECKED_ADDRESSES_FILE = "checked-addresses.json";
 export const RECOVERY_STATE_FILE = "recovery.json";
 export const MODULES_FILE = "modules.json";
 export const MODULE_PREPARATION_STATE_FILE = "module-preparation-state.json";
@@ -140,6 +141,12 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "file",
     reset: "deleted",
     why: "Backup secrets stay outside the venue database.",
+  },
+  {
+    name: CHECKED_ADDRESSES_FILE,
+    kind: "file",
+    reset: "deleted",
+    why: "Where another box was last reached survives a restart.",
   },
   {
     name: RECOVERY_STATE_FILE,

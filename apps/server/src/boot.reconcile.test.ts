@@ -220,7 +220,7 @@ describe("returned-box membership reconciliation at boot", () => {
     await seedHeldChart(supersededDb, 1);
     const peer = await startPeer(peerFencingChart(2));
     await writeMirrorLink(supersededNode, TILL_ENV.WAITRON_NODE_ID, {
-      relayUrl: peer.url,
+      originUrl: peer.url,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
       originNodeId: PEER_NODE,
@@ -273,7 +273,7 @@ describe("returned-box membership reconciliation at boot", () => {
     await seedHeldChart(db, 1);
     const peer = await startPeer(peerFencingChart(2));
     await writeMirrorLink(nodeDb, TILL_ENV.WAITRON_NODE_ID, {
-      relayUrl: peer.url,
+      originUrl: peer.url,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
       originNodeId: PEER_NODE,
@@ -350,7 +350,7 @@ describe("returned-box membership reconciliation at boot", () => {
       );
       const peer = await startPeer(peerFencingChart(2));
       await writeMirrorLink(nodeDb, TILL_ENV.WAITRON_NODE_ID, {
-        relayUrl: peer.url,
+        originUrl: peer.url,
         boxHostname: "box.local",
         boxCaPem: BOX_CA_PEM,
         originNodeId: PEER_NODE,
@@ -412,7 +412,7 @@ describe("returned-box membership reconciliation at boot", () => {
     await seedHeldChart(proceedsDb, 1);
     const [deadPort, port] = await freePorts(2);
     await writeMirrorLink(proceedsNode, TILL_ENV.WAITRON_NODE_ID, {
-      relayUrl: `http://127.0.0.1:${deadPort}/`,
+      originUrl: `http://127.0.0.1:${deadPort}/`,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
       originNodeId: PEER_NODE,

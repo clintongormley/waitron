@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 import { now, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import { nodePrimaryKey } from "./schema/node-primary-key.js";
 
@@ -32,4 +32,12 @@ export async function pinPrimaryKeyTx(
       target: nodePrimaryKey.nodeId,
       set: { ...pinned, pinnedAt: now() },
     });
+}
+
+/** Deletes every row of this table keyed by a node id other than `nodeId`, and keeps its own. */
+export async function deleteNodePrimaryKeyOtherThanTx(
+  tx: NodeTransaction,
+  nodeId: string,
+): Promise<void> {
+  await tx.delete(nodePrimaryKey).where(ne(nodePrimaryKey.nodeId, nodeId));
 }

@@ -147,7 +147,6 @@ async function joined() {
     node: mainBox.node,
     ring: RING,
     stateDir: mainState,
-    relayUrl: "https://relay.test",
     boxHostname: "waitron.local",
     advertisedOrigin: MAIN_URL,
     designated,
@@ -174,6 +173,8 @@ async function joined() {
             standbyNodeId: sent.nodeId,
             standbyPublicKey: sent.publicKey,
             standbyContactUrl: sent.contactUrl,
+            standbyStoreUrl: sent.storeUrl,
+            standbyAt: sent.at,
           }),
         });
         const bundle = await response.json();
@@ -181,10 +182,12 @@ async function joined() {
         return bundle as MirrorBundle;
       },
       advertisedOrigin: SPARE_URL,
+      spareStorePort: 7443,
       environment: "preproduction",
       persistTrading: async (args) => {
         spareId = args.nodeId;
       },
+      persistBackupSettings: async () => {},
       persistModuleConfig: async (config) => {
         await writeModuleConfig(spareState, config);
       },

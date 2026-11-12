@@ -1496,7 +1496,7 @@ describe("the spare's duty runs the real comparison", () => {
     await stampDeployment(r.db, "preproduction");
     await setNodeMode({ venue: r.db, node: suite.node }, r.m2.nodeId, "mirror");
     await writeMirrorLink(suite.node, r.m2.nodeId, {
-      relayUrl: "http://127.0.0.1:1/",
+      originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",
       boxCaPem: "no certificate",
       originNodeId: r.m1.nodeId,

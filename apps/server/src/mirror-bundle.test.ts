@@ -28,6 +28,7 @@ import {
   takenOverSeries,
 } from "./testing/allocated-contract.js";
 import { nodeId } from "@waitron/shared";
+import { PAIR_BUNDLE_FIELDS, PAIR_STORE } from "./testing/pair-bundle.js";
 
 // A mutable copy, so one case can add a module for its own duration.
 vi.mock("./modules.js", async (importOriginal) => {
@@ -117,7 +118,7 @@ function baseDeps() {
     node: suite.node,
     ring: RING,
     stateDir,
-    relayUrl: "https://relay.test:9000/",
+    ...PAIR_BUNDLE_FIELDS,
     boxHostname: "waitron.local",
     accountKey: Buffer.alloc(32, 9).toString("base64"),
   };
@@ -163,7 +164,6 @@ describe("assembleMirrorBundle (primary side)", () => {
     expect(bundle.environment).toBe("preproduction");
     expect(bundle.boxHostname).toBe("waitron.local");
     expect(bundle.boxCaPem).toContain("BEGIN CERTIFICATE");
-    expect(bundle.relayUrl).toBe("https://relay.test:9000/");
     expect("rows" in bundle).toBe(false);
     expect("syncToken" in bundle).toBe(false);
 
@@ -260,6 +260,31 @@ describe("assembleMirrorBundle (primary side)", () => {
       publicKey: STANDBY_PUB,
     });
     expect(bundle.moduleOverrides).toEqual({});
+  });
+
+  it("the bundle carries the main box's backup settings, and null when it has none", async () => {
+    const standby = () => ({ nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB });
+    expect((await allocatedBundle(standby())).bundle.backupSettings).toBeNull();
+    await writeFile(
+      join(stateDir, "backup.env"),
+      "WAITRON_BACKUP_RECOVERY_KEY=recovery-0123456789abcdef\nWAITRON_BACKUP_DIR=\n",
+    );
+    try {
+      expect((await allocatedBundle(standby())).bundle.backupSettings).toEqual({
+        WAITRON_BACKUP_RECOVERY_KEY: "recovery-0123456789abcdef",
+      });
+    } finally {
+      await rm(join(stateDir, "backup.env"), { force: true });
+    }
+  });
+
+  it("carries the main box's own address and the pair's key", async () => {
+    const { bundle } = await allocatedBundle({
+      nodeId: crypto.randomUUID(),
+      publicKey: STANDBY_PUB,
+    });
+    expect(bundle.primaryUrl).toBe("https://box.deli.test");
+    expect(bundle.store).toEqual(PAIR_STORE);
   });
 
   it("carries a WireGuard public key when one is provided, and omits it otherwise (swap S2)", async () => {

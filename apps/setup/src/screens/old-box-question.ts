@@ -1,5 +1,5 @@
 import { html, nothing, type TemplateResult } from "lit";
-import { currentLocale, t } from "../i18n/t.js";
+import { localTime, t } from "../i18n/t.js";
 
 /** The error line when the question is shown and not yet answered, in the wizard's language. */
 export function oldBoxProblem(): string {
@@ -7,9 +7,8 @@ export function oldBoxProblem(): string {
 }
 
 function when(iso: string): TemplateResult {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return html`${iso}`;
-  const local = at.toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
+  const local = localTime(iso);
+  if (local === null) return html`${iso}`;
   return html`<time datetime=${iso}>${local}</time> (${iso})`;
 }
 

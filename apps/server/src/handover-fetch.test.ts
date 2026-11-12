@@ -167,7 +167,7 @@ async function rig({ mode = "mirror" as "mirror" | "primary" } = {}) {
 
   // Plain http ignores the pin; the TLS cases write their own link.
   await writeMirrorLink(suite.node, m2, {
-    relayUrl: "http://127.0.0.1:1/",
+    originUrl: "http://127.0.0.1:1/",
     boxHostname: "box.local",
     boxCaPem: "no certificate",
     originNodeId: m1,
@@ -535,7 +535,7 @@ describe("the spare trusts only the box its link pins", () => {
     const r = await rig();
     const material = mint();
     await writeMirrorLink(suite.node, r.m2, {
-      relayUrl: "http://127.0.0.1:1/",
+      originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",
       boxCaPem: material.caCertPem,
       originNodeId: r.m1,
@@ -551,7 +551,7 @@ describe("the spare trusts only the box its link pins", () => {
   it("takes nothing from a box under another authority: no request arrives, no file", async () => {
     const r = await rig();
     await writeMirrorLink(suite.node, r.m2, {
-      relayUrl: "http://127.0.0.1:1/",
+      originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",
       boxCaPem: mint().caCertPem,
       originNodeId: r.m1,
@@ -579,7 +579,7 @@ describe("the spare trusts only the box its link pins", () => {
       const pinned = mint();
       const other = mint();
       await writeMirrorLink(suite.node, r.m2, {
-        relayUrl: "http://127.0.0.1:1/",
+        originUrl: "http://127.0.0.1:1/",
         boxHostname: "box.local",
         boxCaPem: pinned.caCertPem,
         originNodeId: r.m1,

@@ -39,7 +39,7 @@ the copy holds; Slice 12a will derive the unknown-interval list from these rows.
 deferred both gap tables and the preview, and accepted no declaration withdrawal for this
 simulated-only slice. Slice 8’s page and real-box qualification remain open. The bounded
 [page plan](../superpowers/plans/2026-11-12-a1018-8-emergency-page.md) was cleared by the watcher on 12 November;
-its landing depends on A947 3b-5a retaining the last checked address across restarts.
+the last checked address it needs is kept across restarts since A947 3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898)), so it no longer waits on that.
 
 Left for the slices that add the callers:
 - A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
@@ -198,10 +198,11 @@ controls remain open; no provider work is authorised.
   primary's join refusals (`mirror.standby_removed` for a removed or cleared id,
   `mirror.membership_full` for a full chart) and the mint's size refusals; (v) a receiver whose
   held chart predates a removal accepts the removed machine's charts until it learns of the
-  removal; (vi) a joining standby sees `mirror.bundle_fetch_failed` rather than the primary's
-  reason, because `apps/server/src/mirror-bundle-fetch.ts` turns every non-2xx answer into that
-  code except a refused login, which it relays as `password.invalid` (C95) — this predates A63,
-  and `mirror.standby_removed` has the same gap; (vii) if A61's removal ever mis-classifies a live
+  removal; (vi) a joining standby refused for a removed id (`mirror.standby_removed`) or a full chart
+  (`mirror.membership_full`) sees `mirror.bundle_fetch_failed` rather than the primary's reason,
+  because `apps/server/src/mirror-bundle-fetch.ts` passes on only a refused login
+  (`password.invalid`) and the codes in `JOIN_REFUSALS` (`apps/server/src/mirror-bundle-api.ts`),
+  and turns every other refusal into that code (C95); (vii) if A61's removal ever mis-classifies a live
   standby that an operator later promotes, the old primary refuses the new primary's charts
   (`signer_removed`) and keeps selling; the refusal is logged at warn and raises no alert. No adopt
   can finish today (`finish-adoption.ts`), so no such standby exists yet.
@@ -393,9 +394,10 @@ that slice 3 has to restore:
   in slice 3 has to close this.
 
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
-  wizard still offers the option. The A951-S private build removes the old relay: the primary
-  refuses the request, and the adopting server stays in setup. Its role, connect and refusal
-  wording now points to restore instead of promising a restart or suggesting another attempt.
+  wizard still offers the option. The primary accepts the join without a relay, and the joining
+  server then waits, since nothing copies the restaurant's data to it until 3b-6. Its role and connect
+  wording says joining is not finished and points to restore; each refusal's wording says what
+  happened and either what to fix before pressing Connect again or to choose Back.
   Removing or disabling the option until slice 3
   lands the replacement is a product call, not a wording one. Whoever takes it should decide for
   `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` card together.
@@ -1074,7 +1076,7 @@ password sign-in on the box; staff-host passkeys enrol separately. Venue devices
 
 Remote dashboard access, Settings on/off and retirement of the old TCP relay are implemented in
 [PR #2543](https://github.com/clintongormley/waitron/pull/2543). Trial details and limits stay in its
-thread. Standby adoption remains unavailable.
+thread. A standby can join the main box, but it does not yet receive the restaurant's data.
 
 Translate all returned one editable menu suggestion on the test box. Address completion still
 needs its trial Cloud provider. Provider keys stay on the gateway host and come from the owner.
@@ -1128,7 +1130,9 @@ box's own name) as [#2742](https://github.com/clintongormley/waitron/pull/2742);
 takes the venue's certificate authority as its own) as
 [#2761](https://github.com/clintongormley/waitron/pull/2761); 3b-4 (box-to-box calls find a `.local` box by
 asking the network, a spare listens on the venue's network, and what it serves there is walked by a
-test) as [#2779](https://github.com/clintongormley/waitron/pull/2779). 3b-5a to 3b-F and slices 3c onwards are still open;
+test) as [#2779](https://github.com/clintongormley/waitron/pull/2779); 3b-5a (the pair link: a spare joins with no Cloud relay,
+the main box refuses before reserving anything and hands out the pair's access key and its backup settings) as [#2898](https://github.com/clintongormley/waitron/pull/2898). 3b-5b to 3b-F
+and slices 3c onwards are still open;
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
@@ -1243,18 +1247,6 @@ trust sets built by hand), on the slice's branch; not run end to end. That repli
 S2's chart to D, or to a returned M, is not proven. Go-live is two boxes, where this cannot arise.
 Fix idea: at join, also pin the main box's own trusted keys.
 
-## A1278: the spare-adding route spends a reservation on a held chart it then refuses
-
-Predates A947 slice 3a. On main (01945cbce, in a throwaway worktree), the case "refuses 409
-membership.revoked_duplicate when the held chart's revoked list names a machine twice" in
-`apps/server/src/mirror-bundle-api.test.ts`, with a snapshot of the reservations added before and
-after, failed only on the snapshot: the route answered 409 `membership.revoked_duplicate` after
-making one signed outside reservation (`allocationId contract-P000042`). On the slice's branch the
-trust check and the readability check (`assertHeldDocumentReadable`) both run before the
-reservation, and both pass this chart: the main box signed it, and the readability check does not
-look for repeated ids. The same snapshot added on the branch still fails with that reservation.
-Wanted: refuse repeated ids before reserving.
-
 ## A1296: code-quality follow-ups from A947 slice 3a's finish review
 
 Raised by the finish-branch simplify review (2026-11-01) and not applied there, because each is a
@@ -1292,14 +1284,6 @@ handle a started server carries (`makeStartedServer`, `apps/server/src/boot.ts`)
 tests. Decide its trust set if it gains a caller. That same slice owns the immediate runner role
 notifications and a real promotion test including a mirror. Codex attached that follow-through
 here after the watcher deferred immediate wiring from A1308 jr2 on 2026-11-11 at 05:18.
-
-## A1280: a retried join leaves the abandoned node id's node.db rows
-
-Left open by A947 slice 3a. A join retried after a failure under a new node id leaves the first
-attempt's `node_signing_key`, `node_mode` and `node_mirror_link` rows for an id nothing else names
-(a probe case added to `apps/server/src/adopt.test.ts` in the slice's Task 10 review, then
-removed). Nothing reads a row by any id but its own, and a rotation re-seals the key, but it is a
-private key for an identity the main box endorsed. Wanted: remove them when a new attempt starts.
 
 ## A1282: browser trust after a connection repair replaces the certificate authority
 

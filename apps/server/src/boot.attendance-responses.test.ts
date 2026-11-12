@@ -95,7 +95,7 @@ for (const enabled of [true, false]) {
         if (mode === "mirror") {
           await setNodeMode({ venue: suite.db, node: suite.node }, venue.cfg.nodeId, "mirror");
           await writeMirrorLink(suite.node, venue.cfg.nodeId, {
-            relayUrl: "https://127.0.0.1:1/",
+            originUrl: "https://127.0.0.1:1/",
             boxHostname: "box.test",
             boxCaPem: "unused",
             originNodeId: venue.cfg.nodeId,

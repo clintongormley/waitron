@@ -192,7 +192,7 @@ async function boxes(
   await setNodeMode({ venue: newBox.db, node: newBox.node }, m2, options.mode ?? "primary");
   if (options.link !== "none") {
     await writeMirrorLink(newBox.node, m2, {
-      relayUrl: "http://127.0.0.1:1/",
+      originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",
       boxCaPem: material.caCertPem,
       originNodeId: options.link === "another box" ? m2 : m1,

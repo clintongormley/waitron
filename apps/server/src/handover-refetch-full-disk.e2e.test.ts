@@ -110,7 +110,7 @@ async function rig(small: SmallDisk, name: string) {
   );
   await setNodeMode({ venue: db, node: suite.node }, m2, "mirror");
   await writeMirrorLink(suite.node, m2, {
-    relayUrl: "http://127.0.0.1:1/",
+    originUrl: "http://127.0.0.1:1/",
     boxHostname: "box.local",
     boxCaPem: "no certificate",
     originNodeId: m1,

@@ -1,9 +1,11 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
+import { serve, type ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { deployment, locations, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -14,6 +16,8 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { adoptFromPrimary } from "./adopt.js";
+import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
+import { JOIN_REFUSALS } from "./mirror-bundle-api.js";
 import { writeCredentialsRing } from "./box-secrets.js";
 import {
   readPendingAdoption,
@@ -24,6 +28,7 @@ import {
 import { mountSetup } from "./setup-api.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
+import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
@@ -59,7 +64,7 @@ function bundle(): MirrorBundle {
     environment: "preproduction",
     boxHostname: "waitron.local",
     boxCaPem: MAIN_AUTHORITY.caCertPem,
-    relayUrl: "https://relay.test/",
+    ...PAIR_BUNDLE_FIELDS,
     accountKey: Buffer.alloc(32, 3).toString("base64"),
     reservedIdentity: {
       modules: { "fiscal-verifactu": { version: 1, evidence: {} } },
@@ -69,6 +74,7 @@ function bundle(): MirrorBundle {
     moduleOverrides: {},
     primaryPublicKey: PRIMARY_KEYS.publicKey,
     credentialsRing: { key: Buffer.alloc(32, 5).toString("base64"), version: 1 },
+    backupSettings: null,
     boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
   };
 }
@@ -81,6 +87,7 @@ function deps(value = bundle()) {
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     }),
     advertisedOrigin: "https://spare.test",
+    spareStorePort: 7443,
     environment: "preproduction" as const,
     // The main box endorses the identity this box sends.
     fetchBundle: async (
@@ -100,6 +107,7 @@ function deps(value = bundle()) {
       },
     }),
     persistTrading: async () => {},
+    persistBackupSettings: async () => {},
     persistModuleConfig: async () => {},
     persistCredentialsRing: (ring: MirrorBundle["credentialsRing"]) =>
       writeCredentialsRing(stateDir, ring),
@@ -128,16 +136,14 @@ it("keeps the stamped-environment refusal before allocation-dependent adoption",
   expect(reachedFirstWrite).toBe(false);
   expect(await state()).toEqual(before);
 });
-async function state() {
-  const rows = await suite.db.execute<{ name: string }>(
+async function state(db: Pick<typeof suite.db, "execute"> = suite.db) {
+  const rows = await db.execute<{ name: string }>(
     sql`select name from sqlite_master where type = 'table' and name not like '__drizzle%' order by name`,
   );
   const snapshot: Record<string, unknown> = {};
   for (const { name } of rows.rows) {
     snapshot[name] = (
-      await suite.db.execute(
-        sql.raw(`select * from "${name.replaceAll('"', '""')}" order by rowid`),
-      )
+      await db.execute(sql.raw(`select * from "${name.replaceAll('"', '""')}" order by rowid`))
     ).rows;
   }
   return snapshot;
@@ -152,7 +158,7 @@ it("refuses allocation-dependent adoption before its first local write or handov
       },
     }),
   ).rejects.toMatchObject({
-    code: "module.operation_invalid",
+    code: "mirror.standby_series_unsupported",
     params: { module: "fiscal-verifactu" },
   });
   expect(reachedFirstWrite).toBe(false);
@@ -195,7 +201,7 @@ it("the setup route returns an allocation refusal and does not restart", async (
   });
   expect(response.status).toBe(409);
   expect(await response.json()).toEqual({
-    error: { code: "module.operation_invalid", params: { module: "fiscal-verifactu" } },
+    error: { code: "mirror.standby_series_unsupported", params: { module: "fiscal-verifactu" } },
   });
   expect(restarts).toBe(0);
   expect(await suite.db.select().from(deployment)).toEqual([]);
@@ -240,12 +246,76 @@ it("a pending allocated adoption refuses without creating a selling identity and
     {
       level: "error",
       event: "adoption.establish_failed",
-      fields: { code: "module.operation_invalid" },
+      fields: { code: "mirror.standby_series_unsupported" },
     },
     {
       level: "error",
       event: "adoption.establish_failed",
-      fields: { code: "module.operation_invalid" },
+      fields: { code: "mirror.standby_series_unsupported" },
     },
   ]);
 });
+
+// The main box's answer to the join, as `mirror-bundle-api.ts` sends each refusal; typed by
+// `JOIN_REFUSALS`, so a refusal added there without a case here does not compile.
+const JOIN_REFUSAL_CASES: Record<(typeof JOIN_REFUSALS)[number], Record<string, unknown>> = {
+  "mirror.bucket_stream_active": {},
+  "mirror.standby_name_taken": {},
+  "mirror.spare_already_joined": {},
+  "mirror.standby_series_unsupported": { module: "fiscal-verifactu" },
+  "mirror.clocks_apart": {
+    primaryAt: "2026-11-10T12:00:00.000Z",
+    standbyAt: "2026-11-10T12:05:00.000Z",
+  },
+};
+it.each(Object.entries(JOIN_REFUSAL_CASES))(
+  "the setup route passes on the main box's %s through the real fetch, writes nothing and does not restart",
+  async (code, params) => {
+    const main = new Hono();
+    main.post("/management-api/mirror-bundle", (c) =>
+      c.json({ error: { code, params: { ...params, detail: "https://primary.internal" } } }, 409),
+    );
+    const server = await new Promise<ServerType>((resolve) => {
+      const started = serve({ fetch: main.fetch, hostname: "127.0.0.1", port: 0 }, () =>
+        resolve(started),
+      );
+    });
+    try {
+      const { port } = server.address() as AddressInfo;
+      const before = {
+        venue: await state(),
+        node: await state(suite.node),
+        files: await readdir(stateDir),
+      };
+      let restarts = 0;
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          adopt: (req, hooks) =>
+            adoptFromPrimary({ ...deps(), fetchBundle: fetchMirrorBundle }, req, hooks),
+          requestRestart: () => {
+            restarts += 1;
+          },
+        },
+        () => {},
+      );
+      const response = await app.request("/setup-api/adopt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ primaryUrl: `http://127.0.0.1:${port}`, credential }),
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: { code, params } });
+      expect(restarts).toBe(0);
+      expect({
+        venue: await state(),
+        node: await state(suite.node),
+        files: await readdir(stateDir),
+      }).toEqual(before);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  },
+);

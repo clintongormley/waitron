@@ -43,6 +43,8 @@ export interface ServerConfig {
    * served over plain HTTP.
    */
   landingPort: number;
+  /** `WAITRON_SPARE_STORE_PORT`: where a spare's store listens for the main box's copy (D11). */
+  spareStorePort: number;
   /** Defaults to loopback, because `/health` is unauthenticated. */
   httpHost: string;
   minTickMs: number;
@@ -143,6 +145,7 @@ const DEFAULT_MIN_TICK_MS = 5_000;
 export const DEFAULT_HTTP_PORT = 8080;
 /** Port 80, where a phone lands by typing the box's bare address. Exported for recovery. */
 export const DEFAULT_HTTP_LANDING_PORT = 80;
+const DEFAULT_SPARE_STORE_PORT = 7443;
 const DEFAULT_LOG_MAX_BYTES = 10_000_000;
 const DEFAULT_LOG_MAX_FILES = 5;
 /** Loopback, so an unconfigured box never binds a public interface. Exported for recovery. */
@@ -257,6 +260,15 @@ export function positiveInt(env: Env, variable: string, fallback: number): numbe
 
 function optionalPositiveInt(env: Env, variable: string): number | undefined {
   return parsePositiveInt(env, variable);
+}
+
+/** A port a listener binds: `1..MAX_HTTP_PORT`. */
+function listeningPort(env: Env, variable: string, fallback: number): number {
+  const port = positiveInt(env, variable, fallback);
+  if (port > MAX_HTTP_PORT) {
+    throw new AppError("server.config_invalid", { variable, reason: "port_out_of_range" });
+  }
+  return port;
 }
 
 /** A port in `0..MAX_HTTP_PORT`, where `0` means "disabled", so not `positiveInt`. */
@@ -392,11 +404,13 @@ export function loadConfig(
       reason: "above_max_tick",
     });
   }
-  const httpPort = positiveInt(env, "WAITRON_HTTP_PORT", DEFAULT_HTTP_PORT);
-  if (httpPort > MAX_HTTP_PORT) {
+  const httpPort = listeningPort(env, "WAITRON_HTTP_PORT", DEFAULT_HTTP_PORT);
+  const landingPort = boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT);
+  const spareStorePort = listeningPort(env, "WAITRON_SPARE_STORE_PORT", DEFAULT_SPARE_STORE_PORT);
+  if (spareStorePort === httpPort || spareStorePort === landingPort) {
     throw new AppError("server.config_invalid", {
-      variable: "WAITRON_HTTP_PORT",
-      reason: "port_out_of_range",
+      variable: "WAITRON_SPARE_STORE_PORT",
+      reason: "listener_port_conflict",
     });
   }
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
@@ -458,16 +472,8 @@ export function loadConfig(
         variable: "WAITRON_STAFF_ORIGIN",
         reason: "https_origin_required",
       });
-    const port = positiveInt(env, "WAITRON_STAFF_PORT", 8443);
-    if (port > MAX_HTTP_PORT)
-      throw new AppError("server.config_invalid", {
-        variable: "WAITRON_STAFF_PORT",
-        reason: "port_out_of_range",
-      });
-    if (
-      port === httpPort ||
-      port === boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT)
-    )
+    const port = listeningPort(env, "WAITRON_STAFF_PORT", 8443);
+    if (port === httpPort || port === landingPort || port === spareStorePort)
       throw new AppError("server.config_invalid", {
         variable: "WAITRON_STAFF_PORT",
         reason: "listener_port_conflict",
@@ -487,7 +493,8 @@ export function loadConfig(
     fiscalTestSubmissions: fiscalTestSubmissions(env),
     paymentTestProviders: paymentTestProviders(env),
     httpPort,
-    landingPort: boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT),
+    landingPort,
+    spareStorePort,
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     minTickMs,
     maxTickMs,

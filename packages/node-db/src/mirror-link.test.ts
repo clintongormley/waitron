@@ -9,7 +9,12 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
-import { readMirrorLink, writeMirrorLink, writeMirrorLinkTx } from "./mirror-link.js";
+import {
+  deleteNodeMirrorLinkOtherThanTx,
+  readMirrorLink,
+  writeMirrorLink,
+  writeMirrorLinkTx,
+} from "./mirror-link.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
@@ -18,7 +23,7 @@ const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const PRIMARY_NODE = "11111111-1111-4111-8111-111111111111";
 
 const SAMPLE: Parameters<typeof writeMirrorLink>[2] = {
-  relayUrl: "https://relay.test:9000/",
+  originUrl: "https://relay.test:9000/",
   boxHostname: "waitron.local",
   boxCaPem: "-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n",
   originNodeId: PRIMARY_NODE,
@@ -76,7 +81,7 @@ describe("node_mirror_link accessors", () => {
 
   it("a second write for the same node updates its row in place", async () => {
     await writeMirrorLink(suite.node, NODE, {
-      relayUrl: "https://relay-one.test:9000/",
+      originUrl: "https://relay-one.test:9000/",
       boxHostname: "a",
       boxCaPem: "a",
       originNodeId: PRIMARY_NODE,
@@ -86,7 +91,7 @@ describe("node_mirror_link accessors", () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 5));
     await writeMirrorLink(suite.node, NODE, {
-      relayUrl: "https://relay-two.test:9000/",
+      originUrl: "https://relay-two.test:9000/",
       boxHostname: "b",
       boxCaPem: "b",
       originNodeId: PRIMARY_NODE,
@@ -96,7 +101,7 @@ describe("node_mirror_link accessors", () => {
     );
     expect(count.rows[0]?.n).toBe(1);
     expect(await readMirrorLink(suite.node, NODE)).toEqual({
-      relayUrl: "https://relay-two.test:9000/",
+      originUrl: "https://relay-two.test:9000/",
       boxHostname: "b",
       boxCaPem: "b",
       originNodeId: PRIMARY_NODE,
@@ -114,10 +119,22 @@ describe("node_mirror_link accessors", () => {
     const error = await captureError(() =>
       Promise.resolve(
         suite.node.run(
-          sql`insert into node_mirror_link (node_id, relay_url, box_hostname, box_ca_pem, origin_node_id, adopted_at) values (${NODE}, 'x', 'x', 'x', ${PRIMARY_NODE}, ${new Date().toISOString()})`,
+          sql`insert into node_mirror_link (node_id, origin_url, box_hostname, box_ca_pem, origin_node_id, adopted_at) values (${NODE}, 'x', 'x', 'x', ${PRIMARY_NODE}, ${new Date().toISOString()})`,
         ),
       ),
     );
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+  });
+});
+
+describe("deleteNodeMirrorLinkOtherThanTx", () => {
+  const sweep = useVenueDb({ migrations: [NODE_MIGRATIONS] });
+
+  it("deletes every row but this node id's, and keeps this one's", async () => {
+    for (const nodeId of [NODE, OTHER, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
+      await withNodeTransaction(sweep.node, (tx) => writeMirrorLinkTx(tx, nodeId, SAMPLE));
+    }
+    await withNodeTransaction(sweep.node, (tx) => deleteNodeMirrorLinkOtherThanTx(tx, NODE));
+    expect(sweep.node.all(sql`select node_id from node_mirror_link`)).toEqual([{ node_id: NODE }]);
   });
 });

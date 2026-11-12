@@ -229,7 +229,7 @@ async function boot(
   await beforeStart(nodeId, own, binding(OP));
   await setNodeMode({ venue: suite.db, node: suite.node }, nodeId, mode);
   await writeMirrorLink(suite.node, nodeId, {
-    relayUrl: "http://127.0.0.1:1/",
+    originUrl: "http://127.0.0.1:1/",
     boxHostname: "box.local",
     boxCaPem: mintSelfSignedServerCert({
       hostnames: ["box.local"],

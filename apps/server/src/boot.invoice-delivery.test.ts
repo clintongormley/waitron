@@ -330,7 +330,7 @@ describe("invoice delivery recovery at trading boot", () => {
     const ctx = await fixture();
     await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror");
     await writeMirrorLink(suite.node, ctx.node, {
-      relayUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
+      originUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
       boxHostname: "waitron.local",
       boxCaPem: "unused",
       originNodeId: ctx.node,
@@ -736,7 +736,7 @@ describe("invoice email worker at trading boot", () => {
       const email = await queuedEmail(ctx, smtp.smtp);
       await setNodeMode({ venue: suite.db, node: suite.node }, ctx.node, "mirror");
       await writeMirrorLink(suite.node, ctx.node, {
-        relayUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
+        originUrl: `http://127.0.0.1:${ctx.deadPeerPort}`,
         boxHostname: "waitron.local",
         boxCaPem: "unused",
         originNodeId: ctx.node,

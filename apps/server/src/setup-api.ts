@@ -38,6 +38,7 @@ import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
+import { JOIN_REFUSAL_STATUS } from "./mirror-bundle-api.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSetupSpa } from "./setup-spa.js";
 import type { Logger } from "./logger.js";
@@ -286,17 +287,20 @@ const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_fail
 /**
  * The adopt route's contract. `mirror.bundle_fetch_failed` is 502, not a client fault: the request
  * was well-formed, but the mirror's upstream — the primary it was pointed at — failed.
- * `password.invalid` is the primary's refusal of the login, relayed by `fetchMirrorBundle`.
+ * `password.invalid` is the primary's refusal of the login. `mirror.vault_not_empty` and
+ * `mirror.primary_unconfirmed` are this box's own refusals; `JOIN_REFUSAL_STATUS` holds the main
+ * box's refusals of the join, each relayed by `fetchMirrorBundle`, and this box raises
+ * `mirror.standby_series_unsupported` itself as well for a bundle naming such a module.
  * The two ring refusals, `credentials.key_invalid` and `credentials.key_ring_version_collision`,
  * are left unlisted (400, the setup screen's generic words): only a faulty main box raises them.
  */
 const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
-  "module.operation_invalid": 409,
   "setup.request_invalid": 400,
   "mirror.primary_url_invalid": 400,
   "mirror.bundle_fetch_failed": 502,
   "mirror.vault_not_empty": 409,
   "mirror.primary_unconfirmed": 409,
+  ...JOIN_REFUSAL_STATUS,
   "password.invalid": 401,
   "setup.operation_conflict": 409,
   "setup.already_provisioning": 409,

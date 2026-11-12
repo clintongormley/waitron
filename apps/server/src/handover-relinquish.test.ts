@@ -740,7 +740,7 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     );
     await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spareId, "mirror");
     await writeMirrorLink(spareBox.node, spareId, {
-      relayUrl: "http://127.0.0.1:1/",
+      originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",
       boxCaPem: mintSelfSignedServerCert({
         hostnames: ["box.local"],

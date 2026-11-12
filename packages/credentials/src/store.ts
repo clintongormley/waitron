@@ -10,8 +10,9 @@ import {
   tenantCredentials,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { aadFor, open, seal } from "./cipher.js";
-import { keyForVersion, type KeyRing } from "./keyring.js";
+import { aadFor, openSealedRow, seal } from "./cipher.js";
+import type { KeyRing } from "./keyring.js";
+import { rotateNodePairLinks } from "./node-pair-link.js";
 import { rotateNodeSigningKeys } from "./node-signing-key.js";
 import { isPurpose, validatePayload, type Purpose } from "./purposes.js";
 import "./errors.js";
@@ -58,26 +59,7 @@ export async function tryGetCredential(
     .where(eq(tenantCredentials.purpose, ref.purpose));
   if (row === undefined) return null;
 
-  // The ROW's version, never the ring's current one: that is what keeps a half-finished rotation
-  // readable instead of an outage.
-  const key = keyForVersion(ring, row.keyVersion);
-  if (key === null) {
-    throw new AppError("credentials.key_version_unknown", {
-      purpose: ref.purpose,
-      keyVersion: row.keyVersion,
-    });
-  }
-
-  const plaintext = open(key, aadFor(ref.purpose), {
-    ciphertext: row.ciphertext,
-    iv: row.iv,
-    authTag: row.authTag,
-  });
-  if (plaintext === null) {
-    // Wrong key, tampered ciphertext, or a row moved between purposes — one code for all three,
-    // because distinguishing them would be an oracle. See cipher.ts's `open`.
-    throw new AppError("credentials.decrypt_failed", { purpose: ref.purpose });
-  }
+  const plaintext = openSealedRow(ring, ref.purpose, aadFor(ref.purpose), row);
   // `JSON.parse`'s `SyntaxError` quotes the input, which here is the decrypted credential.
   let parsed: unknown;
   try {
@@ -254,8 +236,8 @@ export interface RotationResult {
  * row and stop, until the purpose is re-provisioned. Kept deliberately: re-sealing a payload the
  * package would now refuse is its own trap.
  *
- * Given `node`, every row in its `node_signing_key` table is re-sealed too, after the vault, and
- * counted in the same result.
+ * Given `node`, every row in its `node_signing_key` and `node_pair_link` tables is re-sealed too,
+ * after the vault, and counted in the same result.
  */
 export async function rotateCredentials(
   db: Database,
@@ -279,9 +261,11 @@ export async function rotateCredentials(
     });
   }
   if (node !== undefined) {
-    const signing = await rotateNodeSigningKeys(node, ring);
-    result.rotated += signing.rotated;
-    result.alreadyCurrent += signing.alreadyCurrent;
+    for (const rotate of [rotateNodeSigningKeys, rotateNodePairLinks]) {
+      const rows = await rotate(node, ring);
+      result.rotated += rows.rotated;
+      result.alreadyCurrent += rows.alreadyCurrent;
+    }
   }
   return result;
 }

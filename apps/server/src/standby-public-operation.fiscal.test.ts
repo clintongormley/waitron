@@ -31,6 +31,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/paper-evidence.js";
 import { withOperationAuthority, type WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
+import { withoutActivationMark } from "./testing/allocated-contract.js";
 import { nodeId } from "@waitron/shared";
 import { type ReservedIdentity } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -111,10 +112,12 @@ beforeEach(async () => {
   modules.splice(
     0,
     modules.length,
-    fakeModule("fiscal-verifactu", {
-      provisioning: { standby: ALLOCATED_FISCAL_STANDBY },
-      operations: createPaperAllocationPreparation(configuration()),
-    }),
+    ...withoutActivationMark([
+      fakeModule("fiscal-verifactu", {
+        provisioning: { standby: ALLOCATED_FISCAL_STANDBY },
+        operations: createPaperAllocationPreparation(configuration()),
+      }),
+    ]),
   );
   await writeFile(
     configuration().custodianPath,
@@ -202,7 +205,6 @@ async function reserve(standby = generateStandbyIdentity()) {
     node: primary.node,
     ring: RING,
     stateDir: stateDir!,
-    relayUrl: "https://relay.test",
     boxHostname: "waitron.local",
     advertisedOrigin: "https://box.test",
     accountKey: "test-account-key",
@@ -218,6 +220,8 @@ async function reserve(standby = generateStandbyIdentity()) {
       standbyNodeId: standby.nodeId,
       standbyPublicKey: standby.publicKey,
       standbyContactUrl: "https://spare.test",
+      standbyStoreUrl: "https://spare.test:7443",
+      standbyAt: Date.now(),
       moduleOperation: { binding: held.binding, input: held.input },
     }),
   });

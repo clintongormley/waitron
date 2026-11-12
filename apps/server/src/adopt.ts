@@ -4,12 +4,25 @@ import {
   withNodeTransaction,
   type Database,
   type NodeDatabase,
+  type NodeTransaction,
 } from "@waitron/db";
-import { pinPrimaryKeyTx, setNodeModeTx, writeMirrorLinkTx } from "@waitron/node-db";
 import {
+  deleteNodeMirrorLinkOtherThanTx,
+  deleteNodeModeOtherThanTx,
+  deleteNodePrimaryKeyOtherThanTx,
+  deleteNodeRecoveryKeyOtherThanTx,
+  NODE_CLASSIFICATION,
+  pinPrimaryKeyTx,
+  setNodeModeTx,
+  writeMirrorLinkTx,
+} from "@waitron/node-db";
+import {
+  deleteNodePairLinkOtherThanTx,
+  deleteNodeSigningKeyOtherThanTx,
   listCredentials,
   loadKeyRing,
   sealNodeSigningKeyTx,
+  writePairLinkTx,
   type KeyRing,
 } from "@waitron/credentials";
 import { verifyEndorsement } from "@waitron/membership";
@@ -32,6 +45,35 @@ import { assertAdoptionModules, writePendingAdoption } from "./finish-adoption.j
 import type { TradingConfig } from "./trading-config.js";
 import { leafHostnamesFor, ownContactUrl } from "./box-name.js";
 import "./errors.js";
+
+/**
+ * What adopt deletes, per node.db table, of rows keyed by any node id but the one it adopts under:
+ * an earlier join that stopped after its node transaction left them under the id it drew.
+ */
+const ABANDONED_ROW_SWEEPS: Readonly<
+  Record<string, (tx: NodeTransaction, nodeId: string) => Promise<void>>
+> = {
+  node_mode: deleteNodeModeOtherThanTx,
+  node_mirror_link: deleteNodeMirrorLinkOtherThanTx,
+  node_recovery_key: deleteNodeRecoveryKeyOtherThanTx,
+  node_signing_key: deleteNodeSigningKeyOtherThanTx,
+  node_primary_key: deleteNodePrimaryKeyOtherThanTx,
+  node_pair_link: deleteNodePairLinkOtherThanTx,
+};
+
+/** The handover tables, which adopt leaves whole: they record what this box did, under its ids. */
+const NODE_TABLES_KEPT_AT_ADOPT: readonly string[] = [
+  "node_handover_operations",
+  "node_handover_events",
+  "node_handover_restriction",
+];
+
+/** The tables of `tables` that adopt neither sweeps nor names as kept. */
+export function nodeTablesAdoptLeaves(tables: readonly string[]): string[] {
+  return tables.filter(
+    (table) => !(table in ABANDONED_ROW_SWEEPS) && !NODE_TABLES_KEPT_AT_ADOPT.includes(table),
+  );
+}
 
 export type PersistTradingArgs = TradingConfig;
 
@@ -71,17 +113,27 @@ export interface AdoptDeps {
   fetchBundle: (
     primaryUrl: string,
     credential: AdoptCredential,
-    standby: { nodeId: string; publicKey: string; contactUrl: string },
+    standby: {
+      nodeId: string;
+      publicKey: string;
+      contactUrl: string;
+      storeUrl: string;
+      at: number;
+    },
     confirmedCaPem?: string,
   ) => Promise<MirrorBundle>;
   /** Its `ownContactUrl` is sent as this node's `contactUrl`, which the primary records so a till
    * can route here after a failover. */
   advertisedOrigin: string;
+  /** This box's store port; its name and this port are sent as the spare's store address (D15). */
+  spareStorePort: number;
   environment: DeploymentEnvironment;
   /** Persists `trading.env` so the next boot enters the trading branch. */
   persistTrading: (args: PersistTradingArgs) => Promise<void>;
   /** So the mirror's next boot sees the primary's enabled module set. */
   persistModuleConfig: (config: ModuleConfig) => Promise<void>;
+  /** Replaces `backup.env` with the main box's settings, or removes it for `null`. */
+  persistBackupSettings: (settings: Record<string, string> | null) => Promise<void>;
   /** Where the finish-adoption latch is written. `PendingAdoption` in `finish-adoption.ts` says why
    * that step cannot complete today. */
   stateDir: string;
@@ -106,13 +158,19 @@ export async function adoptFromPrimary(
   hooks: AdoptHooks,
 ): Promise<{ breakGlassSecret: string; breakGlassKeyName: string }> {
   const standby = generateStandbyIdentity();
+  const contactUrl = ownContactUrl(deps.advertisedOrigin, standby.nodeId);
+  const storeUrl = new URL(contactUrl);
+  storeUrl.protocol = "https:";
+  storeUrl.port = String(deps.spareStorePort);
   const bundle = await deps.fetchBundle(
     req.primaryUrl,
     req.credential,
     {
       nodeId: standby.nodeId,
       publicKey: standby.publicKey,
-      contactUrl: ownContactUrl(deps.advertisedOrigin, standby.nodeId),
+      contactUrl,
+      storeUrl: storeUrl.origin,
+      at: deps.now().getTime(),
     },
     req.confirmedCaPem,
   );
@@ -188,14 +246,25 @@ export async function adoptFromPrimary(
   // here, before finishing adoption puts its public half in venue.db, as everywhere a signing key
   // is first made: a public key with no private half could never sign as this box.
   const recoveryKeyName = await withNodeTransaction(deps.ownerNode, async (tx) => {
+    for (const { table } of NODE_CLASSIFICATION) {
+      await ABANDONED_ROW_SWEEPS[table]?.(tx, standby.nodeId);
+    }
     await setNodeModeTx(tx, standby.nodeId, "mirror");
     await sealNodeSigningKeyTx(tx, ring, standby.nodeId, standby.privateKey);
     await writeMirrorLinkTx(tx, standby.nodeId, {
-      relayUrl: bundle.relayUrl,
+      originUrl: bundle.primaryUrl,
       boxHostname: bundle.boxHostname,
       boxCaPem: bundle.boxCaPem,
       // The PRIMARY's id, which the venue's rows carry, not the standby's own.
       originNodeId: designated.nodeId,
+    });
+    await writePairLinkTx(tx, ring, standby.nodeId, {
+      role: "serves",
+      state: "awaiting_copy",
+      peerNodeId: designated.nodeId,
+      peerPublicKey: bundle.primaryPublicKey,
+      storeUrl: storeUrl.origin,
+      ...bundle.store,
     });
     const { name } = await mintBreakGlassKeyTx(deps.ownerDb, tx, standby.nodeId, recovery);
     await pinPrimaryKeyTx(tx, standby.nodeId, {
@@ -204,8 +273,9 @@ export async function adoptFromPrimary(
     });
     return name;
   });
-  // Unconditional, even `{}`, so a re-adopt overwrites.
+  // Unconditional, even `{}` or `null`, so a re-adopt overwrites.
   await deps.persistModuleConfig(moduleConfig);
+  await deps.persistBackupSettings(bundle.backupSettings);
   await writePendingAdoption(deps.stateDir, {
     standby: { nodeId: standby.nodeId, publicKey: standby.publicKey },
     nodeName: `${bundle.primaryNode.name} (standby)`,

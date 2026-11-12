@@ -961,7 +961,7 @@ calendar.
 ## A write of a table `scripts/write-path-tables.json` lists lives only in the files it names
 
 `venue.db`'s `tenants`, `nodes`, `deployment`, `settings` and `activity_log`, and `node.db`'s `node_mode`, `node_mirror_link`,
-`node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_handover_operations`,
+`node_pair_link`, `node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_handover_operations`,
 `node_handover_events` and `node_handover_restriction`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
 SQLite has no roles and no grants, and every path, request and provisioning alike, shares the one
@@ -980,9 +980,12 @@ records the removal of the old matrix and the restrictions still awaiting indivi
 
 Real code does write them, legitimately: the setup-mode provision route reaches `tenants`,
 `nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment`,
-`node_mode`, `node_mirror_link`, `node_primary_key`, `node_recovery_key` and `node_signing_key`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
+`node_mode`, `node_mirror_link`, `node_pair_link`, `node_primary_key`, `node_recovery_key` and
+`node_signing_key`, writing this box's rows and deleting any an abandoned earlier attempt left in
+those six `node.db` tables under another node id; the main box's joining route
+(`apps/server/src/mirror-bundle-api.ts`) reaches `node_pair_link`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
-`waitron-credentials rotate` reach `node_signing_key`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
+`waitron-credentials rotate` reach `node_signing_key`, and the rotation also reaches `node_pair_link`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
 `packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone, and the
 dashboard's privacy contact (`PUT /management-api/venue-privacy`, A980 S1a) reaches it through
@@ -1521,7 +1524,8 @@ without `applyMigrations` (`runMigrations` called directly) is invisible to it.
 
 `venue.db` holds every table but `node.db`'s, and a primary streams it whole to the owner's bucket once
 one is set up. `node.db`, beside it, holds what a box must remember about itself — its mode and
-singleton role (`node_mode`), its link to the main box (`node_mirror_link`), the main box's key it
+singleton role (`node_mode`), its link to the main box (`node_mirror_link`), its link to the other box of its pair — the spare's
+store address and the store's access key, its secret sealed (`node_pair_link`) — the main box's key it
 pinned when it joined (`node_primary_key`), its recovery-key check (`node_recovery_key`), its
 sealed signing key (`node_signing_key`), and its handover records: each handover operation it
 takes part in (`node_handover_operations`), what it decided and received during them
@@ -1589,7 +1593,7 @@ nothing reads it: accept stamps the venue on the new `devices` or `print_agents`
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (`join_requests`,
 `node_sealed_state`, `recovery_packs`; every `node.db` table carries one too, though a key-ring
-rotation reads `node_signing_key` whole), a seal only a box holding the key ring opens
+rotation reads `node_signing_key` and `node_pair_link` whole), a seal only a box holding the key ring opens
 (`tenant_credentials`, whose ring a joining spare receives from the main box), or rows the
 transaction that wrote them deletes (`change_log`). `fiscal_certificate_installs` and
 `fiscal_certificate_reminders` use the first tie widened to a list: a `node_id` column every read

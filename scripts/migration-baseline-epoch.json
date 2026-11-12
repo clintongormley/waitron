@@ -10,8 +10,8 @@
     {
       "name": "node",
       "tag": "0000_baseline",
-      "when": 1794218237160,
-      "sha256": "b06a23f66d22d3ee373aef6bc5afd58126dfb5e66214e58e5f7cab450a2fc91f"
+      "when": 1794451166220,
+      "sha256": "315c652bbc62961c225e1e4847ec60d16b421e98e3135900cf75273ea1705ef8"
     },
     {
       "name": "workforce",

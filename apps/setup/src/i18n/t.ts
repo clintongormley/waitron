@@ -34,3 +34,11 @@ export function format(key: StringKey, params: Record<string, string | number>):
     Object.hasOwn(params, name) ? String(params[name]) : placeholder,
   );
 }
+
+/** An ISO time as a date and time in the wizard's language, or null when it names no time. */
+export function localTime(iso: string): string | null {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime())
+    ? null
+    : at.toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+}

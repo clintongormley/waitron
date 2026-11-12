@@ -18,9 +18,10 @@ import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { X509Certificate } from "node:crypto";
+import { createHash, X509Certificate } from "node:crypto";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { CHECKED_ADDRESSES_FILE } from "@waitron/store";
 import type { AdoptCredential } from "./adopt.js";
 import { lookupBoxName, type BoxAddresses, type MdnsQuerySocket } from "./box-lookup.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -41,6 +42,7 @@ import {
   type BoxServer,
   type SilentServer,
 } from "./testing/box-authority.js";
+import { PAIR_STORE } from "./testing/pair-bundle.js";
 
 vi.mock("node:fs/promises", { spy: true });
 
@@ -54,7 +56,8 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   environment: "preproduction",
   boxHostname: "waitron.local",
   boxCaPem: "-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----\n",
-  relayUrl: "https://relay.example/abc",
+  primaryUrl: "https://box-4444.waitron.local",
+  store: PAIR_STORE,
   accountKey: Buffer.alloc(32, 9).toString("base64"),
   reservedIdentity: {
     modules: {
@@ -71,6 +74,7 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   moduleOverrides: {},
   primaryPublicKey: "PRIMARY_PUB",
   credentialsRing: { key: Buffer.alloc(32, 5).toString("base64"), version: 1 },
+  backupSettings: null,
   boxCaKeyPem: "-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----\n",
 };
 
@@ -83,6 +87,8 @@ const STANDBY = {
   nodeId: "55555555-5555-5555-5555-555555555555",
   publicKey: "STANDBY_PUB",
   contactUrl: "https://cloud.deli.test",
+  storeUrl: "https://cloud.deli.test:7443",
+  at: 1_800_000_000_000,
 };
 
 const servers: ServerType[] = [];
@@ -152,8 +158,36 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
         standbyNodeId: STANDBY.nodeId,
         standbyPublicKey: STANDBY.publicKey,
         standbyContactUrl: STANDBY.contactUrl,
+        standbyStoreUrl: STANDBY.storeUrl,
+        standbyAt: STANDBY.at,
       }),
     });
+  });
+
+  it("accepts a bundle carrying the main box's backup settings", async () => {
+    const withSettings: MirrorBundle = {
+      ...SAMPLE_BUNDLE,
+      backupSettings: { WAITRON_BACKUP_RECOVERY_KEY: "recovery-0123456789abcdef" },
+    };
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) => c.json(withSettings));
+    const base = await startServer(app);
+
+    expect(await fetchMirrorBundle(base, CREDENTIAL, STANDBY)).toEqual(withSettings);
+  });
+
+  it.each([
+    ["name anything but a WAITRON_BACKUP_ setting", { WAITRON_CREDENTIALS_KEY: "x" }],
+    ["hold a tab", { WAITRON_BACKUP_RECOVERY_KEY: "recovery\t0123456789" }],
+  ])("refuses a bundle whose backup settings %s", async (_shape, backupSettings) => {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) =>
+      c.json({ ...SAMPLE_BUNDLE, backupSettings }),
+    );
+    const base = await startServer(app);
+
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
   });
 
   it("tolerates a primaryUrl with a trailing slash (no double-slash path)", async () => {
@@ -243,6 +277,72 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
 
     const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  });
+
+  async function refusalFor(body: unknown): Promise<unknown> {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) => c.json(body, 409));
+    const base = await startServer(app);
+    return fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+  }
+
+  it.each([
+    "mirror.bucket_stream_active",
+    "mirror.standby_name_taken",
+    "mirror.spare_already_joined",
+  ])("passes on %s, carrying none of its parameters", async (code) => {
+    const error = await refusalFor({
+      error: { code, params: { detail: "https://primary.internal" } },
+    });
+    expect(isAppError(error) && error.code).toBe(code);
+    expect(isAppError(error) && error.params).toEqual({});
+  });
+
+  it("passes on mirror.standby_series_unsupported with a known module's name, and nothing else", async () => {
+    const error = await refusalFor({
+      error: {
+        code: "mirror.standby_series_unsupported",
+        params: { module: "fiscal-verifactu", detail: "https://primary.internal" },
+      },
+    });
+    expect(isAppError(error) && error.code).toBe("mirror.standby_series_unsupported");
+    expect(isAppError(error) && error.params).toEqual({ module: "fiscal-verifactu" });
+  });
+
+  it.each([
+    ["naming an unknown module", { module: "https://primary.internal" }],
+    ["naming no module", {}],
+    ["whose module is not text", { module: 7 }],
+  ])("does not pass on mirror.standby_series_unsupported %s", async (_shape, params) => {
+    const error = await refusalFor({
+      error: { code: "mirror.standby_series_unsupported", params },
+    });
+    expect(isAppError(error) && error.code).toBe("mirror.bundle_fetch_failed");
+    expect(isAppError(error) && error.params).toEqual({});
+  });
+
+  it("passes on mirror.clocks_apart with its two times only, and not with a time that is not one", async () => {
+    const primaryAt = "2026-11-10T12:00:00.000Z";
+    const standbyAt = "2026-11-10T12:05:00.000Z";
+    const relayed = await refusalFor({
+      error: {
+        code: "mirror.clocks_apart",
+        params: { primaryAt, standbyAt, detail: "https://primary.internal" },
+      },
+    });
+    expect(isAppError(relayed) && relayed.code).toBe("mirror.clocks_apart");
+    expect(isAppError(relayed) && relayed.params).toEqual({ primaryAt, standbyAt });
+
+    for (const params of [
+      { primaryAt, standbyAt: "https://primary.internal" },
+      { primaryAt: "2026-11-10", standbyAt },
+      { primaryAt, standbyAt: Date.parse(standbyAt) },
+      { primaryAt },
+    ]) {
+      const error = await refusalFor({ error: { code: "mirror.clocks_apart", params } });
+      expect(isAppError(error) && error.code).toBe("mirror.bundle_fetch_failed");
+      expect(isAppError(error) && error.params).toEqual({});
+    }
   });
 
   it("maps a 200 with an unparseable body to mirror.bundle_fetch_failed", async () => {
@@ -335,6 +435,21 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     ],
     ["null module overrides", { ...SAMPLE_BUNDLE, moduleOverrides: null }],
     ["no main box public key", { ...SAMPLE_BUNDLE, primaryPublicKey: undefined }],
+    ["no main box address", { ...SAMPLE_BUNDLE, primaryUrl: undefined }],
+    ["no pair key", { ...SAMPLE_BUNDLE, store: undefined }],
+    ["a null pair key", { ...SAMPLE_BUNDLE, store: null }],
+    [
+      "a pair key with no secret",
+      { ...SAMPLE_BUNDLE, store: { ...SAMPLE_BUNDLE.store, secretAccessKey: undefined } },
+    ],
+    [
+      "a pair key with a numeric access key id",
+      { ...SAMPLE_BUNDLE, store: { ...SAMPLE_BUNDLE.store, accessKeyId: 42 } },
+    ],
+    [
+      "a pair key with no venue id",
+      { ...SAMPLE_BUNDLE, store: { ...SAMPLE_BUNDLE.store, venueId: undefined } },
+    ],
     ["no authority key", { ...SAMPLE_BUNDLE, boxCaKeyPem: undefined }],
     ["no key ring", { ...SAMPLE_BUNDLE, credentialsRing: undefined }],
     ["an array key ring", { ...SAMPLE_BUNDLE, credentialsRing: [] }],
@@ -1342,6 +1457,189 @@ describe("a box named on the venue's network is found by asking it", () => {
       // The remembered address drops each connection; the network then claims it again, then ::1.
       await failureOf(call(port, checked, () => Promise.resolve(fresh("127.0.0.1", "::1"))));
       expect(tried).toBe(1);
+    });
+
+    describe("kept in the state folder", () => {
+      let stateDir: string;
+      beforeEach(async () => {
+        stateDir = await mkdtemp(join(tmpdir(), "waitron-checked-"));
+        closers.push(() => rm(stateDir, { recursive: true, force: true }));
+      });
+      const loaded = async (onWriteFailed: (error: unknown) => void = () => {}) => {
+        const checked = new CheckedAddresses();
+        await checked.rememberIn(stateDir, onWriteFailed);
+        return checked;
+      };
+      const stored = () => join(stateDir, CHECKED_ADDRESSES_FILE);
+
+      it("is recalled after a restart, and a call to it that reaches nothing says so", async () => {
+        const box = await serve(named);
+        const before = await loaded();
+        await call(box, before, () => Promise.resolve(fresh("127.0.0.1")));
+        await before.written();
+        const port = portOf(box);
+        await switchOff(box);
+
+        const failure = await failureOf(call(port, await loaded(), refused));
+        expect(failure).toBeInstanceOf(CheckedAddressUnreached);
+      });
+
+      it("holds no authority's certificate", async () => {
+        const box = await serve(named);
+        const checked = await loaded();
+        await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+        await checked.written();
+
+        const text = await readFile(stored(), "utf8");
+        expect(text).toContain("127.0.0.1");
+        expect(text).not.toContain("BEGIN CERTIFICATE");
+      });
+
+      it("is written again only when the address changes", async () => {
+        const checked = await loaded();
+        checked.keep("box", "127.0.0.1");
+        await checked.written();
+        const first = (await stat(stored())).ino;
+
+        checked.keep("box", "127.0.0.1");
+        await checked.written();
+        expect((await stat(stored())).ino).toBe(first);
+
+        checked.keep("box", "::1");
+        await checked.written();
+        expect((await stat(stored())).ino).not.toBe(first);
+        expect((await loaded()).recall("box")).toBe("::1");
+      });
+
+      it("keeps the latest of two quick changes", async () => {
+        const checked = await loaded();
+        checked.keep("box", "127.0.0.1");
+        checked.keep("box", "::1");
+        await checked.written();
+
+        expect((await loaded()).recall("box")).toBe("::1");
+      });
+
+      const digest = createHash("sha256").update("box").digest("hex");
+      it.each([
+        ["not JSON", "{not json"],
+        ["a non-text address", JSON.stringify({ [digest]: 5 })],
+      ])("loads as empty from a file that is %s", async (_label, text) => {
+        await writeFile(stored(), text);
+        const checked = await loaded();
+
+        expect(checked.recall("box")).toBeUndefined();
+      });
+
+      it("a failed write is reported and the address still holds in memory", async () => {
+        const gone = join(stateDir, "gone");
+        const failures: unknown[] = [];
+        const checked = new CheckedAddresses();
+        await checked.rememberIn(gone, (error) => failures.push(error));
+
+        checked.keep("box", "127.0.0.1");
+        await checked.written();
+        expect(failures).toHaveLength(1);
+        expect(checked.recall("box")).toBe("127.0.0.1");
+      });
+
+      it("a write that failed is made again when the same address is next kept", async () => {
+        const failures: unknown[] = [];
+        const checked = await loaded((error) => failures.push(error));
+        checked.keep("box", "127.0.0.1");
+        await checked.written();
+        const away = `${stateDir}-away`;
+        await fs.rename(stateDir, away);
+        checked.keep("box", "127.0.0.2");
+        await checked.written();
+        await fs.rename(away, stateDir);
+        expect(failures).toHaveLength(1);
+        // The control: the failed write left the earlier address in the file.
+        expect((await loaded()).recall("box")).toBe("127.0.0.1");
+
+        checked.keep("box", "127.0.0.2");
+        await checked.written();
+        expect((await loaded()).recall("box")).toBe("127.0.0.2");
+        const repaired = (await stat(stored())).ino;
+        checked.keep("box", "127.0.0.2");
+        await checked.written();
+        expect((await stat(stored())).ino).toBe(repaired);
+      });
+
+      it("a failure reporter that throws leaves later writes to go ahead", async () => {
+        const later = join(stateDir, "later");
+        const checked = new CheckedAddresses();
+        await checked.rememberIn(later, () => {
+          throw new Error("reporter failed");
+        });
+        checked.keep("box", "127.0.0.1");
+        await expect(checked.written()).resolves.toBeUndefined();
+
+        await mkdir(later);
+        checked.keep("box", "::1");
+        await expect(checked.written()).resolves.toBeUndefined();
+        const after = new CheckedAddresses();
+        await after.rememberIn(later, () => {});
+        expect(after.recall("box")).toBe("::1");
+      });
+
+      it("once let go, writes nothing more to the folder, after the writes already asked for", async () => {
+        const checked = new CheckedAddresses();
+        const letGo = await checked.rememberIn(stateDir, () => {});
+        checked.keep("box", "127.0.0.1");
+        await letGo();
+        expect((await loaded()).recall("box")).toBe("127.0.0.1");
+
+        checked.keep("box", "::1");
+        await checked.written();
+        expect(checked.recall("box")).toBe("::1");
+        expect((await loaded()).recall("box")).toBe("127.0.0.1");
+      });
+
+      it("a write asked for before it moved to another folder holds only the first folder's addresses", async () => {
+        const newer = await mkdtemp(join(tmpdir(), "waitron-checked-newer-"));
+        closers.push(() => rm(newer, { recursive: true, force: true }));
+        const other = new CheckedAddresses();
+        await other.rememberIn(newer, () => {});
+        other.keep("other box", "10.0.0.9");
+        await other.written();
+        const real = await vi.importActual<typeof fs>("node:fs/promises");
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => (release = resolve));
+        vi.mocked(fs.rename).mockImplementationOnce(async (from, to) => {
+          await held;
+          return real.rename(from, to);
+        });
+        try {
+          const checked = await loaded();
+          checked.keep("box", "127.0.0.1");
+          checked.keep("box", "::1");
+          await checked.rememberIn(newer, () => {});
+          release();
+          await checked.written();
+        } finally {
+          vi.mocked(fs.rename).mockReset();
+        }
+
+        const first = await loaded();
+        expect(first.recall("box")).toBe("::1");
+        expect(first.recall("other box")).toBeUndefined();
+      });
+
+      it("letting go of a folder it has moved on from leaves the newer folder written", async () => {
+        const newer = await mkdtemp(join(tmpdir(), "waitron-checked-newer-"));
+        closers.push(() => rm(newer, { recursive: true, force: true }));
+        const checked = new CheckedAddresses();
+        const letGoOfFirst = await checked.rememberIn(stateDir, () => {});
+        await checked.rememberIn(newer, () => {});
+        await letGoOfFirst();
+
+        checked.keep("box", "::1");
+        await checked.written();
+        const after = new CheckedAddresses();
+        await after.rememberIn(newer, () => {});
+        expect(after.recall("box")).toBe("::1");
+      });
     });
   });
 

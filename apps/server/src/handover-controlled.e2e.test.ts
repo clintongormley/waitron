@@ -649,7 +649,7 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
   const m2Files = await openVenueDatabase(m2Dir);
   await setNodeMode({ venue: m2Files.venue, node: m2Files.node }, m2Id, "mirror");
   await writeMirrorLink(m2Files.node, m2Id, {
-    relayUrl: "http://127.0.0.1:1/",
+    originUrl: "http://127.0.0.1:1/",
     boxHostname: "localhost",
     boxCaPem: m1Ca,
     originNodeId: m1Id,

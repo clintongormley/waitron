@@ -81,6 +81,7 @@ import {
 } from "./testing/boot-harness.js";
 import { createHourTestClock } from "./testing/hour-test-clock.js";
 import * as bootHarness from "./testing/boot-harness.js";
+import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -1597,7 +1598,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       environment: "preproduction",
       boxHostname: "waitron.local",
       boxCaPem: "fixture-ca",
-      relayUrl: "https://relay.example",
+      ...PAIR_BUNDLE_FIELDS,
       accountKey: Buffer.alloc(32, 9).toString("base64"),
       reservedIdentity: {
         modules: {},
@@ -1612,6 +1613,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       moduleOverrides: {},
       primaryPublicKey: "fixture-primary-key",
       credentialsRing: { key: Buffer.alloc(32, 8).toString("base64"), version: 1 },
+      backupSettings: null,
       boxCaKeyPem: "fixture-ca-key",
     };
     const primary = createHttpServer((_req, res) => {

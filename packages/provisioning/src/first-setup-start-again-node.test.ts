@@ -195,6 +195,13 @@ it.each<[string, string, string]>([
     "node.db holds a row: node_mirror_link",
   ],
   [
+    "a pair link",
+    `insert into node_pair_link values ('${NODE_ID}', 'serves', 'awaiting_copy', '${randomUUID()}', 'key',
+       'https://spare:7443', 'v', 'waitron0123456789abcdef', x'01', zeroblob(12), zeroblob(16), 1, 1,
+       '2026-10-31T00:00:00.000Z', '2026-10-31T00:00:00.000Z')`,
+    "node.db holds a row: node_pair_link",
+  ],
+  [
     "a role",
     `insert into node_mode (node_id, updated_at) values ('${NODE_ID}', '2026-10-31T00:00:00.000Z')`,
     "node.db holds a row: node_mode",

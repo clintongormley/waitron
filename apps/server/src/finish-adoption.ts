@@ -6,6 +6,7 @@ import "@waitron/module";
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
+import "./errors.js";
 import { writeFileDurable } from "./fs-atomic.js";
 import {
   establishReservedStandbyIdentity,
@@ -18,7 +19,7 @@ export function assertAdoptionModules(modules: readonly WaitronModule[]): void {
   for (const module of modules) {
     // The adoption latch carries no live authority for a separately prepared allocation.
     if (module.operations !== undefined && module.provisioning?.standby?.series === "on-activation")
-      throw new AppError("module.operation_invalid", { module: module.name });
+      throw new AppError("mirror.standby_series_unsupported", { module: module.name });
   }
 }
 

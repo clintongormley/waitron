@@ -340,7 +340,7 @@ it.each(["mirror", "primary"] as const)(
     if (mode === "mirror") {
       await setNodeMode({ venue: source.db, node: source.node }, NODE, "mirror");
       await writeMirrorLink(source.node, NODE, {
-        relayUrl: "http://127.0.0.1:1/",
+        originUrl: "http://127.0.0.1:1/",
         boxHostname: "origin-box.local",
         boxCaPem: mintSelfSignedServerCert({
           hostnames: ["origin-box.local"],

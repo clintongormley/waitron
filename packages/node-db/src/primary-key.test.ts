@@ -9,7 +9,11 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
-import { pinPrimaryKeyTx, readPinnedPrimaryKey } from "./primary-key.js";
+import {
+  deleteNodePrimaryKeyOtherThanTx,
+  pinPrimaryKeyTx,
+  readPinnedPrimaryKey,
+} from "./primary-key.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
@@ -92,5 +96,19 @@ describe("the main box's pinned public key", () => {
       ),
     );
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+  });
+});
+
+describe("deleteNodePrimaryKeyOtherThanTx", () => {
+  const sweep = useVenueDb({ migrations: [NODE_MIGRATIONS] });
+
+  it("deletes every row but this node id's, and keeps this one's", async () => {
+    for (const nodeId of [NODE, OTHER, "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]) {
+      await withNodeTransaction(sweep.node, (tx) =>
+        pinPrimaryKeyTx(tx, nodeId, { primaryNodeId: PRIMARY, publicKey: "PUB-1" }),
+      );
+    }
+    await withNodeTransaction(sweep.node, (tx) => deleteNodePrimaryKeyOtherThanTx(tx, NODE));
+    expect(sweep.node.all(sql`select node_id from node_primary_key`)).toEqual([{ node_id: NODE }]);
   });
 });

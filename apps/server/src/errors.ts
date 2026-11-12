@@ -1296,11 +1296,12 @@ declare module "@waitron/shared" {
      * environment and `actual` the primary's.
      */
     "mirror.environment_mismatch": { expected: string; actual: string };
-    "mirror.no_relay": Record<string, never>;
     /**
      * A mirror-bundle request carried a malformed STANDBY identity: `standbyNodeId` absent or not a
-     * UUID, `standbyPublicKey` absent or empty, or `standbyContactUrl` absent, not a string, or a
-     * non-empty value that is not a bare http(s) origin (`""` is accepted). Not
+     * UUID, `standbyPublicKey` absent or empty, `standbyContactUrl` absent, not a string, or a
+     * non-empty value that is not a bare http(s) origin, `standbyStoreUrl` not an `https` bare
+     * origin at the contact URL's host (so an empty contact URL is refused), or `standbyAt` not a
+     * number or not a time a `Date` can hold. Not
      * `password.invalid`: a bad identity is not a bad credential. The standby's key is not echoed.
      */
     "mirror.standby_invalid": Record<string, never>;
@@ -1367,6 +1368,21 @@ declare module "@waitron/shared" {
      * removed machine frees a place.
      */
     "mirror.membership_full": { limit: number };
+    /** A spare asked to join while this box's pair link already streams to a joined spare. */
+    "mirror.spare_already_joined": Record<string, never>;
+    /** A spare asked to join while this venue streams to a bucket; a venue streams to one place. */
+    "mirror.bucket_stream_active": Record<string, never>;
+    /** A joining spare's box name is already a listed box's; a fresh join draws a new node id. */
+    "mirror.standby_name_taken": Record<string, never>;
+    /** The two boxes' clocks, both given as ISO times, are 10 minutes or more apart. */
+    "mirror.clocks_apart": { primaryAt: string; standbyAt: string };
+    /**
+     * The venue enables `module`, whose standby series are allocated only at activation under
+     * authority a join does not carry, so this version cannot add a spare to the venue. The main
+     * box refuses the join before reserving anything, a spare refuses a bundle naming such a
+     * module before writing anything, and an adoption left pending refuses to finish.
+     */
+    "mirror.standby_series_unsupported": { module: string };
     /** A secret file's path, from a backup archive being restored, would land outside the state
      * folder or on a first-setup host file. */
     "recovery.archive_path_unsafe": Record<string, never>;
@@ -1395,6 +1411,10 @@ declare module "@waitron/shared" {
     "backup.recovery_key_too_short": { min: number };
     /** WAITRON_BACKUP_DESTINATIONS is not a valid JSON array of destination descriptors. */
     "backup.destinations_invalid": { reason: string };
+    /** A box's backup settings this box would not write as its `backup.env`: a name outside
+     * `WAITRON_BACKUP_`, a value that is not text, or one the file would not keep. `reason` names
+     * the check and never a value, which may be the backup recovery key. */
+    "spare.settings_invalid": { reason: string };
     /** The backup schedule env vars are inconsistent or malformed: an interval AND a wall-clock
      * schedule both set, or a bad weekday token or `WAITRON_BACKUP_AT` time. `reason` is a short
      * machine tag. */

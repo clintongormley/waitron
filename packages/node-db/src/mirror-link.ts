@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 import { now, withNodeTransaction, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import { nodeMirrorLink } from "./schema/node-mirror-link.js";
 
@@ -7,7 +7,7 @@ import { nodeMirrorLink } from "./schema/node-mirror-link.js";
  * box's TLS. `originNodeId` is the PRIMARY this mirror was adopted from, never this node's own id.
  */
 export interface MirrorConnection {
-  relayUrl: string;
+  originUrl: string;
   boxHostname: string;
   boxCaPem: string;
   originNodeId: string;
@@ -20,7 +20,7 @@ export async function readMirrorLink(
 ): Promise<MirrorConnection | null> {
   const [row] = await node
     .select({
-      relayUrl: nodeMirrorLink.relayUrl,
+      originUrl: nodeMirrorLink.originUrl,
       boxHostname: nodeMirrorLink.boxHostname,
       boxCaPem: nodeMirrorLink.boxCaPem,
       originNodeId: nodeMirrorLink.originNodeId,
@@ -55,4 +55,12 @@ export async function writeMirrorLinkTx(
       target: nodeMirrorLink.nodeId,
       set: { ...link, adoptedAt: now() },
     });
+}
+
+/** Deletes every row of this table keyed by a node id other than `nodeId`, and keeps its own. */
+export async function deleteNodeMirrorLinkOtherThanTx(
+  tx: NodeTransaction,
+  nodeId: string,
+): Promise<void> {
+  await tx.delete(nodeMirrorLink).where(ne(nodeMirrorLink.nodeId, nodeId));
 }

@@ -1,20 +1,26 @@
 // `credential` is the primary's by-id login object (`AdoptCredential`), not the dashboard's
 // by-email body: the primary's mirror-bundle route authenticates it with `loginManagerById`.
-import { X509Certificate } from "node:crypto";
-import { open, rename, rm } from "node:fs/promises";
+import { createHash, X509Certificate } from "node:crypto";
+import { open, readFile, rename, rm } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request, type RequestOptions } from "node:https";
 import { isIP } from "node:net";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { AppError } from "@waitron/shared";
+import { CHECKED_ADDRESSES_FILE } from "@waitron/store";
 import type { AdoptCredential } from "./adopt.js";
+import { checkBackupSettings } from "./backup-env-writer.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import { lookupBoxName, RememberedAnswers, type BoxAddresses } from "./box-lookup.js";
+import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
+import { JOIN_REFUSALS } from "./mirror-bundle-api.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { reachDisk } from "./sync-path.js";
 import "./errors.js";
-// The registry of the code this file relays from the primary.
+// The registries of the codes this file relays from the primary.
 import "@waitron/identity";
+import "@waitron/module";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -44,12 +50,15 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
     !hasStrings(value, [
       "boxHostname",
       "boxCaPem",
-      "relayUrl",
+      "primaryUrl",
       "accountKey",
       "primaryPublicKey",
       "boxCaKeyPem",
     ]) ||
+    !isRecord(value.store) ||
+    !hasStrings(value.store, ["accessKeyId", "secretAccessKey", "venueId"]) ||
     !isEncodedKeyRing(value.credentialsRing) ||
+    (value.backupSettings !== null && !checkBackupSettings(value.backupSettings).ok) ||
     (value.environment !== "production" && value.environment !== "preproduction") ||
     (wireguardPublicKey !== undefined && typeof wireguardPublicKey !== "string") ||
     !isRecord(designated) ||
@@ -77,19 +86,57 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
   return true;
 }
 
+const RELAYED_WITH_PARAMS = ["mirror.clocks_apart", "mirror.standby_series_unsupported"] as const;
+
+type RelayedBare =
+  | "password.invalid"
+  | Exclude<(typeof JOIN_REFUSALS)[number], (typeof RELAYED_WITH_PARAMS)[number]>;
+
+function isRelayedBare(code: unknown): code is RelayedBare {
+  return (
+    code === "password.invalid" ||
+    ((JOIN_REFUSALS as readonly unknown[]).includes(code) &&
+      !(RELAYED_WITH_PARAMS as readonly unknown[]).includes(code))
+  );
+}
+
+/** Text that is an ISO time exactly as `Date.prototype.toISOString` writes one. */
+function isIsoTime(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const time = new Date(value);
+  return !Number.isNaN(time.getTime()) && time.toISOString() === value;
+}
+
 /**
- * The primary's refused login is relayed as `password.invalid`, rebuilt here so nothing the primary
- * wrote travels on; every other refusal is `mirror.bundle_fetch_failed`.
+ * A refusal from the main box is passed on only when it is `password.invalid` or one of
+ * `JOIN_REFUSALS`, and each is rebuilt here so nothing the main box wrote travels on: with no
+ * parameters, except `mirror.standby_series_unsupported` with `{ module }` only when it names a
+ * module in `ALL_MODULES`, and `mirror.clocks_apart` with `{ primaryAt, standbyAt }` only when both
+ * are ISO times. Every other code, and any of these whose parameters fail their check, is
+ * `mirror.bundle_fetch_failed`.
  */
 async function refusalFrom(response: Response): Promise<AppError> {
-  let code: unknown;
+  let error: Record<string, unknown> = {};
   try {
     const body: unknown = await response.json();
-    code = isRecord(body) && isRecord(body.error) ? body.error.code : undefined;
+    if (isRecord(body) && isRecord(body.error)) error = body.error;
   } catch {
-    code = undefined;
+    // An unreadable answer is the generic refusal below.
   }
-  if (code === "password.invalid") return new AppError("password.invalid", {});
+  const { code } = error;
+  const params = isRecord(error.params) ? error.params : {};
+  if (isRelayedBare(code)) return new AppError(code, {});
+  if (code === "mirror.standby_series_unsupported") {
+    const named = ALL_MODULES.find((module) => module.name === params.module);
+    if (named !== undefined) return new AppError(code, { module: named.name });
+  }
+  if (
+    code === "mirror.clocks_apart" &&
+    isIsoTime(params.primaryAt) &&
+    isIsoTime(params.standbyAt)
+  ) {
+    return new AppError(code, { primaryAt: params.primaryAt, standbyAt: params.standbyAt });
+  }
   return new AppError("mirror.bundle_fetch_failed", {});
 }
 
@@ -132,22 +179,110 @@ const askVenueNetwork: BoxLookup = (hostname, { fresh }) =>
 
 /**
  * The address at which a connection to a box's name last finished its handshake under the
- * authority pinned for it. Process memory only: after a restart nothing counts as reached until a
- * call reaches the box again.
+ * authority pinned for it. Once given a state folder it is read from there and every change is
+ * written back, so it survives a restart; a write that failed is made again at the next `keep`,
+ * changed or not. Without a folder it lasts as long as the process.
  */
 export class CheckedAddresses {
-  private readonly reached = new Map<string, string>();
+  private reached = new Map<string, string>();
+  private stored: StoredAddresses | undefined;
+  private writes: Promise<void> = Promise.resolve();
 
-  recall(key: string): string | undefined {
-    return this.reached.get(key);
+  /**
+   * Loads what `stateDir` holds; a missing, unreadable or malformed file loads as nothing. The
+   * function returned stops the writes to `stateDir` unless another folder has replaced it, then
+   * settles once the writes asked for before it have finished or failed.
+   */
+  async rememberIn(
+    stateDir: string,
+    onWriteFailed: (error: unknown) => void,
+  ): Promise<() => Promise<void>> {
+    const path = join(stateDir, CHECKED_ADDRESSES_FILE);
+    this.reached = await readReached(path);
+    const stored: StoredAddresses = { path, onWriteFailed, unsaved: false };
+    this.stored = stored;
+    return () => {
+      if (this.stored === stored) this.stored = undefined;
+      return this.writes;
+    };
   }
 
+  recall(key: string): string | undefined {
+    return this.reached.get(digestOf(key));
+  }
+
+  /**
+   * Never throws: a failed write goes to `onWriteFailed`, and the address still holds here; a
+   * reporter that throws is ignored.
+   */
   keep(key: string, address: string): void {
-    this.reached.set(key, address);
+    const digest = digestOf(key);
+    const stored = this.stored;
+    if (this.reached.get(digest) === address && stored?.unsaved !== true) return;
+    this.reached.set(digest, address);
+    if (stored === undefined) return;
+    // Taken now, so a later `rememberIn` cannot put another folder's addresses in this file.
+    const text = JSON.stringify(Object.fromEntries(this.reached));
+    this.writes = this.writes.then(() => saveReached(stored, text));
+  }
+
+  /** Settles once every write asked for so far has finished or failed. */
+  written(): Promise<void> {
+    return this.writes;
+  }
+}
+
+interface StoredAddresses {
+  path: string;
+  onWriteFailed: (error: unknown) => void;
+  /** The file may not hold what memory does, because the last write to it failed. */
+  unsaved: boolean;
+}
+
+async function saveReached(stored: StoredAddresses, text: string): Promise<void> {
+  try {
+    await writeFileDurable(stored.path, text, 0o600);
+    stored.unsaved = false;
+  } catch (error) {
+    stored.unsaved = true;
+    try {
+      stored.onWriteFailed(error);
+    } catch {
+      // Nowhere left to report it; the queue must stay fulfilled for the writes after it.
+    }
+  }
+}
+
+// The key holds the authority's certificate, which the file does not need to.
+function digestOf(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
+
+async function readReached(path: string): Promise<Map<string, string>> {
+  try {
+    const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+    if (typeof parsed !== "object" || parsed === null) return new Map();
+    const entries = Object.entries(parsed);
+    return entries.every(([, value]) => typeof value === "string")
+      ? new Map(entries as [string, string][])
+      : new Map();
+  } catch {
+    return new Map();
   }
 }
 
 const checkedByDefault = new CheckedAddresses();
+
+/**
+ * Gives every call using the default lookup the addresses kept in `stateDir`, until the function
+ * returned is called (see `CheckedAddresses.rememberIn`).
+ */
+export function rememberCheckedAddressesIn(
+  stateDir: string,
+  onWriteFailed: (error: unknown) => void,
+): Promise<() => Promise<void>> {
+  return checkedByDefault.rememberIn(stateDir, onWriteFailed);
+}
 
 /**
  * A failed call that tried the address `CheckedAddresses` remembered for the name first and
@@ -540,7 +675,8 @@ function sameAuthority(bundleCaPem: string, confirmedCaPem: string): boolean {
 
 /**
  * Only the PUBLIC half of the standby's key travels; the private key never leaves the mirror.
- * `standby.contactUrl` may be `""`: a standby that advertises nothing is still a member.
+ * `standby.storeUrl` is where the spare's store listens; the main box refuses one whose host is not
+ * `standby.contactUrl`'s.
  *
  * A network error, a non-2xx response `refusalFrom` does not relay, unparseable JSON, or a
  * malformed bundle is `mirror.bundle_fetch_failed`; no refusal carries upstream detail that could
@@ -549,7 +685,7 @@ function sameAuthority(bundleCaPem: string, confirmedCaPem: string): boolean {
 export async function fetchMirrorBundle(
   primaryUrl: string,
   credential: AdoptCredential,
-  standby: { nodeId: string; publicKey: string; contactUrl: string },
+  standby: { nodeId: string; publicKey: string; contactUrl: string; storeUrl: string; at: number },
   confirmedCaPem?: string,
   { timeoutMs = BUNDLE_REQUEST_LIMIT_MS }: RequestLimit = {},
 ): Promise<MirrorBundle> {
@@ -569,6 +705,8 @@ export async function fetchMirrorBundle(
     standbyNodeId: standby.nodeId,
     standbyPublicKey: standby.publicKey,
     standbyContactUrl: standby.contactUrl,
+    standbyStoreUrl: standby.storeUrl,
+    standbyAt: standby.at,
   });
 
   let response: Response;

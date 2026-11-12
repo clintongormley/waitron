@@ -42,6 +42,7 @@ import { promoteMirrorToPrimary } from "./promote.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
+import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
@@ -200,7 +201,7 @@ async function reserve(standby = generateStandbyIdentity()) {
       node: primary.node,
       ring: RING,
       stateDir: stateDir!,
-      relayUrl: "https://relay.test",
+      ...PAIR_BUNDLE_FIELDS,
       boxHostname: "waitron.local",
       accountKey: "test-account-key",
       designated: { nodeId: PRIMARY },
@@ -448,12 +449,14 @@ it("a refused public adoption retains its independently signed reservation witho
         ownerNode: unadopted.node,
         ring: RING,
         advertisedOrigin: "https://spare.test",
+        spareStorePort: 7443,
         environment: "preproduction",
         database: "synthetic-empty-spare",
         listIpv4: () => [],
         now: () => new Date(),
         stateDir: adoptionDir,
         persistTrading: async () => {},
+        persistBackupSettings: async () => {},
         persistModuleConfig: async () => {},
         persistCredentialsRing: async () => {},
         fetchBundle: async (_url, _credential, standby) => {
@@ -467,8 +470,8 @@ it("a refused public adoption retains its independently signed reservation witho
               appDb: primary.db,
               node: primary.node,
               ring: RING,
+              ...PAIR_BUNDLE_FIELDS,
               stateDir: stateDir!,
-              relayUrl: "https://relay.test",
               boxHostname: "waitron.local",
               accountKey: "test-account-key",
               designated: { nodeId: PRIMARY },
@@ -490,7 +493,7 @@ it("a refused public adoption retains its independently signed reservation witho
       { beforeFirstWrite: async () => {} },
     ),
   ).rejects.toMatchObject({
-    code: "module.operation_invalid",
+    code: "mirror.standby_series_unsupported",
     params: { module: "fiscal-verifactu" },
   });
   expect(target).not.toBe("");

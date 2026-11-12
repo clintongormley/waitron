@@ -40,7 +40,7 @@ CREATE TABLE `node_handover_restriction` (
 --> statement-breakpoint
 CREATE TABLE `node_mirror_link` (
 	`node_id` text PRIMARY KEY NOT NULL,
-	`relay_url` text NOT NULL,
+	`origin_url` text NOT NULL,
 	`box_hostname` text NOT NULL,
 	`box_ca_pem` text NOT NULL,
 	`origin_node_id` text NOT NULL,
@@ -55,6 +55,29 @@ CREATE TABLE `node_mode` (
 	CONSTRAINT "node_mode_mode_ck" CHECK("node_mode"."mode" in ('primary', 'mirror')),
 	CONSTRAINT "node_mode_singleton_role_ck" CHECK("node_mode"."singleton_role" in ('primary', 'secondary')),
 	CONSTRAINT "node_mode_role_valid_ck" CHECK(not ("node_mode"."mode" = 'mirror' and "node_mode"."singleton_role" = 'primary'))
+);
+--> statement-breakpoint
+CREATE TABLE `node_pair_link` (
+	`node_id` text PRIMARY KEY NOT NULL,
+	`role` text NOT NULL,
+	`state` text NOT NULL,
+	`peer_node_id` text NOT NULL,
+	`peer_public_key` text NOT NULL,
+	`store_url` text NOT NULL,
+	`venue_id` text NOT NULL,
+	`access_key_id` text NOT NULL,
+	`secret_ciphertext` blob NOT NULL,
+	`secret_iv` blob NOT NULL,
+	`secret_auth_tag` blob NOT NULL,
+	`key_version` integer NOT NULL,
+	`ring_version` integer NOT NULL,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL,
+	CONSTRAINT "node_pair_link_role_ck" CHECK("node_pair_link"."role" in ('streams', 'serves')),
+	CONSTRAINT "node_pair_link_state_ck" CHECK(("node_pair_link"."role" = 'streams' and "node_pair_link"."state" in ('pending', 'streaming')) or ("node_pair_link"."role" = 'serves' and "node_pair_link"."state" in ('awaiting_copy', 'copied'))),
+	CONSTRAINT "node_pair_link_key_version_ck" CHECK("node_pair_link"."key_version" >= 1),
+	CONSTRAINT "node_pair_link_secret_iv_len_ck" CHECK(octet_length("node_pair_link"."secret_iv") = 12),
+	CONSTRAINT "node_pair_link_secret_auth_tag_len_ck" CHECK(octet_length("node_pair_link"."secret_auth_tag") = 16)
 );
 --> statement-breakpoint
 CREATE TABLE `node_primary_key` (

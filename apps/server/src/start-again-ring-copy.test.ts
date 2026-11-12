@@ -33,6 +33,7 @@ import { mountSetup } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { writeTradingEnv } from "./trading-config.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
+import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -58,11 +59,12 @@ const BUNDLE: Omit<MirrorBundle, "reservedIdentity"> = {
   environment: "preproduction",
   boxHostname: "waitron.local",
   boxCaPem: MAIN_AUTHORITY.caCertPem,
-  relayUrl: "https://relay.example/",
+  ...PAIR_BUNDLE_FIELDS,
   accountKey: Buffer.alloc(32, 9).toString("base64"),
   moduleOverrides: {},
   primaryPublicKey: PRIMARY_KEYS.publicKey,
   credentialsRing: { key: Buffer.alloc(32, 6).toString("base64"), version: 1 },
+  backupSettings: null,
   boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
 };
 
@@ -114,10 +116,12 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
             },
           }),
           advertisedOrigin: "https://standby.example",
+          spareStorePort: 7443,
           environment: "preproduction",
           persistTrading: async (cfg) => {
             await writeTradingEnv(stateDir, cfg);
           },
+          persistBackupSettings: async () => {},
           persistModuleConfig: async (config) => {
             await writeModuleConfig(stateDir, config);
           },

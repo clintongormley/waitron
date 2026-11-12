@@ -78,6 +78,7 @@ describe("loadConfig", () => {
       paymentTestProviders: false,
       httpPort: 8080,
       landingPort: 80,
+      spareStorePort: 7443,
       // /health is unauthenticated, so loopback-only is the default.
       httpHost: "127.0.0.1",
       minTickMs: 5_000,
@@ -505,6 +506,9 @@ describe("loadConfig", () => {
     ["WAITRON_HTTP_PORT", "0", "not_a_positive_integer"],
     // Otherwise `serve()` throws a raw `RangeError [ERR_SOCKET_BAD_PORT]`.
     ["WAITRON_HTTP_PORT", "65536", "port_out_of_range"],
+    ["WAITRON_SPARE_STORE_PORT", "store", "not_a_positive_integer"],
+    ["WAITRON_SPARE_STORE_PORT", "0", "not_a_positive_integer"],
+    ["WAITRON_SPARE_STORE_PORT", "65536", "port_out_of_range"],
     ["WAITRON_MIN_TICK_MS", "-1", "not_a_positive_integer"],
     ["WAITRON_SKIP_RETRY_MS", "nope", "not_a_positive_integer"],
     ["WAITRON_SCHEDULER_MAX_ATTEMPTS", "1.5", "not_a_positive_integer"],
@@ -533,6 +537,16 @@ describe("loadConfig", () => {
   it("accepts a maxTick exactly at Node's timer limit", () => {
     const config = loadConfig({ ...MIN_ENV, WAITRON_MAX_TICK_MS: "2147483647" }, ROOT, STATE_ROOT);
     expect(config.maxTickMs).toBe(2_147_483_647);
+  });
+
+  it.each([undefined, ""])("defaults the spare's store port when its value is %s", (value) => {
+    const config = loadConfig({ ...MIN_ENV, WAITRON_SPARE_STORE_PORT: value }, ROOT, STATE_ROOT);
+    expect(config.spareStorePort).toBe(7443);
+  });
+
+  it("reads the spare's store port", () => {
+    const config = loadConfig({ ...MIN_ENV, WAITRON_SPARE_STORE_PORT: "9443" }, ROOT, STATE_ROOT);
+    expect(config.spareStorePort).toBe(9443);
   });
 
   it.each([undefined, ""])("defaults maxTick when its value is %s", (value) => {
@@ -988,6 +1002,54 @@ it.each(["8080", "80"])(
     }
   },
 );
+
+it.each([
+  ["8080", {}],
+  ["80", {}],
+  ["9000", { WAITRON_HTTP_PORT: "9000" }],
+  ["8000", { WAITRON_HTTP_LANDING_PORT: "8000" }],
+])("refuses store port %s when the local or landing listener uses it", (port, env) => {
+  expect(() => loadConfig({ ...env, WAITRON_SPARE_STORE_PORT: port }, ROOT, STATE_ROOT)).toThrow(
+    expect.objectContaining({
+      code: "server.config_invalid",
+      params: { variable: "WAITRON_SPARE_STORE_PORT", reason: "listener_port_conflict" },
+    }),
+  );
+});
+
+it("refuses a staff port the spare's store uses", () => {
+  expect(() =>
+    loadConfig(
+      { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: "7443" },
+      ROOT,
+      STATE_ROOT,
+    ),
+  ).toThrow(
+    expect.objectContaining({
+      code: "server.config_invalid",
+      params: { variable: "WAITRON_STAFF_PORT", reason: "listener_port_conflict" },
+    }),
+  );
+});
+
+it.each([
+  ["staff", "not_a_positive_integer"],
+  ["0", "not_a_positive_integer"],
+  ["65536", "port_out_of_range"],
+])("refuses staff port %s as %s", (port, reason) => {
+  expect(() =>
+    loadConfig(
+      { WAITRON_STAFF_ORIGIN: "https://staff.example.test", WAITRON_STAFF_PORT: port },
+      ROOT,
+      STATE_ROOT,
+    ),
+  ).toThrow(
+    expect.objectContaining({
+      code: "server.config_invalid",
+      params: { variable: "WAITRON_STAFF_PORT", reason },
+    }),
+  );
+});
 
 it.each(["WAITRON_VENUE_DIR", "WAITRON_LOG_DIR"])(
   "refuses %s in scratch before boot",
