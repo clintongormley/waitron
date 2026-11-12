@@ -116,7 +116,7 @@ it("lists every season from the one in force on 1 January, with colour, name, st
   expect(root(el).querySelector("[data-test=window-hint]")!.textContent!.trim()).toBe(
     "A season runs until the next one starts. The list re-sorts by start date when you save.",
   );
-  expect(button(el, "add-season")!.textContent!.trim()).toBe("+ Season");
+  expect(button(el, "add-season")!.textContent!.trim()).toBe("Add season");
   expect(button(el, "add-season")!.variant).toBe("secondary");
 });
 
@@ -145,7 +145,7 @@ it("edits a name, a colour and a start in place, and Runs until follows the draf
   expect(field(el, "season-1-month").options.map((option) => option.label)).toContain("February");
 });
 
-it("+ Season adds an empty row at the end, offered the first calendar colour no row uses", async () => {
+it("Add season adds an empty row at the end, offered the first calendar colour no row uses", async () => {
   const el = await mount();
   await press(el, button(el, "add-season")!);
   expect(rowKeys(el)).toEqual(["winter", "spring", "summer", "autumn", "new-1"]);
@@ -204,7 +204,7 @@ it("a bin pressed with the mouse hands focus to the bin of the row that took its
   expect(bins(el)[1]!.shadowRoot!.activeElement).toBe(innerButton(bins(el)[1]!));
 });
 
-it("a bin pressed from the keyboard on the last row hands focus to the row above's bin, and the one row left hands it to + Season", async () => {
+it("a bin pressed from the keyboard on the last row hands focus to the row above's bin, and the one row left hands it to Add season", async () => {
   const el = await mount();
   bins(el)[3]!.focus();
   await userEvent.keyboard("{Enter}");

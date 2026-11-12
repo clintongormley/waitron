@@ -297,7 +297,7 @@ describe("a stored special day opened with a date to add", () => {
 describe("a new special day", () => {
   it("starts on the date it was opened on, with no name, and offers no Delete", async () => {
     const { painter } = await mount({ specialDayId: null, date: "2026-12-24" });
-    expect(frame(painter).heading).toBe("New special day");
+    expect(frame(painter).heading).toBe("Add special day");
     expect(chips(painter)).toEqual(["2026-12-24"]);
     expect(grid(painter).columns.map(({ key }) => key)).toEqual(["2026-12-24"]);
     expect(part(painter, "delete")).toBeNull();
@@ -417,7 +417,7 @@ describe("opened on a public holiday", () => {
       "A special day called Navidad already exists.",
     );
     expect(part(offered.painter, "add-to")!.textContent!.trim()).toBe("Add to Navidad");
-    expect(part(offered.painter, "new-instead")!.textContent!.trim()).toBe("New special day");
+    expect(part(offered.painter, "new-instead")!.textContent!.trim()).toBe("Add special day");
     expect(nameValue(offered.painter)).toBeUndefined();
     expect(saveButton(offered.painter).disabled).toBe(true);
     frame(offered.painter).dispatchEvent(new CustomEvent("painter-save"));
@@ -572,7 +572,7 @@ describe("opened on a public holiday", () => {
     ).toBe("sd4");
   });
 
-  it("New special day keeps the pre-filled new day", async () => {
+  it("Add special day keeps the pre-filled new day", async () => {
     const days = { sd2: named("sd2", "Navidad", ["2025-12-25"]) };
     const { painter, writes, events, lists } = await mount({
       specialDayId: null,
@@ -1592,9 +1592,9 @@ describe("the heading names the day, says it is a special day and lists its date
     expect(frame(painter).heading).toBe("Fair: special day, 14–⁠15 Dec");
   });
 
-  it("a named day with no dates is '<name>: special day', an unnamed new day 'New special day'", async () => {
+  it("a named day with no dates is '<name>: special day', an unnamed new day 'Add special day'", async () => {
     const { painter } = await mount({ specialDayId: null });
-    expect(frame(painter).heading).toBe("New special day");
+    expect(frame(painter).heading).toBe("Add special day");
     await typeName(painter, "Fair");
     expect(frame(painter).heading).toBe("Fair: special day");
   });

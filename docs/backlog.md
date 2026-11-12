@@ -507,7 +507,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   The owner brought its basic guest-menu design forward on 11 November through A1517.
   [Detail](backlog/catalogue.md#a670--printed-menus-owner-2026-10-14-open-not-designed)
 
-- **wt-data-table: heading wrap, long names, odds and ends** (bundle of 11, size M). Holds A1318, A543, A890. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
+- **wt-data-table: heading wrap, long names, odds and ends** (bundle of 10, size M). Holds A1318, A543. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
 
 - **One language fallback rule** (bundle of 5, 1 important, size M). [Detail](backlog/catalogue.md#bundle-one-language-fallback-rule)
 
@@ -1382,9 +1382,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   `VENUE_SETTINGS_TABS` (`apps/dashboard/src/screens/venue-settings-screen.ts`) lets the page's tab
   checks keep a second tab; say if it should go (about 25 cases then lose their subject) — plan
   A756 PR 8 Decision 10.
-
-- **A398 — device-profile editor heading remains to align with the sub-page pattern.**
-  [Detail](backlog/dashboard.md#a398--device-profile-editor-heading-remains-to-align-with-the-sub-page-pattern)
 
 - **`setEmail` in `packages/identity/src/staff.ts`, unlike `updatePersonDetails`, never checks the
   new email against other people's pending emails**

@@ -63,8 +63,7 @@ export interface DataTableColumn<Row> {
   /** On the table's last column, keeps it at the box's trailing edge while the other columns scroll
    * sideways under it. */
   pinned?: "end";
-  /** Keep the whole cell outside row activation, including blank space beside its action. Tree mode
-   * still draws the row's activator in its first column whatever that column sets (A890). */
+  /** Keep the whole cell outside row activation, including blank space beside its action. */
   activatesRow?: false;
   /** A help-mode badge over the heading's label; `label` is the badge's whole accessible name. */
   help?: { text: string; label: string };
@@ -866,7 +865,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * sort. */
   @property({ attribute: false }) rowKeepsChildOrder: (row: Row) => boolean = () => false;
   /** When set, each row becomes activatable, except on a flat table a row `rowClickable` refuses: a
-   * stretched, focusable button covers the row and calls this on click; on a flat table it is drawn
+   * stretched, focusable button covers the row and calls this on click; it is drawn
    * in the first shown column that does not set `activatesRow: false`, and none when every column
    * sets it; drawn in the pinned column, it covers that cell only. Per-row controls (the selection
    * checkbox, the Edit/Delete menu) sit above the activator, so they are never swallowed. In a
@@ -3111,8 +3110,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
         : null;
     const lockedWidth = widths?.reduce((sum, width) => sum + width, 0);
     const sortColumn = this.#sortColumn(shown);
+    const activatorColumn = shown.findIndex((column) => column.activatesRow !== false);
     if (!isTree) {
-      const activatorColumn = shown.findIndex((column) => column.activatesRow !== false);
       const sorted = this.#sortedRows(visible, sortColumn, searchRanks);
       const rowKeys = sorted.map((row, index) => this.rowKey(row, index));
       const visibleKeys = sorted.flatMap((row, index) =>
@@ -3255,51 +3254,56 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         }
                       >
                         ${
-                          ci === 0
+                          ci === activatorColumn
                             ? html`${
-                                  toggles
+                                toggles
+                                  ? html`<button
+                                      class="row-activate"
+                                      aria-label=${toggleLabel}
+                                      aria-expanded=${String(expanded)}
+                                      @click=${(event: Event) => {
+                                        event.stopPropagation();
+                                        this.#toggle(key);
+                                      }}
+                                    ></button>`
+                                  : clicks
                                     ? html`<button
                                         class="row-activate"
-                                        aria-label=${toggleLabel}
-                                        aria-expanded=${String(expanded)}
-                                        @click=${(event: Event) => {
-                                          event.stopPropagation();
-                                          this.#toggle(key);
-                                        }}
+                                        aria-label=${this.rowClickLabel(row)}
+                                        @click=${() => this.rowClick!(row)}
                                       ></button>`
-                                    : clicks
-                                      ? html`<button
-                                          class="row-activate"
-                                          aria-label=${this.rowClickLabel(row)}
-                                          @click=${() => this.rowClick!(row)}
-                                        ></button>`
-                                      : nothing
-                                }<span
-                                  class="tree-cell"
-                                  part="tree-cell"
-                                  style=${`--tree-depth: ${joined ? depth - 1 : depth}`}
-                                >
-                                  ${
-                                    !branch
-                                      ? html`<span class="tree-spacer"></span>`
-                                      : toggles
-                                        ? html`<span class="tree-arrow" aria-hidden="true"
-                                            >${expanded ? "▾" : "▸"}</span
-                                          >`
-                                        : html`<button
-                                            class="tree-toggle"
-                                            part=${`tree-toggle ${this.rowToggleParts?.(row) ?? ""}`.trim()}
-                                            aria-label=${toggleLabel}
-                                            @click=${(event: Event) => {
-                                              event.stopPropagation();
-                                              this.#toggle(key);
-                                            }}
-                                          >
-                                            ${expanded ? "▾" : "▸"}
-                                          </button>`
-                                  }
-                                  ${column.cell(row, cellContext)}
-                                </span>`
+                                    : nothing
+                              }`
+                            : nothing
+                        }
+                        ${
+                          ci === 0
+                            ? html`<span
+                                class="tree-cell"
+                                part="tree-cell"
+                                style=${`--tree-depth: ${joined ? depth - 1 : depth}`}
+                              >
+                                ${
+                                  !branch
+                                    ? html`<span class="tree-spacer"></span>`
+                                    : toggles
+                                      ? html`<span class="tree-arrow" aria-hidden="true"
+                                          >${expanded ? "▾" : "▸"}</span
+                                        >`
+                                      : html`<button
+                                          class="tree-toggle"
+                                          part=${`tree-toggle ${this.rowToggleParts?.(row) ?? ""}`.trim()}
+                                          aria-label=${toggleLabel}
+                                          @click=${(event: Event) => {
+                                            event.stopPropagation();
+                                            this.#toggle(key);
+                                          }}
+                                        >
+                                          ${expanded ? "▾" : "▸"}
+                                        </button>`
+                                }
+                                ${column.cell(row, cellContext)}
+                              </span>`
                             : column.cell(row, cellContext)
                         }
                       </td>`,

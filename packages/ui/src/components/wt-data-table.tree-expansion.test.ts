@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, expect, test, vi } from "vitest";
 import { cleanup, mount } from "../test-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
@@ -271,3 +272,30 @@ test("asked about a key no row has, the expansion methods answer closed and chan
   expect(keys(el)).toEqual(["coffee", "cake"]);
   expect(el.filterValues("ghost")).toEqual([]);
 });
+
+test.each(["click", "toggle"] as const)(
+  "tree %s activation uses the first column that allows it",
+  async (mode) => {
+    const opened: string[] = [];
+    const el = await tree({
+      initiallyCollapsed: true,
+      columns: [{ ...columns[0]!, activatesRow: false }, columns[1]!],
+      rowActivation: () => mode,
+      rowClick: (r) => opened.push(r.id),
+    });
+    const cells = shownRow(el, "menu").querySelectorAll("td");
+    expect(cells[0]!.querySelector(".row-activate")).toBeNull();
+    const activate = cells[1]!.querySelector<HTMLButtonElement>(".row-activate")!;
+    expect(activate).not.toBeNull();
+    await userEvent.click(cells[0]!, { position: { x: 2, y: 2 } });
+    expect(opened).toEqual([]);
+    expect(el.isExpanded("menu")).toBe(false);
+    activate.click();
+    await el.updateComplete;
+    if (mode === "click") expect(opened).toEqual(["menu"]);
+    else expect(el.isExpanded("menu")).toBe(true);
+    el.columns = el.columns.map((c) => ({ ...c, activatesRow: false }));
+    await el.updateComplete;
+    expect(shownRow(el, "menu").querySelector(".row-activate")).toBeNull();
+  },
+);

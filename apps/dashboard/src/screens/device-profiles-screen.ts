@@ -31,7 +31,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage } from "../i18n/form-message.js";
-import { dashboardPath } from "../navigation.js";
+import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { ROLES, a4Choices, printerLabel, roleName } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
 // A local mirror keeps the layouts barrel's database imports out of the browser bundle.
@@ -411,6 +411,17 @@ export class DeviceProfilesScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
         font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
+        overflow-wrap: anywhere;
+      }
+      nav {
+        display: flex;
+        gap: var(--wt-space-1);
+        margin-bottom: var(--wt-space-2);
+        color: var(--wt-color-primary-text);
+      }
+      nav a {
+        color: var(--wt-color-primary-text);
+        text-decoration: underline;
       }
       ol {
         list-style: none;
@@ -1526,14 +1537,14 @@ export class DeviceProfilesScreen extends LitElement {
     this.#draftScope?.changed();
   }
 
-  async #cancel(): Promise<void> {
+  async #cancel(reason: "cancel" | "navigation" = "cancel"): Promise<void> {
     if (this.saving) return;
     const proceed = () => {
       this.#closeEditor();
       this.#showError(null);
       if (this.#standingReadError !== null) this.#showReadError(this.#standingReadError.error);
     };
-    if (this.#leave) await this.#leave.request({ scopes: [this], reason: "cancel", proceed });
+    if (this.#leave) await this.#leave.request({ scopes: [this], reason, proceed });
     else proceed();
   }
 
@@ -2502,7 +2513,18 @@ export class DeviceProfilesScreen extends LitElement {
     );
     return html`
       <div class="editor" data-test="editor-form" data-editing-id=${this.editingId ?? nothing}>
-        <h1 class="title">${t("device_profiles.title")}</h1>
+        <nav aria-label=${t("device_profiles.title")}>
+          <a
+            href="/manage/device-profiles"
+            @click=${(event: MouseEvent) => {
+              if (leftToBrowser(event)) return;
+              event.preventDefault();
+              void this.#cancel("navigation");
+            }}
+            >${t("device_profiles.title")}</a
+          ><span aria-hidden="true">›</span>
+        </nav>
+        <h1 class="title">${this.draftName || t("device_profiles.create")}</h1>
         <wt-input
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]"))}
           class="field"
