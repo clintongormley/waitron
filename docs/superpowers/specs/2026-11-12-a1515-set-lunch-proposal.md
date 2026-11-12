@@ -6,6 +6,20 @@ fiscal changes and public printed-menu design are outside this proposal.
 I recommend one priced lunch item, with selected dishes attached for service, so you can send
 them to different stations before the guest chooses the last dish.
 
+## Owner decisions, 12 November 2026
+
+The owner answered through the watcher in Lane D questions.md at 11:59 and 18:29:
+“yes, one item”; “Yes, allow it” for a later course choice; “Price the supplement too”.
+The later send contains only the newly chosen course. An untaken dessert or coffee closes at
+payment without changing the lunch price.
+
+These decisions supersede the receipt recommendation below: show **1 House lunch €18.00**
+and its **hake supplement €3.00** as a priced line beneath it, followed by the chosen dishes
+without prices. The bill uses the same presentation. The lunch remains one bill item.
+The adviser question S10 remains open; the full invoice waits for that answer.
+The watcher requested an implementation plan, followed by Claude review and watcher clearance.
+No implementation plan or VAT treatment is approved by these design answers.
+
 ## Set it up on the dashboard
 
 Create a priced **House lunch** catalogue item on a menu whose service periods limit its
