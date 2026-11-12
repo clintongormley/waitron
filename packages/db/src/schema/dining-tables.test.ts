@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { seedVenue } from "../testing/seed.js";
+import { seedVenue, seedZone } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
@@ -12,7 +12,6 @@ import { isRefusal } from "../unique-violation.js";
 import { NOT_NULL_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { shortNameColumns } from "../table-short-names.js";
 import { diningTables } from "./dining-tables.js";
-import { floorZones } from "./floor-zones.js";
 import { locations } from "./tenants.js";
 
 const LOCATION_B = "aaaaaaaa-0000-4000-8000-000000000002";
@@ -21,8 +20,8 @@ describe("table labels without a location", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("two tables cannot share a label, including in different zones", async () => {
-    await suite.db.run(sql`insert into floor_zones (id, name, created_at)
-      values ('inside', 'Inside', '2026-11-11'), ('outside', 'Outside', '2026-11-11')`);
+    await seedZone(suite.db, { id: "inside", name: "Inside" });
+    await seedZone(suite.db, { id: "outside", name: "Outside" });
     const insert = (id: string, label: string, zone: string) =>
       suite.db.run(sql`insert into dining_tables (id, label, zone_id, created_at)
         values (${id}, ${label}, ${zone}, '2026-11-11')`);
@@ -68,10 +67,7 @@ describe("dining_tables columns", () => {
   // is refused `NOT NULL constraint failed: dining_tables.id`.
   async function seedTable(label: string, shortName?: string): Promise<string> {
     return inTx(async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: label })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: label });
       const [row] = await tx
         .insert(diningTables)
         .values({
@@ -136,10 +132,7 @@ describe("dining_tables columns", () => {
   it("a key a writer did not fold is not refused", async () => {
     await seedTable("Terrace 1", "t1");
     const id = await inTx(async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ name: "Tower" })
-        .returning({ id: floorZones.id });
+      const zone = await seedZone(tx, { name: "Tower" });
       const [row] = await tx
         .insert(diningTables)
         .values({

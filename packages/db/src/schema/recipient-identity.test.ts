@@ -4,11 +4,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { triggerRaised } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode, seedVenue } from "../testing/seed.js";
+import { seedNode, seedVenue, seedZone } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { TRANSITION_REFUSAL } from "../trigger-refusals.js";
 import { diningTables } from "./dining-tables.js";
-import { floorZones } from "./floor-zones.js";
 import { parties } from "./parties.js";
 import { invoiceSeries } from "./series.js";
 
@@ -43,7 +42,7 @@ beforeEach(async () => {
     .values({ nodeId: node, code: "A" })
     .returning();
   series = seriesRow!.id;
-  const [zone] = await db.insert(floorZones).values({ name: "Room" }).returning();
+  const zone = await seedZone(db, { name: "Room" });
   const [table] = await db
     .insert(diningTables)
     .values({ zoneId: zone!.id, label: "1" })

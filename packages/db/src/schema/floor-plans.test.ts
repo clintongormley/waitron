@@ -9,7 +9,7 @@ import { withTransaction } from "../tenancy.js";
 import { venueLocationId } from "../venue.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
-import { seedVenue } from "../testing/seed.js";
+import { seedVenue, seedZone } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { diningTables } from "./dining-tables.js";
 import {
@@ -28,7 +28,6 @@ import {
   floorTodayZones,
   rangeCheck,
 } from "./floor-plans.js";
-import { floorZones } from "./floor-zones.js";
 import { parties } from "./parties.js";
 
 let LOCATION: string;
@@ -59,10 +58,8 @@ describe("floor plan tables", () => {
       operationDescription: "Hostelería",
     });
     LOCATION = await venueLocationId(db);
-    await db.insert(floorZones).values([
-      { id: ZONE, name: "Dining room" },
-      { id: OTHER_ZONE, name: "Terrace" },
-    ]);
+    await seedZone(db, { id: ZONE, name: "Dining room" });
+    await seedZone(db, { id: OTHER_ZONE, name: "Terrace" });
     await db.insert(floorPlanSets).values({ id: SET });
     await db
       .insert(floorPlans)
@@ -930,10 +927,7 @@ describe("floor plan tables", () => {
 
   it("starts a today's zone at revision 0", async () => {
     const zone = await inTx(async (tx) => {
-      const [row] = await tx
-        .insert(floorZones)
-        .values({ name: "Bar" })
-        .returning({ id: floorZones.id });
+      const row = await seedZone(tx, { name: "Bar" });
       return row!.id;
     });
     await inTx((tx) =>

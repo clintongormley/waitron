@@ -31,7 +31,7 @@ const at = (time: string, date = FRIDAY) =>
 const key = (departmentId: string, day: string, periodId: string, startsAt: string) =>
   JSON.stringify([departmentId, day, periodId, startsAt]);
 
-async function newZone(tx: Transaction, cfg: { locationId: string }, name: string) {
+async function newZone(tx: Transaction, _cfg: { locationId: string }, name: string) {
   return (await seedZone(tx, { name })).id;
 }
 

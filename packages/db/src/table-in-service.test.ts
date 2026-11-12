@@ -6,7 +6,7 @@ import { floorTodayTables } from "./schema/floor-plans.js";
 import { floorZones } from "./schema/floor-zones.js";
 import { locations } from "./schema/tenants.js";
 import { tableInService } from "./table-in-service.js";
-import { seedVenue } from "./testing/seed.js";
+import { seedVenue, seedZone } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
 const ZONE = "bbbbbbbb-0000-4000-8000-000000000001";
@@ -25,10 +25,8 @@ describe("table in service", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await suite.db.insert(floorZones).values([
-      { id: ZONE, name: "On" },
-      { id: OTHER_ZONE, name: "Off", active: false },
-    ]);
+    await seedZone(suite.db, { id: ZONE, name: "On" });
+    await seedZone(suite.db, { id: OTHER_ZONE, name: "Off", active: false });
     await suite.db.insert(diningTables).values([
       { id: PRESENT, zoneId: ZONE, label: "Present" },
       { id: TAKEN_OFF, zoneId: ZONE, label: "Taken off" },
