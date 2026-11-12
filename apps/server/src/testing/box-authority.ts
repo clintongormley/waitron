@@ -4,11 +4,12 @@ import type { IncomingHttpHeaders } from "node:http";
 import { createServer as createTcpServer, type AddressInfo, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ensureBoxSecrets } from "../box-secrets.js";
+import { caKeyPath, ensureBoxSecrets } from "../box-secrets.js";
 
 /** A box's authority and the leaf it signed, minted as a real box mints its own. */
 export interface BoxAuthority {
   caPem: string;
+  caKeyPem: string;
   certPem: string;
   keyPem: string;
 }
@@ -23,6 +24,7 @@ export async function mintBoxAuthority(hostnames = ["localhost"]): Promise<BoxAu
     });
     return {
       caPem: await readFile(files.caCertFile, "utf8"),
+      caKeyPem: await readFile(caKeyPath(stateDir), "utf8"),
       certPem: await readFile(files.certFile, "utf8"),
       keyPem: await readFile(files.keyFile, "utf8"),
     };

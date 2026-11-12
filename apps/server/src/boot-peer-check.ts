@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import {
   HANDOVER_STATES,
   initialState,
@@ -26,6 +25,7 @@ import {
   type TrustSet,
 } from "@waitron/membership";
 import { firstCodeInCauseChain, hasCode, isAppError } from "@waitron/shared";
+import { caCertPath } from "./box-secrets.js";
 import { boxExchange, CheckedAddressUnreached } from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerQueryBody, PeerStatusBody } from "./peer-status-api.js";
 
@@ -363,16 +363,17 @@ const CERTIFICATE_REFUSALS = new Set([
   "CERT_UNTRUSTED",
   "DEPTH_ZERO_SELF_SIGNED_CERT",
   "ERR_TLS_CERT_ALTNAME_INVALID",
+  "INVALID_PURPOSE",
   "SELF_SIGNED_CERT_IN_CHAIN",
   "UNABLE_TO_GET_ISSUER_CERT",
   "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
   "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
 ]);
 
-/** This box's venue authority, `<stateDir>/tls/ca.crt`; `undefined` when it cannot be read. */
+/** This box's venue authority, the box CA certificate; `undefined` when it cannot be read. */
 export async function readVenueAuthority(stateDir: string): Promise<string | undefined> {
   try {
-    return await readFile(join(stateDir, "tls", "ca.crt"), "utf8");
+    return await readFile(caCertPath(stateDir), "utf8");
   } catch {
     return undefined;
   }

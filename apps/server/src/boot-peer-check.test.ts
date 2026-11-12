@@ -24,6 +24,7 @@ import {
 } from "./boot-peer-check.js";
 import * as boxTransport from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerStatusBody } from "./peer-status-api.js";
+import { issueClientCert } from "./self-signed-cert.js";
 import { freePorts } from "./testing/free-ports.js";
 import {
   mintBoxAuthority,
@@ -1632,6 +1633,24 @@ describe("askPeerStatus", () => {
 
     it("with the authority pinned, a box presenting another authority's leaf is refused before the query is sent", async () => {
       const server = await statusServer(authorityY, (q) => sign(body(q.nonce)));
+      const onSilent = vi.fn();
+      const real = realAsk({ authorityOf: () => authorityX.caPem, onSilent });
+      expect(await real({ ...PEER, url: server.url })).toBeNull();
+      expect(server.requests).toHaveLength(0);
+      expect(onSilent).toHaveBeenCalledWith(SPARE, "certificate");
+    });
+
+    it("with the authority pinned, a box presenting a leaf it signed for clients only is refused before the query is sent", async () => {
+      const { clientCertPem, clientKeyPem } = issueClientCert({
+        caCertPem: authorityX.caPem,
+        caKeyPem: authorityX.caKeyPem,
+        hostname: "localhost",
+        now: new Date(),
+      });
+      const server = await statusServer(
+        { ...authorityX, certPem: clientCertPem, keyPem: clientKeyPem },
+        (q) => sign(body(q.nonce)),
+      );
       const onSilent = vi.fn();
       const real = realAsk({ authorityOf: () => authorityX.caPem, onSilent });
       expect(await real({ ...PEER, url: server.url })).toBeNull();
