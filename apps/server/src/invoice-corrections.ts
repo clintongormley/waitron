@@ -232,7 +232,6 @@ export async function acceptInvoiceCorrection(
       {
         requestedBy: actor.personId,
         authorizedBy: actor.authorization.authorizedBy,
-        viaOverride: actor.authorization.viaOverride,
       },
       createdAt,
     );

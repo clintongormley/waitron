@@ -25,6 +25,7 @@ import { resolveTransactionScope } from "./find-bill-transactions.js";
 import type { Logger } from "./logger.js";
 import { requestCfg } from "./request-config.js";
 import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
+import { authorizeStoredTenderRefund } from "./tender-refund-reservation.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { refundSettledTender, toTenderRefundView } from "./tender-refunds.js";
 import {
@@ -257,8 +258,9 @@ export function mountTenderRefundApi(
             sessionId: session.sessionId,
             attempts: overridePinAttempts(pinThrottle, session.deviceId),
           },
-          async (tx) => {
+          async (tx, authorize) => {
             const current = await readRefund(tx, id);
+            await authorizeStoredTenderRefund(tx, current, authorize);
             if (current.state === "pending")
               await deps.backend.refuseWhileClockBehind(tx, deps.clock.now());
             if (

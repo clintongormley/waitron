@@ -44,6 +44,7 @@ function cancel(
   refundValue: string | null,
   quantity = "1",
   chargeKept = true,
+  approvedBy: string | null = null,
 ) {
   return withTransaction(db, (tx) =>
     recordAdjustment(tx, {
@@ -69,7 +70,7 @@ function cancel(
       reduction: decimal("0.00"),
       nominalValue: decimal("10.00"),
       requestedBy: WAITER,
-      approvedBy: null,
+      approvedBy,
       note: null,
       chargeKept,
       preparationStarted: false,
@@ -166,7 +167,8 @@ describe("the link from a refund to its cancels", () => {
   it("reads each cancel's stored refund value", async () => {
     const order = await seedWorkingOrder(db);
     const reason = await seedVoidReason(db);
-    const handed = await cancel(order, reason, "3.33", "1");
+    const approver = "22222222-2222-4222-8222-222222222222";
+    const handed = await cancel(order, reason, "3.33", "1", true, approver);
     const kept = await cancel(order, reason, null, "2", false);
     const rows = await read([handed, kept]);
     expect(rows.find((r) => r.id === handed)).toMatchObject({
@@ -176,6 +178,8 @@ describe("the link from a refund to its cancels", () => {
       chargeKept: true,
       refundHandoff: true,
       refundValue: "3.33",
+      requestedBy: WAITER,
+      approvedBy: approver,
     });
     expect(rows.find((r) => r.id === kept)).toMatchObject({
       workingOrderId: order,
@@ -183,6 +187,8 @@ describe("the link from a refund to its cancels", () => {
       chargeKept: false,
       refundHandoff: false,
       refundValue: null,
+      requestedBy: WAITER,
+      approvedBy: null,
     });
     expect(rows.map((r) => typeof r.lineId)).toEqual(["string", "string"]);
 

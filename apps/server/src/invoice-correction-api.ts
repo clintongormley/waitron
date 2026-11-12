@@ -112,7 +112,8 @@ export function mountInvoiceCorrectionApi(
           sessionId: session.sessionId,
           attempts: overridePinAttempts(pinThrottle, session.deviceId),
         },
-        async (tx, authorization, checked) => {
+        async (tx, authorize, checked) => {
+          const authorization = await authorize();
           await requireEconomicWrite(tx, cfg, deps.admission);
           return acceptInvoiceCorrection(
             tx,

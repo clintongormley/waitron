@@ -13261,7 +13261,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       expect(form.dishes).toBe("1 × Flan");
     });
 
-    describe("the PIN Finish table asked for", () => {
+    describe("server-held approval after Finish table", () => {
       const twoSales = [dish(), dish("line-2", "wo-check")];
       function approvedFinish(more: Record<string, unknown> = {}) {
         return mountFinish({
@@ -13288,7 +13288,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         await flush(el, 10);
       }
 
-      it("sends it once with each sale's own refund", async () => {
+      it("sends each sale's own cancellation IDs without its approval PIN", async () => {
         const { el } = await approvedFinish();
         await approve(el);
         await openReceipt(el, "sale-wo-4");
@@ -13310,14 +13310,13 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
           expect.objectContaining({
             appliedAmount: "5.50",
             cancellationIds: ["adj-1"],
-            override: { personId: "m1", pin: "7777" },
           }),
           expect.objectContaining({
             appliedAmount: "5.50",
             cancellationIds: ["adj-2"],
-            override: { personId: "m1", pin: "7777" },
           }),
         ]);
+        for (const request of sent()) expect(request).not.toHaveProperty("override");
         expect(refundPrompt(el)).toBeNull();
         expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
         for (const storage of [localStorage, sessionStorage])
@@ -13330,7 +13329,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         await approve(el);
         await openReceipt(el, "sale-wo-4");
         await sendRefund(el, { appliedAmount: "3.00" });
-        expect(sent()[0]).toMatchObject({ override: { personId: "m1", pin: "7777" } });
+        expect(sent()[0]).not.toHaveProperty("override");
         await expect.poll(() => refundForm(el)).toBeNull();
         vi.mocked(api.refundTransaction).mockRejectedValueOnce({
           code: "authorization.not_permitted",
@@ -13342,7 +13341,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         expect(sent()[1]).not.toHaveProperty("override");
       });
 
-      it("asks again above the total, and the other sale still gets it", async () => {
+      it("asks above the total and submits the other sale without a PIN", async () => {
         const { el } = await approvedFinish();
         await approve(el);
         vi.mocked(api.refundTransaction).mockRejectedValueOnce({
@@ -13352,7 +13351,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         await sendRefund(el, { appliedAmount: "5.51" });
         await expect.poll(() => refundPrompt(el)).not.toBeNull();
         expect(sent()[0]).not.toHaveProperty("override");
-        expect(sent()[0]).not.toHaveProperty("cancellationIds");
+        expect(sent()[0]?.cancellationIds).toEqual(["adj-1"]);
         emit(refundPrompt(el)!, "override-confirm", { personId: "m1", pin: "1234" });
         await flush(el, 8);
         await expect.poll(() => sent()).toHaveLength(2);
@@ -13366,7 +13365,6 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         expect(sent()[2]).toMatchObject({
           appliedAmount: "5.50",
           cancellationIds: ["adj-2"],
-          override: { personId: "m1", pin: "7777" },
         });
       });
     });

@@ -225,7 +225,6 @@
   "src/state/bill-payment.test.ts": 0.3,
   "src/state/bill-state.test.ts": 0.2,
   "src/state/bill-unsent.test.ts": 0.4,
-  "src/state/carried-approval.test.ts": 0.1,
   "src/state/clocking.test.ts": 0.2,
   "src/state/counter-portion-rows.test.ts": 0.3,
   "src/state/department-transfer-monitor.test.ts": 1.5,

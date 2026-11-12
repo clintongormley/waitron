@@ -1716,7 +1716,7 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   [Detail](till.md#a1011-the-owner-looks-at-the-tills-comp-words-as-built-left-open-by-a758-5)
 - **A1020. The owner looks at A758-6's words and choices (left open by A758-6).** Each works as
   built; the owner may want it different: among them no Table finished on the pass, Not served
-  found by its English name, the PIN carried from the cancel to its refund, and a finished table
+  found by its English name, and a finished table
   checked against all its bills' zones.
   [Detail](till.md#a1020-the-owner-looks-at-a758-6s-words-and-choices).
 - **A1031. The owner looks at A758-7's choices (left open by A758-7).** Each works as built; the
@@ -3882,14 +3882,9 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
 2. **"Not served" is found by its English name.** Finish table starts on the first Void reason
    whose English name is exactly "Not served"; a renamed one stops being the start. The rule's
    "Void" half never decides anything, because a Comp reason cannot carry cancel.
-3. **The PIN given for "Cancel and refund" is kept in the till's memory** and sent once per
-   receipt, only up to the ticked dishes' total with no tip, never for a card keyed on a separate
-   terminal. The server refuses a PIN-approved linked refund above that total
-   (`tender.refund_exceeds_cancelled`).
-4. **A refund raised above the filled-in total is an ordinary refund**: it asks for a PIN and the
-   dish's report entry shows no "Refunded", though money did go back for the dish (D19 and §3.6
-   show such money linked to the cancel), and so is the rest refunded from a second payment
-   (Decision 16).
+4. **The rest refunded later from a second payment is an ordinary refund**: that window is
+   not filled in with the cancelled dishes, so staff enter its amount and reason and get fresh
+   approval if needed; it is not linked to the cancel (Decision 16).
 5. **New words, ours:** "Refund pending €x" («Devolución pendiente …») and "This refund is more
    than the cancelled dishes' value" («Esta devolución supera el valor de los platos
    cancelados»), which names no amount where the plan's wording did.
@@ -3907,8 +3902,6 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
    refused the table's read routes (403 `service_zone.not_allowed`).
 10. **The cancel's note is not carried to the refund**: the refund starts on the cancel's reason,
     so a reason that needs a note (such as Other) asks for the note again.
-11. **With two receipts, closing the first refund without sending it drops the carried PIN for
-    both**, so the second asks for the PIN.
 12. **The refund dialogs keep Refund enabled before a reason is chosen** and explain on press,
     drawing it quiet until a reason is chosen, while Cancel item and Finish table grey their action
     out.

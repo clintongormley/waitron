@@ -199,14 +199,21 @@ function request(tenderId: string, patch: Partial<TenderRefundRequest> = {}): Te
 }
 const operator = () => ({ personId, sessionId, attempts });
 const override = () => ({ personId: managerId, pin: PIN });
-async function reserve(t: Target, req = request(t.tenderId), config = cfg, op = operator()) {
+async function reserve(
+  t: Target,
+  req = request(t.tenderId),
+  config = cfg,
+  op = operator(),
+  cancelledBy?: string,
+) {
   return withTenderRefundAuthorization(
     store.db,
     config,
     t.saleId,
     req,
     op,
-    async (tx, authorization) => {
+    async (tx, authorize) => {
+      const authorization = await authorize(cancelledBy);
       const held = await reserveTenderRefund(
         tx,
         config,
@@ -410,6 +417,28 @@ describe("settled-tender refund authorization before reservation", () => {
       request(t.tenderId, { manualConfirmed: true }),
     );
   });
+  it("a standalone terminal cannot use saved cancellation authority instead of a fresh PIN", async () => {
+    const t = await target("card", "manual");
+    await role("staff");
+    await expect(
+      reserve(t, request(t.tenderId, { manualConfirmed: true }), cfg, operator(), managerId),
+    ).rejects.toMatchObject({ code: "authorization.not_permitted" });
+    expect(await rows()).toEqual([]);
+  });
+  it("saved cancellation authority does not rescue an explicitly unqualified approving PIN", async () => {
+    const t = await target();
+    await role("staff");
+    await expect(
+      reserve(
+        t,
+        request(t.tenderId, { override: { personId, pin: PIN } }),
+        cfg,
+        operator(),
+        managerId,
+      ),
+    ).rejects.toMatchObject({ code: "authorization.not_permitted" });
+    expect(await rows()).toEqual([]);
+  });
   it("a standalone terminal needs handover confirmation", async () => {
     const t = await target("card", "manual");
     await refused(t, "management.request_invalid", request(t.tenderId, { override: override() }));
@@ -524,7 +553,8 @@ describe("settled-tender refund authorization before reservation", () => {
         t.saleId,
         request(t.tenderId),
         operator(),
-        async (tx, authorization) => {
+        async (tx, authorize) => {
+          const authorization = await authorize();
           await reserveTenderRefund(
             tx,
             cfg,

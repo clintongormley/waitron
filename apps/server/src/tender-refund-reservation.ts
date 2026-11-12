@@ -1,6 +1,14 @@
 import { and, eq, or } from "drizzle-orm";
 import { linkRefundToCancels, readCancelsForRefund } from "@waitron/adjustments";
-import { billPaymentRefunds, sales, tenderRefunds, tenders, type Transaction } from "@waitron/db";
+import {
+  adjustmentRefunds,
+  billPaymentRefunds,
+  sales,
+  tenderRefunds,
+  tenders,
+  type Transaction,
+} from "@waitron/db";
+import type { Authorization } from "@waitron/identity";
 import { assertReversible, payments } from "@waitron/payments";
 import {
   AppError,
@@ -42,25 +50,13 @@ function cancellationIdsOf(value: unknown): string[] | undefined {
   return ids;
 }
 
-/**
- * Checks that each named cancel was handed to a refund on this sale's bill with a cap, and splits
- * `amount` across them in the order named. Answers the links and what the cancels could still take.
- */
-async function allocateToCancels(
-  tx: Transaction,
-  saleId: string,
-  ids: readonly string[],
-  amount: number,
-): Promise<{ links: { adjustmentId: string; amount: Decimal }[]; canStillTake: number }> {
+async function cancelsForSale(tx: Transaction, saleId: string, ids: readonly string[]) {
   const [sale] = await tx
     .select({ workingOrderId: sales.workingOrderId })
     .from(sales)
     .where(eq(sales.id, saleId));
   const found = new Map((await readCancelsForRefund(tx, ids)).map((row) => [row.id, row]));
-  let left = amount;
-  let canStillTake = 0;
-  const links: { adjustmentId: string; amount: Decimal }[] = [];
-  for (const id of ids) {
+  return ids.map((id) => {
     const cancel = found.get(id);
     if (
       cancel === undefined ||
@@ -70,23 +66,71 @@ async function allocateToCancels(
       cancel.workingOrderId !== sale?.workingOrderId
     )
       throw invalid("cancellationIds");
+    return { ...cancel, refundValue: cancel.refundValue };
+  });
+}
+
+async function allocateToCancels(
+  tx: Transaction,
+  saleId: string,
+  ids: readonly string[],
+  amount: number,
+) {
+  let left = amount;
+  let canStillTake = 0;
+  const links: { adjustmentId: string; amount: Decimal }[] = [];
+  const authorisers = new Set<string>();
+  for (const cancel of await cancelsForSale(tx, saleId, ids)) {
     const open = Math.max(0, decimalToCents(cancel.refundValue) - decimalToCents(cancel.linked));
     canStillTake += open;
     const share = Math.min(open, left);
-    if (share > 0) links.push({ adjustmentId: id, amount: centsToDecimal(share) });
+    if (share > 0) {
+      links.push({ adjustmentId: cancel.id, amount: centsToDecimal(share) });
+      authorisers.add(cancel.approvedBy ?? cancel.requestedBy);
+    }
     left -= share;
   }
-  return { links, canStillTake };
+  return {
+    links,
+    canStillTake,
+    cancelledBy: authorisers.size === 1 ? [...authorisers][0] : undefined,
+  };
 }
 
-// The command must authorize before calling this write path. Cash/manual completion and its
-// audited effects belong in the same transaction; a reservation alone reports no returned money.
+type RefundActor = { requestedBy: string } & (
+  { authorizedBy: string } | { authorize: (cancelledBy?: string) => Promise<Authorization> }
+);
+
+export async function authorizeStoredTenderRefund(
+  tx: Transaction,
+  refund: typeof tenderRefunds.$inferSelect,
+  authorize: (cancelledBy?: string) => Promise<Authorization>,
+): Promise<void> {
+  const links = await tx
+    .select()
+    .from(adjustmentRefunds)
+    .where(eq(adjustmentRefunds.tenderRefundId, refund.id));
+  const cancels = await cancelsForSale(
+    tx,
+    refund.saleId,
+    links.map((row) => row.adjustmentId),
+  );
+  const authorisers = new Set(cancels.map((row) => row.approvedBy ?? row.requestedBy));
+  const covered =
+    links.length > 0 &&
+    refund.tipAmount === 0 &&
+    links.reduce((total, row) => total + row.amount, 0) === refund.appliedAmount &&
+    authorisers.size === 1 &&
+    authorisers.has(refund.authorizedBy);
+  await authorize(covered ? refund.authorizedBy : undefined);
+}
+
 export async function reserveTenderRefund(
   tx: Transaction,
   cfg: DeviceRequestConfig,
   saleId: string,
   request: TenderRefundRequest,
-  actor: { requestedBy: string; authorizedBy: string; viaOverride?: boolean },
+  actor: RefundActor,
   createdAt: string,
 ): Promise<{
   refund: typeof tenderRefunds.$inferSelect;
@@ -129,6 +173,7 @@ export async function reserveTenderRefund(
     .where(and(eq(tenderRefunds.saleId, saleId), eq(tenderRefunds.submissionId, submissionId)));
   if (earlier !== undefined) {
     if (earlier.fingerprint !== print) throw new AppError("submission.id_reused", { submissionId });
+    if ("authorize" in actor) await authorizeStoredTenderRefund(tx, earlier, actor.authorize);
     return { refund: earlier, replayed: true };
   }
 
@@ -212,15 +257,28 @@ export async function reserveTenderRefund(
     cancellationIds === undefined
       ? undefined
       : await allocateToCancels(tx, saleId, cancellationIds, appliedAmount);
-  if (
-    allocation !== undefined &&
-    actor.viaOverride === true &&
-    (tipAmount !== 0 || appliedAmount > allocation.canStillTake)
-  )
-    throw new AppError("tender.refund_exceeds_cancelled", {
-      tenderId,
-      cancelled: centsToDecimal(allocation.canStillTake),
-    });
+  const covered =
+    allocation !== undefined && tipAmount === 0 && appliedAmount <= allocation.canStillTake;
+  let authorizedBy: string;
+  if ("authorize" in actor) {
+    try {
+      authorizedBy = (await actor.authorize(covered ? allocation.cancelledBy : undefined))
+        .authorizedBy;
+    } catch (error) {
+      if (
+        error instanceof AppError &&
+        error.code === "authorization.not_permitted" &&
+        request.override === undefined &&
+        allocation !== undefined &&
+        appliedAmount > allocation.canStillTake
+      )
+        throw new AppError("tender.refund_exceeds_cancelled", {
+          tenderId,
+          cancelled: centsToDecimal(allocation.canStillTake),
+        });
+      throw error;
+    }
+  } else authorizedBy = actor.authorizedBy;
   const [refund] = await tx
     .insert(tenderRefunds)
     .values({
@@ -232,7 +290,7 @@ export async function reserveTenderRefund(
       tipAmount,
       reason,
       requestedBy: actor.requestedBy,
-      authorizedBy: actor.authorizedBy,
+      authorizedBy,
       source: cfg.origin.source,
       deviceId: cfg.origin.deviceId,
       nodeId: cfg.nodeId,

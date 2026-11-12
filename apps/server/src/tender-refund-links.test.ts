@@ -4,6 +4,10 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { adjustmentRefunds, adjustments } from "@waitron/adjustments";
 import {
+  devices,
+  deviceProfiles,
+  drawerOpens,
+  printers,
   parties,
   sales,
   tenderRefunds,
@@ -90,6 +94,7 @@ async function cancel(
   row: { lineId: string; lineIds?: string[] },
   quantity: string,
   refundHandoff: boolean,
+  authority?: { requestedBy: string; approvedBy?: string },
 ) {
   const { lineId, lineIds } = row;
   const answer = await inTx(venue, async (tx) => {
@@ -106,6 +111,7 @@ async function cancel(
       ...(lineIds === undefined ? {} : { lineIds }),
       submissionId: randomUUID(),
       ...(refundHandoff ? { refundHandoff: true } : {}),
+      ...(authority?.approvedBy === undefined ? {} : { refundApprovedBy: authority.approvedBy }),
     };
     return cancelItem(
       tx,
@@ -113,7 +119,7 @@ async function cancel(
       b.partyId,
       lineId,
       { ...ask, admission: testTradingAdmission() },
-      venue.managerId,
+      authority?.requestedBy ?? venue.managerId,
     );
   });
   const linked = answer.refundLinks?.[0]?.adjustmentId;
@@ -433,14 +439,17 @@ describe("a refund names the cancels it pays back", () => {
   });
 });
 
-describe("a PIN-approved linked refund cannot exceed its cancels", () => {
+describe("server-held cancellation approval bounds a linked refund", () => {
   const managerPin = () => ({ personId: venue.managerId, pin: PINS.manager });
 
   function staffRefund(paid: { saleId: string }, body: object) {
-    return send(venue.app, venue.cookie.staff, "POST", `/api/transactions/${paid.saleId}/refunds`, {
-      ...body,
-      override: managerPin(),
-    });
+    return send(
+      venue.app,
+      venue.cookie.staff,
+      "POST",
+      `/api/transactions/${paid.saleId}/refunds`,
+      body,
+    );
   }
 
   /** A paid table of a Burger (€12.00) and a Steak (€25.00); the Burger is cancelled with the
@@ -476,16 +485,24 @@ describe("a PIN-approved linked refund cannot exceed its cancels", () => {
     return (answer.json as { params: { cancelled: string } }).params.cancelled;
   }
 
-  it("refuses a PIN-approved linked refund €0.01 above its cancels", async () => {
+  it("refuses a linked refund without new approval €0.01 above its cancels", async () => {
     const { paid, burger } = await oneCancel();
     expect(await refusedOver(paid, refundBody(paid, "12.01", [burger]))).toBe("12.00");
   });
 
-  it("and one with a tip", async () => {
+  it("requires fresh approval for a tip without claiming the applied amount exceeds its cancels", async () => {
     const { paid, burger } = await oneCancel(true);
-    expect(
-      await refusedOver(paid, { ...refundBody(paid, "12.00", [burger]), tipAmount: "1.00" }),
-    ).toBe("12.00");
+    const before = await ledgers();
+    const answer = await staffRefund(paid, {
+      ...refundBody(paid, "12.00", [burger]),
+      tipAmount: "1.00",
+    });
+    expect(answer.status).toBe(403);
+    expect(answer.json).toEqual({
+      code: "authorization.not_permitted",
+      params: { permission: "sale.refund" },
+    });
+    expect(await ledgers()).toEqual(before);
   });
 
   it("reserves and links one at its cancels' value", async () => {
@@ -518,6 +535,151 @@ describe("a PIN-approved linked refund cannot exceed its cancels", () => {
     const again = await staffRefund(paid, body);
     expect(again.status, JSON.stringify(again.json)).toBe(200);
     expect(again.json).toEqual(first.json);
+    expect(await ledgers()).toEqual(before);
+  });
+
+  it("retry uses the stored links without a PIN and preserves the original audit", async () => {
+    const { paid, burger } = await oneCancel();
+    const first = await staffRefund(paid, refundBody(paid, "12.00", [burger]));
+    expect(first.status).toBe(200);
+    const before = await ledgers();
+    const retry = await send(
+      venue.app,
+      venue.cookie.staff,
+      "POST",
+      `/api/tender-refunds/${(first.json as { id: string }).id}/retry`,
+      {},
+    );
+    expect(retry.status, JSON.stringify(retry.json)).toBe(200);
+    expect(retry.json).toEqual(first.json);
+    expect(await ledgers()).toEqual(before);
+  });
+
+  it("records the saved approver, not the staff requester, as refund and drawer authority", async () => {
+    const [profile] = await venue.db
+      .select({ id: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
+      .from(devices)
+      .innerJoin(deviceProfiles, eq(devices.deviceProfileId, deviceProfiles.id))
+      .where(eq(devices.id, venue.deviceId));
+    await venue.db
+      .update(deviceProfiles)
+      .set({ capabilities: [...(profile!.capabilities as string[]), "open-cash-drawer"] })
+      .where(eq(deviceProfiles.id, profile!.id));
+    await venue.db
+      .update(devices)
+      .set({ cashDrawerPrinterId: venue.printerId })
+      .where(eq(devices.id, venue.deviceId));
+    await venue.db
+      .update(printers)
+      .set({ hasCashDrawer: true })
+      .where(eq(printers.id, venue.printerId));
+    const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
+    const paid = await pay(b, "37.00");
+    const burger = await cancel(b, await todayLine(venue, b.billId, 1), "1", true, {
+      requestedBy: venue.staffId,
+      approvedBy: venue.managerId,
+    });
+    const answer = await staffRefund(paid, refundBody(paid, "12.00", [burger]));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const id = (answer.json as { id: string }).id;
+    const [row] = await venue.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
+    expect(row).toMatchObject({ requestedBy: venue.staffId, authorizedBy: venue.managerId });
+    const [drawer] = await venue.db
+      .select()
+      .from(drawerOpens)
+      .where(eq(drawerOpens.tenderRefundId, id));
+    expect(drawer).toMatchObject({
+      personId: venue.staffId,
+      authorizedBy: venue.managerId,
+      viaOverride: true,
+    });
+  });
+
+  it("requires fresh authority when contributing cancels have different approvers", async () => {
+    const b = await bill([{ name: "Burger" }, { name: "Ham" }, { name: "Steak" }]);
+    const paid = await pay(b, "61.00");
+    const burger = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
+    const ham = await cancel(b, await todayLine(venue, b.billId, 2), "1", true, {
+      requestedBy: venue.supervisorId,
+    });
+    const before = await ledgers();
+    const ask = refundBody(paid, "30.00", [burger, ham]);
+    const refused = await staffRefund(paid, ask);
+    expect(refused.json).toMatchObject({ code: "authorization.not_permitted" });
+    expect(await ledgers()).toEqual(before);
+    const approved = await staffRefund(paid, { ...ask, override: managerPin() });
+    expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+    const id = (approved.json as { id: string }).id;
+    const replay = await staffRefund(paid, ask);
+    expect(replay.json).toMatchObject({ code: "authorization.not_permitted" });
+    const retry = await send(
+      venue.app,
+      venue.cookie.staff,
+      "POST",
+      `/api/tender-refunds/${id}/retry`,
+      {},
+    );
+    expect(retry.json).toMatchObject({ code: "authorization.not_permitted" });
+    expect(await linksOf(id)).toEqual([
+      { adjustmentId: burger, amount: 1200 },
+      { adjustmentId: ham, amount: 1800 },
+    ]);
+  });
+
+  it("replay and retry keep independent approval when it differs from the saved cancel approver", async () => {
+    const { paid, burger } = await oneCancel();
+    const ask = refundBody(paid, "12.00", [burger]);
+    const approved = await staffRefund(paid, {
+      ...ask,
+      override: { personId: venue.supervisorId, pin: PINS.supervisor },
+    });
+    expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+    const id = (approved.json as { id: string }).id;
+    const before = await ledgers();
+    expect((await staffRefund(paid, ask)).json).toMatchObject({
+      code: "authorization.not_permitted",
+    });
+    expect(
+      (await send(venue.app, venue.cookie.staff, "POST", `/api/tender-refunds/${id}/retry`, {}))
+        .json,
+    ).toMatchObject({ code: "authorization.not_permitted" });
+    expect(await ledgers()).toEqual(before);
+  });
+
+  it.each([false, true])(
+    "fresh approval permits excess amount or tip, without granting saved replay authority (tip=%s)",
+    async (tip) => {
+      const { paid, burger } = await oneCancel(tip);
+      const ask = {
+        ...refundBody(paid, tip ? "12.00" : "13.00", [burger]),
+        tipAmount: tip ? "1.00" : "0.00",
+      };
+      const answer = await staffRefund(paid, { ...ask, override: managerPin() });
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      const id = (answer.json as { id: string }).id;
+      expect(await linksOf(id)).toEqual([{ adjustmentId: burger, amount: 1200 }]);
+      const before = await ledgers();
+      expect((await staffRefund(paid, ask)).json).toMatchObject({
+        code: "authorization.not_permitted",
+      });
+      const retry = await send(
+        venue.app,
+        venue.cookie.staff,
+        "POST",
+        `/api/tender-refunds/${id}/retry`,
+        {},
+      );
+      expect(retry.json).toMatchObject({ code: "authorization.not_permitted" });
+      expect(await ledgers()).toEqual(before);
+    },
+  );
+
+  it("omitting the cancellation IDs grants no saved approval", async () => {
+    const { paid } = await oneCancel();
+    const before = await ledgers();
+    const answer = await staffRefund(paid, refundBody(paid, "12.00"));
+    expect(answer.status).toBe(403);
+    expect(answer.json).toMatchObject({ code: "authorization.not_permitted" });
     expect(await ledgers()).toEqual(before);
   });
 

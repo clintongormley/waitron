@@ -212,12 +212,14 @@ The payment is chosen when only one can be refunded on this device. The amount i
 total, the tip is 0.00, the reason is the one you gave for the cancel, and the dishes are listed
 under it.
 
-If someone entered their PIN for the cancel, it also covers this refund, once for each receipt, so
-nobody types it again. That holds while you return no more than the dishes' total and no tip. Raise
-the amount or add a tip and the PIN is asked for again, and the dishes' entries in the report then
-do not show the refund. Closing the window without refunding also means the PIN is asked for next
-time. A card keyed on a separate terminal always asks for the PIN, because there it confirms that
-the terminal refund was done.
+You do not need another PIN to refund up to the cancelled dishes' remaining value, with no tip.
+If you raise the amount or add a tip, you need refund permission or a fresh approval PIN. The
+refund still counts against the cancelled dishes, up to their value. A card keyed on a separate
+terminal always asks for a fresh PIN to confirm that the terminal refund was done.
+
+Keep this refund window open to use the cancellation's approval. If you close it before sending
+a refund and open one from the receipt later, enter its amount and reason again and get approval
+if asked.
 
 When the chosen payment holds less than the dishes' total, the amount is what it holds, and a line
 such as **€2.00 left to refund from another payment** says what remains. It counts from the amount
