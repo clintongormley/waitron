@@ -41,7 +41,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { readBillLines, readOrderRevision } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { mergeBills, moveDishes, splitBill, transferItems } from "./testing/bill-action-fixture.js";
+import { mergeBills, moveDishes, splitBill } from "./testing/bill-action-fixture.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -2667,14 +2667,6 @@ describe("A803 waiting copy: kitchen paper", () => {
         const cake = await lineOf(t.bill2, "Tarta");
         const command = { ...(await commandFor(v, t.partyId)), partyId: t.partyId };
         await inTx(v, (tx) => moveDishes(tx, v.cfg, t.bill2, t.bill1, [cake.id], command));
-        return t.bill1;
-      },
-      "Transfer items": async (t: Awaited<ReturnType<typeof paperTable>>) => {
-        const cake = await lineOf(t.bill2, "Tarta");
-        const command = { ...(await commandFor(v, t.partyId)), partyId: t.partyId };
-        await inTx(v, (tx) =>
-          transferItems(tx, v.cfg, t.bill2, t.bill1, [{ lineNo: cake.lineNo }], command),
-        );
         return t.bill1;
       },
       "Merge bills": async (t: Awaited<ReturnType<typeof paperTable>>) => {

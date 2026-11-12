@@ -361,9 +361,7 @@ const ROUTES: readonly Row[] = [
   ordering("POST", `/api/parties/${id}/drafts/${id}/submit`),
   ordering("POST", `/api/parties/${id}/drafts/${id}/discard`),
   ordering("POST", `/api/parties/${id}/unpaid-departure`),
-  ordering("POST", `/api/bills/${id}/split`),
   ordering("POST", `/api/bills/${id}/merge`),
-  ordering("POST", `/api/bills/${id}/transfer`),
   ordering("POST", `/api/bills/${id}/move-dishes`),
   ordering("POST", `/api/bills/${id}/move`),
 ];

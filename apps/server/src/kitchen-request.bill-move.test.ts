@@ -19,7 +19,7 @@ import { moveBill } from "./testing/move-bill-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { seatTable } from "./parties.js";
 import { createCourse } from "./kitchen.js";
-import { mergeBills, moveDishes, splitBill, transferItems } from "./testing/bill-action-fixture.js";
+import { mergeBills, moveDishes, splitBill } from "./testing/bill-action-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { partyRevision } from "./parties.js";
 import "./errors.js";
@@ -154,7 +154,7 @@ describe("A773 requested lifecycle: bill move", () => {
     });
   });
 
-  it("keeps a Requested dish's stamps when Move dishes, Transfer items and Merge bills carry it to an existing bill", async () => {
+  it("keeps a Requested dish's stamps when Move dishes and Merge bills carry it to an existing bill", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       const [first, second, water] = await requestedBurgers(tx, venue, [
@@ -193,16 +193,6 @@ describe("A773 requested lifecycle: bill move", () => {
 
       const [onTab] = await linesOf(tx, venue.party.tabId);
       expect(onTab!.id).toBe(second!.id);
-      await transferItems(
-        tx,
-        venue.cfg,
-        venue.party.tabId,
-        other,
-        [{ lineNo: onTab!.lineNo }],
-        await command(tx, venue),
-      );
-      expect((await linesOf(tx, other)).map((l) => l.id)).toContain(second!.id);
-      await keptStamps();
 
       await mergeBills(tx, venue.cfg, venue.party.tabId, other, await command(tx, venue));
       expect((await linesOf(tx, venue.party.tabId)).map((l) => l.id)).toEqual(

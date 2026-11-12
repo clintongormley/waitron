@@ -6,7 +6,7 @@ import { parties, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { splitBill, transferItems } from "./bill-actions.js";
+import { splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";

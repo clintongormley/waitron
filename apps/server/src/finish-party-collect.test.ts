@@ -32,7 +32,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { completeBillPayment } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readScopedPassBoard } from "./pass-board.js";

@@ -47,7 +47,7 @@ import {
 } from "./working-order.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { cancellationRefundValue } from "./cancellation-refund-value.js";
 import { cancelRefundShare } from "@waitron/shared";
 import {

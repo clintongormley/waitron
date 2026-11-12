@@ -37,7 +37,8 @@ import {
 } from "@waitron/shared";
 import { listStationNotices, writePartyAllergy } from "@waitron/venue-service";
 import { applyAdjustment, previewAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
-import { mergeCheckedBills, transferItems } from "./bill-actions.js";
+import { mergeCheckedBills } from "./bill-actions.js";
+import { transferItems } from "./testing/bill-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { completeBillPayment } from "./bill-payments.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
