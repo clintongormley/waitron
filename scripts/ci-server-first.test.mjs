@@ -120,8 +120,8 @@ describe("server-first workflow routing", () => {
   });
   it("sets up gh only in a server planning job", () => {
     const body = jobs.find((job) => job.id === "changes").body;
-    const setup = body.match(/      - name: Set up gh on the server\n([\s\S]*?)(?=\n      - )/)[1];
-    const condition = setup.match(/^        if: (.+)$/m)[1];
+    const setup = body.match(/ {6}- name: Set up gh on the server\n([\s\S]*?)(?=\n {6}- )/)[1];
+    const condition = setup.match(/^ {8}if: (.+)$/m)[1];
     for (const environment of ["self-hosted", "github-hosted"])
       expect(runInNewContext(condition, { runner: { environment } })).toBe(
         environment === "self-hosted",
@@ -267,9 +267,7 @@ cat "$FIXTURE_ROUTER"
         step.match(/^ {8}run: (.+)$/m)[1];
       let script = body;
       if (refused === "setup-refused") {
-        const setup = yaml.match(
-          /      - name: Set up gh on the server\n([\s\S]*?)(?=\n      - )/,
-        )[1];
+        const setup = yaml.match(/ {6}- name: Set up gh on the server\n([\s\S]*?)(?=\n {6}- )/)[1];
         const setupBody = setup.match(/^ {8}run: \|\n([\s\S]*)$/m)[1].replace(/^ {10}/gm, "");
         for (const [name, contents] of Object.entries({
           timeout: '#!/bin/sh\nshift\nexec "$@"\n',
