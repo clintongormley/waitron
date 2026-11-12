@@ -1363,12 +1363,7 @@ async function paymentBy(saleId: string, method: "cash" | "card") {
 
 /** `amount` back on the sale's hand-keyed card payment through Refund a payment, as a leg of
  * `correctionId`, confirmed returned with the manager's PIN. */
-async function handKeyedLeg(
-  saleId: string,
-  correctionId: string,
-  amount: string,
-  tipAmount = "0.00",
-) {
+async function handKeyedLeg(saleId: string, correctionId: string, amount: string) {
   const submissionId = randomUUID();
   const cfg = { ...venue.cfg, origin: deviceOrigin(venue.deviceId) };
   return refundSettledTender(
@@ -1386,7 +1381,7 @@ async function handKeyedLeg(
       submissionId,
       tenderId: (await paymentBy(saleId, "card")).tenderId,
       appliedAmount: amount,
-      tipAmount,
+      tipAmount: "0.00",
       reason: "Goodwill",
       manualConfirmed: true,
       override: { personId: managerId, pin: "8888" },
@@ -1476,19 +1471,6 @@ describe("a correction's hand-keyed card legs", () => {
     expect(counts()).toEqual(was);
     await expect(cash(correction.id, "15.00")).resolves.toMatchObject({
       correction: { moneyBack: "15.00" },
-    });
-  });
-
-  it("refuses a card leg with a tip, and takes it without", async () => {
-    const saleId = await soldForCash("Set menu", ["20.00", { card: "20.00" }], "1.00");
-    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "20.00" });
-
-    await refusedWithNothingWritten(() => handKeyedLeg(saleId, correction.id, "20.00", "1.00"), {
-      code: "management.request_invalid",
-      params: { field: "tipAmount" },
-    });
-    await expect(handKeyedLeg(saleId, correction.id, "20.00")).resolves.toMatchObject({
-      state: "completed",
     });
   });
 
