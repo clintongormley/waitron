@@ -497,7 +497,8 @@ the split; 3b-6b and 3b-6c come after 3b-6a). A venue with the Veri*Factu module
 proves 3b-6 end to end without 3b-F (in 3b-6b's two-box test): the main box's own modules are what
 the join checks (D12), and with
 `{"fiscal-verifactu": false}` the refusal does not fire, while the stream loop's
-`{"fiscal-none": false}` refuses `module.operation_invalid` (probe P24).
+`{"fiscal-none": false}` refuses `module.operation_invalid` (probe P24; _2026-11-12, review of 3b-5a:
+that refusal's code is now `mirror.standby_series_unsupported`_).
 
 **Sizes (2026-11-10 (watcher)).** Lines changed (added plus removed), production code and tests apart.
 
@@ -2105,7 +2106,8 @@ designated.nodeId, peerPublicKey: bundle.primaryPublicKey, … })`; the mirror l
 D15 — so `AdoptDeps` gains `spareStorePort`), `config.ts` (`WAITRON_SPARE_STORE_PORT`, default 7443,
 D11; Task 5.8's listener reads the same setting), `boot.ts` (the setup start passes it to adopt),
 `packages/node-db/src/mirror-link.ts` (the TypeScript field `relayUrl` becomes
-`originUrl`; the column `relay_url` keeps its name, so no migration). Tests `adopt.test.ts`,
+`originUrl`; the column `relay_url` keeps its name, so no migration; _2026-11-12, review of 3b-5a: the
+column was renamed `origin_url` too, since this part already rebuilds node.db's starting migration_). Tests `adopt.test.ts`,
 `packages/node-db/src/mirror-link.test.ts`.
 
 **Changed checks:** the 3a cases naming `relayUrl` on the mirror link (`git grep -n "relayUrl" --
@@ -3467,6 +3469,11 @@ measurement leaves open into its own short entry (CLAUDE.md §6, the docs rule).
 ## PR 3b-F — a Veri*Factu venue can add a spare (FISCAL — the owner lands it)
 
 Waits for Q1. Full review path; the fiscal suites run unedited unless a row says otherwise.
+
+_2026-11-12, review of 3b-5a:_ the setup wizard words `mirror.standby_series_unsupported` by its
+code alone (`shell.adopt.standby_series_unsupported`), and those words name Veri*Factu whichever
+module the refusal carries. That is true while Veri*Factu is the only module whose standby series
+starts on activation; 3b-F, or a second such module, rewords it.
 
 ### Task F.0: The trace so far, and what remains
 

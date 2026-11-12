@@ -936,7 +936,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       secretAccessKey: "joined-secret",
     });
 
-    it("refuses a join whose link another spare's became streaming part-way through, changing neither the chart nor any reservation", async () => {
+    it("refuses a join whose link another spare's became streaming before its link check, changing neither the chart nor any reservation", async () => {
       const { designated, adminPersonId } = await setupVenue();
       const app = mountApp(designated);
       const joined = joinedLink();
