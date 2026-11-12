@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { tenders, withTransaction, venueLocationId } from "@waitron/db";
+import { tenders, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -142,7 +142,7 @@ beforeAll(async () => {
   );
 
   seriesId = brandSeriesId(venue.seriesIds[0]!);
-  const venueId = await venueLocationId(suite.db);
+
   cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   ({ menuItemId, zoneId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });

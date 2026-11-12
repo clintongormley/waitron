@@ -3,7 +3,7 @@ import { createZone } from "./testing/service-zone.js";
 
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { venueLocationId, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -39,7 +39,7 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    const locationId = await venueLocationId(db);
+
     const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)

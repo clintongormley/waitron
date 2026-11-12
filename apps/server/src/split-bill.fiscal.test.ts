@@ -9,7 +9,6 @@ import {
   sales,
   withTransaction,
   workingOrderLines,
-  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -134,7 +133,6 @@ async function setupVenue(): Promise<Seeded> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const seeded = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });

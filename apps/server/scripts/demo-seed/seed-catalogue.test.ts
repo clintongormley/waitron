@@ -69,7 +69,7 @@ describe("seedCatalogues", () => {
       // and by insertion, so a lookup that ignored the flag would find it instead.
       const demoted = await tx.execute(sql`
         update kitchen_stations set name = 'Bar prep', is_default = 0
-        where location_id = ${locationId} and is_default = 1
+        where is_default = 1
         returning id`);
       expect(demoted.rows).toHaveLength(1);
       await tx
@@ -79,7 +79,7 @@ describe("seedCatalogues", () => {
       return (
         await tx.execute<{ name: string; is_default: number }>(sql`
         select name, is_default from kitchen_stations
-        where location_id = ${locationId} and name in ('Bar prep', 'Galley', 'Kitchen')
+        where name in ('Bar prep', 'Galley', 'Kitchen')
         order by name`)
       ).rows;
     });
@@ -247,7 +247,7 @@ describe("seedCatalogues", () => {
       const { products } = await listAvailableProducts(tx);
       const contentLanguages = await readContentLanguages(tx, LOCALE);
       const { rows: stationRows } = await tx.execute<{ name: string; is_default: number }>(sql`
-        select name, is_default from kitchen_stations where location_id = ${locationId}`);
+        select name, is_default from kitchen_stations`);
       const stations = stationRows.map((row) => ({
         name: row.name,
         is_default: row.is_default === 1,

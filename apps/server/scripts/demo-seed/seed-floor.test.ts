@@ -113,9 +113,9 @@ describe("seedFloor", () => {
         select p.name from menu_periods p join departments d on d.id = p.department_id
          order by d.name`);
       const { rows: zones } = await tx.execute<{ id: string }>(sql`
-        select id from floor_zones where location_id = ${locationId} and name = 'Upstairs bar'`);
+        select id from floor_zones where name = 'Upstairs bar'`);
       const { rows: stations } = await tx.execute<{ id: string }>(sql`
-        select id from kitchen_stations where location_id = ${locationId} and name = 'Downstairs bar'`);
+        select id from kitchen_stations where name = 'Downstairs bar'`);
       const { products } = await listAvailableProducts(tx);
       const drink = products.find((product) => product.name === "House Negroni")!;
       const makers = [];
@@ -229,7 +229,7 @@ describe("seedFloor", () => {
       });
 
       const { rows: zones } = await tx.execute<{ name: string; active: number }>(
-        sql`select name, active from floor_zones where location_id = ${locationId} order by display_order`,
+        sql`select name, active from floor_zones  order by display_order`,
       );
       const { rows: tables } = await tx.execute<{
         label: string;
@@ -242,7 +242,7 @@ describe("seedFloor", () => {
         sql`select d.label, d.zone_id, p.seats, pl.x, pl.y, pl.shape
             from dining_tables d left join floor_plan_tables p on p.id = d.plan_table_id
             left join floor_plan_placements pl on pl.plan_table_id = p.id
-            where d.location_id = ${locationId} order by d.label`,
+             order by d.label`,
       );
       return { zones, tables };
     });
@@ -282,7 +282,7 @@ describe("seedFloor", () => {
         dataSet: CASA_DELGADO_ES,
       });
       const { rows: zones } = await tx.execute<{ zone_id: string }>(
-        sql`select distinct zone_id from dining_tables where location_id = ${locationId}`,
+        sql`select distinct zone_id from dining_tables `,
       );
       const plans = [];
       for (const { zone_id } of zones)
@@ -300,7 +300,7 @@ describe("seedFloor", () => {
       }>(
         sql`select d.label, d.zone_id, t.fixed, t.x, t.y, t.width, t.height, t.shape, t.rotation
             from dining_tables d join floor_today_tables t on t.table_id = d.id
-            where d.location_id = ${locationId}`,
+            `,
       );
       const { rows: todayZones } = await tx.execute<{ zone_id: string }>(
         sql`select zone_id from floor_today_zones`,
@@ -399,7 +399,7 @@ describe("seedFloor", () => {
           }
         }
         const { rows: seeded } = await tx.execute<{ zone_id: string; label: string }>(
-          sql`select zone_id, label from dining_tables where location_id = ${locationId}`,
+          sql`select zone_id, label from dining_tables `,
         );
         return { departments, sets, placed, seeded };
       });

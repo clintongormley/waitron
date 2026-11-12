@@ -11,7 +11,6 @@ import {
   saleVoids,
   tenderRefunds,
   tenders,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";

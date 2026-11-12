@@ -23,7 +23,6 @@ import {
   workingOrders,
   products,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -208,7 +207,6 @@ async function setupVenue(): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
   const cfg = tillConfigFromVenue(venue);
   venueReceiptPrinter = null;
   const { each, operatorId, supervisorId } = await withTransaction(suite.db, async (tx) => {
@@ -1139,7 +1137,7 @@ describe("an original receipt whose printer was deleted", () => {
   });
 
   it("leaves the device with no receipt printer, as if none were set: a new sale queues no paper and a reprint answers as with none", async () => {
-    const { app, cfg, cookie, printerId, menuItemId } = await open();
+    const { app, cookie, printerId, menuItemId } = await open();
     await deleteVia(printerId);
     const jobsBefore = await suite.db.select().from(printJobs);
 
@@ -3376,7 +3374,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
   });
 
   it("queues no delivery when the explicit original has no active printer", async () => {
-    const { cfg, post } = await issued();
+    const { post } = await issued();
     await configureReceipt({ printerId: null });
     expect((await post("receipt")).status).toBe(200);
     expect(await suite.db.select().from(printJobs)).toEqual([]);

@@ -13,7 +13,6 @@ import {
   floorZones,
   dayCutoverChanges,
   settings as businessDaySettingsTable,
-  venueLocationId,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -561,15 +560,15 @@ describe("clearProvisionFixture", () => {
       planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
       { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
-    const venueId = await venueLocationId(db);
+
     await withTransaction(db, async (tx) => {
       const department = await createDepartment(tx, {
         name: "Restaurant",
         orderStart: "table",
       });
       const setId = randomUUID();
-      await tx.execute(sql`insert into floor_plan_sets (id, location_id)
-        values (${setId}, ${venueId})`);
+      await tx.execute(sql`insert into floor_plan_sets (id)
+        values (${setId})`);
       await linkFloorPlanSet(tx, { setId, departmentId: department.id, name: "Standard" });
     });
 

@@ -773,7 +773,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   });
 
   async function seedPrinter(name: string): Promise<string> {
-    const location = await suite.db.execute<{ id: string }>(sql`select id from locations limit 1`);
+    await suite.db.execute<{ id: string }>(sql`select id from locations limit 1`);
     const [row] = await suite.db
       .insert(printers)
       .values({

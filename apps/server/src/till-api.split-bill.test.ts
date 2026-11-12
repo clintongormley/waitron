@@ -15,7 +15,6 @@ import {
   ticketItems,
   partyTables,
   parties,
-  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,

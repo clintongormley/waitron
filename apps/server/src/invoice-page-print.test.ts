@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -82,7 +82,7 @@ async function agent(name: string): Promise<string> {
 let hostCounter = 20;
 
 async function printer(
-  locationId: string,
+  _locationId: string,
   agentId: string | null,
   extra: Partial<typeof pagePrinters.$inferInsert> = {},
 ): Promise<string> {
@@ -250,23 +250,6 @@ describe("claiming an A4 delivery", () => {
     await report(second!.claim, { status: "sent" }, 5_000);
     expect(await claim(v.agentOne, 5_000)).toBeUndefined();
     expect((await claim(v.agentOne, 10_000))?.claim.deliveryId).toBe(notDue);
-  });
-
-  it("claims a due A4 delivery whatever the printer's location column holds", async () => {
-    const v = await venue();
-    const office = await printer(v.locationId, v.agentOne);
-    const id = await queueA4(await fullInvoice(v.nodeId), office);
-    await suite.db.execute(sql`pragma foreign_keys = off`);
-    try {
-      await suite.db.update(pagePrinters).set({}).where(eq(pagePrinters.id, office));
-      const { job } = await withTransaction(suite.db, (tx) =>
-        claimInvoicePagePrint(tx, v.agentOne, {}, at(1_000)),
-      );
-      expect(job?.claim.deliveryId).toBe(id);
-    } finally {
-      await suite.db.update(pagePrinters).set({}).where(eq(pagePrinters.id, office));
-      await suite.db.execute(sql`pragma foreign_keys = on`);
-    }
   });
 
   it("hands out a delivery whose next attempt lies 400 days ahead, as after a backward step", async () => {

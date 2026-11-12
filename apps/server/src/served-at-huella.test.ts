@@ -11,7 +11,6 @@ import {
   workingOrderLines,
   workingOrders,
   type Database,
-  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -173,7 +172,7 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(db);
+
   const cfg = await deviceRequestCfg(db, tillConfigFromVenue(venue));
   await withTransaction(db, (tx) =>
     registerSif(tx, {

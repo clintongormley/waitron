@@ -1,14 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  invoiceSeries,
-  sales,
-  floorZones,
-  venueLocationId,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, sales, floorZones, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
@@ -31,7 +24,7 @@ async function fixture(nullHeader = false) {
     invoiceLocales: ["es-ES"],
     operationDescription: "Hospitality",
   });
-  const cfg = { locationId: await venueLocationId(suite.db) };
+
   const nodeId = await seedNode(suite.db);
   const [primary] = await suite.db
     .insert(departments)

@@ -10,7 +10,6 @@ import {
   parties,
   workingOrderLines,
   workingOrders,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -75,7 +74,7 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Retail",
     });
-    const locationId = await venueLocationId(db);
+
     await seedKitchenStation(db, {});
     const nodeId = await seedNode(db);
     const [person] = await db

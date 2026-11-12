@@ -12,7 +12,6 @@ import {
   workingOrderLines,
   workingOrders,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -71,8 +70,7 @@ async function setup() {
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant",
   });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
+
   const stationId = await seedKitchenStation(db, {});
   const nodeId = await seedNode(db);
   const cfg: TradingContext = {

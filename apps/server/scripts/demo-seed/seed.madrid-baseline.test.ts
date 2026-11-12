@@ -27,6 +27,19 @@ import {
 } from "./testing/madrid-renamed-columns.js";
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
+  devices: ["location_id"],
+  working_orders: ["location_id"],
+  tender_refunds: ["location_id"],
+  join_requests: ["location_id"],
+  dining_tables: ["location_id"],
+  floor_plan_sets: ["location_id"],
+  floor_zones: ["location_id"],
+  kitchen_stations: ["location_id"],
+  kitchen_courses: ["location_id"],
+  print_agents: ["location_id"],
+  printers: ["location_id"],
+  print_jobs: ["location_id"],
+  page_printers: ["location_id"],
   department_sale_policies: ["receipt_print_mode"],
   zone_sale_policies: ["receipt_print_mode"],
   departments: ["location_id"],
@@ -356,6 +369,17 @@ for (const locale of ["en", "es"] as const) {
       expected[phase] = madridWithDocument(
         expected[phase],
         "locations",
+        { catalogue_id: "id" },
+        {
+          mode: "column-flag",
+          targetTable: "catalogues",
+          targetField: "is_default",
+          beforeColumn: "version",
+        },
+      );
+      expected[phase] = madridWithDocument(
+        expected[phase],
+        "locations",
         { time_zone: "timeZone" },
         { ...venueMetadata, module: "business_day", revision: 1, mode: "business-day" },
       );
@@ -607,7 +631,6 @@ for (const locale of ["en", "es"] as const) {
         const courses = expected[phase].tables.kitchen_courses!;
         expect(courses.rows).toEqual({});
         expect(phases[phase]!.kitchen_courses).toBe(0);
-        const locationId = Object.values(expected[phase].tables.locations!.rows)[0]!.id;
         const names = [
           STARTER_COURSE_NAMES["Sharing plates"].es,
           STARTER_COURSE_NAMES.Starters.es,
@@ -621,7 +644,6 @@ for (const locale of ["en", "es"] as const) {
               id,
               {
                 id,
-                location_id: locationId,
                 name,
                 display_order: displayOrder,
                 active: 1,

@@ -3263,12 +3263,6 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   }, 60_000);
 
   it("the equipment read names a stuck kitchen printer", async () => {
-    const cfg = {
-      locale: "es-ES",
-      ...loadNodeIdentity(TILL_ENV),
-      ...loadTillAppSettings(TILL_ENV),
-      locationId: TILL_LOCATION_ID,
-    };
     const [printer] = await sharedDb
       .insert(printers)
       .values({

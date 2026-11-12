@@ -155,7 +155,6 @@ async function agent(name: string): Promise<string> {
 let hostCounter = 20;
 
 async function printer(
-  v: Venue,
   agentId: string | null,
   extra: Partial<typeof pagePrinters.$inferInsert> = {},
 ): Promise<string> {
@@ -299,7 +298,7 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
 describe("requesting a test page", () => {
   it("needs hardware.manage to request or read one, and a staff refusal queues nothing", async () => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
 
     for (const res of [
       await requestPage(v, office, v.cookies.staff),
@@ -320,7 +319,7 @@ describe("requesting a test page", () => {
 
   it("refuses a printer that is disabled or unknown", async () => {
     const v = await venue();
-    const disabled = await printer(v, v.agentOne, { active: false });
+    const disabled = await printer(v.agentOne, { active: false });
 
     for (const id of [disabled, randomUUID()]) {
       const res = await requestPage(v, id);
@@ -344,7 +343,7 @@ describe("requesting a test page", () => {
 
   it("refuses an active printer with no print agent, and queues nothing", async () => {
     const v = await venue();
-    const orphan = await printer(v, null);
+    const orphan = await printer(null);
 
     const res = await requestPage(v, orphan);
     expect(res.status).toBe(409);
@@ -356,7 +355,7 @@ describe("requesting a test page", () => {
 
   it("answers a request while one is still out with that same page", async () => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const first = await requested(v, office);
 
     expect(await requested(v, office)).toEqual(first);
@@ -376,7 +375,7 @@ describe("requesting a test page", () => {
 describe("printing a test page", () => {
   it("A965 sample language queues no office page when the request transaction cannot commit", async () => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     await suite.db.execute(sql`create table a965_parent (id integer primary key)`);
     await suite.db.execute(
       sql`create table a965_child (id integer primary key, parent_id integer references a965_parent(id) deferrable initially deferred)`,
@@ -414,7 +413,7 @@ describe("printing a test page", () => {
         return renderInvoicePdf(document);
       },
     });
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     await seedVenueSettings(suite.db, { invoiceLocales: ["ca-ES"] });
     const first = await requested(v, office);
     await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
@@ -451,7 +450,7 @@ describe("printing a test page", () => {
         return Buffer.from([7, 7, 7]);
       },
     });
-    const office = await printer(v, v.agentOne, {
+    const office = await printer(v.agentOne, {
       host: "192.0.2.40",
       port: 8631,
       resourcePath: "/ipp/office",
@@ -505,7 +504,7 @@ describe("printing a test page", () => {
 
   it("prints MUESTRA/1 on a real PDF page", async () => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     await requested(v, office);
     const job = (await claim(v))!;
 
@@ -517,7 +516,7 @@ describe("printing a test page", () => {
 
   it("gives a real queued invoice to the agent before a test page", async () => {
     const v = await venue({ render: async () => Buffer.from("x") });
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const page = await requested(v, office);
     const invoice = await queuedInvoice(v, office);
 
@@ -531,9 +530,9 @@ describe("printing a test page", () => {
 
   it("hands out the agent's oldest waiting page first, and leaves a claimed invoice's routes to the invoice", async () => {
     const v = await venue({ render: async () => Buffer.from("x") });
-    const first = await printer(v, v.agentOne);
-    const second = await printer(v, v.agentOne);
-    const third = await printer(v, v.agentOne);
+    const first = await printer(v.agentOne);
+    const second = await printer(v.agentOne);
+    const third = await printer(v.agentOne);
     const queued = await queuedInvoice(v, first);
     const invoiceJob = (await claim(v))!;
     expect(invoiceJob.id).toBe(queued);
@@ -557,7 +556,7 @@ describe("printing a test page", () => {
 
   it("is claimed only by the agent the printer records, even after a re-point", async () => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const page = await requested(v, office);
     await suite.db
       .update(pagePrinters)
@@ -576,7 +575,7 @@ describe("printing a test page", () => {
     ["unknown", "timeout"],
   ] as const)("shows a %s outcome with its code %s", async (status, failureCode) => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const page = await requested(v, office);
     const job = (await claim(v))!;
 
@@ -588,7 +587,7 @@ describe("printing a test page", () => {
 
   it("refuses an outcome an agent may not report, another agent's report or a wrong claim, and changes nothing", async () => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const page = await requested(v, office);
     const job = (await claim(v))!;
 
@@ -617,8 +616,8 @@ describe("printing a test page", () => {
 describe("one job per office printer, test pages included", () => {
   it("keeps a printer's invoice back while its test page prints, and hands out another printer's", async () => {
     const v = await venue({ render: async () => Buffer.from("x") });
-    const x = await printer(v, v.agentOne);
-    const y = await printer(v, v.agentOne);
+    const x = await printer(v.agentOne);
+    const y = await printer(v.agentOne);
     await requested(v, x);
     const page = (await claim(v))!;
     const onX = await queuedInvoice(v, x);
@@ -639,8 +638,8 @@ describe("one job per office printer, test pages included", () => {
 
   it("keeps a printer's test page waiting while its invoice is out, and hands out another printer's", async () => {
     const v = await venue({ render: async () => Buffer.from("x") });
-    const x = await printer(v, v.agentOne);
-    const y = await printer(v, v.agentOne);
+    const x = await printer(v.agentOne);
+    const y = await printer(v.agentOne);
     const queued = await queuedInvoice(v, x);
     const invoice = (await claim(v))!;
     expect(invoice.id).toBe(queued);
@@ -660,7 +659,7 @@ describe("one job per office printer, test pages included", () => {
 
   it("hands out one job for a printer to two overlapping claims, when only the later finds its invoice due", async () => {
     const v = await venue({ render: async () => Buffer.from("x") });
-    const x = await printer(v, v.agentOne);
+    const x = await printer(v.agentOne);
     const page = await requested(v, x);
     const onX = await queuedInvoice(v, x);
     await suite.db
@@ -709,7 +708,7 @@ describe("one job per office printer, test pages included", () => {
 
   it("frees a printer whose test page has lapsed on the same call, and hands out its invoice", async () => {
     const v = await venue({ render: async () => Buffer.from("x") });
-    const x = await printer(v, v.agentOne);
+    const x = await printer(v.agentOne);
     const page = await requested(v, x);
     expect((await claim(v))?.id).toBe(page.id);
     const onX = await queuedInvoice(v, x);
@@ -746,7 +745,7 @@ describe("an agent asking for work", () => {
 
   it("reads no office printer while no test page is waiting", async () => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     expect(await claimReadingPrinters(v)).toEqual({ job: undefined, printerReads: 0 });
 
     const page = await requested(v, office);
@@ -761,7 +760,7 @@ describe("an agent asking for work", () => {
 describe("a test page's time limits", () => {
   it("keeps a renewed claim past the 60 s lease, and lets an unrenewed one lapse to unknown", async () => {
     const v = await venue({ render: async () => Buffer.from("x") });
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const page = await requested(v, office);
     const job = (await claim(v))!;
 
@@ -789,7 +788,7 @@ describe("a test page's time limits", () => {
 
   it("fails a page no agent took within five minutes, and never hands it out after", async () => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const page = await requested(v, office);
 
     v.state.now = at(299_999);
@@ -805,7 +804,7 @@ describe("a test page's time limits", () => {
 
   it("fails a waiting page whose printer is disabled before it is claimed", async () => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const page = await requested(v, office);
     await suite.db.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, office));
 
@@ -819,7 +818,7 @@ describe("a test page's time limits", () => {
 
   it("forgets a finished outcome ten minutes after it finished", async () => {
     const v = await venue();
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const page = await requested(v, office);
     const job = (await claim(v))!;
     v.state.now = at(1_000);
@@ -836,7 +835,7 @@ describe("a test page's time limits", () => {
 describe("a test page the printer is holding", () => {
   it("reads printing with the hold its renewal reports, until a renewal clears it or the page ends", async () => {
     const v = await venue({ render: async () => Buffer.from("x") });
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const page = await requested(v, office);
     const job = (await claim(v))!;
 
@@ -866,7 +865,7 @@ describe("a test page the printer is holding", () => {
 
   it("refuses a hold outside the list and keeps the page as it was", async () => {
     const v = await venue({ render: async () => Buffer.from("x") });
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const page = await requested(v, office);
     const job = (await claim(v))!;
     v.state.now = at(20_000);
@@ -889,7 +888,7 @@ describe("a test page the printer is holding", () => {
 
   it("drops the hold from the view once the page is reported", async () => {
     const v = await venue({ render: async () => Buffer.from("x") });
-    const office = await printer(v, v.agentOne);
+    const office = await printer(v.agentOne);
     const page = await requested(v, office);
     const job = (await claim(v))!;
     v.state.now = at(20_000);
@@ -1004,7 +1003,7 @@ describe("a test page's time limits after a step back of the clock", () => {
 describe("the print agent's own client", () => {
   it("claims, fetches and reports a test page over the same routes it uses for invoices", async () => {
     const v = await venue({ render: async () => Buffer.from([1, 2, 3]) });
-    const office = await printer(v, v.agentOne, { documentFormat: "image/pwg-raster" });
+    const office = await printer(v.agentOne, { documentFormat: "image/pwg-raster" });
     const page = await requested(v, office);
     const agentClient = createClient({
       fetch: ((input: RequestInfo | URL, init?: RequestInit) =>

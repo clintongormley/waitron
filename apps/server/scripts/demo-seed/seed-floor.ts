@@ -32,7 +32,7 @@ export interface SeedFloorInput {
 
 export async function seedFloor(
   tx: Transaction,
-  { locationId, locale, departmentTradingNames, dataSet, menuIds }: SeedFloorInput,
+  { locale, departmentTradingNames, dataSet, menuIds }: SeedFloorInput,
 ): Promise<void> {
   const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
 

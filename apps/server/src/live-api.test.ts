@@ -343,7 +343,7 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   const { cookie, bus } = await fixture();
   const app = new Hono();
   mountLiveApi(app, { db: suite.db, bus, resourceTypes: ["dining_tables"] }, () => {});
-  const { location, zone } = await withTransaction(suite.db, async (tx) => {
+  const { zone } = await withTransaction(suite.db, async (tx) => {
     const [location] = await tx.insert(locations).values({}).returning({ id: locations.id });
     await seedVenueSettings(tx, {
       name: "Before probe",

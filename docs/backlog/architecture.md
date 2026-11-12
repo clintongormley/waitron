@@ -1149,31 +1149,20 @@ the helper's constant status is not evidence of the write.
 
   What the landed slices left, by owner:
 
-  - **S18:** S18e, held by A1308 (above). `CatalogueApiDeps.venueCfg`
-    (`apps/server/src/catalogue-api.ts`) is unread, and no slice plans its removal yet (S18b).
-    Functions in `apps/server`'s `order-groups.ts`, `parties.ts`, `till-sale.ts` and
-    `working-order.ts`, and test helpers such as `asApp` and `asTenant`, discard a `cfg` parameter
-    with `void cfg;`. S18b's codemod started only from parameters named `_cfg` or `_locationId`, so
-    it left them. Removing the ones in `till-sale.ts` and `working-order.ts` edits files on the
+  - **S18:** S18e, held by A1308 (above). `till-sale.ts` and `working-order.ts` still
+    discard a `cfg` parameter with `void cfg;`. Removing them edits files on the
     invoice path, which the owner lands (S18b). Two test helpers still hand out a node value
     holding the venue row's id, because test files read it from there: `hour-recovery-host.ts`'s
     `node` and `staged-hour-crash.ts`'s (an assertion in
     `restore-emergency-crash.e2e.test.ts`) (S18f).
-  - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387). Until the
-    schema slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an
-    optional `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo
-    printer's boot lookup keeps its venue condition for `printers_local_key_key` (S10, #2396).
+  - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387).
     S25 still needs to drop the node's venue foreign key (S4, #2388). Calendar rows still written
-    with a `location_id` take `venueLocationId` (S8, #2405). Until the schema slices
-    drop the columns, the configuration import sets every column whose foreign key points at
-    `locations` to the importing venue's row (`venueLocationId`); the export no longer carries
+    with a `location_id` take `venueLocationId` (S8, #2405). The export no longer carries
     `fire_control`, whose column goes with `locations` in S28 rather than in A773-2, since dropping
     it alone rebuilds `locations` (S17, #2415; A773-2 PR D plan D113). S28 also deletes the tests
-    that still set it, listed in D113 and in [kitchen.md](kitchen.md). One raw
-    `insert into working_orders` statement (`working-order.test.ts`'s `seedForeignNodeOrder`): the
-    schema slice that drops `working_orders.location_id` changes it (F5, #2403). Server test helpers take the venue row's
+    that still set it, listed in D113 and in [kitchen.md](kitchen.md). Server test helpers take the venue row's
     id through the test type `WithVenueRowId` (`apps/server/src/testing/venue-row-id.ts`), which
-    goes when no `location_id` column is left to fill (S18f). `verifyCoreBackupData`
+    stays only in node, Cloud and backup fixtures until 5f/5g (watcher, 2026-11-11). `verifyCoreBackupData`
     (`packages/db/src/backup-evidence.ts`) still reads `locations` and `nodes.location_id` (S18f).
     Until `venueLocationId` goes, boot takes the venue row's id for backup settings, recovery
     packs, the bucket stream and the Cloud connection, and `backup-data-placement.ts` and
@@ -1185,10 +1174,7 @@ the helper's constant status is not evidence of the write.
   - **Fixture lines the helpers could not take:** F5 (#2403), F2 (#2410) and F4 (#2412) list the
     lines they left (fixed ids the helpers cannot keep, second-location cases and standby copies)
     with their owning slice in their commit messages and PR bodies; F3 (#2427) lists its lines
-    with the reason each was left. Reporting's
-    `seedVenueWithSeries` and `seedOpenOrder` still write a raw
-    second location when a cross-location case calls them again; the code slices that delete
-    those cases remove that branch. fiscal-verifactu's own helpers and the tests outside F2's list
+    with the reason each was left. fiscal-verifactu's own helpers and the tests outside F2's list
     (`certificate-install`, `seed-single-venue`, `void-issue-clock`) are S3's. Left as they were
     by F4: rows written under fixed ids that a backup, archive, `trading.env` or assertion names
     (most `recovery*` and `restore*` suites, `hour-promotion`, `hour-recovery`,

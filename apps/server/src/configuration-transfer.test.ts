@@ -158,7 +158,6 @@ import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
 import {
   buildConfigurationBundle,
-  applyPreparedVenue,
   exportConfigurationTables,
   decodeConfigurationBundle,
   encodeConfigurationBundle,
@@ -676,10 +675,9 @@ describe("configuration transfer database path", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
-    const targetVenueId = await venueLocationId(targetSuite.db);
+
     const [imported] = await targetSuite.db.select().from(pagePrinters);
     expect(imported).toMatchObject({
-      locationId: targetVenueId,
       name: "Invoice office",
       host: "192.0.2.20",
       port: 8631,
@@ -2126,8 +2124,7 @@ it("transfers a station's painted season day and a special day's painted date un
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const sourceVenueId = await venueLocationId(suite.db);
-  const scope = { locationId: sourceVenueId };
+
   const original = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Terrace" });
     const [station] = await tx
@@ -2179,10 +2176,10 @@ it("transfers a station's painted season day and a special day's painted date un
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
-  const targetVenueId = await venueLocationId(targetSuite.db);
+
   const days = await targetSuite.db.execute(sql`
     select d.id as day_id, d.department_id, d.station_id, d.season_id, d.special_day_date_id,
-      b.staff_role_id, dep.name as department, st.name as station, st.location_id as station_location,
+      b.staff_role_id, dep.name as department, st.name as station,
       d.weekday, sd.date, sp.name as special_day,
       r.name as role, b.headcount, b.starts_at, b.ends_at
     from staffing_days d
@@ -2204,7 +2201,6 @@ it("transfers a station's painted season day and a special day's painted date un
       staff_role_id: expect.any(String),
       department: null,
       station: "Staffed grill",
-      station_location: targetVenueId,
 
       weekday: 2,
       date: null,
@@ -2224,7 +2220,6 @@ it("transfers a station's painted season day and a special day's painted date un
       staff_role_id: expect.any(String),
       department: "Terrace",
       station: null,
-      station_location: null,
 
       weekday: null,
       date: "2027-08-03",
@@ -3393,13 +3388,12 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
+
   await withTransaction(suite.db, async (tx) => {
     const added = await tx
       .insert(printers)
       .values(
         ["Bar printer", "Back printer", "Slip printer"].map((name, index) => ({
-          locationId: venueId,
           name,
           transport: "network_tcp" as const,
           host: `10.0.1.${index + 1}`,
@@ -3922,7 +3916,7 @@ async function shortNamedBundle(taxId: string) {
   return { transferred, versions };
 }
 
-async function importedShortNames(target: { locationId: string }) {
+async function importedShortNames() {
   return targetSuite.db
     .select({ shortName: diningTables.shortName, shortNameKey: diningTables.shortNameKey })
     .from(diningTables)
@@ -3946,9 +3940,7 @@ it("carries each table's short name, and the import sets the live table's key fr
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
-  expect(await importedShortNames({ locationId: await venueLocationId(targetSuite.db) })).toEqual([
-    { shortName: "Rt1", shortNameKey: "rt1" },
-  ]);
+  expect(await importedShortNames()).toEqual([{ shortName: "Rt1", shortNameKey: "rt1" }]);
   const plan = await targetSuite.db
     .select({ shortName: floorPlanTables.shortName })
     .from(floorPlanTables)
@@ -4005,9 +3997,7 @@ it("imports a file with no short names, at this version, with none", async () =>
         versions,
       ),
   });
-  expect(await importedShortNames({ locationId: await venueLocationId(targetSuite.db) })).toEqual([
-    { shortName: null, shortNameKey: null },
-  ]);
+  expect(await importedShortNames()).toEqual([{ shortName: null, shortNameKey: null }]);
   const plan = await targetSuite.db
     .select({ shortName: floorPlanTables.shortName })
     .from(floorPlanTables)
@@ -4436,7 +4426,7 @@ it("leaves behind a retired profile that no row uses, and the bundle still impor
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
+
   const [retired] = await suite.db
     .insert(deviceProfiles)
     .values({ name: "Old till", formFactor: "till" })
@@ -4465,7 +4455,7 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
+
   const original = await withTransaction(suite.db, async (tx) => {
     const [printer] = await tx
       .insert(printers)
@@ -4527,7 +4517,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
+
   const original = await withTransaction(suite.db, async (tx) => {
     const restaurant = await createDepartment(tx, {
       name: "Restaurant",
@@ -4621,7 +4611,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
+
   const original = await withTransaction(suite.db, async (tx) => {
     const restaurant = await createDepartment(tx, {
       name: "Restaurant",
@@ -4756,7 +4746,7 @@ it("transfers a profile's admitted roles and person exceptions, leaving a retire
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
+
   const original = await withTransaction(suite.db, async (tx) => {
     const [admin] = await tx
       .select({ id: persons.id })
@@ -5359,7 +5349,7 @@ describe("venue detail edits and configuration boundaries", () => {
     expect(model.issuer).toEqual({ country: "ES", legalName: "Prepared SL", taxId: "B33221177" });
   });
   it.each([false, true])(
-    "applying prepared receipt settings keeps all target details with history=%s",
+    "importing configuration keeps all target details with history=%s",
     async (history) => {
       const target = await applyVenue(planVenue(venue("B22334455"), ALL_MODULES), {
         db: suite.db,
@@ -5387,7 +5377,12 @@ describe("venue detail edits and configuration boundaries", () => {
       );
       const exported = await buildConfigurationBundle(
         suite.db,
-        target,
+        {
+          ...target,
+          sourceOperatorId: suite.db.all<{ id: string }>(
+            sql`select id from persons where role = 'admin'`,
+          )[0]!.id,
+        },
         ALL_MODULES,
         new Date("2026-10-06T12:00:00Z"),
         versions,
@@ -5397,19 +5392,21 @@ describe("venue detail edits and configuration boundaries", () => {
         name: "Foreign source name",
         addressLine1: "Foreign street",
         addressLine2: "Foreign line two",
-        postalCode: "08001",
-        city: "Barcelona",
-        province: "Barcelona",
-        timeZone: "UTC",
+        postalCode: "45001",
+        city: "Toledo",
+        province: "Toledo",
+        timeZone: "Atlantic/Canary",
         dayCutover: "01:30:00",
       };
       const beforeSales = suite.db.all(sql`select * from sales`);
       const beforeSeries = suite.db.all(sql`select * from invoice_series`);
       await withTransaction(suite.db, (tx) =>
-        applyPreparedVenue(tx, {
-          ...foreignDetails,
-          defaultCatalogueId: exported.defaultCatalogueId,
-        }),
+        importConfigurationTables(
+          tx,
+          { ...exported, venue: foreignDetails },
+          ALL_MODULES,
+          versions,
+        ),
       );
       const after = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
       expect(after.details).toEqual(initial.details);
@@ -5508,7 +5505,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(18);
+  expect(exported.version).toBe(19);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -5642,7 +5639,7 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     modules: ALL_MODULES,
   });
   const sourceVenueId = await venueLocationId(suite.db);
-  const scope = { locationId: sourceVenueId };
+
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, {
       name: "Routes dining room",
@@ -5766,8 +5763,7 @@ it("carries a cell's period choices with their cell, including a period whose me
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
-  const scope = { locationId: venueId };
+
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, {
       name: "Periods dining room",
@@ -5941,7 +5937,7 @@ describe("special days in a configuration transfer", () => {
     const departmentRows = await db.execute<{ id: string; name: string }>(sql`
       select id, name from departments `);
     const stationRows = await db.execute<{ id: string; name: string }>(sql`
-      select id, name from kitchen_stations where location_id = ${located.locationId}`);
+      select id, name from kitchen_stations `);
     return {
       cfg: { locationId: located.locationId },
       departments: new Map(departmentRows.rows.map((row) => [row.name, row.id])),
@@ -6917,12 +6913,11 @@ describe("a deleted printer in a configuration transfer", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
-    const venueId = await venueLocationId(targetSuite.db);
+
     const imported = await targetSuite.db
       .select({
         id: printers.id,
         name: printers.name,
-        locationId: printers.locationId,
         active: printers.active,
         deletedAt: printers.deletedAt,
         pollTokenHash: printers.pollTokenHash,
@@ -6933,7 +6928,6 @@ describe("a deleted printer in a configuration transfer", () => {
       {
         id: expect.any(String),
         name: "Disabled bar",
-        locationId: venueId,
         active: false,
         deletedAt: null,
         pollTokenHash: null,
@@ -6941,7 +6935,6 @@ describe("a deleted printer in a configuration transfer", () => {
       {
         id: expect.any(String),
         name: "Live bar",
-        locationId: venueId,
         active: false,
         deletedAt: null,
         pollTokenHash: null,
@@ -7581,8 +7574,8 @@ describe("dated business-day configuration transfer", () => {
     ).toEqual([{ revision: 5 }]);
   });
 
-  it("keeps dated target history when the prepared venue is applied", async () => {
-    await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {
+  it("keeps dated target history when configuration is imported", async () => {
+    const target = await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
@@ -7595,12 +7588,28 @@ describe("dated business-day configuration transfer", () => {
       .update(businessDaySettingsTable)
       .set({ revision: 2 })
       .where(eq(businessDaySettingsTable.module, "business_day"));
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const exported = await buildConfigurationBundle(
+      suite.db,
+      {
+        ...target,
+        sourceOperatorId: suite.db.all<{ id: string }>(
+          sql`select id from persons where role = 'admin'`,
+        )[0]!.id,
+      },
+      ALL_MODULES,
+      new Date("2026-11-05T12:00:00Z"),
+      versions,
+    );
     const rows = await suite.db.select().from(dayCutoverChanges);
     const model = await withTransaction(suite.db, (tx) =>
       readVenueDetails(tx, new Date("2026-11-05T12:00:00Z")),
     );
     await withTransaction(suite.db, (tx) =>
-      applyPreparedVenue(tx, { defaultCatalogueId: bundle.defaultCatalogueId }),
+      importConfigurationTables(tx, exported, ALL_MODULES, versions),
     );
     expect(
       await withTransaction(suite.db, (tx) =>

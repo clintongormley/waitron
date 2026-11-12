@@ -165,7 +165,7 @@ describe("collectBoxHealth", () => {
   });
 
   it("lists only printers that are switched on and not deleted", async () => {
-    const location = await seedLocation();
+    await seedLocation();
     const active = await seedPrinter("Bar");
     await seedPrinter("Off", { active: false });
     await seedPrinter("Gone", { active: true, deletedAt: "2026-10-01T00:00:00.000Z" });
@@ -174,7 +174,7 @@ describe("collectBoxHealth", () => {
   });
 
   it("lists printers by name", async () => {
-    const location = await seedLocation();
+    await seedLocation();
     const second = await seedPrinter("Kitchen");
     const first = await seedPrinter("Bar");
     const health = await collectBoxHealth(suite.db, stubReaders());
@@ -246,7 +246,7 @@ describe("collectBoxHealth", () => {
   });
 
   it("counts a source that writes a row as unavailable, and its row does not stay", async () => {
-    const location = await seedLocation();
+    await seedLocation();
     const sources: OwnedStaffNoticeSource[] = [
       {
         owner: "writer",

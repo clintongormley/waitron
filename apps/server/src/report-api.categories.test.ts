@@ -10,7 +10,6 @@ import {
   saleLines,
   sales,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -48,7 +47,7 @@ const DAY2 = "2026-06-11"; // one line recorded before classification began
 const DAY3 = "2026-06-12"; // a product whose category today sits in a loop
 
 let nodeId: string;
-let locationId: string;
+
 let deviceId: string;
 let seriesId: string;
 let managerCookie: string;
@@ -137,7 +136,7 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    locationId = await venueLocationId(db);
+
     ({ deviceId } = await seedDevice(db));
     nodeId = await seedNode(db);
     const [series] = await db

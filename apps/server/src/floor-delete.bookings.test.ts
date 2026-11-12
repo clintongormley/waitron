@@ -9,7 +9,6 @@ import {
   withTransaction,
   installChangeFeed,
   subscribeToChanges,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -49,8 +48,7 @@ for (const enabled of [true, false]) {
         invoiceLocales: ["es"],
         operationDescription: "test",
       });
-      const venueId = await venueLocationId(suite.db);
-      const cfg = { locationId: venueId };
+
       const [zone] = await suite.db
         .insert(floorZones)
         .values({ name: "Stream hierarchy" })
@@ -163,8 +161,7 @@ for (const enabled of [true, false]) {
           invoiceLocales: ["es"],
           operationDescription: "test",
         });
-        const venueId = await venueLocationId(suite.db);
-        const cfg = { locationId: venueId };
+
         const [zone] = await suite.db.insert(floorZones).values({ name: "Hierarchy" }).returning();
         const [table] = await suite.db
           .insert(diningTables)

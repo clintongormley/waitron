@@ -1,4 +1,4 @@
-import { floorTodayTables, venueLocationId } from "@waitron/db";
+import { floorTodayTables } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -29,7 +29,7 @@ import "./errors.js";
 const noopLog: Logger = () => {};
 
 let nodeId: string;
-let locationId: string;
+
 let managerCookie: string;
 let staffCookie: string;
 
@@ -119,7 +119,7 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    locationId = await venueLocationId(db);
+
     nodeId = await seedNode(db);
     const [station] = await db
       .insert(kitchenStations)

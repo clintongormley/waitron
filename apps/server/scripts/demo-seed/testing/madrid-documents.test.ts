@@ -181,3 +181,50 @@ it("moves a captured clock and its dated starts without changing the frozen inpu
   expect(result.tables.location_day_cutover_changes).toBeUndefined();
   expect(captured).toEqual(before);
 });
+
+it("moves the captured default menu reference to a flag, keeping all menu rows and the capture", () => {
+  const captured = structuredClone(original);
+  captured.tables.locations!.columns.push({
+    name: "catalogue_id",
+    type: "TEXT",
+    notnull: 0,
+    pk: 0,
+    dflt_value: null,
+  });
+  captured.tables.locations!.rows.place!.catalogue_id = "second";
+  captured.tables.locations!.foreignKeys = [
+    {
+      id: 0,
+      seq: 0,
+      table: "catalogues",
+      from: "catalogue_id",
+      to: "id",
+      on_update: "NO ACTION",
+      on_delete: "RESTRICT",
+      match: "NONE",
+    },
+  ];
+  captured.tables.catalogues = {
+    columns: [],
+    foreignKeys: [],
+    rows: { first: { id: "first", name: "Lunch" }, second: { id: "second", name: "Dinner" } },
+  };
+  const before = structuredClone(captured);
+  const result = madridWithDocument(
+    captured,
+    "locations",
+    { catalogue_id: "id" },
+    { mode: "column-flag", targetTable: "catalogues", targetField: "is_default" },
+  );
+  expect(result.tables.catalogues).toEqual({
+    columns: [{ name: "is_default", type: "INTEGER", notnull: 1, pk: 0, dflt_value: "false" }],
+    foreignKeys: [],
+    rows: {
+      first: { id: "first", name: "Lunch", is_default: 0 },
+      second: { id: "second", name: "Dinner", is_default: 1 },
+    },
+  });
+  expect(result.tables.locations).toEqual(original.tables.locations);
+  expect(result.tables.settings).toBeUndefined();
+  expect(captured).toEqual(before);
+});

@@ -1000,30 +1000,6 @@ describe("dashboard print on a receipt printer", () => {
     expect(await reprintsOf(saleId)).toHaveLength(1);
   });
 
-  it("prints an invoice on an active receipt printer whatever its location column holds", async () => {
-    const { billId, saleId } = await fullInvoice();
-    await venue.db.execute(sql`pragma foreign_keys = off`);
-    try {
-      await venue.db.update(printers).set({}).where(eq(printers.id, venue.printerId));
-      const response = await printInvoice(
-        venue.adminDashboard,
-        billId,
-        printBody(randomUUID(), venue.printerId),
-      );
-      expect(response.status).toBe(200);
-      expect(await jobsOfSale(saleId)).toEqual([
-        expect.objectContaining({
-          printerId: venue.printerId,
-          kind: "document",
-          receiptCopy: false,
-        }),
-      ]);
-    } finally {
-      await venue.db.update(printers).set({}).where(eq(printers.id, venue.printerId));
-      await venue.db.execute(sql`pragma foreign_keys = on`);
-    }
-  });
-
   it("refuses a receipt printer switched off or deleted, writing nothing", async () => {
     const { billId, saleId } = await fullInvoice();
     const make = (name: string) =>

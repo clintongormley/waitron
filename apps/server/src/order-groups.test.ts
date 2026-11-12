@@ -3562,7 +3562,7 @@ describe("credit (D5)", () => {
   });
 });
 
-async function ready(v: Venue, partyId: string, groupId: string, opts: CommandOptions = {}) {
+async function ready(partyId: string, groupId: string, opts: CommandOptions = {}) {
   const command = await args(partyId, opts);
   return inTx((tx) => bumpGroupReady(tx, partyId, groupId, command));
 }
@@ -3620,7 +3620,7 @@ describe("A773 no dispatch state — group readiness", () => {
       const s = await specExampleOnTwoBills(v);
       const items = await groupTickets(s.cold);
       expect(new Set(items.map((item) => item.workingOrderId)).size).toBe(2);
-      if (isReady) await ready(v, s.partyId, s.cold);
+      if (isReady) await ready(s.partyId, s.cold);
       const before = await snapshot(v, s.partyId);
 
       const group = (await groupsOf(s.partyId)).groups.find((row) => row.id === s.cold)!;
@@ -3772,7 +3772,7 @@ describe("the pass by group (D1)", () => {
     const drinksBefore = await groupTickets(s.drinks);
     const warmBefore = await groupTickets(s.warm);
 
-    const readied = await ready(v, s.partyId, s.cold);
+    const readied = await ready(s.partyId, s.cold);
 
     expect(readied).toEqual({ revision: await revisionOf(s.partyId) });
     const coldReady = await groupTickets(s.cold);
@@ -3790,7 +3790,7 @@ describe("the pass by group (D1)", () => {
     const revision = await revisionOf(s.partyId);
     const readyId = randomUUID();
 
-    await ready(v, s.partyId, s.warm, { submissionId: readyId });
+    await ready(s.partyId, s.warm, { submissionId: readyId });
 
     expect(await groupTickets(s.warm)).toEqual(before);
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
@@ -3811,7 +3811,7 @@ describe("the pass by group (D1)", () => {
     await db.update(ticketItems).set({ state: "ready" }).where(eq(ticketItems.id, first!.id));
     expect(await readyOf(s.cold)).toBe(false);
 
-    await ready(v, s.partyId, s.cold);
+    await ready(s.partyId, s.cold);
     expect(await readyOf(s.cold)).toBe(true);
     expect(await readyOf(s.drinks)).toBe(false);
     expect(await readyOf(s.warm)).toBe(false);
@@ -3820,7 +3820,7 @@ describe("the pass by group (D1)", () => {
   it("keeps a group ready across both bills without a dispatch state", async () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
-    await ready(v, s.partyId, s.cold);
+    await ready(s.partyId, s.cold);
     const [first, ...rest] = await groupTickets(s.cold);
     expect(rest.some((item) => item.workingOrderId !== first!.workingOrderId)).toBe(true);
     const before = await snapshot(v, s.partyId);
@@ -3840,7 +3840,7 @@ describe("the pass by group (D1)", () => {
     const { groups } = await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "water")] }]);
     expect(await groupTickets(groups[0]!.id)).toEqual([]);
 
-    await ready(v, s.partyId, groups[0]!.id);
+    await ready(s.partyId, groups[0]!.id);
 
     expect((await groupsOf(s.partyId)).groups[0]!.ready).toBeUndefined();
   });
@@ -3852,9 +3852,9 @@ describe("pass retries (D8, D19)", () => {
     const s = await specExample(v);
     const opts = { submissionId: randomUUID(), revision: await revisionOf(s.partyId) };
 
-    const first = await ready(v, s.partyId, s.cold, opts);
+    const first = await ready(s.partyId, s.cold, opts);
     const before = await snapshot(v, s.partyId);
-    const second = await ready(v, s.partyId, s.cold, opts);
+    const second = await ready(s.partyId, s.cold, opts);
 
     expect(second).toEqual(first);
     expect(await snapshot(v, s.partyId)).toEqual(before);
@@ -3864,12 +3864,12 @@ describe("pass retries (D8, D19)", () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const submissionId = randomUUID();
-    await ready(v, s.partyId, s.cold, { submissionId });
+    await ready(s.partyId, s.cold, { submissionId });
 
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => ready(v, s.partyId, s.drinks, { submissionId }),
+      () => ready(s.partyId, s.drinks, { submissionId }),
       { code: "submission.id_reused", params: { submissionId } },
     );
   });
@@ -3883,7 +3883,7 @@ describe("pass retries (D8, D19)", () => {
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => ready(v, s.partyId, s.cold, { revision: stale }),
+      () => ready(s.partyId, s.cold, { revision: stale }),
       { code: "party.out_of_date", params: { partyId: s.partyId, revision: stale + 1 } },
     );
   });
@@ -3893,7 +3893,7 @@ describe("pass retries (D8, D19)", () => {
     const s = await specExample(v);
     await closeParty(s.partyId);
 
-    await expectRefusedWithNothingWritten(v, s.partyId, () => ready(v, s.partyId, s.cold), {
+    await expectRefusedWithNothingWritten(v, s.partyId, () => ready(s.partyId, s.cold), {
       code: "party.not_open",
       params: { partyId: s.partyId },
     });
@@ -3908,7 +3908,7 @@ describe("pass retries (D8, D19)", () => {
     ).groups[0]!.id;
 
     for (const groupId of [randomUUID(), theirs]) {
-      await expectRefusedWithNothingWritten(v, s.partyId, () => ready(v, s.partyId, groupId), {
+      await expectRefusedWithNothingWritten(v, s.partyId, () => ready(s.partyId, groupId), {
         code: "group.not_found",
         params: { groupId },
       });
@@ -3923,7 +3923,7 @@ describe("pass retries (D8, D19)", () => {
     const [fish] = await linesIn(s.partyId, fishOnly);
     await move(v, s.partyId, [{ lineId: fish!.id, quantity: "1" }], { groupId: s.mains });
 
-    await expectRefusedWithNothingWritten(v, s.partyId, () => ready(v, s.partyId, fishOnly), {
+    await expectRefusedWithNothingWritten(v, s.partyId, () => ready(s.partyId, fishOnly), {
       code: "group.not_found",
       params: { groupId: fishOnly },
     });
@@ -4057,7 +4057,7 @@ describe("the kitchen and the pass read a party's groups", () => {
   it("keeps a split group visible on both bills", async () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
-    await ready(v, s.partyId, s.cold);
+    await ready(s.partyId, s.cold);
 
     const board = await passBoard();
     const cold = cardOf(board, (card) => groupIdOf(card) === s.cold);

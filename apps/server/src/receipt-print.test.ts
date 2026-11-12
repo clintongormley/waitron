@@ -42,7 +42,6 @@ import {
   sales,
   tenants,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -244,7 +243,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });

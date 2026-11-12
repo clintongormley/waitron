@@ -48,7 +48,6 @@ type StationIds = Record<"kitchen" | "bar" | "deli", string> & {
 
 async function resolveStationIds(
   tx: Transaction,
-  locationId: string,
   dataSet: DemoDataSet,
   locale: SeedLocale,
 ): Promise<StationIds> {
@@ -56,7 +55,7 @@ async function resolveStationIds(
   const names = dataSet.stations;
   const { rows: defaults } = await tx.execute<{ id: string }>(sql`
     select id from kitchen_stations
-    where location_id = ${locationId} and is_default = 1 and active = 1
+    where is_default = 1 and active = 1
     limit 1`);
   const kitchen = defaults[0]?.id;
   if (kitchen === undefined) {
@@ -75,7 +74,6 @@ async function resolveStationIds(
         { name: plain(names.upstairsBar), colour: "indigo" as const },
         { name: plain(names.deli), colour: "green" as const },
       ].map(({ name, colour }) => ({
-        locationId,
         name,
         colour,
         isDefault: false,
@@ -95,10 +93,10 @@ async function resolveStationIds(
  */
 export async function seedCatalogues(
   tx: Transaction,
-  { locationId, locale, dataSet }: SeedCataloguesInput,
+  { locale, dataSet }: SeedCataloguesInput,
 ): Promise<SeedCataloguesResult> {
   const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
-  const stationIds = await resolveStationIds(tx, locationId, dataSet, locale);
+  const stationIds = await resolveStationIds(tx, dataSet, locale);
   const venue = await readVenue(tx);
   const taxpayer = await readTenant(tx);
   const { defaultLanguage, languages, required } = demoLanguagesFor(dataSet, {

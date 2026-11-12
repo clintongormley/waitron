@@ -208,7 +208,7 @@ export async function canonicalMadridSemantics(
         key = parts("special_day_id", "date");
         break;
       case "floor_zones":
-        key = parts("location_id", "name");
+        key = parts("name");
         break;
       case "dining_tables":
       case "floor_plan_tables":

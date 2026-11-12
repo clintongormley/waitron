@@ -267,10 +267,10 @@ export interface UnsentDraft {
 
 export async function readDrafts(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   partyId: string,
 ): Promise<Draft[]> {
-  return readOpenDrafts(tx, cfg, partyId);
+  return readOpenDrafts(tx, partyId);
 }
 
 export async function saveDraft(
@@ -1316,18 +1316,17 @@ async function replaceLines(
 /** One open draft of the party, which the caller knows is there. */
 async function readOpenDraft(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   partyId: string,
   draftId: string,
   offers?: Map<string, ZoneMenuOffer>,
 ): Promise<Draft> {
-  return (await readOpenDrafts(tx, cfg, partyId, draftId, offers))[0]!;
+  return (await readOpenDrafts(tx, partyId, draftId, offers))[0]!;
 }
 
 /** `known` is the offers of every line the drafts hold, when the caller has already read them. */
 async function readOpenDrafts(
   tx: Transaction,
-  cfg: TradingContext,
   partyId: string,
   draftId?: string,
   known?: Map<string, ZoneMenuOffer>,

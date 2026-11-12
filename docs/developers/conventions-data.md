@@ -1583,8 +1583,8 @@ open under Task 1b. _2026-10-04 (A238):_ `tills` is gone; `sessions.device_id` n
 `restrict` key to `devices`, and `sessions` still has none to `persons`
 (`packages/db/src/schema/identity/sessions.ts`).
 
-_2026-11-03 (A1301 S12b):_ `join_requests.location_id` is now stamped with the venue's id, and
-nothing reads it: accept stamps the venue on the new `devices` or `print_agents` row itself.
+_2026-11-03 (A1301 S12b):_ `join_requests.location_id` was stamped with the venue's id.
+_2026-11-12 (A1308 5e):_ that column and the venue foreign keys on `devices` and `print_agents` are removed.
 
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (`join_requests`,
@@ -1893,6 +1893,8 @@ a format-11 export is refused as outdated.
 **2026-11-10, A1308 slice 4b:** format 17 removes `payment_policy`; the payments module
 transfers no configuration tables. A format-16 export is refused as `setup.configuration_outdated`.
 
+**2026-11-12, A1308 slice 5e:** format 19 removes the remaining transferred `location_id` columns and top-level `defaultCatalogueId`; the default menu travels as `catalogues.is_default`. Format-18 exports are refused as `setup.configuration_outdated`.
+
 **2026-11-11, A739 cut 7(c):** format 18 removes `receipt_print_mode` from department and zone sale policies; format-17 exports are refused as `setup.configuration_outdated`.
 
 **2026-11-10, A1308 slice 5a:** format 12 removes `location_id` from the service, calendar,
@@ -1908,8 +1910,8 @@ telling the person to update this server. Until go-live a server is reset instea
 The setup app copies into the claim only the preview's `country`, the taxpayer fields (`TAXPAYER_FIELDS`) and `CLAIM_VENUE_FIELDS`
 (`apps/setup/src/setup-app.ts`). The claim refuses any venue key it does not list
 (`exact(body.venue, …)` in `apps/server/src/setup-first-fiscal-api.ts`). So a bundle value that is
-not a setup field lives outside `venue`'s own keys, as `privacyContact` does; the default menu
-travels as the top-level `defaultCatalogueId`
+not a setup field lives outside `venue`'s own keys; the privacy contact and content languages
+travel as top-level fields
 (`packages/provisioning/src/configuration-transfer.ts`). Cost: from #1752 to A980 S1a2 every Live
 setup from an export on a production box was refused at the claim, because the setup app, which
 dropped only the location's `id`, copied its `fireControl` and `catalogueId` into it (probes 2 to 4
@@ -1937,8 +1939,7 @@ id in a table's `id` column, its foreign-key columns, and the columns its module
 `references` (`importConfigurationTables`, `packages/provisioning/src/configuration-transfer.ts`,
 which reads `pragma_foreign_key_list` for the keys), and the export leaves out the columns a table
 lists in `omit`. Declared `jsonReferences` paths rewrite ids inside JSON as described below.
-Until `locations` is dropped, a column whose foreign key points at it is set to the
-importing venue's row (`venueLocationId`), whatever the export carried. Any other column the export
+Any other column the export
 carries that holds a row's id arrives holding the EXPORTING venue's id. Before W72a (#1230) the
 import replaced any text equal to a bundle id in every column, so a product named like an id arrived
 renamed; the narrowing is what makes this rule necessary. A reference the schema cannot give a
@@ -6160,7 +6161,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 ### Configuration preview field guard
 
 - **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the
-  default menu travels as the top-level `defaultCatalogueId`); the setup app copies the preview's
+  privacy contact and content languages travel as top-level fields); the setup app copies the preview's
   `venue` by `country`, `TAXPAYER_FIELDS` and `CLAIM_VENUE_FIELDS`. Cost: from #1752 to A980 S1a2
   no production box could be set up from an export. Guards:
   `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
@@ -6264,7 +6265,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 ### Configuration bundle keys outside venue
 
 - **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the
-  default menu travels as the top-level `defaultCatalogueId`); the setup app copies the preview's
+  privacy contact and content languages travel as top-level fields); the setup app copies the preview's
   `venue` by `country`, `TAXPAYER_FIELDS` and `CLAIM_VENUE_FIELDS`. Cost: from #1752 to A980 S1a2
   no production box could be set up from an export. Guards:
   `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,

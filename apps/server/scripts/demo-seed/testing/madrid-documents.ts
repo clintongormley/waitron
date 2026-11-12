@@ -1,3 +1,4 @@
+import { madridWithDroppedColumns } from "./madrid-dropped-columns.js";
 import { FIRST_DAY_START } from "@waitron/db";
 import { stable, type CanonicalMadridSemantics, type MadridColumn } from "./madrid-semantics.js";
 
@@ -5,21 +6,45 @@ export function madridWithDocument(
   original: CanonicalMadridSemantics,
   sourceTable: string,
   fields: Readonly<Record<string, string>>,
-  metadata: {
-    module: string;
-    version: number;
-    revision: number;
-    updatedAt: string;
-    updatedBy: string | null;
-    mode?: "row" | "business-day";
-    targetField?: string;
-    defaults?: Readonly<Record<string, unknown>>;
-  },
+  metadata:
+    | { mode: "column-flag"; targetTable: string; targetField: string; beforeColumn?: string }
+    | {
+        module: string;
+        version: number;
+        revision: number;
+        updatedAt: string;
+        updatedBy: string | null;
+        mode?: "row" | "business-day";
+        targetField?: string;
+        defaults?: Readonly<Record<string, unknown>>;
+      },
 ): CanonicalMadridSemantics {
   const result = structuredClone(original);
   const source = result.tables[sourceTable]!;
   const rows = Object.values(source.rows);
   if (rows.length > 1) throw new Error(`Madrid document source has two rows: ${sourceTable}`);
+  if (metadata.mode === "column-flag") {
+    const target = result.tables[metadata.targetTable]!;
+    target.columns.splice(
+      metadata.beforeColumn === undefined
+        ? target.columns.length
+        : target.columns.findIndex((column) => column.name === metadata.beforeColumn),
+      0,
+      {
+        name: metadata.targetField,
+        type: "INTEGER",
+        notnull: 1,
+        pk: 0,
+        dflt_value: "false",
+      },
+    );
+    for (const row of Object.values(target.rows))
+      row[metadata.targetField] = Number(
+        rows.length === 1 &&
+          Object.entries(fields).every(([from, to]) => rows[0]![from] === row[to]),
+      );
+    return madridWithDroppedColumns(result, { [sourceTable]: Object.keys(fields) });
+  }
   const columns: MadridColumn[] = [
     "module",
     "version",

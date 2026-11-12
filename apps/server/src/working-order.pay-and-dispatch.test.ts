@@ -472,10 +472,10 @@ async function ticketStateOf(id: string): Promise<string | null> {
  *  venue-apply.ts). No fixture product names a station, itself or through its category, so the
  *  routes `offerProducts` writes send every line here; it is the id the whole-ticket bump and the
  *  per-station queue address. */
-async function defaultStationId(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<string> {
+async function defaultStationId(): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     select id from kitchen_stations
-    where location_id = ${cfg.locationId} and is_default and active
+    where is_default and active
   `);
   return rows[0]!.id;
 }
@@ -2197,7 +2197,7 @@ describe("prepare & collect — zone payment timing", () => {
   // through the direct settle UPDATE.
   it("Mode T: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -2247,7 +2247,7 @@ describe("prepare & collect — zone payment timing", () => {
 
   it("Mode I: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -2423,7 +2423,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       id,
       OPERATOR,
     ); // fires two items → default station
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const items = await ticketItemIdsFor(id);
     expect(items).toHaveLength(2);
 
@@ -2444,7 +2444,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 
   it("listStationQueue lists this station's items grouped by order oldest-first, dropping collected and abandoned orders", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
 
     // Two orders placed oldest-first, each a single line → the default station.
     const id1 = randomUUID();
@@ -2524,7 +2524,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // both — a measurement where each side holds two orders, not "one empty, one not" (CLAUDE.md §1).
     // Both nodes share the location's one default station.
     const nodeB = await addNode(nodeA);
-    const station = await defaultStationId(nodeA);
+    const station = await defaultStationId();
 
     const idA = randomUUID();
     await parkOrder({ db: suite.db }, nodeA, {
@@ -2568,7 +2568,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     const id = randomUUID();
     // With the default station off, paying leaves the dish unsent; turning it back on before
     // `sendToPrep` lets that call send the same stored dish.
-    await setDefaultStationActive(cfg, false);
+    await setDefaultStationActive(false);
     await payWorkingOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
@@ -2589,7 +2589,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       ).map((row) => row.sentAt);
     expect(await ticketStateOf(id)).toBeNull();
     expect(await sentAt()).toEqual([null]);
-    await setDefaultStationActive(cfg, true);
+    await setDefaultStationActive(true);
 
     await sendToPrep({ db: suite.db }, cfg, id);
 
@@ -2677,18 +2677,15 @@ describe("the pass board — venue-wide", () => {
   });
 });
 
-async function setDefaultStationActive(
-  cfg: WithVenueRowId<DeviceRequestConfig>,
-  active: boolean,
-): Promise<void> {
+async function setDefaultStationActive(active: boolean): Promise<void> {
   await suite.db.execute(sql`
     update kitchen_stations set active = ${active ? 1 : 0}
-    where location_id = ${cfg.locationId} and is_default`);
+    where is_default`);
 }
 
 /** A printer on the venue's default station, so a fire there enqueues a kitchen ticket. */
-async function kitchenPrinter(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<string> {
-  const station = await defaultStationId(cfg);
+async function kitchenPrinter(): Promise<string> {
+  const station = await defaultStationId();
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(tx, {
       name: "P-Cocina",
@@ -2725,8 +2722,8 @@ async function linesSent(orderId: string): Promise<boolean[]> {
 describe("paying a counter order never sent, in a zone that sends before payment", () => {
   it("ticket_then_pay: a cash walk-up's dish reaches the station queue and prints its kitchen ticket in the payment", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const station = await defaultStationId(cfg);
-    const printerId = await kitchenPrinter(cfg);
+    const station = await defaultStationId();
+    const printerId = await kitchenPrinter();
     const id = randomUUID();
 
     await payWorkingOrder(
@@ -2753,7 +2750,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
 
   it("ticket_then_pay: a cash walk-up files a settled sale and sends its dish in the payment", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const printerId = await kitchenPrinter(cfg);
+    const printerId = await kitchenPrinter();
     const id = randomUUID();
 
     const ticket = await payWorkingOrder(
@@ -2805,7 +2802,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
 
   it("ticket_then_pay: the same pay sent again sends nothing more and files no second sale", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const printerId = await kitchenPrinter(cfg);
+    const printerId = await kitchenPrinter();
     const id = randomUUID();
     const req = {
       id,
@@ -2838,7 +2835,7 @@ describe("paying a counter order never sent, in a zone that sends before payment
     "%s: a parked order paid sends every counter course, and the same pay sent again changes nothing",
     async (mode) => {
       const { cfg, coffee, water, zoneId } = await modeVenue(mode);
-      const printerId = await kitchenPrinter(cfg);
+      const printerId = await kitchenPrinter();
       const { starters, mainCourses } = await withTransaction(suite.db, async (tx) => {
         const starters = (await createCourse(tx, { name: "Primeros", displayOrder: 1 })).id;
         const mainCourses = (await createCourse(tx, { name: "Segundos", displayOrder: 2 })).id;
@@ -2899,7 +2896,7 @@ describe("markCollected (the counter handover)", () => {
   // stamp, a ready order stays on the queue.
   it("Mode P: fired → ready → markCollected stamps collected_at and drops the order off listStationQueue", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
-    const station = await defaultStationId(cfg);
+    const station = await defaultStationId();
     const id = randomUUID();
 
     // Pay and fire at order (open → settled in one transaction — the Mode-P walk-up).

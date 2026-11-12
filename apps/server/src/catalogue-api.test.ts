@@ -7,7 +7,6 @@ import {
   categories,
   products,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -21,7 +20,7 @@ import {
 } from "@waitron/catalogue";
 import type { MenuPreview, MenuStatus } from "@waitron/catalogue";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/catalogue";
-import { nodeId as brandNodeId, type ContentLanguageRules } from "@waitron/shared";
+import { type ContentLanguageRules } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { libraryImageName, seedLibraryImages } from "@waitron/catalogue/test/library-images.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -35,7 +34,6 @@ import { floorZones, kitchenStations } from "@waitron/db";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
-import type { TradingContext } from "./trading-context.js";
 
 // The catalogue ROUTES end to end in-process: the body and id screens and the permission gate. The
 // staff refusal over every write route is in `catalogue-api.full-manifest.test.ts`.
@@ -601,7 +599,6 @@ describe("GET /management-api/products/menus", () => {
   });
 });
 
-let locationId: string;
 let managerCookie: string;
 let managerPersonId: string;
 let staffCookie: string;
@@ -615,7 +612,7 @@ const suite = useVenueDb({
     await seedLegacySellingUnits(db);
     // The venue's one `locations` row: the venue menu routes act on it and `venueCfg` names its id.
     await seedVenue(db, { name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Venta" });
-    locationId = await venueLocationId(db);
+
     // A MANAGER (holds `catalogue.manage`) and a STAFF person (holds no `catalogue.manage`), each with a
     // live management session.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
@@ -656,19 +653,6 @@ beforeEach(async () => {
     sql`update products set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
   );
 });
-
-/**
- * The venue's location id, for the kitchen stations and zones these cases insert and look up
- * directly; the other fields only fill the type.
- */
-function venueCfg(): TradingContext {
-  return {
-    nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
-    locale: "es-ES",
-    tipsEnabled: false,
-    simplifiedInvoiceLimit: null,
-  };
-}
 
 function mountApp(venueLocale = "es-ES", contentLanguageRules?: ContentLanguageRules): Hono {
   const app = new Hono();
@@ -1729,7 +1713,6 @@ describe("mountCatalogueApi — products", () => {
     const mojito = await create("Mojito", cocktails);
     const bread = await create("Bread", null);
     await withTransaction(suite.db, async (tx) => {
-      const cfg = venueCfg();
       const [bar, cocktailBar] = await tx
         .insert(kitchenStations)
         .values([{ name: "Bar", isDefault: true }, { name: "Cocktail bar" }])
@@ -1758,7 +1741,6 @@ describe("mountCatalogueApi — products", () => {
     expect(body[mojito]).toMatchObject({ stationName: "Bar", variesByZone: true });
     expect(body[bread]).toMatchObject({ stationName: "Bar", variesByZone: false });
     const cocktailBarId = await withTransaction(suite.db, async (tx) => {
-      const cfg = venueCfg();
       const [cocktailBar] = await tx
         .select({ id: kitchenStations.id })
         .from(kitchenStations)
