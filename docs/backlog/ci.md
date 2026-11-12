@@ -462,28 +462,6 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
 - **What the per-push CI concurrency groups (#384) left open:** two states stop publishing until a
   person intervenes; the repair is to delete or retag `:main` by hand. Nothing alerts on it. [Detail](ci.md#what-the-per-push-ci-concurrency-groups-384-left-open)
 
-## Bundle: Investigate the named test failures under load
-
-6 entries, size M. Use the [repeated-run rig](../developers/testing-guide.md#repeat-a-named-test-while-keeping-each-attempts-evidence) to retain each attempt and its failure diagnostics.
-
-- **A local four-file till browser run ended without a completed-file report.**
-  Capture per-case and file progress plus a process snapshot on recurrence; a serial pass does
-  not qualify the concurrent path. The standalone parties suite also reaches its local
-  deadline; the cause is unknown. [Detail](ci.md#local-multi-file-till-browser-interruption).
-- **Investigate two full-run till browser failures seen during A669 validation.**
-  [Detail](ci.md#investigate-two-full-run-till-browser-failures-seen-during-a669-validation).
-- **The payments test "refreshes only active reader statuses" failed once locally beside another
-  coverage run**, then passed five times alone and in CI; not investigated. Left open by W100
-  (#1332).
-- **Two browser tests failed once each during A454's work (search everywhere), and neither was reproduced or checked on `main`**
-  [Detail](ci.md#two-browser-tests-failed-once-each-during-a454s-work).
-- **The relocated independent department preview needs a load investigation.**
-  [Detail](ci.md#the-relocated-independent-department-preview-needs-a-load-investigation).
-- **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**
-  [Detail](ci.md#a-printers-screen-test-failed-once-during-a435-step-2s-review-fixes).
-
-
-
 ## Bundle: Replace 14 "if it happens again" entries with one table in `docs/backlog/ci
 
 14 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -1068,24 +1046,6 @@ Checked 2026-10-16 (A774): the guard's list now also names
 and `live-queries.ts`, both exported by `packages/venue-service/package.json`, are still not named,
 and no file the guard names imports `season-tint`.
 
-## Two browser tests failed once each during A454's work
-
-Neither was reproduced or checked on `main`: "edge scroll reaches hidden column choices during a
-stationary
-reorder" (`packages/ui/src/components/wt-data-table.test.ts`), once in a `packages/ui` coverage
-run; and "cancel keeps reassignment selections and target until explicit local Discard"
-(`apps/dashboard/src/screens/units-reassignment.unsaved.test.ts`), once in seven runs, then six
-passes alone. Neither types a search. **Next action:** reproduce each under load and fix at the
-root. Apply the [CI-failure rule](../developers/ci-and-gates.md#what-to-do-when-ci-fails)
-before retrying unrelated work; a later pass does not fix either test.
-
-## A printers-screen test failed once during A435 step 2's review fixes
-
-"a press after one edit sends the edit and the field as it was read"
-(`apps/dashboard/src/screens/printers-screen.save-state.test.ts`) failed once in eight runs of the
-printers-screen files on 2026-10-10, then passed alone and in the seven later runs; its error was
-not captured. It was not reproduced. **Next action:** reproduce it under load and fix at the root.
-
 ## Other `uses:` steps that fetch over the network have no step time limit, and the runner's own action download at job set-up is bounded only by long limits of its own (left open by A935)
 
 2026-10-25 (A1100): artifact uploads now have
@@ -1152,21 +1112,6 @@ coverage gates passed; the history change reduces requested data, not a proved t
 On 28 October, [main run 40750935978, till shard 3](https://github.com/clintongormley/waitron/actions/runs/40750935978/job/123038600113)
 exhausted both 120-second attempts with `--depth=1`, before installation or tests. Reducing
 full-history transfers does not eliminate this observed shallow-checkout failure mode.
-
-
-## Investigate two full-run till browser failures seen during A669 validation
-
-On
-2026-10-20, `pnpm --filter @waitron/till test:coverage` reached a missing `Filters 1`
-control in `till-find-bill-screen.a11y.test.ts:89`; its failure capture showed three active
-filters. After rebasing onto A582 help, Playwright could not
-click the split control in `till-app-drafts.test.ts:8160`: the button detached during
-scrolling. Retain both captures and reproduce
-the saved-view and detached-control paths before changing code or tests; neither cause
-is established, and a passing retry is not a repair. Lane G retains the logs and captures
-under `resume-a669-land-20261020-090825`.
-
-On 2026-10-31 the same detached split click failed again — `till-app-drafts.test.ts` "keeps the source and pending edit when the save before a split fails", in a 66-file local till run on feat/a803-3-bill-switcher (432 of 432 passed when that file ran alone).
 
 
 ## Decide whether browser tests stop replacing modules (A943 follow-up)
@@ -1297,15 +1242,6 @@ Read, not run: both tables' keys into
 (#1311).
 
 
-## The relocated independent department preview needs a load investigation
-
-The retired
-`receipts-screen.defaults.test.ts` case failed once during A463 and was not reproduced.
-A493 moves this behavior into the department receipt editor's language-independent preview cases
-(`apps/dashboard/src/screens/department-receipt-editor.preview.test.ts`).
-Reproduce that flow under load before assigning a cause; its retirement does not establish
-that the original failure is fixed.
-
 
 ## drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES` on this engine, while its snapshot kept it
 
@@ -1332,29 +1268,6 @@ long; the line-detail and refund-unsaved files started within 13 seconds of the
 deadline. The till shard selects all three for the existing case/hook trace and
 enables `DEBUG=pw:api`; these diagnostics do not establish a cause or repair. Keep the venue-service startup investigation and A419's dashboard stall
 separate; no shared cause is established.
-
-## Local multi-file till browser interruption
-
-A local run on 26 October produced no completed-file report before it was stopped, with
-`src/till-app.theme.test.ts`, `src/widgets/basket.adjustments.test.ts`,
-`src/till-app-parties.test.ts` and `src/till-app-counter-adjustments.test.ts` selected.
-It was stopped after five minutes, with the source tests still unchanged. The cause
-is unknown. The theme suite completed alone; the serial diagnostic command adds
-`--maxWorkers=1 --reporter=verbose --reporter=../../scripts/vitest-file-progress.mjs`
-to `pnpm --filter @waitron/till exec vitest run` with those four paths.
-
-The serial diagnostic completed three files and was still reporting passing cases
-in the larger parties suite when its four-minute outer deadline stopped it. That
-run establishes no serial stall.
-
-A standalone `src/till-app-parties.test.ts` run also reaches the local outer
-deadline. Capture per-case progress and the pending browser operation for this
-path too; no common cause with the multi-file interruption is established.
-
-Capture the concurrent path's per-case and file progress, pending browser operation
-and process tree on recurrence, under `scripts/run-with-deadline.mjs`. Keep that
-qualification separate from a serial pass; neither a cause nor a repair has been
-established.
 
 ## One failing success-branch check in the first-fiscal-setup end-to-end file ends its worker
 
