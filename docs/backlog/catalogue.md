@@ -1078,7 +1078,7 @@ tests. Media still validates required image names and translates its refusal to
 
 **Go-live (owner, 2026-11-11).** The [design proposal](../superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md)
 records the owner’s extras, later-choice and course-send decisions. The [build plan](../superpowers/plans/2026-11-12-a1515-set-lunch-build.md)
-awaits final Claude review and watcher clearance. The owner’s table-service 10% decision removes
+has completed Claude approach/fixes reads and awaits watcher clearance. The owner’s table-service 10% decision removes
 the adviser wait for that scope; takeaway/delivery remain with S10 and Lane L.
 Implementation has not started. Most Spanish restaurants sell a fixed-price
 lunch menu. Waitron has no way to sell one: the demo's "Set lunch" is an ordinary menu whose dishes

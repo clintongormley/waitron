@@ -475,8 +475,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   bread, a drink or coffee included and an extra charge for a premium choice. The receipt shows one
   line. Today a set lunch can only be sold as separate dishes with their own prices. The
   [proposal](superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md) records the owner’s extras,
-  later-choice, course-send and table-service 10% decisions. The build plan awaits final Claude
-  review and watcher clearance; takeaway/delivery VAT remain with S10/Lane L. Nothing is built.
+  later-choice, course-send and table-service 10% decisions. The build plan has completed Claude
+  approach/fixes reads and awaits watcher clearance; takeaway/delivery VAT remain with S10/Lane L. Nothing is built.
   [Detail](backlog/catalogue.md#a1515-set-lunch-menus-the-menú-del-día)
 
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted

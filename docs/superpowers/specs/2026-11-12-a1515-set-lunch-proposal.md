@@ -1,6 +1,6 @@
 # A1515. Set lunch menus: proposal
 
-**Draft, 12 November 2026.** These are recommendations, not agreed features. Lane L reviewed the invoice part on 12 November; its corrections are incorporated below. Nothing is built; implementation, schema,
+**Historical draft, 12 November 2026.** Later dated sections supersede earlier recommendations, including receipt layout, closing choices and the VAT wait. These are recommendations, not agreed features. Lane L reviewed the invoice part on 12 November; its corrections are incorporated below. Nothing is built; implementation, schema,
 fiscal changes and public printed-menu design are outside this proposal.
 
 I recommend one priced lunch item, with selected dishes attached for service, so you can send
@@ -172,3 +172,12 @@ set lunch is one 10% service. Write and build the plan without waiting; the plan
 a set menu's price across VAT rates.” This supersedes the earlier table-service VAT/full-invoice
 wait. Takeaway and delivery set menus remain in adviser question S10, handled by Lane L.
 The build plan still goes through Claude review and watcher clearance.
+
+
+## 12 November 2026, 21:52: simpler build and open choices
+
+The watcher cleared existing `courseId`, `extraListId` and recorded `menu_version_id`, with no
+new course column or stored open/chosen/not-taken state. “Payment must never be blocked by a
+choice still open.” A guest who never chooses coffee can pay the same lunch price, with nothing
+sent for that choice. The watcher also cleared: “The bounded kitchen context (lunch reference
+plus earlier dishes, clearly labelled) is fine.” The corrected plan still needs watcher clearance.
