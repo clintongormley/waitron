@@ -555,9 +555,7 @@ describe("backup-screen", () => {
       api: stubApi({}, bucket),
     });
     await flush(el);
-    expect(el.shadowRoot!.textContent).toContain(
-      "owner-bucket/waitron/",
-    );
+    expect(el.shadowRoot!.textContent).toContain("owner-bucket/waitron/");
     expect((q(el, "[data-test=destination]") as { value?: string } | null)?.value ?? "").toBe("");
   });
 

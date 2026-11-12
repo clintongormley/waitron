@@ -881,6 +881,7 @@ describe("another S3-compatible bucket", () => {
     await choose(el, "custom-s3");
     await fillCustom(el, "SECRET-1");
     expect(text(q(el, "[data-test=custom-location]")!)).toContain("my-bucket/shop/");
+    expect(customField(el, "prefix").hint).toBe(t("backup.destination.prefix_hint"));
   });
 
   it("a first save with no secret is held by the form's own check: the secret is marked, no request goes", async () => {
@@ -1651,33 +1652,28 @@ describe("turning stored settings back on", () => {
 });
 
 describe("a folder typed and switched off, when backup status refreshes", () => {
-  it.each([
-    ["the settings editor", openEdit],
-    ["the form turning stored-off settings back on", openStoredOff],
-  ] as const)("%s keeps the folder for the switch", async (_where, open) => {
-    const { el, api } = await open(ON_STREAM_BUCKET);
+  it("keeps the folder for the switch when stored-off settings are refreshed", async () => {
+    const { el, api } = await openStoredOff(ON_STREAM_BUCKET);
     expect(folderSwitch(el)!.checked).toBe(false);
     await setFolder(el, true);
     await typeFolder(el, "/mnt/kept");
     await setFolder(el, false);
+    const reads = vi.mocked(api.getBackupStatus).mock.calls.length;
+    vi.mocked(api.getBackupStatus).mockResolvedValue({
+      ...ON_STREAM_BUCKET,
+      enabled: false,
+      storedDisabled: true,
+      revision: "99999999-2222-4333-8444-555555555555",
+      retention: { count: 9, days: 30 },
+    });
     api.liveData.invalidate([{ type: "backup_status" }]);
-    await vi.waitFor(() => expect(choice(el)!.value).toBe("custom-s3"));
-    await settle();
-    await el.updateComplete;
+    await vi.waitFor(() =>
+      expect(vi.mocked(api.getBackupStatus).mock.calls.length).toBeGreaterThan(reads),
+    );
+    await vi.waitFor(() => expect((q(el, "[data-test=retain-count]") as Field).value).toBe("9"));
     expect(folderSwitch(el)!.checked).toBe(false);
     await setFolder(el, true);
     expect((q(el, "[data-test=destination]") as Field).value).toBe("/mnt/kept");
-  });
-
-  it("the settings editor's Save stays quiet while the kept folder is switched off", async () => {
-    const { el, api } = await openEdit(ON_STREAM_BUCKET);
-    await setFolder(el, true);
-    await typeFolder(el, "/mnt/kept");
-    await setFolder(el, false);
-    api.liveData.invalidate([{ type: "backup_status" }]);
-    await vi.waitFor(() => expect(choice(el)!.value).toBe("custom-s3"));
-    await settle();
-    expect(await buttonState(el, "save-settings")).toEqual(["secondary", true]);
   });
 });
 

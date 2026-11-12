@@ -820,10 +820,14 @@ it("a folder typed and then switched off is no change, and a status read keeps i
   await setFolderOn(screen, false);
   expect(unload()).toBe(false);
   const reads = getBackupStatus.mock.calls.length;
+  getBackupStatus.mockResolvedValue({
+    ...stored,
+    revision: "99999999-2222-4333-8444-555555555555",
+    retention: { count: 9, days: 30 },
+  });
   api.liveData.invalidate([{ type: "backup_status" }]);
   await expect.poll(() => getBackupStatus.mock.calls.length).toBeGreaterThan(reads);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await screen.updateComplete;
+  await expect.poll(() => field(screen, "retain-count").value).toBe("9");
   await setFolderOn(screen, true);
   expect(field(screen, "destination").value).toBe("/mnt/kept");
 });

@@ -29,7 +29,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/dashboard/src/screens/approvals-screen.test.ts",
   "apps/dashboard/src/screens/attendance-corrections-screen.hours.test.ts",
   "apps/dashboard/src/screens/attendance-corrections-screen.test.ts",
-  "apps/dashboard/src/screens/backup-screen.archive-destination.test.ts",
   "apps/dashboard/src/screens/backup-screen.test.ts",
   "apps/dashboard/src/screens/box-status-rows.test.ts",
   "apps/dashboard/src/screens/box-status-screen.test.ts",

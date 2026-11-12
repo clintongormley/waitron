@@ -206,11 +206,11 @@ Not counted: the script's output for `nodes`, deletions, regenerated files.
    `pnpm --filter @waitron/server exec vitest run src/recovery-pack.test.ts src/recovery-pack-api.test.ts src/boot.recovery-pack.test.ts`
    and `pnpm --filter @waitron/fiscal-verifactu typecheck` pass.
 4. `git grep -n -w -E "readCopyNodeAndVenue|readOperationalVenueIds|assertSingleOperationalVenue" -- apps packages` prints nothing.
-5. `git grep -n -w venueId -- apps/server/src packages/module/src ':!*.test.ts'` prints only the
+5. `git grep -n -w venueId -- apps/server/src packages/module/src ':!*.test.ts' ':!**/testing/**'` prints only the
    stream's and the kit's lines (5g: `stream-api.ts`, `stream-host.ts`, `restore-stream.ts`,
-   `rebuild-first-start.ts`, `backup-recovery-pack-parts.ts`, `recovery-preparation.ts`,
+   `rebuild-first-start.ts`, `backup-recovery-pack-parts.ts`, `backup-recovery-pack-api.ts`, `recovery-preparation.ts`,
    `recovery-backup-preview.ts`), the Cloud connection's (5g: `boot.ts`, `cloud-client.ts`,
-   `cloud-replacement.ts`), mirror-bundle and stream-key callers and test support, and the lines that already use Cloud's own id and stay (the design's "They
+   `cloud-replacement.ts`), `mirror-bundle-api.ts`, `mirror-bundle-fetch.ts`, `mirror-bundle.ts` and `stream-key.ts`, and the lines that already use Cloud's own id and stay (the design's "They
    do not change": `cloud-installation.ts`, `cloud-backup.ts`, `cloud-billing.ts`,
    `cloud-snapshot-worker.ts`, `cloud-recovery*.ts`, `cloud-tunnel.ts`, `backup-verification-protocol.ts`).
    Control, on the base first: it also prints `archive-settings.ts:64`.

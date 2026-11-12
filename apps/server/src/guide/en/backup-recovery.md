@@ -4,7 +4,7 @@ Keep the previous recovery pack when you change the recovery key. Until the new 
 
 Scheduled backups in a bucket use the folder you choose, with no extra venue folder. Choose separate folders for scheduled backups and the bucket copy. Neither folder can be inside the other.
 
-Use a separate archive folder for each installation. A restored box that keeps the previous backup settings also cleans up the same folder. Choose a new folder if you want to keep the old box’s backups.
+Use a separate archive folder for each installation. A restored box that keeps the previous backup settings can delete the old box’s backups. Choose a new folder to keep them.
 
 ## When first setup was interrupted {#interrupted-setup}
 

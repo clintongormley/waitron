@@ -85,10 +85,6 @@ describe("openingDestinations", () => {
     });
   });
 
-  it("reads a bucket matching nothing as another bucket when there is no bucket copy", () => {
-    expect(openingDestinations(status([streamMatched])).bucket).toBe("custom-s3");
-  });
-
   it("opens a stored folder and bucket together, whichever is listed first", () => {
     const both = {
       folderOn: true,

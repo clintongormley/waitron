@@ -4,7 +4,7 @@ Conserva el paquete de recuperación anterior cuando cambies la clave de recuper
 
 Las copias programadas en un bucket usan la carpeta que elijas, sin añadir una carpeta para el local. Elige carpetas distintas para las copias programadas y la copia en el bucket. Ninguna puede estar dentro de la otra.
 
-Usa una carpeta de copias distinta para cada instalación. Una caja restaurada que conserva los ajustes anteriores también elimina las copias antiguas de esa carpeta. Elige una carpeta nueva si quieres conservar las copias de la caja anterior.
+Usa una carpeta de copias distinta para cada instalación. Una caja restaurada que conserva los ajustes anteriores puede eliminar las copias de la caja anterior. Elige una carpeta nueva para conservarlas.
 
 ## Si se interrumpió la primera configuración {#interrupted-setup}
 
