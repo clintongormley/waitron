@@ -413,8 +413,10 @@ loading poll, keeping the selector, timeout and every case. Compare its paired
 coverage-on file measurements in the pull request before attributing a saving.
 The watcher's 2026-11-11 23:38 cut shortens the disclosure duration only in the
 36 static product-editor phone-layout fixtures, keeping animation settlement and
-every geometry assertion. The remaining product-editor, product-list and menu costs still need
-a demonstrated cause before another cut.
+every geometry assertion. The watcher’s 2026-11-12 01:03 cut removes only the two
+save-only screenshot calls from product-list’s alignment and root-controls matrices,
+keeping every row, frame wait and assertion. The remaining product-editor, product-list
+and menu costs still need a demonstrated cause before another cut.
 Judge the first cut by drafts' own file time in its PR run; do not compare coverage-off
 PR timings with those coverage-on timings as a measured speed gain. Bring the next
 cause and its measurement to the watcher before splitting files or changing capacity.

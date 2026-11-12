@@ -49,3 +49,8 @@ required. No other polling change or file split is cleared, and the four-minute 
 ## Watcher-cleared static layout cut, 2026-11-11 23:38
 
 The watcher cleared setting `--wt-duration-disclosure` to `1ms` only on the host of the 36 phone-layout fixtures in `product-editor.test.ts`. Keep the real header click, animation-finished wait, final geometry and every assertion; all other fixtures retain default motion. This is the explicit exception to the rendering-shortcut restriction above, not a shared-helper or production change. Compare paired coverage-on file runs and the unchanged case inventory before finish-branch.
+
+
+## Watcher-cleared screenshot save removal, 2026-11-12 01:03
+
+The watcher cleared removing only the two save-only `page.screenshot` calls in the product-list alignment and root-controls matrices, keeping every row, frame wait and assertion. The diagnostic timed three PNG saves at 1,131.4 ms in one 1.94-second passing case; no image comparison was found at those sites. Keep the paired coverage-on file runs and identical expanded inventory, then the normal finish-branch review. This is a narrow exception to preserving each browser action, not permission to remove assertions or change rendering, polling or motion.
