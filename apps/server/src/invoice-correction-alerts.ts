@@ -19,12 +19,12 @@ const ORIGIN = jobOrigin("payment_check");
  * unhandled unfinished alert yet, each with the money its completed refunds gave back, as raw
  * cents text, and that earliest completion. */
 function dueCorrections(db: Transaction, cutoff: string) {
-  const since = sql<string>`min(${tenderRefunds.completedAt})`;
+  const completedSince = sql<string>`min(${tenderRefunds.completedAt})`;
   return db
     .select({
       correction: invoiceCorrections,
       back: sql<string>`cast(sum(${tenderRefunds.appliedAmount}) as text)`,
-      since,
+      completedSince,
     })
     .from(invoiceCorrections)
     .innerJoin(
@@ -59,7 +59,7 @@ function dueCorrections(db: Transaction, cutoff: string) {
       ),
     )
     .groupBy(invoiceCorrections.id)
-    .having(sql`${since} < ${cutoff}`);
+    .having(sql`${completedSince} < ${cutoff}`);
 }
 
 /** Raises `invoice_correction.unfinished` for every open correction whose earliest completed
@@ -75,7 +75,7 @@ export async function sweepInvoiceCorrections(deps: TenderRefundDeps, now: Date)
         tx,
         due.correction,
         rawCentsToDecimal(due.back),
-        due.since,
+        due.completedSince,
         now,
       );
   });
@@ -86,7 +86,7 @@ export function raiseCorrectionUnfinished(
   tx: Transaction,
   row: typeof invoiceCorrections.$inferSelect,
   moneyBack: Decimal,
-  since: string,
+  completedSince: string,
   now: Date,
 ): Promise<boolean> {
   return recordIncidentOnce(tx, {
@@ -96,7 +96,7 @@ export function raiseCorrectionUnfinished(
       correctionId: row.id,
       saleId: row.originalSaleId,
       moneyBack,
-      since,
+      completedSince,
     }),
     severity: "warning",
     detectedAt: now,

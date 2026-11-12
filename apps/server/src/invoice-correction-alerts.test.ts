@@ -84,7 +84,7 @@ async function fifteenBack() {
     ),
   );
   await giveCash(correction.id, "15.00");
-  return { saleId, correctionId: correction.id, since: new Date(start).toISOString() };
+  return { saleId, correctionId: correction.id, completedSince: new Date(start).toISOString() };
 }
 
 /** Gives `amount` of correction `correctionId` back in cash now. */
@@ -122,7 +122,7 @@ const alertsFor = (saleId: string) =>
 
 describe("the unfinished-correction alert", () => {
   it("raises the unfinished alert once a correction has had money back for over an hour", async () => {
-    const { saleId, correctionId, since } = await fifteenBack();
+    const { saleId, correctionId, completedSince } = await fifteenBack();
     at(59);
     await recoverTenderRefunds(v.deps);
     expect(await alertsFor(saleId)).toEqual([]);
@@ -131,7 +131,7 @@ describe("the unfinished-correction alert", () => {
     await recoverTenderRefunds(v.deps);
     const raised = [
       {
-        params: { correctionId, saleId, moneyBack: "15.00", since },
+        params: { correctionId, saleId, moneyBack: "15.00", completedSince },
         severity: "warning",
         source: "payment_check",
       },
@@ -216,14 +216,14 @@ describe("the unfinished-correction alert", () => {
   });
 
   it("measures the hour from the earliest completed refund, not the latest", async () => {
-    const { saleId, correctionId, since } = await fifteenBack();
+    const { saleId, correctionId, completedSince } = await fifteenBack();
     at(45);
     await giveCash(correctionId, "3.00");
     at(61);
     await sweepInvoiceCorrections(v.deps, v.deps.clock.now().instant);
     expect(await alertsFor(saleId)).toEqual([
       {
-        params: { correctionId, saleId, moneyBack: "18.00", since },
+        params: { correctionId, saleId, moneyBack: "18.00", completedSince },
         severity: "warning",
         source: "payment_check",
       },
