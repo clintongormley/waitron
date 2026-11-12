@@ -101,3 +101,10 @@ restart-service work. Lane F receipt: `receipts/a950-usable-manual-plan-20261112
 and its `cut-serial.log` / `after-cut-serial.log`. This used an already-stopped,
 setup-only synthetic source and same-image candidate, paused after the real stopped-tree
 copy; it does not qualify the installed manual command or successful sale on Linux.
+
+**12 November, driver source (watcher 22:20/22:25, Lane F questions.md):** bootstrap
+one fixed driver before the attempt lock; retain it throughout apply and recovery.
+Prefer the registry image's revision read without pulling. If no label or the whole
+driver is absent there, use the resolved Git SHA for every driver file and log the
+fallback. Candidate Compose still follows its image revision. The installed managed
+Compose omits restart policies; the source template retains them for unmanaged use.

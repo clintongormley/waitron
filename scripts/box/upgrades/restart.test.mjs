@@ -10,6 +10,7 @@ const bin = join(root, "bin");
 mkdirSync(bin);
 for (const [name, body] of Object.entries({
   flock: 'printf "flock %s\\n" "$*" >> "$CALLS"; [ "${BUSY:-0}" = 0 ]',
+  "aa-enabled": '[ "${AA_ENABLED:-1}" = 1 ]',
   apparmor_parser: 'echo apparmor >> "$CALLS"; exit "${APPARMOR_EXIT:-0}"',
   docker: `printf 'docker %s\\n' "$*" >> "$CALLS"
 case "$*" in
@@ -79,6 +80,7 @@ it("recovers before Docker using only the retained runtime", () => {
 it("refuses missing retained runtime or a busy host before Docker", () => {
   for (const [knobs, code, reason] of [
     [{ held: true, runtime: false }, 78, "retained runtime"],
+    [{ runtime: false }, 78, "retained runtime"],
     [{ BUSY: "1" }, 75, "another host operation"],
   ]) {
     const result = invoke("run", knobs);
@@ -111,4 +113,11 @@ it("includes a previously installed tunnel when reopening the group", () => {
   expect(result.calls).toContain(
     "docker compose --profile staff-tunnel up -d --pull never --remove-orphans\n",
   );
+});
+
+it("starts with Docker's default profile when AppArmor is disabled on the host", () => {
+  const result = invoke("run", { AA_ENABLED: "0" });
+  expect(result.status).toBe(1);
+  expect(result.calls).toContain("docker compose up -d --pull never --remove-orphans\n");
+  expect(result.calls).not.toContain("apparmor\n");
 });

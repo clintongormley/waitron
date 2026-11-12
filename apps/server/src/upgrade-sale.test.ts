@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { createServer } from "node:net";
 import { beforeAll, afterAll, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
+import { withTransaction } from "@waitron/db";
+import { writeContentLanguages } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
@@ -21,6 +23,9 @@ const source = useVenueDb({
   setup: async (db) => {
     venue = await provisionOrderVenue(db);
     await billlessSale(venue);
+    await withTransaction(db, (tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr", "en", "es"] }),
+    );
   },
 });
 let root: string;

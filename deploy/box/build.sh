@@ -67,7 +67,7 @@ for unit in docker.service docker.socket; do
 done
 install -d -m 0755 "$root/usr/lib/dracut/modules.d/95waitron"
 install -m 0755 "$repo/deploy/box/dracut/95waitron/"*.sh "$root/usr/lib/dracut/modules.d/95waitron/"
-cp "$repo/deploy/compose.yml" "$root/opt/waitron/compose.yml"
+sed '/^    restart: unless-stopped$/d' "$repo/deploy/compose.yml" > "$root/opt/waitron/compose.yml"
 mkdir "$output/input-stage"
 for kind in app agent mailpit; do
   archive="$inputs/$kind.tar"

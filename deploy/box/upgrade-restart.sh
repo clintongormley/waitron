@@ -20,9 +20,12 @@ if pending; then
   fi
 fi
 [ "$1" = run ] || exit 0
+[ -x "$node" ] || refuse 'retained runtime unavailable; retain the copy and runtime' 78
 cd "$box"
-apparmor_parser -r /etc/apparmor.d/waitron-print-agent
-export WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent
+if command -v aa-enabled >/dev/null 2>&1 && aa-enabled; then
+  apparmor_parser -r /etc/apparmor.d/waitron-print-agent
+  export WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent
+fi
 compose_command=(docker compose)
 if [ -n "$(docker compose --profile staff-tunnel ps -a -q tunnel)" ]; then
   compose_command+=(--profile staff-tunnel)

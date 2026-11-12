@@ -94,6 +94,8 @@ stub(
 args="$*"
 [ -n "\${WT_HANG}" ] && sleep "\${WT_HANG}"
 case "$args" in
+  *'--format {{.Manifest.Digest}}'*) printf 'sha256:%064d\\n' 1; exit 0 ;;
+  "buildx imagetools inspect"*) printf '%s\\n' "\${WT_REGISTRY_REVISION:-}"; exit 0 ;;
   "compose version"*) exit 0 ;;
 esac
 case "$1" in
@@ -180,6 +182,8 @@ case "$1" in
   image)
     [ "\${WT_LOOKUP_FAIL}" = labels ] && [ "\${@: -1}" = sha256:running-app ] && exit 1
     case "$args" in
+      *'--format {{index .Config.Labels "org.opencontainers.image.revision"}}'*) printf '%s\\n' "\${WT_CANDIDATE_REVISION:-0123456789abcdef0123456789abcdef01234567}"; exit 0 ;;
+      *'{{.Id}}'*) case "$args" in *print-agent*) echo sha256:candidate-agent ;; *) echo sha256:candidate-app ;; esac; exit 0 ;;
       *--format*waitron:newer-tag*|*--format*waitron-print-agent:newer-tag*) echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|2026-10-12T12:00:00Z|newer-tag'; exit 0 ;;
       *--format*sha256:running-app*) printf '%s\\n' "\${WT_APP_LABELS}"; exit 0 ;;
       *--format*sha256:running-agent*) printf '%s\\n' "\${WT_AGENT_LABELS}"; exit 0 ;;
@@ -191,6 +195,13 @@ case "$1" in
       case "$args" in *"\${WT_IMAGE_MISSING}"*) exit 1 ;; esac
     fi
     [ "$2" = rm ] && [ "\${WT_RMI_FAIL}" = 1 ] && exit 1 ;;
+  build)
+    previous=""; for value in "$@"; do
+      if [ "$previous" = --iidfile ]; then
+        case "$value" in */agent.id) echo sha256:candidate-print-agent > "$value" ;; *) echo sha256:candidate-app > "$value" ;; esac
+      fi
+      previous="$value"
+    done ;;
   pull)
     if [ -n "\${WT_IMAGE_PULL_FAIL}" ]; then
       case "$args" in *"\${WT_IMAGE_PULL_FAIL}"*) exit 1 ;; esac
@@ -223,6 +234,10 @@ case "$url" in
   */deploy/waitron.sh)
     [ "\${WT_SELF_FETCH_FAIL}" = "1" ] && exit 22
     cp "\${WT_SELF_SCRIPT}" "$out"; exit 0 ;;
+  */scripts/box/upgrades/*)
+    case "$url" in *"\${WT_DRIVER_MISSING:-__never__}"*) exit 22 ;; esac
+    if [[ "$url" == */bootstrap.sh ]]; then cp "$WT_BOOTSTRAP" "$out"; else printf 'source:%s\\n' "$url" > "$out"; fi
+    exit 0 ;;
   */deploy/compose.yml)
     if [ "\${WT_COMPOSE_FETCH_FAIL}" = 1 ]; then printf 'partial' > "$out"; exit 22; fi ;;
 esac
@@ -316,6 +331,31 @@ stub("groupadd", "exit 0");
 // as_root calls `sudo -n <cmd>`; drop the -n and exec the rest so it lands on the stubbed systemctl.
 stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
 stub("flock", `[ "\${WT_UPGRADE_BUSY:-0}" != 1 ]`);
+
+const HOST_NODE_STUB = join(STUB_BIN, "host-node");
+writeFileSync(
+  HOST_NODE_STUB,
+  `#!/bin/bash
+printf 'host:%s\\n' "$*" >> "$WT_LOG"
+if [ "\${WT_UPGRADE_HELD:-0}" = 1 ]; then
+  mkdir -p "\${WAITRON_DIR}.upgrades/attempt"
+  printf '{"phase":"awaiting-choice"}\\n'
+else
+  printf '{"phase":"committed"}\\n'
+fi
+`,
+  { mode: 0o700 },
+);
+const BOOTSTRAP_STUB = join(STUB_BIN, "bootstrap");
+writeFileSync(
+  BOOTSTRAP_STUB,
+  `#!/bin/bash
+printf 'bootstrap %s\\n' "$*" >> "$WT_LOG"
+mkdir -p "$1/node-v26.7.0/bin"
+cp "$WT_HOST_NODE" "$1/node-v26.7.0/bin/node"
+`,
+  { mode: 0o700 },
+);
 
 const GIT_LOCATION_OVERRIDES = [
   "GIT_DIR",
@@ -498,6 +538,9 @@ function run(sb, args, extraEnv = {}, { timeoutMs = RUN_TIMEOUT_MS } = {}) {
       ...process.env,
       PATH: `${STUB_BIN}${delimiter}${process.env.PATH}`,
       WAITRON_DIR: sb.boxDir,
+      WAITRON_HOST_DIR: join(sb.root, "host"),
+      WT_HOST_NODE: HOST_NODE_STUB,
+      WT_BOOTSTRAP: BOOTSTRAP_STUB,
       // The child's whole health-retry budget, shrunk from ~175s to ~2s.
       WAITRON_TEST_HEALTH_DELAY: "0.05",
       ...sb.env,
@@ -600,6 +643,119 @@ describe("waitron.sh pending manual upgrade", () => {
   });
 });
 
+describe("waitron.sh candidate preparation", () => {
+  it("builds one resolved source in a private folder without replacing the installed files", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const original = readFileSync(join(sb.boxDir, "compose.yml"), "utf8");
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_IMAGE=old:app\nKEEP=value\n");
+    const host = join(sb.root, "host");
+    mkdirSync(host);
+    const result = run(
+      sb,
+      [
+        "__candidate",
+        "my-branch",
+        "0123456789abcdef0123456789abcdef01234567:1792062000",
+        sb.boxDir,
+      ],
+      { WAITRON_HOST_DIR: host },
+    );
+    expect(result.status).toBe(0);
+    const prepared = JSON.parse(result.stdout);
+    expect(prepared.images).toEqual({
+      app: "sha256:candidate-app",
+      "print-agent": "sha256:candidate-agent",
+    });
+    expect(prepared.compose).toBe("stub\n");
+    expect(readFileSync(join(sb.boxDir, "compose.yml"), "utf8")).toBe(original);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toBe(
+      "WAITRON_IMAGE=old:app\nKEEP=value\n",
+    );
+    const builds = loggedCalls(sb).filter((line) => line.startsWith("docker build "));
+    expect(builds).toHaveLength(2);
+    expect(builds.every((line) => line.includes("--iidfile "))).toBe(true);
+    expect(builds.some((line) => line.includes("-t waitron:my-branch"))).toBe(false);
+    expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker compose .*\b(up|stop|down)\b/);
+    expect(readdirSync(host)).toEqual([]);
+  });
+});
+
+describe("waitron.sh published candidate", () => {
+  it("pulls immutable references without moving the installed main tags", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const host = join(sb.root, "host");
+    mkdirSync(host);
+    const result = run(
+      sb,
+      ["__candidate", "main", "0123456789abcdef0123456789abcdef01234567:1792062000", sb.boxDir],
+      { WAITRON_HOST_DIR: host },
+    );
+    expect(result.status).toBe(0);
+    const pulls = loggedCalls(sb).filter((line) => line.startsWith("docker pull "));
+    expect(pulls).toHaveLength(2);
+    expect(pulls.every((line) => line.includes("@sha256:"))).toBe(true);
+    expect(pulls.some((line) => line.endsWith(":main"))).toBe(false);
+  });
+});
+
+describe("waitron.sh recovery owner", () => {
+  it.each(["restore", "keep"])("restarts the installed owner after a successful %s", (verb) => {
+    const sb = sandbox({ systemd: true });
+    const host = join(sb.root, "host");
+    mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
+    copyFileSync(HOST_NODE_STUB, join(host, "node-v26.7.0/bin/node"));
+    writeFileSync(join(sb.root, "units/waitron-app.service"), "installed owner");
+    const result = run(sb, [verb]);
+    expect(result.status).toBe(0);
+    expect(loggedCalls(sb)).toContain("systemctl --no-block restart waitron-app.service");
+  });
+});
+
+describe("waitron.sh manual upgrade invocation", () => {
+  it.each([false, true])(
+    "uses the checked host transaction for an installed box (held %s)",
+    (held) => {
+      const sb = sandbox({ systemd: true });
+      installedBox(sb);
+      const result = run(sb, ["install", "my-branch"], {
+        WT_UPGRADE_HELD: held ? "1" : "0",
+        WAITRON_SH_REFRESHED: "1",
+      });
+      expect(result.status).toBe(held ? 1 : 0);
+      const calls = readFileSync(sb.log, "utf8");
+      expect(calls).toContain(
+        `cli.mjs apply ${sb.boxDir} bash ${sb.script} __candidate my-branch 0123456789abcdef0123456789abcdef01234567:`,
+      );
+      expect(calls.indexOf("bootstrap ")).toBeLessThan(calls.indexOf("flock -n 9"));
+      expect(composeCalls(sb).some((call) => /^up\b/.test(call))).toBe(false);
+      if (held) {
+        expect(result.stderr).toContain("restore or keep");
+        expect(result.stdout).not.toContain("Waitron is ready");
+      }
+    },
+  );
+
+  it("falls back as one whole driver when the registry revision lacks a required module", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    const preferred = "a".repeat(40);
+    const result = run(sb, ["install"], {
+      WT_REGISTRY_REVISION: preferred,
+      WT_DRIVER_MISSING: `${preferred}/scripts/box/upgrades/candidate.mjs`,
+      WAITRON_SH_REFRESHED: "1",
+    });
+    expect(result.status).toBe(0);
+    for (const name of ["cli", "host", "candidate", "copy", "transaction", "restart"]) {
+      expect(readFileSync(join(sb.root, "host", "box/upgrades", `${name}.mjs`), "utf8")).toContain(
+        `/0123456789abcdef0123456789abcdef01234567/scripts/box/upgrades/${name}.mjs`,
+      );
+    }
+    expect(result.stderr).toContain("resolved Git fallback");
+  });
+});
+
 describe("waitron.sh image provenance", () => {
   const app = "0123456789abcdef0123456789abcdef01234567";
   const agent = "fedcba9876543210fedcba9876543210fedcba98";
@@ -617,7 +773,7 @@ describe("waitron.sh image provenance", () => {
   ])(
     "reports running image IDs and local build times after %s with path suffix %j",
     (verb, directorySuffix) => {
-      const sb = sandbox({ directorySuffix });
+      const sb = sandbox({ directorySuffix, systemd: verb !== "status" });
       writeFileSync(join(sb.boxDir, "compose.yml"), "stub\n");
       const r = run(sb, [verb], labels);
       expect(r.status, r.stderr).toBe(0);
@@ -2257,8 +2413,8 @@ describe("waitron.sh --reset install", () => {
     );
   });
 
-  it("leaves a plain branch install as it was: no supporting-image check", () => {
-    const sb = sandbox({ imageMissing: "mailpit", imagePullFail: "mailpit" });
+  it("leaves supporting-image checks to the checked transaction for a plain install", () => {
+    const sb = sandbox({ imageMissing: "mailpit", imagePullFail: "mailpit", systemd: true });
     installedBox(sb);
     const r = run(sb, ["install", "my-branch"]);
     expect(r.status).toBe(0);
@@ -2352,16 +2508,17 @@ describe("waitron.sh --reset install", () => {
     expect(readdirSync(sb.scriptDir).filter((n) => n.startsWith(".waitron.sh."))).toEqual([]);
   });
 
-  it("without --reset, still replaces its copy with a ref's script that predates --reset and runs it", () => {
-    const sb = sandbox({ refScript: "pre-reset" });
+  it("keeps its checked installer when the requested ref carries an older script", () => {
+    const sb = sandbox({ refScript: "pre-reset", systemd: true });
     installedBox(sb);
+    const before = readFileSync(sb.script, "utf8");
     const r = run(sb, ["install", "old-branch"]);
     expect(r.status).toBe(0);
-    expect(r.stderr).not.toContain("predates");
-    expect(readFileSync(sb.script, "utf8")).toBe(readFileSync(sb.env.WT_SELF_SCRIPT, "utf8"));
-    expect(loggedCalls(sb).filter((c) => c.startsWith("waitron.sh-start "))).toEqual([
-      "waitron.sh-start <install><old-branch>",
-    ]);
+    expect(readFileSync(sb.script, "utf8")).toBe(before);
+    expect(loggedCalls(sb).filter((c) => c.startsWith("waitron.sh-start "))).toEqual([]);
+    expect(readFileSync(sb.log, "utf8")).toContain(
+      `cli.mjs apply ${sb.boxDir} bash ${sb.script} __candidate old-branch`,
+    );
   });
 
   it.each([
