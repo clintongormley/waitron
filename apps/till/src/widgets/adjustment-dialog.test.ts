@@ -102,10 +102,7 @@ const shownMessages = (el: TillAdjustmentDialog) => [
 
 async function chooseReason(el: TillAdjustmentDialog, name: string): Promise<void> {
   const radio = [...root(el).querySelectorAll<HTMLInputElement>('input[name="reason"]')].find(
-    (candidate) => {
-      const label = candidate.closest("label")!.textContent!.trim();
-      return label === name || label.startsWith(`${name} · `);
-    },
+    (candidate) => candidate.closest("label")!.textContent!.trim().split(" · ")[0] === name,
   )!;
   radio.click();
   await el.updateComplete;

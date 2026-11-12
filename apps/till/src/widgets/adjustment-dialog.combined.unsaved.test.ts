@@ -27,7 +27,7 @@ afterEach(() => {
   setLocale("en");
 });
 it.each(["Cancel", "Escape"])(
-  "combined Comp %s preserves all choices until explicit Discard",
+  "Comp %s preserves all choices until explicit Discard",
   async (action) => {
     const { el: app } = await mountWidget<CompLeaveApp>("comp-leave-test-app", {});
     const form = app.shadowRoot!.querySelector<TillAdjustmentDialog>("till-adjustment-dialog")!;

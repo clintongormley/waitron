@@ -340,10 +340,7 @@ async function press(el: TillApp, target: HTMLElement): Promise<void> {
 async function chooseReason(el: TillApp, name: string): Promise<void> {
   const radio = [
     ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="reason"]'),
-  ].find((candidate) => {
-    const label = candidate.closest("label")!.textContent!.trim();
-    return label === name || label.startsWith(`${name} · `);
-  })!;
+  ].find((candidate) => candidate.closest("label")!.textContent!.trim().split(" · ")[0] === name)!;
   await press(el, radio);
 }
 
@@ -383,7 +380,7 @@ const requestComp = (el: TillApp, order: TillTableOrderScreen, lineNo = 1) =>
 const requestCancel = (el: TillApp, order: TillTableOrderScreen, lineNo: number) =>
   requestAdjustment(el, order, "cancel", lineNo);
 
-/** Opens Give away on the wine, chooses Complaint and presses Continue. */
+/** Opens Comp on the wine, chooses Complaint and presses Continue. */
 async function previewComp(el: TillApp, order: TillTableOrderScreen): Promise<void> {
   await requestComp(el, order, 1);
   await chooseReason(el, "Complaint");
@@ -923,7 +920,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     return { promise, resolve, reject };
   }
 
-  it("reads the reasons once however often Give away is pressed while they load", async () => {
+  it("reads the reasons once however often Comp is pressed while they load", async () => {
     const reasons = deferred<AdjustmentReason[]>();
     const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => reasons.promise) });
     const order = await openTable4(el);
@@ -4760,7 +4757,7 @@ it.each([
   ["es", "dark", 390],
   ["es", "dark", 1280],
 ] as const)(
-  "combined Comp previews and applies one whole extra through the existing financial seam (%s, %s, %i)",
+  "Comp previews and applies one whole extra through the existing financial seam (%s, %s, %i)",
   async (locale, theme, width) => {
     await page.viewport(width, 1100);
     setLocale(locale);
@@ -4889,7 +4886,7 @@ it.each([
   },
 );
 
-it("a combined amount refusal returns to its amount field and permits correction", async () => {
+it("a Comp amount refusal returns to its amount field and permits correction", async () => {
   const { el } = await mountApp({
     listAdjustmentReasons: vi
       .fn()
@@ -4920,7 +4917,7 @@ it("a combined amount refusal returns to its amount field and permits correction
   ).toBe(false);
 });
 
-it("a combined Comp preview cannot become a write after its bill is paid", async () => {
+it("a Comp preview cannot become a write after its bill is paid", async () => {
   const { el } = await mountApp();
   const order = await openTable4(el);
   emit(order, "adjust", {

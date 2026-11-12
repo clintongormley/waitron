@@ -3751,7 +3751,7 @@ export class TillApp extends LitElement {
   #equipmentReads = 0;
   #equipmentChanged = 0;
   #equipmentStale = false;
-  /** The open cancel, give-away or discount dialog, with what the server last answered it. */
+  /** The open cancel, Comp or whole-bill discount dialog, with what the server last answered it. */
   @state() private adjusting: Adjusting | null = null;
   @state() private cancellingItem: CancellingItem | null = null;
   #cancelItems = 0;

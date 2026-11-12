@@ -38,7 +38,7 @@ const steaks: AdjustTarget = {
 };
 const wholeBill: AdjustTarget = {
   lineId: null,
-  name: "Toda la cuenta",
+  name: "Whole bill",
   quantity: null,
   total: "50.00",
   unitTotal: null,

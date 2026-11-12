@@ -10,7 +10,7 @@ afterEach(async () => {
   setLocale("en");
   await page.viewport(1280, 900);
 });
-describe.each(["en", "es"] as const)("combined Comp %s", (locale) => {
+describe.each(["en", "es"] as const)("Comp window %s", (locale) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {
     it.each([390, 1280])(
       "has usable reason, extra, quantity and confirmation controls at %i",

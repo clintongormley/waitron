@@ -34,8 +34,8 @@ export interface AdjustTarget {
   /** What the action can take off: the dish with its extras, the extra, or the whole bill. */
   total: string;
   /** One unit's price, with its share of any extras, when the dish is several whole units the
-   * action may take one of; null when only the whole of it can be adjusted (a weighed dish, or an
-   * extra). */
+   * action may take part of (a cancel one or all, the Comp window a count); null when only the
+   * whole of it can be adjusted (a weighed dish, or an extra). */
   unitTotal: string | null;
   extras?: AdjustTarget[];
   started?: boolean;
@@ -186,7 +186,8 @@ export class TillAdjustmentDialog extends LitElement {
     `,
   ];
 
-  /** `comp` is the Comp window; `discount` is the whole bill's. */
+  /** `comp` opens the Comp window on a dish or extra; `discount` comps the whole bill; `cancel`
+   * cancels a dish or extra. */
   @property() kind: AdjustKind = "comp";
   @property({ attribute: false }) target: AdjustTarget | null = null;
   /** The venue's reasons; the form offers those allowing the action. */
@@ -372,7 +373,8 @@ export class TillAdjustmentDialog extends LitElement {
     return this.#target()?.unitTotal != null;
   }
 
-  /** The most a discount can take: one unit, or all the action covers. */
+  /** The most a discount can take: the Comp window's chosen count of the dish, or all the action
+   * covers. */
   #covered(): string {
     const target = this.#target()!;
     if (this.kind === "comp" && this.#partial())
