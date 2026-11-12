@@ -259,3 +259,38 @@ export function reissueServerLeaf(opts: {
     serverKeyPem: forge.pki.privateKeyToPem(serverKeys.privateKey),
   };
 }
+
+/**
+ * A client certificate for `hostname`, signed by an existing authority: `clientAuth` only, so it
+ * cannot serve as a server leaf, and the box's server leaf cannot stand in for it. It never
+ * outlives its authority.
+ */
+export function issueClientCert(opts: {
+  caCertPem: string;
+  caKeyPem: string;
+  hostname: string;
+  now: Date;
+  keypair?: () => forge.pki.rsa.KeyPair;
+}): { clientCertPem: string; clientKeyPem: string } {
+  const makeKeypair = keypairFor([opts.hostname], opts.keypair);
+  const caCert = forge.pki.certificateFromPem(opts.caCertPem);
+  const caKey = forge.pki.privateKeyFromPem(opts.caKeyPem) as forge.pki.rsa.PrivateKey;
+  const keys = makeKeypair();
+  const cert = certificate(
+    opts.hostname,
+    keys,
+    { cn: CA_COMMON_NAME, key: caKey },
+    randomSerial(),
+    validityFrom(opts.now, caCert.validity.notAfter.getTime()),
+    [
+      { name: "basicConstraints", cA: false },
+      { name: "keyUsage", digitalSignature: true, keyEncipherment: true },
+      { name: "extKeyUsage", clientAuth: true },
+      { name: "subjectAltName", altNames: [{ type: 2, value: opts.hostname }] },
+    ],
+  );
+  return {
+    clientCertPem: forge.pki.certificateToPem(cert),
+    clientKeyPem: forge.pki.privateKeyToPem(keys.privateKey),
+  };
+}

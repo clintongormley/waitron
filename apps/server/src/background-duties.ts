@@ -170,7 +170,7 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
             name: "spareStore",
             close: () => h.spareStore!.stop(),
             reason:
-              "stops the spare's versitygw, which serves only the main box's copy under pair-store/ and writes nothing in venue.db",
+              "stops the spare's store and its listener, which admits only the main box; they serve that box's copy under pair-store/ and write nothing in venue.db",
           },
         ]),
     {

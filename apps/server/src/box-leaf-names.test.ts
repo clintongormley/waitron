@@ -1,10 +1,11 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { X509Certificate, createPrivateKey } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ensureLeaf } from "./box-secrets.js";
 import {
+  issueClientCert,
   mintSelfSignedServerCert,
   reissueServerLeaf,
   type SelfSignedMaterial,
@@ -14,6 +15,7 @@ import { handshake, tlsFile, writeTlsSet } from "./testing/box-tls.js";
 const OWN_NAME = "box-7f3a.waitron.local";
 const HOSTNAMES = [OWN_NAME, "waitron.local", "localhost"];
 const ADDRESS = "192.168.10.20";
+const CLIENT_AUTH = "1.3.6.1.5.5.7.3.2";
 
 let own: SelfSignedMaterial;
 let other: SelfSignedMaterial;
@@ -145,6 +147,41 @@ describe("ensureLeaf", () => {
 
     expect(await tlsFile(stateDir, "server.pem")).toBe(cert);
     expect(await tlsFile(stateDir, "server.pem")).toBe(key);
+  });
+
+  it("every start leaves a client certificate for this box's name under its authority", async () => {
+    const stateDir = await box(leafFrom(own, HOSTNAMES, ["127.0.0.1", ADDRESS]));
+
+    await ensure(stateDir);
+
+    const cert = new X509Certificate(await tlsFile(stateDir, "client.crt"));
+    expect(cert.verify(new X509Certificate(own.caCertPem).publicKey)).toBe(true);
+    expect(cert.checkPrivateKey(createPrivateKey(await tlsFile(stateDir, "client.key")))).toBe(
+      true,
+    );
+    expect(cert.subjectAltName).toBe(`DNS:${OWN_NAME}`);
+    expect(cert.keyUsage).toEqual([CLIENT_AUTH]);
+    const first = await tlsFile(stateDir, "client.crt");
+
+    await ensure(stateDir);
+    expect(await tlsFile(stateDir, "client.crt")).toBe(first);
+
+    const elsewhere = issueClientCert({
+      caCertPem: other.caCertPem,
+      caKeyPem: other.caKeyPem,
+      hostname: OWN_NAME,
+      now: new Date(),
+    });
+    await writeFile(join(stateDir, "tls", "client.crt"), elsewhere.clientCertPem);
+    await writeFile(join(stateDir, "tls", "client.key"), elsewhere.clientKeyPem);
+
+    await ensure(stateDir);
+
+    const reissued = new X509Certificate(await tlsFile(stateDir, "client.crt"));
+    expect(reissued.verify(new X509Certificate(own.caCertPem).publicKey)).toBe(true);
+    expect(reissued.checkPrivateKey(createPrivateKey(await tlsFile(stateDir, "client.key")))).toBe(
+      true,
+    );
   });
 
   it("does nothing on a box with no minted leaf", async () => {

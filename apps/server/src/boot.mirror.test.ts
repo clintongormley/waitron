@@ -43,7 +43,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
-import { peerCertificate } from "./testing/box-tls.js";
+import { peerCertificate, writeTlsSet } from "./testing/box-tls.js";
+import { connect as connectTcp } from "node:net";
 import { get } from "node:https";
 
 vi.mock("@hono/node-server", async () => {
@@ -104,6 +105,12 @@ const BOX_CA_PEM = mintSelfSignedServerCert({
 let migrationsRoot: string;
 
 const PAIR_SECRET = "c".repeat(64);
+/** A spare's `tls/` set: its store's listener serves this leaf under this authority. */
+const BOX_TLS = mintSelfSignedServerCert({
+  hostnames: ["waitron.local"],
+  ipAddresses: ["127.0.0.1"],
+  now: new Date(),
+});
 const PAIR_ACCESS_KEY_ID = "waitron0123456789abcdef";
 
 /**
@@ -167,6 +174,17 @@ async function expectStoreRan(dir: string, stateDir: string, loopbackPort: numbe
   expect(env).toContain(`ROOT_ACCESS_KEY_ID=${PAIR_ACCESS_KEY_ID}\n`);
   expect(env).toContain(`ROOT_SECRET_ACCESS_KEY=${PAIR_SECRET}\n`);
   return Number((await readFile(join(dir, "pid"), "utf8")).trim());
+}
+
+/** Whether something accepts a TCP connection on 127.0.0.1:`port`. */
+function accepts(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connectTcp(port, "127.0.0.1", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on("error", () => resolve(false));
+  });
 }
 
 function running(pid: number): boolean {
@@ -740,7 +758,8 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
   it("a spare's full start runs its store on loopback with the pair's key, and stops it on close", async () => {
     const fake = await fakeVersitygw();
     const removePair = await servePair("mirror");
-    const [httpPortNumber, loopbackPort] = await freePorts(2);
+    const [httpPortNumber, loopbackPort, storePort] = await freePorts(3);
+    await writeTlsSet(STATE_ROOT, BOX_TLS);
     let pid: number | undefined;
     try {
       const server = await startServer({
@@ -750,18 +769,22 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_VERSITYGW_BIN: fake.bin,
         WAITRON_SPARE_STORE_LOOPBACK_PORT: String(loopbackPort),
+        WAITRON_SPARE_STORE_PORT: String(storePort),
       });
       try {
         pid = await expectStoreRan(fake.dir, STATE_ROOT, loopbackPort!);
         expect(running(pid)).toBe(true);
+        expect(await accepts(storePort!)).toBe(true);
       } finally {
         await server.close();
       }
       expect(running(pid)).toBe(false);
+      expect(await accepts(storePort!)).toBe(false);
     } finally {
       await removePair();
       await rm(fake.dir, { recursive: true, force: true });
       await rm(join(STATE_ROOT, "pair-store"), { recursive: true, force: true });
+      await rm(join(STATE_ROOT, "tls"), { recursive: true, force: true });
     }
   }, 60_000);
 
@@ -891,7 +914,8 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     );
     const fake = await fakeVersitygw();
     const removePair = await servePair("adopting");
-    const [httpPortNumber, loopbackPort] = await freePorts(2);
+    const [httpPortNumber, loopbackPort, storePort] = await freePorts(3);
+    await writeTlsSet(stateDir, BOX_TLS);
     try {
       const server = await startServer({
         ...KEY_ENV,
@@ -901,15 +925,18 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_VERSITYGW_BIN: fake.bin,
         WAITRON_SPARE_STORE_LOOPBACK_PORT: String(loopbackPort),
+        WAITRON_SPARE_STORE_PORT: String(storePort),
       });
       let pid: number;
       try {
         pid = await expectStoreRan(fake.dir, stateDir, loopbackPort!);
         expect(running(pid)).toBe(true);
+        expect(await accepts(storePort!)).toBe(true);
       } finally {
         await server.close();
       }
       expect(running(pid)).toBe(false);
+      expect(await accepts(storePort!)).toBe(false);
     } finally {
       await removePair();
       await rm(fake.dir, { recursive: true, force: true });

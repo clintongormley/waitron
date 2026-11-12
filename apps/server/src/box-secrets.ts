@@ -4,6 +4,8 @@ import {
   TLS_REPAIR_DIR,
   TLS_REPAIR_FLOW_DIR,
   SERVER_PEM_FILE,
+  TLS_CLIENT_CERT_FILE,
+  TLS_CLIENT_KEY_FILE,
 } from "@waitron/store";
 import { chmod, lstat, open, readFile, type FileHandle } from "node:fs/promises";
 import { constants, existsSync } from "node:fs";
@@ -15,7 +17,12 @@ import { withRecoveryLock } from "./recovery-lock.js";
 import "./errors.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { fileExists } from "./box-tls-install.js";
-import { leafIpv4s, mintSelfSignedServerCert, reissueServerLeaf } from "./self-signed-cert.js";
+import {
+  issueClientCert,
+  leafIpv4s,
+  mintSelfSignedServerCert,
+  reissueServerLeaf,
+} from "./self-signed-cert.js";
 import { mkdirDurable, writeFileDurable } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 import type { TlsFiles } from "./tls.js";
@@ -215,6 +222,8 @@ async function reissueBoxLeafLocked(deps: {
  * Reissues the box's leaf with {@link reissueBoxLeaf} when it lacks one of `hostnames` or a current
  * permitted address, does not verify under the current `tls/ca.crt`, or is not the certificate of
  * `tls/server.pem`; otherwise leaves the file untouched. A box with no minted leaf is left alone.
+ * Then keeps `tls/client.crt` and `tls/client.key` a pair under the current authority naming
+ * `hostnames[0]`, the box's own name. The result is the server leaf's.
  */
 export async function ensureLeaf(deps: {
   stateDir: string;
@@ -232,9 +241,40 @@ export async function ensureLeaf(deps: {
     leaf.checkPrivateKey(key) &&
     deps.hostnames.every((host) => leaf.checkHost(host) === host) &&
     leafIpv4s(deps.listIpv4).every((ip) => leaf.checkIP(ip) === ip);
-  if (fits) return "kept";
-  await reissueBoxLeaf(deps);
-  return "reissued";
+  if (!fits) await reissueBoxLeaf(deps);
+  await ensureClientCert(deps.stateDir, deps.hostnames[0]!, authority, deps.now);
+  return fits ? "kept" : "reissued";
+}
+
+async function ensureClientCert(
+  stateDir: string,
+  name: string,
+  authority: X509Certificate,
+  now: () => Date,
+): Promise<void> {
+  const certFile = join(stateDir, TLS_CLIENT_CERT_FILE);
+  const keyFile = join(stateDir, TLS_CLIENT_KEY_FILE);
+  if ((await fileExists(certFile)) && (await fileExists(keyFile))) {
+    const cert = new X509Certificate(await readFile(certFile, "utf8"));
+    if (
+      cert.verify(authority.publicKey) &&
+      cert.checkPrivateKey(createPrivateKey(await readFile(keyFile, "utf8"))) &&
+      cert.checkHost(name, { subject: "never", wildcards: false }) === name
+    )
+      return;
+  }
+  const files = boxTlsPaths(stateDir);
+  await withRecoveryLock(stateDir, async () => {
+    await assertNoPendingTlsRepair(stateDir);
+    const issued = issueClientCert({
+      caCertPem: await readFile(files.caCertFile, "utf8"),
+      caKeyPem: await readFile(files.caKeyFile, "utf8"),
+      hostname: name,
+      now: now(),
+    });
+    await writeFileDurable(keyFile, issued.clientKeyPem, 0o600);
+    await writeFileDurable(certFile, issued.clientCertPem, 0o600);
+  });
 }
 
 async function assertNoPendingTlsRepair(stateDir: string): Promise<void> {
