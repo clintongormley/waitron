@@ -7224,7 +7224,7 @@ export const es: Record<StringKey, string> = {
   "menu_preview.field_diet": "dieta",
   "menu_preview.field_vat": "IVA",
   "menu_preview.field_ordering": "cómo se vende",
-  "menu_preview.field_set_lunch": "menú por precio fijo",
+  "menu_preview.field_set_lunch": "comida a precio fijo",
   "menu_preview.field_variants": "variantes",
   "menu_preview.field_extras": "extras",
   "menu_preview.field_options": "opciones",
