@@ -162,8 +162,15 @@ it("join approval refuses a zone the profile's pass screen does not offer with k
     { db: suite.db, cfg: venue.cfg, pairingMode, deviceAddress: "https://waitron.local" },
     () => {},
   );
-  const [offered, other] = [await seedZone(suite.db, { name: "Terrace" }), await seedZone(suite.db, { name: "Bar" })];
-  const [profile] = await seedDeviceProfiles(suite.db, { name: "Pass KDS", formFactor: "kds", capabilities: [] });
+  const [offered, other] = [
+    await seedZone(suite.db, { name: "Terrace" }),
+    await seedZone(suite.db, { name: "Bar" }),
+  ];
+  const [profile] = await seedDeviceProfiles(suite.db, {
+    name: "Pass KDS",
+    formFactor: "kds",
+    capabilities: [],
+  });
   await withTransaction(suite.db, (tx) =>
     VENUE_SERVICE.setProfileKitchenScreens(tx, profile!.id, {
       pass: { stationIds: null, zoneIds: [offered!.id] },

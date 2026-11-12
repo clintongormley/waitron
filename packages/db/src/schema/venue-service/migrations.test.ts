@@ -19,7 +19,13 @@ import {
 import { randomUUID } from "node:crypto";
 import type { Database } from "../../index.js";
 import { useVenueDb } from "../../testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles, seedTenant, seedVenue, seedZone } from "../../testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedTenant,
+  seedVenue,
+  seedZone,
+} from "../../testing/seed.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
