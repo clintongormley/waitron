@@ -16,6 +16,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import type { TillApi } from "../api/client.js";
 import { chooserStyles } from "../widgets/chooser-styles.js";
 import { themeChooser } from "../widgets/theme-chooser.js";
+import "../widgets/about-button.js";
 
 const POLL_MS = 2_000;
 
@@ -188,6 +189,7 @@ export class TillEnrolScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <div class="language-corner">
+        <till-about-button></till-about-button>
         ${themeChooser()}
         <wt-language-chooser
           active=${currentLocale()}

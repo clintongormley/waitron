@@ -5,14 +5,16 @@ export const KITCHEN_HELP_IDLE_MS = 120_000;
 
 export interface HelpIdleOptions {
   applies: () => boolean;
+  /** Runs the clock while it holds, even with help off, for something `onIdle` closes. */
+  held?: () => boolean;
   onIdle?: () => void;
   idleMs?: number;
 }
 
 /**
- * Turns help off after `idleMs` without a `pointerdown` or `keydown` inside the host, while
- * the host is in the page and `applies()` holds. Listens in the capture phase so a child that
- * stops an event still counts.
+ * Turns help off and calls `onIdle` after `idleMs` without a `pointerdown` or `keydown` inside
+ * the host, while the host is in the page, `applies()` holds, and help is on or `held()` holds.
+ * Listens in the capture phase so a child that stops an event still counts.
  * A host update is not a touch: it starts a clock that is not running, never restarts one.
  */
 export class HelpIdleController implements ReactiveController {
@@ -53,7 +55,8 @@ export class HelpIdleController implements ReactiveController {
 
   #check(): void {
     // An update queued before the host left the page still runs `hostUpdated` after it left.
-    if (!this.#host.isConnected || !currentHelpMode() || !this.#options.applies()) this.#stop();
+    const wanted = currentHelpMode() || this.#options.held?.() === true;
+    if (!this.#host.isConnected || !wanted || !this.#options.applies()) this.#stop();
     else if (this.#timer === undefined) this.#start();
   }
 

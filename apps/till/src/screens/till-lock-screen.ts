@@ -16,6 +16,7 @@ import type { StringKey } from "../i18n/strings.js";
 import "../widgets/numeric-pad.js";
 import { chooserStyles } from "../widgets/chooser-styles.js";
 import { themeChooser } from "../widgets/theme-chooser.js";
+import "../widgets/about-button.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { ServerStatus } from "../api/server-router.js";
 
@@ -336,6 +337,7 @@ export class TillLockScreen extends LitElement {
   override render() {
     return html`
       <div class="language-corner">
+        <till-about-button></till-about-button>
         ${themeChooser()}
         <wt-language-chooser
           active=${currentLocale()}

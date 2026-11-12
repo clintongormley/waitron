@@ -246,7 +246,7 @@ describe("till-shell's menu badges", () => {
     await userEvent.keyboard("{Tab}");
     expect(deepActiveElement()).toBe(badgeButton(settings));
     await userEvent.keyboard("{Tab}");
-    expect(deepActiveElement()).toBe(inner(option(more, t("shell.logout"))));
+    expect(deepActiveElement()).toBe(inner(option(more, t("about.title"))));
   });
 
   it("with help off there is no badge and no extra Tab stop", async () => {
@@ -258,7 +258,7 @@ describe("till-shell's menu badges", () => {
     const settings = option(more, t("device_zones.settings"));
     inner(settings).focus();
     await userEvent.keyboard("{Tab}");
-    expect(deepActiveElement()).toBe(inner(option(more, t("shell.logout"))));
+    expect(deepActiveElement()).toBe(inner(option(more, t("about.title"))));
   });
 
   it("turning help on from the bar while More is open shows the badges at once", async () => {

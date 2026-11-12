@@ -86,6 +86,17 @@ describe("the guide sheet", () => {
     expect(close.textContent!.trim()).toBe(helpEn["help.guide_close"]);
   });
 
+  it("a heading replaces the guide title in the heading, the frame's title and the modal's name", async () => {
+    setLocale("en");
+    const { el: sheet } = await mountWidget<TillGuideSheet>("till-guide-sheet", {
+      href: HREF,
+      heading: "About Waitron · 1.2.3",
+    });
+    await modalOf(sheet).updateComplete;
+    expect(titlesOf(sheet)).toEqual(["About Waitron · 1.2.3", "About Waitron · 1.2.3"]);
+    expect(frameOf(sheet).title).toBe("About Waitron · 1.2.3");
+  });
+
   it("is closed while it has no guide to show", async () => {
     const sheet = await mountSheet("");
     expect(modalOf(sheet).open).toBe(false);

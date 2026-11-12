@@ -44,6 +44,8 @@ export class TillGuideSheet extends LitElement {
 
   @property() href = "";
 
+  @property() heading = "";
+
   @query("wt-modal") private modal!: WtModal;
 
   #pageListeners?: AbortController;
@@ -86,7 +88,7 @@ export class TillGuideSheet extends LitElement {
   }
 
   override render() {
-    const title = helpText("help.guide_title");
+    const title = this.heading === "" ? helpText("help.guide_title") : this.heading;
     return html`<wt-modal
       ${trackDialog()}
       size="full"
