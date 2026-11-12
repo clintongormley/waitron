@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
-import { ticketItems, workingOrderLines } from "@waitron/db";
+import { describe, expect, it, vi } from "vitest";
+import { billPaymentRefunds, billPayments, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -15,6 +15,7 @@ import { createOpenOrder } from "./working-order.js";
 import { fireAll } from "./testing/serve-line.js";
 import {
   inTx,
+  paymentRows,
   provisionBillVenue,
   seatedWith,
   send,
@@ -465,22 +466,24 @@ describe("kitchen work that changes no amount carries on while the bill's card m
     );
     expect(asked.json).toMatchObject({ refund: { state: "pending" } });
   }
+  async function refundStates(billId: string): Promise<string[]> {
+    const rows = await venue.db
+      .select({ state: billPaymentRefunds.state })
+      .from(billPaymentRefunds)
+      .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+      .where(eq(billPayments.workingOrderId, billId));
+    return rows.map((row) => row.state);
+  }
   const codeOf = (error: unknown) => (error as { code?: string }).code ?? String(error);
 
   it("moves a dish to another station while a card refund waits on its bill", async () => {
-    const control = await fixture();
-    const moved = await move(control, undefined, { kitchen: true }).then(
-      () => "moved",
-      (error) => codeOf(error),
-    );
     const p = await fixture();
     await pendingRefundOn(p.tabId);
-    const outcome = await move(p, undefined, { kitchen: true }).then(
-      () => "moved",
-      (error) => codeOf(error),
-    );
-    expect(moved).toBe("moved");
-    expect(outcome).toBe("moved");
+    const observation = await edit(p.tabId);
+    const result = await move(p, undefined, { kitchen: true });
+    expect(result.moved).toEqual([{ workingOrderLineId: p.lineId, fromStationId: bar }]);
+    await assertMoved(p, observation);
+    expect(await refundStates(p.tabId)).toEqual(["pending"]);
   });
 
   it("closes a station and sends its dishes on while another bill has a card refund waiting", async () => {
@@ -489,9 +492,8 @@ describe("kitchen work that changes no amount carries on while the bill's card m
     await move(p, undefined, { kitchen: true });
     await move(q, undefined, { kitchen: true });
     await pendingRefundOn(q.tabId);
-    let outcome = "closed";
     try {
-      await inTx(venue, (tx) =>
+      const outcome = await inTx(venue, (tx) =>
         withStationDishes(
           tx,
           venue.cfg,
@@ -501,21 +503,21 @@ describe("kitchen work that changes no amount carries on while the bill's card m
           (at) => VENUE_SERVICE.closeStationForToday(tx, grill, bar, at),
           { deviceId: venue.deviceId, personId: venue.operatorId },
         ),
-      );
-    } catch (error) {
-      outcome = codeOf(error);
-    }
-    const states = await inTx(venue, (tx) => VENUE_SERVICE.stationStates(tx, new Date()));
-    const [item] = await venue.db
-      .select()
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderLineId, p.lineId));
-    const grillOpen = states.get(grill)!.open;
-    if (!grillOpen)
+      ).then(() => "closed", codeOf);
+      expect(outcome).toBe("closed");
+      for (const bill of [p, q]) {
+        const [item] = await venue.db
+          .select()
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderLineId, bill.lineId));
+        expect(item!.stationId).toBe(bar);
+      }
+      const states = await inTx(venue, (tx) => VENUE_SERVICE.stationStates(tx, new Date()));
+      expect(states.get(grill)!.open).toBe(false);
+      expect(await refundStates(q.tabId)).toEqual(["pending"]);
+    } finally {
       await inTx(venue, (tx) => VENUE_SERVICE.openStationForToday(tx, grill, new Date()));
-    expect(outcome).toBe("closed");
-    expect(grillOpen).toBe(false);
-    expect(item!.stationId).toBe(bar);
+    }
   });
 
   it("fires a held course while a card refund waits on its bill", async () => {
@@ -541,7 +543,12 @@ describe("kitchen work that changes no amount carries on while the bill's card m
       `/api/parties/${p.partyId}/groups/${group.id}/fire`,
       { submissionId: randomUUID(), expectedPartyRevision: groups.json.revision },
     );
-    expect(fired.status).toBe(200);
+    expect(fired.status, JSON.stringify(fired.json)).toBe(200);
+    const after = await send(venue.app, venue.cookie, "GET", `/api/parties/${p.partyId}/groups`);
+    expect(
+      (after.json.groups as { id: string; state: string }[]).find((entry) => entry.id === group.id),
+    ).toMatchObject({ state: "fired" });
+    expect(await refundStates(p.tabId)).toEqual(["pending"]);
   });
 
   it("moves a dish to another station while a card is at the reader for part of its bill", async () => {
@@ -549,15 +556,17 @@ describe("kitchen work that changes no amount carries on while the bill's card m
     const release = venue.card.holdNextCollect();
     const calls = venue.card.collectCalls.length;
     const paying = payCard(p.tabId, "5.00");
-    for (let i = 0; i < 200 && venue.card.collectCalls.length === calls; i++)
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    const outcome = await move(p, undefined, { kitchen: true }).then(
-      () => "moved",
-      (error) => codeOf(error),
-    );
-    release();
+    try {
+      await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
+      const observation = await edit(p.tabId);
+      const result = await move(p, undefined, { kitchen: true });
+      expect(result.moved).toEqual([{ workingOrderLineId: p.lineId, fromStationId: bar }]);
+      await assertMoved(p, observation);
+      expect((await paymentRows(venue, p.tabId)).map((row) => row.state)).toEqual(["pending"]);
+    } finally {
+      release();
+    }
     const paid = await paying;
-    expect(outcome).toBe("moved");
     expect(paid.status).toBe(200);
   });
 });

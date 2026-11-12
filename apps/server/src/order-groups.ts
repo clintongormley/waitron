@@ -1306,6 +1306,14 @@ export async function moveLinesToGroup(
       for (const billId of billIds) {
         await requireBillOfParty(tx, partyId, billId);
       }
+      // A partial move splits the line, rewriting the rows that carry its price.
+      const splitting = new Set(
+        moves.flatMap(({ lineId, quantity }) => {
+          const line = lineById.get(lineId)!;
+          return isWholeLine(quantity, line.quantity) ? [] : [line.workingOrderId];
+        }),
+      );
+      if (splitting.size > 0) await refusePaymentInFlight(tx, [...splitting]);
       await requireBillEditors(tx, billIds, args.operatorId, expectedEdits);
       const printed = await printedHeldGroups(tx, [
         ...lines.map((line) => line.groupId!),
@@ -1338,13 +1346,6 @@ export async function moveLinesToGroup(
           splits.push({ lineNo: line.lineNo, quantity });
         }
       }
-      // A partial move splits the line, rewriting the rows that carry its price.
-      const splitting = [...splitsByBill].filter(([, splits]) => splits.length > 0);
-      if (splitting.length > 0)
-        await refusePaymentInFlight(
-          tx,
-          splitting.map(([billId]) => billId),
-        );
       const splitIds = new Map<string, string>();
       for (const [billId, splits] of splitsByBill) {
         if (splits.length === 0) continue;
