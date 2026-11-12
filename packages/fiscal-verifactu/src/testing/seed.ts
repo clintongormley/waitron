@@ -126,9 +126,9 @@ export async function seedNode(db: Database, label = "A"): Promise<SeededNode> {
     await ensureTaxpayer(tx, nif);
     return addNode(tx, nif, label);
   });
-  const { locationId, ...ids } = seeded;
+  const { nodeId, seriesId, sifId } = seeded;
   const { deviceId } = await seedDevice(db, {});
-  return { ...ids, deviceId };
+  return { nodeId, seriesId, sifId, deviceId };
 }
 
 /**
@@ -148,9 +148,9 @@ export async function addDeviceToNode(db: Database, seed: SeededNode): Promise<S
       sifId: seed.sifId,
     };
   });
-  const { locationId, ...ids } = added;
+  const { nodeId, seriesId, sifId } = added;
   const { deviceId } = await seedDevice(db, {});
-  return { ...ids, deviceId };
+  return { nodeId, seriesId, sifId, deviceId };
 }
 
 async function addBareNode(tx: Transaction, label: string): Promise<NodeId> {
