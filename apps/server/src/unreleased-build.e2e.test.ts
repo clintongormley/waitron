@@ -78,6 +78,7 @@ describe("a bundle stamped as no release", () => {
     const agent = await boxSecrets(f.stateDir);
     const recovering = await childProcess(built(ENTRY), env);
     try {
+      let text = "";
       await expect
         .poll(
           async () => {
@@ -85,14 +86,12 @@ describe("a bundle stamped as no release", () => {
               dispatcher: agent,
               signal: AbortSignal.timeout(1000),
             } as RequestInit);
-            return await response.text();
+            text = await response.text();
+            return text;
           },
           { timeout: 45_000 },
         )
         .toContain("This box is running a test build.");
-      const text = await (
-        await fetch(`https://127.0.0.1:${recovering.port}/`, { dispatcher: agent } as RequestInit)
-      ).text();
       expect(text).toContain("Install a release.");
     } finally {
       await recovering.stop();

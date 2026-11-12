@@ -301,7 +301,7 @@ jobs:
           cat about.json
           echo
           [ "$code" = "200" ]
-          grep -q '"release":null' about.json
+          jq -e 'has("release") and .release == null' about.json
 
       - name: check-release refuses the image's bundle, being no release
         run: |

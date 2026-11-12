@@ -143,6 +143,7 @@ describe("check-release on a release bundle", { timeout: CHILD_LIMIT_MS + 10_000
     expect(result, result.stdout + result.stderr).toMatchObject({ code: 0, signal: null });
     expect(result.stdout).toContain("release: the bundle and the declaration folder match");
     expect(result.stderr).toBe("");
+    expect(await readdir(root)).toEqual([]);
   });
 
   it("exits 1 for another version, naming the bundle's and the folder's", async () => {
@@ -150,5 +151,6 @@ describe("check-release on a release bundle", { timeout: CHILD_LIMIT_MS + 10_000
     expect(result, result.stdout + result.stderr).toMatchObject({ code: 1, signal: null });
     expect(result.stderr).toContain(`bundle version ${TEST_RELEASE.version}`);
     expect(result.stderr).toContain(`declaration folder version ${TEST_RELEASE.version}`);
+    expect(await readdir(root)).toEqual([]);
   });
 });

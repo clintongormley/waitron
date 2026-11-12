@@ -322,7 +322,7 @@ describe("the release's declaration folder", () => {
 
   it("is absent from the image image-smoke builds, whose bundle check-release refuses", () => {
     expect(IMAGE_SMOKE).toContain("https://127.0.0.1/legal/declaration");
-    expect(IMAGE_SMOKE).toContain('"release":null');
+    expect(IMAGE_SMOKE).toContain(`jq -e 'has("release") and .release == null' about.json`);
     expect(IMAGE_SMOKE).toContain("node /app/server.js check-release 0.0.0");
     expect(IMAGE_SMOKE).toContain("bundle version none");
   });

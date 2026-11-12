@@ -52,7 +52,12 @@ export function useBuiltServer(
       },
     );
     if (options.declaration !== undefined) {
-      await writeDeclarationFolder(join(target, "declaration"), options.declaration);
+      await writeDeclarationFolder(
+        join(target, "declaration"),
+        options.declaration,
+        undefined,
+        options.declaration.version,
+      );
     }
   });
   afterAll(async () => {
