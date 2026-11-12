@@ -12,7 +12,13 @@ import {
   reissueServerLeaf,
   type SelfSignedMaterial,
 } from "./self-signed-cert.js";
-import { startStoreListener } from "./spare-pipe.js";
+import { startStoreListener, type StoreListenerDeps } from "./spare-pipe.js";
+
+vi.mock("node:tls", async (original) => {
+  const actual = await original<typeof import("node:tls")>();
+  return { ...actual, createServer: vi.fn(actual.createServer) };
+});
+const { createServer: createTlsServer } = await import("node:tls");
 
 const MAIN_NAME = "box-7f3a.waitron.local";
 const SPARE_NAME = "box-5c21.waitron.local";
@@ -61,7 +67,7 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-async function listen(): Promise<number> {
+async function listen(overrides: Partial<StoreListenerDeps> = {}): Promise<number> {
   listener = await startStoreListener({
     port: 0,
     host: "127.0.0.1",
@@ -71,9 +77,12 @@ async function listen(): Promise<number> {
     peerHostname: MAIN_NAME,
     upstreamPort,
     log: (level, event, fields) => logged.push({ level, event, ...(fields ? { fields } : {}) }),
+    ...overrides,
   });
   return listener.port;
 }
+
+const refusals = () => logged.filter((line) => line.event === "spare.store_client_refused");
 
 function clientFor(authority: SelfSignedMaterial, name: string) {
   const { clientCertPem, clientKeyPem } = issueClientCert({
@@ -117,7 +126,7 @@ async function expectRefused(identity: { cert?: string; key?: string }, reason: 
     expect(logged).toContainEqual({
       level: "warn",
       event: "spare.store_client_refused",
-      fields: { reason },
+      fields: { reason, refused: 1 },
     }),
   );
   expect(seen).toEqual([]);
@@ -130,7 +139,13 @@ describe("startStoreListener", () => {
     expect(await get(port, clientFor(venue, MAIN_NAME))).toBe("200 stored");
 
     expect(seen.map((headers) => headers.host)).toEqual([STORE_HOST]);
-    expect(logged).toEqual([]);
+    expect(logged).toEqual([
+      {
+        level: "info",
+        event: "server.listening",
+        fields: { listener: "spare_store", port },
+      },
+    ]);
   });
 
   it("a client with no certificate is refused and logged", async () => {
@@ -184,5 +199,56 @@ describe("startStoreListener", () => {
     listener = undefined;
 
     expect(await get(port, clientFor(venue, MAIN_NAME))).toBe("ECONNREFUSED");
+  });
+  it("a port already taken rejects as the listener's bind failure", async () => {
+    const port = await listen();
+    const first = listener;
+    listener = undefined;
+    try {
+      await expect(listen({ port })).rejects.toMatchObject({
+        code: "server.listen_failed",
+        params: { listener: "spare_store", port, code: "EADDRINUSE" },
+      });
+    } finally {
+      await first!.close();
+    }
+  });
+
+  it("an error after it is listening is logged, not thrown, and it keeps serving", async () => {
+    const port = await listen();
+    const server = vi.mocked(createTlsServer).mock.results.at(-1)!
+      .value as import("node:tls").Server;
+
+    server.emit("error", Object.assign(new Error("accept failed"), { code: "EMFILE" }));
+
+    expect(logged).toContainEqual({
+      level: "warn",
+      event: "server.listen_failed",
+      fields: { listener: "spare_store", port, code: "EMFILE" },
+    });
+    expect(await get(port, clientFor(venue, MAIN_NAME))).toBe("200 stored");
+  });
+
+  it("logs refusals at most once a minute for each reason, with how many there were since", async () => {
+    let at = 1_000_000;
+    const port = await listen({ now: () => at });
+    const stranger = clientFor(venue, "box-9e0d.waitron.local");
+
+    for (let i = 0; i < 3; i++) expect(await get(port, stranger)).not.toBe("200 stored");
+    expect(await get(port, {})).not.toBe("200 stored");
+    await vi.waitFor(() => expect(refusals()).toHaveLength(2));
+    expect(refusals().map((line) => line.fields)).toEqual([
+      { reason: "name_mismatch", refused: 1 },
+      { reason: "no_certificate", refused: 1 },
+    ]);
+
+    at += 59_999;
+    expect(await get(port, stranger)).not.toBe("200 stored");
+    at += 1;
+    expect(await get(port, stranger)).not.toBe("200 stored");
+
+    await vi.waitFor(() => expect(refusals()).toHaveLength(3));
+    expect(refusals()[2]!.fields).toEqual({ reason: "name_mismatch", refused: 4 });
+    expect(seen).toEqual([]);
   });
 });

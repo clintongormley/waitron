@@ -888,7 +888,9 @@ The ones worth grepping for:
 - **`server.listen_failed`** (`error`) — `{ port, code }`. The listener failed to bind — `EADDRINUSE`
   (the port is already taken — the common case for a fixed default port) or `EACCES` (a privileged
   port, no permission) are the usual `code` values. The process exits `1` immediately after this
-  line; nothing retries a bind failure in the background.
+  line; nothing retries a bind failure in the background. A spare's store listener carries
+  `listener: spare_store`: its bind failure fails the start, and an error after it is listening is
+  logged at `warn` while it keeps serving.
 - **`server.stopped`** / **`loop.stopped`** (`info`) — graceful shutdown completed (SIGTERM/SIGINT).
 
 Never prose, and never a secret: every credential-adjacent error reports a structured code and — at

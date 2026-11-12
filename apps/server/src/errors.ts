@@ -338,9 +338,10 @@ declare module "@waitron/shared" {
     "node.enrol_unavailable": Record<string, never>;
     /**
      * The HTTP listener's socket failed to bind. `code` is the raw OS error code (`EADDRINUSE`,
-     * `EACCES`) — never the `Error` itself, whose `.message` can embed the bind address.
+     * `EACCES`) — never the `Error` itself, whose `.message` can embed the bind address. `listener`
+     * names any listener but the main one.
      */
-    "server.listen_failed": { port: number; code: string };
+    "server.listen_failed": { port: number; code: string; listener?: string };
     /**
      * `StartedServer.close()` rejected during a signal-initiated shutdown. `errorCode` is `codeOf`'s
      * structured classification, never the caught value's `.message`.

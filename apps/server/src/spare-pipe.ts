@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { connect, type AddressInfo, type Socket } from "node:net";
 import { createServer, type TLSSocket } from "node:tls";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
 import type { Logger } from "./logger.js";
+
+const LISTENER = "spare_store";
+const REFUSAL_LOG_INTERVAL_MS = 60_000;
 
 export interface StoreListenerDeps {
   port: number;
@@ -15,11 +20,32 @@ export interface StoreListenerDeps {
   /** Where versitygw listens on 127.0.0.1. */
   upstreamPort: number;
   log: Logger;
+  /** Milliseconds, for spacing the refusal lines; `Date.now` when absent. */
+  now?: () => number;
 }
 
 export interface StoreListener {
   port: number;
   close(): Promise<void>;
+}
+
+/**
+ * Logs a refusal at most once per reason per {@link REFUSAL_LOG_INTERVAL_MS}, each line carrying how
+ * many were refused for that reason since the last, so a scanner on the venue's network cannot fill
+ * the log.
+ */
+function refusalLog(log: Logger, now: () => number): (reason: string) => void {
+  const last = new Map<string, { at: number; refused: number }>();
+  return (reason) => {
+    const at = now();
+    const entry = last.get(reason);
+    if (entry !== undefined && at - entry.at < REFUSAL_LOG_INTERVAL_MS) {
+      entry.refused += 1;
+      return;
+    }
+    log("warn", "spare.store_client_refused", { reason, refused: (entry?.refused ?? 0) + 1 });
+    last.set(reason, { at, refused: 0 });
+  };
 }
 
 /** Why `socket`'s client is not the paired main box, or undefined when it is. */
@@ -53,10 +79,11 @@ export async function startStoreListener(deps: StoreListenerDeps): Promise<Store
     socket.on("close", () => open.delete(socket));
   };
   server.on("connection", track);
+  const refused = refusalLog(deps.log, deps.now ?? Date.now);
   server.on("secureConnection", (socket) => {
     const reason = refusal(socket, deps.peerHostname);
     if (reason !== undefined) {
-      deps.log("warn", "spare.store_client_refused", { reason });
+      refused(reason);
       socket.destroy();
       return;
     }
@@ -66,15 +93,29 @@ export async function startStoreListener(deps: StoreListenerDeps): Promise<Store
     upstream.on("error", () => socket.destroy());
     socket.pipe(upstream).pipe(socket);
   });
+  const code = (error: NodeJS.ErrnoException) => error.code ?? "unknown";
   await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
+    const bindFailed = (error: NodeJS.ErrnoException) =>
+      reject(
+        new AppError("server.listen_failed", {
+          listener: LISTENER,
+          port: deps.port,
+          code: code(error),
+        }),
+      );
+    server.once("error", bindFailed);
     server.listen(deps.port, deps.host, () => {
-      server.off("error", reject);
+      server.off("error", bindFailed);
       resolve();
     });
   });
+  const port = (server.address() as AddressInfo).port;
+  server.on("error", (error: NodeJS.ErrnoException) =>
+    deps.log("warn", "server.listen_failed", { listener: LISTENER, port, code: code(error) }),
+  );
+  deps.log("info", "server.listening", { listener: LISTENER, port });
   return {
-    port: (server.address() as AddressInfo).port,
+    port,
     close: () =>
       new Promise<void>((resolve) => {
         server.close(() => resolve());
