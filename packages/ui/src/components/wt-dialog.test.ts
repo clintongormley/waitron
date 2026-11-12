@@ -679,6 +679,25 @@ test.each([
   },
 );
 
+test("keeps hinted fields inside the body without scrolling the native dialog", async () => {
+  const { el, dialog, body, cancel, save } = await openAtPhoneSize(
+    '<div style="height: 1800px">Long order</div><wt-input name="note" label="Note" hint="Printed on the receipt"></wt-input>',
+  );
+  const field = el.querySelector("wt-input")!;
+  await field.updateComplete;
+  await frame();
+  expectFooterInView(dialog, cancel, save);
+  body.scrollTop = 0;
+  const footer = el.shadowRoot!.querySelector(".footer")!;
+  const before = footer.getBoundingClientRect().toJSON();
+  field.shadowRoot!.querySelector(".hint")!.scrollIntoView({ block: "start" });
+  await frame();
+  expect(dialog.scrollTop).toBe(0);
+  expect(footer.getBoundingClientRect().toJSON()).toEqual(before);
+  expect(body.scrollTop).toBeGreaterThan(0);
+  expectFooterInView(dialog, cancel, save);
+});
+
 test("paints a long dialog's surface and footer divider from their tokens", async () => {
   const { el, dialog } = await openAtPhoneSize('<div style="height: 1800px">Long order</div>');
   host.style.setProperty("--wt-color-surface-raised", "rgb(30, 31, 32)");

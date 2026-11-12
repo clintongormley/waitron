@@ -1031,18 +1031,3 @@ with a ruler and scanned with a phone; the same invoice as Apple Raster at 600 d
 from the Printers tab; and what Waitron reports with the tray empty and when the printer is
 switched off mid-job. The owner saw the last two once on 2026-10-12 with a local change, before
 A231q changed how a job the printer is holding is reported. Left open by A231q.
-
-## A wt-dialog holding hinted fields is taller inside than it shows
-
-- **A `wt-dialog` (and so `wt-modal`) holding hinted fields is taller inside than it shows (found
-  by A662; predates it).** Each `wt-input`/`wt-textarea` hint (`p.hint`, visually hidden) is
-  positioned absolutely, and the dialog's scrolling `.body` is not its positioning parent, so the
-  hint counts towards the native `<dialog>`'s scroll height. Measured 2026-10-16 in headless
-  Chromium at 1280 × 900: the Edit receipt dialog 1078/864 on main and 1017/850 on the branch; a
-  plain dialog of 16 hinted fields 953/864, the same fields without hints none. (2026-10-18: A756
-  retired the Edit receipt dialog; its fields are now in the department dialog's Receipts tab,
-  which is where to measure again.) A
-  `scrollIntoView({ block: "start" })` at 390 wide lifted the footer and left a gap under it; Tab,
-  the mouse wheel, End/PageDown and a validation error never did. `.body { position: relative }`
-  removed the excess in the probe. Untested: a screen reader's cursor or find-in-page landing on a
-  hint.
