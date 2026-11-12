@@ -143,8 +143,11 @@ it.each([
   [{ Running: false, Health: { Status: "starting" } }, "stopped"],
 ])("refuses the existing agent healthcheck's %s outcome before the sale", async (state, reason) => {
   const f = await fixture(false, state);
-  await expect(
-    checkUpgradeCandidate({ boxDirectory: f.root, directory: f.directory, run: f.run }),
-  ).rejects.toThrow(`upgrade agent ${reason}`);
+  const result = await checkUpgradeCandidate({
+    boxDirectory: f.root,
+    directory: f.directory,
+    run: f.run,
+  }).catch((error) => error);
   expect(f.calls.some((args) => args.includes("sale"))).toBe(false);
+  expect(result).toMatchObject({ message: `upgrade agent ${reason}` });
 });

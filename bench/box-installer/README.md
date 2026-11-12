@@ -161,3 +161,19 @@ docker rm waitron-b3-rehearsal
 docker image rm waitron-b3-tools:rehearsal "$app" waitron-b3-agent:rehearsal
 rm -rf "$inputs"
 ```
+
+## Check a manual upgrade and interrupted recovery
+
+Supply a synthetic preproduction state archive as `B3_UPGRADE_STATE`, with its producer
+environment in the adjacent `<archive>.json`. The fixture must contain one fiscal sale
+and one open order with a line; the rig checks those facts and compares their rows after
+each operation. Build the fixture with the same migration set as the image.
+
+After building the recipe above, run `upgrade-manual` or `upgrade-power-cut` with
+`B3_INSTALLER_IMAGE=/work/output/waitron-install-dev.img` and
+`B3_UPGRADE_STATE=/inputs/source-state.tar`. Use a separate `--run-dir` for each case.
+The manual case requires a successful disposable-copy sale, then exercises Restore and
+Keep after an owned port blocker refuses readiness. The power-cut case kills QEMU during
+the initial copy and during restore, then checks the held boot and repeated restore.
+The guest needs real internet time synchronisation; no clock confirmation is fabricated.
+These current-build synthetic checks create no qualified historical release in the index.

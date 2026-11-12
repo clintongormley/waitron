@@ -1,8 +1,8 @@
 # Running a Waitron node
 
-A node is a few containers: the Waitron app, a local mail capture, and the print agent. Everything
-the node keeps lives in the named Docker volumes below, so `docker volume` is the whole of a box's
-life. Back those up and you have backed up the box.
+A node runs the Waitron app, a local mail capture and the print agent. Back up the named
+Docker volumes below. During a held upgrade, also retain `/opt/waitron.upgrades` and
+`/opt/waitron-host`: they hold the stopped copy and the runtime that can restore it.
 
 **The venue's own database is a folder inside the `state` volume.** The app opens
 `/var/lib/waitron/state/venue/`, which holds `venue.db`, `node.db`, their write-ahead sidecars,
@@ -69,7 +69,7 @@ reports its own commit below. Finally it pulls the box's images, the two Waitron
 mail catcher from Docker Hub, stopping with an error if any of them fails to download, and starts the
 containers.
 
-Before any of that, unless the copy you ran is inside a git checkout, `install` fetches
+For a fresh installation or `--reset install`, unless the copy you ran is inside a git checkout, `install` fetches
 `deploy/waitron.sh` itself from the ref you are installing and compares it with the copy you ran.
 When there is a `.git` in the copy's folder or a folder above it, `install` says so on stderr and
 uses that copy as it is. If the fetched script differs, `install` moves it into place over the copy you ran, keeping that
@@ -199,6 +199,9 @@ it is rather than fetching the ref's `waitron.sh`:
 sudo deploy/waitron.sh install
 ```
 
+An existing box keeps the installer you ran throughout its checked upgrade. Download the
+current installer before upgrading a box that still has an older copy.
+
 Set `WAITRON_DIR` to install somewhere other than `/opt/waitron` (that is how the script is
 exercised on a developer machine without touching `/opt`).
 
@@ -222,6 +225,24 @@ it. It does not offer the box's fallback CA, which cannot certify that connectio
 The optional [staff tunnel runtime](tunnel/README.md) is a separate container. It is not started
 by the default installation; automatic connection and Settings wiring remain open in A951-S.
 
+## Checked manual upgrades
+
+Use the current `waitron.sh` on a Linux host running systemd. For an existing single-box
+venue, `sudo bash waitron.sh install <ref>` pins the old images, stops the writers and keeps
+a copy of their data and configuration. It checks a disposable copy, including a real primary
+cash sale, before reopening the candidate. The test sale never reaches the live venue.
+
+If a check fails, the box stays stopped. Read `sudo bash waitron.sh status`, then choose
+`sudo bash waitron.sh restore` to return to the stopped copy, or `sudo bash waitron.sh keep`
+to start the candidate despite the failed checks. Keep still uses the ordinary boot guards.
+An interrupted restore starts again from its intact copy. Install and reset refuse while
+an attempt is held. On an unfinished setup, Keep continues setup; choose Restore before
+using `--reset install` instead.
+
+The USB recipe installs the script at `/opt/waitron-host/waitron.sh`. Status, Restore and
+Keep use the retained host runtime and make no bootstrap downloads. Automatic updates and
+the advisory online migration trial remain separate work.
+
 ## Updating and operating
 
 Run `sudo bash waitron.sh status` to see the commit, requested ref, local build time and GitHub
@@ -235,7 +256,7 @@ to the other service and the setup links.
 
 ```bash
 cd /opt/waitron
-docker compose pull && docker compose up -d --remove-orphans   # updates to the published :main, unless a branch or release install pinned an image in .env (run `waitron.sh install` with no ref to return to :main)
+sudo bash waitron.sh install                  # checked upgrade to the published main image
 docker compose ps                             # all the services, with health
 docker compose logs -f app                    # the server's JSON lines
 ```
@@ -246,10 +267,12 @@ runs again, and until then Waitron cannot set its clock or see whether it keeps 
 every start a box that files invoices takes no payment until two tills or handhelds that are
 switched on and connected agree with its clock or someone confirms it.
 
-The services are all `restart: unless-stopped`, so the box comes back on its own after a power cut and
-after the app's own requested restart at the end of the setup wizard.
+The source Compose template uses Docker restart policies. The installed USB recipe and a
+checked manual upgrade use `waitron-app.service` to reopen the group after a container exits.
+`waitron-upgrade-recovery.service` runs before Docker after a restart; a held manual attempt
+keeps the app stopped for your choice.
 
-After an `install` (or `update`, or `--reset install`) whose box comes up healthy, `install`
+After a fresh installation or `--reset install` whose box comes up healthy, `install`
 deletes each image the `app` and `print-agent` containers ran before it that Docker still holds and
 no Waitron container runs now, with `docker image rm` (never forced), and prints one line for
 each. A deletion Docker refuses is reported with the command to run later, and does not stop the

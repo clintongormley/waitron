@@ -5098,6 +5098,8 @@ control still sends before the wait. Run them with
 
 ## Boot, the contained upgrade data checker and the bucket rebuild carry an ahead-of-image check
 
+**2026-11-12, manual activation:** [checked manual upgrades](../../deploy/README.md#checked-manual-upgrades) now invoke the contained data checker and a separate copy-sale process through the retained host runtime. The 3a note below records the earlier dormant slice.
+
 **2026-11-12 (A950 3a):** the dormant upgrade data checker is a third caller. It shares
 `upgrade-schema-check.ts`'s preflight with the ordinary entry, which re-exports it. It checks the
 venue before applying packaged migrations. No installed command invokes that library yet;
@@ -5993,8 +5995,10 @@ so an entry at or below a recorded watermark never runs and drizzle raises nothi
 `scripts/journal-monotonic.test.ts`, which bites only on a set with more than one entry. A drizzle
 bump starts with `grep -rn 'dialect.js'`.
 
-**2026-11-12 update:** the historical boot/bucket-only statement below now has the dormant A950
+**2026-11-12 update:** the historical boot/bucket-only statement below now has the A950
 upgrade data checker as a third caller; see the current ahead-of-image section above.
+The current [manual Restore/Keep path](../../deploy/README.md#checked-manual-upgrades) also
+supersedes the earlier one-way-door description below.
 
 ### The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door.
 

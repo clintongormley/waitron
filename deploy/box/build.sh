@@ -47,7 +47,11 @@ for module in cli host transaction copy candidate restart; do
   install -D -m 0644 "$repo/scripts/box/upgrades/$module.mjs" "$root/opt/waitron-host/box/upgrades/$module.mjs"
 done
 install -D -m 0755 "$repo/scripts/box/upgrades/bootstrap.sh" "$root/opt/waitron-host/box/upgrades/bootstrap.sh"
-chroot "$root" bash /opt/waitron-host/box/upgrades/bootstrap.sh /opt/waitron-host /opt/waitron
+(
+  trap 'rm -f "$root/etc/resolv.conf"' EXIT
+  cp /etc/resolv.conf "$root/etc/resolv.conf"
+  chroot "$root" bash /opt/waitron-host/box/upgrades/bootstrap.sh /opt/waitron-host /opt/waitron
+)
 install -m 0644 "$root/opt/waitron-host/node-v26.7.0/LICENSE" "$root/app/third-party/node-host-LICENSE"
 install -d -m 0755 "$root/opt/waitron-host/box"
 for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host network-host host-protocol wifi-record wifi-boot-copy; do

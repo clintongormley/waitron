@@ -108,3 +108,8 @@ Prefer the registry image's revision read without pulling. If no label or the wh
 driver is absent there, use the resolved Git SHA for every driver file and log the
 fallback. Candidate Compose still follows its image revision. The installed managed
 Compose omits restart policies; the source template retains them for unmanaged use.
+
+**12 November, watcher 22:59/23:02 (Lane F questions.md):** reuse the agent's existing
+Docker healthcheck, then read status once; remove the separate 90-second status wait.
+Linux tests, docs and review fixes may reach about 2,600 changed lines; the ten-hour
+working budget stays. These are watcher clearances, not owner design approval.
