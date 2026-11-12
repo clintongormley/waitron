@@ -7,8 +7,11 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./deferred-close-dialog.js";
 import type { DeferredCloseBill, TillDeferredCloseDialog } from "./deferred-close-dialog.js";
 
-afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es"));
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en");
+});
 
 const SIMPLIFIED: DeferredCloseBill = {
   label: "Table 4 · Bill 2",

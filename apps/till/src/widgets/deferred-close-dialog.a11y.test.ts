@@ -4,7 +4,10 @@ import { setLocale } from "../i18n/t.js";
 import "./deferred-close-dialog.js";
 import type { TillDeferredCloseDialog } from "./deferred-close-dialog.js";
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en");
+});
 
 const bill = {
   label: "Table 4 · Bill 2",
