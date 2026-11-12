@@ -1,6 +1,6 @@
 # A1516-3: preserve a till-marked sold-out choice on dashboard save
 
-**Proposal.** Separate Sol-high draft, shortened by the driver and corrected after one Claude read. Base 5f81a905f2. Watcher clearance precedes build; no owner approval of these technical details is claimed.
+**Proposal.** Separate Sol-high draft, shortened by the driver and corrected after one Claude read. Base 5f81a905f2. Cleared by the watcher at 2026-11-12 05:01 after the sole Claude272s read and the accepted simplifications; no owner approval of these technical details is claimed.
 
 **Exact ask**, Lane K queue.md A1516-3:
 > the owner's answer (d) to A1516 (2026-11-11 ~22:00, "All four as recommended": fix the bug where a dashboard save puts a sold-out dish back on sale), applied to extras and option choices: an option list opened in the dashboard before a choice was marked sold out on the till, then saved, must not mark it available again. Small; plan in proportion.
