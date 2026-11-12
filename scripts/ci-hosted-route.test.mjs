@@ -89,6 +89,7 @@ describe("queue-pressure routing", () => {
 
   it.each([
     [0, 0, 6, 0, 0, "server"],
+    [0, 1, 6, 0, 0, "hosted"],
     [6, 0, 6, 19, 0, "hosted"],
     [1, 5, 6, 20, 0, "server"],
     [6, 12, 6, 0, 1, "hosted"],
