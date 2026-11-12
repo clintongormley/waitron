@@ -275,11 +275,13 @@ unchanged-database and empty-staging checks remain. This is preproduction format
 with no backward-compatibility implementation.
 
 The till offers **Full invoice**. A saved Spanish recipient can be invoiced through table bill
-payments or an unpaid departure. Email and A4 originals use the existing delivery queue. Direct
-counter cash/manual-card sales (`POST /api/sales`), integrated-card payment (`POST /api/pay`) and
-unissued counter collection still refuse F1 with `sale.full_invoice_unavailable` until A555.
-The shared Full invoice control and automatic recipient prompt are visible at the counter;
-payment still refuses that choice. A555 must complete that path. Placing a ticket-then-pay order saves it without issuing an invoice. The retired invoice-first
+payments or an unpaid departure, and, since #2725, a Counter bill paid through the shared Pay
+window (measured 2026-11-12; see A555 below). Email and A4 originals use the existing delivery
+queue. Direct counter cash/manual-card sales (`POST /api/sales`), integrated-card payment
+(`POST /api/pay`) and unissued counter collection still refuse F1 with
+`sale.full_invoice_unavailable`.
+The shared Full invoice control and automatic recipient prompt are visible at the counter; the
+till saves that choice on the order before the Pay window opens. Placing a ticket-then-pay order saves it without issuing an invoice. The retired invoice-first
 zone setting creates no separate public issuance route. Zero-total F1 counter requests retain
 the same refusal. A saved F1 choice still permits the bill to grow above the simplified ceiling;
 the existing recipient checks and F1 series selection remain in place.
@@ -303,8 +305,11 @@ choice before payment, in A739's shared payment window. Delivery failure keeps p
 invoice delivery retries have separate identities. Earlier partial-payment preferences cannot
 replace the final invoice's selected original. None remains an ordinary F2 receipt choice.
 
-**Next action:** plan/build against the released
-A739 seams. A444, B2B delivery, physical 58/80 mm paper/QR checks and the adviser's
+**2026-11-12 re-map:** the Pay window already issues a counter F1 and sends a staged Email/A4
+original (since #2725, measured); the build waits on one owner question in the
+[A555 note](../superpowers/plans/2026-11-12-a555-counter-invoice-delivery.md).
+
+**Next action:** answer that question, then plan the chosen option. A444, B2B delivery, physical 58/80 mm paper/QR checks and the adviser's
 manual-remedy confirmation remain separate work; the owner removed them as switch prerequisites
 on 2026-10-27.
 This design does not close A554's saved-email-address question, change the consent decision or
