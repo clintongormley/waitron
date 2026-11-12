@@ -39,7 +39,11 @@ export interface SpareStore {
 /** How many characters from the end of versitygw's output an exit logs. */
 const OUTPUT_TAIL = 1_024;
 
-/** The end of `output`, with the pair's two keys taken out wherever they appear. */
+/**
+ * The end of `output`, with the pair's access key id and secret replaced before it is cut: why this
+ * output may be logged, although the recovery page shows the log's tail without sign-in and
+ * Litestream's is never logged (`exitCategory` in `packages/stream/src/supervisor.ts`).
+ */
 function outputTail(output: string, keys: readonly string[]): string {
   return keys.reduce((text, key) => text.replaceAll(key, "[redacted]"), output).slice(-OUTPUT_TAIL);
 }

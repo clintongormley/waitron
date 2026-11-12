@@ -1795,8 +1795,8 @@ async function bootServer(
   };
   // Only a spare whose pair link serves its main box runs the store that box streams to, behind a
   // listener admitting that box's client certificate alone. Each stop is registered on
-  // `undoOnFailure` here, so the caller registers neither. Called after `checkLeaf`: the listener
-  // reads the leaf once, when it starts.
+  // `undoOnFailure` here, so the caller registers neither. Called after `checkLeaf` where the start
+  // runs it: the listener reads the leaf once, when it starts.
   const ownNodeId = config.node.nodeId;
   const startServedStore = async (): Promise<{ stop(): Promise<void> } | undefined> => {
     const link = await readPairLink(store.node, ownNodeId);

@@ -232,7 +232,9 @@ export interface RotationResult {
  * under any node id: the other box of the pair holds the same ring, and nothing sends it a new one
  * (decision D7, `docs/superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md`). The check and
  * every re-seal run under node.db's write lock, which a pair link's writer also takes, so a link
- * being written is waited for and then seen.
+ * being written is waited for and then seen. The lock is held for the whole rotation, so a write
+ * the server makes to node.db meanwhile waits, and is refused once SQLite's busy timeout runs out
+ * (`BUSY_TIMEOUT_MS`, `packages/store/src/index.ts`).
  *
  * One venue.db transaction per row, so a failure part-way keeps the rows already re-sealed. An
  * interrupted run leaves a readable vault because reads select their key by the row's own version;
