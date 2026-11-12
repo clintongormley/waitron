@@ -4102,6 +4102,16 @@ describe("the lint and root-guards jobs", () => {
     }
   });
 
+  // scripts/released-declarations.mjs compares each declaration with its release tag, and fails
+  // on a checkout holding no tags at all.
+  it("fetch the tags in both of root-guards' checkout attempts", () => {
+    const checkouts = workflowSteps(job("root-guards").body.join("\n")).filter((step) =>
+      step.uses?.startsWith("actions/checkout@"),
+    );
+    expect(checkouts).toHaveLength(2);
+    for (const step of checkouts) expect(step.with["fetch-tags"], step.step).toBe("true");
+  });
+
   it("leave lint running exactly lint and the format check", () => {
     const runs = job("lint")
       .body.map((line) => /^ {6}- run: (.*)$/.exec(line)?.[1])
