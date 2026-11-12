@@ -1140,9 +1140,7 @@ What the design has to settle:
 ## A1516. Mark a dish sold out from the till
 
 **Go-live.** The remaining sold-out work is A1516-3: a dashboard option list opened before a till
-change must not put that choice back on sale when saved; and A1516-4: portions already on a bill
-can still be sent after sold-out, with only new additions refused (owner, 2026-11-12 02:00,
-“Yes, stop new only”, recorded by the watcher).
+change must not put that choice back on sale when saved.
 
 
 ## A1517. Allergen points to revisit before go-live
