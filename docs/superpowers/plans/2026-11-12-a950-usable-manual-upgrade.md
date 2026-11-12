@@ -93,3 +93,11 @@ bypasses, AEAT/providers/hardware/live mounts or new protocol/record/ledger/dead
 2,305 changed lines **including systemd**; 9–13 hours, ten-hour completion uncertain.
 Dropping systemd saves roughly 600 lines/3–5 hours (estimate). Signed task checkpoints
 report production/tests/support. Past either ceiling, stop/report; no rig-only/sale-free split.
+
+**12 November, restart experiment:** the current B3 start and Compose policies reopened
+all three containers after a QEMU kill while the durable manual marker still read
+`candidate`, `copied: true`. The watcher’s 19:46 condition therefore retains the
+restart-service work. Lane F receipt: `receipts/a950-usable-manual-plan-20261112/restart-evidence/restart-result.json`
+and its `cut-serial.log` / `after-cut-serial.log`. This used an already-stopped,
+setup-only synthetic source and same-image candidate, paused after the real stopped-tree
+copy; it does not qualify the installed manual command or successful sale on Linux.
