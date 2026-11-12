@@ -30,3 +30,5 @@ pnpm --filter @waitron/till exec vitest run src/till-app.document-printer-choice
 Require passing Tests counts; no full-package local suite. LOOK EN/ES, both themes, 390/1280 widths. Update `apps/server/src/guide/{en,es}/table-service.md`, `docs/backlog.md` and `docs/backlog/printers.md`, retaining remaining A790 work. Finish-branch owns two Claude run-it reviews after initial rebase for cross-package/by-ID risk, triage/fixes and a fresh Claude read, normal hook and current-head CI.
 
 Expected lines added/removed: production +280/−70; tests +325/−45; support +0/−0; docs +80/−15: 815 changed lines, outside opinion above 1,222. No generated files.
+
+**12 November review fix round:** the watcher at18:55 cleared consolidation of repeated original-print setup and capability tests, then the normal fix round, with an outside opinion above about1,350 changed lines. At19:00 the watcher also cleared omitting the invented Order0 row from printed originals/copies with no source group; the wire value and both ticket readers stay unchanged.

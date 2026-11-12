@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   billPayments,
   deviceProfiles,
+  deviceProfilePrinters,
   floorZones,
   products,
   devices,
@@ -27,7 +28,7 @@ import { payments } from "@waitron/payments";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setProfileServiceAccess } from "@waitron/venue-service";
+import { orderServiceContexts, setProfileServiceAccess } from "@waitron/venue-service";
 import { inTx, send } from "./testing/bill-venue.js";
 import {
   billlessSale,
@@ -277,7 +278,7 @@ it("offers the device's Invoice printer for an orderless historical full invoice
   expect(await snapshot()).toEqual(before);
   expect(await jobs()).toEqual(printed);
 });
-it("prints an orderless full invoice original on its Invoice receipt printer without money or drawer writes", async () => {
+it("keeps the original Invoice destination through status, retry and handover", async () => {
   const sale = await projectionInvoice({
     counterpartyTaxId: "B00000000",
     counterpartyLegalName: "Stored recipient",
@@ -318,24 +319,6 @@ it("prints an orderless full invoice original on its Invoice receipt printer wit
   expect(after.drawers).toEqual(printed.drawers);
   expect(after.reprints).toEqual(printed.reprints);
   expect(await snapshot()).toEqual(before);
-});
-it("keeps the original Invoice destination through status, retry and handover", async () => {
-  const sale = await projectionInvoice({
-    counterpartyTaxId: "B00000000",
-    counterpartyLegalName: "Stored recipient",
-    counterpartyCountryCode: "ES",
-    counterpartyAddress: "Stored address",
-  });
-  const profileId = await profile();
-  await inTx(venue, (tx) =>
-    listInvoicePrinter(tx, { profileId, printerId: venue.printerId, isDefault: true }),
-  );
-  const before = await snapshot();
-  await send(venue.app, venue.cookie, "POST", `/api/transactions/${sale.id}/deliveries`, {
-    medium: "print",
-    requestKey: randomUUID(),
-    printerId: venue.printerId,
-  });
   const original = (await jobs()).prints.at(-1)!;
   await inTx(venue, (tx) =>
     tx
@@ -367,6 +350,37 @@ it("keeps the original Invoice destination through status, retry and handover", 
     printerId: venue.printerId,
     printerName: expect.any(String),
   });
+  await inTx(venue, (tx) =>
+    tx
+      .delete(deviceProfilePrinters)
+      .where(
+        and(
+          eq(deviceProfilePrinters.deviceProfileId, profileId),
+          eq(deviceProfilePrinters.role, "invoice"),
+        ),
+      ),
+  );
+  const withdrawn = await send(
+    venue.app,
+    venue.cookie,
+    "GET",
+    `/api/transactions/${sale.id}/receipt-print`,
+  );
+  expect(withdrawn.json).toMatchObject({ printerWithdrawn: true, printerId: venue.printerId });
+  const priorJobs = await jobs();
+  expect(
+    await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${sale.id}/receipt-print/retry`,
+      {},
+    ),
+  ).toMatchObject({ status: 409, json: { code: "invoice_delivery.printer_invalid" } });
+  expect(await jobs()).toEqual(priorJobs);
+  await inTx(venue, (tx) =>
+    listInvoicePrinter(tx, { profileId, printerId: venue.printerId, isDefault: true }),
+  );
   const retry = await send(
     venue.app,
     venue.cookie,
@@ -543,16 +557,7 @@ it("orderless writes require their device proof and print actions require print-
   await inTx(venue, (tx) =>
     tx.update(deviceProfiles).set({ capabilities: [] }).where(eq(deviceProfiles.id, profileId)),
   );
-  for (const [suffix, action] of [
-    ["deliveries", "invoice_delivery"],
-    [`deliveries/${randomUUID()}/to-receipt`, "invoice_delivery_to_receipt"],
-    ["receipt-print/retry", "receipt_retry"],
-  ]) {
-    expect(
-      await send(venue.app, venue.cookie, "POST", `/api/transactions/${id}/${suffix}`, {}),
-      suffix,
-    ).toMatchObject({ status: 403, json: { code: "device.forbidden_action", params: { action } } });
-  }
+
   expect(
     (await send(venue.app, venue.cookie, "GET", `/api/transactions/${id}/deliveries`)).status,
   ).toBe(200);
@@ -571,8 +576,8 @@ it("orderless writes require their device proof and print actions require print-
   expect(await jobs()).toEqual(before);
 });
 it("orderless delivery checks every source zone before any status or action", async () => {
-  const allowed = await saleOf(await placedIssuedBill(venue, "Croquettes"));
-  const denied = await saleOf(await placedIssuedBill(venue, "Caña"));
+  const tableSale = await saleOf(await placedIssuedBill(venue, "Croquettes"));
+  const counterSale = await saleOf(await placedIssuedBill(venue, "Caña"));
   const own = await projectionInvoice({
     counterpartyTaxId: "B00000000",
     counterpartyLegalName: "Recipient",
@@ -580,9 +585,15 @@ it("orderless delivery checks every source zone before any status or action", as
     counterpartyAddress: "Address",
   });
   const sourceProfile = await profile();
+  const firstZone =
+    tableSale.workingOrderId! < counterSale.workingOrderId! ? venue.zoneId : venue.counterZone;
   await inTx(venue, async (tx) => {
+    await tx
+      .update(orderServiceContexts)
+      .set({ zoneId: venue.zoneId })
+      .where(eq(orderServiceContexts.workingOrderId, tableSale.workingOrderId!));
     await tx.insert(saleSubstitutions).values(
-      [allowed, denied].map((sale) => ({
+      [tableSale, counterSale].map((sale) => ({
         substitutionSaleId: own.id,
         substitutedSaleId: sale.id,
       })),
@@ -590,8 +601,8 @@ it("orderless delivery checks every source zone before any status or action", as
     const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, venue.zoneId));
     await setProfileServiceAccess(tx, sourceProfile, {
       departmentId: zone!.departmentId,
-      allowedZoneIds: [venue.zoneId],
-      startingZoneId: venue.zoneId,
+      allowedZoneIds: [firstZone],
+      startingZoneId: firstZone,
     });
   });
   const before = await jobs();

@@ -719,12 +719,16 @@ export class TillTicketView extends LitElement {
               ${
                 this.printDocument === null
                   ? html`
-                      <wt-button
-                        data-test="document-receipt"
-                        variant="secondary"
-                        @click=${() => this.#documentChoice("receipt")}
-                        >${t("document.receipt")}</wt-button
-                      >
+                      ${
+                        !this.receiptCopiesOnly || designation === "duplicate"
+                          ? html`<wt-button
+                              data-test="document-receipt"
+                              variant="secondary"
+                              @click=${() => this.#documentChoice("receipt")}
+                              >${t("document.receipt")}</wt-button
+                            >`
+                          : nothing
+                      }
                       ${this.result.invoiceType === "F1" ? html`<wt-button data-test="document-invoice" variant="secondary" @click=${() => this.#documentChoice("invoice")}>${t("document.invoice")}</wt-button>` : nothing}
                     `
                   : html`
@@ -958,6 +962,12 @@ export class TillTicketView extends LitElement {
     const words = status?.current ? deliveryWords(status.current) : undefined;
     const busy = this.deliveryBusy || this.originalReceiptBusy;
     const instead = this.canPrintReceipt ? status?.actions.receiptInstead : null;
+    const retainedPrinter =
+      this.originalReceiptPrint?.status === "not_queued"
+        ? undefined
+        : this.originalReceiptPrint?.printerName;
+    const insteadPrinter =
+      retainedPrinter ?? this.receiptEquipment?.resolved?.name ?? t("equipment.none");
     const email = this.canPrintReceipt ? status?.actions.email : null;
     const emailAgainId =
       this.canPrintReceipt && status?.actions.retryOriginal?.medium === "email"
@@ -1025,10 +1035,7 @@ export class TillTicketView extends LitElement {
                 )}
               >${
                 this.receiptCopiesOnly
-                  ? t("invoice.receipt_instead_on").replace(
-                      "{printer}",
-                      () => this.receiptEquipment?.resolved?.name ?? t("equipment.none"),
-                    )
+                  ? t("invoice.receipt_instead_on").replace("{printer}", () => insteadPrinter)
                   : t("invoice.receipt_instead")
               }</wt-button
             >`

@@ -380,12 +380,11 @@ it.each(["receipt", "a4"] as const)(
       getTransactionDeliveries: vi.fn().mockResolvedValue(state),
     });
     await press(el, "document-print-toggle");
-    await press(el, "document-receipt");
+    expect(part(el, "document-receipt")).toBeNull();
     expect(part(el, "print-receipt")).toBeNull();
     emit(ticket(el), "print-receipt");
     await flush(el);
     expect(api.printReceipt).not.toHaveBeenCalled();
-    await press(el, "document-back");
     await press(el, "document-invoice");
     emit(ticket(el), "equipment-change", { role: "invoice", selection: "default", via: "list" });
     await flush(el);
@@ -406,8 +405,30 @@ it.each(["receipt", "a4"] as const)(
 );
 
 it.each(["en-GB", "es-ES"])(
-  "orderless recovery names its retained retry printer and saved fallback in %s",
+  "orderless recovery names its retained retry and fallback printer in %s",
   async (locale) => {
+    const a4Waiting: InvoiceDeliveryStatus = {
+      ...delivered,
+      originalCompleted: false,
+      current: {
+        id: "a4-job",
+        medium: "a4",
+        designation: "original",
+        status: "queued",
+        failureCode: null,
+        requestedAt: "2026-11-12T12:00:00Z",
+        at: null,
+        personId: "staff",
+        printerHold: null,
+        lateSuccess: false,
+      },
+      actions: { ...delivered.actions, receiptInstead: { deliveryId: "a4-job" } },
+    };
+    const getTransactionDeliveries = vi.fn().mockResolvedValue({
+      ...delivered,
+      originalCompleted: false,
+      current: { ...a4Waiting.current!, id: "receipt-job", medium: "receipt", status: "failed" },
+    });
     const { el, api } = await orderless({
       getTransactionReceiptPrint: vi.fn().mockResolvedValue({
         status: "failed",
@@ -416,30 +437,29 @@ it.each(["en-GB", "es-ES"])(
         printerId: "old",
         printerName: "Retained belt",
       }),
-      getTransactionDeliveries: vi.fn().mockResolvedValue({
-        ...delivered,
-        originalCompleted: false,
-        actions: { ...delivered.actions, receiptInstead: { deliveryId: "a4-job" } },
-      }),
+      getTransactionDeliveries,
       retryTransactionReceipt: vi.fn().mockResolvedValue({ jobId: "retry" }),
       transactionReceiptInstead: vi.fn().mockResolvedValue({}),
     });
     setLocale(locale);
     await flush(el);
     expect(part(el, "retry-receipt").textContent).toContain("Retained belt");
-    expect(part(el, "receipt-instead").textContent).toContain("Bar");
     const reads = vi.mocked(api.getTransactionReceiptPrint).mock.calls.length;
     await press(el, "retry-receipt");
     expect(api.retryTransactionReceipt).toHaveBeenCalledWith("sale-history");
     expect(api.getTransactionReceiptPrint).toHaveBeenCalledTimes(reads + 1);
+    getTransactionDeliveries.mockResolvedValue(a4Waiting);
+    emit(ticket(el), "refresh-receipt");
+    await flush(el);
+    expect(part(el, "receipt-instead").textContent).toContain("Retained belt");
     await press(el, "receipt-instead");
     expect(api.transactionReceiptInstead).toHaveBeenCalledWith(
       "sale-history",
       "a4-job",
       expect.any(String),
     );
-    expect(api.getTransactionReceiptPrint).toHaveBeenCalledTimes(reads + 2);
-    expect(api.getTransactionDeliveries).toHaveBeenCalledTimes(reads + 2);
+    expect(api.getTransactionReceiptPrint).toHaveBeenCalledTimes(reads + 3);
+    expect(api.getTransactionDeliveries).toHaveBeenCalledTimes(reads + 3);
   },
 );
 
@@ -469,4 +489,24 @@ it("orderless handover targets the sale and ignores its answer after Back and re
   expect(part(el, "confirm-handover")).not.toBeNull();
   expect(api.printReceipt).not.toHaveBeenCalled();
   expect(api.printTransactionInvoice).not.toHaveBeenCalled();
+});
+
+it("an orderless F2 retains the immediate Receipt copy and never reads Invoice delivery status", async () => {
+  const { el, api } = await orderless({
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      deviceId: "dev-1",
+      receiptLanguages: ["en-GB"],
+      capabilities: ["take-orders", "print-receipt"],
+    }),
+    getTransactionReceipt: vi
+      .fn()
+      .mockResolvedValue({ ...invoiceOf("12.00"), invoiceType: "F2", locale: "en-GB" }),
+    reprintTransaction: vi.fn().mockResolvedValue(undefined),
+  });
+  expect(part(el, "document-print-toggle")).toBeNull();
+  await press(el, "reprint");
+  expect(api.reprintTransaction).toHaveBeenCalledWith("sale-history", undefined);
+  expect(api.getTransactionDeliveries).not.toHaveBeenCalled();
+  expect(api.getTransactionReceiptPrint).not.toHaveBeenCalled();
 });
