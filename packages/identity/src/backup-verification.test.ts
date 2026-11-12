@@ -79,9 +79,17 @@ beforeEach(async () => {
     await seedBusinessDay(suite.db, {});
     await seedDeviceProfiles(suite.db, {
       id: profile,
+      admitted: [],
       name: "Till",
       formFactor: "till",
       capabilities: [],
+    });
+    await seedDeviceProfiles(suite.db, {
+      id: "other-profile",
+      name: "Other till",
+      formFactor: "till",
+      capabilities: [],
+      admitted: [],
     });
     await suite.db.insert(devices).values({
       id: device,
@@ -171,11 +179,8 @@ beforeEach(async () => {
       expiresAt: end,
     });
     await suite.db
-      .insert(schema.deviceProfileAdmissionPersons)
-      .values({ deviceProfileId: profile, personId: second, admitted: false });
-    await suite.db
       .insert(schema.deviceProfileAdmissionRoles)
-      .values({ deviceProfileId: profile, role: "manager" });
+      .values({ deviceProfileId: profile, staffRoleId: "job" });
   }
 });
 afterEach(() => {
@@ -375,8 +380,7 @@ describe("identity offline backup owner", () => {
     ["management_sessions", "last_seen_at='2026-10-21T00:00:00.000Z'"],
     ["webauthn_challenges", "challenge='AQIE'"],
     ["google_oidc_states", "nonce='AQIE'"],
-    ["device_profile_admission_roles", "role='admin'"],
-    ["device_profile_admission_persons", "admitted=1"],
+    ["device_profile_admission_roles", "device_profile_id='other-profile'"],
   ])("preserves all captured rows in %s", async (table, change) => {
     damage(`update ${table} set ${change}`, "after");
     expect((await run()).checks).toContainEqual({ code: "data", status: "invalid" });

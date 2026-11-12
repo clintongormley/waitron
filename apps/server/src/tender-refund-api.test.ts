@@ -20,7 +20,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { deviceProfileAdmissionPersons, persons, sessions } from "@waitron/identity";
+import { deviceProfileAdmissionRoles, persons, sessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import { setProfileServiceAccess } from "@waitron/venue-service";
 import {
@@ -263,8 +263,8 @@ it.each(["missing", "ended", "device", "deleted", "retired", "admission", "suspe
         .where(eq(deviceProfiles.id, profileId));
     if (kind === "admission") {
       await store.db
-        .insert(deviceProfileAdmissionPersons)
-        .values({ deviceProfileId: profileId, personId: venue.supervisorId, admitted: false });
+        .delete(deviceProfileAdmissionRoles)
+        .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
       code = "device_profile.not_admitted";
       http = 403;
     }

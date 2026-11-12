@@ -819,10 +819,6 @@ export interface RoleEquipment {
 export type FormFactor = "till" | "phone-portrait" | "tablet-landscape" | "kds";
 
 /** One person's own rule on a profile: `admitted` false keeps them out whatever their role. */
-export interface PersonException {
-  personId: string;
-  admitted: boolean;
-}
 
 /** Where a profile serves; `allowedZoneIds` null is every zone of the department. */
 export interface ProfileServiceScope {
@@ -849,16 +845,14 @@ export interface DeviceProfile extends ProfileServiceScope {
   /** Receipt printers and A4 printers alike. */
   invoicePrinterIds: string[];
   invoicePrinterDefaultId: string | null;
-  /** Never empty: every role when the profile narrows nothing. */
-  admittedRoles: PersonRole[];
-  personExceptions: PersonException[];
+  admittedStaffRoleIds: string[];
 }
 
 /** What a profile save may also carry; each part left out stays as stored on an edit. */
 export type ProfileSaveExtras = Partial<
   { kitchenScreens: ProfileKitchenScreens } & ProfileServiceScope &
     ProfileEquipmentDefaults &
-    Pick<DeviceProfile, "startingScreen" | "admittedRoles" | "personExceptions">
+    Pick<DeviceProfile, "startingScreen" | "admittedStaffRoleIds">
 >;
 
 /** The drawer and invoice lists and each printer list's default; on a new profile, absent is empty

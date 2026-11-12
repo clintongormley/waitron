@@ -1,3 +1,5 @@
+import { personStaffRoles } from "@waitron/db";
+import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
@@ -15,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { BootReading, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   createPinThrottle,
-  deviceProfileAdmissionPersons,
+  deviceProfileAdmissionRoles,
   endSession,
   hashPin,
   loginWithPin,
@@ -123,6 +125,12 @@ useVenueDb({
     adminTillId = adminTill.deviceId;
     adminTillCookie = await signIn(adminTill, venue.adminId, "1234");
     const [clockOnly] = await seedDeviceProfiles(db, {
+      admitted: (
+        await db
+          .select({ id: personStaffRoles.staffRoleId })
+          .from(personStaffRoles)
+          .where(eq(personStaffRoles.personId, venue.operatorId))
+      ).map((row) => row.id),
       name: "Fichaje",
       formFactor: "till",
       capabilities: ["clock-in"],
@@ -473,14 +481,14 @@ const setRefused = (reason: string) => ({ code: "clock.set_refused", params: { r
 
 async function withdrawAdmission<T>(fn: () => Promise<T>): Promise<T> {
   await venue.db
-    .insert(deviceProfileAdmissionPersons)
-    .values({ deviceProfileId: profileId, personId: venue.operatorId, admitted: false });
+    .delete(deviceProfileAdmissionRoles)
+    .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
   try {
     return await fn();
   } finally {
     await venue.db
-      .delete(deviceProfileAdmissionPersons)
-      .where(eq(deviceProfileAdmissionPersons.personId, venue.operatorId));
+      .insert(deviceProfileAdmissionRoles)
+      .values({ deviceProfileId: profileId, staffRoleId: await ensureFixtureJobRole(venue.db) });
   }
 }
 
@@ -720,23 +728,19 @@ async function confirmWhileHeld(
 
 it("refuses a confirm whose admission is withdrawn while it waits for its turn", async () => {
   const box = await stoppedBox(DAY);
-  const exception = eq(deviceProfileAdmissionPersons.personId, venue.operatorId);
+  const admission = eq(deviceProfileAdmissionRoles.deviceProfileId, profileId);
   for (const offsetMs of [DAY, 20_000]) {
     const before = written(box);
-    await venue.db
-      .insert(deviceProfileAdmissionPersons)
-      .values({ deviceProfileId: profileId, personId: venue.operatorId, admitted: true });
     try {
       const answer = await confirmWhileHeld(box, offsetMs, async () => {
-        await venue.db
-          .update(deviceProfileAdmissionPersons)
-          .set({ admitted: false })
-          .where(exception);
+        await venue.db.delete(deviceProfileAdmissionRoles).where(admission);
       });
       expect(answer.status).toBe(403);
       expect(answer.json).toEqual({ code: "device_profile.not_admitted", params: {} });
     } finally {
-      await venue.db.delete(deviceProfileAdmissionPersons).where(exception);
+      await venue.db
+        .insert(deviceProfileAdmissionRoles)
+        .values({ deviceProfileId: profileId, staffRoleId: await ensureFixtureJobRole(venue.db) });
     }
     expect(written(box)).toEqual(before);
   }

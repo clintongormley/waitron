@@ -1,12 +1,10 @@
 import "./errors.js";
 import {
-  deviceProfiles,
   devices,
   googleOidcStates,
   managementAccountActions,
   managementSessions,
   persons,
-  deviceProfileAdmissionPersons,
   recoveryCodes,
   sessions,
   totpEnrollments,
@@ -59,19 +57,6 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
       .from(persons)
       .where(eq(persons.id, personId));
     if (person === undefined) throw new AppError("person.not_found", { personId });
-
-    const exceptions = await tx
-      .select({
-        deviceProfile: deviceProfiles.name,
-        admitted: deviceProfileAdmissionPersons.admitted,
-      })
-      .from(deviceProfileAdmissionPersons)
-      .innerJoin(
-        deviceProfiles,
-        eq(deviceProfiles.id, deviceProfileAdmissionPersons.deviceProfileId),
-      )
-      .where(eq(deviceProfileAdmissionPersons.personId, personId))
-      .orderBy(asc(deviceProfiles.name), asc(deviceProfiles.id));
 
     const passkeys = await readPasskeys(tx, personId);
 
@@ -140,7 +125,7 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
       .orderBy(asc(googleOidcStates.expiresAt), asc(googleOidcStates.id));
 
     return async () => [
-      jsonFile("profile.json", { ...person.profile, deviceProfileExceptions: exceptions }),
+      jsonFile("profile.json", person.profile),
       jsonFile("sign-in.json", {
         ...person.signIn,
         passkeys: passkeys.map(({ name, provider, createdAt, lastUsedAt }) => ({

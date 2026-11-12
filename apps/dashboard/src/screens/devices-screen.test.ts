@@ -156,8 +156,7 @@ const deviceProfiles: DeviceProfile[] = [
     departmentId: "dep-1",
     allowedZoneIds: null,
     startingZoneId: "zone-1",
-    admittedRoles: ["staff", "supervisor", "manager", "admin"],
-    personExceptions: [],
+    admittedStaffRoleIds: ["job-waiter", "job-chef"],
   },
   {
     id: "dp2",
@@ -178,8 +177,7 @@ const deviceProfiles: DeviceProfile[] = [
     departmentId: "dep-1",
     allowedZoneIds: null,
     startingZoneId: "zone-1",
-    admittedRoles: ["staff", "supervisor", "manager", "admin"],
-    personExceptions: [],
+    admittedStaffRoleIds: ["job-waiter", "job-chef"],
   },
   {
     id: "dp3",
@@ -200,8 +198,7 @@ const deviceProfiles: DeviceProfile[] = [
     departmentId: null,
     allowedZoneIds: null,
     startingZoneId: null,
-    admittedRoles: ["staff", "supervisor", "manager", "admin"],
-    personExceptions: [],
+    admittedStaffRoleIds: ["job-waiter", "job-chef"],
   },
 ];
 

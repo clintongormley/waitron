@@ -1,3 +1,5 @@
+import { withTransaction, persons, deviceProfiles } from "@waitron/db";
+import { listStaffAdmittedTo } from "@waitron/identity";
 import { STARTER_JOB_ROLE_NAMES, DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 import { madridWithFoldedTables } from "./testing/madrid-folded-tables.js";
 import { madridWithDocument } from "./testing/madrid-documents.js";
@@ -29,6 +31,7 @@ import {
 } from "./testing/madrid-renamed-columns.js";
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
+  device_profile_admission_roles: ["role"],
   nodes: ["location_id"],
   adjustment_reasons: ["apply_roles", "approver_roles"],
   devices: ["location_id"],
@@ -96,6 +99,7 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues"];
 const REMOVED_TABLES = [
+  "device_profile_admission_persons",
   "floor_plan_table_parts",
   "floor_plan_table_sizes",
   "floor_reset_table_parts",
@@ -253,6 +257,16 @@ for (const locale of ["en", "es"] as const) {
       salesDays: 0,
       departmentTradingNames: getCountryPack("ES")!.demo!.departmentTradingNames,
       dataSet: CASA_DELGADO_ES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const admitted = new Set<string>();
+      for (const profile of await tx.select().from(deviceProfiles))
+        for (const person of await listStaffAdmittedTo(tx, profile.id))
+          admitted.add(person.personId);
+      expect(admitted.size).toBe(6);
+      expect((await tx.select().from(persons)).every((person) => admitted.has(person.id))).toBe(
+        true,
+      );
     });
     const seeded = await readMadridSemantics(suite.db);
     expect(seeded.tables.management_sessions!.rows).toEqual(
@@ -824,6 +838,33 @@ for (const locale of ["en", "es"] as const) {
         );
         phases[phase]!.kitchen_courses = 4;
       }
+      const admissions = expected[phase].tables.device_profile_admission_roles!;
+      admissions.columns = [
+        { name: "device_profile_id", type: "TEXT", notnull: 1, dflt_value: null, pk: 1 },
+        { name: "staff_role_id", type: "TEXT", notnull: 1, dflt_value: null, pk: 2 },
+      ];
+      admissions.foreignKeys = [
+        {
+          id: 0,
+          seq: 0,
+          table: "staff_roles",
+          from: "staff_role_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "CASCADE",
+          match: "NONE",
+        },
+        {
+          id: 1,
+          seq: 0,
+          table: "device_profiles",
+          from: "device_profile_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "CASCADE",
+          match: "NONE",
+        },
+      ];
       if (phase !== "before") {
         const team = STARTER_JOB_ROLE_NAMES.Team.es;
         const names = [
@@ -844,6 +885,29 @@ for (const locale of ["en", "es"] as const) {
             .sort(([a], [b]) => String(a).localeCompare(String(b))),
         );
         phases[phase]!.staff_roles = phase === "seeded" ? 4 : 1;
+        const ticks = Object.values(expected[phase].tables.device_profiles!.rows).flatMap(
+          (profile) => {
+            const selected = [
+              team,
+              ...(phase === "seeded"
+                ? profile.form_factor === "kds"
+                  ? [names[2]!]
+                  : [names[1]!, names[3]!]
+                : []),
+            ];
+            return selected.map((name) => ({
+              device_profile_id: String(profile.id),
+              staff_role_id: roleId(name),
+            }));
+          },
+        );
+        admissions.rows = Object.fromEntries(
+          ticks
+            .map((row) => [stable(row), row])
+            .sort(([a], [b]) => String(a).localeCompare(String(b))),
+        );
+        phases[phase]!.device_profile_admission_roles = phase === "seeded" ? 8 : 3;
+
         const memberships = [
           ["owner@example.test", team],
           ...(phase === "seeded"

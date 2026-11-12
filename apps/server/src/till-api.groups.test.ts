@@ -1,3 +1,4 @@
+import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -2640,7 +2641,7 @@ describe("one held dish rechecks admission after reading its request", () => {
             .where(eq(deviceProfiles.id, profile!.id));
         if (kind === "removed admission")
           await setProfileAdmission(tx, profile!.id, {
-            personExceptions: [{ personId: venue.operatorId, admitted: false }],
+            admittedStaffRoleIds: [],
           });
       });
       release();
@@ -2658,7 +2659,9 @@ describe("one held dish rechecks admission after reading its request", () => {
           .update(deviceProfiles)
           .set({ capabilities: profile!.capabilities })
           .where(eq(deviceProfiles.id, profile!.id));
-        await setProfileAdmission(tx, profile!.id, { personExceptions: [] });
+        await setProfileAdmission(tx, profile!.id, {
+          admittedStaffRoleIds: [await ensureFixtureJobRole(tx)],
+        });
       });
     }
   });

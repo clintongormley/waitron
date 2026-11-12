@@ -1,3 +1,4 @@
+import { staffRoles, personStaffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { seedDeviceProfiles, seedVenueSettings, seedZone } from "@waitron/db/testing/seed.js";
@@ -43,7 +44,6 @@ import {
 import {
   createPinThrottle,
   deactivatePerson,
-  deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,
   endSession,
   PIN_THROTTLE_MAX_KEYS_PER_SLOT,
@@ -2695,21 +2695,20 @@ describe("POST /api/session refusals say nothing about the account", () => {
 });
 
 describe("a device's profile decides who may sign in on it", () => {
-  /** A device whose profile admits managers only, with Anna let in as an exception: Abel, staff
-   * like Anna, is not admitted. */
   async function managersAndAnaDevice(): Promise<{
     deviceId: string;
     cookie: string;
     profileId: string;
   }> {
     const profileId = await seedDeviceProfile(suite.db, `Managers ${randomUUID()}`, []);
-    await suite.db.insert(deviceProfileAdmissionRoles).values({
-      deviceProfileId: profileId,
-      role: "manager",
-    });
+    const [job] = await suite.db.insert(staffRoles).values({ name: randomUUID() }).returning();
     await suite.db
-      .insert(deviceProfileAdmissionPersons)
-      .values({ deviceProfileId: profileId, personId: ana.id, admitted: true });
+      .delete(deviceProfileAdmissionRoles)
+      .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
+    await suite.db
+      .insert(deviceProfileAdmissionRoles)
+      .values({ deviceProfileId: profileId, staffRoleId: job!.id });
+    await suite.db.insert(personStaffRoles).values({ personId: ana.id, staffRoleId: job!.id });
     const { deviceId, cookie } = await enrolTillDevice(suite.db, profileId);
     return { deviceId, cookie, profileId };
   }

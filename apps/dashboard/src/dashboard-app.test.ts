@@ -1237,8 +1237,7 @@ describe("dashboard-app", () => {
     departmentId: null,
     allowedZoneIds: null,
     startingZoneId: null,
-    admittedRoles: ["staff", "supervisor", "manager", "admin"],
-    personExceptions: [],
+    admittedStaffRoleIds: ["job-waiter", "job-chef"],
     startingScreen: null,
   };
   async function mountOnDeviceProfiles(overrides: Record<string, unknown> = {}) {

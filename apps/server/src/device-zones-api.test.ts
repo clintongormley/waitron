@@ -184,7 +184,7 @@ describe("the device's zone preferences", () => {
     const f = await fixture();
     await run((tx) =>
       setProfileAdmission(tx, f.profileId, {
-        personExceptions: [{ personId: f.personId, admitted: false }],
+        admittedStaffRoleIds: [],
       }),
     );
     expect(await f.request(method, method === "PUT" ? f.input : undefined)).toEqual({
@@ -272,14 +272,14 @@ describe("the device's zone preferences", () => {
           if (change === "profile-admission")
             await run((tx) =>
               setProfileAdmission(tx, profile!.id, {
-                personExceptions: [{ personId: f.personId, admitted: false }],
+                admittedStaffRoleIds: [],
               }),
             );
         }
         if (change === "admission")
           await run((tx) =>
             setProfileAdmission(tx, f.profileId, {
-              personExceptions: [{ personId: f.personId, admitted: false }],
+              admittedStaffRoleIds: [],
             }),
           );
         if (change === "selection")

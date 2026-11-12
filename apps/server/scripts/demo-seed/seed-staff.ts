@@ -1,6 +1,11 @@
 // Inserts directly: a seed script has no management session.
 
-import { personStaffRoles, staffRoles } from "@waitron/db";
+import {
+  deviceProfiles,
+  deviceProfileAdmissionRoles,
+  personStaffRoles,
+  staffRoles,
+} from "@waitron/db";
 import { starterName } from "@waitron/country-packs";
 import { DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 import type { SeedLocale } from "./locale.js";
@@ -44,5 +49,13 @@ export async function seedStaff(
         .insert(personStaffRoles)
         .values({ personId: created!.id, staffRoleId: roles.get(name)! });
     }
+  }
+  for (const profile of await tx
+    .select({ id: deviceProfiles.id, formFactor: deviceProfiles.formFactor })
+    .from(deviceProfiles)) {
+    const jobs = profile.formFactor === "kds" ? ["Kitchen"] : ["Waiter", "Manager on duty"];
+    await tx
+      .insert(deviceProfileAdmissionRoles)
+      .values(jobs.map((name) => ({ deviceProfileId: profile.id, staffRoleId: roles.get(name)! })));
   }
 }

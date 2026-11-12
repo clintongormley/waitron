@@ -523,7 +523,7 @@ describe("the staff roles page", () => {
     const request = await mount(fakeRequest(() => [cook]));
     await choose("delete-role-c");
     expect(dialogText()).toContain(
-      "1 person holds this role. Deleting it removes it from them and from the staffing plan. Shifts that used it keep its name.",
+      "1 person holds this role. Deleting it removes it from them, from every device and from the staffing plan. Shifts that used it keep its name.",
     );
     expect(dialogLines()).toEqual([]);
     expect(confirmDelete().disabled).toBe(false);

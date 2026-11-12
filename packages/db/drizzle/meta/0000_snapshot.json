@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a5e87da9-ab6d-434f-9920-2b43440aa049",
+  "id": "7f1af622-4ac3-4f3b-9996-b12d0b52c2d7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -11314,72 +11314,6 @@
         }
       }
     },
-    "device_profile_admission_persons": {
-      "name": "device_profile_admission_persons",
-      "columns": {
-        "device_profile_id": {
-          "name": "device_profile_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "person_id": {
-          "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "admitted": {
-          "name": "admitted",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "device_profile_admission_persons_profile_fk": {
-          "name": "device_profile_admission_persons_profile_fk",
-          "tableFrom": "device_profile_admission_persons",
-          "tableTo": "device_profiles",
-          "columnsFrom": [
-            "device_profile_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "device_profile_admission_persons_person_fk": {
-          "name": "device_profile_admission_persons_person_fk",
-          "tableFrom": "device_profile_admission_persons",
-          "tableTo": "persons",
-          "columnsFrom": [
-            "person_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "device_profile_admission_persons_pk": {
-          "columns": [
-            "device_profile_id",
-            "person_id"
-          ],
-          "name": "device_profile_admission_persons_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "device_profile_admission_roles": {
       "name": "device_profile_admission_roles",
       "columns": {
@@ -11390,8 +11324,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "role": {
-          "name": "role",
+        "staff_role_id": {
+          "name": "staff_role_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -11412,24 +11346,32 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "device_profile_admission_roles_role_fk": {
+          "name": "device_profile_admission_roles_role_fk",
+          "tableFrom": "device_profile_admission_roles",
+          "tableTo": "staff_roles",
+          "columnsFrom": [
+            "staff_role_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "device_profile_admission_roles_pk": {
           "columns": [
             "device_profile_id",
-            "role"
+            "staff_role_id"
           ],
           "name": "device_profile_admission_roles_pk"
         }
       },
       "uniqueConstraints": {},
-      "checkConstraints": {
-        "device_profile_admission_roles_role_ck": {
-          "name": "device_profile_admission_roles_role_ck",
-          "value": "\"device_profile_admission_roles\".\"role\" in ('staff', 'supervisor', 'manager', 'admin')"
-        }
-      }
+      "checkConstraints": {}
     },
     "google_oidc_states": {
       "name": "google_oidc_states",

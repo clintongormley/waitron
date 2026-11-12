@@ -15,7 +15,6 @@ export {
 } from "./profile-admission.js";
 export type { ProfileAdmission } from "./profile-admission.js";
 export {
-  deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,
   managementAccountActions,
   managementSessions,

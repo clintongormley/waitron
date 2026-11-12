@@ -1,3 +1,5 @@
+import { builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
+import { personStaffRoles, staffRoles, persons } from "@waitron/db";
 import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
@@ -3979,7 +3981,19 @@ describe("a device's approved profiles and switching its active one", () => {
 
   /** Admits only `role` to `profileId`. */
   async function admitOnly(profileId: string, role: "staff" | "manager"): Promise<void> {
-    await suite.db.insert(deviceProfileAdmissionRoles).values({ deviceProfileId: profileId, role });
+    const [job] = await suite.db.insert(staffRoles).values({ name: randomUUID() }).returning();
+    for (const person of await suite.db.select({ id: persons.id }).from(persons)) {
+      if ((await builtInRoleForTest(suite.db, person.id)) === role)
+        await suite.db
+          .insert(personStaffRoles)
+          .values({ personId: person.id, staffRoleId: job!.id });
+    }
+    await suite.db
+      .delete(deviceProfileAdmissionRoles)
+      .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
+    await suite.db
+      .insert(deviceProfileAdmissionRoles)
+      .values({ deviceProfileId: profileId, staffRoleId: job!.id });
   }
 
   /** An `attempting` card payment started on `deviceId`. */
@@ -4208,9 +4222,9 @@ describe("a device's approved profiles and switching its active one", () => {
       const app = mountApp(venue.cfg);
       const t = await till(app, venue);
       const next = await seedProfile("till");
-      await admitOnly(next, "manager");
       await signIn(t, "staff");
       const manager = await signIn(t, "manager");
+      await admitOnly(next, "manager");
       expect((await manage(app, venue, t.deviceId, { profileId: next })).status).toBe(204);
       expect(await openSessionsOn(t.deviceId)).toEqual([manager.personId]);
     });
@@ -4322,6 +4336,7 @@ describe("a device's approved profiles and switching its active one", () => {
       expect(await offered(`${t.jar}; ${staff.cookie}`)).toEqual([t.profileId, everyone]);
 
       const manager = await signIn(t, "manager");
+      await admitOnly(managersOnly, "manager");
       const [active, ...alternatives] = await offered(`${t.jar}; ${manager.cookie}`);
       expect(active).toBe(t.profileId);
       expect(alternatives.sort()).toEqual([managersOnly, everyone].sort());

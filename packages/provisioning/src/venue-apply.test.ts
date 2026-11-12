@@ -1,3 +1,4 @@
+import { canUseDeviceProfile } from "@waitron/identity";
 import { builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { applyVenue as realApplyVenue } from "./venue-apply.js";
@@ -1207,6 +1208,9 @@ for (const [staffLanguage, name] of [
     const plan = planVenue({ ...request(), staffLanguage }, ALL_MODULES);
     await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
     await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+    const [admin] = suite.db.all<{ id: string }>(sql`select id from persons`);
+    for (const profile of await suite.db.select().from(deviceProfiles))
+      expect(await canUseDeviceProfile(suite.db, profile.id, admin!.id), profile.name).toBe(true);
     const expectedName = typeof name === "string" ? name : name();
     expect(
       suite.db.all(sql`select r.name, p.display_name from person_staff_roles h

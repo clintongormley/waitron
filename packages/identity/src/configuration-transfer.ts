@@ -20,6 +20,5 @@ export const IDENTITY_CONFIGURATION_TRANSFER = {
     { name: "staff_roles" },
     { name: "person_staff_roles" },
     { name: "device_profile_admission_roles" },
-    { name: "device_profile_admission_persons" },
   ],
 } as const;

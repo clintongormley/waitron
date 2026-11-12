@@ -32,7 +32,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage } from "../i18n/form-message.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
-import { ROLES, a4Choices, printerLabel, roleName } from "../i18n/domain.js";
+import { a4Choices, printerLabel } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
 // A local mirror keeps the layouts barrel's database imports out of the browser bundle.
 import {
@@ -54,9 +54,7 @@ import type {
   KitchenScreenScope,
   NarrowedDevice,
   PagePrinterRow,
-  PersonException,
-  PersonRole,
-  PersonSummary,
+  JobRole,
   Printer,
   ProfileEquipmentDefaults,
   ProfileKitchenScreen,
@@ -98,8 +96,7 @@ interface ProfileDraft {
   everyZone: boolean;
   zoneIds: string[];
   startingZoneId: string;
-  roles: PersonRole[];
-  exceptions: PersonException[];
+  roles: string[];
   startingScreen: string | null;
 }
 
@@ -270,15 +267,6 @@ function sameScope(a: ProfileServiceScope, b: ProfileServiceScope): boolean {
   );
 }
 
-function sameExceptions(a: readonly PersonException[], b: readonly PersonException[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((entry) =>
-      b.some((other) => other.personId === entry.personId && other.admitted === entry.admitted),
-    )
-  );
-}
-
 function activeZones(choices: ProfileScopeChoices, departmentId: string | null) {
   return choices.zones.filter((zone) => zone.departmentId === departmentId && zone.active);
 }
@@ -306,7 +294,6 @@ const FIELDS = [
   "zones",
   "startingZone",
   "roles",
-  "people",
   "actions",
   "startingScreen",
   "kitchenScreens",
@@ -333,7 +320,6 @@ const FIELD_TARGET: Record<EditorField, string> = {
   zones: "[data-test=profile-zones] wt-switch",
   startingZone: "[data-test=profile-starting-zone]",
   roles: "[data-test=profile-roles] wt-switch",
-  people: "[data-test=profile-people] wt-combobox",
   actions: "[data-test=profile-actions] wt-switch",
   startingScreen: "[data-test=profile-starting-screen]",
   kitchenScreens: "[data-test=profile-kitchen-screens] wt-switch",
@@ -358,8 +344,7 @@ const FIELD_BY_PARAM: Record<string, EditorField> = {
   departmentId: "department",
   allowedZoneIds: "zones",
   startingZoneId: "startingZone",
-  admittedRoles: "roles",
-  personExceptions: "people",
+  admittedStaffRoleIds: "roles",
   kitchenScreens: "kitchenScreens",
   stationScreenStations: "stationScreenStations",
   passScreenStations: "passScreenStations",
@@ -379,8 +364,7 @@ const FIELD_SENTENCE: Partial<Record<EditorField, StringKey>> = {
   department: "device_profiles.err_department",
   zones: "device_profiles.err_zones",
   startingZone: "device_profiles.err_starting_zone",
-  roles: "device_profiles.err_roles_required",
-  people: "device_profiles.err_people",
+  roles: "device_profiles.err_roles",
   startingScreen: "device_profiles.err_starting_screen",
   receiptDefault: "device_profiles.err_default_not_listed",
   slipDefault: "device_profiles.err_default_not_listed",
@@ -610,7 +594,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   @state() private scopeChoices: ProfileScopeChoices = { departments: [], zones: [] };
 
-  @state() private staff: PersonSummary[] = [];
+  @state() private jobRoles: JobRole[] = [];
 
   @state() private errorKey: string | null = null;
   #readErrorOwner: "main" | "scope" | "profiles" | null = null;
@@ -642,8 +626,7 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private draftStartingZoneId = "";
   /** Until the service scope changes, unrelated edits leave its stored fields untouched. */
   #scopeEdited = false;
-  @state() private draftRoles: PersonRole[] = [...ROLES];
-  @state() private draftExceptions: PersonException[] = [];
+  @state() private draftRoles: string[] = [];
   @state() private draftStartingScreen: string | null = null;
   /** The edited profile as opened, so an edit sends only the parts it changed; null for a new one. */
   #loaded: DeviceProfile | null = null;
@@ -681,11 +664,6 @@ export class DeviceProfilesScreen extends LitElement {
       zoneIds: ordering && !this.draftEveryZone ? [...this.draftZoneIds].sort() : [],
       startingZoneId: ordering ? this.draftStartingZoneId : "",
       roles: ordering ? [...this.draftRoles].sort() : [],
-      exceptions: ordering
-        ? this.draftExceptions
-            .map((entry) => ({ ...entry }))
-            .sort((a, b) => a.personId.localeCompare(b.personId))
-        : [],
       startingScreen: ordering ? this.draftStartingScreen : null,
     };
   }
@@ -710,7 +688,6 @@ export class DeviceProfilesScreen extends LitElement {
         this.draftZoneIds = [...value.zoneIds];
         this.draftStartingZoneId = value.startingZoneId;
         this.draftRoles = [...value.roles];
-        this.draftExceptions = value.exceptions.map((entry) => ({ ...entry }));
         this.draftStartingScreen = value.startingScreen;
       },
     });
@@ -738,10 +715,16 @@ export class DeviceProfilesScreen extends LitElement {
     void this.#load();
   }
 
+  #jobRolesReady: Promise<void> = Promise.resolve();
+
   async #load(): Promise<void> {
     this.#showError(null);
     try {
+      this.#jobRolesReady = this.#queries.watch("listJobRoles", [], (value) => {
+        this.jobRoles = value;
+      });
       await Promise.all([
+        this.#jobRolesReady,
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.profiles = value;
           if (this.#readErrorOwner === "profiles") this.#showError(null);
@@ -771,9 +754,6 @@ export class DeviceProfilesScreen extends LitElement {
         }),
         this.#queries.watch("listProfileKitchenScreens", [], (value) => {
           this.kitchenScreens = value;
-        }),
-        this.#queries.watch("listStaff", [], (value) => {
-          this.staff = value;
         }),
       ]);
     } catch (error) {
@@ -887,9 +867,7 @@ export class DeviceProfilesScreen extends LitElement {
     return FIELDS.filter((field) => {
       if (field === "inactivity") return !kds;
       if (KITCHEN_LIST_FIELDS.includes(field)) return listsShown.includes(field);
-      if (
-        ["department", "zones", "startingZone", "roles", "people", "startingScreen"].includes(field)
-      )
+      if (["department", "zones", "startingZone", "roles", "startingScreen"].includes(field))
         return !kds;
       if (field === "readerDefault") return !kds && this.#readersShown();
       return true;
@@ -926,7 +904,6 @@ export class DeviceProfilesScreen extends LitElement {
         )
           errors.startingZone = t("device_profiles.err_starting_zone_required");
       }
-      if (this.draftRoles.length === 0) errors.roles = t("device_profiles.err_roles_required");
     }
     return errors;
   }
@@ -1019,45 +996,17 @@ export class DeviceProfilesScreen extends LitElement {
 
   // ── Who can sign in ──────────────────────────────────────────────────────────────────────────────
 
-  #onRole(event: CustomEvent<{ checked: boolean }>, role: PersonRole): void {
+  #onRole(event: CustomEvent<{ checked: boolean }>, role: string): void {
     event.stopPropagation();
-    this.draftRoles = toggleMembership(this.draftRoles, ROLES, role, event.detail.checked);
+    this.draftRoles = toggleMembership(
+      this.draftRoles,
+      this.jobRoles.map((job) => job.id),
+      role,
+      event.detail.checked,
+    );
     this.#clearRefusal("roles");
     this.#draftScope?.changed();
   }
-
-  #onPersonRule(event: CustomEvent<{ value: string }>, personId: string): void {
-    event.stopPropagation();
-    const rule = event.detail.value;
-    const existing = this.draftExceptions.findIndex((entry) => entry.personId === personId);
-    const exceptions = [...this.draftExceptions];
-    if (rule === "") {
-      if (existing !== -1) exceptions.splice(existing, 1);
-    } else {
-      const entry = { personId, admitted: rule === "allow" };
-      if (existing === -1) exceptions.push(entry);
-      else exceptions[existing] = entry;
-    }
-    this.draftExceptions = exceptions;
-    this.#clearRefusal("people");
-    this.#draftScope?.changed();
-  }
-
-  #ruleOf(personId: string): "" | "allow" | "deny" {
-    const entry = this.draftExceptions.find((exception) => exception.personId === personId);
-    return entry === undefined ? "" : entry.admitted ? "allow" : "deny";
-  }
-
-  /** The active people the draft admits: a person's own rule first, then their role. */
-  #admittedPeople(): PersonSummary[] {
-    return this.staff.filter((person) => {
-      if (person.status !== "active") return false;
-      const rule = this.#ruleOf(person.personId);
-      return rule === "" ? this.draftRoles.includes(person.role) : rule === "allow";
-    });
-  }
-
-  // ── New / Edit ─────────────────────────────────────────────────────────────────────────────────
 
   #clearDraft(): void {
     this.#scopeQueries.release("choices");
@@ -1089,8 +1038,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftZoneIds = [];
     this.draftStartingZoneId = "";
     this.#scopeEdited = false;
-    this.draftRoles = [...ROLES];
-    this.draftExceptions = [];
+    this.draftRoles = this.jobRoles.map((role) => role.id);
     this.draftStartingScreen = null;
     this.#loaded = null;
     this.attempted = false;
@@ -1149,11 +1097,14 @@ export class DeviceProfilesScreen extends LitElement {
     const scope = this.#draftScope;
     const opened = this.#opened;
     void this.#loadReaders(null, opened);
-    this.#watchScopeChoices().then(
-      (initialChoices) => {
+    Promise.all([this.#watchScopeChoices(), this.#jobRolesReady]).then(
+      ([initialChoices]) => {
         if (opened !== this.#opened) return;
         const choices = this.#latestScopeChoices ?? initialChoices;
         this.scopeChoices = choices;
+        this.draftRoles = this.jobRoles.map((role) => role.id);
+        baseline.roles = [...this.draftRoles].sort();
+        scope?.commit(baseline);
         if (this.draftDepartmentId !== "") return;
         const departments = choices.departments.filter((department) => department.active);
         if (departments.length !== 1) return;
@@ -1215,8 +1166,7 @@ export class DeviceProfilesScreen extends LitElement {
         this.draftZoneIds = zones.allowedZoneIds ?? [];
         this.draftStartingZoneId = zones.startingZoneId;
       }
-      this.draftRoles = ROLES.filter((role) => profile.admittedRoles.includes(role));
-      this.draftExceptions = [...profile.personExceptions];
+      this.draftRoles = [...profile.admittedStaffRoleIds];
       this.draftStartingScreen = profile.startingScreen;
       this.attempted =
         this.#ordering() && profile.departmentId !== null && this.#allowedZones().length === 0;
@@ -1509,15 +1459,13 @@ export class DeviceProfilesScreen extends LitElement {
       if (this.#decidesScope() && (loaded === null || !sameScope(scope, loaded)))
         Object.assign(extras, scope);
       const roles = this.draftRoles;
-      if (loaded === null ? roles.length < ROLES.length : !sameIds(roles, loaded.admittedRoles))
-        extras.admittedRoles = [...roles];
-      const exceptions = this.draftExceptions;
       if (
-        loaded === null
-          ? exceptions.length > 0
-          : !sameExceptions(exceptions, loaded.personExceptions)
+        !sameIds(
+          roles,
+          loaded === null ? this.jobRoles.map((role) => role.id) : loaded.admittedStaffRoleIds,
+        )
       )
-        extras.personExceptions = exceptions.map((entry) => ({ ...entry }));
+        extras.admittedStaffRoleIds = [...roles];
       const screen = this.draftStartingScreen;
       if (loaded === null ? screen !== null : screen !== loaded.startingScreen)
         extras.startingScreen = screen;
@@ -1701,7 +1649,7 @@ export class DeviceProfilesScreen extends LitElement {
     const name = `${profile.name}${t("device_profiles.copy_suffix")}`;
     let readersFailed: { error: unknown } | null = null;
     const copied = this.#mutate(async () => {
-      const extras: ProfileSaveExtras = {};
+      const extras: ProfileSaveExtras = { admittedStaffRoleIds: [...profile.admittedStaffRoleIds] };
       const choices = await this.api.getProfileScopeChoices();
       const stored = this.kitchenScreens.find((entry) => entry.profileId === profile.id)?.screens;
       const screens = switchedOnScreens(
@@ -1717,9 +1665,6 @@ export class DeviceProfilesScreen extends LitElement {
         const zones = liveZones(profile, choices);
         if (departmentOn && zones.startingZoneId !== "")
           Object.assign(extras, { departmentId: profile.departmentId, ...zones });
-        if (profile.admittedRoles.length < ROLES.length)
-          extras.admittedRoles = profile.admittedRoles;
-        if (profile.personExceptions.length > 0) extras.personExceptions = profile.personExceptions;
         if (profile.startingScreen !== null) extras.startingScreen = profile.startingScreen;
       }
       if (profile.cashDrawerPrinterIds.length > 0)
@@ -2344,84 +2289,25 @@ export class DeviceProfilesScreen extends LitElement {
     `;
   }
 
-  #ruleLabel(rule: "" | "allow" | "deny"): string {
-    return t(
-      rule === "allow"
-        ? "device_profiles.person_allowed"
-        : rule === "deny"
-          ? "device_profiles.person_refused"
-          : "device_profiles.person_follows_role",
-    );
-  }
-
   #renderWho(errors: FieldErrors): TemplateResult {
-    const admitted = this.#admittedPeople().map((person) => person.displayName);
-    const people = this.staff.filter((person) => person.status === "active");
-    const ruled = people.filter((person) => this.#ruleOf(person.personId) !== "");
-    const summary =
-      ruled.length === 0
-        ? t("device_profiles.people_none")
-        : ruled
-            .map(
-              (person) =>
-                `${person.displayName}: ${this.#ruleLabel(this.#ruleOf(person.personId))}`,
-            )
-            .join(" · ");
     return html`
       <h2 class="section-title">${t("device_profiles.who_heading")}</h2>
       ${this.#switchGroup(
         "profile-roles",
         t("device_profiles.roles"),
         errors.roles,
-        ROLES.map(
+        this.jobRoles.map(
           (role) =>
             html`<wt-switch
-              data-test="profile-role-${role}"
-              name="admittedRoles"
-              label=${roleName(role)}
-              .checked=${this.draftRoles.includes(role)}
-              @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onRole(e, role)}
+              data-test=${`profile-role-${role.id}`}
+              name="admittedStaffRoleIds"
+              label=${role.name}
+              .checked=${this.draftRoles.includes(role.id)}
+              @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#onRole(e, role.id)}
             ></wt-switch>`,
         ),
       )}
-      <p class="hint" data-test="admitted-people" aria-live="polite">
-        ${
-          admitted.length === 0
-            ? t("device_profiles.admitted_nobody")
-            : fill("device_profiles.admitted_people", { names: admitted.join(", ") })
-        }
-      </p>
-      ${
-        people.length === 0
-          ? nothing
-          : html`<wt-disclosure
-              class="field"
-              data-test="profile-people"
-              heading=${t("device_profiles.people")}
-              summary=${summary}
-              ?has-error=${Boolean(errors.people)}
-            >
-              ${people.map(
-                (person) =>
-                  html`<wt-combobox
-                    class="field"
-                    data-test="profile-person-${person.personId}"
-                    name="personExceptions"
-                    label=${person.displayName}
-                    search="never"
-                    show-empty-option
-                    .options=${(["", "allow", "deny"] as const).map((rule) => ({
-                      value: rule,
-                      label: this.#ruleLabel(rule),
-                    }))}
-                    .value=${this.#ruleOf(person.personId)}
-                    @wt-change=${(e: CustomEvent<{ value: string }>) =>
-                      this.#onPersonRule(e, person.personId)}
-                  ></wt-combobox>`,
-              )}
-              ${this.#groupError("profile-people", errors.people)}
-            </wt-disclosure>`
-      }
+      ${this.draftRoles.length === 0 ? html`<p class="hint" data-test="admitted-people" aria-live="polite">${t("device_profiles.admitted_nobody")}</p>` : nothing}
     `;
   }
 

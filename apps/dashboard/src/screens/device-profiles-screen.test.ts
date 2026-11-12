@@ -24,13 +24,10 @@ import { codeMessage } from "../i18n/codes.js";
 
 afterEach(cleanupWidgets);
 
-const EVERY_ROLE: PersonRole[] = ["staff", "supervisor", "manager", "admin"];
-
 /** Where and for whom a profile with nothing narrowed serves: every zone, every role. */
 const OPEN_ACCESS = {
   allowedZoneIds: null,
-  admittedRoles: EVERY_ROLE,
-  personExceptions: [],
+  admittedStaffRoleIds: ["job-waiter", "job-chef"],
   startingScreen: null,
 };
 
@@ -119,6 +116,10 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listStations: vi.fn().mockResolvedValue([]),
     listProfileKitchenScreens: vi.fn().mockResolvedValue([]),
     getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),
+    listJobRoles: vi.fn().mockResolvedValue([
+      { id: "job-waiter", name: "Waiter", colour: "grey", position: 0 },
+      { id: "job-chef", name: "Chef", colour: "grey", position: 1 },
+    ]),
     listStaff: vi.fn().mockResolvedValue(staff),
     listReaders: vi.fn().mockResolvedValue([]),
     getProfileReaders: vi.fn().mockResolvedValue({ readerIds: [], defaultReaderId: null }),
@@ -252,7 +253,7 @@ describe("device-profiles-screen list mode", () => {
       "till",
       null,
       NO_PRINTERS,
-      ORDERING,
+      { ...ORDERING, admittedStaffRoleIds: ["job-waiter", "job-chef"] },
     );
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2);
   });
@@ -1667,6 +1668,7 @@ describe("device-profiles-screen kitchen screens", () => {
     await flush(el);
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p2");
     expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
+      admittedStaffRoleIds: ["job-waiter", "job-chef"],
       kitchenScreens: {
         station: { stationIds: ["s1"], zoneIds: null },
         pass: { stationIds: [], zoneIds: null },
@@ -1715,7 +1717,13 @@ describe("device-profiles-screen kitchen screens", () => {
 });
 
 describe("device-profiles-screen where a profile serves and who signs in (W97)", () => {
-  type Field = HTMLElement & { value: string; error: string; required: boolean; checked: boolean };
+  type Field = HTMLElement & {
+    label: string;
+    value: string;
+    error: string;
+    required: boolean;
+    checked: boolean;
+  };
   const q = (el: DeviceProfilesScreen, testId: string) =>
     el.shadowRoot!.querySelector<Field>(`[data-test="${testId}"]`);
   const text = (el: DeviceProfilesScreen, testId: string) =>
@@ -1773,7 +1781,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       startingZoneId: "z4",
     });
     change(el, "profile-name", "Renamed counter");
-    toggle(el, "profile-role-staff", false);
+    toggle(el, "profile-role-job-waiter", false);
     await save(el);
     expect(api.updateDeviceProfile).not.toHaveBeenCalled();
     expect(text(el, "profile-zones-error")).toBe(t("device_profiles.err_zones_required"));
@@ -1783,7 +1791,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     await save(el);
     expect(api.updateDeviceProfile).toHaveBeenCalledOnce();
     expect(extras(api)).toEqual({
-      admittedRoles: ["supervisor", "manager", "admin"],
+      admittedStaffRoleIds: ["job-chef"],
       departmentId: "d1",
       allowedZoneIds: ["z1"],
       startingZoneId: "z1",
@@ -1855,22 +1863,22 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(q(el, "profile-name")!.value).toBe("Patio");
   });
 
-  it("puts a department name and a person's name holding a replacement pattern in as written", async () => {
+  it("puts department and job names holding a replacement pattern in as written", async () => {
     const el = await openCreate(
       stubApi({
         getProfileScopeChoices: vi.fn().mockResolvedValue({
           ...scopeChoices,
           departments: [{ id: "d1", name: "Restaurant $&", active: true }],
         }),
-        listStaff: vi.fn().mockResolvedValue([person("pe-ana", "Ana $&", "staff")]),
+        listJobRoles: vi
+          .fn()
+          .mockResolvedValue([{ id: "job-waiter", name: "Waiter $&", holderIds: [] }]),
       }),
     );
     expect(text(el, "profile-zones-hint")).toBe(
       t("device_profiles.every_zone_hint").split("{department}").join("Restaurant $&"),
     );
-    expect(text(el, "admitted-people")).toBe(
-      t("device_profiles.admitted_people").split("{names}").join("Ana $&"),
-    );
+    expect(q(el, "profile-role-job-waiter")!.label).toBe("Waiter $&");
   });
 
   it("starts a new profile in the venue's only department, at its first zone, using every zone", async () => {
@@ -2007,53 +2015,45 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     });
   });
 
-  it("lists who can sign in, following the roles and each person's own rule", async () => {
-    const { api, el } = await openEdit(profiles[0]!);
-    expect(text(el, "admitted-people")).toBe(
-      t("device_profiles.admitted_people").replace("{names}", "Ana, Luis"),
+  it("ticks job roles in rota order and shows no people or access levels", async () => {
+    const { api, el } = await openEdit(
+      { ...profiles[0]!, admittedStaffRoleIds: ["job-waiter"] },
+      {
+        listJobRoles: vi.fn().mockResolvedValue([
+          { id: "job-chef", name: "Chef", colour: "grey", position: 0, holderIds: [] },
+          { id: "job-waiter", name: "Waiter", colour: "grey", position: 1, holderIds: [] },
+        ]),
+      },
     );
-    toggle(el, "profile-role-staff", false);
+    expect(
+      [...q(el, "profile-roles")!.querySelectorAll<Field>("wt-switch")].map((s) => s.label),
+    ).toEqual(["Chef", "Waiter"]);
+    expect(q(el, "profile-role-job-waiter")!.checked).toBe(true);
+    expect(q(el, "profile-role-job-chef")!.checked).toBe(false);
+    expect(q(el, "profile-people")).toBeNull();
+    expect(q(el, "profile-role-admin")).toBeNull();
+    toggle(el, "profile-role-job-chef", true);
     await flush(el);
-    expect(text(el, "admitted-people")).toBe(
-      t("device_profiles.admitted_people").replace("{names}", "Luis"),
-    );
-    await chooseOption(q(el, "profile-person-pe-ana")!, "allow");
-    await chooseOption(q(el, "profile-person-pe-luis")!, "deny");
-    await flush(el);
-    expect(text(el, "admitted-people")).toBe(
-      t("device_profiles.admitted_people").replace("{names}", "Ana"),
-    );
-    expect(q(el, "profile-person-pe-marta")).toBeNull();
     await save(el);
-    expect(extras(api)).toEqual({
-      admittedRoles: ["supervisor", "manager", "admin"],
-      personExceptions: [
-        { personId: "pe-ana", admitted: true },
-        { personId: "pe-luis", admitted: false },
-      ],
-    });
+    expect(extras(api)).toEqual({ admittedStaffRoleIds: ["job-chef", "job-waiter"] });
   });
 
-  it("says so when nobody can sign in", async () => {
-    const { el } = await openEdit(profiles[0]!);
-    await chooseOption(q(el, "profile-person-pe-ana")!, "deny");
-    await chooseOption(q(el, "profile-person-pe-luis")!, "deny");
+  it("an empty job selection saves and says nobody can sign in", async () => {
+    const { api, el } = await openEdit(
+      { ...profiles[0]!, admittedStaffRoleIds: ["job-waiter"] },
+      {
+        listJobRoles: vi
+          .fn()
+          .mockResolvedValue([
+            { id: "job-waiter", name: "Waiter", colour: "grey", position: 0, holderIds: [] },
+          ]),
+      },
+    );
+    toggle(el, "profile-role-job-waiter", false);
     await flush(el);
     expect(text(el, "admitted-people")).toBe(t("device_profiles.admitted_nobody"));
-  });
-
-  it("refuses a profile no role can sign in on, beside the roles, sending nothing", async () => {
-    const { api, el } = await openEdit(profiles[0]!);
-    for (const role of EVERY_ROLE) toggle(el, `profile-role-${role}`, false);
-    await flush(el);
     await save(el);
-    expect(api.updateDeviceProfile).not.toHaveBeenCalled();
-    expect(text(el, "profile-roles-error")).toBe(t("device_profiles.err_roles_required"));
-    expect(bottom(el)).toBe(t("form.fix_fields"));
-    toggle(el, "profile-role-manager", true);
-    await flush(el);
-    expect(q(el, "profile-roles-error")).toBeNull();
-    expect(bottom(el)).toBeNull();
+    expect(extras(api)).toEqual({ admittedStaffRoleIds: [] });
   });
 
   it("draws actions and screens as separate groups, and offers a kitchen display taking, preparing and handing over", async () => {
@@ -2210,18 +2210,10 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     [
       {
         code: "device_profile.admission_invalid",
-        params: { field: "admittedRoles", reason: "empty" },
+        params: { field: "admittedStaffRoleIds", reason: "not_found", staffRoleId: "gone" },
       },
       "roles",
-      "device_profiles.err_roles_required",
-    ],
-    [
-      {
-        code: "device_profile.admission_invalid",
-        params: { field: "personExceptions", reason: "not_found", personId: "pe-gone" },
-      },
-      "people",
-      "device_profiles.err_people",
+      "device_profiles.err_roles",
     ],
     [
       { code: "device_profile.invalid", params: { reason: "shared_display_action" } },
@@ -2285,20 +2277,23 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     q(el, "edit-p1")!.click();
     await flush(el);
     change(el, "profile-name", "Draft name");
-    toggle(el, "profile-role-staff", false);
+    toggle(el, "profile-role-job-waiter", false);
     await flush(el);
-    vi.mocked(api.listStaff).mockResolvedValue([...staff, person("pe-new", "Nora", "manager")]);
+    vi.mocked(api.listJobRoles).mockResolvedValue([
+      { id: "job-waiter", name: "Waiter", holderIds: [] },
+      { id: "job-chef", name: "Chef", holderIds: [] },
+      { id: "job-new", name: "Barista", holderIds: [] },
+    ]);
     liveData.invalidate([
-      { type: "persons", id: "pe-new" },
+      { type: "staff_roles", id: "job-new" },
       { type: "device_profiles", id: "p1" },
     ]);
-    await vi.waitFor(() => expect(api.listStaff).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(api.listJobRoles).toHaveBeenCalledTimes(2));
     await flush(el);
     expect(q(el, "profile-name")!.value).toBe("Draft name");
-    expect(q(el, "profile-role-staff")!.checked).toBe(false);
-    expect(text(el, "admitted-people")).toBe(
-      t("device_profiles.admitted_people").replace("{names}", "Luis, Nora"),
-    );
+    expect(q(el, "profile-role-job-waiter")!.checked).toBe(false);
+    expect(q(el, "profile-role-job-new")!.label).toBe("Barista");
+    expect(q(el, "profile-role-job-new")!.checked).toBe(false);
     const listReads = vi.mocked(api.listDeviceProfiles).mock.calls.length;
     await save(el);
     expect(q(el, "editor-form")).toBeNull();
@@ -2320,6 +2315,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       departmentId: "d1",
       allowedZoneIds: ["z1"],
       startingZoneId: "z1",
+      admittedStaffRoleIds: ["job-waiter", "job-chef"],
     });
   });
 
@@ -2345,7 +2341,9 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       q(el, "duplicate-p1")!.click();
       await flush(el);
       expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
-      expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toBeUndefined();
+      expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
+        admittedStaffRoleIds: ["job-waiter", "job-chef"],
+      });
     },
   );
 
@@ -2410,7 +2408,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       expect(help?.textContent?.trim()).toBeTruthy();
       expect((q(el, field) as unknown as Combobox).placeholder).toBe("");
     }
-    for (const field of ["profile-starting-screen", "profile-person-pe-ana"]) {
+    for (const field of ["profile-starting-screen"]) {
       const box = q(el, field) as unknown as Combobox & { showEmptyOption: boolean };
       expect(box.showEmptyOption).toBe(true);
       expect(box.placeholder).toBe("");
@@ -2424,14 +2422,24 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     );
   });
 
+  it("copies an empty job selection on a kitchen-display profile", async () => {
+    const kitchen = { ...profiles[1]!, admittedStaffRoleIds: [] };
+    const api = stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([kitchen]) });
+    const el = await mount(api);
+    q(el, "duplicate-p2")!.click();
+    await flush(el);
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
+      admittedStaffRoleIds: [],
+    });
+  });
+
   it("copies where a profile serves, who signs in and its starting screen when it is duplicated", async () => {
     const narrowed: DeviceProfile = {
       ...profiles[0]!,
       capabilities: ["show-schedule"],
       allowedZoneIds: ["z2"],
       startingZoneId: "z2",
-      admittedRoles: ["manager"],
-      personExceptions: [{ personId: "pe-ana", admitted: true }],
+      admittedStaffRoleIds: ["job-chef"],
       startingScreen: "show-schedule",
     };
     const api = stubApi({ listDeviceProfiles: vi.fn().mockResolvedValue([narrowed]) });
@@ -2443,8 +2451,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       departmentId: "d1",
       allowedZoneIds: ["z2"],
       startingZoneId: "z2",
-      admittedRoles: ["manager"],
-      personExceptions: [{ personId: "pe-ana", admitted: true }],
+      admittedStaffRoleIds: ["job-chef"],
       startingScreen: "show-schedule",
     });
   });
@@ -3563,6 +3570,7 @@ it("service deletion empty zone bound survives native unrelated save and actual 
     await vi.waitFor(() => expect(writes.length).toBe(1));
     expect(writes[0]![0]).toBe("/management-api/device-profiles/p2/copy");
     expect(writes[0]![1]).toEqual({
+      admittedStaffRoleIds: ["job-waiter", "job-chef"],
       name: "Kitchen (copy)",
 
       capabilities: [],

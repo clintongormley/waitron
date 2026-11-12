@@ -29,8 +29,7 @@ const profile: DeviceProfile = {
   departmentId: null,
   allowedZoneIds: null,
   startingZoneId: null,
-  admittedRoles: ["staff", "supervisor", "manager", "admin"],
-  personExceptions: [],
+  admittedStaffRoleIds: ["job-waiter", "job-chef"],
   id: "p1",
   name: "Counter",
 
@@ -133,6 +132,10 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
     listZones: async () => [],
     listPrinters: async () => [],
     listPagePrinters: async () => [],
+    listJobRoles: vi.fn().mockResolvedValue([
+      { id: "job-waiter", name: "Waiter", colour: "grey", position: 0 },
+      { id: "job-chef", name: "Chef", colour: "grey", position: 1 },
+    ]),
     listProfileKitchenScreens: async () => [
       { profileId: "p2", screens: { station: { stationIds: null, zoneIds: null } } },
     ],

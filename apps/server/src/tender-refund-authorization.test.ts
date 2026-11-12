@@ -1,3 +1,4 @@
+import { staffRoles, personStaffRoles } from "@waitron/db";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,7 +26,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   createPinThrottle,
-  deviceProfileAdmissionPersons,
+  deviceProfileAdmissionRoles,
   hashPin,
   hashSessionToken,
   persons,
@@ -319,8 +320,8 @@ describe("settled-tender refund authorization before reservation", () => {
   it("rechecks the current profile's operator admission", async () => {
     const t = await target();
     await store.db
-      .insert(deviceProfileAdmissionPersons)
-      .values({ deviceProfileId: profileId, personId, admitted: false });
+      .delete(deviceProfileAdmissionRoles)
+      .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
     await refused(t, "device_profile.not_admitted");
   });
   it("requires sale.refund even when the device takes cash", async () => {
@@ -573,8 +574,13 @@ describe("settled-tender refund authorization before reservation", () => {
     const t = await target();
     await role("staff");
     await store.db
-      .insert(deviceProfileAdmissionPersons)
-      .values({ deviceProfileId: profileId, personId: managerId, admitted: false });
+      .delete(deviceProfileAdmissionRoles)
+      .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
+    const [job] = await store.db.insert(staffRoles).values({ name: "Refund operator" }).returning();
+    await store.db.insert(personStaffRoles).values({ personId, staffRoleId: job!.id });
+    await store.db
+      .insert(deviceProfileAdmissionRoles)
+      .values({ deviceProfileId: profileId, staffRoleId: job!.id });
     expect(
       (await reserve(t, request(t.tenderId, { override: override() }))).refund.authorizedBy,
     ).toBe(managerId);

@@ -1669,21 +1669,12 @@ CREATE TABLE `handover_return_batches` (
 	CONSTRAINT "handover_return_batches_bounds_ck" CHECK(typeof("handover_return_batches"."batch_index") = 'integer' and typeof("handover_return_batches"."batch_count") = 'integer' and "handover_return_batches"."batch_index" >= 0 and "handover_return_batches"."batch_index" < "handover_return_batches"."batch_count" and "handover_return_batches"."batch_count" <= 9007199254740991)
 );
 --> statement-breakpoint
-CREATE TABLE `device_profile_admission_persons` (
-	`device_profile_id` text NOT NULL,
-	`person_id` text NOT NULL,
-	`admitted` integer NOT NULL,
-	PRIMARY KEY(`device_profile_id`, `person_id`),
-	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
 CREATE TABLE `device_profile_admission_roles` (
 	`device_profile_id` text NOT NULL,
-	`role` text NOT NULL,
-	PRIMARY KEY(`device_profile_id`, `role`),
+	`staff_role_id` text NOT NULL,
+	PRIMARY KEY(`device_profile_id`, `staff_role_id`),
 	FOREIGN KEY (`device_profile_id`) REFERENCES `device_profiles`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "device_profile_admission_roles_role_ck" CHECK("device_profile_admission_roles"."role" in ('staff', 'supervisor', 'manager', 'admin'))
+	FOREIGN KEY (`staff_role_id`) REFERENCES `staff_roles`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE TABLE `google_oidc_states` (

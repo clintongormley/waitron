@@ -5,7 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
-  deviceProfileAdmissionPersons,
+  deviceProfileAdmissionRoles,
   persons,
   registerModulePermissions,
   sessions,
@@ -104,8 +104,8 @@ it.each(["ended", "disabled", "deleted", "suspended", "admission", "profile"] as
         .where(eq(persons.id, venue.personId));
     if (kind === "admission")
       await suite.db
-        .insert(deviceProfileAdmissionPersons)
-        .values({ deviceProfileId: venue.profileId, personId: venue.personId, admitted: false });
+        .delete(deviceProfileAdmissionRoles)
+        .where(eq(deviceProfileAdmissionRoles.deviceProfileId, venue.profileId));
     if (kind === "profile")
       await suite.db
         .update(deviceProfiles)
@@ -209,8 +209,8 @@ it.each(["session", "admission", "allowed"] as const)(
           .where(eq(sessions.id, venue.sessionId));
       if (kind === "admission")
         await suite.db
-          .insert(deviceProfileAdmissionPersons)
-          .values({ deviceProfileId: venue.profileId, personId: venue.personId, admitted: false });
+          .delete(deviceProfileAdmissionRoles)
+          .where(eq(deviceProfileAdmissionRoles.deviceProfileId, venue.profileId));
     } finally {
       release.resolve();
       spy.mockRestore();

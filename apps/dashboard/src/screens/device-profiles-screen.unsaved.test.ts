@@ -27,8 +27,7 @@ const profile: DeviceProfile = {
   departmentId: "d1",
   allowedZoneIds: null,
   startingZoneId: "z1",
-  admittedRoles: ["staff", "supervisor", "manager", "admin"],
-  personExceptions: [],
+  admittedStaffRoleIds: ["job-waiter", "job-chef"],
   startingScreen: "show-station",
 };
 const printer: Printer = {
@@ -105,6 +104,10 @@ async function mount(overrides: Partial<DashboardApi> = {}, loaded = profile) {
       listProfileKitchenScreens: async () => [
         { profileId: "p1", screens: { station: { stationIds: ["s1"], zoneIds: null } } },
       ],
+      listJobRoles: vi.fn().mockResolvedValue([
+        { id: "job-waiter", name: "Waiter", colour: "grey", position: 0 },
+        { id: "job-chef", name: "Chef", colour: "grey", position: 1 },
+      ]),
       listStaff: async () => [
         {
           personId: "pe1",
@@ -171,8 +174,7 @@ for (const [id, initial, edited] of [
   ["profile-form-factor", "till", "phone-portrait"],
   ["profile-starting-zone", "z1", "z2"],
   ["profile-starting-screen", "show-station", "show-expo"],
-  ["profile-role-staff", true, false],
-  ["profile-person-pe1", "", "deny"],
+  ["profile-role-job-waiter", true, false],
   ["cap-take-orders", false, true],
   ["payment-slip-printers-r1", false, true],
   ["receipt-printers-default", "", "r1"],

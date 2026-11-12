@@ -1,3 +1,6 @@
+import { STARTER_PROFILE_NAMES } from "@waitron/provisioning";
+import { personStaffRoles, staffRoles } from "@waitron/db";
+import { canUseDeviceProfile } from "@waitron/identity";
 import { STARTER_JOB_ROLE_NAMES } from "@waitron/provisioning";
 import { seedPersons, builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { listPagePrinters, registerPagePrinter } from "./page-printers.js";
@@ -110,7 +113,6 @@ import {
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, type VenueRequest } from "@waitron/provisioning";
 import {
-  deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,
   hashPassword,
   hashPin,
@@ -4773,40 +4775,23 @@ async function exportScratch(
   }
 }
 
-it("transfers a profile's admitted roles and person exceptions, leaving a retired profile's and the exporting operator's behind", async () => {
+it("transfers job-role admission, omits retired profiles, and admits the importing administrator through their imported jobs", async () => {
   const source = await applyVenue(planVenue(venue("B35792468"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
-
   const original = await withTransaction(suite.db, async (tx) => {
     const candidates = await tx.select({ id: persons.id }).from(persons);
-    let admin: { id: string } | undefined;
-    for (const person of candidates) {
-      if ((await builtInRoleForTest(tx, person.id)) === "admin") {
-        admin = person;
-        break;
-      }
-    }
-    const [mia] = await seedPersons(tx, {
-      displayName: "Mia",
-      pinHash: hashPin("5555"),
-      role: "staff",
-    });
+    let admin = "";
+    for (const person of candidates)
+      if ((await builtInRoleForTest(tx, person.id)) === "admin") admin = person.id;
+    const [job] = await tx.insert(staffRoles).values({ name: "Cook" }).returning();
+    await tx.insert(personStaffRoles).values({ personId: admin, staffRoleId: job!.id });
     const [live, retired] = await seedDeviceProfiles(tx, [
-      { name: "Bar till", formFactor: "till" },
-      { name: "Old till", formFactor: "till" },
+      { name: "Bar till", formFactor: "till", admitted: [job!.id] },
+      { name: "Old till", formFactor: "till", admitted: [job!.id] },
     ]);
-    for (const profile of [live!, retired!]) {
-      await tx
-        .insert(deviceProfileAdmissionRoles)
-        .values({ deviceProfileId: profile.id, role: "manager" });
-      await tx.insert(deviceProfileAdmissionPersons).values([
-        { deviceProfileId: profile.id, personId: mia!.id, admitted: true },
-        { deviceProfileId: profile.id, personId: admin!.id, admitted: false },
-      ]);
-    }
-    return { admin: admin!.id, mia: mia!.id, live: live!.id, retired: retired!.id };
+    return { admin, job: job!.id, live: live!.id, retired: retired!.id };
   });
   await retireProfile(original.retired);
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -4817,43 +4802,37 @@ it("transfers a profile's admitted roles and person exceptions, leaving a retire
     new Date("2026-10-06T12:00:00Z"),
     versions,
   );
-  expect(
-    transferred.tables.device_profile_admission_roles!.map((row) => row.device_profile_id),
-  ).toEqual([original.live]);
-  expect(
-    transferred.tables
-      .device_profile_admission_persons!.map((row) => `${row.device_profile_id} ${row.person_id}`)
-      .sort(),
-  ).toEqual([`${original.live} ${original.admin}`, `${original.live} ${original.mia}`].sort());
+  const admissions = transferred.tables.device_profile_admission_roles!;
+  expect(admissions).toContainEqual({
+    device_profile_id: original.live,
+    staff_role_id: original.job,
+  });
+  expect(admissions.some((row) => row.device_profile_id === original.retired)).toBe(false);
+  expect(transferred.tables).not.toHaveProperty("device_profile_admission_persons");
   await applyVenue(planVenue(venue("B46813579"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
-  const imported = await withTransaction(targetSuite.db, async (tx) => ({
-    roles: await tx
-      .select({ profile: deviceProfiles.name, role: deviceProfileAdmissionRoles.role })
+  await withTransaction(targetSuite.db, async (tx) => {
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.role, "admin"));
+    const rows = await tx
+      .select({ profile: deviceProfiles.name, job: staffRoles.name })
       .from(deviceProfileAdmissionRoles)
-      .innerJoin(
-        deviceProfiles,
-        eq(deviceProfiles.id, deviceProfileAdmissionRoles.deviceProfileId),
-      ),
-    exceptions: await tx
-      .select({
-        profile: deviceProfiles.name,
-        person: persons.displayName,
-        admitted: deviceProfileAdmissionPersons.admitted,
-      })
-      .from(deviceProfileAdmissionPersons)
-      .innerJoin(
-        deviceProfiles,
-        eq(deviceProfiles.id, deviceProfileAdmissionPersons.deviceProfileId),
-      )
-      .innerJoin(persons, eq(persons.id, deviceProfileAdmissionPersons.personId)),
-  }));
-  expect(imported).toEqual({
-    roles: [{ profile: "Bar till", role: "manager" }],
-    exceptions: [{ profile: "Bar till", person: "Mia", admitted: true }],
+      .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfileAdmissionRoles.deviceProfileId))
+      .innerJoin(staffRoles, eq(staffRoles.id, deviceProfileAdmissionRoles.staffRoleId))
+      .orderBy(deviceProfiles.name);
+    expect(rows).toEqual([
+      { profile: "Bar till", job: "Cook" },
+      { profile: STARTER_PROFILE_NAMES.Kitchen.es, job: STARTER_JOB_ROLE_NAMES.Team.es },
+      { profile: STARTER_PROFILE_NAMES.Counter.es, job: STARTER_JOB_ROLE_NAMES.Team.es },
+      { profile: STARTER_PROFILE_NAMES.Handheld.es, job: STARTER_JOB_ROLE_NAMES.Team.es },
+    ]);
+    for (const profile of await tx.select().from(deviceProfiles))
+      expect(await canUseDeviceProfile(tx, profile.id, admin!.id), profile.name).toBe(true);
   });
 });
 
