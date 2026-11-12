@@ -78,6 +78,7 @@ export async function checkAccess(
     device.deviceProfileId,
     scope.workingOrderIds.map((orderId) => ({ orderId })),
   );
+  return device;
 }
 async function readRefund(tx: Transaction, id: string) {
   const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));

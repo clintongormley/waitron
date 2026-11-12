@@ -1,17 +1,12 @@
 import type { Hono } from "hono";
-import { and, asc, eq } from "drizzle-orm";
-import { tenders, withTransaction, type Transaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import type { AuthzInput, PinThrottle } from "@waitron/identity";
 import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid, saleId as brandSaleId } from "@waitron/shared";
 import { asObject } from "./bill-payments-api.js";
 import { withCorrectionAuthorization } from "./invoice-correction-authorization.js";
 import { readCorrectionRow } from "./invoice-correction-legs.js";
-import {
-  giveCorrectionCash,
-  parseCorrectionCash,
-  readCashLeft,
-} from "./invoice-correction-cash.js";
+import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
 import {
   closeInvoiceCorrection,
   expectedSplitOf,
@@ -27,7 +22,6 @@ import {
 import type { Logger } from "./logger.js";
 import { withCheck } from "./pin-check-ahead.js";
 import { requestCfg } from "./request-config.js";
-import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
 import { checkAccess, overrideOf, pathId } from "./tender-refund-api.js";
 import { overridePinAttempts, STATUS, type TillApiDeps } from "./till-api.js";
 import { requireEconomicWrite } from "./trading-admission.js";
@@ -126,31 +120,17 @@ export function mountInvoiceCorrectionApi(
       const body = asObject(await readRawJsonBody<unknown>(c));
       const ask = parseCorrectionCash({ submissionId: body.submissionId, amount: body.amount });
       const override = overrideOf(body);
-      const { saleId, tenderId } = await withTransaction(deps.db, async (tx) => {
-        const saleId = await saleOfCorrection(tx, correctionId);
-        const [holding] = await readCashLeft(tx, saleId);
-        const [oldest] = await tx
-          .select({ id: tenders.id })
-          .from(tenders)
-          .where(and(eq(tenders.saleId, saleId), eq(tenders.method, "cash")))
-          .orderBy(asc(tenders.settledAt), asc(tenders.id));
-        return { saleId, tenderId: holding?.tenderId ?? oldest?.id ?? "" };
-      });
-      const result = await withTenderRefundAuthorization(
+      // Read apart only to name the invoice whose zones authorization checks; the write
+      // transaction reads the correction again.
+      const saleId = await withTransaction(deps.db, (tx) => saleOfCorrection(tx, correctionId));
+      const result = await withCorrectionAuthorization(
         deps.db,
-        cfg,
         saleId,
-        {
-          submissionId: ask.submissionId,
-          tenderId,
-          appliedAmount: ask.amount,
-          tipAmount: "0.00",
-          reason: "",
-          override,
-        },
+        override,
         {
           personId: session.personId,
           sessionId: session.sessionId,
+          deviceId: session.deviceId,
           attempts: overridePinAttempts(pinThrottle, session.deviceId),
         },
         async (tx, authorization, checked) => {
@@ -168,6 +148,7 @@ export function mountInvoiceCorrectionApi(
             },
           );
         },
+        { permission: "sale.refund", tender: "cash" },
       );
       return c.json(result);
     }),
@@ -192,6 +173,8 @@ export function mountInvoiceCorrectionApi(
         const body = asObject(await readRawJsonBody<unknown>(c));
         const request = parse(body);
         const override = overrideOf(body);
+        // Read apart only to name the invoice whose zones authorization checks; the write
+        // transaction reads the correction again.
         const saleId = await withTransaction(deps.db, (tx) => saleOfCorrection(tx, correctionId));
         const result = await withCorrectionAuthorization(
           deps.db,

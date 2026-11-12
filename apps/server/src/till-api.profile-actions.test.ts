@@ -530,7 +530,7 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
     proof: "matching request (source)",
     actions: ["take-cash"],
     basis:
-      'Cash only: the correction\'s oldest cash payment holding money goes through withTenderRefundAuthorization, as POST /api/transactions/:saleId/refunds; invoice-correction-api.test.ts: "refuses a till whose profile cannot take cash, writing nothing, and gives cash once it can"',
+      'Cash only: withCorrectionAuthorization asks for sale.refund and a profile that takes cash, as POST /api/transactions/:saleId/refunds does for a cash payment; invoice-correction-api.test.ts: "refuses a till whose profile cannot take cash, writing nothing, and gives cash once it can"',
     routes: ["POST /api/invoice-corrections/:id/cash"],
   },
   {

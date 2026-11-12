@@ -49,7 +49,7 @@ export function parseCorrectionCash(request: { submissionId: unknown; amount: un
 
 /** The sale's cash payments still holding money paid for the sale, oldest first: a correction gives
  * back no tip, so a payment holding only its tip is left out. */
-export async function readCashLeft(tx: Transaction, saleId: string) {
+async function readCashLeft(tx: Transaction, saleId: string) {
   return (await readRefundableTenders(tx, saleId)).filter(
     (row) => row.method === "cash" && compareDecimal(decimal(row.appliedRemaining), ZERO) > 0,
   );
