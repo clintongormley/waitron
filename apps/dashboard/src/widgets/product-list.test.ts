@@ -6120,9 +6120,6 @@ it.each(
     }
 
     expect(root.querySelector(`[data-test="select-${ROOT_KEY}"]`)).toBeNull();
-    await page.screenshot({
-      path: `__screenshots__/a462-task2/products-${width}-${locale}-${theme}.png`,
-    });
   } finally {
     setLocale(before);
   }
@@ -6272,28 +6269,25 @@ it.each(
     expect(window.innerWidth).toBe(width);
     const { el, root, table } = await mountTree({ selecting: true, reordering: true });
     el.parentElement!.setAttribute("data-theme", theme);
-    const frame = async (state: string) => {
+    const frame = async () => {
       await new Promise<void>((resolve) =>
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       );
       const top = root.querySelector<HTMLElement>('tr[data-row-key="root"]')!;
       const color = getComputedStyle(top).color;
       expect(color).toBe(theme === "light" ? "rgb(22, 24, 29)" : "rgb(236, 238, 242)");
-      await page.screenshot({
-        path: `__screenshots__/a462-task4/products-${width}-${locale}-${theme}-${state}.png`,
-      });
     };
     await openRow(el, "folder:d");
     await openRow(el, "folder:b");
-    await frame("deep");
+    await frame();
     root.querySelector<HTMLButtonElement>('tr[data-row-key="root"] .tree-toggle')!.click();
     await table.updateComplete;
     expect(rowKeys(root)).toEqual([]);
-    await frame("closed");
+    await frame();
     root.querySelector<HTMLButtonElement>('tr[data-row-key="root"] .tree-toggle')!.click();
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["folder:d", "folder:f", "bread"]);
-    await frame("reopened");
+    await frame();
   } finally {
     setLocale(previousLocale);
     if (previousTheme === null) document.documentElement.removeAttribute("data-theme");
