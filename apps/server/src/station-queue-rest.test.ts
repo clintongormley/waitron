@@ -308,7 +308,7 @@ describe("station queue bump mode", () => {
       () => {},
     );
     const [cook] = await seedPersons(db, {
-      displayName: "Ana",
+      displayName: "Anna",
       pinHash: fixturePinHash("5555"),
       role: "staff",
     });

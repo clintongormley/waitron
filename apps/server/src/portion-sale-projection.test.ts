@@ -493,7 +493,7 @@ describe("A803 monetary comparison: operations on portions through the real path
         )
       ).id;
       await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
-      await seedPersons(tx, { id: OPERATOR, displayName: "Ana", role: "supervisor" });
+      await seedPersons(tx, { id: OPERATOR, displayName: "Anna", role: "supervisor" });
       const reasonId = (
         await createAdjustmentReason(tx, {
           name: "House",
@@ -913,7 +913,7 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
         )
       ).id;
       await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
-      await seedPersons(tx, { id: OPERATOR, displayName: "Ana", role: "supervisor" });
+      await seedPersons(tx, { id: OPERATOR, displayName: "Anna", role: "supervisor" });
       const reasonId = (
         await createAdjustmentReason(tx, {
           name: "House",
