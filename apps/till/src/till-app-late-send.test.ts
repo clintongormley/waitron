@@ -851,7 +851,7 @@ describe("a manager's PIN", () => {
     const el = await managerAsked();
 
     expect(api.serviceDayAuthorizers).toHaveBeenCalledTimes(1);
-    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    expect(approvalText(el, ".prompt")).toBe("Choose who approves");
     expect(windowOf(el)).toBeNull();
     await authorize(el, "0123");
 
@@ -1039,7 +1039,7 @@ describe("a manager's PIN", () => {
     await act(el, "send-all");
     await choose(el, "data-late-agreed");
     expect(approval(el)!.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
-    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    expect(approvalText(el, ".prompt")).toBe("Choose who approves");
     expect(submissions()).toHaveLength(3);
   });
 });
@@ -1997,7 +1997,7 @@ describe("counter pay with a manager's PIN", () => {
     await flush(el, 6);
     await choose(el, "data-late-agreed");
 
-    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    expect(approvalText(el, ".prompt")).toBe("Choose who approves");
     expect(el.shadowRoot!.querySelector(".error")).toBeNull();
     await authorize(el, "0123");
 
@@ -2111,7 +2111,7 @@ describe("counter pay with a manager's PIN", () => {
     await flush(el, 6);
     await choose(el, "data-late-agreed");
 
-    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    expect(approvalText(el, ".prompt")).toBe("Choose who approves");
     await authorize(el, "0123");
 
     expect(pay.mock.calls.map(([request]) => request.lateSend)).toEqual([
@@ -2273,7 +2273,7 @@ describe("counter place and park", () => {
     await place(el);
     await choose(el, "data-late-agreed");
 
-    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    expect(approvalText(el, ".prompt")).toBe("Choose who approves");
     await authorize(el, "0123");
 
     expect(parkedLateSends()).toEqual([
@@ -2378,7 +2378,7 @@ describe("counter place and park", () => {
     await park(el);
     await choose(el, "data-late-agreed");
 
-    expect(approvalText(el, ".prompt")).toBe("Choose a manager");
+    expect(approvalText(el, ".prompt")).toBe("Choose who approves");
     await authorize(el, "0123");
 
     expect(parkedLateSends()).toEqual([
