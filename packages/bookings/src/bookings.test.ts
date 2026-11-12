@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   floorPlanSets,
