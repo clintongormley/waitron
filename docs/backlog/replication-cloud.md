@@ -1301,20 +1301,25 @@ attempt's `node_signing_key`, `node_mode` and `node_mirror_link` rows for an id 
 removed). Nothing reads a row by any id but its own, and a rotation re-seals the key, but it is a
 private key for an identity the main box endorsed. Wanted: remove them when a new attempt starts.
 
-## A1282: the Servers screen's main-box fingerprint is stale after a connection repair
+## A1282: browser trust after a connection repair replaces the certificate authority
 
-Left open by A947 slice 3a. The dashboard's Settings → Servers screen shows the serving box's
-certificate authority fingerprint (`readBoxCaFingerprint`, `apps/server/src/box-tls-repair.ts`), refreshed only when `node_membership` or `nodes` change (`listServers` in
-`apps/dashboard/src/api/live-queries.ts`). A connection repair that makes a new authority would show
-the old fingerprint until the page reloads. From reading, not run.
+After a connection repair issues a new certificate authority, a browser accepting only the old
+certificate refuses new HTTPS connections. In the 2026-11-12 disposable-box check, the existing
+one-minute refresh requested Servers, alerts and the disk stop; all three failed with
+`ERR_CERT_AUTHORITY_INVALID`. Servers kept the old fingerprint and showed a connection error;
+a fresh navigation was refused too. The open work is how you trust the box again after a repair,
+not a notification to refresh the fingerprint.
 
-## A1283: no guide page covers the Servers screen or adding a spare
+Evidence: `~/waitron-campaign-d/receipts/a1282/refresh.log`, `browser-events.json` and screenshots.
+The Chromium check accepted only the original served leaf key through a temporary SPKI exemption,
+with `ignoreHTTPSErrors: false`; it did not install an authority in the operating system.
 
-Left open by A947 slice 3a. CLAUDE.md §3 asks a screen change to update its guide. Slice 3a changed
-the Servers screen (the fingerprint line) and the joining steps (a spare compares the main box's
-fingerprint before it sends a password), and no page in `apps/server/src/guide/en/` or
-`apps/server/src/guide/es/` covers either. Wanted: a section in English and Spanish, with shared
-`{#id}` headings, on adding a spare and the fingerprint comparison.
+## A1283: spare-joining guide owned by A947 Task 6.10
+
+[A947 Task 6.10](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md#task-610-the-guide-the-docs-and-final-checks)
+owns the English and Spanish “Adding a spare box” section and its fingerprint comparison, alongside
+the joining feature. The existing Servers guide covers handover and returning a former main box;
+no separate guide or help bubble is needed before spare joining is available.
 
 ## Loose ends left by the Cloud connection integration
 

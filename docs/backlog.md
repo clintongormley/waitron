@@ -2004,11 +2004,12 @@ outstanding on code that exists.
 - **A1280: a retried join leaves the abandoned node id's node.db rows.**
   [Detail](backlog/replication-cloud.md#a1280-a-retried-join-leaves-the-abandoned-node-ids-nodedb-rows)
 
-- **A1282: the Servers screen's main-box fingerprint is stale after a connection repair** until the
-  page reloads. [Detail](backlog/replication-cloud.md#a1282-the-servers-screens-main-box-fingerprint-is-stale-after-a-connection-repair)
+- **A1282: browser trust after a connection repair replaces the certificate authority.** The browser
+  check refused Servers, alerts and disk-stop reads with `ERR_CERT_AUTHORITY_INVALID`.
+  [Detail](backlog/replication-cloud.md#a1282-browser-trust-after-a-connection-repair-replaces-the-certificate-authority)
 
-- **A1283: no guide page covers the Servers screen or adding a spare.**
-  [Detail](backlog/replication-cloud.md#a1283-no-guide-page-covers-the-servers-screen-or-adding-a-spare)
+- **A1283: spare-joining guide belongs to A947 Task 6.10**, alongside the joining feature.
+  [Detail](backlog/replication-cloud.md#a1283-spare-joining-guide-owned-by-a947-task-610)
 
 The membership, promotion and rejoin arc remains in the tree. What remains, largest first:
 
