@@ -754,7 +754,7 @@ describe("openInvoiceCorrection refuses", () => {
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(full!.id),
         substitutedSaleIds: [substituted],
-        counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
+        counterparty: { taxId: "B12345674", legalName: "Customer SL", countryCode: "ES" },
         total: "12.10",
         lines: [
           {
