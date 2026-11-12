@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { setHelpMode } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
@@ -3329,7 +3330,7 @@ describe("till-bill-pay-dialog: Close as deferred payment", () => {
   it("names it in Spanish", async () => {
     setLocale("es");
     const el = await mount({ way: "whole", deferredOffered: { state: "offered" } });
-    expect(text(deferred(el))).toBe("Cerrar como pago aplazado");
+    expect(text(deferred(el))).toBe(es["deferred_close.title"]);
   });
 
   it("offers it on a handheld with no cash or card method", async () => {

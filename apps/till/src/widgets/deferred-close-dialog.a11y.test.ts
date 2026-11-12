@@ -17,11 +17,7 @@ describe.each(["light", "dark"] as const)("till-deferred-close-dialog a11y (%s t
   it.each([
     ["idle", "", false],
     ["busy", "", true],
-    [
-      "refused",
-      "El total de esta cuenta ha cambiado. Revisa los datos y confirma de nuevo.",
-      false,
-    ],
+    ["refused", "This bill's total has changed. Check the details and confirm again.", false],
   ])("has no violations when %s", async (_state, refusal, busy) => {
     setLocale("es-ES");
     const { host } = await mountWidget<TillDeferredCloseDialog>(

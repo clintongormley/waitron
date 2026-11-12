@@ -105,9 +105,9 @@ describe("till-deferred-close-dialog", () => {
     el.busy = true;
     await el.updateComplete;
     el.busy = false;
-    el.refusal = "Este total ha cambiado.";
+    el.refusal = "This total has changed.";
     await el.updateComplete;
-    expect(actions(el).error).toBe("Este total ha cambiado.");
+    expect(actions(el).error).toBe("This total has changed.");
     expect(confirmButton(el).disabled).toBe(false);
     confirmButton(el).click();
     await el.updateComplete;
