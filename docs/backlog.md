@@ -1851,12 +1851,14 @@ Not in any track until the standalone primary is done.
 
 - **Address search provider, province names, guide lines** (bundle of 2, size M, waits for another entry). Holds A1171, A1171. [Detail](backlog/replication-cloud.md#bundle-address-search-provider-province-names-guide-lines)
 
-- **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles all AEAT communication after either takeover; returning M1 transfers fiscal originals/outcomes only.
+- **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles all AEAT communication after either takeover; returning M1 transfers fiscal originals, outcomes and their recorded payment facts without replaying live effects.
   The [build plan](superpowers/plans/2026-11-02-a1018-handover-build.md) cuts the work into slices.
   The controlled Servers-to-spare screen is built and checked on simulated boxes; real-box use
   still waits for real-box qualification. Slice 7’s emergency server flow is checked on simulated
-  boxes; Slice 8’s page remains open, with a bounded [page plan](superpowers/plans/2026-11-12-a1018-8-emergency-page.md)
-  cleared by the watcher on 12 November; the page is not built. Slice 12a will derive unknown intervals from the signed
+  boxes. Slice 8 adds the protected `/handover/emergency` page, saved-declaration resume and the
+  existing clock check, with one entered password/code retained until completion or leaving and a
+  replacement code only if it expires. Its [page plan](superpowers/plans/2026-11-12-a1018-8-emergency-page.md)
+  was cleared by the watcher on 12 November; real-box and Cloud qualification remain open. Slice 12a will derive unknown intervals from the signed
   declarations in `handover_activations.evidence`, without separate gap tables in Slice 7.
   The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
   minute wait) on 2026-11-02: Slice 12b is built on that answer, landed by the owner and marked

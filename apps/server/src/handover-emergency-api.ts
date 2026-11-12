@@ -159,7 +159,9 @@ export function mountHandoverEmergencyApi(
       answer.restriction?.successorNodeId === deps.nodeId
     )
       return;
-    throw new AppError("handover.source_still_answering", {});
+    throw new AppError("handover.source_still_answering", {
+      sourceServersUrl: new URL("/manage/servers", originOf(source!.contactUrl)).href,
+    });
   }
   async function authenticate(signIn: unknown) {
     const credentials = await signInCredentials(deps.db, signIn);
@@ -245,7 +247,7 @@ export function mountHandoverEmergencyApi(
     return {
       sourceNodeId,
       destinationNodeId: deps.nodeId,
-      sourceServersUrl: new URL("/manage/servers", source.contactUrl).href,
+      sourceServersUrl: new URL("/manage/servers", originOf(source.contactUrl)).href,
       copy,
       operation:
         operation === null

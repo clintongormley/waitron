@@ -20,13 +20,15 @@ const transport = createInstrumentedFetch(
   { makeId: makeSetupId },
 );
 installErrorCapture(window, diag);
+const emergency = location.pathname === "/handover/emergency";
 const operation = /^\/handover\/([^/]+)$/.exec(location.pathname);
-if (operation) {
+if (emergency || operation) {
   setLocale(matchBrowserLocale(navigator.languages));
   render(
     html`<setup-handover-screen
       .api=${new SetupApi("", transport)}
-      operationId=${decodeURIComponent(operation[1]!)}
+      .emergency=${emergency}
+      operationId=${emergency ? "" : decodeURIComponent(operation![1]!)}
     ></setup-handover-screen>`,
     app,
   );

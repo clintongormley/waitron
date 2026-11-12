@@ -6,6 +6,38 @@ Si ves **Este es el equipo de reserva**, abre la dirección del equipo principal
 pantallas y los datos del local. La página de reserva muestra su estado; no acepta ventas ni
 ofrece acceso al panel de gestión.
 
+## Iniciar aquí si ha fallado el equipo principal {#emergency}
+
+Usa un equipo de reserva que haya terminado de unirse a este local. Apaga el equipo principal
+anterior y mantenlo apagado, porque dos equipos principales encendidos podrían cobrar y enviar
+registros por separado. Esta declaración no se puede deshacer.
+
+Abre la dirección HTTPS del equipo de reserva y añade `/handover/emergency`, por ejemplo
+`https://spare.example/handover/emergency`. Identifícate con la contraseña de una cuenta de
+administrador y su código actual de autenticador, si está configurado, y elige **Comprobar esta
+copia**. Revisa su última actividad con fecha. Puede faltar la actividad posterior; si no hay
+ninguna fecha disponible, la página lo indica.
+
+Lee las advertencias, marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
+el equipo principal anterior**, compara los relojes y elige **Iniciar el local en este equipo**.
+Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
+el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. El
+motivo y las declaraciones se conservan.
+
+Si se pierde una respuesta, mantén la página abierta y vuelve a comprobar la copia antes de
+reintentar. Al recargar o abrir la dirección en otro dispositivo se encuentra la declaración
+guardada; identifícate y continúa con la comprobación del reloj. Un traspaso controlado pendiente
+ofrece su página de progreso. Si responde el equipo principal anterior, abre su enlace
+**Servidores** o apágalo y vuelve a comprobarlo. Si no se puede verificar la copia con la
+declaración, para y conserva los datos de ambos equipos.
+
+## Conservar los datos del equipo averiado {#old-box-returns}
+
+Usa el nuevo equipo principal cuando arranque. Conserva el equipo averiado y sus datos para la
+devolución. Los registros de facturación y sus hechos de pago registrados pueden volver al nuevo
+equipo principal; esto no repite pedidos, cambios de existencias, impresiones ni aperturas de
+cajón. No restablezcas el equipo anterior mientras necesites sus datos.
+
 ## Traspasar el local a un equipo de reserva {#hand-over}
 
 Usa este proceso solo con un equipo de reserva que haya terminado de unirse al local.

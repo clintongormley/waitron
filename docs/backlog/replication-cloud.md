@@ -37,7 +37,13 @@ owner's reading of 2026-11-03, see below).
 The signed declaration in `handover_activations.evidence` records the last dated activity
 the copy holds; Slice 12a will derive the unknown-interval list from these rows. The watcher
 deferred both gap tables and the preview, and accepted no declaration withdrawal for this
-simulated-only slice. Slice 8’s page and real-box qualification remain open. The bounded
+simulated-only slice.
+**2026-11-12 — Slice 8:** `/handover/emergency` on a joined spare checks the copy after sign-in,
+records the one-way shutdown declaration and opens the existing clock check and activation.
+A reload or another device resumes the saved declaration without declaring it again. A process
+restart rechecks the copy against its signed declaration at activation. The page retains the one
+entered password/code in memory and asks for a replacement only if the authenticator code expires,
+as the watcher cleared at 03:59. Real-box and Cloud qualification remain open. The bounded
 [page plan](../superpowers/plans/2026-11-12-a1018-8-emergency-page.md) was cleared by the watcher on 12 November;
 the last checked address it needs is kept across restarts since A947 3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898)), so it no longer waits on that.
 
@@ -96,6 +102,9 @@ a version 2 approval):
   `activation()`.
 
 **Amended Cloud agreement published, 2026-10-23 (D133):**
+**2026-11-12 clarification:** the fiscal-only boundaries in this October agreement are historical;
+the [later returned-fact decision](#returned-originals-and-their-recorded-facts-a1342-2026-11-10)
+also carries the recorded payment facts without replaying live effects.
 [Cloud #323](https://github.com/waitron-io/waitron-cloud/pull/323), signed
 `08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec`, publishes the
 [canonical correction](https://github.com/waitron-io/waitron-cloud/blob/08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec/docs/waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018); full shared-contract SHA-256

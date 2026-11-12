@@ -262,11 +262,11 @@ declare module "@waitron/shared" {
     /** The copy fails the database's own integrity check. */
     "handover.copy_damaged": Record<string, never>;
     /** A declaration got an answer, or activation got no restriction naming this successor. */
-    "handover.source_still_answering": Record<string, never>;
+    "handover.source_still_answering": { sourceServersUrl?: string };
     /** Neither a verified answer nor one of the allowed silence reasons was obtained. */
     "handover.source_not_established": Record<string, never>;
     /** Only this source's prepared controlled destination may be replaced. */
-    "handover.controlled_unresolved": Record<string, never>;
+    "handover.controlled_unresolved": { operationId?: string };
     /** `module`'s records in the copy a spare received fail that module's own check. */
     "handover.chain_broken": { module: string };
     /** The old box's retained selections and the spare's own would leave their file too little room. */

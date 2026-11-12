@@ -154,7 +154,7 @@ function service(origin = "https://spare.example") {
             lastCopy: { identifier: string; lastChangeAtMs: number | null };
           };
         };
-        error?: { code: string; params?: { operationId?: string } };
+        error?: { code: string; params?: { operationId?: string; sourceServersUrl?: string } };
       },
     };
   };
@@ -317,6 +317,8 @@ it("refuses declaration when the old main box's name finds no box on the network
 it("refuses declaration even when the answering source is restricted to this spare", async () => {
   external.restriction = { kind: "superseded", successorNodeId: standby.nodeId, operationId: null };
   expect((await service().post()).body.error?.code).toBe("handover.source_still_answering");
+  const preview = await service().post({ signIn: request.signIn }, true, "preview");
+  expect(preview.body.error?.params?.sourceServersUrl).toBe("https://main.example/manage/servers");
   expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
 });
 
@@ -366,6 +368,9 @@ it("activation rechecks a saved declaration after restart, and refuses changed a
   await expect(restarted.emergency.assertMayActivate(operation)).resolves.toBeUndefined();
   await seedWorkingOrder(placed.venue, { openedAt: "2026-10-16T12:00:00Z" });
   expect((await service().post()).body.error?.code).toBe("handover.copy_mismatch");
+  await expect(service().emergency.assertMayActivate(operation)).rejects.toMatchObject({
+    code: "handover.copy_mismatch",
+  });
 });
 
 it.each([null, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"])(
