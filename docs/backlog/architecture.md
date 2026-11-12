@@ -1391,7 +1391,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Correct every sentence known to be false, then finish comment pruning
 
-27 entries, size M.
+26 entries, size M.
 
 - **`writeItems` and `writeLabels` each keep a refusal after their insert that looks unreachable
   now** — OPEN (found by #603). Read only, not run: `writeItems` (`packages/catalogue/src/extras.ts`)
@@ -1415,13 +1415,11 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `no such savepoint`"; since #1936 that text is only the error's cause, not its message. Reword
   the comment (a comment in a fiscal test, not the fiscal core).
 - **start-space.ts's `logDir: null` option is dead since A1042**; removing it deletes an existing case, so the owner approves the removal. [Detail](box.md#start-spacetss-logdir-null-option-is-dead-since-a1042)
-- **`apps/server/src/errors.ts` still cites CLAUDE.md §5 for things §5 does not say** — found by
+- **Server comment pruning notes** — found by
   #656 while pruning comments. No production caller sets `skipSecrets` any more, so whether the
   option should go is open.
-  [Detail](box.md#appsserversrcerrorsts-still-cites-claudemd-5-for-things-5-does-not-say)
-- **`apps/server/README.md` (near line 230, the `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp
-  can round a value "past" a bound, which it cannot** — found by #653 while pruning comments.
-  [Detail](box.md#appsserverreadmemd-near-line-230-the-waitron_skip_retry_ms-row-says-the-sleep-clamp-can-round-a-value-past-a-bound-which-it-cannot)
+  [Detail](box.md#server-comment-pruning-notes)
+
 - **The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there**
   [Detail](box.md#the-empty-venue-directory-reason-561-deleted-from-packagesprovisioning--is-false-there)
 - **`packages/provisioning/README.md` also says only `ES-common` is implemented** — found by #561
@@ -1438,7 +1436,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   `packages/fiscal-verifactu/src/schema/clock-confirmations.ts:46`, `clock-stop-restarts.ts:16` and
   `filing-cases.ts:60` say `persons` is in identity's own set (it is in core's since A760);
   `clock-stop-restarts.ts:6` says A760 will drop that table (A760 changed no table's shape); and
-  `src/drain.ts:54` and `:1930` name `@waitron/scheduler`, now part of `@waitron/payments`. A760
+  `src/drain.ts`'s `codeOf` comment names `@waitron/scheduler`, now part of `@waitron/payments`. A760
   left
   them because fiscal source stays unedited in that change; fix them in the next fiscal change.
 - **Remove the stale till description beside the device-delete preview fixture.**

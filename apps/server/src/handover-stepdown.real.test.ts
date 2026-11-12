@@ -301,14 +301,12 @@ describe("a card sale in flight when the box steps down", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
       WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-      WAITRON_MAX_TICK_MS: "600000",
-      WAITRON_MIN_TICK_MS: "200",
       WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
-      WAITRON_SCHEDULER_MAX_PERIODS_PER_TICK: "1",
     };
 
     let card: FakePaymentProvider | undefined;
     server = await startServer(env, env, {
+      timings: { maxTickMs: 600000, minTickMs: 200, scheduler: { maxPeriodsPerTick: 1 } },
       boxHost: synchronisedBoxHost(),
       peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }),
       // The venue's readers are Stripe's here, so the till's own credential check passes and the

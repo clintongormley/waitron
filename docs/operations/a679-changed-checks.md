@@ -579,6 +579,11 @@ No package threshold, exclusion or ignore changes.
 
 ## Task 4 startup configuration order, 2026-10-17
 
+**2026-11-12, A1308 env1:** the maximum-tick environment setting and its startup refusal are
+retired. The default idle sleep is checked against the drain budget in `health.test.ts`.
+The command and results below are the historical receipt, including the retired refusal case.
+See the [env1 plan](../superpowers/plans/2026-11-08-a1308-env1-tuning-constants.md) for the current checks.
+
 With a configured setup directory missing `index.html`, or a maximum tick interval at the drain
 budget, you receive `server.config_invalid` before the server inspects setup workspace files.
 The workspace admission check remains before module configuration and the venue opener.

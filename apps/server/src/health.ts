@@ -20,8 +20,6 @@ const DRAIN_STALE_SLACK_MS = 15 * 60 * 1000;
  *
  * Keyed by `Duty`, so a duty in `ALL_DUTIES` without a budget here is a compile error.
  *
- * Bounded against `DEFAULT_MAX_TICK_MS`, not the running `WAITRON_MAX_TICK_MS`; `boot.ts` refuses a
- * runtime value at or above drain's budget (`reason: "at_or_above_drain_budget"`).
  */
 export const DUTY_BUDGET_MS: Readonly<Record<Duty, number>> = {
   [DRAIN_DUTY]: DEFAULT_MAX_TICK_MS + DRAIN_STALE_SLACK_MS,

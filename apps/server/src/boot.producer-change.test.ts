@@ -145,22 +145,23 @@ async function startWith(taxId: string | undefined) {
   if (taxId !== undefined) process.env.WAITRON_PRODUCER_TAX_ID = taxId;
   const port = await freePort();
   try {
-    const server = await startServer({
-      WAITRON_HTTP_LANDING_PORT: "0",
-      WAITRON_CREDENTIALS_KEY: CREDENTIALS_KEY,
-      WAITRON_CREDENTIALS_KEY_VERSION: "1",
-      WAITRON_ENV: "production",
-      WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
-      WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
-      WAITRON_MIN_TICK_MS: "250",
-      WAITRON_MAX_TICK_MS: "1000",
-      WAITRON_SKIP_RETRY_MS: "250",
-      WAITRON_NODE_ID: NODE_ID,
-      WAITRON_STATE_DIR: stateDir,
-      WAITRON_VENUE_DIR: venueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    });
+    const server = await startServer(
+      {
+        WAITRON_HTTP_LANDING_PORT: "0",
+        WAITRON_CREDENTIALS_KEY: CREDENTIALS_KEY,
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        WAITRON_ENV: "production",
+        WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
+        WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
+        WAITRON_NODE_ID: NODE_ID,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_VENUE_DIR: venueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      },
+      {},
+      { timings: { minTickMs: 250, maxTickMs: 1000, skipRetryMs: 250 } },
+    );
     return {
       server,
       cleanUp: () => rm(stateDir, { recursive: true, force: true }),

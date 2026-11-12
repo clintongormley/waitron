@@ -261,8 +261,6 @@ function observeStart(options: { restricted: boolean }): () => Observed {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
       WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-      WAITRON_MAX_TICK_MS: "600000",
-      WAITRON_MIN_TICK_MS: "200",
       WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     };
     const litestream = new FakeLitestream();
@@ -277,6 +275,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     calls.runner = 0;
     const hashBefore = await venueHash(suite);
     server = await startServer(env, env, {
+      timings: { maxTickMs: 600000, minTickMs: 200 },
       stream: { spawn, store: new SwitchableStore(() => new Date()) },
     });
     await vi.waitFor(

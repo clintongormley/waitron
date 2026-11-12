@@ -144,17 +144,21 @@ async function boot(
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-    WAITRON_MAX_TICK_MS: "600000",
-    WAITRON_MIN_TICK_MS: String(MIN_TICK_MS),
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
   };
   if (options.tls === true) {
     await ensureBoxSecrets({ stateDir: scratch, hostnames: ["localhost"], now: () => new Date() });
-    server = await startServer(env, env, options.seams);
+    server = await startServer(env, env, {
+      ...options.seams,
+      timings: { maxTickMs: 600000, minTickMs: MIN_TICK_MS },
+    });
     await awaitListening(httpPort());
     return { port: httpPort(), venue, env };
   }
-  server = await startServer(env, env, options.seams);
+  server = await startServer(env, env, {
+    ...options.seams,
+    timings: { maxTickMs: 600000, minTickMs: MIN_TICK_MS },
+  });
   await vi.waitFor(
     async () => {
       expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
@@ -633,7 +637,9 @@ describe("a full start's stepdown, through its test seam", () => {
       await server!.close();
       await whileStopped?.();
       beforeServerStarts();
-      server = await startServer(env, env);
+      server = await startServer(env, env, {
+        timings: { maxTickMs: 600000, minTickMs: MIN_TICK_MS },
+      });
       await awaitListening(httpPort());
       return httpPort();
     };

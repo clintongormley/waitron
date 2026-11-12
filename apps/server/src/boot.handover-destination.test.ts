@@ -262,11 +262,10 @@ async function boot(
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-    WAITRON_MAX_TICK_MS: "600000",
-    WAITRON_MIN_TICK_MS: "200",
     ...extraEnvironment,
   };
   server = await startServer(env, env, {
+    timings: { maxTickMs: 600000, minTickMs: 200 },
     peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
     stepdown: { mount: () => {}, restart: () => {} },
   });

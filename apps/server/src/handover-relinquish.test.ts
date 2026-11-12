@@ -637,8 +637,6 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
       WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-      WAITRON_MAX_TICK_MS: "600000",
-      WAITRON_MIN_TICK_MS: "200",
     };
   }
 
@@ -797,11 +795,14 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     beforeServerStarts();
     const restrictionBefore = await readHandoverRestriction(mainBox.node, boxes.mainId);
 
-    main = await startServer(boxes.mainEnv, boxes.mainEnv);
+    main = await startServer(boxes.mainEnv, boxes.mainEnv, {
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
+    });
     const mainPort = httpPort();
     await boxes.writeSpareChart(`http://127.0.0.1:${mainPort}`, { term: 4, standing: "evicted" });
     const restart = vi.fn();
     spare = await startServer(boxes.spareEnv, boxes.spareEnv, {
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
       stepdown: { mount: () => {}, restart },
     });
@@ -874,7 +875,9 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     const acceptance = (await event(spareBox.node, boxes.spareId, "copy_accepted"))!.envelope!;
 
     // M2's post reaches M1 and M1 gives up filing; the answer never gets back to M2.
-    main = await startServer(boxes.mainEnv, boxes.mainEnv);
+    main = await startServer(boxes.mainEnv, boxes.mainEnv, {
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
+    });
     const lost = await fetch(`http://127.0.0.1:${httpPort()}/api/node/handover/${OP}/acceptance`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -889,13 +892,16 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
 
     await main.close();
     main = undefined;
-    main = await startServer(boxes.mainEnv, boxes.mainEnv);
+    main = await startServer(boxes.mainEnv, boxes.mainEnv, {
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
+    });
     const mainPort = httpPort();
     await refusesSales(mainPort);
     expect(await readHandoverRestriction(mainBox.node, boxes.mainId)).toEqual(restrictionBefore);
 
     await boxes.writeSpareChart(`http://127.0.0.1:${mainPort}`);
     spare = await startServer(boxes.spareEnv, boxes.spareEnv, {
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
       stepdown: { mount: () => {}, restart: () => {} },
     });
@@ -925,12 +931,15 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     beforeServerStarts();
     const restrictionBefore = await readHandoverRestriction(mainBox.node, boxes.mainId);
 
-    main = await startServer(boxes.mainEnv, boxes.mainEnv);
+    main = await startServer(boxes.mainEnv, boxes.mainEnv, {
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
+    });
     const mainPort = httpPort();
     await refusesSales(mainPort);
 
     await boxes.writeSpareChart(`http://127.0.0.1:${mainPort}`);
     spare = await startServer(boxes.spareEnv, boxes.spareEnv, {
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
       stepdown: { mount: () => {}, restart: () => {} },
     });
@@ -963,7 +972,9 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
 
     await main.close();
     main = undefined;
-    main = await startServer(boxes.mainEnv, boxes.mainEnv);
+    main = await startServer(boxes.mainEnv, boxes.mainEnv, {
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
+    });
     const restartedPort = httpPort();
     await refusesSales(restartedPort);
 

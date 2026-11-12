@@ -99,8 +99,6 @@ async function spareEnv(): Promise<Record<string, string>> {
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-    WAITRON_MAX_TICK_MS: "600000",
-    WAITRON_MIN_TICK_MS: "200",
     WAITRON_LOG_DIR: join(spareState, "logs"),
   };
 }
@@ -132,6 +130,7 @@ async function startAndTryToActivate() {
   beforeServerStarts();
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   started = await startServer(await spareEnv(), undefined, {
+    timings: { minTickMs: 200, maxTickMs: 600_000 },
     peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
     stepdown: { mount: () => {}, restart: () => restarts.push("restart") },
   });
@@ -288,6 +287,7 @@ describe("a real restart after activating, then the same request again", () => {
       const restarts: string[] = [];
       beforeServerStarts();
       started = await startServer(await spareEnv(), undefined, {
+        timings: { minTickMs: 200, maxTickMs: 600_000 },
         peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
         stepdown: { mount: () => {}, restart: () => restarts.push("restart") },
       });
@@ -348,6 +348,7 @@ describe("the emergency routes through a real spare start", () => {
     vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
     const env = await spareEnv();
     started = await startServer(env, undefined, {
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
       stepdown: { mount: () => {}, restart: () => {} },
     });
@@ -402,6 +403,7 @@ describe("the emergency routes through a real spare start", () => {
     }
     beforeServerStarts();
     started = await startServer(env, undefined, {
+      timings: { minTickMs: 200, maxTickMs: 600_000 },
       peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
     });
     expect(await post("activate", activationBody)).toEqual({

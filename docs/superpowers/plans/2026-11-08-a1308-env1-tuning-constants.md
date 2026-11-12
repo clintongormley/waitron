@@ -175,7 +175,10 @@ deletions in `config.ts`, `config.test.ts` and `boot.test.ts` (about 250 lines).
 ## Finish line
 
 1. `git grep -n -E "WAITRON_(MIN_TICK|MAX_TICK|SKIP_RETRY|SETTLEMENT_LAG|SCHEDULER_|LOG_MAX)" -- . ':!docs/superpowers'`
-   prints nothing.
+   prints only the recorded command in `docs/operations/a679-changed-checks.md`'s
+   "Task 4 startup configuration order, 2026-10-17" section. **Watcher, 2026-11-12 22:15:**
+   this is the one historical-command exception; preserve that receipt with a dated pointer.
+   Every other match is a failure.
 2. `pnpm --filter @waitron/server exec vitest run src/config.test.ts src/health.test.ts src/boot.test.ts src/boot.fiscal-retry.test.ts src/boot.promote.test.ts src/boot.promote-endpoint.test.ts src/boot.restricted.test.ts src/boot.restricted-quiet.test.ts src/boot.start-check.test.ts src/boot.handover-chart-moved-on.test.ts src/boot.handover-collection.test.ts src/boot.handover-destination.test.ts src/handover-activation-repair.test.ts src/handover-relinquish.test.ts src/handover-stepdown.real.test.ts src/handover-stepdown.crash.test.ts src/promote-endpoint-e2e.test.ts src/read-only-exemptions.test.ts src/handover-controlled.e2e.test.ts`
    prints a `Tests` count with no failures (CLAUDE.md §4: no count is no evidence).
 3. `pnpm --filter @waitron/server typecheck` passes.

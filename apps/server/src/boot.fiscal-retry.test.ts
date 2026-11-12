@@ -161,8 +161,6 @@ async function boot(options: {
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-    WAITRON_MAX_TICK_MS: "600000",
-    WAITRON_MIN_TICK_MS: "200",
     ...(options.testSubmissions ? { WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled" } : {}),
   };
   if (options.staleTunnel) {
@@ -172,7 +170,7 @@ async function boot(options: {
     if (options.staleTunnel === "without-origin") delete env.WAITRON_CLOUD_ORIGIN;
   }
   await options.beforeStart?.(venue, scratch, env);
-  server = await startServer(env, env);
+  server = await startServer(env, env, { timings: { maxTickMs: 600000, minTickMs: 200 } });
   await vi.waitFor(async () => {
     expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
   });

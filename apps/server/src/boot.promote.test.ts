@@ -238,11 +238,7 @@ async function cleanupFiscalWork(seeded: { registroIds: string[] }): Promise<voi
 
 // Short ticks so both passes land inside the poll budget: an idle secondary's empty pass returns
 // `nextDueAt: null`, so the loop would otherwise sleep `maxTickMs`.
-const TICK_ENV = {
-  WAITRON_MIN_TICK_MS: "250",
-  WAITRON_MAX_TICK_MS: "1000",
-  WAITRON_SKIP_RETRY_MS: "250",
-};
+const TIMINGS = { minTickMs: 250, maxTickMs: 1_000, skipRetryMs: 250 };
 
 /** A prior test may have promoted the shared directory's node. Its chart goes too, or the start
  * would finish that promotion's role from it. */
@@ -258,13 +254,16 @@ describe("historical promote: local secondary → primary, live", () => {
     const { registroIds } = seeded;
     const port = await freePort();
 
-    const server = await startServer({
-      ...KEY_ENV,
-      ...TICK_ENV,
-      WAITRON_VENUE_DIR: appVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: appVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      },
+      {},
+      { timings: TIMINGS },
+    );
     const base = `http://127.0.0.1:${httpPort()}`;
     try {
       // Phase A — a secondary: the loop is live, but its fiscal pass is empty.
@@ -309,13 +308,16 @@ describe("historical promote: local secondary → primary, live", () => {
     const { registroIds } = seeded;
     const port = await freePort();
 
-    const server = await startServer({
-      ...KEY_ENV,
-      ...TICK_ENV,
-      WAITRON_VENUE_DIR: appVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: appVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      },
+      {},
+      { timings: TIMINGS },
+    );
     try {
       await waitForPass(server.health);
 
@@ -425,15 +427,18 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
-    const server = await startServer({
-      ...KEY_ENV,
-      ...TICK_ENV,
-      WAITRON_NODE_ID: seed.nodeId,
-      WAITRON_VENUE_DIR: mirrorVenueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_STATE_DIR: stateDir,
-    }).catch(async (err: unknown) => {
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_NODE_ID: seed.nodeId,
+        WAITRON_VENUE_DIR: mirrorVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+      },
+      {},
+      { timings: TIMINGS },
+    ).catch(async (err: unknown) => {
       // `server` is never assigned on a failed boot, so the `finally` below cannot clean up.
       await rm(stateDir, { recursive: true, force: true });
       throw err;
@@ -501,15 +506,18 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       );
       const records = mirrorDb.all(sql`select * from registros_facturacion order by secuencia`);
       const attempts = mirrorDb.all(sql`select * from envios order by registro_id`);
-      const restarted = await startServer({
-        ...KEY_ENV,
-        ...TICK_ENV,
-        ...persisted,
-        WAITRON_VENUE_DIR: mirrorVenueDir,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_STATE_DIR: stateDir,
-      });
+      const restarted = await startServer(
+        {
+          ...KEY_ENV,
+          ...persisted,
+          WAITRON_VENUE_DIR: mirrorVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+        },
+        {},
+        { timings: TIMINGS },
+      );
       try {
         const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
         expect(await node.json()).toEqual({ acceptingSales: false });
@@ -540,16 +548,19 @@ describe("a mirror's promotion whose role write is lost", () => {
     nodeId: string,
     extraEnv: Record<string, string> = {},
   ) {
-    return startServer({
-      ...KEY_ENV,
-      ...extraEnv,
-      ...TICK_ENV,
-      WAITRON_NODE_ID: nodeId,
-      WAITRON_VENUE_DIR: venueDir,
-      WAITRON_HTTP_PORT: String(await freePort()),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_STATE_DIR: stateDir,
-    });
+    return startServer(
+      {
+        ...KEY_ENV,
+        ...extraEnv,
+        WAITRON_NODE_ID: nodeId,
+        WAITRON_VENUE_DIR: venueDir,
+        WAITRON_HTTP_PORT: String(await freePort()),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+      },
+      {},
+      { timings: TIMINGS },
+    );
   }
 
   async function writeStatus(): Promise<number> {
@@ -680,15 +691,18 @@ describe("a mirror's promote and the backup room note", () => {
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
-    const server = await startServer({
-      ...KEY_ENV,
-      ...TICK_ENV,
-      WAITRON_NODE_ID: seed.nodeId,
-      WAITRON_VENUE_DIR: venueDir,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_STATE_DIR: stateDir,
-    }).catch(async (err: unknown) => {
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_NODE_ID: seed.nodeId,
+        WAITRON_VENUE_DIR: venueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+      },
+      {},
+      { timings: TIMINGS },
+    ).catch(async (err: unknown) => {
       await rm(stateDir, { recursive: true, force: true });
       await rm(venueDir, { recursive: true, force: true });
       throw err;
@@ -760,7 +774,6 @@ describe("a mirror's promote and the backup room note", () => {
     const server = await startServer(
       {
         ...KEY_ENV,
-        ...TICK_ENV,
         WAITRON_NODE_ID: seed.nodeId,
         WAITRON_VENUE_DIR: venueDir,
         WAITRON_HTTP_PORT: String(port),
@@ -768,7 +781,7 @@ describe("a mirror's promote and the backup room note", () => {
         WAITRON_STATE_DIR: stateDir,
       },
       undefined,
-      { stepdown: { mount: () => {}, restart: () => steps.push("restart") } },
+      { timings: TIMINGS, stepdown: { mount: () => {}, restart: () => steps.push("restart") } },
     );
     const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
     try {
@@ -825,7 +838,6 @@ describe("a mirror's promote and the backup room note", () => {
     const server = await startServer(
       {
         ...KEY_ENV,
-        ...TICK_ENV,
         WAITRON_NODE_ID: seed.nodeId,
         WAITRON_VENUE_DIR: venueDir,
         WAITRON_HTTP_PORT: String(port),
@@ -833,7 +845,7 @@ describe("a mirror's promote and the backup room note", () => {
         WAITRON_STATE_DIR: stateDir,
       },
       undefined,
-      { stepdown: { mount: () => {}, restart } },
+      { timings: TIMINGS, stepdown: { mount: () => {}, restart } },
     );
     try {
       const request = seed.fixture.request("promote");
@@ -881,15 +893,18 @@ describe("a mirror's promote and the backup room note", () => {
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
     await withCapturedStdout(async (lines) => {
-      const server = await startServer({
-        ...KEY_ENV,
-        ...TICK_ENV,
-        WAITRON_NODE_ID: seed.nodeId,
-        WAITRON_VENUE_DIR: venueDir,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_STATE_DIR: stateDir,
-      }).catch(async (err: unknown) => {
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_NODE_ID: seed.nodeId,
+          WAITRON_VENUE_DIR: venueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_STATE_DIR: stateDir,
+        },
+        {},
+        { timings: TIMINGS },
+      ).catch(async (err: unknown) => {
         await rm(stateDir, { recursive: true, force: true });
         await rm(venueDir, { recursive: true, force: true });
         throw err;

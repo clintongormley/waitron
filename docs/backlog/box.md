@@ -196,7 +196,7 @@ carry none.
   folder, or something that is not a folder. The lock-file measurement kept in `db-wipe.ts` names no engine version
   or platform.
 
-## `apps/server/src/errors.ts` still cites CLAUDE.md §5 for things §5 does not say
+## Server comment pruning notes
 
 - `apps/server/src/errors.ts` still cites CLAUDE.md §5 for
   things §5 does not say, on `backup.recovery_key_unstorable` ("unrecoverable (CLAUDE.md §5)") and
@@ -210,22 +210,17 @@ carry none.
   key's SHA-256 (`backup-supervisor.ts`), shown in the backup status, so anyone who can read the
   status can test a guessed key against it.
 
-## `apps/server/README.md` (near line 230, the `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp can round a value "past" a bound, which it cannot
-
-- `sleepMsFor` in `loop.ts` is `Math.min(max, Math.max(min, wait))`, and config refuses
-  `minTickMs > maxTickMs`; `config.test.ts`'s test title (near line 572) says "round back down
-  past the floor" where it means "to the floor". The restore question A38 (#669) raised about
-  `readNodeMembership`'s callers trusting the row is open under Task 9a. Two notes #653's prune
-  deleted and nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
-  `database is locked` in the pending-payment sweep (a candidate cause, not verified for the sweep:
-  a busy wait on the server's own thread,
-  [testing-guide.md](../developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down));
-  and nothing proves `startServer` itself survives a backup duty that cannot start — only
-  `backup-supervisor.test.ts` covers that, at the supervisor. Left open by A39 (#671): each stop is written twice, once in the failed-start unwind
-  list (`undoOnFailure`, `boot.ts`) and once in the background-duties table
-  (`background-duties.ts`), whose order `background-duties.test.ts` pins.
-  Test titles #653 could not touch in `boot.test.ts` carry the history tags
-  "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
+The restore question A38 (#669) raised about `readNodeMembership`'s callers trusting the row is open under Task 9a. Two notes #653's prune
+deleted and nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
+`database is locked` in the pending-payment sweep (a candidate cause, not verified for the sweep:
+a busy wait on the server's own thread,
+[testing-guide.md](../developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down));
+and nothing proves `startServer` itself survives a backup duty that cannot start — only
+`backup-supervisor.test.ts` covers that, at the supervisor. Left open by A39 (#671): each stop is written twice, once in the failed-start unwind
+list (`undoOnFailure`, `boot.ts`) and once in the background-duties table
+(`background-duties.ts`), whose order `background-duties.test.ts` pins.
+Test titles #653 could not touch in `boot.test.ts` carry the history tags
+"(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
 
 ## The empty-venue-directory reason #561 deleted from `packages/provisioning` … is false there
 
@@ -1639,7 +1634,6 @@ The owner's four answers: no reserved
   `x-waitron-build` header on every main-listener response after `/health`; see
   `docs/backlog/dashboard.md` → Decisions and deliberate limits.)
 
-
 - **Backups make room for themselves (A1167, owner 2026-10-28 and 2026-10-29).** Owner, 2026-10-28:
   "our backup policy needs to delete old backups automatically when we're running out of disk space,
   plus alert the administrator, plus refuse to do a backup if there still isn't enough space, and
@@ -2080,7 +2074,6 @@ exist when the payments module is off (A798-B slice 7 plan, M9: `select … from
 `no such table` with the payments set left out); the registry turns a failing source into that
 alert (design §5). Read, not run on a booted box. The Box status page leaves its card readers row
 out in that case.
-
 
 ## AEAT's time for a confirmation comes from its QR validation host, not from a `consultar` reply
 
