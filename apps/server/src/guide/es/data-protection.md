@@ -336,7 +336,8 @@ datos, y Waitron puede enviarle la factura por correo.
   del cliente, pero no su dirección; tu proveedor de correo, por cada factura que envías por correo,
   que lleva la factura en PDF con el nombre, el NIF y la dirección del cliente; y tu gestor, cuando
   le das el archivo de pagos aplazados de **Ventas y recaudación**, que lista el nombre y el NIF
-  del cliente de cada una de esas facturas.
+  del cliente de cada una de esas facturas. **Descargar para tu gestor (XLSX)** en la misma pantalla
+  también incluye la dirección registrada del cliente. Comparte estos archivos solo con su destinatario.
 - Plazo de conservación: _fijar con tu asesor_. Waitron nunca cambia ni borra una factura emitida.
   También guarda cada recibo y cada comanda que envía a una impresora de recibos o de cocina y no
   borra ninguno, así que los datos del cliente de una factura impresa en la caja también quedan en
@@ -350,7 +351,8 @@ el nombre y el NIF del proveedor son datos personales si el proveedor es autóno
 - Finalidad: guardar las facturas de proveedores para tus declaraciones de IVA.
 - Interesados: los proveedores que son autónomos.
 - Datos: el nombre y el NIF del proveedor, con el número, las fechas y los importes de la factura.
-- Destinatarios: _cualquiera con quien los compartas, como tu asesor fiscal_.
+- Destinatarios: _cualquiera con quien los compartas, como tu asesor fiscal_. **Descargar para tu gestor
+  (XLSX)** en **Ventas y recaudación** incluye esos datos registrados del proveedor y los importes de la factura.
 - Plazo de conservación: _fijar con tu asesor_.
 - Seguridad: como en todas las entradas.
 

@@ -1455,6 +1455,16 @@ it("downloads a bill's full invoice PDF as a POST, bytes untouched", async () =>
   expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x25, 0x50, 0x44, 0x46]);
 });
 
+it("downloads the accountant workbook for the chosen calendar dates as a POST, bytes untouched", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(new Response(new Uint8Array([0x50, 0x4b, 3, 4])));
+  const api = new DashboardApi("", fetchImpl);
+  const file = await api.downloadAccountantExport({ from: "2030-06-01", to: "2030-06-15" });
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/reports/accountant-export?from=2030-06-01&to=2030-06-15", "POST", undefined],
+  ]);
+  expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x50, 0x4b, 3, 4]);
+});
+
 it("downloads the modelo 303 file for the chosen period as an ordinary GET, bytes untouched", async () => {
   const fetchImpl = vi
     .fn()

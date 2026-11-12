@@ -253,6 +253,8 @@ export class SalesScreen extends LitElement {
   @state() private printersErrorKey: string | null = null;
   @state() private exporting = false;
   @state() private exportErrorKey: string | null = null;
+  @state() private accountantExporting = false;
+  @state() private accountantErrorKey: string | null = null;
   @state() private incompleteDates: Readonly<Record<"from" | "to", boolean>> = {
     from: false,
     to: false,
@@ -301,6 +303,7 @@ export class SalesScreen extends LitElement {
         this.incompleteDates = { from: false, to: false };
         this.#exportGeneration += 1;
         this.exportErrorKey = null;
+        this.accountantErrorKey = null;
         void this.#load();
         void this.#loadCategories();
       });
@@ -395,6 +398,27 @@ export class SalesScreen extends LitElement {
     }
   }
 
+  async #exportAccountant(): Promise<void> {
+    if (!this.canExport || this.accountantExporting || this.#exportBlocked()) return;
+    const sent = { from: this.from, to: this.to };
+    const generation = this.#exportGeneration;
+    this.accountantExporting = true;
+    this.accountantErrorKey = null;
+    try {
+      const file = await this.api.downloadAccountantExport(sent);
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `accountant-${sent.from}-${sent.to}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      if (generation === this.#exportGeneration) this.accountantErrorKey = codeOf(error);
+    } finally {
+      this.accountantExporting = false;
+    }
+  }
+
   /** BOTH branches' state is cleared before the request, so a rejection can never leave a stale close
    * or period rendering beside the error banner. */
   async #load(): Promise<void> {
@@ -430,6 +454,7 @@ export class SalesScreen extends LitElement {
     this[field] = value;
     this.#exportGeneration += 1;
     this.exportErrorKey = null;
+    this.accountantErrorKey = null;
     void this.#load();
     void this.#loadCategories();
   }
@@ -469,6 +494,25 @@ export class SalesScreen extends LitElement {
 
   #renderExport(): TemplateResult {
     return html`
+      <div class="export">
+        <p class="muted" id="accountant-dates">${t("sales.accountant_dates")}</p>
+        <wt-button
+          variant=${this.#exportBlocked() ? "secondary" : "primary"}
+          data-test="export-accountant"
+          aria-describedby="accountant-dates"
+          ?disabled=${this.#exportBlocked()}
+          ?loading=${this.accountantExporting}
+          @click=${() => void this.#exportAccountant()}
+          >${t("sales.export_accountant")}</wt-button
+        >
+        ${
+          this.accountantErrorKey
+            ? html`<p class="error" role="alert" data-test="accountant-error">
+                ${codeMessage(this.accountantErrorKey)}
+              </p>`
+            : nothing
+        }
+      </div>
       <div class="export">
         <wt-button
           variant="secondary"

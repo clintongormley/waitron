@@ -991,3 +991,102 @@ describe("dashboard-sales-screen deferred-payments file", () => {
     expect(exportButton(el)!.disabled).toBe(true);
   });
 });
+
+describe("dashboard-sales-screen accountant workbook", () => {
+  const button = (el: SalesScreen) =>
+    el.shadowRoot!.querySelector<WtButton>("[data-test=export-accountant]");
+  const error = (el: SalesScreen) =>
+    el.shadowRoot!.querySelector("[data-test=accountant-error]")?.textContent?.trim() ?? null;
+  afterEach(() => vi.restoreAllMocks());
+
+  it("offers no accountant download without report export permission", async () => {
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api: stubApi() });
+    await flush(el);
+    expect(button(el)).toBeNull();
+  });
+
+  it("downloads the selected calendar range even if the dates change while it is being prepared", async () => {
+    let answer!: (file: Blob) => void;
+    const downloadAccountantExport = vi.fn(() => new Promise<Blob>((r) => (answer = r)));
+    const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:accountant");
+    const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const clicked: HTMLAnchorElement[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      clicked.push(this);
+    });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", {
+      api: stubApi({ downloadAccountantExport }),
+      canExport: true,
+    });
+    await flush(el);
+    setDate(el, "from-picker", "2030-06-01");
+    setDate(el, "to-picker", "2030-06-15");
+    await flush(el);
+    expect(button(el)).not.toBeNull();
+    button(el)!.click();
+    await flush(el);
+    expect(button(el)!.loading).toBe(true);
+    button(el)!.click();
+    expect(downloadAccountantExport).toHaveBeenCalledExactlyOnceWith({
+      from: "2030-06-01",
+      to: "2030-06-15",
+    });
+    setDate(el, "to-picker", "2030-06-20");
+    const file = new Blob(["workbook"]);
+    answer(file);
+    await flush(el);
+    expect(create).toHaveBeenCalledWith(file);
+    expect(clicked.map((link) => [link.download, link.href])).toEqual([
+      ["accountant-2030-06-01-2030-06-15.xlsx", "blob:accountant"],
+    ]);
+    expect(revoke).toHaveBeenCalledWith("blob:accountant");
+    expect(button(el)!.loading).toBe(false);
+  });
+
+  it("blocks missing and backwards dates, then retries a refusal without a report refresh erasing it", async () => {
+    const downloadAccountantExport = vi
+      .fn()
+      .mockRejectedValue({ code: "authorization.not_permitted" });
+    const liveData = new LiveData();
+    const api = stubApi({ downloadAccountantExport, liveData } as Partial<DashboardApi>);
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", {
+      api,
+      canExport: true,
+    });
+    await flush(el);
+    expect(button(el)).not.toBeNull();
+    setDate(el, "to-picker", "");
+    await flush(el);
+    expect(button(el)!.disabled).toBe(true);
+    button(el)!.click();
+    expect(downloadAccountantExport).not.toHaveBeenCalled();
+    setDate(el, "from-picker", "2030-06-15");
+    setDate(el, "to-picker", "2030-06-01");
+    await flush(el);
+    expect(button(el)!.disabled).toBe(true);
+    setDate(el, "to-picker", "2030-06-20");
+    await flush(el);
+    button(el)!.click();
+    await flush(el);
+    expect(error(el)).toBe(codeMessage("authorization.not_permitted"));
+    const reads = vi.mocked(api.getSalesPeriod).mock.calls.length;
+    liveData.refresh();
+    await vi.waitFor(() => expect(api.getSalesPeriod).toHaveBeenCalledTimes(reads + 1));
+    await flush(el);
+    expect(error(el)).toBe(codeMessage("authorization.not_permitted"));
+    expect(el.shadowRoot!.querySelector("[data-test=error]")).toBeNull();
+    expect(button(el)!.disabled).toBe(false);
+    button(el)!.click();
+    await flush(el);
+    expect(downloadAccountantExport).toHaveBeenCalledTimes(2);
+    expect(downloadAccountantExport).toHaveBeenLastCalledWith({
+      from: "2030-06-15",
+      to: "2030-06-20",
+    });
+    setDate(el, "to-picker", "2030-06-21");
+    await flush(el);
+    expect(error(el)).toBeNull();
+  });
+});
