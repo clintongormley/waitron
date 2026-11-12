@@ -17,7 +17,8 @@ These decisions supersede the receipt recommendation below: show **1 House lunch
 and its **hake supplement €3.00** as a priced line beneath it, followed by the chosen dishes
 without prices. The bill uses the same presentation. The lunch remains one bill item.
 The adviser question S10 remains open; the full invoice waits for that answer.
-The watcher requested an implementation plan, followed by Claude review and watcher clearance.
+The watcher requested an implementation plan, followed by Claude review and watcher clearance;
+that request is paused until you see the 18:39 reuse comparison below.
 No implementation plan or VAT treatment is approved by these design answers.
 
 ## Set it up on the dashboard
@@ -108,19 +109,24 @@ product choices priced at €0 and hake at €3. This reuses the price component
 The missing work is course-by-course service and lunch presentation. **Needs owner review before
 a build plan.** These are source-inspection findings, not runtime verification.
 
-| Existing piece | Works today, unchanged | Extension or new behavior needed |
-| --- | --- | --- |
-| **Variants at €18/€21** | Select a variant and save its price on the parent line. | A variant records no separate €3 difference for the receipt. Preserving that breakdown is an extension, and chosen dishes and courses still need another mechanism. Extras already retain the priced child. [1] |
-| **Extras and options** | Extras choose real products, override prices, enforce minimum/maximum picks and quantity caps, and become attached child lines. Each course can have its own one-pick list. Options choose text labels, without priced children. | Extend the existing picker/basket for lunch. A remembered **choose later** state is new: required extras currently block Add; optional lists allow omission without remembering an outstanding course. [2] |
-| **Kitchen and later service** | Extras with explicit product/category station routes can become separate kitchen work, including beneath a no-preparation parent; otherwise they follow it. Tickets have unpriced dishes and parent references. | Extras inherit the parent's course. Started/served work can refuse changed selections; fired work can be resent. New lunch behavior must serve courses independently, accept later coffee, send only that choice, and close an untaken final choice at payment without changing the price. Reuse routing and ticket rendering. [3] |
-| **Bill and receipt** | Parent/child grouping retains €18 and €3 amounts. Extras, including €0 choices, currently show prices. | Extend presentation: name the €3 supplement, show dishes unpriced, and retain one item per diner through existing basket/receipt merging paths. [4] |
-| **Extra starter outside lunch** | Add ordinary Croquettes to the same bill as its own product line, with its ordinary price and kitchen routing. The demo price is €7.80. | No custom lunch inclusion. Keep it outside the indented lunch choices on till and receipt. [5] |
+| Existing piece | Works today, unchanged | Small change to an existing piece | Truly new behavior |
+| --- | --- | --- | --- |
+| **Variants at €18/€21** | Select a variant and save its price on the parent line. | None removes the remaining gaps. | A separate €3 breakdown and dish choices. A “with hake” variant is not linked to the main pick. Extras already retain a priced child. [1] |
+| **Extras and options** | Extras select products, override prices and enforce min/max picks and quantity caps; each course can use a one-pick list. Enter **€0 explicitly** for included dishes; blank uses the ordinary price. Options are text labels, not priced children. | Adapt the existing picker and basket for lunch. | Remember an outstanding **choose later** course. Required extras currently block Add; optional lists permit omission without remembering it. [2] |
+| **Kitchen** | Reuse routing and ticket rendering. Set lunch to No preparation; give choices explicit station cells (product, folder or zone-wide). Default-station fallback follows the parent, so a no-preparation parent alone sends nothing. | Reuse the existing station and ticket presentation. | Give children their own courses, fire them independently and accept later coffee without recalling earlier work. Normal edits refuse a changed selection after a lunch part is served; editing fired work before cooking recalls and resends it. Close an untaken course at payment without repricing. [3] |
+| **Bill and receipt** | Parent/child grouping keeps €18 and €3. Extras currently display prices, including €0. | Show the same hake child as a €3 supplement line and an unpriced dish description, charged once. Hide included-dish prices. Skip basket and receipt merging for lunches so each diner keeps an item. | No new receipt data needed. [4] |
+| **Ordinary extra starter** | Croquettes already has its own product line, ordinary €7.80 demo price and kitchen route. Keep it outside lunch choices on till and receipt. | None. | Nothing new. [5] |
 
 The owner’s answers stand: one lunch item, later choice allowed, supplement priced separately.
 The proposed display is **House lunch €18 + hake supplement €3 + ordinary Croquettes €7.80 =
 €28.80**, with the lunch’s selected dishes beneath it unpriced. Add the second €18 lunch and the
 two-diner example totals **€46.80**. Adviser S10 remains open; no VAT treatment is chosen and the
-full invoice waits.
+full invoice waits. Both approaches currently put €18 at the lunch rate and €3 at the hake rate;
+adviser answer B would require a new allocation step with either approach.
+
+The local gallery is linked from Lane D’s `receipts/a1515-mockups/README.md`; mock-ups stay
+outside the repository. The displayed choices remain as drawn; the recommendation reuses extras
+underneath them and adds later-course service.
 
 **Sources inspected:** [1] `packages/catalogue/src/variants.ts::selectMenuVariant`;
 `apps/till/src/state/order-line.ts::productAsVariant`.
