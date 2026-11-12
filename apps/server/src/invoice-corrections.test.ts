@@ -109,11 +109,12 @@ useVenueDb({
   },
 });
 
-/** A counter order of `dish`, paid through the till in `parts` (cash, or a hand-keyed card); its
- * invoice, issued unpaid when `parts` is empty. */
+/** A counter order of `dish`, paid through the till in `parts` (cash, or a hand-keyed card), each
+ * part with `tip` on top; its invoice, issued unpaid when `parts` is empty. */
 async function soldForCash(
   dish: string | readonly string[],
   parts: readonly (string | { card: string })[],
+  tip = "0.00",
 ) {
   const id = randomUUID();
   const deps = {
@@ -132,7 +133,7 @@ async function soldForCash(
     operatorId: venue.operatorId,
   });
   if (parts.length === 0) await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
-  await payFor(id, parts);
+  await payFor(id, parts, tip);
   const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, id));
   return brandSaleId(sale!.id);
 }
@@ -140,13 +141,15 @@ async function soldForCash(
 async function payFor(id: string, parts: readonly (string | { card: string })[], tip = "0.00") {
   for (const part of parts) {
     const applied = typeof part === "string" ? part : part.card;
-    const amount = centsToDecimal(decimalToCents(decimal(applied)) + decimalToCents(decimal(tip)));
+    const tendered = centsToDecimal(
+      decimalToCents(decimal(applied)) + decimalToCents(decimal(tip)),
+    );
     const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
       submissionId: randomUUID(),
       kind: "contribution",
-      amount,
+      amount: applied,
       ...(typeof part === "string"
-        ? { method: "cash", tendered: amount }
+        ? { method: "cash", tendered }
         : { method: "card", entry: "manual" }),
       applied,
       tip,
@@ -1055,6 +1058,46 @@ describe("a correction's cash", () => {
     });
     await expect(cash(correction.id, "3.00")).resolves.toMatchObject({
       correction: { state: "filed" },
+    });
+  });
+
+  it("gives the next €10 from the second payment once the first holds only its €1 tip, counting no tip as cash left", async () => {
+    const saleId = await soldForCash("Set menu", ["20.00", "20.00"], "1.00");
+    const paidInOrder = await inTx(venue, (tx) => readRefundableTenders(tx, saleId));
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "30.00" });
+    await refusedWithNothingWritten(() => cash(correction.id, "40.01"), {
+      code: "invoice_correction.cash_short",
+      params: { correctionId: correction.id, cashLeft: "40.00", amount: "40.01" },
+    });
+    await cash(correction.id, "20.00");
+    await refusedWithNothingWritten(() => cash(correction.id, "20.01"), {
+      code: "invoice_correction.cash_short",
+      params: { correctionId: correction.id, cashLeft: "20.00", amount: "20.01" },
+    });
+
+    const given = await cash(correction.id, "10.00");
+
+    expect(
+      given.refunds.map(({ tenderId, appliedAmount, tipAmount }) => ({
+        tenderId,
+        appliedAmount,
+        tipAmount,
+      })),
+    ).toEqual([{ tenderId: paidInOrder[1]!.tenderId, appliedAmount: "10.00", tipAmount: "0.00" }]);
+    expect(given.correction).toMatchObject({ state: "filed", moneyBack: "30.00" });
+  });
+
+  it("gives €1.05 from the later payment of a €12.10 steak once €5 has emptied the first, leaving its tip", async () => {
+    const saleId = await soldForCash("Rib steak", []);
+    const [sale] = await venue.db.select().from(sales).where(eq(sales.id, saleId));
+    await payFor(sale!.workingOrderId!, ["5.00"], "1.00");
+    await payFor(sale!.workingOrderId!, ["7.10"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "6.05" });
+    await cash(correction.id, "5.00");
+
+    await expect(cash(correction.id, "1.05")).resolves.toMatchObject({
+      refunds: [{ appliedAmount: "1.05" }],
+      correction: { state: "filed", moneyBack: "6.05" },
     });
   });
 

@@ -11,6 +11,7 @@ import type { Authorization, AuthzInput } from "@waitron/identity";
 import {
   AppError,
   centsToDecimal,
+  compareDecimal,
   decimal,
   decimalToCents,
   isUuid,
@@ -34,6 +35,8 @@ import { canonicaliseUuid } from "./till-session.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import "./errors.js";
 
+const ZERO = decimal("0.00");
+
 /** The request's submission id, canonical, and its amount; refused by field when malformed or zero. */
 export function parseCorrectionCash(request: { submissionId: unknown; amount: unknown }): {
   submissionId: string;
@@ -47,9 +50,12 @@ export function parseCorrectionCash(request: { submissionId: unknown; amount: un
   return { submissionId: canonicaliseUuid(request.submissionId)!, amount: centsToDecimal(cents) };
 }
 
-/** The sale's cash payments still holding money, oldest first. */
+/** The sale's cash payments still holding money paid for the sale, oldest first: a correction gives
+ * back no tip, so a payment holding only its tip is left out. */
 export async function readCashLeft(tx: Transaction, saleId: string) {
-  return (await readRefundableTenders(tx, saleId)).filter((row) => row.method === "cash");
+  return (await readRefundableTenders(tx, saleId)).filter(
+    (row) => row.method === "cash" && compareDecimal(decimal(row.appliedRemaining), ZERO) > 0,
+  );
 }
 
 /**
