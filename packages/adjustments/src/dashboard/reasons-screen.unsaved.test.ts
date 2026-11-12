@@ -54,11 +54,8 @@ afterEach(() => {
   sessionStorage.clear();
   localStorage.clear();
 });
-function settings(
-  maxBillComp: string | null,
-  billApproverRoles: AdjustmentSettings["billApproverRoles"] = ["manager", "admin"],
-): AdjustmentSettings {
-  return { maxBillComp, billApproverRoles, revision: 4 };
+function settings(maxBillComp: string | null): AdjustmentSettings {
+  return { maxBillComp, revision: 4 };
 }
 function fakeApi() {
   const api = {
@@ -239,31 +236,19 @@ for (const name of ["names-es", "maxPercent", "maxAmount"]) {
     expect(value(screen, name)).toBe("invalid edited input");
   });
 }
-async function roles(screen: AdjustmentReasonsScreen, name: string, values: string[]) {
-  screen
-    .shadowRoot!.querySelector(`[name="${name}"]`)!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { values } }));
-  await settle(screen);
-}
-for (const name of ["applyRoles", "approverRoles"]) {
-  it(`a change of ${name} dirties the draft, and restoring it in another order cleans it`, async () => {
-    const { screen } = await mount();
-    const modal = await open(screen);
-    const before = reason[name as "applyRoles" | "approverRoles"];
-    await roles(screen, name, ["admin"]);
-    expect(unload()).toBe(true);
-    await userEvent.keyboard("{Escape}");
-    expect((await question()).open).toBe(true);
-    await choose("keep");
-    expect(native(modal).open).toBe(true);
-    expect(
-      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(`[name="${name}"]`)!
-        .values,
-    ).toEqual(["admin"]);
-    await roles(screen, name, [...before].reverse());
-    expect(unload()).toBe(false);
-  });
-}
+it("a changed amount limit stays through Keep and cleans when restored", async () => {
+  const { screen } = await mount();
+  const modal = await open(screen);
+  await field(screen, "maxAmount", "0");
+  expect(unload()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect((await question()).open).toBe(true);
+  await choose("keep");
+  expect(native(modal).open).toBe(true);
+  expect(value(screen, "maxAmount")).toBe("0");
+  await field(screen, "maxAmount", "030.00");
+  expect(unload()).toBe(false);
+});
 it("a change of the kind dirties the draft, and restoring it cleans it", async () => {
   const api = fakeApi();
   api.listReasons.mockImplementation(async () => [reason, voidReason]);
@@ -621,50 +606,6 @@ it("an empty reverted uncapped limit is clean", async () => {
   await field(screen, "maxBillComp", "10");
   expect(unload()).toBe(true);
   await field(screen, "maxBillComp", "  ");
-  expect(unload()).toBe(false);
-});
-async function approvers(screen: AdjustmentReasonsScreen, values: string[]) {
-  screen
-    .shadowRoot!.querySelector('[name="billApproverRoles"]')!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { values } }));
-  await settle(screen);
-}
-function approverValues(screen: AdjustmentReasonsScreen) {
-  return screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-    '[name="billApproverRoles"]',
-  )!.values;
-}
-it("protects edited approvers through Keep and Discard without a settings write", async () => {
-  const { screen, api } = await mount();
-  await approvers(screen, ["admin"]);
-  expect(unload()).toBe(true);
-  let departed = 0;
-  const leave = () =>
-    app.leave.coordinator.request({
-      scopes: [screen],
-      reason: "navigation",
-      proceed() {
-        departed++;
-      },
-    });
-  const first = leave();
-  await choose("keep");
-  await first;
-  expect(departed).toBe(0);
-  expect(approverValues(screen)).toEqual(["admin"]);
-  const second = leave();
-  await choose("discard");
-  await second;
-  expect(departed).toBe(1);
-  expect(approverValues(screen)).toEqual(["manager", "admin"]);
-  expect(api.saveSettings).not.toHaveBeenCalled();
-  expect(unload()).toBe(false);
-});
-it("approvers chosen back in another order are clean", async () => {
-  const { screen } = await mount();
-  await approvers(screen, ["supervisor", "manager", "admin"]);
-  expect(unload()).toBe(true);
-  await approvers(screen, ["admin", "manager"]);
   expect(unload()).toBe(false);
 });
 it("an accepted limit commits before a failed settings refresh", async () => {

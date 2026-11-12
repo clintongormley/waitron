@@ -29,7 +29,7 @@ import {
   readAdjustmentSettings,
   saveAdjustmentSettings,
 } from "@waitron/adjustments";
-import { createPinThrottle, loginWithPin, persons, type PersonRoleValue } from "@waitron/identity";
+import { createPinThrottle, loginWithPin, persons } from "@waitron/identity";
 import { decimal } from "@waitron/shared";
 import { send } from "./testing/bill-venue.js";
 import {
@@ -61,6 +61,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 // The till's adjustment routes (service plan Task 11): apply, preview, and the reasons and
 // approvers the till offers, over HTTP against a provisioned venue.
 let venue: AdjustmentVenue;
+let approvalReasonId: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -68,6 +69,16 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionAdjustmentVenue(db);
+    approvalReasonId = (
+      await inTx(venue, (tx) =>
+        createAdjustmentReason(tx, {
+          ...REASONS.complaint,
+          name: "Approval required",
+          names: {},
+          maxAmount: decimal("0"),
+        }),
+      )
+    ).id;
   },
 });
 
@@ -81,8 +92,6 @@ async function revisionOf(billId: string): Promise<number> {
   return row!.revision;
 }
 
-/** POSTs an adjustment of the bill as it reads now, as the supervisor unless another cookie is given,
- * under House (House void for a cancel) unless the body names a reason. */
 async function post(
   billId: string,
   body: Record<string, unknown>,
@@ -90,7 +99,7 @@ async function post(
 ) {
   return send(
     venue.app,
-    opts.cookie ?? venue.cookie.supervisor,
+    opts.cookie ?? (body.action === "cancel" ? venue.cookie.supervisor : venue.cookie.staff),
     "POST",
     `/api/working-orders/${billId}/adjustments${opts.path ?? ""}`,
     {
@@ -118,7 +127,7 @@ async function postCancel(
   return cancelItemHttp(
     venue.db,
     venue.app,
-    opts.cookie ?? venue.cookie.supervisor,
+    opts.cookie ?? (body.action === "cancel" ? venue.cookie.supervisor : venue.cookie.staff),
     billId,
     line!.lineNo,
     body.quantity as string | undefined,
@@ -408,7 +417,7 @@ describe("approval through the route (plan D6)", () => {
   const comp = async (billId: string) => ({
     ...(await todayLine(venue, billId, 1)),
     action: "comp",
-    reasonId: venue.reasonId.complaint,
+    reasonId: approvalReasonId,
   });
 
   it("refuses a staff member's comp with no approver, then applies it with a manager's PIN, leaving the waiter signed in", async () => {
@@ -418,7 +427,7 @@ describe("approval through the route (plan D6)", () => {
     expect(refused.status).toBe(403);
     expect(refused.json).toEqual({
       code: "adjustment.approval_required",
-      params: { approval: "reason" },
+      params: { approval: "limit" },
     });
 
     const applied = await post(
@@ -441,22 +450,22 @@ describe("approval through the route (plan D6)", () => {
     expect(lines.status).toBe(200);
   });
 
-  it("still refuses it with a supervisor's PIN, who may apply Guest complaint but not approve it", async () => {
+  it("refuses a PIN without adjustment.approve", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
     const refused = await post(
       billId,
-      { ...(await comp(billId)), approver: { personId: venue.supervisorId, pin: PINS.supervisor } },
+      { ...(await comp(billId)), approver: { personId: venue.staffId, pin: PINS.staff } },
       { cookie: venue.cookie.staff },
     );
     expect(refused.status).toBe(403);
     expect(refused.json).toEqual({
       code: "adjustment.approval_required",
-      params: { approval: "reason" },
+      params: { approval: "limit" },
     });
     expect(await recordedOn(billId)).toEqual([]);
   });
 
-  it("applies a supervisor's comp within Guest complaint's €30 with no PIN", async () => {
+  it("applies a supervisor's zero-limit comp with no PIN", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
     const applied = await post(billId, await comp(billId), { cookie: venue.cookie.supervisor });
     expect(applied.status).toBe(200);
@@ -472,7 +481,7 @@ describe("approval through the route (plan D6)", () => {
       sql`select doc from settings where module = 'adjustments'`,
     ).rows[0];
     venue.db.execute(
-      sql`insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{"maxBillComp":0,"billApproverRoles":["admin"]}', '2026-11-09T12:00:00.000Z') on conflict(module) do update set doc = excluded.doc`,
+      sql`insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{"maxBillComp":-1}', '2026-11-09T12:00:00.000Z') on conflict(module) do update set doc = excluded.doc`,
     );
     try {
       const response = await post(billId, await comp(billId), { path: "/preview" });
@@ -491,19 +500,18 @@ describe("approval through the route (plan D6)", () => {
     }
   });
 
-  it("past the bill's limit, refuses a PIN from the reason's list that is not on the bill's, and applies one from the bill's", async () => {
-    const save = (maxBillComp: string | null, billApproverRoles: PersonRoleValue[]) =>
+  it("past the bill limit, refuses Staff and applies a Supervisor's PIN", async () => {
+    const save = (maxBillComp: string | null) =>
       inTx(venue, async (tx) =>
         saveAdjustmentSettings(
           tx,
           {
             maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
-            billApproverRoles,
           },
           { expectedRevision: (await readAdjustmentSettings(tx)).revision, personId: null },
         ),
       );
-    await save("10.00", ["supervisor"]);
+    await save("10.00");
     try {
       const { billId } = await billWith(venue, [{ name: "Burger" }]);
       const preview = await post(billId, await comp(billId), {
@@ -511,18 +519,23 @@ describe("approval through the route (plan D6)", () => {
         path: "/preview",
       });
       expect(preview.json).toMatchObject({
-        needsApproval: { by: "bill_limit", roles: ["supervisor"], limit: "10.00" },
+        needsApproval: {
+          by: "limit",
+          permission: "adjustment.approve",
+          limit: { kind: "bill", amount: "10.00", percentBp: null },
+        },
       });
+      expect(await recordedOn(billId)).toEqual([]);
       const refused = await post(
         billId,
-        { ...(await comp(billId)), approver: { personId: venue.managerId, pin: PINS.manager } },
+        { ...(await comp(billId)), approver: { personId: venue.staffId, pin: PINS.staff } },
         { cookie: venue.cookie.staff },
       );
-      expect(refused.status).toBe(403);
-      expect(refused.json).toEqual({
-        code: "adjustment.approval_required",
-        params: { approval: "bill_limit" },
-      });
+      expect([refused.status, refused.json]).toEqual([
+        403,
+        { code: "adjustment.approval_required", params: { approval: "limit" } },
+      ]);
+      expect(await recordedOn(billId)).toEqual([]);
       const applied = await post(
         billId,
         {
@@ -532,44 +545,12 @@ describe("approval through the route (plan D6)", () => {
         { cookie: venue.cookie.staff },
       );
       expect(applied.status).toBe(200);
-      expect((await recordedOn(billId))[0]).toMatchObject({ approvedBy: venue.supervisorId });
+      expect((await recordedOn(billId))[0]).toMatchObject({
+        reduction: 1200,
+        approvedBy: venue.supervisorId,
+      });
     } finally {
-      await save(null, ["manager", "admin"]);
-    }
-  });
-
-  it("past the bill's limit, answers a request nobody on both lists may approve as 409 no_common_approver", async () => {
-    const save = (maxBillComp: string | null, billApproverRoles: PersonRoleValue[]) =>
-      inTx(venue, async (tx) =>
-        saveAdjustmentSettings(
-          tx,
-          {
-            maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
-            billApproverRoles,
-          },
-          { expectedRevision: (await readAdjustmentSettings(tx)).revision, personId: null },
-        ),
-      );
-    // Past Guest complaint's €30.00 only managers and admins approve it; only supervisors may
-    // pass this bill.
-    await save("40.00", ["supervisor"]);
-    try {
-      const { billId } = await billWith(venue, [{ name: "Salad", quantity: "10" }]);
-      const off = {
-        action: "discount_amount",
-        amount: "50.00",
-        reasonId: venue.reasonId.complaint,
-      };
-      for (const path of ["/preview", ""] as const) {
-        const refused = await post(billId, off, { cookie: venue.cookie.staff, path });
-        expect([refused.status, refused.json]).toEqual([
-          409,
-          { code: "adjustment.no_common_approver", params: {} },
-        ]);
-      }
-      expect(await recordedOn(billId)).toEqual([]);
-    } finally {
-      await save(null, ["manager", "admin"]);
+      await save(null);
     }
   });
 
@@ -796,7 +777,7 @@ describe("approval through the route (plan D6)", () => {
     expect(preview.json).toMatchObject({
       reduction: "12.00",
       nominalValue: "12.00",
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
     });
     expect(await recordedOn(billId)).toEqual([]);
   });
@@ -935,7 +916,7 @@ describe("an approver's PIN derives its key outside the write lock", () => {
       {
         ...(await todayLine(venue, billId, 1)),
         action: "comp",
-        reasonId: venue.reasonId.complaint,
+        reasonId: approvalReasonId,
         approver: { personId: venue.managerId, pin: PINS.manager },
       },
       { cookie: venue.cookie.staff },
@@ -955,7 +936,7 @@ describe("an approver's PIN derives its key outside the write lock", () => {
       {
         ...(await todayLine(venue, billId, 1)),
         action: "comp",
-        reasonId: venue.reasonId.complaint,
+        reasonId: approvalReasonId,
         expectedRevision: (await revisionOf(billId)) + 1,
         approver: { personId: venue.managerId, pin: PINS.manager },
       },
@@ -1425,27 +1406,26 @@ describe("what the till reads", () => {
     ]);
   });
 
-  it("lists who holds one of the roles, to a staff session, and refuses a list that is not one", async () => {
+  it("lists people holding the requested permission to Staff and refuses other permissions", async () => {
     const approvers = (query: string, cookie = venue.cookie.staff) =>
       send(venue.app, cookie, "GET", `/api/adjustment-approvers${query}`);
-    const managers = await approvers("?roles=manager,admin");
-    expect(managers.status).toBe(200);
-    expect(managers.json).toEqual([
+    const comps = await approvers("?permission=adjustment.approve");
+    expect(comps.status).toBe(200);
+    expect(comps.json).toEqual([
       { personId: expect.any(String), displayName: "Administrator" },
       { personId: venue.managerId, displayName: "Marta" },
+      { personId: venue.supervisorId, displayName: "Sara" },
     ]);
-    const supervisors = await approvers("?roles=supervisor");
-    expect(supervisors.json).toEqual([
-      { personId: venue.supervisorId, displayName: expect.any(String) },
-    ]);
-    for (const query of ["?roles=", "?roles=chef", "?roles=manager,manager", "?role=manager", ""]) {
+    expect((await approvers("?permission=sale.refund")).json).toEqual(comps.json);
+    expect((await approvers("?permission=system.box_admin")).json).toEqual([comps.json[0]]);
+    for (const query of ["?permission=", "?permission=person.admin", "?roles=manager,admin", ""]) {
       const refused = await approvers(query);
       expect([query, refused.status, refused.json]).toEqual([
         query,
         400,
-        { code: "management.request_invalid", params: { field: "roles" } },
+        { code: "management.request_invalid", params: { field: "permission" } },
       ]);
     }
-    expect((await approvers("?roles=manager", "")).status).toBe(401);
+    expect((await approvers("?permission=adjustment.approve", "")).status).toBe(401);
   });
 });

@@ -141,26 +141,16 @@ it("limit opens quiet, compares numeric values and quiets after a successful sav
   });
 });
 
-it("limit's approvers enable Save when changed and quiet it when chosen back", async () => {
+it("a zero limit enables Save, quiets when restored, and saves zero", async () => {
   const api = await mount();
-  const approvers = async (values: string[]) => {
-    el.shadowRoot!.querySelector("[name=billApproverRoles]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { values } }),
-    );
-    await el.updateComplete;
-  };
-  await approvers(["admin"]);
+  await change("maxBillComp", "0");
   await state("save-limit", false, "primary");
-  await approvers(["admin", "manager"]);
+  await change("maxBillComp", "15.00");
   await state("save-limit", true, "secondary");
-  await approvers(["admin"]);
+  await change("maxBillComp", "0");
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-limit]")!.click();
   await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(1));
-  expect(api.saveSettings).toHaveBeenCalledWith({
-    maxBillComp: "15.00",
-
-    revision: 4,
-  });
+  expect(api.saveSettings).toHaveBeenCalledWith({ maxBillComp: "0.00", revision: 4 });
 });
 
 it("a refused changed limit remains primary and retryable", async () => {

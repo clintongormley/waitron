@@ -1228,7 +1228,11 @@ async function asked(billId: string, ask: Ask) {
   return preview.needsApproval;
 }
 
-const ASKS = { by: "reason", roles: ["manager", "admin"] };
+const ASKS = {
+  by: "limit",
+  permission: "adjustment.approve",
+  limit: { kind: "reason", amount: null, percentBp: 5000 },
+};
 
 /** Marks `quantity` of the line served, as the till's serve does. */
 function serve(billId: string, lineId: string, quantity = "1.000") {
@@ -2004,8 +2008,6 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
   });
 });
 
-/** Guest complaint (€30.00 a bill, managers and admins approve) on `target`, by the supervisor,
- * who may apply it. */
 const complaint = (target: Target, rest: Partial<Ask> = {}): Ask => ({
   ...target,
   action: "comp",
@@ -2013,7 +2015,6 @@ const complaint = (target: Target, rest: Partial<Ask> = {}): Ask => ({
   ...rest,
 });
 
-/** `amount` off the bill's steak under Guest complaint: whether the supervisor is asked. */
 async function steakOff(billId: string, amount: string) {
   const [steak] = await dishesNamed(billId, "Steak");
   const preview = await inTx(venue, async (tx) =>
@@ -2022,7 +2023,10 @@ async function steakOff(billId: string, amount: string) {
       await argsFor(
         tx,
         billId,
-        complaint({ lineId: steak! }, { action: "discount_amount", amount }),
+        complaint(
+          { lineId: steak! },
+          { action: "discount_amount", amount, operatorId: venue.staffId },
+        ),
       ),
       venue.venueLocale,
     ),
@@ -2042,7 +2046,10 @@ describe("A803 portions: a reason's euro limit counts what is still off the bill
         billId,
         complaint(rowOf(burgers), { action: "discount_percent", percentBp: 5000 }),
       );
-      expect(await steakOff(billId, "18.01"), shape).toEqual(ASKS);
+      expect(await steakOff(billId, "18.01"), shape).toEqual({
+        ...ASKS,
+        limit: { kind: "reason", amount: "30.00", percentBp: null },
+      });
 
       await adjust(
         billId,
@@ -2052,7 +2059,10 @@ describe("A803 portions: a reason's euro limit counts what is still off the bill
       );
 
       expect(await steakOff(billId, "24.00"), shape).toBe("through");
-      expect(await steakOff(billId, "24.01"), shape).toEqual(ASKS);
+      expect(await steakOff(billId, "24.01"), shape).toEqual({
+        ...ASKS,
+        limit: { kind: "reason", amount: "30.00", percentBp: null },
+      });
     }
   });
 });

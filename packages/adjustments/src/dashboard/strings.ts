@@ -16,8 +16,6 @@ const en = {
   "adjustments.empty": "No reasons yet.",
   "adjustments.column.name": "Name",
   "adjustments.column.kind": "Kind",
-  "adjustments.column.apply_roles": "Who can apply it",
-  "adjustments.column.approver_roles": "Who can approve it",
   "adjustments.column.limits": "Limits",
   "adjustments.column.actions": "Actions",
   "adjustments.customise_columns": "Customise columns",
@@ -34,7 +32,6 @@ const en = {
   "adjustments.limit_amount": "{amount} a bill",
   "adjustments.none": "—",
   "adjustments.no_limit": "No limit",
-  "adjustments.everyone": "Everyone",
   "adjustments.note_required": "Note required",
   "adjustments.order_note": "Drag ⋮⋮ to set the order the till lists them in.",
   "adjustments.order_note_searching": "Clear the search to change the order.",
@@ -48,11 +45,6 @@ const en = {
   "adjustments.field.name": "Name",
   "adjustments.field.names": "Name in each language",
   "adjustments.field.name_in": "Name in {language}",
-  "adjustments.field.apply_roles": "Who can apply it",
-  "adjustments.field.apply_roles_hint": "They use it straight away, up to its limits.",
-  "adjustments.field.approver_roles": "Who can approve it",
-  "adjustments.field.approver_roles_hint":
-    "They enter their PIN when anyone else asks, or above a limit.",
   "adjustments.field.actions": "How it can be taken off",
   "adjustments.field.max_percent": "Most off one item",
   "adjustments.field.max_percent_help_label": "About most off one item",
@@ -86,8 +78,6 @@ const en = {
   "adjustments.error.maxAmount":
     "Enter an amount of 0 or more with at most two decimals, such as 30.00.",
   "adjustments.error.kind": "Choose Void or Comp.",
-  "adjustments.error.applyRoles": "Choose at least one role.",
-  "adjustments.error.approverRoles": "Choose at least one role.",
   "adjustments.error.free_over_limit": "Free takes 100% off: raise this limit or untick Free.",
   "adjustments.error.noteRequired": "Choose whether staff must write a note.",
   "adjustments.error.void_required": "A venue keeps at least one Void reason.",
@@ -102,7 +92,6 @@ const en = {
   "adjustments.limit.help_label": "About most comped on one bill",
   "adjustments.limit.hint":
     "Every comp on the bill counts. 0 means every comp on a bill needs approval.",
-  "adjustments.limit.approvers": "Who can approve past it",
   "adjustments.limit.save": "Save limit",
   "adjustments.limit.saved": "Limit saved.",
   "adjustments.limit.load_error": "The bill's comp limit could not be loaded.",
@@ -190,8 +179,6 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.empty": "Todavía no hay motivos.",
   "adjustments.column.name": "Nombre",
   "adjustments.column.kind": "Tipo",
-  "adjustments.column.apply_roles": "Quién puede aplicarlo",
-  "adjustments.column.approver_roles": "Quién puede autorizarlo",
   "adjustments.column.limits": "Límites",
   "adjustments.column.actions": "Acciones",
   "adjustments.customise_columns": "Personalizar columnas",
@@ -208,7 +195,6 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.limit_amount": "{amount} por cuenta",
   "adjustments.none": "—",
   "adjustments.no_limit": "Sin límite",
-  "adjustments.everyone": "Todos",
   "adjustments.note_required": "Nota obligatoria",
   "adjustments.order_note": "Arrastra ⋮⋮ para fijar el orden en que la caja los muestra.",
   "adjustments.order_note_searching": "Borra la búsqueda para cambiar el orden.",
@@ -222,20 +208,15 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.field.name": "Nombre",
   "adjustments.field.names": "Nombre en cada idioma",
   "adjustments.field.name_in": "Nombre en {language}",
-  "adjustments.field.apply_roles": "Quién puede aplicarlo",
-  "adjustments.field.apply_roles_hint": "Lo usan directamente, hasta sus límites.",
-  "adjustments.field.approver_roles": "Quién puede autorizarlo",
-  "adjustments.field.approver_roles_hint":
-    "Introducen su PIN cuando lo pide otra persona o se pasa un límite.",
   "adjustments.field.actions": "Cómo se descuenta",
   "adjustments.field.max_percent": "Máximo por artículo",
   "adjustments.field.max_percent_help_label": "Acerca del máximo por artículo",
   "adjustments.field.max_percent_hint":
-    "Cuenta todos los descuentos del artículo, sea cual sea su motivo, también los de toda la cuenta.",
+    "Cuenta todos los descuentos del artículo. 0 significa que cada invitación con este motivo necesita aprobación.",
   "adjustments.field.max_amount": "Máximo por cuenta",
   "adjustments.field.max_amount_help_label": "Acerca del máximo por cuenta",
   "adjustments.field.max_amount_hint":
-    "Lo fija el local. Por encima, se pide a alguien que pueda autorizarlo.",
+    "0 significa que cada invitación con este motivo necesita aprobación.",
   "adjustments.field.note_required": "Pide una nota",
   "adjustments.field.note_required_void_hint": "La caja pide la nota con «Indica el motivo».",
   "adjustments.void_rule": "Quién puede cancelar lo decide el permiso de devolución, no el motivo.",
@@ -263,8 +244,6 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.error.maxAmount":
     "Escribe un importe mayor que 0 con dos decimales como máximo, como 30,00.",
   "adjustments.error.kind": "Elige Cancelar o Descuento.",
-  "adjustments.error.applyRoles": "Elige al menos un rol.",
-  "adjustments.error.approverRoles": "Elige al menos un rol.",
   "adjustments.error.free_over_limit": "Gratis quita el 100 %: sube este límite o desmarca Gratis.",
   "adjustments.error.noteRequired": "Elige si el personal debe escribir una nota.",
   "adjustments.error.void_required": "El local necesita al menos un motivo de cancelación.",
@@ -278,7 +257,6 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.limit.field": "Máximo descontado en una cuenta",
   "adjustments.limit.help_label": "Acerca del máximo descontado en una cuenta",
   "adjustments.limit.hint": "0 significa que cada invitación de una cuenta necesita aprobación.",
-  "adjustments.limit.approvers": "Quién puede autorizar más",
   "adjustments.limit.save": "Guardar límite",
   "adjustments.limit.saved": "Límite guardado.",
   "adjustments.limit.load_error": "No se pudo cargar el límite de descuento por cuenta.",
@@ -407,23 +385,12 @@ const STAGE_NAMES: NameTable = {
   billDiscount: { en: "Whole bill", es: "Toda la cuenta" },
 };
 
-const ROLE_NAMES: NameTable = {
-  staff: { en: "Staff", es: "Empleado" },
-  supervisor: { en: "Supervisor", es: "Supervisor" },
-  manager: { en: "Manager", es: "Encargado" },
-  admin: { en: "Admin", es: "Administrador" },
-};
-
 export function actionChoice(action: string, locale?: string): string {
   return resolveNameTable(ACTION_CHOICES, action, locale);
 }
 
 export function kindName(kind: string, locale?: string): string {
   return resolveNameTable(KIND_NAMES, kind, locale);
-}
-
-export function roleName(role: string, locale?: string): string {
-  return resolveNameTable(ROLE_NAMES, role, locale);
 }
 
 export function kindTotalName(kind: string, locale?: string): string {

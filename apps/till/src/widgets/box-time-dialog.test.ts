@@ -491,7 +491,7 @@ describe("till-box-time-dialog", () => {
       const api = fakeApi(BOX_BEHIND, okConfirm(5_000));
       const el = await refusedNotStartUp(api);
       expect(api.listApprovers).toHaveBeenCalledWith("system.box_admin");
-      const dialog = pinDialog(el) as unknown as { authorizers: unknown; approverRole: string };
+      const dialog = pinDialog(el) as unknown as { authorizers: unknown };
       expect(dialog.authorizers).toEqual([ADMIN]);
       await signIn(el);
       expect(pinDialog(el)).toBeNull();

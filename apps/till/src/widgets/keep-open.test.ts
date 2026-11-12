@@ -136,7 +136,7 @@ it.each(["pin.invalid", "pin.throttled"])(
       .not.toBeNull();
     const pin = el.shadowRoot!.querySelector("till-supervisor-override-dialog")!;
     await pin.updateComplete;
-    expect(pin.approverRole).toBe("manager");
+    expect(pin.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Approval needed");
     expect(pin.authorizers).toEqual([{ personId: "ana", displayName: "Ana" }]);
     pin.dispatchEvent(
       new CustomEvent("override-confirm", { detail: { personId: "ana", pin: "1234" } }),

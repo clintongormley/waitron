@@ -113,7 +113,11 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await previewed(el, {
       reduction: "50.00",
       nominalValue: "50.00",
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      needsApproval: {
+        by: "limit",
+        permission: "adjustment.approve",
+        limit: { kind: "reason", amount: "30.00", percentBp: null },
+      },
       lines: [],
     });
     await expectNoA11yViolations(host);
@@ -131,7 +135,11 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await previewed(el, {
       reduction: "15.00",
       nominalValue: "50.00",
-      needsApproval: { by: "bill_limit", roles: ["manager", "admin"], limit: "40.00" },
+      needsApproval: {
+        by: "limit",
+        permission: "adjustment.approve",
+        limit: { kind: "bill", amount: "40.00", percentBp: null },
+      },
       lines: [],
     });
     expect(el.shadowRoot!.querySelector("[data-needs-approval]")).not.toBeNull();
@@ -150,7 +158,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await previewed(el, {
       reduction: "50.00",
       nominalValue: "50.00",
-      needsApproval: { by: "refund" },
+      needsApproval: { by: "refund", permission: "sale.refund" },
       lines: [],
     });
     expect(el.shadowRoot!.querySelector("[data-needs-approval]")).not.toBeNull();

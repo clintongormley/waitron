@@ -12844,7 +12844,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     await openFinish(el);
     await choose(el, true);
     expect(approval(el)?.authorizers).toEqual([{ personId: "m1", displayName: "Marta" }]);
-    expect(approval(el)?.approverRole).toBeNull();
+    expect(approval(el)?.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Approval needed");
     expect(api.getTransactionReceipt).not.toHaveBeenCalled();
     const first = finish.mock.calls[1]![3];
     expect(first.cancellations[0].refundHandoff).toBe(true);

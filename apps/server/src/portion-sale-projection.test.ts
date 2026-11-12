@@ -1,3 +1,5 @@
+import { ADJUSTMENTS_PERMISSIONS } from "@waitron/adjustments";
+import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -40,6 +42,8 @@ import { setupVenue, useSplitExtrasDb, type ProductLine } from "./testing/split-
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { readLockedLines, splitLinesWithinOrder, type StoredOrderLine } from "./working-order.js";
+
+registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
 
 const DAY = "2026-10-27";
 

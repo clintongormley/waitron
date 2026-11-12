@@ -6,6 +6,17 @@ blocked so you can practise recovery. In the dashboard's **Payments**, a manager
 **Check with the card provider** for a whole-order payment, or **Check with provider** for a bill
 contribution, and confirms. This ends the practice attempt without recording a charge.
 
+## Give a comp or discount {#comps-and-discounts}
+
+Choose a reason when you make an item free or give a discount. With **Apply comps**, you can
+apply it up to the reason's limits and the bill's comp limit. If you need approval, choose someone
+with **Approve comps** and ask them to enter their PIN. They approve past those limits and can
+apply their own comps without a second person's PIN.
+
+In the dashboard's **Voids and comps**, set a limit to **0** when each comp needs approval.
+**Complaint**, **On the house** and **Discount** start at 0; **Staff meal** allows up to 50% off
+an item before approval is needed.
+
 ## Share a Counter bill {#counter-part-payments}
 
 Choose **Pay** to take all or part of a Counter bill. **Whole bill** starts selected;

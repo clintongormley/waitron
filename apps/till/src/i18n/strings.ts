@@ -2501,7 +2501,7 @@ export const es: Record<StringKey, string> = {
   "login.powered_by": "Con la tecnología de",
   "override.title": "Hace falta aprobación",
   "override.pick_supervisor": "Elige quién aprueba",
-  "override.enter_pin": "Introduce el PIN del responsable",
+  "override.enter_pin": "Introduce su PIN",
   "override.no_supervisors": "Aquí nadie puede aprobarlo",
   "override.error": "No se pudo autorizar, inténtalo de nuevo",
   // The approver's PIN prompt, naming the role that must approve
@@ -3192,7 +3192,7 @@ export const es: Record<StringKey, string> = {
   "adjust.note_shown": "Nota: {note}",
   "adjust.approval_reason": "Alguien que pueda autorizar «{reason}» debe introducir su PIN.",
   "adjust.approval_bill_limit":
-    "Con esto, los descuentos de la cuenta pasan de {limit}. Alguien que pueda superar el límite y autorizar este motivo debe introducir su PIN.",
+    "Con esto, los descuentos de la cuenta pasan de {limit}. Alguien con Autorizar invitaciones debe introducir su PIN.",
   "adjust.approval_refund": "Alguien que pueda hacer devoluciones debe introducir su PIN.",
   "adjust.approval_any": "Alguien que pueda autorizarlo debe introducir su PIN.",
   "adjust.ask_approval": "Pedir aprobación",

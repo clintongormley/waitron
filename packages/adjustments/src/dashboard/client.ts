@@ -6,7 +6,6 @@ import { QUERY_DEPENDENCIES } from "./live-queries.js";
 // Node builtins into the browser bundle.
 
 export type AdjustmentAction = "cancel" | "comp" | "discount_percent" | "discount_amount";
-export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
 export type ReasonKind = "void" | "comp";
 
 /** Every field an owner edits. `maxAmount` is euros as a decimal string; a `null` limit is no limit.

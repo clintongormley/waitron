@@ -43,7 +43,11 @@ async function discount(): Promise<string> {
         stage: "fired",
       },
       quantity: "3",
-      reason: { id: reason.id, name: reason.name, policy: policySnapshotOf(reason) },
+      reason: {
+        id: reason.id,
+        name: reason.name,
+        policy: policySnapshotOf(reason, { maxBillComp: null }),
+      },
       action: "discount_percent",
       percentBp: 1000,
       beforeAmount: decimal("30.00"),

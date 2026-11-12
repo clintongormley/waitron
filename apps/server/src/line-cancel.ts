@@ -22,7 +22,12 @@ import {
   thousandthsToDecimal,
 } from "@waitron/shared";
 import { persons, type PinAttempts } from "@waitron/identity";
-import { findAdjustmentReason, policySnapshotOf, recordAdjustment } from "@waitron/adjustments";
+import {
+  findAdjustmentReason,
+  policySnapshotOf,
+  readAdjustmentSettings,
+  recordAdjustment,
+} from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
 import type { CancellationContext, CancellationTarget } from "./line-cancel-context.js";
 import { requireRowCancellationContext } from "./line-cancel-context.js";
@@ -452,7 +457,7 @@ export async function cancelItem(
           reason: {
             id: reason.id,
             name: reasonNameIn(reason, actor.locale, policy.venueLocale),
-            policy: policySnapshotOf(reason),
+            policy: policySnapshotOf(reason, await readAdjustmentSettings(tx)),
           },
           action: "cancel",
           percentBp: null,

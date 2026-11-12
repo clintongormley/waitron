@@ -33,7 +33,6 @@ import {
   type AdjustmentAction,
 } from "@waitron/adjustments";
 import { localToday, rateLines, type GrossLines, type VatClass } from "@waitron/catalogue";
-import type { PersonRoleValue } from "@waitron/identity";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { listStationNotices } from "@waitron/venue-service";
 import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
@@ -82,6 +81,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 // Cancellations, comps and discounts applied to an open bill (service plan Task 11, spec §7),
 // against a provisioned venue that files real Veri*Factu records.
 let venue: AdjustmentVenue;
+let approvalReasonId: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -89,6 +89,16 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionAdjustmentVenue(db);
+    approvalReasonId = (
+      await inTx(venue, (tx) =>
+        createAdjustmentReason(tx, {
+          ...REASONS.complaint,
+          name: "Approval required",
+          names: {},
+          maxAmount: decimal("0"),
+        }),
+      )
+    ).id;
   },
 });
 
@@ -97,8 +107,6 @@ type Ask = Partial<Omit<AdjustmentArgs, "amount">> & {
   amount?: string;
 };
 
-/** Apply `ask` to the bill as its current revision reads, as the supervisor, under House (House
- * void for a cancel). */
 async function adjust(billId: string, ask: Ask) {
   return inTx(venue, async (tx) =>
     applyAdjustment(
@@ -124,7 +132,7 @@ async function argsFor(tx: Transaction, billId: string, ask: Ask): Promise<Adjus
     lineId: null,
     reasonId: ask.action === "cancel" ? venue.reasonId.houseVoid : venue.reasonId.house,
     note: null,
-    operatorId: venue.supervisorId,
+    operatorId: ask.action === "cancel" ? venue.supervisorId : venue.staffId,
     ...rest,
     ...(amount === undefined ? {} : { amount: decimal(amount) }),
   };
@@ -307,7 +315,7 @@ describe("a comp (plan D4)", () => {
       reduction: 1200,
       nominalValue: 1200,
       stage: "fired",
-      requestedBy: venue.supervisorId,
+      requestedBy: venue.staffId,
       approvedBy: null,
       lineName: "Burger",
       lineListUnitPrice: 1200,
@@ -892,37 +900,40 @@ describe("approval (plan D6)", () => {
   const comp = async (billId: string, approver?: AdjustmentArgs["approver"]) => ({
     ...(await todayLine(venue, billId, 1)),
     action: "comp" as const,
-    reasonId: venue.reasonId.complaint,
+    reasonId: approvalReasonId,
     operatorId: venue.staffId,
     ...(approver === undefined ? {} : { approver }),
   });
 
-  it("refuses a staff member's comp under Guest complaint with no approver, naming the reason's list", async () => {
+  it("refuses a staff member's comp under Guest complaint with no approver, naming the required permission", async () => {
     const { billId } = await bill([{ name: "Burger" }]);
     await refusedWith(billId, await comp(billId), "adjustment.approval_required", {
-      approval: "reason",
+      approval: "limit",
     });
     expect(await preview(billId, await comp(billId))).toMatchObject({
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
       reduction: "12.00",
     });
   });
 
-  it("applies it with a manager's PIN, recording who asked and who approved", async () => {
+  it("applies it with a supervisor's PIN, recording who asked and who approved", async () => {
     const { billId } = await bill([{ name: "Burger" }]);
 
-    await adjust(billId, await comp(billId, { personId: venue.managerId, pin: PINS.manager }));
+    await adjust(
+      billId,
+      await comp(billId, { personId: venue.supervisorId, pin: PINS.supervisor }),
+    );
 
     expect((await recordedOn(billId))[0]).toMatchObject({
       requestedBy: venue.staffId,
-      approvedBy: venue.managerId,
+      approvedBy: venue.supervisorId,
     });
     // The recorded command never holds the PIN (ruling R2).
     const commands = await inTx(venue, (tx) =>
       tx.select().from(serviceCommands).where(eq(serviceCommands.scopeId, billId)),
     );
     expect(commands).toHaveLength(1);
-    expectNoPinIn(commands, PINS.manager);
+    expectNoPinIn(commands, PINS.supervisor);
   });
 
   it("refuses a staff member's PIN as the approver", async () => {
@@ -931,11 +942,11 @@ describe("approval (plan D6)", () => {
       billId,
       await comp(billId, { personId: venue.staffId, pin: PINS.staff }),
       "adjustment.approval_required",
-      { approval: "reason" },
+      { approval: "limit" },
     );
   });
 
-  it("lets a manager on Who can approve it but off Who can apply it comp straight through", async () => {
+  it("lets a manager who can approve comp straight through", async () => {
     const reasonId = await inTx(venue, async (tx) => {
       return (
         await createAdjustmentReason(tx, {
@@ -1795,10 +1806,10 @@ describe("cumulative limits (plan D6)", () => {
     await adjust(billId, await comp(2));
 
     await refusedWith(billId, await comp(3), "adjustment.approval_required", {
-      approval: "reason",
+      approval: "limit",
     });
     expect(await preview(billId, await comp(3))).toMatchObject({
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
     });
   });
 
@@ -1826,7 +1837,7 @@ describe("cumulative limits (plan D6)", () => {
       operatorId: venue.staffId,
     });
     expect(await preview(billId, off("5.01"))).toMatchObject({
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
     });
 
     await adjust(billId, off("1.00"));
@@ -1851,7 +1862,7 @@ describe("cumulative limits (plan D6)", () => {
     await adjust(billId, await discount());
 
     await refusedWith(billId, await discount(), "adjustment.approval_required", {
-      approval: "reason",
+      approval: "limit",
     });
     await adjust(billId, await discount(MANAGER_PIN()));
     expect((await recordedOn(billId)).map((row) => row.approvedBy)).toEqual([
@@ -1941,7 +1952,7 @@ describe("cumulative limits (plan D6)", () => {
         operatorId: venue.staffId,
       };
       expect(await preview(billId, ask)).toMatchObject({
-        needsApproval: { by: "reason", roles: ["manager", "admin"] },
+        needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
       });
     });
   });
@@ -1975,7 +1986,7 @@ describe("cumulative limits (plan D6)", () => {
       reasonId: venue.reasonId.staffMeal,
     });
     expect(await preview(billId, off(4000))).toMatchObject({ needsApproval: null });
-    await refusedWith(billId, off(6000), "adjustment.approval_required", { approval: "reason" });
+    await refusedWith(billId, off(6000), "adjustment.approval_required", { approval: "limit" });
   });
 
   it("counts a discount on the whole bill once on a dish with extras: 30% off the bill, then 10% on the pizza goes straight through for staff, while 30% asks", async () => {
@@ -1993,7 +2004,7 @@ describe("cumulative limits (plan D6)", () => {
       operatorId: venue.staffId,
     };
     expect(await preview(billId, { ...ask, percentBp: 3000 })).toMatchObject({
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
     });
     expect(await preview(billId, ask)).toMatchObject({ needsApproval: null });
 
@@ -2018,7 +2029,7 @@ describe("cumulative limits (plan D6)", () => {
       });
     };
     expect(await twice(4000)).toMatchObject({
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
     });
     expect(await twice(2000)).toMatchObject({ needsApproval: null });
   });
@@ -2060,7 +2071,7 @@ describe("cumulative limits (plan D6)", () => {
       billId,
       { ...(await sixOff(1)), amount: "6.01" },
       "adjustment.approval_required",
-      { approval: "reason" },
+      { approval: "limit" },
     );
   });
 
@@ -2134,7 +2145,7 @@ describe("cumulative limits (plan D6)", () => {
     // €1.55 is off the €10.50 dish; its share is €5.25525 and its allowance two cents.
     expect(await preview(billId, await off("3.72"))).toMatchObject({ needsApproval: null });
     expect(await preview(billId, await off("3.73"))).toMatchObject({
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
     });
   });
 
@@ -2181,7 +2192,9 @@ describe("cumulative limits (plan D6)", () => {
         reasonId,
         operatorId: venue.staffId,
       }),
-    ).toMatchObject({ needsApproval: { by: "reason", roles: ["manager", "admin"] } });
+    ).toMatchObject({
+      needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
+    });
   });
 
   it("counts what a bill discount took off a dish's extras in the dish's floor: €5.23 more goes through, €5.24 asks", async () => {
@@ -2218,7 +2231,7 @@ describe("cumulative limits (plan D6)", () => {
       });
     expect(await off("5.23")).toMatchObject({ needsApproval: null });
     expect(await off("5.24")).toMatchObject({
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
     });
   });
 
@@ -2247,7 +2260,7 @@ describe("cumulative limits (plan D6)", () => {
 
     expect(await preview(billId, await half(2))).toMatchObject({ needsApproval: null });
     expect(await preview(billId, await half(1))).toMatchObject({
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
     });
   });
 
@@ -2282,7 +2295,7 @@ describe("cumulative limits (plan D6)", () => {
         reasonId: venue.reasonId.staffMeal,
       },
       "adjustment.approval_required",
-      { approval: "reason" },
+      { approval: "limit" },
     );
   });
 });
@@ -2297,7 +2310,11 @@ describe("a reason's euro limit counts what is still off the bill (owner, 2026-1
   });
   const verdict = async (billId: string, ask: Ask) =>
     (await preview(billId, ask)).needsApproval ?? "through";
-  const ASKS_REASON = { by: "reason", roles: ["manager", "admin"] };
+  const ASKS_REASON = {
+    by: "limit",
+    permission: "adjustment.approve",
+    limit: { kind: "reason", amount: "30.00", percentBp: null },
+  };
 
   it("another reason's €25 free steak does not count toward Guest complaint's €30", async () => {
     const { billId } = await bill([{ name: "Steak" }, { name: "Burger" }]);
@@ -2362,7 +2379,10 @@ describe("a reason's euro limit counts what is still off the bill (owner, 2026-1
     const staying = await lineIdOf(venue, billId, 3);
     const euroOff: Ask = { lineId: staying, action: "discount_amount", amount: "1.01", reasonId };
     await adjust(billId, { action: "discount_amount", amount: "10.00", reasonId });
-    expect(await verdict(billId, euroOff)).toEqual(ASKS_REASON);
+    expect(await verdict(billId, euroOff)).toEqual({
+      ...ASKS_REASON,
+      limit: { kind: "reason", amount: "11.00", percentBp: null },
+    });
     const [party] = await inTx(venue, (tx) =>
       tx
         .select({ revision: parties.revision })
@@ -2385,16 +2405,12 @@ describe("a reason's euro limit counts what is still off the bill (owner, 2026-1
 
 describe("the bill's comp limit (A758 §3.5)", () => {
   // The venue is shared by every case in the file, so each case sets the limit it needs.
-  const setLimit = (
-    maxBillComp: string | null,
-    billApproverRoles: PersonRoleValue[] = ["manager", "admin"],
-  ) =>
+  const setLimit = (maxBillComp: string | null) =>
     inTx(venue, async (tx) =>
       saveAdjustmentSettings(
         tx,
         {
           maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
-          billApproverRoles,
         },
         { expectedRevision: (await readAdjustmentSettings(tx)).revision, personId: null },
       ),
@@ -2410,9 +2426,13 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     ...byStaff(),
     ...extra,
   });
-  const PAST_BILL = { approval: "bill_limit" };
-  const askedOfBill = (roles: PersonRoleValue[]) => ({
-    needsApproval: { by: "bill_limit", roles, limit: "40.00" },
+  const PAST_BILL = { approval: "limit" };
+  const askedOfBill = () => ({
+    needsApproval: {
+      by: "limit",
+      permission: "adjustment.approve",
+      limit: { kind: "bill", amount: "40.00", percentBp: null },
+    },
   });
   const approvals = async (billId: string) =>
     (await recordedOn(billId)).map((row) => [row.action, row.reduction, row.approvedBy]);
@@ -2423,7 +2443,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
 
     expect(await preview(billId, billOff("40.01"))).toMatchObject({
       reduction: "40.01",
-      ...askedOfBill(["manager", "admin"]),
+      ...askedOfBill(),
     });
     expect(await preview(billId, billOff("40.00"))).toMatchObject({ needsApproval: null });
     await adjust(billId, billOff("40.00"));
@@ -2446,9 +2466,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
       ...byStaff(),
     });
 
-    expect(await preview(billId, billOff("28.01"))).toMatchObject(
-      askedOfBill(["manager", "admin"]),
-    );
+    expect(await preview(billId, billOff("28.01"))).toMatchObject(askedOfBill());
     await refusedWith(billId, billOff("28.01"), "adjustment.approval_required", PAST_BILL);
     await adjust(billId, billOff("28.00"));
     expect(await approvals(billId)).toEqual([
@@ -2465,9 +2483,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     const bottle = await todayLine(venue, billId, 2);
     const onBottle = (amount: string): Ask => ({ ...bottle, ...billOff(amount) });
 
-    expect(await preview(billId, onBottle("14.01"))).toMatchObject(
-      askedOfBill(["manager", "admin"]),
-    );
+    expect(await preview(billId, onBottle("14.01"))).toMatchObject(askedOfBill());
     await refusedWith(billId, onBottle("14.01"), "adjustment.approval_required", PAST_BILL);
     await adjust(billId, onBottle("14.00"));
     expect(await approvals(billId)).toEqual([
@@ -2485,9 +2501,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
       ...byStaff(),
     });
     // With the €30.00 bottle given away, €10.01 more is past the limit.
-    expect(await preview(billId, billOff("10.01"))).toMatchObject(
-      askedOfBill(["manager", "admin"]),
-    );
+    expect(await preview(billId, billOff("10.01"))).toMatchObject(askedOfBill());
 
     // A supervisor holds the refund permission a sent dish's cancel needs.
     await adjust(billId, {
@@ -2514,7 +2528,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
       ...(await todayLine(venue, billId, 1)),
       ...billOff("50.00", { operatorId: venue.managerId }),
     });
-    expect(await preview(billId, billOff("0.01"))).toMatchObject(askedOfBill(["manager", "admin"]));
+    expect(await preview(billId, billOff("0.01"))).toMatchObject(askedOfBill());
     const cancel: Ask = {
       ...(await todayLine(venue, billId, 2)),
       action: "cancel",
@@ -2529,82 +2543,35 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     ]);
   });
 
-  it("nobody on both Who can approve past it and the reason's approvers is refused", async () => {
-    await setLimit("40.00", ["supervisor"]);
-    const ownersComp = await inTx(venue, (tx) =>
-      createAdjustmentReason(tx, {
-        ...REASONS.complaint,
-        name: "Owner's comp A758",
-        names: {},
-      }),
-    );
+  it("past both reason and bill limits, one supervisor PIN approves the comp", async () => {
+    await setLimit("40.00");
     const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
-    const bySupervisor = (amount: string) =>
-      billOff(amount, { reasonId: ownersComp.id, operatorId: venue.supervisorId });
-
-    // Under the bill's limit the reason's lists decide, and they name only admins.
-    expect(await preview(billId, bySupervisor("10.00"))).toMatchObject({
-      needsApproval: { by: "reason", roles: ["admin"] },
-    });
-    // Past it, only supervisors may pass the bill and only admins may approve the reason.
-    await expect(preview(billId, bySupervisor("50.00"))).rejects.toMatchObject({
-      code: "adjustment.no_common_approver",
-    });
-    await refusedWith(billId, bySupervisor("50.00"), "adjustment.no_common_approver");
-    expect(await approvals(billId)).toEqual([]);
-  });
-
-  it("past both the reason's limit and the bill's, one PIN from someone on both lists is enough", async () => {
-    await setLimit("40.00", ["supervisor", "manager"]);
-    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
-    // Guest complaint allows €30.00 a bill and is approved by managers and admins.
     const complaint = (extra: Partial<Ask> = {}) =>
       billOff("50.00", { reasonId: venue.reasonId.complaint, ...extra });
-
-    expect(await preview(billId, complaint())).toMatchObject(askedOfBill(["manager"]));
-    await refusedWith(
-      billId,
-      complaint({ approver: SUPERVISOR_PIN() }),
-      "adjustment.approval_required",
-      PAST_BILL,
-    );
-    await adjust(billId, complaint({ approver: MANAGER_PIN() }));
-    expect(await approvals(billId)).toEqual([["discount_amount", 5000, venue.managerId]]);
+    expect(await preview(billId, complaint())).toMatchObject(askedOfBill());
+    await refusedWith(billId, complaint(), "adjustment.approval_required", PAST_BILL);
+    await adjust(billId, complaint({ approver: SUPERVISOR_PIN() }));
+    expect(await approvals(billId)).toEqual([["discount_amount", 5000, venue.supervisorId]]);
   });
 
-  it("Luis, a supervisor on Who can approve past it, needs a manager's PIN for a managers-only reason", async () => {
-    await setLimit("40.00", ["supervisor", "manager"]);
-    const onTheHouse = await inTx(venue, (tx) =>
-      createAdjustmentReason(tx, {
-        ...REASONS.complaint,
-        name: "On the house A803",
-        names: {},
-        maxAmount: null,
-      }),
-    );
-    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
-    const byLuis = (extra: Partial<Ask> = {}) =>
-      billOff("50.00", { reasonId: onTheHouse.id, operatorId: venue.supervisorId, ...extra });
-
-    expect(await preview(billId, byLuis())).toMatchObject(askedOfBill(["manager"]));
-    await refusedWith(billId, byLuis(), "adjustment.approval_required", PAST_BILL);
-    await refusedWith(
-      billId,
-      byLuis({ approver: SUPERVISOR_PIN() }),
-      "adjustment.approval_required",
-      PAST_BILL,
-    );
-    await adjust(billId, byLuis({ approver: MANAGER_PIN() }));
-    expect(await approvals(billId)).toEqual([["discount_amount", 5000, venue.managerId]]);
-  });
-
-  it("a PIN from someone off the bill's list is refused", async () => {
+  it("a supervisor who can approve passes the bill limit without another PIN", async () => {
     await setLimit("40.00");
-    // House is approved by everyone, a supervisor among them.
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    const ask = billOff("50.00", {
+      reasonId: venue.reasonId.complaint,
+      operatorId: venue.supervisorId,
+    });
+    expect(await preview(billId, ask)).toMatchObject({ needsApproval: null });
+    await adjust(billId, ask);
+    expect(await approvals(billId)).toEqual([["discount_amount", 5000, null]]);
+  });
+
+  it("a PIN without approval permission is refused past the bill limit", async () => {
+    await setLimit("40.00");
     const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
     await refusedWith(
       billId,
-      billOff("50.00", { approver: SUPERVISOR_PIN() }),
+      billOff("50.00", { approver: { personId: venue.staffId, pin: PINS.staff } }),
       "adjustment.approval_required",
       PAST_BILL,
     );
@@ -2645,7 +2612,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     ).billId;
 
     // The given-away burger came along, leaving €28.00 of the limit on the new bill.
-    expect(await preview(moved, billOff("28.01"))).toMatchObject(askedOfBill(["manager", "admin"]));
+    expect(await preview(moved, billOff("28.01"))).toMatchObject(askedOfBill());
     await refusedWith(moved, billOff("28.01"), "adjustment.approval_required", PAST_BILL);
     await adjust(moved, billOff("28.00"));
     expect(await approvals(moved)).toEqual([["discount_amount", 2800, null]]);
@@ -2676,9 +2643,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     const onSalads = (amount: string): Ask => ({ ...salads, ...billOff(amount) });
     await adjust(billId, onSalads("15.00"));
 
-    expect(await preview(billId, onSalads("25.01"))).toMatchObject(
-      askedOfBill(["manager", "admin"]),
-    );
+    expect(await preview(billId, onSalads("25.01"))).toMatchObject(askedOfBill());
     await refusedWith(billId, onSalads("25.01"), "adjustment.approval_required", PAST_BILL);
     await adjust(billId, onSalads("25.00"));
     expect(await approvals(billId)).toEqual([
@@ -2702,9 +2667,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     const salads = await todayLine(venue, billId, 3);
     const onSalads = (amount: string): Ask => ({ ...salads, ...billOff(amount) });
 
-    expect(await preview(billId, onSalads("29.51"))).toMatchObject(
-      askedOfBill(["manager", "admin"]),
-    );
+    expect(await preview(billId, onSalads("29.51"))).toMatchObject(askedOfBill());
     await refusedWith(billId, onSalads("29.51"), "adjustment.approval_required", PAST_BILL);
     await adjust(billId, onSalads("29.50"));
     expect((await recordedOn(billId)).map((row) => [row.action, row.approvedBy])).toEqual([
@@ -3065,14 +3028,14 @@ describe("an extra on its own (B11d)", () => {
     const ask = {
       ...(await todayLine(venue, billId, 2)),
       action: "comp" as const,
-      reasonId: venue.reasonId.complaint,
+      reasonId: approvalReasonId,
       operatorId: venue.staffId,
     };
 
     expect(await preview(billId, ask)).toMatchObject({
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      needsApproval: { by: "limit", permission: "adjustment.approve", limit: { kind: "reason" } },
     });
-    await refusedWith(billId, ask, "adjustment.approval_required", { approval: "reason" });
+    await refusedWith(billId, ask, "adjustment.approval_required", { approval: "limit" });
     await adjust(billId, { ...ask, approver: { personId: venue.managerId, pin: PINS.manager } });
     expect((await recordedOn(billId))[0]).toMatchObject({
       requestedBy: venue.staffId,
@@ -3105,7 +3068,7 @@ describe("an extra on its own (B11d)", () => {
       half.billId,
       { ...(await todayLine(venue, half.billId, 2)), ...percent(1000) },
       "adjustment.approval_required",
-      { approval: "reason" },
+      { approval: "limit" },
     );
   });
 
@@ -4048,7 +4011,7 @@ describe("a counter order (B11c)", () => {
     const comp = async (approver?: AdjustmentArgs["approver"]): Promise<Ask> => ({
       ...(await todayLine(venue, billId, 1)),
       action: "comp",
-      reasonId: venue.reasonId.complaint,
+      reasonId: approvalReasonId,
       operatorId: venue.staffId,
       ...(approver === undefined ? {} : { approver }),
     });
@@ -4056,7 +4019,7 @@ describe("a counter order (B11c)", () => {
 
     await expect(adjust(billId, await comp())).rejects.toMatchObject({
       code: "adjustment.approval_required",
-      params: { approval: "reason" },
+      params: { approval: "limit" },
     });
     expect(await counterStateOf(billId)).toEqual(before);
 
@@ -4092,11 +4055,15 @@ describe("a counter order (B11c)", () => {
       const before = await counterStateOf(billId);
 
       expect(await preview(billId, off("10.01"))).toMatchObject({
-        needsApproval: { by: "bill_limit", roles: ["manager", "admin"], limit: "40.00" },
+        needsApproval: {
+          by: "limit",
+          permission: "adjustment.approve",
+          limit: { kind: "bill", amount: "40.00", percentBp: null },
+        },
       });
       await expect(adjust(billId, off("10.01"))).rejects.toMatchObject({
         code: "adjustment.approval_required",
-        params: { approval: "bill_limit" },
+        params: { approval: "limit" },
       });
       expect(await counterStateOf(billId)).toEqual(before);
 

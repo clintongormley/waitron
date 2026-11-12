@@ -8,7 +8,10 @@ import {
 } from "./supervisor-override-dialog.js";
 import type { StaffMember } from "../api/client.js";
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en");
+});
 
 const authorizers: StaffMember[] = [
   { personId: "sup-1", displayName: "Responsable" },
@@ -189,33 +192,28 @@ describe("till-supervisor-override-dialog", () => {
 });
 
 describe("till-supervisor-override-dialog: approval prompts", () => {
-  it.each(["en", "es-ES"])(
-    "asks for approval without a role throughout (%s)",
-    async (locale) => {
-      setLocale(locale);
-      const { el } = await mountWidget<TillSupervisorOverrideDialog>(
-        "till-supervisor-override-dialog",
-        { authorizers },
-      );
-      const dialog = root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!;
-      expect(dialog.heading).toBe(t("override.title"));
-      expect(root(el).querySelector(".prompt")!.textContent!.trim()).toBe(
-        t("override.pick_supervisor"),
-      );
-      await pick(el, "sup-1");
-      expect(root(el).querySelector(".prompt")!.textContent!.trim()).toBe(
-        t("override.enter_pin"),
-      );
+  it.each(["en", "es-ES"])("asks for approval without a role throughout (%s)", async (locale) => {
+    setLocale(locale);
+    const { el } = await mountWidget<TillSupervisorOverrideDialog>(
+      "till-supervisor-override-dialog",
+      { authorizers },
+    );
+    const dialog = root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!;
+    expect(dialog.heading).toBe(t("override.title"));
+    expect(root(el).querySelector(".prompt")!.textContent!.trim()).toBe(
+      t("override.pick_supervisor"),
+    );
+    await pick(el, "sup-1");
+    expect(root(el).querySelector(".prompt")!.textContent!.trim()).toBe(t("override.enter_pin"));
 
-      el.authorizers = [];
-      await pick(el, "sup-1").catch(() => undefined);
-      root(el).querySelector<HTMLElement>(".back")?.click();
-      await el.updateComplete;
-      expect(root(el).querySelector(".prompt")!.textContent!.trim()).toBe(
-        t("override.no_supervisors"),
-      );
-    },
-  );
+    el.authorizers = [];
+    await pick(el, "sup-1").catch(() => undefined);
+    root(el).querySelector<HTMLElement>(".back")?.click();
+    await el.updateComplete;
+    expect(root(el).querySelector(".prompt")!.textContent!.trim()).toBe(
+      t("override.no_supervisors"),
+    );
+  });
 
   it("uses the same permission-based wording by default", async () => {
     const { el } = await mount();
@@ -245,12 +243,22 @@ it("hands a refusal to the footer row while Authorize remains usable for retry",
   );
 });
 
-it("asks for an approver without naming a role", async () => {
-  const { el } = await mount();
-  const dialog = root(el).querySelector("wt-dialog")!;
-  await dialog.updateComplete;
-  expect(dialog.heading).toBe("Approval needed");
-  expect(root(el).textContent).toContain("Choose who approves");
-  await pick(el, "sup-1");
-  expect(root(el).textContent).toContain("Enter their PIN");
-});
+it.each([
+  ["en", "Approval needed", "Choose who approves", "Enter their PIN"],
+  ["es", "Hace falta aprobación", "Elige quién aprueba", "Introduce su PIN"],
+])(
+  "asks for an approver without naming a role in %s",
+  async (locale, heading, pickText, pinText) => {
+    const { el } = await mount();
+    setLocale(locale);
+    el.requestUpdate();
+    await el.updateComplete;
+    const dialog = root(el).querySelector("wt-dialog")!;
+    await dialog.updateComplete;
+    expect(dialog.heading).toBe(heading);
+    expect(root(el).textContent).toContain(pickText);
+    await pick(el, "sup-1");
+    expect(root(el).textContent).toContain(pinText);
+    setLocale("en");
+  },
+);

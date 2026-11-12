@@ -32,9 +32,6 @@ describe("a newly set-up venue's till", () => {
   it("offers the nine starter reasons, and a staff member cancels a dish with the first without a PIN", async () => {
     const listed = await send(venue.app, venue.cookie, "GET", "/api/adjustment-reasons");
     expect(listed.status).toBe(200);
-    const every = ["staff", "supervisor", "manager", "admin"];
-    const supervisorUp = ["supervisor", "manager", "admin"];
-    const managerUp = ["manager", "admin"];
     const allOff = ["comp", "discount_percent", "discount_amount"];
     const voidReason = (name: string, noteRequired = false) => ({
       id: expect.any(String),
@@ -49,10 +46,9 @@ describe("a newly set-up venue's till", () => {
     });
     const compReason = (
       name: string,
-      applyRoles: string[],
-      approverRoles: string[],
       actions = allOff,
       maxPercentBp: number | null = null,
+      maxAmount: string | null = "0.00",
     ) => ({
       id: expect.any(String),
       name,
@@ -60,9 +56,7 @@ describe("a newly set-up venue's till", () => {
       actions,
       noteRequired: false,
       maxPercentBp,
-      maxAmount: null,
-      applyRoles,
-      approverRoles,
+      maxAmount,
       startsFinishTable: false,
     });
     expect(listed.json).toEqual([
@@ -71,16 +65,10 @@ describe("a newly set-up venue's till", () => {
       voidReason(expected["Customer changed mind"].es),
       voidReason(expected["Not served"].es),
       voidReason(expected.Other.es, true),
-      compReason(expected.Complaint.es, supervisorUp, supervisorUp),
-      compReason(expected["On the house"].es, managerUp, managerUp),
-      compReason(
-        expected["Staff meal"].es,
-        every,
-        managerUp,
-        ["discount_percent", "discount_amount"],
-        5000,
-      ),
-      compReason(expected.Discount.es, managerUp, managerUp),
+      compReason(expected.Complaint.es),
+      compReason(expected["On the house"].es),
+      compReason(expected["Staff meal"].es, ["discount_percent", "discount_amount"], 5000, null),
+      compReason(expected.Discount.es),
     ]);
     const reasonId = (listed.json as unknown as { id: string }[])[0]!.id;
 

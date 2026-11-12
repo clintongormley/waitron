@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { userEvent } from "vitest/browser";
 import {
   LiveData,
   codeMessage,
@@ -10,7 +10,7 @@ import {
 import type { DeleteImpact, DeleteImpactRefusal } from "@waitron/shared";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import type { AdjustmentReason, AdjustmentSettings, AdjustmentsApi } from "./client.js";
+import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import "./reasons-screen.js";
 import { ADJUSTMENTS_STRINGS, actionChoice, kindName, t, tf } from "./strings.js";
@@ -508,14 +508,12 @@ describe("the reasons list", () => {
   it("keeps the row menu on screen at phone width", async () => {
     const el = await mount(
       fakeApi({
-        listReasons: vi
-          .fn()
-          .mockResolvedValue(
-            pictureReasons().map((reason) => ({
-              ...reason,
-              name: reason.name + "LongUnbrokenReasonNameForANarrowScreen",
-            })),
-          ),
+        listReasons: vi.fn().mockResolvedValue(
+          pictureReasons().map((reason) => ({
+            ...reason,
+            name: reason.name + "LongUnbrokenReasonNameForANarrowScreen",
+          })),
+        ),
       }),
     );
     el.parentElement!.style.width = "390px";
@@ -2217,10 +2215,7 @@ describe("the bill comp limit", () => {
 
   it("shows the limit the refresh reads after a save", async () => {
     const api = withLimit(null, {
-      getSettings: vi
-        .fn()
-        .mockResolvedValueOnce(body(null))
-        .mockResolvedValue(body("25.00", ["admin"])),
+      getSettings: vi.fn().mockResolvedValueOnce(body(null)).mockResolvedValue(body("25.00")),
     });
     const el = await mount(api);
     await type(el, "maxBillComp", "20");

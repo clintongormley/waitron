@@ -1421,6 +1421,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   [build plan](superpowers/plans/2026-11-11-a1002-roles-redesign.md) starts with test-fixture
   preparation, now ready: ordinary people and device-profile fixtures use the shared helpers.
   SQL constraint, trigger and pinned-hash probes retain their direct writes until PR11.
+  Comp reasons and the bill limit use Apply comps and Approve comps without role lists.
   Legacy raw SQL role reads remain for PR11. Permission declarations now list their default
   holders; Managers can restart the box, while clock and email changes use Box administration
   (Admin by default). Editable access roles and job-role behavior remain to be built.

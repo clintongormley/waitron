@@ -39,10 +39,10 @@ beforeEach(() => {
       sql`insert into working_orders (id,source,order_number,opened_at) values ('order','operator_script',1,'2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into adjustment_reasons (id,name,names,kind,actions,apply_roles,approver_roles,position,created_at) values ('reason','Current reason','{"en":"Current reason"}','comp','["comp"]','["manager"]','["admin"]',0,'2026-10-20T08:00:00.000Z')`,
+      sql`insert into adjustment_reasons (id,name,names,kind,actions,position,created_at) values ('reason','Current reason','{"en":"Current reason"}','comp','["comp"]',0,'2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into adjustments (id,working_order_id,line_id,splits,comped_extras,line_name,line_quantity,line_list_unit_price,credited_to,reason_id,reason_name,policy_snapshot,action,quantity,percent_bp,before_amount,after_amount,reduction,nominal_value,requested_by,approved_by,note,stage,by_guest,created_at) values ('adjustment','order','deleted-line','[{"from":"old","to":"split"}]','["deleted-extra"]','Recorded dish',2000,500,'former-person','removed-reason','Issued reason','{"actions":["cancel"],"applyRoles":[],"approverRoles":[],"maxPercentBp":null,"maxAmount":null,"noteRequired":true}','cancel',1000,null,1000,500,500,500,'requester','approver','Recorded note','fired',1,'2026-10-20T08:00:00.000Z')`,
+      sql`insert into adjustments (id,working_order_id,line_id,splits,comped_extras,line_name,line_quantity,line_list_unit_price,credited_to,reason_id,reason_name,policy_snapshot,action,quantity,percent_bp,before_amount,after_amount,reduction,nominal_value,requested_by,approved_by,note,stage,by_guest,created_at) values ('adjustment','order','deleted-line','[{"from":"old","to":"split"}]','["deleted-extra"]','Recorded dish',2000,500,'former-person','removed-reason','Issued reason','{"actions":["cancel"],"maxBillComp":null,"maxPercentBp":null,"maxAmount":null,"noteRequired":true}','cancel',1000,null,1000,500,500,500,'requester','approver','Recorded note','fired',1,'2026-10-20T08:00:00.000Z')`,
     );
   }
 });
@@ -212,7 +212,7 @@ describe("adjustment backup evidence", () => {
       await corrupt(restored.db, `delete from "${table}"`);
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
     restored.db.run(
-      sql`insert into adjustment_reasons (id,name,names,kind,actions,apply_roles,approver_roles,position,created_at) values ('reason','Current reason','{"en":"Current reason"}','comp','["comp"]','["manager"]','["admin"]',0,'2026-10-20T08:00:00.000Z')`,
+      sql`insert into adjustment_reasons (id,name,names,kind,actions,position,created_at) values ('reason','Current reason','{"en":"Current reason"}','comp','["comp"]',0,'2026-10-20T08:00:00.000Z')`,
     );
     expect((await run({ absent: true })).status).toBe("invalid");
   });

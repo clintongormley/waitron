@@ -214,8 +214,6 @@ const MENU: {
 
 /** The reasons every suite shares; a case that edits a reason makes its own. */
 export const REASONS = {
-  /** Free and every discount; €30.00 a bill; supervisors and above apply, managers and admins
-   * approve. */
   complaint: {
     name: "Guest complaint",
     names: { en: "Guest complaint", es: "Queja" },
@@ -226,7 +224,6 @@ export const REASONS = {
 
     noteRequired: false,
   },
-  /** A percentage or an amount, 50% an item; anyone applies, managers and admins approve. */
   staffMeal: {
     name: "Crew meal",
     names: { en: "Crew meal", es: "Comida de personal" },

@@ -6280,7 +6280,7 @@ so it takes no draft scope and has no `*.unsaved.test.ts`; Escape or closing it 
 removes nothing. The app draws one at a time (`lateSendWindow` in `apps/till/src/till-app.ts`).
 
 When Kitchen agreed is refused for want of `venue.configure`, the manager's PIN step reuses
-`till-supervisor-override-dialog` with `approverRole` `manager` and the people from
+`till-supervisor-override-dialog` with the people from
 `GET /api/service-day/authorizers`; that dialog registers its own digits with the leave coordinator.
 
 ### The notice strip (till)

@@ -240,7 +240,11 @@ describe("dated business-day reporting through real storage", () => {
         workingOrderId: bill,
         line: null,
         quantity: null,
-        reason: { id: reason.id, name: reason.name, policy: policySnapshotOf(reason) },
+        reason: {
+          id: reason.id,
+          name: reason.name,
+          policy: policySnapshotOf(reason, { maxBillComp: null }),
+        },
         action: "discount_amount",
         percentBp: null,
         beforeAmount: decimal("18.00"),

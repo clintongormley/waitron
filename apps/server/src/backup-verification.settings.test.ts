@@ -27,7 +27,7 @@ it("refuses a restored settings row that differs from the backup's", async () =>
   await f.corrupt((db) =>
     db
       .prepare("insert into settings values ('adjustments', 1, 1, ?, ?, null)")
-      .run('{"maxBillComp":4000,"billApproverRoles":["manager"]}', verificationTime),
+      .run('{"maxBillComp":4000}', verificationTime),
   );
   expect((await verify(f)).status).toBe("passed");
   const place = placement.placeBackupData;
@@ -36,7 +36,7 @@ it("refuses a restored settings row that differs from the backup's", async () =>
     const db = new DatabaseSync(join(args[1].venueDir, "venue.db"));
     try {
       db.prepare("update settings set doc = ? where module = 'adjustments'").run(
-        '{"maxBillComp":500,"billApproverRoles":["manager"]}',
+        '{"maxBillComp":500}',
       );
     } finally {
       db.close();
