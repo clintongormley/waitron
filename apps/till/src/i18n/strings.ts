@@ -1631,6 +1631,8 @@ export const en = {
     "The customer will pay later. This closes the bill now, and Waitron will not record the payment when it arrives.",
   "deferred_close.issue_and_close": "Issue invoice and close",
   "deferred_close.close": "Close bill",
+  "deferred_close.unserved": "Mark every dish served or cancel it first",
+  "deferred_close.payment_unconfirmed": "A payment on this bill could not be confirmed",
   // The bill payment dialog: paying for items, contributing an amount, or an equal share.
   "bill_pay.unsent": "Send or remove the unsent dishes before paying.",
   "bill_pay.title": "Pay",
@@ -3585,6 +3587,8 @@ export const es: Record<StringKey, string> = {
     "El cliente pagará más tarde. Esto cierra la cuenta ahora y Waitron no registrará el pago cuando llegue.",
   "deferred_close.issue_and_close": "Emitir factura y cerrar",
   "deferred_close.close": "Cerrar cuenta",
+  "deferred_close.unserved": "Marca todos los platos como servidos o cancélalos primero",
+  "deferred_close.payment_unconfirmed": "Un pago de esta cuenta no se ha podido confirmar",
   "bill_pay.unsent": "Envía o quita los platos sin enviar antes de cobrar.",
   "bill_pay.title": "Cobrar",
   "bill_pay.title_table": "Cobrar · {table}",

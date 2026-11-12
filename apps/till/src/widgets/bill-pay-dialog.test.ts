@@ -3308,3 +3308,73 @@ it("starts the reader slip unticked, forwards the choice, and resets for the nex
   await el.updateComplete;
   expect(box()).toBeNull();
 });
+
+describe("till-bill-pay-dialog: Close as deferred payment", () => {
+  const deferred = (el: TillBillPayDialog) =>
+    root(el).querySelector<HTMLElement & { disabled: boolean }>("[data-pay-deferred]");
+  const reason = (el: TillBillPayDialog) =>
+    text(root(el).querySelector("[data-pay-deferred-reason]"));
+
+  it("offers Close as deferred payment with Whole bill chosen and emits bill-pay-deferred", async () => {
+    const el = await mount({ way: "whole", deferredOffered: { state: "offered" } });
+    const pressed = capture<unknown>(el, "bill-pay-deferred");
+
+    expect(text(deferred(el))).toBe("Close as deferred payment");
+    expect(deferred(el)!.disabled).toBe(false);
+    expect(root(el).querySelector("[data-pay-deferred-reason]")).toBeNull();
+    await click(el, "[data-pay-deferred]");
+    expect(pressed).toEqual([{}]);
+  });
+
+  it("names it in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({ way: "whole", deferredOffered: { state: "offered" } });
+    expect(text(deferred(el))).toBe("Cerrar como pago aplazado");
+  });
+
+  it("offers it on a handheld with no cash or card method", async () => {
+    const el = await mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "none",
+      takesCash: false,
+      takesReaderCard: false,
+      takesManualCard: false,
+      deferredOffered: { state: "offered" },
+    });
+    const pressed = capture<unknown>(el, "bill-pay-deferred");
+    expect(text(root(el))).toContain(t("bill_pay.no_method"));
+    await click(el, "[data-pay-deferred]");
+    expect(pressed).toEqual([{}]);
+  });
+
+  it("shows it switched off with the reason when dishes are unserved", async () => {
+    const el = await mount({
+      way: "whole",
+      deferredOffered: { state: "off", reason: "deferred_close.unserved" },
+    });
+    const pressed = capture<unknown>(el, "bill-pay-deferred");
+
+    expect(deferred(el)!.disabled).toBe(true);
+    expect(reason(el)).toBe("Mark every dish served or cancel it first");
+    expect(deferred(el)!.getAttribute("aria-description")).toBe(
+      "Mark every dish served or cancel it first",
+    );
+    deferred(el)!.click();
+    await el.updateComplete;
+    expect(pressed).toEqual([]);
+  });
+
+  it("is not shown when it is hidden, or when another way is chosen", async () => {
+    const hidden = await mount({ way: "whole", deferredOffered: { state: "hidden" } });
+    expect(deferred(hidden)).toBeNull();
+
+    const el = await mount({ way: "whole", deferredOffered: { state: "offered" } });
+    for (const way of ["items", "contribution", "share"]) {
+      await pick(el, "way", way);
+      expect([way, deferred(el)]).toEqual([way, null]);
+    }
+    await pick(el, "way", "whole");
+    expect(deferred(el)).not.toBeNull();
+  });
+});
