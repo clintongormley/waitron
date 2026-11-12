@@ -617,6 +617,23 @@ describe("removing the standby this box's pair link names", () => {
     expect(await readPairLink(suite.node, p.nodeId)).toBeNull();
     expect(p.reloadStream).toHaveBeenCalledOnce();
   });
+
+  it("a repeated removal finishes a reload the first one could not, and reloads no more after", async () => {
+    const p = await primary();
+    const gone = standby();
+    await holdChart(p, [self(p), gone]);
+    await linkTo(p, gone.nodeId);
+    p.reloadStream.mockRejectedValueOnce(new Error("test: reload failed"));
+
+    expect((await remove(p, gone.nodeId, p.adminCookie)).status).toBe(500);
+    expect(await readPairLink(suite.node, p.nodeId)).toBeNull();
+
+    expect((await remove(p, gone.nodeId, p.adminCookie)).status).toBe(200);
+    expect(p.reloadStream).toHaveBeenCalledTimes(2);
+
+    expect((await remove(p, gone.nodeId, p.adminCookie)).status).toBe(200);
+    expect(p.reloadStream).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("POST /management-api/servers/:nodeId/remove on a cleared machine", () => {

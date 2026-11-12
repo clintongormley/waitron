@@ -284,27 +284,37 @@ export async function removeUnjoinedStandby(
 }
 
 /**
- * Deletes this box's pair link when it names `targetNodeId`, and restarts the bucket copy the link
- * stopped. Run after `removeUnjoinedStandby` commits the chart, so a removal that stops between the
- * two deletes the link when it is run again.
+ * Deletes this box's pair link when it names `targetNodeId`, then reloads the stream. Run after
+ * `removeUnjoinedStandby` commits the chart, so a removal that stops between the two deletes the
+ * link when it is run again. A reload that fails is owed to the next removal, whichever standby it
+ * names; it is kept in memory only, because a restart starts the stream afresh.
  */
-export async function unlinkRemovedStandby(
-  deps: {
-    readonly node: NodeDatabase;
-    readonly nodeId: string;
-    readonly log: Logger;
-    readonly reloadStream: () => Promise<void>;
-  },
-  targetNodeId: string,
-): Promise<void> {
-  const unlinked = await withNodeTransaction(deps.node, async (tx) => {
-    if ((await readPairLink(tx, deps.nodeId))?.peerNodeId !== targetNodeId) return false;
-    await deletePairLinkTx(tx, deps.nodeId);
-    return true;
-  });
-  if (!unlinked) return;
-  deps.log("info", "membership.pair_link_deleted", { nodeId: targetNodeId });
-  await deps.reloadStream();
+export function createStandbyUnlinker(deps: {
+  readonly node: NodeDatabase;
+  readonly nodeId: string;
+  readonly log: Logger;
+  readonly reloadStream: () => Promise<void>;
+}): (targetNodeId: string) => Promise<void> {
+  let reloadOwed = false;
+  return async (targetNodeId) => {
+    const unlinked = await withNodeTransaction(deps.node, async (tx) => {
+      if ((await readPairLink(tx, deps.nodeId))?.peerNodeId !== targetNodeId) return false;
+      await deletePairLinkTx(tx, deps.nodeId);
+      return true;
+    });
+    if (unlinked) {
+      deps.log("info", "membership.pair_link_deleted", { nodeId: targetNodeId });
+      reloadOwed = true;
+    }
+    if (!reloadOwed) return;
+    reloadOwed = false;
+    try {
+      await deps.reloadStream();
+    } catch (error) {
+      reloadOwed = true;
+      throw error;
+    }
+  };
 }
 
 export interface ClearanceResult {
