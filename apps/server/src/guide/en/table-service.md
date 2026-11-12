@@ -75,6 +75,10 @@ it in the receipt language. Order details name it in your screen language.
 At the counter, choose **Full invoice** before **Pay**. Paying the order in full issues the
 invoice. Placing a counter order alone does not issue an invoice.
 
+When the form shows **Delivery**, **A4 on {printer}** or **Email** sends the original by itself
+once the invoice is issued. With **Receipt printer: print after paying**, press **Print on
+{printer}** in the window after payment; closing that window prints nothing.
+
 ## Choose a document and printer {#invoice-printer}
 
 On a sale’s ticket, choose **Print/Reprint**. For a full invoice, choose **Receipt** for the compact

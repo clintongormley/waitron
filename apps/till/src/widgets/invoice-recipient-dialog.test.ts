@@ -232,7 +232,7 @@ describe("till-invoice-recipient-dialog delivery choice", () => {
     ["en", "Receipt printer: print after paying", "A4 on Office HP", "Delivery"],
     ["es-ES", "Impresora de tickets: imprimir tras cobrar", "A4 en Office HP", "Entrega"],
   ])(
-    "offers the printed receipt first and A4 on the invoice printer in %s",
+    "offers the receipt printer first and A4 on the invoice printer in %s",
     async (locale, receipt, a4, label) => {
       setLocale(locale);
       const el = await mountWithPrinter();

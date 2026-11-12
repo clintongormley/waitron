@@ -67,6 +67,11 @@ corrección. Cuando ya has elegido un cliente, su nombre y su identificador apar
 En el mostrador, elige **Factura completa** antes de **Cobrar**. Al cobrar todo el pedido se
 emite la factura. Tramitar un pedido de mostrador por sí solo no emite una factura.
 
+Cuando el formulario muestra **Entrega**, **A4 en {printer}** o **Correo electrónico** envía el
+original por sí solo al emitirse la factura. Con **Impresora de tickets: imprimir tras cobrar**,
+pulsa **Imprimir en {printer}** en la ventana posterior al cobro; si cierras esa ventana, no se
+imprime nada.
+
 Elige **NIF español** para un NIF, NIE o CIF. Para un pasaporte u otro documento aceptado,
 elige su **Tipo de identificador**, **País emisor** y **Número de documento**. Introduce el número
 tal como aparece. Puedes usar un pasaporte con una dirección española: el país emisor pertenece

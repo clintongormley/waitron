@@ -44,7 +44,9 @@ open the existing paid-view or Orders document actions deliberately, including o
 
 **Fiscal precedence.** Build only from main after E/A948 [PR #2122](https://github.com/clintongormley/waitron/pull/2122)
 lands. Preserve its F1 enablement in every environment, including production; add no F1-off boundary.
-Keep its actual route scope, including any counter restriction still owned by A555. An already-issued
+Keep its actual route scope, including any counter restriction still owned by A555 (2026-11-12, A555:
+the counter's Pay window has issued F1 since #2725, and the owner chose to keep that; see
+[the A555 decision](../../backlog/fiscal.md#a555-counter-full-invoices-stay-as-the-pay-window-issues-them-owner-2026-11-12)). An already-issued
 F1 can be printed/emailed using its recorded identity; A790's Receipt/Invoice choices are renderings
 of that same full invoice. Once F2 has issued, Full invoice instead needs a new F3 replacement
 under **A556**. A739 does not build that integration or call `recordSubstitution`. Keep actionable

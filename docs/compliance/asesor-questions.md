@@ -14,8 +14,8 @@ F1 paths in all environments. The owner removed the physical paper/QR checks, A5
 delivery and the asesor's manual-remedy approval as prerequisites to that switch. They remain
 open separately. Counter payment still refuses F1. Earlier dated statements about the public
 F1 stop describe the implementation at that time.
-2026-11-12: counter orders paid through the Pay window now issue full invoices (owner, A555);
-see [Decisions and deliberate limits](../backlog/fiscal.md#a555-counter-full-invoices-stay-as-the-pay-window-issues-them-owner-2026-11-12) in docs/backlog/fiscal.md.
+2026-11-12, A555: Counter bills paid through the shared Pay window have issued full invoices
+since #2725, and the owner chose to keep that; see [the A555 decision](../backlog/fiscal.md#a555-counter-full-invoices-stay-as-the-pay-window-issues-them-owner-2026-11-12).
 
 **2026-10-27 research update, A948:** The [operation-date proposal and B2B source check](research/2026-10-27-a948-operation-date-and-b2b.md)
 recommends a confirmed meal-completion date rather than bill opening or automatic use of the

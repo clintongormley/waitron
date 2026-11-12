@@ -13015,7 +13015,7 @@ describe("till-app", () => {
 
     it("explains that a Find a bill collection still cannot issue a counter F1", async () => {
       expect(await findBillPayRefused({ code: "sale.full_invoice_unavailable", status: 409 })).toBe(
-        "Este cobro no puede emitir una factura completa. Elige Factura completa en el pedido y cobra el pedido entero con Cobrar. Un pedido sin nada que cobrar no puede tener factura completa.",
+        "Este cobro no puede emitir una factura completa. Cobra el pedido entero con Cobrar para emitirla. Un pedido sin nada que cobrar no puede tener factura completa.",
       );
     });
 

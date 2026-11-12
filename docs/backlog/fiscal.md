@@ -245,7 +245,7 @@ intra-community and import boxes (32–39); a libro-registro / Pre303 export.
 
 A231 [#1256](https://github.com/clintongormley/waitron/pull/1256) adds the `full` purpose beside
 `standard` and `rectificative`, provisions its series, and makes core require it for F1 and F3.
-Table bill payments and unpaid departures can issue F1; no route calls `recordSubstitution`. The separate-series
+Table bill payments, unpaid departures and Counter bills paid through the shared Pay window can issue F1; no route calls `recordSubstitution`. The separate-series
 basis is recorded in [verifactu-findings.md §10.1](../compliance/verifactu-findings.md).
 **Next action:** complete A231's remaining paths and qualification below. Asesor Q5(d) remains open for F3 and R5.
 
@@ -277,8 +277,8 @@ with no backward-compatibility implementation.
 The till offers **Full invoice**. A saved Spanish recipient can be invoiced through table bill
 payments or an unpaid departure, and, since #2725, a Counter bill paid through the shared Pay
 window. Email and A4 originals use the existing delivery queue. Direct counter cash/manual-card
-sales (`POST /api/sales`), integrated-card payment (`POST /api/pay`) and unissued counter
-collection still refuse F1 with `sale.full_invoice_unavailable`.
+sales (`POST /api/sales`), integrated-card payment (`POST /api/pay`), unissued counter
+collection and closing a counter bill by transfer still refuse F1 with `sale.full_invoice_unavailable`.
 The shared Full invoice control and automatic recipient prompt are visible at the counter; the
 till saves that choice on the order before the Pay window opens. Placing a ticket-then-pay order saves it without issuing an invoice. The retired invoice-first
 zone setting creates no separate public issuance route. Zero-total F1 counter requests retain
@@ -1070,8 +1070,10 @@ The owner chose to keep counter full invoices through the shared Pay window as m
 "keep what works, fix the printer choice". The Full invoice choice, with an Email or A4 original,
 is saved before Pay and the invoice is issued on the last payment; paper is printed after payment,
 from Print in the window that follows it. Direct `POST /api/sales`, `POST /api/pay`, unissued
-`/collect` and zero-total counter bills still refuse F1 with `sale.full_invoice_unavailable`.
-Pinned by the full-invoice cases in `apps/server/src/counter-bill-payments.test.ts`.
+`/collect`, closing a counter bill by transfer and zero-total counter bills still refuse F1 with
+`sale.full_invoice_unavailable`. Pinned by the full-invoice cases in
+`apps/server/src/counter-bill-payments.test.ts`. Recorded in the campaign's `questions.md`,
+2026-11-12 11:31.
 
 ### A1481: a fix never changes an invoice's amounts (owner, 2026-11-11)
 
@@ -1112,8 +1114,8 @@ assertions remain outside the change. See the [implementation plan](../superpowe
   Counter sales, integrated-card payment and unissued counter collection retain their F1 refusal
   until A555 carries original delivery through payment. Saved F1 choices may grow above the
   simplified-invoice ceiling.
-  2026-11-12: counter orders paid through the Pay window now issue full invoices (owner, A555);
-  see [Decisions and deliberate limits](#a555-counter-full-invoices-stay-as-the-pay-window-issues-them-owner-2026-11-12) in docs/backlog/fiscal.md.
+  2026-11-12, A555: Counter bills paid through the shared Pay window have issued full invoices
+  since #2725, and the owner chose to keep that; see [the A555 decision](#a555-counter-full-invoices-stay-as-the-pay-window-issues-them-owner-2026-11-12).
 
 - **Backup access is independent of a retained setup's password (A731; owner, 2026-10-15).**
   Authenticate the selected backup with its own named node key, plus the archive key or source
