@@ -32,7 +32,7 @@ it.each([true, false])(
         sessionDefault: "en-GB",
         venueName: "Test venue",
         modules: [],
-        permissions: ["mirror.create", ...(allowed ? ["node.promote"] : [])],
+        permissions: allowed ? ["node.manage"] : [],
         sessionExpiresInSeconds: 1800,
         sessionIdleTimeoutSeconds: 1800,
       }),
@@ -58,6 +58,13 @@ it.each([true, false])(
         throw new Error("Unexpected module request");
       }),
     });
+    if (!allowed) {
+      await vi.waitFor(() => {
+        expect(el.shadowRoot!.querySelector("dashboard-overview-screen")).not.toBeNull();
+        expect(el.shadowRoot!.querySelector("dashboard-servers-screen")).toBeNull();
+      });
+      return;
+    }
     let screen: ServersScreen;
     await vi.waitFor(() => {
       screen = el.shadowRoot!.querySelector<ServersScreen>("dashboard-servers-screen")!;

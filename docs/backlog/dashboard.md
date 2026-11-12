@@ -59,7 +59,9 @@ forecast. `fiscal.remedy` is Admin by default and assignable (owner 2026-11-09).
 landed. The [build plan](../superpowers/plans/2026-11-11-a1002-roles-redesign.md) starts with
 test-fixture preparation, now ready: ordinary server, package and device-profile fixtures use
 the shared helpers. SQL constraint, trigger and pinned-hash probes retain their direct writes
-until PR11. Legacy raw SQL role reads remain for PR11; access/job-role behavior is unbuilt.
+until PR11. Legacy raw SQL role reads remain for PR11. Permission declarations list their default
+holders; Managers can restart the box. Clock and mail-server changes use Box administration
+(Admin by default). Editable access roles and job-role behavior remain unbuilt.
 
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 
@@ -209,9 +211,8 @@ its pending-approval wording is superseded by the 2026-11-07 full approval recor
   since C128 (#1031): every till payment route checks the permission held by every role, staff
   included. A1002 cut 1 names it `payment.take` and keeps those holders. The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
-  too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
-  `node.promote` split today (adding a machine, promoting a standby and, since #708, removing a
-  standby that never finished joining all use one or the other). Machine permissions are to be named
+  too fine-grained. The machine permissions now share `node.manage`: adding a machine, promoting
+  a standby and, since #708, removing a standby that never finished joining. Machine permissions are named
   `node.*`, not `mirror.*` — the owner's preference. The review should propose the whole list: which
   permissions to merge, the names, and which role holds each, and then rename the call sites in one
   change. **Renaming is allowed now:** A1002 cut 1 removes the obsolete permanent-name header.

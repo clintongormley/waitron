@@ -356,7 +356,7 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
       expect(await readNodeMembership(p.db)).toEqual(before);
     });
 
-    it("refuses a manager (no mirror.create) as authorization.not_permitted (403), for a real id and an unknown one alike", async () => {
+    it("refuses a manager (no node.manage) as authorization.not_permitted (403), for a real id and an unknown one alike", async () => {
       const p = await primary();
       const gone = standby();
       await holdChart(p, [self(p), gone]);
@@ -809,7 +809,7 @@ describe("POST /management-api/servers/:nodeId/clear", () => {
       expect(await readNodeMembership(p.db)).toEqual(before);
     });
 
-    it("refuses a manager (no mirror.create) as authorization.not_permitted (403), for a real id and an unknown one alike", async () => {
+    it("refuses a manager (no node.manage) as authorization.not_permitted (403), for a real id and an unknown one alike", async () => {
       const p = await primary();
       const gone = evicted();
       await holdChart(p, [self(p), gone]);

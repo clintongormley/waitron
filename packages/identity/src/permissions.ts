@@ -1,111 +1,73 @@
+import type { ModulePermission } from "@waitron/module";
 import type { PersonRoleValue } from "@waitron/shared";
 
-export const PERMISSIONS = [
-  "payment.take",
-  "sale.void",
-  "sale.refund",
-  "sale.discount", // no call site yet
-  "sale.rectify",
-  "person.manage",
-  "catalogue.manage",
-  // Assigning or removing the admin role changes who can control every permission. Admin only.
-  "person.admin",
-  // Another person's personal data: admin only, by the owner's A980 O5 decision (2026-10-22).
-  "personal_data.export",
-  "venue.configure",
-  "venue.view",
-  "system.manage",
-  "schedule.manage",
-  "purchase.manage",
-  "report.export",
-  "report.view",
-  "hardware.manage",
-  "cash.drawer",
-  // Decides which machines are in the venue's membership chart and hands one its identity, so
-  // admin-only.
-  "mirror.create",
-  "node.promote",
-  "fiscal.view",
-] as const;
+export type BuiltInRoleKey = "staff" | "supervisor" | "manager" | "admin";
+export type DefaultHolder = Exclude<BuiltInRoleKey, "admin">;
+export interface PermissionDeclaration {
+  readonly permission: string;
+  readonly defaultHolders: readonly DefaultHolder[];
+}
 
-export type Permission = (typeof PERMISSIONS)[number];
+export const CORE_PERMISSIONS = [
+  { permission: "payment.take", defaultHolders: ["staff", "supervisor", "manager"] },
+  { permission: "sale.void", defaultHolders: ["supervisor", "manager"] },
+  { permission: "sale.refund", defaultHolders: ["supervisor", "manager"] },
+  { permission: "sale.rectify", defaultHolders: ["supervisor", "manager"] },
+  { permission: "person.manage", defaultHolders: ["manager"] },
+  { permission: "catalogue.manage", defaultHolders: ["manager"] },
+  { permission: "person.admin", defaultHolders: [] },
+  { permission: "personal_data.export", defaultHolders: [] },
+  { permission: "venue.configure", defaultHolders: ["manager"] },
+  { permission: "venue.view", defaultHolders: ["supervisor", "manager"] },
+  { permission: "system.manage", defaultHolders: ["manager"] },
+  { permission: "schedule.manage", defaultHolders: ["manager"] },
+  { permission: "purchase.manage", defaultHolders: ["manager"] },
+  { permission: "report.export", defaultHolders: ["manager"] },
+  { permission: "report.view", defaultHolders: ["supervisor", "manager"] },
+  { permission: "hardware.manage", defaultHolders: ["manager"] },
+  { permission: "cash.drawer", defaultHolders: ["supervisor", "manager"] },
+  { permission: "node.manage", defaultHolders: [] },
+  { permission: "system.box_admin", defaultHolders: [] },
+  { permission: "fiscal.view", defaultHolders: ["manager"] },
+] as const satisfies readonly PermissionDeclaration[];
 
-const STAFF: ReadonlySet<Permission> = new Set(["payment.take"]);
-const SUPERVISOR: ReadonlySet<Permission> = new Set([
-  ...STAFF,
-  "sale.void",
-  "sale.refund",
-  "sale.discount",
-  "sale.rectify",
-  "cash.drawer",
-  "report.view",
-  "venue.view",
-]);
-const MANAGER: ReadonlySet<Permission> = new Set([
-  ...SUPERVISOR,
-  "person.manage",
-  "catalogue.manage",
-  "venue.configure",
-  "system.manage",
-  "schedule.manage",
-  "purchase.manage",
-  "report.export",
-  "hardware.manage",
-  "fiscal.view",
-]);
-const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
+export type Permission = (typeof CORE_PERMISSIONS)[number]["permission"];
+export const PERMISSIONS = CORE_PERMISSIONS.map(({ permission }) => permission);
+const CORE_IDS: ReadonlySet<string> = new Set(PERMISSIONS);
+const MODULE_PERMISSIONS = new Map<string, readonly DefaultHolder[]>();
 
-const ROLE_PERMISSIONS: Record<PersonRoleValue, ReadonlySet<Permission>> = {
-  staff: STAFF,
-  supervisor: SUPERVISOR,
-  manager: MANAGER,
-  admin: ALL,
-};
-
-// Returns its argument unchanged, but only type-checks when the tuple lists EVERY `PersonRoleValue`:
-// an unlisted role would make `indexOf` below return -1 and fold into `["admin"]` alone.
-const arrayOfAll =
-  <T>() =>
-  <U extends readonly T[]>(array: U & ([T] extends [U[number]] ? unknown : never)): U =>
-    array;
-
-// Identity OWNS the ladder; a module states only the floor a permission is granted from.
-const ROLE_LADDER = arrayOfAll<PersonRoleValue>()([
-  "staff",
-  "supervisor",
-  "manager",
-  "admin",
-] as const);
-
-// Populated once at boot, before any route auth runs (apps/server/src/boot.ts). A module's permission
-// lives here, never in the static PERMISSIONS catalog.
-const MODULE_PERMISSIONS = new Map<string, ReadonlySet<PersonRoleValue>>();
-
-/** Grants each `permission` to `grantedFrom` and every role ABOVE it. Re-registering a permission
- * overwrites its role set. */
-export function registerModulePermissions(
-  perms: readonly { permission: string; grantedFrom: PersonRoleValue }[],
-): void {
-  for (const { permission, grantedFrom } of perms) {
-    const floor = ROLE_LADDER.indexOf(grantedFrom);
-    MODULE_PERMISSIONS.set(permission, new Set(ROLE_LADDER.slice(floor)));
+export function registerModulePermissions(perms: readonly ModulePermission[]): void {
+  for (const { permission, defaultHolders } of perms) {
+    if (CORE_IDS.has(permission)) throw new Error(`permission declared twice: ${permission}`);
+    MODULE_PERMISSIONS.set(permission, defaultHolders);
   }
 }
 
-/** The static catalog plus every module permission registered so far, filtered by
- * `roleHasPermission`. */
-export function permissionsForRole(role: PersonRoleValue): string[] {
-  const ids = [...PERMISSIONS, ...MODULE_PERMISSIONS.keys()];
-  return ids.filter((p) => roleHasPermission(role, p));
+export function declaredPermissions(): string[] {
+  return [...PERMISSIONS, ...MODULE_PERMISSIONS.keys()];
 }
 
-/** `permission` widens past the closed core union so a module's own permission string is accepted. */
+export function isDeclaredPermission(id: string): boolean {
+  return CORE_IDS.has(id) || MODULE_PERMISSIONS.has(id);
+}
+
+export function defaultPermissionsFor(holder: DefaultHolder): string[] {
+  return declaredPermissions().filter((permission) => roleHasPermission(holder, permission));
+}
+
+export function permissionsForRole(role: PersonRoleValue): string[] {
+  return role === "admin" ? declaredPermissions() : defaultPermissionsFor(role);
+}
+
 export function roleHasPermission(
   role: PersonRoleValue,
   permission: Permission | (string & {}),
 ): boolean {
+  if (role === "admin") return isDeclaredPermission(permission);
+  const declaration: PermissionDeclaration | undefined = CORE_PERMISSIONS.find(
+    (entry) => entry.permission === permission,
+  );
   return (
-    (ROLE_PERMISSIONS[role] as ReadonlySet<string>).has(permission) ||
-    (MODULE_PERMISSIONS.get(permission)?.has(role) ?? false)
+    (declaration?.defaultHolders ?? MODULE_PERMISSIONS.get(permission))?.includes(role) ?? false
   );
 }

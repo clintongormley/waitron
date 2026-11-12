@@ -7,5 +7,5 @@ import "./errors.js";
 export function requireNodeOperationHttps(c: Context): void {
   const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
   if (!(socket instanceof TLSSocket) || !socket.encrypted || !sentFromThisOrigin(c))
-    throw new AppError("authorization.not_permitted", { permission: "node.promote" });
+    throw new AppError("authorization.not_permitted", { permission: "node.manage" });
 }

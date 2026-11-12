@@ -5,7 +5,7 @@ import { BOOKINGS_PERMISSIONS } from "./permissions.js";
 describe("BOOKINGS_PERMISSIONS", () => {
   it("declares exactly booking.manage granted from manager", () => {
     expect(BOOKINGS_PERMISSIONS).toEqual([
-      { permission: "booking.manage", grantedFrom: "manager" },
+      { permission: "booking.manage", defaultHolders: ["manager"] },
     ]);
   });
 

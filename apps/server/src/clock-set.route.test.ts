@@ -367,7 +367,7 @@ it("lets only an administrator with a management session set the clock", async (
   expect(manager.status).toBe(403);
   expect(manager.json).toEqual({
     code: "authorization.not_permitted",
-    params: { permission: "person.admin" },
+    params: { permission: "system.box_admin" },
   });
   for (const cookie of [undefined, venue.cookie]) {
     const sent = await setWith(box, cookie, body);

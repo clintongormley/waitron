@@ -177,7 +177,7 @@ function postedSecurely(c: Context): boolean {
 const REFRESH = '<meta http-equiv="refresh" content="5; url=/">\n';
 
 /**
- * The waiting page's "Carry on as the main box": a person with `node.promote` who states that the
+ * The waiting page's "Carry on as the main box": a person with `node.manage` who states that the
  * other box is switched off and that no other recovery is in progress ends the wait, for this start
  * only. Mounts its POST route and returns what the page draws below its body.
  */
@@ -281,7 +281,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
           });
           const { authorizedBy } = await authorizeManager(tx, {
             managementSessionId: session.token,
-            permission: "node.promote",
+            permission: "node.manage",
           });
           await endManagementSession(tx, session.token);
           return authorizedBy;

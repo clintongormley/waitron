@@ -302,7 +302,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "box-status", labelKey: "nav.box_status", requiresPermission: "system.manage" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
       { screen: "backup", labelKey: "nav.backup", requiresManager: true },
-      { screen: "servers", labelKey: "nav.servers", requiresPermission: "mirror.create" },
+      { screen: "servers", labelKey: "nav.servers", requiresPermission: "node.manage" },
       { screen: "cloud", labelKey: "nav.cloud", requiresManager: true },
     ],
   },
@@ -3092,8 +3092,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-box-status-screen
           .api=${this.api}
           .canOpen=${this.#canOpenScreen}
-          .canConfirmClock=${this.#sessionPermissions.includes("person.admin")}
-          .canRestart=${this.#sessionPermissions.includes("person.admin")}
+          .canConfirmClock=${this.#sessionPermissions.includes("system.box_admin")}
+          .canRestart=${this.#sessionPermissions.includes("system.manage")}
           @admin-sign-in=${() => void this.#onLogout("box-status")}
           @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
             e.stopPropagation();
@@ -3115,7 +3115,7 @@ export class DashboardApp extends LitElement {
       case "servers":
         return html`<dashboard-servers-screen
           .api=${this.api}
-          .canPromote=${this.#sessionPermissions.includes("node.promote")}
+          .canPromote=${this.#sessionPermissions.includes("node.manage")}
           @handover-open=${(event: CustomEvent<{ url: string }>) => {
             window.location.href = event.detail.url;
           }}

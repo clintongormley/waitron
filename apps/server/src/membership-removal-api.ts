@@ -52,7 +52,7 @@ export function mountMembershipRemovalApi(
     withTransaction(deps.db, async (tx) => {
       const { authorizedBy } = await authorizeManager(tx, {
         managementSessionId: sessionId,
-        permission: "mirror.create",
+        permission: "node.manage",
       });
       if (fresh) await requireFreshManagementSignIn(tx, sessionId);
       return authorizedBy;

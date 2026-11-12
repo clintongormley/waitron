@@ -2,7 +2,7 @@
 
 **Box status** shows, on one page, whether each part of the box is working: sales, the tax agency,
 the bucket copy, printers, card readers, the clock and disk space. It is also where you free space
-on the box when its disk fills up, and where an administrator restarts Waitron on the box when
+on the box when its disk fills up, and where a Manager or Admin restarts Waitron on the box when
 an alert says to. To read the box's log, use **Diagnostics** instead.
 
 ## Open the page {#open}
@@ -196,10 +196,12 @@ until Waitron has started again, so the page asks first: choose **Restart** to g
 **Stop** to leave it. Use it when an alert says to. The page catches up by itself once the box is
 back.
 
-Only an administrator can press it. Anyone else sees **Sign in as an administrator** instead,
+You can press it with **Manage system**, held by Managers and Admins by default. Anyone else sees **Sign in as an administrator** instead,
 which signs them out and comes back to this page after the administrator signs in.
 
 ## When payments stop because of the clock {#clock-behind}
+
+**Box administration**, held by Admin by default, lets you confirm or set the clock from your own device or approve it on a till. Staff can still confirm it on a till while startup waits.
 
 When the box's clock reads more than a minute earlier than the latest sale recorded on the box, the
 box stops taking payments and refunds. A sale recorded then would carry a time before that latest

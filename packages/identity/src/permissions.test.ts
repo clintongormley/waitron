@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   PERMISSIONS,
+  CORE_PERMISSIONS,
+  declaredPermissions,
+  defaultPermissionsFor,
+  isDeclaredPermission,
   type Permission,
   permissionsForRole,
   registerModulePermissions,
@@ -68,10 +72,10 @@ describe("roleHasPermission", () => {
       expect(roleHasPermission(role, "payment.take")).toBe(true);
     }
   });
-  it("lets a supervisor void, refund, discount and rectify but not manage staff", () => {
+  it("lets a supervisor void, refund and rectify but not manage staff", () => {
     expect(roleHasPermission("supervisor", "sale.void")).toBe(true);
     expect(roleHasPermission("supervisor", "sale.refund")).toBe(true);
-    expect(roleHasPermission("supervisor", "sale.discount")).toBe(true);
+    expect(roleHasPermission("supervisor", "sale.discount")).toBe(false);
     expect(roleHasPermission("supervisor", "sale.rectify")).toBe(true);
     expect(roleHasPermission("supervisor", "person.manage")).toBe(false);
   });
@@ -80,8 +84,8 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("manager", "sale.void")).toBe(true);
     // Pin every row: a MANAGER that dropped the ...SUPERVISOR spread would pass the two above.
     const ADMIN_ONLY: ReadonlySet<Permission> = new Set([
-      "mirror.create",
-      "node.promote",
+      "node.manage",
+      "system.box_admin",
       "person.admin",
       "personal_data.export",
     ]);
@@ -171,20 +175,22 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("admin", "report.view")).toBe(true);
     expect(roleHasPermission("staff", "report.view")).toBe(false);
   });
-  it("folds a module permission into grantedFrom and every role ABOVE it (booking.manage)", () => {
+  it("folds a module permission into the named default holders (booking.manage)", () => {
     // Assert false, register, assert true in one test so it is order-independent under the
     // module-level registry.
     expect(PERMISSIONS as readonly string[]).not.toContain("booking.manage");
     expect(roleHasPermission("manager", "booking.manage")).toBe(false);
-    registerModulePermissions([{ permission: "booking.manage", grantedFrom: "manager" }]);
+    registerModulePermissions([{ permission: "booking.manage", defaultHolders: ["manager"] }]);
     expect(roleHasPermission("manager", "booking.manage")).toBe(true);
     expect(roleHasPermission("admin", "booking.manage")).toBe(true);
     expect(roleHasPermission("supervisor", "booking.manage")).toBe(false);
     expect(roleHasPermission("staff", "booking.manage")).toBe(false);
   });
-  it("folds a supervisor-floor module permission into supervisor, manager and admin, not staff", () => {
+  it("folds a module permission with supervisor and manager defaults into supervisor, manager and admin, not staff", () => {
     // A string absent from the catalog, so no static grant can mask the registry path.
-    registerModulePermissions([{ permission: "synthetic.floor", grantedFrom: "supervisor" }]);
+    registerModulePermissions([
+      { permission: "synthetic.floor", defaultHolders: ["supervisor", "manager"] },
+    ]);
     expect(roleHasPermission("supervisor", "synthetic.floor")).toBe(true);
     expect(roleHasPermission("manager", "synthetic.floor")).toBe(true);
     expect(roleHasPermission("admin", "synthetic.floor")).toBe(true);
@@ -197,13 +203,13 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "system.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "system.manage")).toBe(false);
   });
-  it("grants node.promote to admin only (authenticated mirror→primary promotion)", () => {
-    expect(PERMISSIONS).toContain("node.promote");
-    expect(roleHasPermission("admin", "node.promote")).toBe(true);
-    expect(roleHasPermission("admin", "mirror.create")).toBe(true);
-    expect(roleHasPermission("manager", "node.promote")).toBe(false);
-    expect(roleHasPermission("supervisor", "node.promote")).toBe(false);
-    expect(roleHasPermission("staff", "node.promote")).toBe(false);
+  it("grants system.box_admin to admin only (authenticated mirror→primary promotion)", () => {
+    expect(PERMISSIONS).toContain("system.box_admin");
+    expect(roleHasPermission("admin", "system.box_admin")).toBe(true);
+    expect(roleHasPermission("admin", "node.manage")).toBe(true);
+    expect(roleHasPermission("manager", "system.box_admin")).toBe(false);
+    expect(roleHasPermission("supervisor", "system.box_admin")).toBe(false);
+    expect(roleHasPermission("staff", "system.box_admin")).toBe(false);
   });
   it("grants personal_data.export to admin only (another person's data download)", () => {
     expect(PERMISSIONS).toContain("personal_data.export");
@@ -214,19 +220,19 @@ describe("roleHasPermission", () => {
     expect(permissionsForRole("admin")).toContain("personal_data.export");
     expect(permissionsForRole("manager")).not.toContain("personal_data.export");
   });
-  it("grants mirror.create to admin only (sync cloud-mirror C2b bundle minting)", () => {
-    expect(PERMISSIONS).toContain("mirror.create");
-    expect(roleHasPermission("admin", "mirror.create")).toBe(true);
-    expect(roleHasPermission("manager", "mirror.create")).toBe(false);
-    expect(roleHasPermission("supervisor", "mirror.create")).toBe(false);
-    expect(roleHasPermission("staff", "mirror.create")).toBe(false);
+  it("grants node.manage to admin only (sync cloud-mirror C2b bundle minting)", () => {
+    expect(PERMISSIONS).toContain("node.manage");
+    expect(roleHasPermission("admin", "node.manage")).toBe(true);
+    expect(roleHasPermission("manager", "node.manage")).toBe(false);
+    expect(roleHasPermission("supervisor", "node.manage")).toBe(false);
+    expect(roleHasPermission("staff", "node.manage")).toBe(false);
   });
 });
 
 describe("permissionsForRole", () => {
-  it("spans core + module permissions on the ladder", () => {
+  it("spans core + module permissions from explicit declarations", () => {
     // Registered here too so this test does not depend on the order it runs in.
-    registerModulePermissions([{ permission: "booking.manage", grantedFrom: "manager" }]);
+    registerModulePermissions([{ permission: "booking.manage", defaultHolders: ["manager"] }]);
     expect(permissionsForRole("staff")).toEqual(["payment.take"]);
     expect(permissionsForRole("supervisor")).toContain("report.view");
     expect(permissionsForRole("supervisor")).not.toContain("booking.manage");
@@ -240,4 +246,83 @@ it("grants hardware.manage for resending to manager and admin", () => {
   expect(roleHasPermission("admin", "hardware.manage")).toBe(true);
   expect(roleHasPermission("staff", "hardware.manage")).toBe(false);
   expect(roleHasPermission("supervisor", "hardware.manage")).toBe(false);
+});
+
+describe("explicit permission declarations", () => {
+  it("declares each core permission's default holders", () => {
+    const all = ["staff", "supervisor", "manager"];
+    const supervisors = ["supervisor", "manager"];
+    expect(
+      Object.fromEntries(
+        CORE_PERMISSIONS.map(({ permission, defaultHolders }) => [permission, defaultHolders]),
+      ),
+    ).toEqual({
+      "payment.take": all,
+      "sale.void": supervisors,
+      "sale.refund": supervisors,
+      "sale.rectify": supervisors,
+      "cash.drawer": supervisors,
+      "report.view": supervisors,
+      "venue.view": supervisors,
+      "person.manage": ["manager"],
+      "catalogue.manage": ["manager"],
+      "venue.configure": ["manager"],
+      "system.manage": ["manager"],
+      "schedule.manage": ["manager"],
+      "purchase.manage": ["manager"],
+      "report.export": ["manager"],
+      "hardware.manage": ["manager"],
+      "fiscal.view": ["manager"],
+      "person.admin": [],
+      "personal_data.export": [],
+      "node.manage": [],
+      "system.box_admin": [],
+    });
+    expect(defaultPermissionsFor("staff")).toEqual(["payment.take"]);
+    expect(isDeclaredPermission("payment.take")).toBe(true);
+  });
+  it("Admin holds a permission registered after start", () => {
+    registerModulePermissions([{ permission: "synthetic.later", defaultHolders: [] }]);
+    expect(roleHasPermission("admin", "synthetic.later")).toBe(true);
+    expect(roleHasPermission("manager", "synthetic.later")).toBe(false);
+    expect(permissionsForRole("admin")).toContain("synthetic.later");
+  });
+  it("an undeclared permission authorizes nobody, Admin included", () => {
+    expect(isDeclaredPermission("synthetic.unknown")).toBe(false);
+    for (const role of ["staff", "supervisor", "manager", "admin"] as const) {
+      expect(roleHasPermission(role, "synthetic.unknown")).toBe(false);
+    }
+  });
+  it("refuses a module redeclaring a core permission", () => {
+    expect(() =>
+      registerModulePermissions([{ permission: "payment.take", defaultHolders: [] }]),
+    ).toThrow("permission declared twice: payment.take");
+    expect(roleHasPermission("staff", "payment.take")).toBe(true);
+  });
+  it("no longer declares retired permissions", () => {
+    for (const permission of ["sale.discount", "mirror.create", "node.promote"]) {
+      expect(declaredPermissions()).not.toContain(permission);
+    }
+  });
+  it("grants exactly the named holders and overwrites a module declaration", () => {
+    registerModulePermissions([
+      { permission: "synthetic.explicit", defaultHolders: ["staff", "manager"] },
+    ]);
+    expect(
+      (["staff", "supervisor", "manager", "admin"] as const).map((role) =>
+        roleHasPermission(role, "synthetic.explicit"),
+      ),
+    ).toEqual([true, false, true, true]);
+    expect(defaultPermissionsFor("manager")).toContain("synthetic.explicit");
+    registerModulePermissions([
+      { permission: "synthetic.explicit", defaultHolders: ["supervisor"] },
+    ]);
+    expect(
+      (["staff", "supervisor", "manager", "admin"] as const).map((role) =>
+        roleHasPermission(role, "synthetic.explicit"),
+      ),
+    ).toEqual([false, true, false, true]);
+    expect(defaultPermissionsFor("manager")).not.toContain("synthetic.explicit");
+    expect(defaultPermissionsFor("supervisor")).toContain("synthetic.explicit");
+  });
 });

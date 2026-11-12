@@ -642,7 +642,7 @@ it("refuses a manager replacing the relay that delivers admin password resets", 
     delivery: { mode: "unconfigured" },
   });
   expect(await response.json()).toMatchObject({
-    error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+    error: { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
   });
   expect(await suite.db.select().from(tenantCredentials)).toEqual([]);
 });
@@ -723,7 +723,7 @@ it("lets a Prepare admin save, read and remove a sealed relay while managers onl
     const refused = await request(app, venue.manager, settings);
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({
-      error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+      error: { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
     });
     const tested = await app.request(path + "/test", {
       method: "POST",
@@ -826,7 +826,7 @@ describe("removing saved SMTP settings", () => {
       expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
       expect(response.status).toBe(403);
       expect(await response.json()).toEqual({
-        error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+        error: { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
       });
     },
   );
@@ -879,7 +879,7 @@ describe("removing saved SMTP settings", () => {
             ? { code: "management_session.required", params: {} }
             : role === "suspended"
               ? { code: "person.suspended", params: { personId: admin!.id } }
-              : { code: "authorization.not_permitted", params: { permission: "person.admin" } },
+              : { code: "authorization.not_permitted", params: { permission: "system.box_admin" } },
       });
       expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
     },

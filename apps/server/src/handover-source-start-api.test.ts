@@ -422,7 +422,7 @@ describe("a valid start", () => {
 
 describe("the connection", () => {
   const NOT_PERMITTED = refusal(403, "authorization.not_permitted", {
-    permission: "node.promote",
+    permission: "node.manage",
   });
   const send = async (
     headers: Record<string, string>,
@@ -496,11 +496,11 @@ describe("who may start one", () => {
     await expectNothingRecorded();
   });
 
-  it("a person without `node.promote` is refused before freshness", async () => {
+  it("a person without `node.manage` is refused before freshness", async () => {
     const manager = await openManagementSession(mainBox.db, "manager");
     const answer = await start({}, app, `${MANAGEMENT_COOKIE}=${manager.token}`);
     expect(answer).toEqual(
-      refusal(403, "authorization.not_permitted", { permission: "node.promote" }),
+      refusal(403, "authorization.not_permitted", { permission: "node.manage" }),
     );
     await expectNothingRecorded();
   });

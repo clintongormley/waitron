@@ -96,7 +96,7 @@ const VENUE_LOCALE = "en-GB";
 const MODULES = ["core", "bookings"];
 
 // As the composition root does at boot, so the manager whoami below carries `booking.manage`.
-registerModulePermissions([{ permission: "booking.manage", grantedFrom: "manager" }]);
+registerModulePermissions([{ permission: "booking.manage", defaultHolders: ["manager"] }]);
 
 const PROFILE_KEY_RING = { current: { version: 1, key: Buffer.alloc(32, 6) } };
 
@@ -326,7 +326,7 @@ describe("mountMeApi — whoami", () => {
     };
     expect(body.role).toBe("manager");
     expect(body.permissions).toContain("booking.manage");
-    expect(body.permissions).not.toContain("mirror.create");
+    expect(body.permissions).not.toContain("node.manage");
     expect(body.modules).toEqual(MODULES);
   });
 

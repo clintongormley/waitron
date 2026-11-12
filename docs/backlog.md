@@ -1440,7 +1440,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   [build plan](superpowers/plans/2026-11-11-a1002-roles-redesign.md) starts with test-fixture
   preparation, now ready: ordinary people and device-profile fixtures use the shared helpers.
   SQL constraint, trigger and pinned-hash probes retain their direct writes until PR11.
-  Legacy raw SQL role reads remain for PR11. Access/job-role behavior remains to be built.
+  Legacy raw SQL role reads remain for PR11. Permission declarations now list their default
+  holders; Managers can restart the box, while clock and email changes use Box administration
+  (Admin by default). Editable access roles and job-role behavior remain to be built.
   Cut 1's permission names (#2578) have landed.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
@@ -1620,7 +1622,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   [Detail](backlog/box.md#a1323-one-master-key-for-the-venue)
 
 - **A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).**
-  Waits for A1188 part 1, whose card facts the page prints, for people holding `node.promote`.
+  Waits for A1188 part 1, whose card facts the page prints, for people holding `node.manage`.
   [Detail](backlog/box.md#a1187-part-2-the-recovery-packs-emergency-start-page-owner-2026-10-29).
 
 - **A1187 part 3: the recovery pack's disk key page.** B3's development startup now creates and retains the key through `scripts/box/disk-key.mjs`; the protected host delivery and pack integration remain to be built. A pack
@@ -2388,7 +2390,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
   dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat and off
   the coarse `requiresManager` gate. A core nav item can now also name a `requiresPermission`
-  (`apps/dashboard/src/dashboard-app.ts`); Servers (`mirror.create`) is the first to use it.
+  (`apps/dashboard/src/dashboard-app.ts`); Servers (`node.manage`) is the first to use it.
 
 ### Data protection and legal compliance
 

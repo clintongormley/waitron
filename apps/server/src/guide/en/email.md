@@ -9,7 +9,7 @@ Before saving or removing a mail server, confirm your sign-in in the shared wind
 
 ## Set up a mail server {#set-up}
 
-In Prepare or Live, open **Settings → Email**. As an admin, choose **Set up mail server** or
+In Prepare or Live, open **Settings → Email**. With **Box administration** (Admin by default), choose **Set up mail server** or
 **Change mail server**, enter your provider's settings and send a test before saving. Enter fresh
 login details when changing an authenticated server; Waitron never shows the saved password.
 Managers can view the settings, but cannot save or remove them.
@@ -47,7 +47,7 @@ Continue becomes available after the server accepts a test of those settings for
 
 ## Remove a mail server {#remove}
 
-As an admin, choose **Remove mail server** and read the confirmation. **Stop** keeps the settings.
+With **Box administration** (Admin by default), choose **Remove mail server** and read the confirmation. **Stop** keeps the settings.
 Removing the server clears its saved login details too; enter them again if you set it up later.
 
 In Prepare or Live, account links and invoice email cannot be sent until you configure a server

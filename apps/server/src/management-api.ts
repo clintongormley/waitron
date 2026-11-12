@@ -1074,7 +1074,7 @@ export function mountManagementApi(
         });
         await authorizeManager(tx, {
           managementSessionId: session.token,
-          permission: "mirror.create",
+          permission: "node.manage",
         });
         await endManagementSession(tx, session.token);
       });

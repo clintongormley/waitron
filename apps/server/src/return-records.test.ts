@@ -499,7 +499,7 @@ it("ends the duty after a signed clash without scheduling another receiver pass"
 });
 
 async function acceptanceSession(role: "admin" | "staff" = "admin", fresh = true) {
-  registerModulePermissions([{ permission: "sample.accept", grantedFrom: "admin" }]);
+  registerModulePermissions([{ permission: "sample.accept", defaultHolders: [] }]);
   return database.withTransaction(suite.db, async (tx) => {
     const [person] = await seedPersons(tx, { displayName: `Operator ${role}`, role });
     const session = await startManagementSession(tx, { personId: person!.id });

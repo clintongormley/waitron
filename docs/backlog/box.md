@@ -1264,7 +1264,7 @@ once released. Belongs with A1016.
 ## A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).
 
 - **A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).** Waits for A1188
-  part 1, whose card facts the page prints, for people holding `node.promote`. Part 1 landed in
+  part 1, whose card facts the page prints, for people holding `node.manage`. Part 1 landed in
   pull requests from #2250 to setup's first pack (PR E): one PDF holding the bucket copy, the
   archives and the server key, made from the Backups card or by setup.
   [Design](../superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](../superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).

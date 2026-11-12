@@ -1,3 +1,4 @@
+import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -621,4 +622,49 @@ describe("two-party correction decisions", () => {
       await intact();
     },
   );
+});
+
+it("self-approval follows workforce.self_approve, not the Admin name", async () => {
+  const target = await day();
+  await setBuiltInRoleForTest(suite.db, personId, "manager");
+  const correctionId = await run((tx) => backend.requestCorrection(tx, targeted(target)));
+  await unchangedRefusal(
+    () =>
+      run((tx) =>
+        backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: personId }),
+      ),
+    "correction.not_permitted",
+  );
+  registerModulePermissions([
+    { permission: "workforce.self_approve", defaultHolders: ["manager"] },
+  ]);
+  registerModulePermissions([{ permission: "workforce.correct", defaultHolders: [] }]);
+  try {
+    await unchangedRefusal(
+      () =>
+        run((tx) =>
+          backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: personId }),
+        ),
+      "correction.not_permitted",
+    );
+  } finally {
+    registerModulePermissions([
+      { permission: "workforce.correct", defaultHolders: ["supervisor", "manager"] },
+    ]);
+  }
+  try {
+    const approved = await run((tx) =>
+      backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: personId }),
+    );
+    expect(
+      (await suite.db.select().from(timeEntries).where(eq(timeEntries.id, approved)))[0],
+    ).toMatchObject({
+      selfApproved: true,
+      correctionStatus: "approved",
+      recordedByPersonId: personId,
+    });
+    await intact();
+  } finally {
+    registerModulePermissions([{ permission: "workforce.self_approve", defaultHolders: [] }]);
+  }
 });

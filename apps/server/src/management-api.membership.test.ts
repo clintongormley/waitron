@@ -23,7 +23,7 @@ import { writerBesideRequest, whileSuspendingOnLockRequest } from "./testing/wat
 
 /**
  * GET /management-api/membership returns this node's held signed membership chart to a peer
- * presenting an admin credential (`loginManagerById`, then `mirror.create`) in the
+ * presenting an admin credential (`loginManagerById`, then `node.manage`) in the
  * `x-waitron-peer-credential` header.
  */
 
@@ -47,7 +47,7 @@ function nextNif(): string {
 
 let db: Database;
 
-/** `applyVenue` seeds one admin carrying ADMIN_PASSWORD; admin holds `mirror.create`. */
+/** `applyVenue` seeds one admin carrying ADMIN_PASSWORD; admin holds `node.manage`. */
 async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -91,7 +91,7 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
   return { designated, adminPersonId };
 }
 
-/** Staff lacks `mirror.create`, so it authenticates and then fails authorization. Seeded through
+/** Staff lacks `node.manage`, so it authenticates and then fails authorization. Seeded through
  * the table definition: `persons.id` and `persons.created_at` are `$defaultFn` generators, which a
  * raw SQL insert never reaches. */
 async function seedStaff(): Promise<string> {

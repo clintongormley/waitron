@@ -147,7 +147,7 @@ const document = signedMembershipDoc(2, { signerNodeId: target.nodeId });
 async function promote(personId = ADMIN) {
   const result = await withAuthenticatedOperation(
     { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
-    { binding, permission: "node.promote" },
+    { binding, permission: "node.manage" },
     { personId, password: PASSWORD },
     (authority) =>
       withTransaction(suite.db, async (tx) => {

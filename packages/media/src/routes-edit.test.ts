@@ -6,13 +6,7 @@ import { expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, mediaImageData, mediaImageEdits } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  hashPin,
-  managementSessions,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { hashPin, managementSessions, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
 import { type ReceiptLogoRasters } from "@waitron/shared";
@@ -22,7 +16,6 @@ import { readImage, readImageBytes, updateImage, uploadImage } from "./images.js
 import { sampleImage, samplePreparedImage } from "./testing/sample-image.js";
 import * as renditionRendering from "./renditions.js";
 
-registerModulePermissions([{ permission: "catalogue.manage", grantedFrom: "manager" }]);
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
 });

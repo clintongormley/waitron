@@ -85,7 +85,7 @@ export async function authorizeSystemManager(db: Database, c: Context): Promise<
 async function authorizeOnAnyDisk(
   db: Database,
   c: Context,
-  permission: "system.manage" | "person.admin",
+  permission: "system.manage" | "system.box_admin",
 ): Promise<string> {
   const sessionId = requireManagementSession(c);
   const check = (tx: Database | Transaction, touch: false | undefined) =>
@@ -133,10 +133,6 @@ export async function requiredNameOf(tx: Transaction, personId: string): Promise
   return name;
 }
 
-/** `GET /api/box/health`, `POST /api/box/free-space`, `GET /api/box/clock-misdated` and its
- * `/handled` and `/:incidentId/download`, all `system.manage`; `POST /api/box/restart`,
- * `person.admin`; `POST /api/box/clock-challenge`, `POST /api/box/clock-confirm` and
- * `POST /api/box/clock-set`, all `person.admin` and refused on the box itself. */
 export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger): void {
   const readRun = createErrorBoundary(STATUS, "box-health.failed");
   const freeRun = createErrorBoundary(STATUS, "box-free-space.failed");
@@ -157,7 +153,7 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
     restartRun(c, log, async () => {
       const outgoing = outgoingOf(c);
       if (outgoing === undefined) throw new Error("Missing response lifecycle");
-      const personId = await authorizeOnAnyDisk(deps.db, c, "person.admin");
+      const personId = await authorizeOnAnyDisk(deps.db, c, "system.manage");
       log("info", "box.restart_requested", { personId });
       restartAfterResponse(outgoing, deps.restart, log);
       return c.json({}, 202);
@@ -275,7 +271,7 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       throw new AppError(code, { reason: "same_machine" });
   };
   const authorizeAdmin = (tx: Transaction, sessionId: string) =>
-    authorizeManager(tx, { managementSessionId: sessionId, permission: "person.admin" });
+    authorizeManager(tx, { managementSessionId: sessionId, permission: "system.box_admin" });
   const challengeRun = createErrorBoundary(STATUS, "box-clock-challenge.failed");
   app.post("/api/box/clock-challenge", (c) =>
     challengeRun(c, log, async () => {

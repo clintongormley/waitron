@@ -207,7 +207,7 @@ export function mountHandoverEmergencyApi(
           });
           await authorizeManager(tx, {
             managementSessionId: session.token,
-            permission: "node.promote",
+            permission: "node.manage",
           });
           await endManagementSession(tx, session.token);
           const [person] = await tx

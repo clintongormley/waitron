@@ -99,7 +99,7 @@ describe("scoped recovery-key authority", () => {
   it.each([
     { ...binding, targetNodeId: "other-node" },
     { ...binding, action: "setup" },
-    { ...binding, action: "mirror.create" },
+    { ...binding, action: "node.manage" },
   ])("refuses a key for another target or a non-recovery action %#", async (scope) => {
     let entered = false;
     await expect(

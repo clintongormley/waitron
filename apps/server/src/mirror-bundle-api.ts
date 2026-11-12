@@ -237,7 +237,7 @@ export function mountMirrorBundleApi(
           throw new AppError("module.operation_invalid", { module: operation.binding.module });
         return withAuthenticatedOperation(
           { db: deps.appDb, credentialKeyRing: deps.credentialKeyRing },
-          { binding: operation.binding, permission: "mirror.create" },
+          { binding: operation.binding, permission: "node.manage" },
           body,
           (authority) =>
             assemble(new Map([[operation.binding.module, { ...operation, authority }]])),
@@ -254,7 +254,7 @@ export function mountMirrorBundleApi(
         });
         await authorizeManager(tx, {
           managementSessionId: session.token,
-          permission: "mirror.create",
+          permission: "node.manage",
         });
         // The session only authorised this request; ending it leaves no dead row behind.
         await endManagementSession(tx, session.token);

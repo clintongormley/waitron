@@ -186,7 +186,7 @@ async function holdsJoinedSpare(deps: HandoverSourceStartDeps, id: string): Prom
   return chartKey !== undefined && row?.publicKey === chartKey;
 }
 
-/** `POST /management-api/handover` — a person holding `node.promote` starts a controlled handover. */
+/** `POST /management-api/handover` — a person holding `node.manage` starts a controlled handover. */
 export function mountHandoverSourceStartApi(
   app: Hono,
   deps: HandoverSourceStartDeps,
@@ -450,7 +450,7 @@ export function mountHandoverSourceStartApi(
       const personId = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: token,
-          permission: "node.promote",
+          permission: "node.manage",
           touch: false,
         });
         // The old box steps down before the spare can check its password and current code.

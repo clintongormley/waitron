@@ -243,7 +243,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
               });
               await authorizeManager(tx, {
                 managementSessionId: session.token,
-                permission: "node.promote",
+                permission: "node.manage",
               });
               await endManagementSession(tx, session.token);
               // Inside the transaction, so a refusal here leaves no session row behind.

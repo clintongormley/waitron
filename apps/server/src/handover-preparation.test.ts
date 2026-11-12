@@ -870,7 +870,7 @@ describe("the handover's preparation route", () => {
       expect(external.hashes).toBe(1);
     });
 
-    it("a person without node.promote is refused authorization.not_permitted", async () => {
+    it("a person without node.manage is refused authorization.not_permitted", async () => {
       const s = service();
       await controlledAtFilingAssumed();
       await setBuiltInRoleForTest(suite.db, ADMIN, "staff");
@@ -948,7 +948,7 @@ describe("the handover's preparation route", () => {
     });
     expect([plain.status, await plain.json()]).toEqual([
       403,
-      { error: { code: "authorization.not_permitted", params: { permission: "node.promote" } } },
+      { error: { code: "authorization.not_permitted", params: { permission: "node.manage" } } },
     ]);
     for (const headers of [
       { Origin: "https://elsewhere.test" },
@@ -1144,7 +1144,7 @@ describe("the spare's dormant setup, written at a good sign-in", () => {
     expect(await venueRows()).toEqual(before);
   });
 
-  it("a person without node.promote writes nothing", async () => {
+  it("a person without node.manage writes nothing", async () => {
     await controlledAtFilingAssumed();
     const other = "e1000000-0000-4000-8000-000000000005";
     await seedPersons(suite.db, {

@@ -29,7 +29,7 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     method: "POST",
     path: "/api/box/restart",
     boxes: ["fenced"],
-    authenticates: "a management session whose person holds `person.admin`",
+    authenticates: "a management session whose person holds `system.manage`",
   },
   {
     method: "POST",
@@ -50,7 +50,7 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     path: "/management-api/promote",
     boxes: ["mirror", "fenced"],
     authenticates:
-      "in the body, either the box's break-glass secret or the password (and code when enrolled) of a person holding `node.promote`; a promote module operation for this box takes the same choice, or, with `noParallelRecovery` on a box that prepares operations, the HTTPS and sign-in checks `node-operation-preparation.ts` makes; a fenced box answers `promotion.node_fenced`; a mirror answers `promotion.from_box_only` to a request not from the box itself, before reading the body",
+      "in the body, either the box's break-glass secret or the password (and code when enrolled) of a person holding `node.manage`; a promote module operation for this box takes the same choice, or, with `noParallelRecovery` on a box that prepares operations, the HTTPS and sign-in checks `node-operation-preparation.ts` makes; a fenced box answers `promotion.node_fenced`; a mirror answers `promotion.from_box_only` to a request not from the box itself, before reading the body",
   },
   {
     method: "POST",
@@ -85,28 +85,28 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     path: "/api/node/handover/:operationId/preparation",
     boxes: ["mirror"],
     authenticates:
-      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.promote`, by email (`handover-preparation.ts`)",
+      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.manage`, by email (`handover-preparation.ts`)",
   },
   {
     method: "POST",
     path: "/api/node/handover/:operationId/activate",
     boxes: ["mirror"],
     authenticates:
-      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.promote`, by email (`handover-activation.ts`); an operation already activated answers only that",
+      "HTTPS, a stored operation ready to promote, a promote module operation naming that operation, its source and this box, and the sign-in of a person holding `node.manage`, by email (`handover-activation.ts`); an operation already activated answers only that",
   },
   {
     method: "POST",
     path: "/api/node/handover/emergency/declare",
     boxes: ["mirror"],
     authenticates:
-      "own-origin HTTPS, fresh password and authenticator code when enrolled for `node.promote`, three shutdown and uncertainty statements, checked copy and transport silence (`handover-emergency-api.ts`)",
+      "own-origin HTTPS, fresh password and authenticator code when enrolled for `node.manage`, three shutdown and uncertainty statements, checked copy and transport silence (`handover-emergency-api.ts`)",
   },
   {
     method: "POST",
     path: "/api/node/handover/emergency/preview",
     boxes: ["mirror"],
     authenticates:
-      "HTTPS and the sign-in of a person holding `node.promote`, by email, password and authenticator code when enrolled; answers the checked copy and saved declaration without writing one (`handover-emergency-api.ts`)",
+      "HTTPS and the sign-in of a person holding `node.manage`, by email, password and authenticator code when enrolled; answers the checked copy and saved declaration without writing one (`handover-emergency-api.ts`)",
   },
 ];
 
