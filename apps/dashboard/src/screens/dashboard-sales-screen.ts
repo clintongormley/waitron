@@ -495,11 +495,11 @@ export class SalesScreen extends LitElement {
   #renderExport(): TemplateResult {
     return html`
       <div class="export">
-        <p class="muted" id="accountant-dates">${t("sales.accountant_dates")}</p>
+        <p class="muted">${t("sales.accountant_dates")}</p>
         <wt-button
           variant=${this.#exportBlocked() ? "secondary" : "primary"}
           data-test="export-accountant"
-          aria-describedby="accountant-dates"
+          aria-description=${t("sales.accountant_dates")}
           ?disabled=${this.#exportBlocked()}
           ?loading=${this.accountantExporting}
           @click=${() => void this.#exportAccountant()}

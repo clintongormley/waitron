@@ -999,6 +999,25 @@ describe("dashboard-sales-screen accountant workbook", () => {
     el.shadowRoot!.querySelector("[data-test=accountant-error]")?.textContent?.trim() ?? null;
   afterEach(() => vi.restoreAllMocks());
 
+  it("drops a refusal arriving after the dates change", async () => {
+    let refuse!: (reason: unknown) => void;
+    const downloadAccountantExport = vi.fn(
+      () => new Promise<Blob>((_, reject) => (refuse = reject)),
+    );
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", {
+      api: stubApi({ downloadAccountantExport }),
+      canExport: true,
+    });
+    await flush(el);
+    button(el)!.click();
+    await flush(el);
+    setDate(el, "to-picker", "2030-06-20");
+    refuse({ code: "authorization.not_permitted" });
+    await flush(el);
+    expect(error(el)).toBeNull();
+    expect(button(el)!.loading).toBe(false);
+  });
+
   it("offers no accountant download without report export permission", async () => {
     const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api: stubApi() });
     await flush(el);
@@ -1048,7 +1067,8 @@ describe("dashboard-sales-screen accountant workbook", () => {
   it("blocks missing and backwards dates, then retries a refusal without a report refresh erasing it", async () => {
     const downloadAccountantExport = vi
       .fn()
-      .mockRejectedValue({ code: "authorization.not_permitted" });
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockImplementationOnce(() => new Promise<Blob>(() => {}));
     const liveData = new LiveData();
     const api = stubApi({ downloadAccountantExport, liveData } as Partial<DashboardApi>);
     const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", {
@@ -1085,6 +1105,8 @@ describe("dashboard-sales-screen accountant workbook", () => {
       from: "2030-06-15",
       to: "2030-06-20",
     });
+    expect(error(el)).toBeNull();
+    expect(button(el)!.loading).toBe(true);
     setDate(el, "to-picker", "2030-06-21");
     await flush(el);
     expect(error(el)).toBeNull();

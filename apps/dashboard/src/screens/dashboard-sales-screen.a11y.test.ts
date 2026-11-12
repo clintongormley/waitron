@@ -9,6 +9,7 @@ import type {
   SalesPeriodDto,
 } from "../api/client.js";
 import { today } from "../date-utils.js";
+import { t } from "../i18n/t.js";
 
 const close: DailyCloseDto = {
   businessDay: "2026-08-29",
@@ -277,6 +278,9 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
     await flush(el);
     const action = el.shadowRoot!.querySelector<HTMLElement>("[data-test=export-accountant]");
     expect(action).not.toBeNull();
+    await expect
+      .element(action!.shadowRoot!.querySelector("button")!)
+      .toHaveAccessibleDescription(t("sales.accountant_dates"));
     await expectNoA11yViolations(host);
     action!.click();
     await flush(el);
