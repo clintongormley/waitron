@@ -20,6 +20,10 @@ import {
 const HOLD_MS = 1_000;
 const CHILD_DEADLINE_MS = 20_000;
 const TEST_TIMEOUT_MS = 60_000;
+// One waiter can sit behind the other children's 75 durable updates.
+const MANY_LOCK_WAIT_MS = 30_000;
+const MANY_CHILD_DEADLINE_MS = 45_000;
+const MANY_TEST_TIMEOUT_MS = 120_000;
 
 const moduleUrl = (name: string) =>
   JSON.stringify(pathToFileURL(join(import.meta.dirname, name)).href);
@@ -33,11 +37,12 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const mark = (name) => writeFileSync(join(dir, name), "");
 const waitFor = async (name) => { while (!existsSync(join(dir, name))) await sleep(5); };
 const writeOnly = process.env.NO_LOCK === "1";
+const lock = (d, body) => withRecoveryLock(d, body, role === "many" ? ${MANY_LOCK_WAIT_MS} : undefined);
 const store = {
-  lock: writeOnly ? (_dir, body) => body() : withRecoveryLock,
+  lock: writeOnly ? (_dir, body) => body() : lock,
   read: state.readRecoveryState,
   write: writeOnly
-    ? (d, s) => withRecoveryLock(d, () => state.writeRecoveryState(d, s))
+    ? (d, s) => lock(d, () => state.writeRecoveryState(d, s))
     : state.writeRecoveryState,
 };
 const holdingRead = (marker) => ({
@@ -134,7 +139,10 @@ function startChild(dir: string, role: string, id: number, noLock: boolean): Pro
     },
   );
   children.push(child);
-  const deadline = setTimeout(() => child.kill("SIGTERM"), CHILD_DEADLINE_MS);
+  const deadline = setTimeout(
+    () => child.kill("SIGTERM"),
+    role === "many" ? MANY_CHILD_DEADLINE_MS : CHILD_DEADLINE_MS,
+  );
   let stdout = "";
   let stderr = "";
   child.stdout!.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
@@ -249,6 +257,9 @@ describe("two starts racing on recovery.json", () => {
       const four = ["many", "many", "many", "many"];
       const locked = await race(FRESH, four, false);
       expect(locked.outcomes.map((outcome) => outcome.stderr)).toEqual(["", "", "", ""]);
+      expect(finishedCleanly(locked.outcomes)).toEqual(
+        four.map(() => ({ code: 0, stdout: "done" })),
+      );
       expect(locked.final.failures).toBe(100);
 
       // Every process finishes cleanly and the count still falls short: counts were lost, not
@@ -259,6 +270,6 @@ describe("two starts racing on recovery.json", () => {
       );
       expect(unlocked.final.failures).toBeLessThan(100);
     },
-    TEST_TIMEOUT_MS,
+    MANY_TEST_TIMEOUT_MS,
   );
 });
