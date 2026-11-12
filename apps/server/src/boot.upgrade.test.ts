@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { Socket } from "node:net";
-import childProcess from "node:child_process";
+import * as childProcess from "node:child_process";
 import { get as httpsGet } from "node:https";
 import { mkdtemp, mkdir, writeFile, rm, readdir, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,10 +14,14 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { provisionOrderVenue, billlessSale, type OrderVenue } from "./testing/order-venue.js";
 import * as history from "./orders-list.js";
+import * as firstSetupMode from "./first-fiscal-mode.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { TEST_PRODUCER } from "./testing/test-producer.js";
 import { loadConfig } from "./config.js";
 import { freePort } from "./testing/free-ports.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
+
+vi.mock("node:child_process", { spy: true });
 
 let root: string;
 beforeEach(async () => {
@@ -25,6 +29,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   if (root) await rm(root, { recursive: true, force: true });
 });
 
@@ -121,9 +126,13 @@ describe("contained upgrade data checks", () => {
     const connect = vi.spyOn(Socket.prototype, "connect").mockImplementation(() => {
       throw new Error("external socket refused");
     });
-    const spawn = vi.spyOn(childProcess, "spawn").mockImplementation(() => {
-      throw new Error("external process refused");
-    });
+    const processes = (
+      ["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"] as const
+    ).map((name) =>
+      vi.spyOn(childProcess, name).mockImplementation(() => {
+        throw new Error("external process refused");
+      }),
+    );
     const fetch = vi
       .spyOn(globalThis, "fetch")
       .mockRejectedValue(new Error("external fetch refused"));
@@ -135,7 +144,7 @@ describe("contained upgrade data checks", () => {
     );
     expect(report).toEqual({ mode: "trading", menus: 3, orders: 1, fiscalRecords: 1 });
     expect(connect).not.toHaveBeenCalled();
-    expect(spawn).not.toHaveBeenCalled();
+    for (const process of processes) expect(process).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
     const { openUpgradeListener } = await import("./upgrade-checks.js");
     const rebound = await openUpgradeListener(
@@ -199,6 +208,12 @@ describe("contained upgrade data checks", () => {
   it("refuses a mismatched deployment before it applies migrations", async () => {
     const { checkUpgradeData } = await import("./upgrade-checks.js");
     const { config, env } = await copiedConfig();
+    const file = new DatabaseSync(join(config.venueDir, "venue.db"));
+    try {
+      file.exec("update __drizzle_migrations_db set created_at=0");
+    } finally {
+      file.close();
+    }
     await expect(
       checkUpgradeData(
         { ...config, environment: "production" },
@@ -247,7 +262,10 @@ describe("contained upgrade data checks", () => {
     await rebound.close();
   });
 
-  it("ships an inert library entry that runs the real checks from its packaged files", async () => {
+  it("ships an inert library entry that checks data and reports a refused bind", async () => {
+    vi.stubEnv("CLAUDECODE", "1");
+    vi.stubEnv("CLAUDE_CODE_CHILD_SESSION", "1");
+    vi.stubEnv("WAITRON_TLS_CERT_FILE", "/ambient/never-use.pem");
     const { env } = await copiedConfig();
     const artifact = join(root, "artifact");
     const entry = join(artifact, "upgrade-checks.js");
@@ -262,7 +280,11 @@ describe("contained upgrade data checks", () => {
     await execute(process.execPath, ["scripts/copy-migrations.mjs", artifact], { timeout: 30_000 });
     await symlink(resolve("node_modules/sharp"), join(artifact, "node_modules/sharp"));
     const cold = await execute(process.execPath, [entry], {
-      env: { ...process.env, WAITRON_ENV: "invalid-for-startup", WAITRON_STATE_DIR: coldState },
+      env: {
+        PATH: process.env.PATH,
+        WAITRON_ENV: "invalid-for-startup",
+        WAITRON_STATE_DIR: coldState,
+      },
       timeout: 10_000,
     });
     expect(cold.stdout).toBe("");
@@ -273,7 +295,7 @@ describe("contained upgrade data checks", () => {
       console.log(JSON.stringify(await runUpgradeChecks(process.env,()=>{})));`;
     const checked = await execute(process.execPath, ["--input-type=module", "--eval", script], {
       env: {
-        ...process.env,
+        PATH: process.env.PATH,
         ...env,
         WAITRON_MIGRATIONS_DIR: join(artifact, "drizzle"),
         WAITRON_HTTP_PORT: String(port),
@@ -287,12 +309,70 @@ describe("contained upgrade data checks", () => {
       fiscalRecords: 1,
     });
     expect(checked.stderr).toBe("");
-  }, 210_000);
+    const held = await retainHttpListener();
+    try {
+      const busyScript = `const {runUpgradeChecks}=await import(${JSON.stringify(pathToFileURL(entry).href)});
+        await runUpgradeChecks(process.env,(level,event,fields)=>console.log(JSON.stringify({level,event,...fields})));`;
+      const refused = await execute(
+        process.execPath,
+        ["--input-type=module", "--eval", busyScript],
+        {
+          env: {
+            PATH: process.env.PATH,
+            WAITRON_STATE_DIR: coldState,
+            WAITRON_HTTP_PORT: String(held.port),
+          },
+          timeout: 10_000,
+        },
+      ).catch(
+        (error: childProcess.ExecFileException & { stdout: string; stderr: string }) => error,
+      );
+      expect(refused).toMatchObject({ code: 1, stderr: "" });
+      expect(JSON.parse(refused.stdout)).toMatchObject({
+        event: "server.listen_failed",
+        code: "EADDRINUSE",
+        port: held.port,
+      });
+      expect(await readdir(coldState)).toEqual([]);
+    } finally {
+      await held.close();
+    }
+  }, 220_000);
 
   it("does not pass a setup-only box by skipping the required test sale", async () => {
     const { checkUpgradeData } = await import("./upgrade-checks.js");
     const env = { WAITRON_STATE_DIR: root };
     await expect(checkUpgradeData(loadConfig(env, migrations, root), env)).rejects.toThrow(
+      "Upgrade readiness needs a configured node for its test sale",
+    );
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it.each([
+    { name: "first-setup-deleting.json", code: "setup.start_again_incomplete" },
+    { name: "first-setup-claim.json", code: "setup.attempt_invalid" },
+  ])(
+    "keeps an unfinished setup in $name refused without changing the copy",
+    async ({ name, code }) => {
+      const { checkUpgradeData } = await import("./upgrade-checks.js");
+      const { config, env } = await copiedConfig();
+      const marker = join(config.venueDir, name);
+      await writeFile(marker, "{}");
+      const before = await readdir(config.venueDir);
+      await expect(checkUpgradeData(config, env)).rejects.toMatchObject({ code });
+      expect(await readdir(config.venueDir)).toEqual(before);
+    },
+  );
+
+  it("uses first setup's mode decision before choosing the node for data checks", async () => {
+    const { checkUpgradeData } = await import("./upgrade-checks.js");
+    const { config, env } = await copiedConfig();
+    vi.spyOn(firstSetupMode, "reconcileFirstSetupBeforeMode").mockImplementation(
+      async (resolved) => {
+        resolved.node = undefined;
+      },
+    );
+    await expect(checkUpgradeData(config, env)).rejects.toThrow(
       "Upgrade readiness needs a configured node for its test sale",
     );
   });

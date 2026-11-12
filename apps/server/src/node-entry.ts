@@ -83,7 +83,7 @@ export interface EntryDeps {
   venueDir: string;
   runStagedRestore?: (deps: StagedRestoreDeps) => Promise<boolean>;
   runStagedReset?: (deps: StagedResetDeps) => Promise<boolean>;
-  /** Defaults to the real `assertNotAhead` below, never a no-op: it is a guard, and a no-op default
+  /** Defaults to the shared `assertNotAhead`, never a no-op: it is a guard, and a no-op default
    *  is lost silently by any caller that forgets the dependency. */
   assertNotAhead?: (venueDir: string, migrationsRoot: string) => Promise<void>;
   /** Defaults to the real `clearReplacedDatabases` (restore.ts), never a no-op, for the same reason. */

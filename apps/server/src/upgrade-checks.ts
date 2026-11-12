@@ -1,16 +1,12 @@
 import { once } from "node:events";
 import { join } from "node:path";
-import {
-  catalogues,
-  lockVenueDatabase,
-  openVenueDatabase,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
+import { catalogues, lockVenueDatabase, openVenueDatabase, withTransaction } from "@waitron/db";
 import { readMenuStructure } from "@waitron/catalogue";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertAppendOnlyIntact } from "./append-only-watch.js";
 import { enabledModules, orderedMigrationSets } from "@waitron/module";
+import { assertNoStartAgainDeletion } from "@waitron/provisioning";
+import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { ALL_MODULES } from "./modules.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { readModuleConfig } from "./module-config.js";
@@ -31,30 +27,29 @@ export async function openUpgradeListener(config: ServerConfig, log: Logger) {
   app.all("*", (c) => c.text("Upgrade checks in progress", 503));
   const server = startTradingListener(config, app, () => new Date(), log);
   const close = () => closeListener(server);
-  try {
-    if (!server.listening) await once(server, "listening");
-    return { server, close };
-  } catch (error) {
-    await close();
-    throw error;
-  }
+  if (!server.listening) await once(server, "listening");
+  return { server, close };
 }
 
 export async function checkUpgradeData(config: ServerConfig, env: NodeJS.ProcessEnv) {
+  await assertNoStartAgainDeletion(config.venueDir);
+  const moduleConfig = await readModuleConfig(config.stateDir);
+  const firstSetupHost = createFirstSetupModuleHost({
+    environment: env,
+    stateDir: config.stateDir,
+    venueDir: config.venueDir,
+    modules: ALL_MODULES,
+    moduleConfig,
+  });
+  await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
+  const node = config.node;
+  if (node === undefined)
+    throw new Error("Upgrade readiness needs a configured node for its test sale");
+  const available = firstSetupHost.modules;
+  const modules = enabledModules(available, moduleConfig);
+  const options = migrationOptionsFor(orderedMigrationSets(modules), config.migrationsRoot);
   const hold = await lockVenueDatabase(config.venueDir);
-  let db: Database | undefined;
   try {
-    const moduleConfig = await readModuleConfig(config.stateDir);
-    const available = createFirstSetupModuleHost({
-      environment: env,
-      stateDir: config.stateDir,
-      venueDir: config.venueDir,
-      modules: ALL_MODULES,
-      moduleConfig,
-      database: () => db,
-    }).modules;
-    const modules = config.node === undefined ? available : enabledModules(available, moduleConfig);
-    const options = migrationOptionsFor(orderedMigrationSets(modules), config.migrationsRoot);
     await assertNotAhead(config.venueDir, config.migrationsRoot);
     const probe = await openVenueDatabase(config.venueDir);
     try {
@@ -69,7 +64,7 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
     await applyMigrations(config.venueDir, options);
     const store = await openVenueDatabase(config.venueDir);
     try {
-      db = store.venue;
+      const db = store.venue;
       assertAppendOnlyIntact(
         db,
         options.flatMap((set) => set.appendOnlyTables ?? []),
@@ -78,9 +73,6 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
         if (!(await isCopyIntact(join(config.venueDir, file))))
           throw new Error(`Upgrade integrity check failed: ${file}`);
       }
-      const node = config.node;
-      if (node === undefined)
-        throw new Error("Upgrade readiness needs a configured node for its test sale");
       const backend = makeFiscalBackend(modules, await readFilingModule(db, node), db, env);
       return await withTransaction(db, async (tx) => {
         await backend.checkFilingIdentity?.(tx, node.nodeId);
@@ -104,7 +96,6 @@ export async function checkUpgradeData(config: ServerConfig, env: NodeJS.Process
         };
       });
     } finally {
-      db = undefined;
       await store.close();
     }
   } finally {
