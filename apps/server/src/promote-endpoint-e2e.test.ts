@@ -272,7 +272,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
   if (!(await admin.select({ id: persons.id }).from(persons).where(eq(persons.id, STAFF_ID)))[0]) {
     await seedPersons(admin, {
       id: STAFF_ID,
-      displayName: "Cajera",
+      displayName: "Cashier",
       pinHash: hashPin(STAFF_PIN),
       role: "staff",
     });

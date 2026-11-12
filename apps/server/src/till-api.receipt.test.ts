@@ -167,7 +167,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 }
 
 /** Stand up a fresh chained venue + a one-`each`-product catalogue (1.50 gross, general/21 %), a
- *  staff person ("Cajera") and a supervisor ("Responsable"), both with PIN "5555". The supervisor
+ *  staff person ("Cashier") and a supervisor ("Supervisor"), both with PIN "5555". The supervisor
  *  holds `cash.drawer`; the staff person does not — the pair the gated drawer matrix is written
  *  against. */
 async function setupVenue(): Promise<{
@@ -196,7 +196,7 @@ async function setupVenue(): Promise<{
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: fixturePinHash("1234"),
           passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
@@ -237,12 +237,12 @@ async function setupVenue(): Promise<{
       noPreparation: true,
     });
     const [staff] = await seedPersons(tx, {
-      displayName: "Cajera",
+      displayName: "Cashier",
       pinHash: fixturePinHash("5555"),
       role: "staff",
     });
     const [supervisor] = await seedPersons(tx, {
-      displayName: "Responsable",
+      displayName: "Supervisor",
       pinHash: fixturePinHash("5555"),
       role: "supervisor",
     });
@@ -2006,7 +2006,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
     const { cfg, operatorId, supervisorId } = await setupVenue();
     await configureReceipt({ printerId: await makePrinter() });
     const [suspended] = await seedPersons(suite.db, {
-      displayName: "Responsable suspendida",
+      displayName: "Suspended supervisor",
       pinHash: hashPin("5555"),
       role: "supervisor",
       status: "suspended",
@@ -2204,8 +2204,8 @@ describe("GET /api/drawer/authorizers (eligible cash.drawer supervisors over HTT
     expect(res.status).toBe(200);
     const authorizers = (await res.json()) as { personId: string; displayName: string }[];
 
-    // The venue's cash.drawer holders are the provisioned admin (Administradora) + the seeded
-    // supervisor (Responsable) — the staff operator (Cajera) is NOT one.
+    // The venue's cash.drawer holders are the provisioned admin (Administrator) + the seeded
+    // supervisor (Supervisor) — the staff operator (Cashier) is NOT one.
     const ids = new Set(authorizers.map((a) => a.personId));
     expect(ids.has(supervisorId)).toBe(true);
     expect(ids.has(operatorId)).toBe(false);

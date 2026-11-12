@@ -169,7 +169,7 @@ async function venue(db: Database): Promise<Venue> {
       productIds: [product.id, free.id],
     });
     const [staff] = await seedPersons(tx, {
-      displayName: "Cajera",
+      displayName: "Cashier",
       pinHash: hashPin("5555"),
       role: "staff",
     });

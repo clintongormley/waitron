@@ -411,6 +411,8 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   has not been established. `git blame` attributes the selection expression to `082553a65`.
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
   The shared bill and order venues use Anna, Administrator and Sophia for staff samples.
+  Local receipt-language, receipt-guests, till-receipt, promotion-endpoint and till-reroute
+  fixtures use English staff display names.
   The till-sale suite uses Main room, Administrator, Food and Drinks for local staff samples;
   its Spanish product names, customer wording and fiscal defaults remain.
   BillVenue uses Croquettes and Octopus as staff keys, with their matching selectors and
