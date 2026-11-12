@@ -644,6 +644,7 @@ describe("what moves, ends or keeps today's name", () => {
 
     await inTx(v, (tx) =>
       splitOff(tx, v.cfg, REMOVALS, new Date(), {
+        expectedParties: [],
         tableId: table.bar!,
         partIds: [table.window!],
         seats: null,
@@ -697,6 +698,7 @@ describe("what moves, ends or keeps today's name", () => {
 
     await inTx(v, (tx) =>
       splitOff(tx, v.cfg, REMOVALS, new Date(), {
+        expectedParties: [],
         tableId: table.bar!,
         partIds: [table.bar!],
         seats: 8,
@@ -861,6 +863,7 @@ describe("a reset clears today's name", () => {
 
     await inTx(v, (tx) =>
       splitOff(tx, v.cfg, REMOVALS, new Date(), {
+        expectedParties: [],
         tableId: table.bar!,
         partIds: [table.bar!],
         seats: null,

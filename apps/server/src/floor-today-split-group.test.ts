@@ -50,6 +50,7 @@ import {
   plannedZone,
   todayRow,
   zoneRevisionOf,
+  withSplitPartyReads,
 } from "./testing/floor-today-venue.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 import "./errors.js";
@@ -161,10 +162,14 @@ async function post(path: string, revisionAt: string, body: Record<string, unkno
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify(
-      await observedTableActionBody(v.db, path, {
-        zoneRevision: await readRevision(revisionAt),
-        ...body,
-      }),
+      await observedTableActionBody(
+        v.db,
+        path,
+        await withSplitPartyReads(v, path, {
+          zoneRevision: await readRevision(revisionAt),
+          ...body,
+        }),
+      ),
     ),
   });
 }
@@ -1228,5 +1233,95 @@ describe("Split tables… on a joined table in no group", () => {
     expect(await placeOf(table.c5!)).toEqual({ x: 14, y: 20, width: 2, height: 2 });
     expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
     expect(await groupOf(table.long!)).toBeNull();
+  });
+});
+
+describe("split party observations", () => {
+  const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  for (const [name, expectedParties] of [
+    ["missing", undefined],
+    ["null", null],
+    ["not a list", {}],
+    ["not an object", [null]],
+    ["invalid id", [{ id: "not-an-id", revision: 0 }]],
+    ["missing revision", [{ id }]],
+    ["fractional revision", [{ id, revision: 0.5 }]],
+    ["negative revision", [{ id, revision: -1 }]],
+    ["coerced revision", [{ id, revision: "0" }]],
+    [
+      "duplicate id",
+      [
+        { id, revision: 0 },
+        { id: id.toUpperCase(), revision: 1 },
+      ],
+    ],
+  ] as const) {
+    it(`refuses ${name} party observations without changing the group`, async () => {
+      const { table } = await barOnLong();
+      const before = await everything();
+      await refused(
+        post(`/api/tables/${table.bar!}/today/split-off`, table.bar!, {
+          partIds: [table.bar!],
+          expectedParties,
+        }),
+        400,
+        "management.request_invalid",
+        { field: "expectedParties" },
+      );
+      expect(await everything()).toEqual(before);
+    });
+  }
+
+  it("checks the party revision before stranding or missing seats", async () => {
+    const { table, partyId } = await partyAtBarAlone();
+    const revision = await revisionOf(v, partyId);
+    const before = await everything();
+    await refused(
+      post(`/api/tables/${table.bar!}/today/split-off`, table.bar!, {
+        partIds: [table.bar!],
+        expectedParties: [{ id: partyId, revision: revision + 1 }],
+      }),
+      409,
+      "party.out_of_date",
+      { partyId, revision },
+    );
+    expect(await everything()).toEqual(before);
+  });
+
+  it("refuses a party read at a table that is now free", async () => {
+    const old = await guestsAtGroup();
+    const { table } = await barOnLong();
+    const revision = await revisionOf(v, old.guests.partyId);
+    const before = await everything();
+    await refused(
+      post(`/api/tables/${table.bar!}/today/split-off`, table.bar!, {
+        partIds: [table.bar!],
+        expectedParties: [{ id: old.guests.partyId, revision }],
+      }),
+      409,
+      "party.out_of_date",
+      { partyId: old.guests.partyId, revision },
+    );
+    expect(await everything()).toEqual(before);
+  });
+
+  it("refuses a different party even when its revision matches", async () => {
+    const old = await guestsAtGroup();
+    const current = await guestsAtGroup();
+    const revision = await revisionOf(v, current.guests.partyId);
+    expect(await revisionOf(v, old.guests.partyId)).toBe(revision);
+    const before = await everything();
+    const answer = await post(
+      `/api/tables/${current.table.bar!}/today/split-off`,
+      current.table.bar!,
+      {
+        partIds: [current.table.bar!],
+        seats: 10,
+        expectedParties: [{ id: old.guests.partyId, revision }],
+      },
+    );
+    expect(answer.status).toBe(409);
+    expect(await answer.json()).toMatchObject({ error: { code: "party.out_of_date" } });
+    expect(await everything()).toEqual(before);
   });
 });

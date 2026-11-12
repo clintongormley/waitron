@@ -65,7 +65,7 @@ import type {
   TodayNameRefusal,
 } from "../widgets/today-name-dialog.js";
 import type { JoinWithPickDetail } from "../widgets/join-with-dialog.js";
-import { otherPartyRead } from "../widgets/table-targets.js";
+import { otherPartyRead, seatedRead } from "../widgets/table-targets.js";
 import type { TodaySeatsDetail } from "../widgets/today-seats-dialog.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
@@ -75,6 +75,7 @@ import {
   detailsHeading,
   groupName,
   groupSplitOf,
+  splitsGroup,
   needsMovingToday,
   nextFloorMoment,
   normalGroupName,
@@ -1929,6 +1930,16 @@ export class TillFloorScreen extends LitElement {
     const sending = { ...splitting, sent: shown, refusal: null };
     this.splittingJoined = sending;
     const revision = this.#revision(shown.joined.zoneId);
+    const observed = shown.parts.filter((table) => detail.partIds.includes(table.id));
+    if (!splitsGroup(shown.joined)) observed.push(shown.joined);
+    const expectedParties = [
+      ...new Map(
+        observed.flatMap((table) => {
+          const party = seatedRead(table);
+          return party === null ? [] : [[party.id, party] as const];
+        }),
+      ).values(),
+    ];
     try {
       this.#carry(
         await this.#send(revision, (sent) =>
@@ -1936,6 +1947,7 @@ export class TillFloorScreen extends LitElement {
             splitting.tableId,
             {
               partIds: detail.partIds,
+              expectedParties,
               ...(detail.seats === null ? {} : { seats: detail.seats }),
             },
             sent,

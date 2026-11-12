@@ -2312,6 +2312,12 @@ every table a party holds `merge.strands_party` (a moved bill can hold one table
 A594). When deleting a table is refused, `removeLiveTables` deletes the split rows naming it and
 tries again, and puts them back if that is refused too (`apps/server/src/table-removal.ts`).
 
+Split tables… also requires the till's `expectedParties`, distinct party ids and revisions from
+its ticked tables and, for a joined-table split, the joined table itself. After validating the
+selected members, `splitOff` compares the observed holders and revisions before the split's
+stranding, seats and placement checks or writes. A free read sends `[]`. Seating stays outside
+the room's revision.
+
 Each room's plan for the day has a revision (`floor_today_zones.generation`, read as `revision`). A
 reset adds one to it (`resetZoneFor`, `apps/server/src/floor-today-store.ts`). Any other request
 moves it by one for its own writes, however many rows they touch, when they change the room: the

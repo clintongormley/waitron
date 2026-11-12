@@ -38,6 +38,8 @@ import {
 import { finishTable, markTableCleared } from "./party-close-fixture.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
 import { inTx, OPERATOR, seat, type PartyVenue } from "./party-venue.js";
+import { partsOf } from "../floor-today-parts.js";
+import { holdersOf, partyRevision } from "../parties.js";
 
 export interface PlannedEntry {
   key: string;
@@ -441,9 +443,29 @@ export async function withFloorRevision(
   body: unknown,
 ): Promise<unknown> {
   const table = /^\/api\/tables\/([^/]+)\/today\//.exec(path)?.[1];
-  if (table !== undefined) return withRevision(v, table, body);
+  if (table !== undefined) return withRevision(v, table, await withSplitPartyReads(v, path, body));
   const zone = /^\/api\/zones\/([^/]+)\/today\/(?:reset|update-layout)$/.exec(path)?.[1];
   return zone === undefined ? body : withZoneRevision(v, zone, body);
+}
+
+export async function withSplitPartyReads(
+  v: PartyVenue,
+  path: string,
+  body: unknown,
+): Promise<unknown> {
+  const tableId = /^\/api\/tables\/([^/]+)\/today\/split-off$/.exec(path)?.[1];
+  if (tableId === undefined || !isPlainBody(body) || Object.hasOwn(body, "expectedParties"))
+    return body;
+  return inTx(v, async (tx) => {
+    const ids = Array.isArray(body.partIds)
+      ? body.partIds.filter((id): id is string => typeof id === "string")
+      : [];
+    if ((await partsOf(tx, tableId)).some((part) => part.stillJoined)) ids.push(tableId);
+    const expectedParties = [];
+    for (const id of new Set((await holdersOf(tx, ids)).values()))
+      expectedParties.push({ id, revision: await partyRevision(tx, id) });
+    return { ...body, expectedParties };
+  });
 }
 
 function isPlainBody(body: unknown): body is Record<string, unknown> {

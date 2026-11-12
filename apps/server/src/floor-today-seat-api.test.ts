@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { diningTables, floorResetTables, partyTables } from "@waitron/db";
+import { diningTables, floorResetTables, parties, partyTables, workingOrders } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -16,6 +16,7 @@ import {
   needingMoving,
   plannedZone,
   withFloorRevision,
+  zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 import "./errors.js";
@@ -129,6 +130,48 @@ async function takeOff(tableId: string): Promise<void> {
   const answer = await post(`/api/tables/${tableId}/today/take-off`, {});
   await expectRevision(v, answer);
 }
+
+it("refuses a split sent from before guests were seated", async () => {
+  const { a, b } = await threeTables();
+  await merge(a, b, "right");
+  const [table] = await inTx(v, (tx) =>
+    tx.select({ zoneId: diningTables.zoneId }).from(diningTables).where(eq(diningTables.id, a)),
+  );
+  const readRevision = await zoneRevisionOf(v, table!.zoneId);
+  expect(await holders(a, b)).toEqual([null, null]);
+
+  const seated = await post(`/api/tables/${a}/seat`, { guestCount: 6 });
+  expect(seated.status, await seated.clone().text()).toBe(200);
+  const { partyId } = (await seated.json()) as { partyId: string };
+  expect(await holders(a, b)).toEqual([partyId, partyId]);
+  expect(await zoneRevisionOf(v, table!.zoneId)).toBe(readRevision);
+  const beforeParty = await inTx(v, (tx) =>
+    tx.select().from(parties).where(eq(parties.id, partyId)),
+  );
+  const beforeBills = await inTx(v, (tx) =>
+    tx.select().from(workingOrders).where(eq(workingOrders.partyId, partyId)),
+  );
+  const beforeMerge = await mergeOf(v, a);
+
+  const split = await post(`/api/tables/${a}/today/split-off`, {
+    partIds: [b],
+    zoneRevision: readRevision,
+    expectedParties: [],
+  });
+  expect(split.status, await split.clone().text()).toBe(409);
+  expect(await split.json()).toMatchObject({ error: { code: "party.out_of_date" } });
+  expect(await holders(a, b)).toEqual([partyId, partyId]);
+  expect(await inTx(v, (tx) => tx.select().from(parties).where(eq(parties.id, partyId)))).toEqual(
+    beforeParty,
+  );
+  expect(
+    await inTx(v, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.partyId, partyId)),
+    ),
+  ).toEqual(beforeBills);
+  expect(await mergeOf(v, a)).toEqual(beforeMerge);
+  expect(await zoneRevisionOf(v, table!.zoneId)).toBe(readRevision);
+});
 
 describe("seating at a table taken off today", () => {
   it("refuses the table the path names, and seats nobody", async () => {

@@ -20,6 +20,7 @@ import {
   floorTodayTables,
   floorTodayZones,
   partyTables,
+  parties,
   ticketItems,
   workingOrders,
 } from "@waitron/db";
@@ -59,6 +60,7 @@ import {
   tableServiceZone,
   todayRow,
   withRevision,
+  withSplitPartyReads,
   withZoneRevision,
   zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
@@ -131,7 +133,11 @@ async function today(tableId: string, change: string, body: unknown = {}): Promi
   return send(
     "POST",
     `/api/tables/${tableId}/today/${change}`,
-    await withRevision(v, tableId, body),
+    await withRevision(
+      v,
+      tableId,
+      await withSplitPartyReads(v, `/api/tables/${tableId}/today/${change}`, body),
+    ),
   );
 }
 
@@ -1034,6 +1040,44 @@ const LONG = async () => {
 };
 
 describe("the split-off route", () => {
+  it("checks the joined parent's party before seats and accepts a fresh read once", async () => {
+    const { table } = await LONG();
+    const partyId = await seatAt(table.long!);
+    const [party] = await inTx(v, (tx) => tx.select().from(parties).where(eq(parties.id, partyId)));
+    const before = await everything();
+    expect(
+      await refusal(
+        today(table.long!, "split-off", {
+          partIds: [table.c5!],
+          expectedParties: [],
+        }),
+      ),
+    ).toEqual({
+      status: 409,
+      body: {
+        error: { code: "party.out_of_date", params: { partyId, revision: party!.revision } },
+      },
+    });
+    expect(await everything()).toEqual(before);
+    await expectRevision(
+      v,
+      today(table.long!, "split-off", {
+        partIds: [table.c4!, table.c5!],
+        expectedParties: [{ id: partyId, revision: party!.revision }],
+      }),
+    );
+    const [after] = await inTx(v, (tx) => tx.select().from(parties).where(eq(parties.id, partyId)));
+    expect(after!.revision).toBe(party!.revision + 1);
+    expect(
+      await inTx(v, (tx) =>
+        tx
+          .select({ tableId: partyTables.tableId })
+          .from(partyTables)
+          .where(eq(partyTables.partyId, partyId)),
+      ),
+    ).toEqual(expect.arrayContaining([{ tableId: table.c3! }]));
+  });
+
   it("splits parts off over HTTP and answers the room's revision", async () => {
     const { table } = await LONG();
 

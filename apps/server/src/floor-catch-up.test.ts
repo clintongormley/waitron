@@ -1242,7 +1242,12 @@ describe("a table that frees up after a reset needs moving", () => {
     ]);
     const [t4, long] = [z.live("t4"), z.live("long")];
     await inTx(v, (tx) =>
-      splitOff(tx, v.cfg, REMOVALS, NOW, { tableId: long, partIds: [t4], seats: 6 }),
+      splitOff(tx, v.cfg, REMOVALS, NOW, {
+        tableId: long,
+        partIds: [t4],
+        seats: 6,
+        expectedParties: [],
+      }),
     );
     await finish(z.partyId);
     expect(await readyOf(z.t3)).toEqual({ pending: true, readyToMove: false });
@@ -1302,7 +1307,12 @@ describe("a table that frees up after a reset needs moving", () => {
     expect(await readyOf(t3)).toEqual({ pending: true, readyToMove: false });
 
     await inTx(v, (tx) =>
-      splitOff(tx, v.cfg, REMOVALS, NOW, { tableId: bar, partIds: [bar], seats: null }),
+      splitOff(tx, v.cfg, REMOVALS, NOW, {
+        tableId: bar,
+        partIds: [bar],
+        seats: null,
+        expectedParties: [],
+      }),
     );
 
     expect(await mergeOf(v, bar)).toBeNull();

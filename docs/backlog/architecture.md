@@ -1101,6 +1101,8 @@ product failures.
   suggestions and practice printing) also run there. Repeated thrown passes raise one dashboard
   alert per job after ten minutes and three failures; the manager’s box-status read includes the
   complete job views. The remaining jobs still need moving onto the runner.
+  Floor splits now check the parties the till read, separately from the room layout revision;
+  converting saved joined tables into ordinary groups and folding floor storage remain open.
   Management and device events share one loop with read-only wake checks; device events carry types
   only. The dashboard detects a silent connection, quiets audited database-only re-read timers
   while connected and receives pairing, discovery, practice-inbox and backup state changes.

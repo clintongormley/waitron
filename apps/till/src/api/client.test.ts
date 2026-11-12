@@ -2998,18 +2998,37 @@ describe("TillApi", () => {
     const fetchStub = vi.fn(async () => jsonResponse(answer));
     const api = new TillApi("", fetchStub);
 
-    await expect(api.splitOffToday("long", { partIds: ["c4", "c5"] }, 7)).resolves.toEqual(answer);
-    await expect(api.splitOffToday("long", { partIds: ["c5"], seats: 8 }, 7)).resolves.toEqual(
-      answer,
-    );
+    await expect(
+      api.splitOffToday("long", { partIds: ["c4", "c5"], expectedParties: [] }, 7),
+    ).resolves.toEqual(answer);
+    await expect(
+      api.splitOffToday(
+        "long",
+        { partIds: ["c5"], seats: 8, expectedParties: [{ id: "party", revision: 3 }] },
+        7,
+      ),
+    ).resolves.toEqual(answer);
 
     const sent = fetchStub.mock.calls.map((call) => {
       const [path, init] = call as unknown as [string, RequestInit];
       return [path, init.method, JSON.parse(String(init.body)) as unknown];
     });
     expect(sent).toEqual([
-      ["/api/tables/long/today/split-off", "POST", { partIds: ["c4", "c5"], zoneRevision: 7 }],
-      ["/api/tables/long/today/split-off", "POST", { partIds: ["c5"], seats: 8, zoneRevision: 7 }],
+      [
+        "/api/tables/long/today/split-off",
+        "POST",
+        { partIds: ["c4", "c5"], expectedParties: [], zoneRevision: 7 },
+      ],
+      [
+        "/api/tables/long/today/split-off",
+        "POST",
+        {
+          partIds: ["c5"],
+          seats: 8,
+          expectedParties: [{ id: "party", revision: 3 }],
+          zoneRevision: 7,
+        },
+      ],
     ]);
   });
 
