@@ -195,10 +195,6 @@ el servidor anterior y los demás servidores que queden están detenidos, y acep
 posteriores a esta instantánea.» para una copia de Waitron Cloud— y elige **Restaurar la copia**,
 **Restaurar desde mi bucket** o **Restaurar esta instantánea**.
 
-Si la copia tiene ventas con una fecha posterior en más de un minuto a la hora del servidor, el servidor
-deja de cobrar al terminar la recuperación hasta que su reloj las alcance o se confirme su hora: consulta
-[Cuando se paran los cobros por la hora](box-status.md#clock-behind).
-
 Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si la comprobación
 del reloj lo impide, resuelve la causa y elige **Volver a comparar los relojes**. Si los relojes no
 coinciden, después de **Continuar** la página muestra la hora del servidor y la de este dispositivo y

@@ -4308,6 +4308,11 @@ opening the folder with `exclusive: false` never files.
 
 ## While the box's clock reads behind the latest fiscal record, no record is written and no new money moves
 
+**Switched off (2026-11-12, A1420 PR 5).** `clockBehindChain` and `clockStopState` now answer
+nothing, so this stop never holds; a record dated before the latest one is written and chained after
+it (`packages/fiscal-verifactu/src/chain.earlier-time.test.ts`). The code below goes in A1420 PR 6.
+[Plan](../superpowers/plans/2026-11-09-a1420-start-clock-corrects-itself.md).
+
 **The comparison.** `clockBehindChain` (`packages/fiscal-verifactu/src/clock-behind.ts`) reads the
 latest `fecha_hora_huso_gen_registro` in `registros_facturacion`, across every chain, and answers
 the four params `clockAt`, `offsetMinutes`, `lastRecordAt` and `lastRecordOffsetMinutes` when the
@@ -4419,9 +4424,8 @@ already filed, paid by card on `POST /api/pay`, called `collect` once and answer
 the same kind of order collected in cash answered `200`. Settling a filed invoice writes no record,
 so the append never saw the last two.
 
-Guards: `apps/server/src/clock-behind-stop.*.test.ts`,
-`apps/server/src/payments-api.clock-behind.test.ts` and
-`packages/fiscal-verifactu/src/chain.clock-behind.test.ts` — weaker than the rule, because they
+Guards: `apps/server/src/clock-behind-stop.*.test.ts` and
+`apps/server/src/payments-api.clock-behind.test.ts` — weaker than the rule, because they
 cover the routes they name; a new money route is seen by none.
 
 ### A confirmation of the clock lifts the stop for one step back
@@ -6141,7 +6145,7 @@ and both refund recovery loops pause. A card refund's send and outcome are judge
 transaction that dates them, after any provider wait. A payment whose money has already moved is
 still stored. Guards: `apps/server/src/clock-behind-stop.*.test.ts`,
 `apps/server/src/payments-api.clock-behind.test.ts` and
-`packages/fiscal-verifactu/src/chain.clock-behind.test.ts`, weaker than the rule — they cover the
+`chain.clock-behind.test.ts` (deleted 2026-11-12, A1420 PR 5), weaker than the rule — they cover the
 routes they name; a new money route is seen by none. Receipt:
 [conventions-data.md](conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves).
 **A confirmation of the clock (`clock_confirmations`: AEAT's time, two agreeing devices from two
@@ -6565,21 +6569,25 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ### Who may confirm or set the clock
 
-- **More than a minute behind the latest fiscal record, write no record and take/refund no new
-  money unless a clock confirmation covers it.** After replay, call `refuseWhileClockBehind` before
-  reader/refund/drawer work; pause both refund recovery loops. Recheck card-refund send/outcome in
-  their dating transaction after provider waits. Still store money already moved.
-  **Clock confirmation lifts the stop for one step back, with no gap limit; once a record is written
-  under it, readings stay within a minute of the latest record written since.** Sources: the box's
+- **A record's time is never compared with the latest record's: the start confirms the time, and
+  once it is confirmed the box records with its clock however far a later sync moves it** (owner,
+  2026-11-10: "if we successfully sync the clock using ntp then we continue to sell, it doesn't
+  matter how much the clock changes"); a time a person confirms or sets from their own device is
+  never compared with the latest record (owner, 2026-11-11 14:34: "if somebody has confirmed the
+  time on their device, then we trust that time and move forward"). After replay, call the seat's
+  `refuseWhileClockBehind` (by then: waiting, or before 28-10-2024) before reader/refund/drawer
+  work; pause both refund recovery loops while waiting. Recheck card-refund send/outcome in their
+  dating transaction after provider waits, against the same check. Still store money already
+  moved. Sources: the box's
   time service; during the stop, AEAT and two agreeing devices at different addresses (not while the
   stop found at start-up lasts); while a start waits, two devices at different addresses within 5
   seconds, at the PIN screen or signed in, which confirm and set nothing; a Box administration holder's own device; or a till's time
   confirmed on it by a holder of Box administration at any time or, by a staff member signed in on it, while the
   start waits for its time, during a stop before the internet confirms that start, or during a stop
   found at start-up once AEAT has not answered or cannot be asked (owner, 2026-10-31; 2026-11-10); never a box device outside development. Guards:
-  clock-behind-stop, payments clock-behind, fiscal chain/restart/confirmation, clock-confirm route
-  and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule: only named routes/readings/requests; new money routes
-  unguarded. **The box's internet time service keeps its clock; Waitron sets it only through the host
+  `packages/fiscal-verifactu/src/chain.earlier-time.test.ts` and
+  `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule: the money routes
+  `clock-unconfirmed-gate.test.ts` lists. **The box's internet time service keeps its clock; Waitron sets it only through the host
   service, from a till's time (a staff member's while the start waits for its time, or during a stop
   until the internet confirms that start or during start-up; a Box administration holder's at any time), a
   Box administration holder's own device, the device showing the clock step of the setup page (under its

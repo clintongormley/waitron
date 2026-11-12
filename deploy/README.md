@@ -126,8 +126,7 @@ Every `install`, upgrades included, also runs `timedatectl set-ntp true` as root
 limit where `timeout` is installed, to ask the system to keep its clock in step with internet time, and prints one line either
 way. Where that fails, or the system has no `timedatectl`, the line says that unless another time
 service runs on the machine nothing keeps its clock right, and to check the clock and install a
-time service such as `systemd-timesyncd`; `install` carries on. It matters because Waitron stops
-taking payments while the box's clock reads earlier than its last sale, and at every start a box
+time service such as `systemd-timesyncd`; `install` carries on. It matters because at every start a box
 that files invoices takes no payment until the system reports its clock in step with internet time
 (`timedatectl`'s `NTPSynchronized`, read through the box's clock service), two tills or handhelds
 that are switched on and connected agree with its clock, or someone confirms it. `install` switches

@@ -40,48 +40,8 @@ unos 24 MB.
 La hora del servidor está tan atrasada que no se puede registrar una venta para Hacienda. Hasta que
 se corrija, el servidor también rechaza los cobros y las devoluciones. Un administrador puede poner
 la hora desde su propio móvil u ordenador, en la [página Estado del
-servidor](box-status.md#clock-behind). Justo después de que el servidor arranque, la indicación
-puede decir **Comprobar la hora** en su lugar, como se explica más abajo.
-
-**No se puede cobrar: la hora del servidor es anterior a la última venta · Avisa al encargado** es
-rojo. El reloj del servidor marca más de un minuto antes que la última venta que registró. Hasta que
-marque como mucho un minuto antes, o hasta que se confirme la hora del servidor, el servidor rechaza
-los cobros, las devoluciones y todo lo que registraría una venta o movería dinero: cobros en
-efectivo o con tarjeta, en el mostrador o en una mesa, devoluciones y reintentos de devoluciones,
-registrar una cuenta sin pagar, anular un pedido que ya tiene factura, y un cambio o un envío a cocina que
-terminaría de pagar una cuenta ya pagada en parte. En el panel, los encargados tampoco pueden
-resolver cobros ni devoluciones atascados o retenidos.
-
-El resto del trabajo sigue. Por ejemplo, puedes sentar mesas, tomar pedidos, enviarlos a cocina,
-fichar la entrada y la salida, reimprimir un recibo e imprimir una factura que ya estaba hecha. Un
-cobro rechazado deja el pedido abierto.
-
-Cuando se rechaza un cobro, el terminal muestra la hora del servidor y la de la última venta. Si ya
-has cobrado al cliente en otro datáfono, no vuelvas a cobrar: registra el pago cuando se pueda
-volver a cobrar.
-
-Abre **Pagos con tarjeta → Comparación del datáfono de reserva** para comparar los pagos anotados
-de la misma cuenta con los cargos de SumUp. Comprueba en SumUp los pagos sin una coincidencia
-única. Conserva el número de operación y el datáfono al anotar cada pago; esta comparación no
-envía devoluciones.
-
-Si el terminal dice que se ha cobrado con tarjeta pero el pago no se ha registrado, no vuelvas a
-cobrar. Puede pasar si la hora cambia mientras el lector está cobrando la tarjeta.
-Lo que hay que hacer después depende de cómo se cobró la tarjeta:
-
-- **En el mostrador, o la cuenta de una mesa cobrada de una vez desde la cuenta presentada:** cuando se
-  pueda volver a cobrar, cobra ese pedido otra vez de la misma forma. El pago se registra sin cobrar
-  la tarjeta otra vez.
-- **Desde la ventana Cobrar de la cuenta:** el pago queda pendiente, y el servidor lo registra por sí solo cuando
-  se puede volver a cobrar.
-
-Con internet, el servidor normalmente corrige su reloj por sí solo. Si no, un
-administrador pone o confirma la hora en la [página Estado del servidor](box-status.md#clock-behind)
-con su propio móvil u ordenador, nunca desde la pantalla del propio servidor. Justo después de que el
-servidor arranque, cualquier empleado puede hacerlo desde una caja con **Comprobar la hora**, como se
-explica más abajo. Si la hora del servidor es correcta y fue la última venta la que llevaba una hora
-equivocada, dos cajas o terminales que coinciden con el servidor también reanudan los cobros, salvo
-que la parada dure desde que arrancó el servidor. Nunca ponen la hora.
+servidor](box-status.md#clock-own-device). Justo después de que el servidor arranque, la indicación puede
+decir **Comprobar la hora** en su lugar, como se explica más abajo.
 
 **Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora (0
 de 2 por ahora) · Comprobar la hora** es rojo. Cuando el servidor arranca sin la hora de internet,
@@ -93,7 +53,7 @@ dispositivo si lo es esa. La pantalla de inicio de sesión muestra las mismas pa
 
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
 significa que el servidor arrancó con su hora en duda y no ha podido confirmarla por sí
-mismo. Termina cualquiera de las tres líneas rojas de la hora de arriba. Un cobro rechazado dice
+mismo. Termina cualquiera de las dos líneas rojas de la hora de arriba. Un cobro rechazado dice
 entonces que uses **Comprobar la hora** arriba de la pantalla. Pulsa **Comprobar la hora** para
 abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ahí. Puede usarlo
 cualquiera con la sesión iniciada en la caja.
@@ -103,9 +63,7 @@ la hora de la propia caja.
 
 - Cuando las dos horas están a más de un minuto, pregunta cuál es la correcta. Pulsa **Este
   dispositivo** si la hora de la caja es la buena: el reloj del servidor se pone a esa hora y se
-  puede volver a cobrar. Si la hora de la caja es más de un minuto anterior a la última venta del
-  servidor, los cobros pueden pararse: si la línea roja de la hora termina entonces con **Comprobar
-  la hora**, vuelve a abrirlo y pulsa **Sí**. Pulsa **El servidor** si la hora del servidor es la
+  puede volver a cobrar. Pulsa **El servidor** si la hora del servidor es la
   buena: cuando **Los cobros esperan** es la única línea roja de la hora, el servidor mantiene su
   hora y se puede volver a cobrar; si no, el diálogo te pide que corrijas la hora de la caja, como
   con **Las dos horas están mal**. Pulsa **Las dos horas están mal** si ninguna lo es.

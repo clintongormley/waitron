@@ -637,7 +637,7 @@ export class BoxStatusScreen extends LitElement {
       ><wt-help-tooltip
         mode="help-mode"
         aria-label=${t("box_status.clock_check_help_label")}
-        guide-href=${guideHref("box-status.clock-behind")}
+        guide-href=${guideHref("box-status.clock-own-device")}
         guide-label=${t("box_status.clock_check_help_guide")}
         >${t("box_status.clock_check_help")}</wt-help-tooltip
       >

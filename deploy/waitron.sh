@@ -323,15 +323,15 @@ disable_bluetooth_autopair() {
   rm -f "$tmp"
 }
 
-# 2d. A box whose clock reads earlier than its last sale stops taking payments, so install asks the host
-# to keep its clock right where it can.
+# 2d. Every start of a box that files invoices takes no payment until its clock is confirmed, so install
+# asks the host to keep its clock right where it can.
 enable_time_sync() {
   local limit
   limit="$(command -v gtimeout || command -v timeout)" || limit=""
   if as_root ${limit:+"$limit" 60} timedatectl set-ntp true >/dev/null 2>&1; then
     echo "waitron.sh: asked the system to keep its clock in step with internet time (timedatectl set-ntp true)"
   else
-    echo "waitron.sh: could not switch on the system's time synchronisation ('timedatectl set-ntp true' failed, or this system has no timedatectl). Unless another time service runs on this machine, nothing keeps its clock right, Waitron stops taking payments while the clock reads earlier than its last sale, and every start of a box that files invoices takes no payment until the system reports its clock in step with internet time, two tills or handhelds that are switched on and connected agree with its clock, or someone confirms it — check the clock, and install and enable a time service such as systemd-timesyncd if there is none" >&2
+    echo "waitron.sh: could not switch on the system's time synchronisation ('timedatectl set-ntp true' failed, or this system has no timedatectl). Unless another time service runs on this machine, nothing keeps its clock right, and every start of a box that files invoices takes no payment until the system reports its clock in step with internet time, two tills or handhelds that are switched on and connected agree with its clock, or someone confirms it — check the clock, and install and enable a time service such as systemd-timesyncd if there is none" >&2
   fi
 }
 

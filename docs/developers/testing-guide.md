@@ -618,6 +618,10 @@ it failed at that check; with every draw forced to collide, it failed at once wi
 
 ## A fiscal record dated after a later write's clock makes the chain refuse that write
 
+**Superseded (2026-11-12, A1420 PR 5).** The chain no longer refuses a record dated before the
+latest one, and the root rule this section backed was deleted. What follows records what was true
+before. [Plan](../superpowers/plans/2026-11-09-a1420-start-clock-corrects-itself.md).
+
 The chain refuses to append a record whose time is more than a minute before the latest record in
 the database (`attemptAppend`, `packages/fiscal-verifactu/src/chain.ts`; the rule is
 [conventions-data.md](conventions-data.md#while-the-boxs-clock-reads-behind-the-latest-fiscal-record-no-record-is-written-and-no-new-money-moves)).

@@ -751,9 +751,6 @@ passed while proving nothing.
 - **With `useVenueDb({ resetPerTest: false })`, a row found by a drawn port must be checked as
   this test's own row.** Guard: `apps/server/src/print-agent-e2e.test.ts`'s `portsNoPrinterNames` and
   pre-discovery check, weaker than the rule: this file only.
-- **A fiscal fixture must not be over a minute ahead of a later recording write's clock.**
-  In a shared database, every write and helper takes its clock from the latest record time;
-  otherwise give the case its own database. Nothing guards it.
 - **A suite that sends a room's revision to a today's-floor write route pins the API's clock at its
   own fixed time and seeds at that time**. Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change).
@@ -947,16 +944,18 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-unconfirmed-gate.test.ts` and
   `apps/server/src/boot.start-clock-gate.test.ts`, weaker than the rule.
   [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).
-- **More than a minute behind the latest fiscal record, write no record and take/refund no new money
-  unless a clock confirmation covers it.** After replay, call `refuseWhileClockBehind` before
-  reader/refund/drawer work; pause both refund recovery loops. Recheck card-refund send/outcome in
-  their dating transaction after provider waits. Still store money already moved. **Clock
-  confirmation lifts the stop for one step back, with no gap limit; once a record is written under
-  it, readings stay within a minute of the latest record written since.** Sources, never a box
-  device outside development:
-  [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06).
-  Guards: clock-behind-stop, payments clock-behind, fiscal chain/restart/confirmation, clock-confirm
-  route and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule. **The box's
+- **A record's time is never compared with the latest record's: the start confirms the time, and
+  once it is confirmed the box records with its clock however far a later sync moves it** (owner,
+  2026-11-10: "if we successfully sync the clock using ntp then we continue to sell, it doesn't
+  matter how much the clock changes"); a time a person confirms or sets from their own device is
+  never compared with the latest record (owner, 2026-11-11 14:34: "if somebody has confirmed the
+  time on their device, then we trust that time and move forward"). After replay, call the seat's
+  `refuseWhileClockBehind` (by then: waiting, or before 28-10-2024) before reader/refund/drawer
+  work; pause both refund recovery loops while waiting. Recheck card-refund send/outcome in their
+  dating transaction after provider waits, against the same check. Still store money already
+  moved. Guards: `packages/fiscal-verifactu/src/chain.earlier-time.test.ts` and
+  `apps/server/src/clock-unconfirmed-gate.test.ts`, weaker than the rule: the money routes
+  `clock-unconfirmed-gate.test.ts` lists. **The box's
   internet time service keeps its clock; Waitron sets it only through the host service, from a till's
   time (a staff member's while the start waits for its time, or during a stop until the internet
   confirms that start or during start-up; a Box administration holder's at any time), a Box
