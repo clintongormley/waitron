@@ -77,8 +77,7 @@ RUN set -eux; \
 # ---------------------------------------------------------------------------
 # Declaration stage — a release's declaration folder, which the runtime stage copies to
 # /app/declaration/. A build with no release version leaves /release-root/ empty, so the image has no
-# folder at all. The render refuses a version with no written declaration, or one that does not
-# agree, and the build fails with it.
+# folder at all. A render that refuses fails the build.
 # ---------------------------------------------------------------------------
 FROM build AS declaration
 ARG WAITRON_RELEASE_VERSION

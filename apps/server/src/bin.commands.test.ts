@@ -127,7 +127,7 @@ describe("check-release on the test bundle", { timeout: CHILD_LIMIT_MS + 10_000 
   it("exits 1, the bundle carrying no stamp", async () => {
     const result = await runBin(["check-release", "1.2.3"], TEST_PRODUCER);
     expect(result, result.stdout + result.stderr).toMatchObject({ code: 1, signal: null });
-    expect(result.stderr).toContain("bundle version none");
+    expect(result.stderr).toBe("bundle version none\ndeclaration folder none\n");
     expect(await readdir(root)).toEqual([]);
   });
 });
