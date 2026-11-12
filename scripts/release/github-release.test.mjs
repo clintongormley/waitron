@@ -2,10 +2,13 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "github-release.sh");
 const IMAGE = "ghcr.io/example/waitron:1.2.3";
+const SPAWN_TIMEOUT_MS = 30_000;
+// Each case runs the script once, plus an untimed `ls` of its folder.
+vi.setConfig({ testTimeout: SPAWN_TIMEOUT_MS + 10_000 });
 
 // Stand-ins built once for the file; each case varies them through STUB_* variables. Both record
 // every call; `gh` also records each file it is handed, with its contents at the time of the call.
@@ -46,7 +49,7 @@ function run({ release = "absent", cpFails = "", args = ["1.2.3", IMAGE] } = {})
     // A minimal environment, so nothing of the caller's (GIT_*, GH_*) reaches the script.
     const result = spawnSync("bash", [SCRIPT, ...args], {
       encoding: "utf8",
-      timeout: 30_000,
+      timeout: SPAWN_TIMEOUT_MS,
       env: {
         PATH: `${bin}:/usr/bin:/bin`,
         HOME: dir,
