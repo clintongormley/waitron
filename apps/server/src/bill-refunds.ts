@@ -226,8 +226,9 @@ function providerRefundRefOf(evidence: RefundEvidence): string | null {
  * Whether a refund's send or outcome, dated by `reading` in `tx`, is held: while the start clock
  * gate holds, or while `reading` is behind the latest fiscal record. Judged again here because a
  * provider wait since the request's own check can end after the clock steps back or the gate
- * starts holding; the refund is then left pending for a later pass. A manager's
- * confirmed outcome (`evidence` attested) is refused instead, as their route refuses it.
+ * starts holding; the refund is then left pending for a later pass. A manager's confirmed outcome
+ * (`evidence` attested) is refused instead, by the seat's `refuseWhileClockBehind`, as their route
+ * refuses it.
  */
 export async function clockStopsRefund(
   tx: Transaction,

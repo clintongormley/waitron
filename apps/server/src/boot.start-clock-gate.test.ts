@@ -58,7 +58,7 @@ vi.mock("./clock-correction.js", async (original) => {
   };
 });
 
-/** The `clockUnconfirmed` each money mount was last handed by boot. */
+/** The `clockUnconfirmed` boot last handed `mountTillApi` and `mountPaymentsApi`. */
 const mounted = vi.hoisted(() => ({
   till: undefined as (() => boolean) | undefined,
   payments: undefined as (() => boolean) | undefined,

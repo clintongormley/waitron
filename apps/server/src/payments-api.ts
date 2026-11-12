@@ -136,8 +136,8 @@ export interface PaymentsApiDeps {
   /** Injected by tests; production gets one `createPinThrottle()` per mount. */
   pinThrottle?: PinThrottle;
   attendance?: AttendanceRecorder;
-  /** The start clock gate, for the refund resolves' check after a provider wait; unset, that check
-   * ignores it; a live boot always supplies it. */
+  /** The start clock gate, read by `clockStopsRefund` when the dashboard's refund resolutions check
+   * again after a provider wait; unset, that check ignores it; a live boot always supplies it. */
   clockUnconfirmed?: () => boolean;
 }
 
