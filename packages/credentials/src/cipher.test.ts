@@ -1,6 +1,9 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { aadFor, open, seal } from "./cipher.js";
+import { hasCode } from "@waitron/shared";
+import { aadFor, open, openSealedRow, seal } from "./cipher.js";
+import { loadKeyRing } from "./keyring.js";
+import { capturedSync } from "./testing/captured.js";
 
 const KEY = Buffer.alloc(32, 7);
 const OTHER_KEY = Buffer.alloc(32, 9);
@@ -68,6 +71,37 @@ describe("seal and open", () => {
   it("refuses a ciphertext moved to a different purpose", () => {
     const sealed = seal(KEY, aadFor("payments.stripe"), "x");
     expect(open(KEY, aadFor("fiscal.aeat"), sealed)).toBeNull();
+  });
+});
+
+describe("openSealedRow", () => {
+  const ring = loadKeyRing({
+    WAITRON_CREDENTIALS_KEY: OTHER_KEY.toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "2",
+    WAITRON_CREDENTIALS_KEY_PREVIOUS: KEY.toString("base64"),
+    WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
+  });
+  const aad = aadFor("payments.stripe");
+  const row = { ...seal(KEY, aad, "secret"), keyVersion: 1 };
+
+  it("opens a row with the ring's key for the row's own version", () => {
+    expect(openSealedRow(ring, "payments.stripe", aad, row)).toBe("secret");
+  });
+
+  it("refuses a row whose version the ring lacks, naming the purpose and version", () => {
+    const error = capturedSync(() =>
+      openSealedRow(ring, "payments.stripe", aad, { ...row, keyVersion: 3 }),
+    );
+    expect(hasCode(error, "credentials.key_version_unknown")).toBe(true);
+    expect(error.params).toEqual({ purpose: "payments.stripe", keyVersion: 3 });
+  });
+
+  it("refuses a row that does not open, naming only the purpose", () => {
+    const error = capturedSync(() =>
+      openSealedRow(ring, "payments.stripe", aadFor("fiscal.aeat"), row),
+    );
+    expect(hasCode(error, "credentials.decrypt_failed")).toBe(true);
+    expect(error.params).toEqual({ purpose: "payments.stripe" });
   });
 });
 

@@ -15,8 +15,8 @@ import {
 import { generateNodeKeyPair, type TrustSet } from "@waitron/membership";
 import { nodeSigningKey } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
-import { aadFor, open, seal, type SealedRow } from "./cipher.js";
-import { keyForVersion, type KeyRing } from "./keyring.js";
+import { aadFor, openSealedRow, seal, type SealedRow } from "./cipher.js";
+import type { KeyRing } from "./keyring.js";
 import "./errors.js";
 
 const PURPOSE = "membership.node_key";
@@ -65,15 +65,7 @@ export function openNodeSigningKeyRow(
   ring: KeyRing,
   nodeId: string,
 ): string {
-  const key = keyForVersion(ring, row.keyVersion);
-  if (key === null) {
-    throw new AppError("credentials.key_version_unknown", {
-      purpose: PURPOSE,
-      keyVersion: row.keyVersion,
-    });
-  }
-  const plaintext = open(key, aadForNode(nodeId), row);
-  if (plaintext === null) throw new AppError("credentials.decrypt_failed", { purpose: PURPOSE });
+  const plaintext = openSealedRow(ring, PURPOSE, aadForNode(nodeId), row);
   let parsed: unknown;
   try {
     parsed = JSON.parse(plaintext);

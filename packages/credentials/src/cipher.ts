@@ -1,4 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { AppError } from "@waitron/shared";
+import { keyForVersion, type KeyRing } from "./keyring.js";
+import "./errors.js";
 
 const ALGORITHM = "aes-256-gcm";
 /** GCM's standard nonce length, and the value `tenant_credentials_iv_len_ck` enforces. */
@@ -55,4 +58,26 @@ export function open(key: Buffer, aad: Buffer, sealed: SealedRow): string | null
   } catch {
     return null;
   }
+}
+
+/**
+ * Opens a stored row with the ring's key for the row's own version. Throws
+ * `credentials.key_version_unknown` when the ring lacks that key and `credentials.decrypt_failed`
+ * when the row does not open; never echoes the plaintext.
+ */
+export function openSealedRow(
+  ring: KeyRing,
+  purpose: string,
+  aad: Buffer,
+  row: SealedRow & { keyVersion: number },
+): string {
+  // The ROW's version, never the ring's current one: that is what keeps a half-finished rotation
+  // readable instead of an outage.
+  const key = keyForVersion(ring, row.keyVersion);
+  if (key === null) {
+    throw new AppError("credentials.key_version_unknown", { purpose, keyVersion: row.keyVersion });
+  }
+  const plaintext = open(key, aad, row);
+  if (plaintext === null) throw new AppError("credentials.decrypt_failed", { purpose });
+  return plaintext;
 }

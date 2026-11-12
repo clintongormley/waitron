@@ -10,8 +10,8 @@ import {
   tenantCredentials,
 } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { aadFor, open, seal } from "./cipher.js";
-import { keyForVersion, type KeyRing } from "./keyring.js";
+import { aadFor, openSealedRow, seal } from "./cipher.js";
+import type { KeyRing } from "./keyring.js";
 import { rotateNodePairLinks } from "./node-pair-link.js";
 import { rotateNodeSigningKeys } from "./node-signing-key.js";
 import { isPurpose, validatePayload, type Purpose } from "./purposes.js";
@@ -59,26 +59,7 @@ export async function tryGetCredential(
     .where(eq(tenantCredentials.purpose, ref.purpose));
   if (row === undefined) return null;
 
-  // The ROW's version, never the ring's current one: that is what keeps a half-finished rotation
-  // readable instead of an outage.
-  const key = keyForVersion(ring, row.keyVersion);
-  if (key === null) {
-    throw new AppError("credentials.key_version_unknown", {
-      purpose: ref.purpose,
-      keyVersion: row.keyVersion,
-    });
-  }
-
-  const plaintext = open(key, aadFor(ref.purpose), {
-    ciphertext: row.ciphertext,
-    iv: row.iv,
-    authTag: row.authTag,
-  });
-  if (plaintext === null) {
-    // Wrong key, tampered ciphertext, or a row moved between purposes — one code for all three,
-    // because distinguishing them would be an oracle. See cipher.ts's `open`.
-    throw new AppError("credentials.decrypt_failed", { purpose: ref.purpose });
-  }
+  const plaintext = openSealedRow(ring, ref.purpose, aadFor(ref.purpose), row);
   // `JSON.parse`'s `SyntaxError` quotes the input, which here is the decrypted credential.
   let parsed: unknown;
   try {

@@ -8,8 +8,8 @@ import {
 } from "@waitron/db";
 import { nodePairLink, type PairLink, type PairLinkState } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
-import { aadFor, open, seal } from "./cipher.js";
-import { keyForVersion, type KeyRing } from "./keyring.js";
+import { aadFor, openSealedRow, seal } from "./cipher.js";
+import type { KeyRing } from "./keyring.js";
 import "./errors.js";
 
 const PURPOSE = "node.pair_secret";
@@ -70,23 +70,6 @@ async function readSealedRow(node: NodeDatabase | NodeTransaction, nodeId: strin
   return row ?? null;
 }
 
-function openSecret(
-  row: NonNullable<Awaited<ReturnType<typeof readSealedRow>>>,
-  ring: KeyRing,
-  nodeId: string,
-): string {
-  const key = keyForVersion(ring, row.keyVersion);
-  if (key === null) {
-    throw new AppError("credentials.key_version_unknown", {
-      purpose: PURPOSE,
-      keyVersion: row.keyVersion,
-    });
-  }
-  const secret = open(key, aadForPair(nodeId, row.peerNodeId), row);
-  if (secret === null) throw new AppError("credentials.decrypt_failed", { purpose: PURPOSE });
-  return secret;
-}
-
 /**
  * The store's secret key from this node's pair link. Throws `credentials.missing` when the node has
  * no link, `credentials.key_version_unknown` when the ring lacks the sealing key, and
@@ -99,7 +82,7 @@ export async function readPairSecret(
 ): Promise<string> {
   const row = await readSealedRow(node, nodeId);
   if (row === null) throw new AppError("credentials.missing", { purpose: PURPOSE });
-  return openSecret(row, ring, nodeId);
+  return openSealedRow(ring, PURPOSE, aadForPair(nodeId, row.peerNodeId), row);
 }
 
 /**
@@ -126,7 +109,7 @@ export async function rotateNodePairLinks(
     await withNodeTransaction(node, async (tx) => {
       const row = await readSealedRow(tx, nodeId);
       if (row === null) return;
-      const secret = openSecret(row, ring, nodeId);
+      const secret = openSealedRow(ring, PURPOSE, aadForPair(nodeId, row.peerNodeId), row);
       const sealed = seal(ring.current.key, aadForPair(nodeId, row.peerNodeId), secret);
       await tx
         .update(nodePairLink)
