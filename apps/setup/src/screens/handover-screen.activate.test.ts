@@ -64,6 +64,7 @@ async function mount(
     loseAnswer?: boolean;
     waitForStatus?: boolean;
     holdActivation?: boolean;
+    holdSelection?: boolean;
     restartOutage?: boolean;
     refuse?: { code: string; params: Record<string, unknown> };
     secondClockLater?: boolean;
@@ -105,6 +106,7 @@ async function mount(
       return new Response(JSON.stringify({ activated: true, restarting: true }));
     }
     const action = (body.proposal as { action: string }).action;
+    if (action === "select" && options.holdSelection) await pending;
     const result =
       action === "clock-challenge"
         ? { id: "challenge" }
@@ -311,6 +313,95 @@ it("asks for a fresh code when one runs out during the automatic clock check, an
     vi.useRealTimers();
   }
 });
+const sentPasswords = (requests: { body: Record<string, unknown> }[]) =>
+  requests.map((row) => (row.body.signIn as { password: string }).password);
+it("sends nothing while the password is empty during the automatic clock wait, and carries on once it is filled", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const { el, requests, secondClockArrives } = await mount({ secondClockLater: true });
+    await select(el);
+    const clockEntry = q<LitElement>(el, "vf-recovery-hour");
+    await vi.waitFor(() => expect(q(clockEntry, "[data-test=clock-wait]")).not.toBeNull());
+    await edit(el, "handover-password", "");
+    secondClockArrives();
+    const before = requests.length;
+    await vi.advanceTimersByTimeAsync(15_000);
+    await el.updateComplete;
+    expect(requests).toHaveLength(before);
+    expect(q<HTMLElement & { error: string }>(el, '[name="handover-password"]').error).toBe(
+      "Complete this field.",
+    );
+    expect(q(clockEntry, "[data-test=clock-wait]")).not.toBeNull();
+    await edit(el, "handover-password", "new password");
+    expect(q(el, "vf-recovery-hour")).toBe(clockEntry);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
+    );
+    expect(activations(requests)).toHaveLength(1);
+    expect(new Set(sentPasswords(requests.slice(before)))).toEqual(new Set(["new password"]));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("holds the venue start when the password is emptied while the series are being made, until Try again", async () => {
+  const { el, requests, release } = await mount({ holdSelection: true });
+  await select(el);
+  await vi.waitFor(() =>
+    expect(
+      requests.some((row) => (row.body.proposal as { action?: string })?.action === "select"),
+    ).toBe(true),
+  );
+  await edit(el, "handover-password", "");
+  release();
+  await vi.waitFor(() => expect(q(el, "[data-test=retry-activation]")).not.toBeNull());
+  expect(activations(requests)).toHaveLength(0);
+  const retry = q<HTMLElement & { disabled: boolean }>(el, "[data-test=retry-activation]");
+  expect(retry.disabled).toBe(true);
+  expect(q<HTMLElement & { error: string }>(el, "wt-form-actions").error).toBe(
+    "Complete the highlighted fields to continue.",
+  );
+  await edit(el, "handover-password", "new password");
+  expect(activations(requests)).toHaveLength(0);
+  expect(retry.disabled).toBe(false);
+  retry.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
+  );
+  expect(activations(requests)).toHaveLength(1);
+  expect(requests.at(-1)!.body.signIn).toEqual({
+    email: "owner@example.com",
+    password: "new password",
+    totp: "123456",
+  });
+});
+it("sends nothing when Proceed is pressed with an empty password, and the clock entry's Try again carries on once it is filled", async () => {
+  const { el, requests } = await mount();
+  await edit(el, "handover-password", "");
+  const clockEntry = q<LitElement>(el, "vf-recovery-hour");
+  await select(el);
+  await vi.waitFor(() =>
+    expect(q<HTMLElement & { error: string }>(clockEntry, "wt-form-actions").error).toBe(
+      "Check your password and code, then try again. Use a fresh authenticator code.",
+    ),
+  );
+  expect(requests).toHaveLength(0);
+  expect(q<HTMLElement & { error: string }>(el, '[name="handover-password"]').error).toBe(
+    "Complete this field.",
+  );
+  const retry = q<HTMLElement & { disabled: boolean }>(clockEntry, "[data-test=compare]");
+  expect(retry.textContent!.trim()).toBe("Try again");
+  await edit(el, "handover-password", "new password");
+  expect(q(el, "vf-recovery-hour")).toBe(clockEntry);
+  await clockEntry.updateComplete;
+  expect(retry.disabled).toBe(false);
+  retry.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
+  );
+  expect(activations(requests)).toHaveLength(1);
+  expect(new Set(sentPasswords(requests))).toEqual(new Set(["new password"]));
+});
 it("asks for a fresh code when one runs out just before the venue starts, keeping the chosen minute", async () => {
   const { el, requests, expireCode } = await mount();
   expireCode("activate");
@@ -461,7 +552,7 @@ it("Edit these details goes back to the sign-in step and sends nothing", async (
   const clockEntry = q<LitElement>(el, "vf-recovery-hour");
   await clockEntry.updateComplete;
   const sent = requests.length;
-  q(clockEntry, "[data-test=change-details]").click();
+  q(clockEntry, "[data-test=edit-details]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).toBeNull());
   expect(q(el, "[data-test=authenticate]")).not.toBeNull();
   expect(q<HTMLElement & { value: string }>(el, '[name="handover-email"]').value).toBe(

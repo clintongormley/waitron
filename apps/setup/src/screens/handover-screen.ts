@@ -96,8 +96,11 @@ export class SetupHandoverScreen extends LitElement {
   @state() private attempted = false;
   @state() private actionError = "";
   @state() private busy = false;
-  /** The box refused the sign-in at activation; the chosen minute stays until it is sent again. */
-  @state() private signInRefused = false;
+  /**
+   * Activation waits for Try again, keeping the chosen minute: the box refused the sign-in, or the
+   * fields failed their check when the series became ready.
+   */
+  @state() private activationHeld = false;
   @state() private entry?: ModulePromotionEntry;
   #signInChecked = false;
   #restorePage = (event: PageTransitionEvent): void => {
@@ -166,7 +169,7 @@ export class SetupHandoverScreen extends LitElement {
   #resetSelection(): void {
     this.entry?.clear();
     this.entry = undefined;
-    this.signInRefused = false;
+    this.activationHeld = false;
   }
   #signIn(): HandoverSignIn {
     return {
@@ -214,6 +217,13 @@ export class SetupHandoverScreen extends LitElement {
       binding,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       prepare: async (proposal) => {
+        if (!this.#valid()) {
+          this.attempted = true;
+          // ClockWait.settle takes a TypeError with no code as a lost request: during a wait the
+          // entry keeps waiting and checks again at its next turn; a check the person pressed shows
+          // the entry's failure. Nothing is sent either way.
+          throw new TypeError("sign-in fields incomplete");
+        }
         try {
           return await this.api.prepareHandover(
             this.operationId,
@@ -235,10 +245,15 @@ export class SetupHandoverScreen extends LitElement {
     const entry = this.entry;
     const moduleOperation = entry?.readOperation();
     if (!entry || !moduleOperation || this.busy) return;
+    if (!this.#valid()) {
+      this.attempted = true;
+      this.activationHeld = true;
+      return;
+    }
     const controller = this.#controller;
     this.busy = true;
     this.actionError = "";
-    this.signInRefused = false;
+    this.activationHeld = false;
     try {
       const answer = await this.api.activateHandover(
         this.operationId,
@@ -256,7 +271,7 @@ export class SetupHandoverScreen extends LitElement {
         ? this.#emergencyError(cause)
         : entry.refusalMessage(cause);
       if ((cause as { code?: unknown } | null)?.code === "password.invalid") {
-        this.signInRefused = true;
+        this.activationHeld = true;
         return;
       }
       this.#resetSelection();
@@ -557,7 +572,7 @@ export class SetupHandoverScreen extends LitElement {
                   >${t("handover.emergency.declare")}</wt-button
                 >`
               : this.entry
-                ? this.signInRefused
+                ? this.activationHeld
                   ? html`<wt-button
                       data-test="retry-activation"
                       .disabled=${this.busy || !this.#valid()}
@@ -581,12 +596,12 @@ export class SetupHandoverScreen extends LitElement {
     const status = this.status;
     return html`<main
       lang=${currentLocale()}
-      @recovery-change-details=${(event: Event) => {
+      @recovery-edit-details=${(event: Event) => {
         event.stopPropagation();
         this.#resetSelection();
       }}
       @promotion-change=${() => {
-        if (!this.signInRefused && this.entry?.readOperation()) void this.#activate();
+        if (!this.activationHeld && this.entry?.readOperation()) void this.#activate();
       }}
     >
       <h1>${t("handover.heading")}</h1>
