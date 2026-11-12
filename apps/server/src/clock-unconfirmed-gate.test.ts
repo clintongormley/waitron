@@ -853,6 +853,50 @@ describe("a manager's confirmed refund outcome behind the start clock gate", () 
 });
 
 describe("money already moved while the start waits", () => {
+  it("a card charged as the gate turns on says so, and Pay records it without charging again once confirmed", async () => {
+    const id = randomUUID();
+    const before = moneyState();
+    const state = startClockState();
+    // The box counts as filing records only once the reader has collected, so the route's own
+    // check lets the charge through and the sale's record is the first thing the gate refuses.
+    const collected = () => venue.card.collectCalls.length > before.collects;
+    const app = venue.appWith({
+      backend: gateSeatOnStartClock(
+        venue.backend,
+        startClockGateHolds(state, collected, () => false),
+      ),
+    });
+    const payments = () =>
+      venue.db.all(
+        sql`select state, sale_id is not null as filed from payments where working_order_id = ${id}`,
+      );
+
+    const charged = await as(app, "POST", "/api/pay", {
+      id,
+      lines: tarta(),
+      zoneId: counter.zoneId,
+    });
+
+    expect(charged.status).toBe(507);
+    expect(charged.json).toEqual({
+      code: "sale.charged_not_recorded",
+      params: { workingOrderId: id, reason: "clock_unconfirmed" },
+    });
+    expect(payments()).toEqual([{ state: "captured", filed: 0 }]);
+    expect(moneyState()).toMatchObject({ collects: before.collects + 1, records: before.records });
+
+    state.confirm("by_person", {});
+    const paid = await as(app, "POST", "/api/pay", { id, lines: [], zoneId: counter.zoneId });
+
+    expect(paid.status).toBe(200);
+    expect(paid.json.outcome).toBe("captured");
+    expect(payments()).toEqual([{ state: "captured", filed: 1 }]);
+    expect(moneyState()).toMatchObject({
+      collects: before.collects + 1,
+      records: before.records + 1,
+    });
+  });
+
   it("the webhook stores a hosted payment, with no seat to refuse it", async () => {
     // The webhook takes no fiscal seat (`WebhookDeps`), so no gate can stand in front of it.
     const state = startClockState();
