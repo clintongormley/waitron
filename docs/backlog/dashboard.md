@@ -356,6 +356,9 @@ wrapper each list puts round its table (`.table-wrap`, or `.wrap` in the variant
 `overflow-x: auto`). The canvas editor's tile drag stays as it is (owner choice, 2026-10-01); A182
 plans to retire the editor.
 
+Local held-row evidence: Lane D `receipts/d-reorder-contrast/current-spanish-dark-phone.png`.
+The paint/shadow question remains open; no paint fix has been built.
+
 ## Bundle: One session with real phones and password managers
 
 13 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -499,11 +502,8 @@ Shared form plumbing, an untraced dialog focus line and retiring the summary onc
 
 ## Bundle: Reorder controller
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry remains, size S.
 
-- **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
-  bottom**
-  [Detail](dashboard.md#one-earlier-spanish-dark-theme-390-px-demo-probe-reached-its-12-second-deadline-before-the-bottom)
 - **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.**
   [Detail](dashboard.md#dragging-a-row-a180-994-and-1003--two-things-seen-left-as-they-were)
 
@@ -808,18 +808,6 @@ The per-form classifications remain in the [A331 plan](../superpowers/plans/2026
   still gets Waitron's default blue or red on a hovered or disabled primary or danger `wt-button`;
   and no theme writes `--wt-color-danger-hover`, `--wt-color-danger-disabled` or
   `--wt-color-on-danger-disabled`.
-
-## One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the bottom
-
-- **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
-  bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge): a later
-  instrumented eight-case matrix reached the bottom in every case. A 2026-10-09 venue-service
-  browser run also missed the Prep stations drag test's 1500 ms bound at
-  `prep-stations-screen.test.ts:6556`: scrollTop was 266, against a required value above 317.
-  An isolated run of the complete file on the branch's earlier head passed. The cause remains
-  unverified. Capture the current scroll/limit, pointer position, drag state and visible box
-  before attributing it to the scroll helper.
-
 
 ## A398 — device-profile editor heading remains to align with the sub-page pattern.
 
