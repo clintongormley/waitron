@@ -17,6 +17,7 @@ import { joinTables, splitTable } from "./table-actions.js";
 import { oneBill } from "./testing/table-action-fixture.js";
 import { moveBill } from "./move-bill.js";
 import { mergeBills } from "./bill-actions.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
 
@@ -260,6 +261,7 @@ describe("moving one bill compares only that bill and the complete destination",
       () =>
         inTx(venue, (tx) =>
           mergeBills(tx, venue.cfg, into.tabId, from.tabId, {
+            admission: testTradingAdmission(),
             partyId: into.partyId,
             expectedPartyRevision: row!.revision,
             operatorId: venue.operatorId,
@@ -556,6 +558,7 @@ describe("bill merges require both editors and release the consumed bill", () =>
     const [p] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
     return inTx(venue, (tx) =>
       mergeBills(tx, venue.cfg, into, from, {
+        admission: testTradingAdmission(),
         partyId,
         expectedPartyRevision: p!.revision,
         operatorId: venue.operatorId,

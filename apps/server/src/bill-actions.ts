@@ -112,9 +112,10 @@ export async function mergeBills(
   cfg: TradingContext,
   intoBillId: string,
   fromBillId: string,
-  command: BillCommand & { expectedEdits: BillEditExpected[] },
+  command: BillCommand & { expectedEdits: BillEditExpected[]; admission: TradingAdmission },
   attendance?: OrderAttendance,
 ): Promise<void> {
+  await requireEconomicWrite(tx, cfg, command.admission);
   if (intoBillId === fromBillId) throw new AppError("tab.merge_self", { tabId: intoBillId });
   const path = await guardPathParty(tx, intoBillId, command);
   if (path.partyId === null) throw new AppError("bill.other_party", { workingOrderId: fromBillId });
