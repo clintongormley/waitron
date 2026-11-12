@@ -1542,6 +1542,104 @@ describe("a box named on the venue's network is found by asking it", () => {
         expect(failures).toHaveLength(1);
         expect(checked.recall("box")).toBe("127.0.0.1");
       });
+
+      it("a write that failed is made again when the same address is next kept", async () => {
+        const failures: unknown[] = [];
+        const checked = await loaded((error) => failures.push(error));
+        checked.keep("box", "127.0.0.1");
+        await checked.written();
+        const away = `${stateDir}-away`;
+        await fs.rename(stateDir, away);
+        checked.keep("box", "127.0.0.2");
+        await checked.written();
+        await fs.rename(away, stateDir);
+        expect(failures).toHaveLength(1);
+        // The control: the failed write left the earlier address in the file.
+        expect((await loaded()).recall("box")).toBe("127.0.0.1");
+
+        checked.keep("box", "127.0.0.2");
+        await checked.written();
+        expect((await loaded()).recall("box")).toBe("127.0.0.2");
+        const repaired = (await stat(stored())).ino;
+        checked.keep("box", "127.0.0.2");
+        await checked.written();
+        expect((await stat(stored())).ino).toBe(repaired);
+      });
+
+      it("a failure reporter that throws leaves later writes to go ahead", async () => {
+        const later = join(stateDir, "later");
+        const checked = new CheckedAddresses();
+        await checked.rememberIn(later, () => {
+          throw new Error("reporter failed");
+        });
+        checked.keep("box", "127.0.0.1");
+        await expect(checked.written()).resolves.toBeUndefined();
+
+        await mkdir(later);
+        checked.keep("box", "::1");
+        await expect(checked.written()).resolves.toBeUndefined();
+        const after = new CheckedAddresses();
+        await after.rememberIn(later, () => {});
+        expect(after.recall("box")).toBe("::1");
+      });
+
+      it("once let go, writes nothing more to the folder, after the writes already asked for", async () => {
+        const checked = new CheckedAddresses();
+        const letGo = await checked.rememberIn(stateDir, () => {});
+        checked.keep("box", "127.0.0.1");
+        await letGo();
+        expect((await loaded()).recall("box")).toBe("127.0.0.1");
+
+        checked.keep("box", "::1");
+        await checked.written();
+        expect(checked.recall("box")).toBe("::1");
+        expect((await loaded()).recall("box")).toBe("127.0.0.1");
+      });
+
+      it("a write asked for before it moved to another folder holds only the first folder's addresses", async () => {
+        const newer = await mkdtemp(join(tmpdir(), "waitron-checked-newer-"));
+        closers.push(() => rm(newer, { recursive: true, force: true }));
+        const other = new CheckedAddresses();
+        await other.rememberIn(newer, () => {});
+        other.keep("other box", "10.0.0.9");
+        await other.written();
+        const real = await vi.importActual<typeof fs>("node:fs/promises");
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => (release = resolve));
+        vi.mocked(fs.rename).mockImplementationOnce(async (from, to) => {
+          await held;
+          return real.rename(from, to);
+        });
+        try {
+          const checked = await loaded();
+          checked.keep("box", "127.0.0.1");
+          checked.keep("box", "::1");
+          await checked.rememberIn(newer, () => {});
+          release();
+          await checked.written();
+        } finally {
+          vi.mocked(fs.rename).mockReset();
+        }
+
+        const first = await loaded();
+        expect(first.recall("box")).toBe("::1");
+        expect(first.recall("other box")).toBeUndefined();
+      });
+
+      it("letting go of a folder it has moved on from leaves the newer folder written", async () => {
+        const newer = await mkdtemp(join(tmpdir(), "waitron-checked-newer-"));
+        closers.push(() => rm(newer, { recursive: true, force: true }));
+        const checked = new CheckedAddresses();
+        const letGoOfFirst = await checked.rememberIn(stateDir, () => {});
+        await checked.rememberIn(newer, () => {});
+        await letGoOfFirst();
+
+        checked.keep("box", "::1");
+        await checked.written();
+        const after = new CheckedAddresses();
+        await after.rememberIn(newer, () => {});
+        expect(after.recall("box")).toBe("::1");
+      });
     });
   });
 

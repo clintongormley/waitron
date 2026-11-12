@@ -180,41 +180,76 @@ const askVenueNetwork: BoxLookup = (hostname, { fresh }) =>
 /**
  * The address at which a connection to a box's name last finished its handshake under the
  * authority pinned for it. Once given a state folder it is read from there and every change is
- * written back, so it survives a restart; without one it lasts as long as the process.
+ * written back, so it survives a restart; a write that failed is made again at the next `keep`,
+ * changed or not. Without a folder it lasts as long as the process.
  */
 export class CheckedAddresses {
   private reached = new Map<string, string>();
-  private stored: { path: string; onWriteFailed: (error: unknown) => void } | undefined;
+  private stored: StoredAddresses | undefined;
   private writes: Promise<void> = Promise.resolve();
 
-  /** Loads what `stateDir` holds; a missing, unreadable or malformed file loads as nothing. */
-  async rememberIn(stateDir: string, onWriteFailed: (error: unknown) => void): Promise<void> {
+  /**
+   * Loads what `stateDir` holds; a missing, unreadable or malformed file loads as nothing. The
+   * function returned stops the writes to `stateDir` unless another folder has replaced it, then
+   * settles once the writes asked for before it have finished or failed.
+   */
+  async rememberIn(
+    stateDir: string,
+    onWriteFailed: (error: unknown) => void,
+  ): Promise<() => Promise<void>> {
     const path = join(stateDir, CHECKED_ADDRESSES_FILE);
     this.reached = await readReached(path);
-    this.stored = { path, onWriteFailed };
+    const stored: StoredAddresses = { path, onWriteFailed, unsaved: false };
+    this.stored = stored;
+    return () => {
+      if (this.stored === stored) this.stored = undefined;
+      return this.writes;
+    };
   }
 
   recall(key: string): string | undefined {
     return this.reached.get(digestOf(key));
   }
 
-  /** Never throws: a failed write goes to `onWriteFailed`, and the address still holds here. */
+  /**
+   * Never throws: a failed write goes to `onWriteFailed`, and the address still holds here; a
+   * reporter that throws is ignored.
+   */
   keep(key: string, address: string): void {
     const digest = digestOf(key);
-    if (this.reached.get(digest) === address) return;
-    this.reached.set(digest, address);
     const stored = this.stored;
+    if (this.reached.get(digest) === address && stored?.unsaved !== true) return;
+    this.reached.set(digest, address);
     if (stored === undefined) return;
-    this.writes = this.writes.then(() =>
-      writeFileDurable(stored.path, JSON.stringify(Object.fromEntries(this.reached)), 0o600).catch(
-        stored.onWriteFailed,
-      ),
-    );
+    // Taken now, so a later `rememberIn` cannot put another folder's addresses in this file.
+    const text = JSON.stringify(Object.fromEntries(this.reached));
+    this.writes = this.writes.then(() => saveReached(stored, text));
   }
 
   /** Settles once every write asked for so far has finished or failed. */
   written(): Promise<void> {
     return this.writes;
+  }
+}
+
+interface StoredAddresses {
+  path: string;
+  onWriteFailed: (error: unknown) => void;
+  /** The file may not hold what memory does, because the last write to it failed. */
+  unsaved: boolean;
+}
+
+async function saveReached(stored: StoredAddresses, text: string): Promise<void> {
+  try {
+    await writeFileDurable(stored.path, text, 0o600);
+    stored.unsaved = false;
+  } catch (error) {
+    stored.unsaved = true;
+    try {
+      stored.onWriteFailed(error);
+    } catch {
+      // Nowhere left to report it; the queue must stay fulfilled for the writes after it.
+    }
   }
 }
 
@@ -238,11 +273,14 @@ async function readReached(path: string): Promise<Map<string, string>> {
 
 const checkedByDefault = new CheckedAddresses();
 
-/** Gives every call using the default lookup the addresses kept in `stateDir`. */
+/**
+ * Gives every call using the default lookup the addresses kept in `stateDir`, until the function
+ * returned is called (see `CheckedAddresses.rememberIn`).
+ */
 export function rememberCheckedAddressesIn(
   stateDir: string,
   onWriteFailed: (error: unknown) => void,
-): Promise<void> {
+): Promise<() => Promise<void>> {
   return checkedByDefault.rememberIn(stateDir, onWriteFailed);
 }
 

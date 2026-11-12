@@ -41,9 +41,15 @@ import { freePorts } from "./testing/free-ports.js";
 import { startStaffListener } from "./cloud-remote.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { stopBackgroundDuties } from "./background-duties.js";
+import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 vi.mock("./background-duties.js", async (original) => {
   const actual = await original<typeof import("./background-duties.js")>();
   return { ...actual, stopBackgroundDuties: vi.fn(actual.stopBackgroundDuties) };
+});
+
+vi.mock("./mirror-bundle-fetch.js", async (original) => {
+  const actual = await original<typeof import("./mirror-bundle-fetch.js")>();
+  return { ...actual, rememberCheckedAddressesIn: vi.fn(actual.rememberCheckedAddressesIn) };
 });
 
 vi.mock("./cloud-remote.js", async (original) => {
@@ -233,6 +239,21 @@ async function spyOnBoxEmailDutyStop() {
     return { stop, remember: duty.remember };
   });
   return stop;
+}
+
+/** Spies on the function that lets go of the state folder the next start keeps checked addresses in. */
+async function spyOnCheckedAddressesLetGo() {
+  const { rememberCheckedAddressesIn: realRemember } = await vi.importActual<
+    typeof import("./mirror-bundle-fetch.js")
+  >("./mirror-bundle-fetch.js");
+  const letGo = vi.fn<() => Promise<void>>();
+  const folders: string[] = [];
+  vi.mocked(rememberCheckedAddressesIn).mockImplementationOnce(async (stateDir, onWriteFailed) => {
+    folders.push(stateDir);
+    letGo.mockImplementation(await realRemember(stateDir, onWriteFailed));
+    return letGo;
+  });
+  return { letGo, folders };
 }
 
 async function tempDir(prefix: string): Promise<string> {
@@ -569,6 +590,17 @@ describe("a start that fails after the venue folder is opened gives the folder b
     } finally {
       await vi.mocked(startStaffListener).mock.results.at(-1)?.value?.close();
     }
+  }, 60_000);
+
+  it("when a later step throws, letting go of the state folder it kept checked addresses in", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir();
+    await writeFile(join(state, PENDING_ADOPTION_FILE), "not json");
+    const { letGo, folders } = await spyOnCheckedAddressesLetGo();
+
+    await expect(startServer(await tradingEnv(venueDir, state))).rejects.toThrow(SyntaxError);
+    expect(folders).toEqual([state]);
+    expect(letGo).toHaveBeenCalledOnce();
   }, 60_000);
 
   it("when the pending-adoption file cannot be read", async () => {
@@ -1186,6 +1218,20 @@ describe("closing a started server", () => {
     await server.close();
     expect(stop).toHaveBeenCalledTimes(2);
     expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
+  it("lets go of the state folder it kept checked addresses in", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state);
+    const { letGo, folders } = await spyOnCheckedAddressesLetGo();
+    const server = await startServer(env);
+    await listening(Number(env.WAITRON_HTTP_PORT));
+    expect(folders).toEqual([state]);
+    expect(letGo).not.toHaveBeenCalled();
+
+    await server.close();
+    expect(letGo).toHaveBeenCalledOnce();
   }, 60_000);
 
   it("stops the free-space watch", async () => {
