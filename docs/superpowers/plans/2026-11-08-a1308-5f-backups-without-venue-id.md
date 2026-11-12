@@ -22,8 +22,8 @@ moves in 5g, which lands with the Cloud change: the bucket stream's folder and p
 stream's signed generation marker, and the recovery kit (Cloud builds version-1 kits, Cloud
 `packages/account-http/src/recovery.ts:91`). Cloud recovery must not break between 5f and 5g.
 
-**Pull request's first line:** "Every venue is reset: core; backups, exports and printed recovery
-packs from before this cannot be restored, imported or used." (rules §2; venue-id design question 5).
+**Pull request's first line:** "Every venue is reset: core; backups and printed archive recovery
+packs from before this cannot be restored or used." (rules §2; venue-id design question 5).
 
 **Needs before it:** 5e. (The owner answered the venue-id design's question 6 on 2026-11-09; see
 below.)
@@ -312,3 +312,5 @@ FK". The backup and guard changes touch no schema.
   S18e".
 - [ ] **Step 3:** Protection list: compare, paste, mark.
 - [ ] **Step 4:** `pnpm format:check`; commit; `/finish-branch`. The owner lands it.
+
+2026-11-12, watcher clearance 09:23: configuration exports stay version 19; the reset notice does not claim they are refused. Missing-venue verification now deletes `settings.venue` and refuses through the core module check (`module_integrity`).

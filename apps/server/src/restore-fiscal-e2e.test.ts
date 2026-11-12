@@ -1,3 +1,4 @@
+import { venueLocationId } from "@waitron/db";
 // Every database here is a real venue DIRECTORY migrated by the product's own `applyMigrations`,
 // so the append-only triggers on `registros_facturacion`, and the schema every assertion reads,
 // are the ones a box would carry.
@@ -396,9 +397,10 @@ describe("fiscal restore, end to end", () => {
       // The restored identity keeps the deployment environment.
       expect(env.WAITRON_ENV).toBe("preproduction");
       expect(env).not.toHaveProperty(["WAITRON", "LOCATION", "ID"].join("_"));
-      expect(
-        await db.select({ locationId: nodes.locationId }).from(nodes).where(eq(nodes.id, F.nodeId)),
-      ).toEqual([{ locationId: F.locationId }]);
+      expect(await db.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, F.nodeId))).toEqual([
+        { id: F.nodeId },
+      ]);
+      expect(await venueLocationId(db)).toBe(F.locationId);
       expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe(
         "WAITRON_CREDENTIALS_KEY=deadbeef\n",
       );

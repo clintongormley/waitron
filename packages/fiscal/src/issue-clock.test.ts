@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, nodes, withTransaction } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
@@ -82,15 +82,7 @@ describe("writing location zone", () => {
       params: { reason },
     });
   });
-  it("reads the venue's zone whatever the node's location column holds", async () => {
-    await suite.db.execute(sql`pragma foreign_keys = off`);
-    try {
-      await suite.db.update(nodes).set({}).where(eq(nodes.id, scope.nodeId));
-      expect(await zone({ nodeId: scope.nodeId })).toBe("Europe/Madrid");
-    } finally {
-      await suite.db.execute(sql`pragma foreign_keys = on`);
-    }
-  });
+
   it("propagates unexpected zone-name runtime faults", async () => {
     const fault = new Error("runtime unavailable");
     vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function () {

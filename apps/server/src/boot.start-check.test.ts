@@ -181,10 +181,6 @@ async function boot(
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
   await stampDeployment(suite.db, "preproduction");
   if (options.joined) {
-    const [own] = await suite.db
-      .select({ locationId: nodes.locationId })
-      .from(nodes)
-      .where(eq(nodes.id, nodeId));
     await suite.db.insert(nodes).values({
       id: SPARE.nodeId,
       name: "Spare",

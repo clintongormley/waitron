@@ -10,7 +10,6 @@ import { withTransaction } from "./tenancy.js";
 
 export interface ReservedNodeInput {
   id: string; // the standby's own nodeId
-  locationId: string;
   name: string;
   filingModule: string | null;
   taxModule: string | null;

@@ -17,7 +17,7 @@ import { RECOVERY_FILES } from "./state-secrets.js";
 import { checkBackupVerificationCompatibility as check } from "./backup-verification-compatibility.js";
 
 const coreSql = [
-  "create table locations (id text primary key);--> statement-breakpoint\ncreate table nodes (id text primary key, location_id text);",
+  "create table locations (id text primary key);--> statement-breakpoint\ncreate table nodes (id text primary key);--> statement-breakpoint\ncreate table settings (module text primary key);",
   "create table deployment (id integer primary key, environment text);",
 ];
 const extraSql = ["create table extras (id text);"];
@@ -58,7 +58,7 @@ function module(name: string, tables: string[]): WaitronModule {
   };
 }
 const baseModules = [
-  module("core", ["locations", "nodes", "deployment"]),
+  module("core", ["locations", "nodes", "settings", "deployment"]),
   module("extra", ["extras"]),
 ];
 let root: string | undefined;
@@ -124,7 +124,7 @@ beforeEach(async () => {
       migrationsTable: m.migrations!.table,
     });
   execute(
-    "insert into locations values ('10000000-0000-4000-8000-000000000001'); insert into nodes values ('20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000001'); insert into deployment values (1, 'preproduction');",
+    "insert into locations values ('10000000-0000-4000-8000-000000000001'); insert into nodes values ('20000000-0000-4000-8000-000000000002'); insert into settings values ('venue'); insert into deployment values (1, 'preproduction');",
   );
   modules = structuredClone(baseModules.map((m) => ({ ...m, backup: undefined }))).map((m, i) => ({
     ...m,
@@ -354,7 +354,7 @@ describe("strict backup compatibility", () => {
   });
   it("refuses zero-schema dependency of positive-schema source", async () => {
     execute(
-      "drop table __drizzle_migrations_core; drop table nodes; drop table locations; drop table deployment;",
+      "drop table __drizzle_migrations_core; drop table nodes; drop table locations; drop table settings; drop table deployment;",
     );
     manifest = { ...manifest, modules: { core: 0, extra: 1 } };
     await expect(run()).resolves.toBe("unsupported");
@@ -564,12 +564,11 @@ describe("strict backup compatibility", () => {
     entries.push(entry("secrets/extra-state"));
     await expect(run()).resolves.toBe("passed");
   });
-  it.each(["node", "location", "wrong location", "empty identity"])(
+  it.each(["node", "venue document", "empty identity"])(
     "checks the captured identity: %s",
     async (mode) => {
       if (mode === "node") execute("delete from nodes");
-      if (mode === "location") execute("delete from locations");
-      if (mode === "wrong location") execute("update nodes set location_id='elsewhere'");
+      if (mode === "venue document") execute("drop table settings");
       if (mode === "empty identity") setEntry("secrets/trading.env", "WAITRON_NODE_ID=");
       await expect(run()).resolves.toBe("invalid");
     },

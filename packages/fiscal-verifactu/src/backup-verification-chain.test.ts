@@ -98,8 +98,8 @@ async function replaceNodeIdentity(node: SeededNode, installation: string) {
 
 async function capture(populate = true, resetOther = false) {
   if (populate) {
-    const first = await seedNode(suite.db);
-    other = await seedNode(suite.db);
+    const first = await seedNode(suite.db, "Source");
+    other = await seedNode(suite.db, "Inactive");
     for (const node of [first, other]) {
       await append(node, 1);
       await append(node, 2, "void");
@@ -111,7 +111,7 @@ async function capture(populate = true, resetOther = false) {
     await append(other, 6);
     await replaceNodeIdentity(first, "empty-current");
     if (resetOther) await replaceNodeIdentity(other, "empty-next");
-    await seedNode(suite.db);
+    await seedNode(suite.db, "Never traded");
   }
   directory = await mkdtemp(join(tmpdir(), "waitron-fiscal-backup-"));
   const [{ file }] = suite.db.all<{ file: string }>(sql`pragma database_list`);
@@ -216,7 +216,7 @@ describe("complete captured fiscal chains", () => {
   });
 
   it("accepts records whose software block names a producer other than the taxpayer", async () => {
-    const node = await seedNode(suite.db);
+    const node = await seedNode(suite.db, "Producer");
     const producer = { NombreRazon: "Producer Person", NIF: "12345678Z" };
     await append(node, 1, "alta", producer);
     await append(node, 2, "void", producer);

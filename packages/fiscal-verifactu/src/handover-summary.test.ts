@@ -93,13 +93,13 @@ const noEnvios = {
 
 describe("summariseChains", () => {
   it("two chains on two nodes are summarised apart, head by secuencia not invoice number", async () => {
-    const first = await seedNode(suite.db);
-    const second = await seedNode(suite.db);
+    const first = await seedNode(suite.db, "First");
+    const second = await seedNode(suite.db, "Second");
     await append(first, 9);
     await append(first, 3);
     await append(second, 20);
     await append(second, 11);
-    await seedNode(suite.db);
+    await seedNode(suite.db, "Never traded");
     const [a1, a2] = records(first.nodeId);
     const [b1, b2] = records(second.nodeId);
     await envio(a1!.id, "aceptado");
@@ -142,7 +142,7 @@ describe("summariseChains", () => {
   });
 
   it("a chain whose SIF was revoked and replaced is two entries", async () => {
-    const node = await seedNode(suite.db);
+    const node = await seedNode(suite.db, "Replaced");
     await append(node, 1);
     await append(node, 2);
     const replacement = await suite.db.transaction((tx) =>
@@ -192,7 +192,7 @@ describe("summariseChains", () => {
   });
 
   it("counts every envio state, lists the ones being sent and hashes the acks", async () => {
-    const node = await seedNode(suite.db);
+    const node = await seedNode(suite.db, "States");
     const states = Object.keys(noEnvios);
     for (let i = 0; i < states.length + 1; i++) await append(node, i + 1);
     const rows = records(node.nodeId);
@@ -237,7 +237,7 @@ describe("summariseChains", () => {
   });
 
   it("refuses a copy holding an envio state it does not know", async () => {
-    const node = await seedNode(suite.db);
+    const node = await seedNode(suite.db, "Odd");
     await append(node, 1);
     const [row] = records(node.nodeId);
     await suite.db.execute(
@@ -255,7 +255,7 @@ describe("summariseChains", () => {
   });
 
   it("adding one record changes count, head and huella", async () => {
-    const node = await seedNode(suite.db);
+    const node = await seedNode(suite.db, "Grows");
     await append(node, 1);
     const [before] = await summarise();
     await append(node, 2);
@@ -266,7 +266,7 @@ describe("summariseChains", () => {
   });
 
   it("writes nothing", async () => {
-    const node = await seedNode(suite.db);
+    const node = await seedNode(suite.db, "Quiet");
     await append(node, 1);
     const path = await copy();
     const digest = () =>

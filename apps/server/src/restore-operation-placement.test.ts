@@ -186,59 +186,6 @@ it("the admission check's folder holds the backup's node copy, not an empty node
   }
 });
 
-async function secondVenueRow(): Promise<void> {
-  await suite.db.insert(locations).values({
-    id: "d0000000-0000-4000-8000-000000000099",
-  });
-  await seedVenueSettings(suite.db, { operationDescription: "Venta" });
-  await seedBusinessDay(suite.db, {});
-}
-
-it("refuses a copy holding two venue rows at admission, before anything is placed", async () => {
-  await secondVenueRow();
-  let entered = false;
-  const f = await fixture(
-    regime(async () => {
-      entered = true;
-      return { report: "unexpected" };
-    }),
-  );
-  let admitted = false;
-  f.deps.withModuleOperations!.checkBeforePlacement = async () => {
-    admitted = true;
-  };
-  const error = await writeValidated(f.validated, f.deps).catch((e: unknown) => e);
-  expect(error).toMatchObject({ code: "provisioning.second_venue" });
-  expect(admitted).toBe(false);
-  expect(entered).toBe(false);
-  await expect(readFile(join(f.deps.venueDir, "venue.db"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-  await expect(readFile(join(f.deps.stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-  await expect(readFile(join(f.deps.stateDir, "trading.env"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-});
-
-it("refuses a copy holding two venue rows before any restore hook runs or the identity is published", async () => {
-  await secondVenueRow();
-  let entered = false;
-  const f = await fixture(
-    regime(async () => {
-      entered = true;
-      return { report: "unexpected" };
-    }),
-  );
-  const error = await writeValidated(f.validated, f.deps).catch((e: unknown) => e);
-  expect(error).toMatchObject({ code: "provisioning.second_venue" });
-  expect(entered).toBe(false);
-  await expect(readFile(join(f.deps.stateDir, "trading.env"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-});
-
 it("refuses a wrong node key before hooks or restored identity are published", async () => {
   let entered = false;
   const f = await fixture(

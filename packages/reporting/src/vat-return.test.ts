@@ -41,7 +41,7 @@ describe("computeVatReturn", () => {
     // Catalogue (gross-inclusive) sales file cuotas by the DIFFERENCE method, which can land a céntimo
     // away from round(base × rate). The 303 aggregate must sum the FILED per-invoice cuotas, never
     // re-round on the monthly base. Two nodes, both counted (no node predicate).
-    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const nodeB = await seedNodeAndSeries(suite.db);
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: augNoonUtc,

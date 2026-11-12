@@ -7,7 +7,7 @@ import {
   readNodeMembership,
   readStandardSeriesId,
   requireStamp,
-  venueLocationId,
+  readVenueSettings,
   withNodeTransaction,
   withTransaction,
   writeNodeMembershipTx,
@@ -253,8 +253,7 @@ export async function promoteMirrorToPrimary(
     .from(nodes)
     .where(eq(nodes.id, deps.nodeId));
   if (stored === undefined) throw new AppError("node.not_found", { id: deps.nodeId });
-  // Interim: keeps the `provisioning.second_venue` refusal until S28 drops `locations`.
-  await venueLocationId(deps.db);
+  await readVenueSettings(deps.db);
   const node = { nodeId: brandNodeId(deps.nodeId) };
 
   assertNotFenced(held, deps.nodeId);

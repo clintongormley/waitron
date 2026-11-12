@@ -14,7 +14,6 @@ import {
   readNodeMembership,
   readTenant,
   stampDeployment,
-  venueLocationId,
   withNodeTransaction,
   withTransaction,
   writeNodeMembership,
@@ -291,11 +290,9 @@ async function joined() {
   /** The spare's row in the main box's file as A947 3b's Task 6.2 plans it, on the key it sent. */
   const writeSpareRow = async () => {
     const [main] = await mainBox.db.select().from(nodes).where(eq(nodes.id, mainId));
-    const locationId = await venueLocationId(mainBox.db);
     await withTransaction(mainBox.db, (tx) =>
       insertReservedNodeTx(tx, {
         id: spareId,
-        locationId,
         name: `${main!.name} (standby)`,
         filingModule: main!.filingModule,
         taxModule: main!.taxModule,

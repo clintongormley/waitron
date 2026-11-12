@@ -23,7 +23,7 @@ const recipient = {
 
 async function bill(full = false) {
   return withTransaction(suite.db, async (tx) => {
-    const [location] = await tx.insert(locations).values({}).returning();
+    await tx.insert(locations).values({}).returning();
     await seedVenueSettings(tx, {
       name: "Selector",
       invoiceLocales: ["es-ES"],

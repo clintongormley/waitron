@@ -131,44 +131,13 @@ describe("seedNode", () => {
     db = suite.db;
   });
 
-  it("inserts one node for the tenant + location and returns its id", async () => {
-    await seedTenant(db);
-    const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
-    await seedVenueSettings(db, {
-      name: "Test location",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    });
-    await seedBusinessDay(db, {});
-    const location = loc!.id;
-    const node = await seedNode(db);
-    const result = await db.execute<{ n: number }>(
-      sql`select count(*) as n from nodes where id = ${node} and location_id = ${location}`,
-    );
-    expect((result.rows[0] as { n: number }).n).toBe(1);
-  });
-
-  it("seedNode with an explicit location puts the node there, not at the venue", async () => {
-    await seedVenue(db);
-    const [second] = await db.insert(locations).values({}).returning({ id: locations.id });
-    await seedVenueSettings(db, { operationDescription: "Restaurant" });
-    await seedBusinessDay(db, {});
+  it("inserts one node and returns its id without requiring a location", async () => {
     const node = await seedNode(db);
     const [row] = await db
-      .select({ locationId: nodes.locationId })
+      .select({ id: nodes.id, name: nodes.name })
       .from(nodes)
       .where(eq(nodes.id, node));
-    expect(row!.locationId).toBe(second!.id);
-  });
-
-  it("seedNode with no location puts the node at the venue", async () => {
-    await seedVenue(db);
-    const node = await seedNode(db);
-    const [row] = await db
-      .select({ locationId: nodes.locationId })
-      .from(nodes)
-      .where(eq(nodes.id, node));
-    expect(row!.locationId).toBe(await venueLocationId(db));
+    expect(row).toEqual({ id: node, name: "Test node" });
   });
 });
 

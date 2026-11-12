@@ -88,7 +88,7 @@ describe("department closed bills", () => {
 
   it("leaves out a bill settled on another box unless the read is venue-wide", async () => {
     await bill(venue, 1, { total: "100.00", issuedAt: noon, settledAt: noon });
-    const second = await seedNodeAndSeries(suite.db, venue);
+    const second = await seedNodeAndSeries(suite.db);
     await bill({ ...venue, ...second }, 2, { total: "40.00", issuedAt: noon, settledAt: noon });
 
     expect(await run()).toEqual({ count: 1, total: "100.00" });

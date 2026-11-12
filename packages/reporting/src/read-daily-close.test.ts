@@ -25,7 +25,7 @@ const at = "2026-08-04T10:00:00.000Z";
 
 it("combines frozen and live nodes without reassigning frozen payments after invoicing", async () => {
   const venue = await seedVenueWithSeries(suite.db);
-  const other = { ...venue, ...(await seedNodeAndSeries(suite.db, venue)) };
+  const other = { ...venue, ...(await seedNodeAndSeries(suite.db)) };
   const [department] = await suite.db
     .insert(departments)
     .values({ id: "ffffffff-0000-4000-8000-000000000001", name: "Dining", tradingName: "Dining" })

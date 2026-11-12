@@ -630,9 +630,8 @@ it.each(["source", "target"])("requires a reservation's %s node to exist", async
   await capture(false);
   both((db) => {
     for (const id of [node.nodeId, TENANT_A.nodeId2])
-      db.prepare("insert into nodes (id,location_id,name,created_at) values (?,?,?,?)").run(
+      db.prepare("insert into nodes (id,name,created_at) values (?,?,?)").run(
         id,
-        node.locationId,
         "Retained node",
         time,
       );

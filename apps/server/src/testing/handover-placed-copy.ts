@@ -214,7 +214,6 @@ export function placedSpareFixture(boxes: {
     await withTransaction(mainBox.db, (tx) =>
       insertReservedNodeTx(tx, {
         id: standby.nodeId,
-        locationId: venueId,
         name: "Primary (standby)",
         filingModule: "verifactu",
         taxModule: "vat",

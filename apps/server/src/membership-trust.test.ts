@@ -119,7 +119,7 @@ describe("the held document's check against the keys this box stores", () => {
 
   it("refuses a document signed by a key only venue.db names, with reason untrusted_signer", async () => {
     const { db, nodeId } = await box();
-    const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
+    await db.insert(locations).values({}).returning({ id: locations.id });
     await seedVenueSettings(db, {
       name: "Terraza",
       invoiceLocales: ["es-ES"],
@@ -151,7 +151,7 @@ describe("the held document's check against the keys this box stores", () => {
     "refuses a document signed with a key venue.db names for %s, with reason bad_signature",
     async (whose) => {
       const { db, nodeId } = await box();
-      const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
+      await db.insert(locations).values({}).returning({ id: locations.id });
       await seedVenueSettings(db, { operationDescription: "Venta" });
       await seedBusinessDay(db, {});
       const mainId = await seedNode(db);

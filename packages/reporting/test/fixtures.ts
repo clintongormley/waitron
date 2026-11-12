@@ -76,13 +76,8 @@ export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
   return { locationId, deviceId, nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
-/**
- * A SECOND node (with its own series) under an existing venue's location, so a test can tell a
- * node-grain aggregate from a venue-wide one.
- */
 export async function seedNodeAndSeries(
   db: Database,
-  venue: { locationId: string },
   seriesCode = "B",
 ): Promise<{ nodeId: NodeId; seriesId: SeriesId }> {
   const nodeId = await seedNode(db);

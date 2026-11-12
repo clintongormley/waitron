@@ -443,7 +443,7 @@ describe("computeOverdueOrders", () => {
   });
 
   it("another box's overdue order is listed", async () => {
-    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const nodeB = await seedNodeAndSeries(suite.db);
     const stationB = await seedKitchenStation(suite.db, {
       name: "Counter",
       isDefault: false,

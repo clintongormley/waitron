@@ -494,7 +494,7 @@ it.each(["node", "environment"])("keeps the current host %s check on replay", as
 });
 
 it("a refused record of the box this one took over from can be remedied here", async () => {
-  const successor = await seedNode(suite.db);
+  const successor = await seedNode(suite.db, "B");
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   runtimeNode = successor.nodeId;
   const before = await snapshot();
@@ -512,8 +512,8 @@ it("a refused record of the box this one took over from can be remedied here", a
 });
 
 it("a record of an unrelated box is still refused", async () => {
-  const successor = await seedNode(suite.db);
-  const unrelated = await seedNode(suite.db);
+  const successor = await seedNode(suite.db, "B");
+  const unrelated = await seedNode(suite.db, "C");
   await recordTakeover(suite.db, node.nodeId, successor.nodeId);
   runtimeNode = unrelated.nodeId;
   const before = await snapshot();

@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   nodes,
@@ -599,11 +599,7 @@ describe("a full start's stepdown, through its test seam", () => {
     };
 
     /** The row a spare has once it finished joining: its key signs a chart, and a start asks it. */
-    const addSpareRow = async (nodeId: string): Promise<void> => {
-      const [own] = await suite.db
-        .select({ locationId: nodes.locationId })
-        .from(nodes)
-        .where(eq(nodes.id, nodeId));
+    const addSpareRow = async (): Promise<void> => {
       await suite.db.insert(nodes).values({
         id: SPARE.nodeId,
         name: "Spare",
@@ -624,7 +620,7 @@ describe("a full start's stepdown, through its test seam", () => {
         },
         beforeListening: async (nodeId, privateKey) => {
           await holdChartNamingSpare(nodeId, privateKey);
-          await addSpareRow(nodeId);
+          await addSpareRow();
         },
       });
       return { ...started, cookie };

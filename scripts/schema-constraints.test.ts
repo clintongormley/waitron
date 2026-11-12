@@ -197,7 +197,6 @@ const EXPECTED_FOREIGN_KEYS = [
   ["menu_version_images", ["version_id"], "menu_versions"],
   ["menu_versions", ["menu_id"], "catalogues"],
   ["menu_items", ["product_id"], "products"],
-  ["nodes", ["location_id"], "locations"],
   ["option_labels", ["list_id"], "option_lists"],
   ["order_amendments", ["captured_by_node_id"], "nodes"],
   ["order_amendments", ["captured_by_device_id"], "devices"],

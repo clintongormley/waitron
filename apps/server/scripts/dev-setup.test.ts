@@ -564,7 +564,7 @@ describe("inspectVenues reads a migrated venue directory", () => {
       const file = new DatabaseSync(join(broken, "venue.db"));
       file.exec("create table locations (not_id text)");
       file.exec("create table tenants (id integer)");
-      file.exec("create table nodes (id text, location_id text)");
+      file.exec("create table nodes (not_id text)");
       file.close();
       await expect(inspectVenues(broken, null)).rejects.toThrow(/no such column/i);
     } finally {

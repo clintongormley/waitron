@@ -30,7 +30,7 @@ import {
   readStandardSeriesIdTx,
   retireNodeSeriesTx,
   withTransaction,
-  venueLocationId,
+  readVenueSettings,
   type Database,
   type NodeDatabase,
   type Transaction,
@@ -902,8 +902,7 @@ export async function resolveArtifactNode(
   const { node } = readArtifactIdentity(entries);
   const [stored] = await db.select({ id: nodes.id }).from(nodes).where(eq(nodes.id, node.nodeId));
   if (stored === undefined) throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
-  // Interim: keeps the `provisioning.second_venue` refusal until S28 drops `locations`.
-  await venueLocationId(db);
+  await readVenueSettings(db);
   return node;
 }
 

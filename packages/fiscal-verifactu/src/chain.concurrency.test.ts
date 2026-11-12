@@ -33,7 +33,7 @@ let node: SeededNode;
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  node = await seedNode(suite.db);
+  node = await seedNode(suite.db, "A");
 });
 
 /** A promise plus the function that settles it. */

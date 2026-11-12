@@ -333,7 +333,6 @@ export async function applyVenue(
                 taxModule: nodes.taxModule,
               })
               .from(nodes)
-              .where(eq(nodes.locationId, locationId))
               .orderBy(nodes.id)
               .limit(1);
             if (

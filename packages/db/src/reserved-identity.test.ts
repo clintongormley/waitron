@@ -18,7 +18,6 @@ import { invoiceSeries } from "./schema/series.js";
 import { captureError } from "./testing/errors.js";
 import { seedNode, seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
-import { venueLocationId } from "./venue.js";
 
 const ENDORSEMENT: Endorsement = {
   nodeId: "22222222-2222-2222-2222-222222222222",
@@ -35,11 +34,8 @@ describe("reserved-identity accessors", () => {
     resetPerTest: false,
   });
 
-  let locationId: string;
-
   beforeAll(async () => {
     await seedVenue(suite.db);
-    locationId = await venueLocationId(suite.db);
   });
 
   it("stores a node without linking it to a location", async () => {
@@ -56,7 +52,6 @@ describe("reserved-identity accessors", () => {
     await withTransaction(suite.db, (tx) =>
       insertReservedNodeTx(tx, {
         id: CLOUD_NODE,
-        locationId,
         name: "cloud",
         filingModule: null,
         taxModule: null,

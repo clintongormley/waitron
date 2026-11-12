@@ -1027,7 +1027,9 @@ describe("checkIntegrity", () => {
         await copyFile(fixtureDb, args.outPath);
         const db = new DatabaseSync(args.outPath);
         try {
-          db.exec("pragma foreign_keys = off; delete from locations");
+          db.exec(
+            "pragma foreign_keys = off; update settings set updated_by='missing' where module='venue'",
+          );
         } finally {
           db.close();
         }

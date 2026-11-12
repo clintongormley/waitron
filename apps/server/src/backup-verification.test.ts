@@ -73,7 +73,7 @@ async function seedSource(db: VenueDb["db"]) {
     "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
   );
   await db.run(
-    sql`insert into nodes (id, location_id, name, created_at) values (${sourceNodeId}, ${locationId}, 'Source node', '2026-10-20T00:00:00Z')`,
+    sql`insert into nodes (id, name, created_at) values (${sourceNodeId}, 'Source node', '2026-10-20T00:00:00Z')`,
   );
   db.run(
     `insert into deployment (id, environment, stamped_at) values (1, 'preproduction', '2026-10-20T00:00:00Z')`,
@@ -361,7 +361,9 @@ describe("complete backup verification", () => {
     const db = new DatabaseSync(f.databasePath);
     try {
       db.exec("pragma foreign_keys=off");
-      db.exec(`update nodes set location_id='missing'`);
+      db.exec(
+        `insert into invoice_series (id, node_id, code) values ('orphan-series', 'missing', 'ORPHAN')`,
+      );
     } finally {
       db.close();
     }
@@ -716,12 +718,12 @@ describe("complete backup verification", () => {
     });
   });
 
-  it("calls a copy holding no venue row a bad backup", async () => {
+  it("calls a copy holding no venue document a bad backup", async () => {
     const f = await fixture();
     const db = new DatabaseSync(f.databasePath);
     try {
       db.exec("pragma foreign_keys=off");
-      db.exec("delete from locations");
+      db.exec("delete from settings where module='venue'");
     } finally {
       db.close();
     }
@@ -729,8 +731,14 @@ describe("complete backup verification", () => {
     await seal(f);
     expect(await verify(f)).toMatchObject({
       status: "invalid",
-      reason: "sqlite_integrity",
-      modules: [],
+      reason: "module_integrity",
+      modules: expect.arrayContaining([
+        expect.objectContaining({
+          name: "core",
+          status: "invalid",
+          checks: expect.arrayContaining([{ code: "data", status: "invalid" }]),
+        }),
+      ]),
     });
   });
   it("rejects a placed key layout whose effective key came only from excluded backup.env", async () => {

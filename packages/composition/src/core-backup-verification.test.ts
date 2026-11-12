@@ -69,7 +69,7 @@ describe("core backup contribution", () => {
       "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
     );
     suite.db.run(
-      `insert into nodes (id, location_id, name, created_at) values ('source', 'venue', 'Source node', '2026-10-20T00:00:00Z')`,
+      `insert into nodes (id, name, created_at) values ('source', 'Source node', '2026-10-20T00:00:00Z')`,
     );
     suite.db.run(
       `insert into deployment (id, environment, stamped_at) values (1, 'preproduction', '2026-10-20T00:00:00Z')`,
@@ -99,7 +99,7 @@ describe("core backup contribution", () => {
       "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
     );
     suite.db.run(
-      `insert into nodes (id, location_id, name, created_at) values ('source', 'venue', 'Source node', '2026-10-20T00:00:00Z')`,
+      `insert into nodes (id, name, created_at) values ('source', 'Source node', '2026-10-20T00:00:00Z')`,
     );
     suite.db.run(
       `insert into deployment (id, environment, stamped_at) values (1, 'preproduction', '2026-10-20T00:00:00Z')`,

@@ -4,7 +4,6 @@ import {
   insertReservedNodeTx,
   insertReservedSeriesTx,
   nodes,
-  venueLocationId,
   withTransaction,
   type Database,
   type Transaction,
@@ -72,10 +71,8 @@ export async function establishReservedStandbyIdentity(
       );
       if (owner !== undefined && (reserved.series?.length ?? 0) !== 0)
         throw new AppError("module.operation_invalid", { module: owner.name });
-      const venueId = await venueLocationId(tx);
       await insertReservedNodeTx(tx, {
         id: standby.nodeId,
-        locationId: venueId,
         name: supplied.nodeName,
         filingModule: supplied.filingModule,
         taxModule: supplied.taxModule,

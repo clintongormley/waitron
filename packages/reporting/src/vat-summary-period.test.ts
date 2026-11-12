@@ -133,7 +133,7 @@ describe("computeVatSummaryForPeriod", () => {
       total: "121.00",
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
-    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const nodeB = await seedNodeAndSeries(suite.db);
     await seedSale(
       suite.db,
       { ...venue, nodeId: nodeB.nodeId, seriesId: nodeB.seriesId },

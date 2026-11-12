@@ -15,7 +15,6 @@ import {
   nodes,
   readTenant,
   stampDeployment,
-  venueLocationId,
   withNodeTransaction,
   withTransaction,
   writeNodeMembership,
@@ -143,11 +142,9 @@ async function holdChart(
 
 /** The spare's row in the main box's own file, as A947 3b's Task 6.2 plans to write it. */
 async function writeSpareRow(publicKey: string): Promise<void> {
-  const locationId = await venueLocationId(mainBox.db);
   await withTransaction(mainBox.db, (tx) =>
     insertReservedNodeTx(tx, {
       id: spare,
-      locationId,
       name: "Test node (standby)",
       filingModule: null,
       taxModule: null,

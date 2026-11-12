@@ -365,12 +365,9 @@ async function reconcileModules(
     }
   }
   const identity = readArtifactIdentity([...entries.values()]).node;
-  if (!tables.has("nodes") || !tables.has("locations")) refuse("invalid");
+  if (!tables.has("nodes") || !tables.has("settings")) refuse("invalid");
   let found = false;
-  for await (const row of before.rows(
-    "select n.id from nodes n join locations l on l.id = n.location_id where n.id = ?",
-    [identity.nodeId],
-  )) {
+  for await (const row of before.rows("select id from nodes where id = ?", [identity.nodeId])) {
     if (row.id === identity.nodeId) found = true;
   }
   if (!found) refuse("invalid");

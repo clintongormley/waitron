@@ -127,8 +127,7 @@ export async function seedVenue(
   await seedBusinessDay(db, { timeZone, dayCutover });
 }
 
-/** Seeds one node and returns its id: at the venue unless `location` is given. */
-export async function seedNode(db: Database | Transaction, location?: string): Promise<NodeId> {
+export async function seedNode(db: Database | Transaction): Promise<NodeId> {
   const [row] = await db.insert(nodes).values({ name: "Test node" }).returning({ id: nodes.id });
   return brandNodeId(row!.id);
 }

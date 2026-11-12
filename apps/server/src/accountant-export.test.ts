@@ -304,7 +304,7 @@ describe("accountant period selection", () => {
     withTransaction(suite.db, (tx) => listAccountantExport(tx, { from, to }));
 
   it("reads unpaid invoices across nodes by their inclusive recorded civil dates and keeps customer and VAT facts", async () => {
-    const other = await seedNodeAndSeries(suite.db, venue, "B");
+    const other = await seedNodeAndSeries(suite.db, "B");
     const [full] = await suite.db
       .insert(sales)
       .values({

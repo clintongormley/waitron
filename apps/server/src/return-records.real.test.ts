@@ -66,7 +66,7 @@ const modules = ALL_MODULES.filter((module) => module.name === "fiscal-verifactu
 const now = new Date("2026-07-21T00:01:00.000Z");
 
 it("returns a real fiscal tail between isolated boxes and files it through the receiver's normal outbox", async () => {
-  const source = await seedNode(old.db);
+  const source = await seedNode(old.db, "Source");
   const receiverId = await bareNode(old.db);
   await old.db
     .insert(invoiceSeries)
@@ -353,8 +353,8 @@ async function copyBase() {
 }
 
 it("counts returned VAT and settled payments without changing the new main's own day-close", async () => {
-  const source = await seedNode(old.db);
-  const receiver = await seedNode(old.db);
+  const source = await seedNode(old.db, "Source");
+  const receiver = await seedNode(old.db, "Receiver");
   const receiverId = receiver.nodeId;
   await copyBase();
   const clock = {
@@ -463,9 +463,6 @@ it("counts returned VAT and settled payments without changing the new main's own
       manual: false,
     },
   ]);
-  old.db.all<{ location_id: string }>(
-    sql`select location_id from nodes where id = ${source.nodeId}`,
-  );
   await old.db.insert(tenderRefunds).values({
     id: "returned-refund",
     saleId: sale!.id,
@@ -512,8 +509,8 @@ async function originalFor(db: Database, source: SeededNode, saleId: SaleId) {
 }
 
 async function pendingCardOriginal() {
-  const source = await seedNode(old.db);
-  const receiver = await seedNode(old.db);
+  const source = await seedNode(old.db, "Source");
+  const receiver = await seedNode(old.db, "Receiver");
   await copyBase();
   const order = await seedWorkingOrder(old.db, {
     nodeId: source.nodeId,

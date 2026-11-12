@@ -28,6 +28,7 @@ import {
 } from "./testing/madrid-renamed-columns.js";
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
+  nodes: ["location_id"],
   devices: ["location_id"],
   working_orders: ["location_id"],
   tender_refunds: ["location_id"],

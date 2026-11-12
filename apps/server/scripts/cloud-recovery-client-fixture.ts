@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { locations, nodes, openVenueDatabase, readVenue } from "@waitron/db";
+import { nodes, openVenueDatabase, readVenue, venueLocationId } from "@waitron/db";
 import { createCloudRecoveryClient } from "../src/cloud-recovery.js";
 import { createCloudConnection } from "../src/cloud-client.js";
 import { createCloudReplacement } from "../src/cloud-replacement.js";
@@ -146,13 +146,9 @@ else if (request.command === "stage") {
   const store = await openVenueDatabase(venueDir);
   let localVenueId: string;
   try {
-    const venue = await store.venue.select({ id: locations.id }).from(locations);
-    assert.equal(venue.length, 1);
-    localVenueId = venue[0]!.id;
-    const source = await store.venue
-      .select({ id: nodes.id, locationId: nodes.locationId })
-      .from(nodes);
-    assert(source.some((row) => row.id === nodeId && row.locationId === localVenueId));
+    localVenueId = await venueLocationId(store.venue);
+    const source = await store.venue.select({ id: nodes.id }).from(nodes);
+    assert(source.some((row) => row.id === nodeId));
   } finally {
     await store.close();
   }

@@ -430,8 +430,8 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
         sql.raw(
           `create trigger test_standby_joins before update on node_membership
            begin
-             insert into nodes (id, location_id, name, created_at)
-               select '${late.nodeId}', location_id, 'Joined late', created_at
+             insert into nodes (id, name, created_at)
+               select '${late.nodeId}', 'Joined late', created_at
                from nodes where id = '${p.nodeId}';
            end`,
         ),

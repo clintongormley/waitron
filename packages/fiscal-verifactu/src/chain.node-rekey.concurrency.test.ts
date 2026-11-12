@@ -38,7 +38,7 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let node: SeededNode;
 
 beforeEach(async () => {
-  node = await seedNode(suite.db);
+  node = await seedNode(suite.db, "A");
 });
 
 describe("appendToChain from many callers started together, keyed by node", () => {
@@ -156,7 +156,7 @@ describe("currentSif resolves per node", () => {
     return suite.db.transaction(async (tx) => {
       // Through the tables, not raw SQL: `id` and `created_at` are builder-side `$defaultFn`
       // generators a raw insert never reaches.
-      const [loc] = await tx.insert(locations).values({}).returning({ id: locations.id });
+      await tx.insert(locations).values({}).returning({ id: locations.id });
       await seedVenueSettings(tx, {
         name: "Sala sib",
         invoiceLocales: ["es"],
@@ -197,7 +197,7 @@ describe("the series↔node guard (record-sale)", () => {
   }
 
   it("rejects a sale whose node does not own the series", async () => {
-    const other = await seedNode(suite.db); // a DIFFERENT node
+    const other = await seedNode(suite.db, "OTH"); // a DIFFERENT node
     const backend = backendFor();
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {

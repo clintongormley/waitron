@@ -14,7 +14,7 @@ import { ensureBoxSecrets } from "../src/box-secrets.js";
 import { isUnset } from "../src/env-value.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { writeTradingEnv } from "../src/trading-config.js";
-import { openVenueDatabase } from "@waitron/db";
+import { openVenueDatabase, venueLocationId } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, hashPassword } from "@waitron/identity";
 import { provisionVenue, venueModuleConfig } from "../src/provision.js";
@@ -135,11 +135,11 @@ if (savedEnv !== undefined) {
 const identityStore = await openVenueDatabase(env.WAITRON_VENUE_DIR!);
 let localVenueId: string;
 try {
-  const result = await identityStore.venue.execute<{ location_id: string }>(
-    sql`select location_id from nodes where id = ${env.WAITRON_NODE_ID}`,
+  const result = await identityStore.venue.execute<{ id: string }>(
+    sql`select id from nodes where id = ${env.WAITRON_NODE_ID}`,
   );
   if (result.rows[0] === undefined) throw new Error("Fixture node missing");
-  localVenueId = result.rows[0].location_id;
+  localVenueId = await venueLocationId(identityStore.venue);
 } finally {
   await identityStore.close();
 }

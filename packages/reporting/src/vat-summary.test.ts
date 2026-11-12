@@ -188,7 +188,7 @@ describe("computeVatSummary", () => {
   });
 
   it("reverses a later void only at the voided sale's own node", async () => {
-    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const nodeB = await seedNodeAndSeries(suite.db);
     const s = await seedSale(
       suite.db,
       { ...venue, nodeId: nodeB.nodeId, seriesId: nodeB.seriesId },
@@ -275,7 +275,7 @@ describe("computeVatSummary", () => {
       total: "121.00",
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
-    const nodeB = await seedNodeAndSeries(suite.db, venue);
+    const nodeB = await seedNodeAndSeries(suite.db);
     await seedSale(
       suite.db,
       { ...venue, nodeId: nodeB.nodeId, seriesId: nodeB.seriesId },
@@ -291,8 +291,8 @@ describe("computeVatSummary", () => {
   });
 
   it("a report for two boxes counts both boxes' sales", async () => {
-    const nodeB = await seedNodeAndSeries(suite.db, venue);
-    const nodeC = await seedNodeAndSeries(suite.db, venue, "C");
+    const nodeB = await seedNodeAndSeries(suite.db);
+    const nodeC = await seedNodeAndSeries(suite.db, "C");
     const sales: Array<[{ nodeId: NodeId; seriesId: SeriesId }, string, string]> = [
       [venue, "121.00", "100.00"],
       [nodeB, "242.00", "200.00"],
