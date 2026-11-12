@@ -345,20 +345,6 @@ owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is w
 zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,
 the usual remedy is to keep field text at 16px on small screens only.
 
-## Dragging a row (A180, #994 and #1003) — two things seen, left as they were
-
-A lifted row in a
-reorder list (`ReorderController`, `packages/ui/src/reorder-table.ts`) shows a faint line at
-each cell boundary, most visible in the dark theme, and a row lifted at the bottom of its list
-has its shadow cut off where the table ends. Whether A180's lifting (`position: relative`,
-`z-index: 1`) contributes is not known; the likely cause, not checked, is the sideways-scroll
-wrapper each list puts round its table (`.table-wrap`, or `.wrap` in the variant table;
-`overflow-x: auto`). The canvas editor's tile drag stays as it is (owner choice, 2026-10-01); A182
-plans to retire the editor.
-
-Local held-row evidence: Lane D `receipts/d-reorder-contrast/current-spanish-dark-phone.png`.
-The paint/shadow question remains open; no paint fix has been built.
-
 ## Bundle: One session with real phones and password managers
 
 13 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -493,15 +479,16 @@ Shared form plumbing, an untraced dialog focus line and retiring the summary onc
   password manager on 2026-10-08 and reported that it works well; other password managers are
   untried. Left open by A331 batch 3a (#1401).
 
-## Bundle: Reorder controller
-
-1 entry remains, size S.
-
-- **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.**
-  [Detail](dashboard.md#dragging-a-row-a180-994-and-1003--two-things-seen-left-as-they-were)
-
-
 ## Decisions and deliberate limits
+
+- **Reorder row paint (watcher, 2026-11-12 09:54, Lane D questions.md).** The scrolling
+  wrapper clips the held last row's bottom shadow in shared reorder lists and the variant table.
+  Keep that cosmetic clipping: the tested gutter added a permanent 32px blank band at rest,
+  including inside the Voids and comps card. In the inspected captures, cell seams appeared only
+  when the test runner scaled the page, not at native size; no seam fix is included. Local receipts:
+  `~/waitron-campaign-d/receipts/d-reorder-contrast/paint-unscaled-pixel-samples.txt`,
+  `paint-images/`, `d-rest-*` captures and `paint-review-{1,2}.md` in that folder.
+  The canvas editor's tile drag stays as it is (owner choice, 2026-10-01); A182 plans to retire it.
 
 - Dropdown and browser table labels use the app language. Server-sorted display lists, including
   delete-refusal names and role holders, keep the runtime's default comparison; the watcher

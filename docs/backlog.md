@@ -1392,7 +1392,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Form implementation leftovers:** shared plumbing, an untraced dialog focus line and eventual summary retirement. [Detail](backlog/dashboard.md#bundle-form-implementation-leftovers)
 
-- **Reorder controller** (bundle of 1, size S). [Detail](backlog/dashboard.md#bundle-reorder-controller)
 
 
 

@@ -19,3 +19,13 @@ Run changed test files with `pnpm --filter @waitron/<package> exec vitest run <f
 **2026-11-12 measured checkpoint:** Existing routing-grid/station-table accessibility files passed 64 cases. Browser-computed focus/surface-raised ratios were 4.634 in light and 4.738 in dark, both above 3:1. The bounded current service-steps probe (Spanish/dark/390px, 20 steps) reached scroll 1691/1691 in 10.356 seconds with its drag still active. That does not explain the retired Prep stations failure; the watcher cleared retiring that obsolete entry at 08:59 in Lane D questions.md, without claiming its cause fixed. Small local receipts are under Lane D `receipts/d-reorder-contrast/`.
 
 The held-row capture shows cell boundaries; no paint cause or fix is claimed. Shared-style consumers were enumerated, including variant-table’s separate wrapper. The three named paint/probe source files had no changes between this plan tree and fetched main at inspection. Remaining: variant and shared held/bottom paint investigation and the required visual matrix, a meaningful failing regression before any fix, and watcher disposition before backlog edits. Temporary probes and installed dependencies were removed; no product changes were made.
+
+**2026-11-12 closure, watcher 09:54 (Lane D questions.md):** The native-size matrix reproduced
+bottom-shadow clipping in both scrolling wrappers. The tested gutter made room for the shadow but
+added a permanent 32px blank band at rest. Both completed run-it reads raised that cost; the watcher
+withdrew the gutter, accepted the clipping and directed deletion of the unpushed code branch and its
+new tests. Cell seams appeared in the inspected scaled captures only, not at native size; no seam
+fix or historical-cause claim follows. The remaining reorder entry moves to
+[Decisions and deliberate limits](../../backlog/dashboard.md#decisions-and-deliberate-limits).
+Contrast closure already landed without a palette change in `37f752e51c5b7ee87ea418b6e4d1648531a9e159`.
+Local evidence remains in `~/waitron-campaign-d/receipts/d-reorder-contrast/`.
