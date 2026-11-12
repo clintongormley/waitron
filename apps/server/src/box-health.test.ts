@@ -439,7 +439,7 @@ describe("collectBoxHealth", () => {
       unconfirmed: true,
     });
     const [rosa] = await seedPersons(suite.db, {
-      displayName: "Rosa Handler",
+      displayName: "Rose Handler",
       pinHash: hashPin("1234"),
       role: "manager",
     });
@@ -496,7 +496,7 @@ describe("collectBoxHealth", () => {
         incidentId: ids[1]!.id,
         ...params("by Rosa"),
         handledAt: "2026-10-22T09:45:00.000Z",
-        handledBy: { kind: "person", name: "Rosa Handler" },
+        handledBy: { kind: "person", name: "Rose Handler" },
         note: "Sent to the accountant",
       },
       {

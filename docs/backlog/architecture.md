@@ -854,6 +854,7 @@ the helper's constant status is not evidence of the write.
   route fixtures use English staff display-name samples.
   Local portion-sale projection, station-queue and station-move staff samples use Anna and Lewis.
   Local adjustment-report staff use Lucy, Paul and Rose; `till-session.person` and box-alert-email samples use Anna.
+  Local personal-data download and box-health samples use Martha and Rose; stream-route and cross-person profile administrators use Administrator.
   Spanish staff display-name samples remain, including in the shared `testing/` helpers.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
