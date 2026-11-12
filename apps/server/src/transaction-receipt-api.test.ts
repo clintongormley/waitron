@@ -10,6 +10,8 @@ import {
   drawerOpens,
   invoiceSeries,
   invoiceDeliveries,
+  pagePrinters,
+  printAgents,
   printJobs,
   receiptReprints,
   saleLines,
@@ -22,6 +24,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { payments } from "@waitron/payments";
+import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setProfileServiceAccess } from "@waitron/venue-service";
@@ -314,6 +317,180 @@ it("prints an orderless full invoice original on its Invoice receipt printer wit
   expect(after.drawers).toEqual(printed.drawers);
   expect(after.reprints).toEqual(printed.reprints);
   expect(await snapshot()).toEqual(before);
+});
+it("keeps the original Invoice destination through status, retry and handover", async () => {
+  const sale = await projectionInvoice({
+    counterpartyTaxId: "B00000000",
+    counterpartyLegalName: "Stored recipient",
+    counterpartyCountryCode: "ES",
+    counterpartyAddress: "Stored address",
+  });
+  const profileId = await profile();
+  await inTx(venue, (tx) =>
+    listInvoicePrinter(tx, { profileId, printerId: venue.printerId, isDefault: true }),
+  );
+  const before = await snapshot();
+  await send(venue.app, venue.cookie, "POST", `/api/transactions/${sale.id}/deliveries`, {
+    medium: "print",
+    requestKey: randomUUID(),
+    printerId: venue.printerId,
+  });
+  const original = (await jobs()).prints.at(-1)!;
+  await inTx(venue, (tx) =>
+    tx
+      .update(printJobs)
+      .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+      .where(eq(printJobs.id, original.id)),
+  );
+  await inTx(venue, (tx) =>
+    tx
+      .update(invoiceDeliveries)
+      .set({
+        status: "failed",
+        failureCode: "transport_failed",
+        reportedAt: new Date().toISOString(),
+      })
+      .where(eq(invoiceDeliveries.printJobId, original.id)),
+  );
+  const status = await send(
+    venue.app,
+    venue.cookie,
+    "GET",
+    `/api/transactions/${sale.id}/receipt-print`,
+  );
+  expect(status.status, JSON.stringify(status.json)).toBe(200);
+  expect(status.json).toMatchObject({
+    status: "failed",
+    jobId: original.id,
+    canRetry: true,
+    printerId: venue.printerId,
+    printerName: expect.any(String),
+  });
+  const retry = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/transactions/${sale.id}/receipt-print/retry`,
+    {},
+  );
+  expect(retry.status, JSON.stringify(retry.json)).toBe(200);
+  const resent = (await jobs()).prints.at(-1)!;
+  expect(resent).toMatchObject({
+    saleId: sale.id,
+    printerId: original.printerId,
+    receiptCopy: false,
+    resendOf: original.id,
+  });
+  await inTx(venue, (tx) =>
+    tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, resent.id)),
+  );
+  const handover = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/transactions/${sale.id}/receipt-print/handover`,
+    {},
+  );
+  expect(handover.status, JSON.stringify(handover.json)).toBe(200);
+  expect(handover.json).toMatchObject({ status: "done", handover: { personId: venue.operatorId } });
+  expect((await jobs()).drawers).toEqual([]);
+  expect(await snapshot()).toEqual(before);
+});
+it("sends an orderless A4 original to its receipt destination instead", async () => {
+  const sale = await projectionInvoice({
+    counterpartyTaxId: "B00000000",
+    counterpartyLegalName: "Stored recipient",
+    counterpartyCountryCode: "ES",
+    counterpartyAddress: "Stored address",
+  });
+  const profileId = await profile();
+  const office = await inTx(venue, async (tx) => {
+    const [agent] = await tx
+      .insert(printAgents)
+      .values({ name: "Office agent", tokenHash: "scrypt$test" })
+      .returning();
+    const [printer] = await tx
+      .insert(pagePrinters)
+      .values({
+        name: "Office",
+        host: "192.0.2.20",
+        port: 631,
+        resourcePath: "/ipp/print",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        media: "iso_a4_210x297mm",
+        resolutionDpi: 600,
+        agentId: agent!.id,
+      })
+      .returning();
+    await listInvoicePrinter(tx, { profileId, pagePrinterId: printer!.id, isDefault: true });
+    return printer!;
+  });
+  const before = await snapshot();
+  const original = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/transactions/${sale.id}/deliveries`,
+    { medium: "print", requestKey: randomUUID(), printerId: office.id },
+  );
+  expect(original.status, JSON.stringify(original.json)).toBe(200);
+  expect(original.json).toMatchObject({ medium: "a4", designation: "original" });
+  const switched = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/transactions/${sale.id}/deliveries/${(original.json as { id: string }).id}/to-receipt`,
+    { requestKey: randomUUID() },
+  );
+  expect(switched.status, JSON.stringify(switched.json)).toBe(200);
+  expect(switched.json).toMatchObject({ medium: "receipt", designation: "original" });
+  expect((await jobs()).prints.at(-1)).toMatchObject({
+    saleId: sale.id,
+    printerId: venue.printerId,
+    receiptCopy: false,
+  });
+  expect((await jobs()).drawers).toEqual([]);
+  expect(await snapshot()).toEqual(before);
+});
+it("the new delivery paths refuse order-linked sales and simplified invoices without effects", async () => {
+  const linked = await saleOf(await placedIssuedBill(venue, "Croquettes"));
+  const simplified = await billlessSale(venue);
+  const before = await snapshot(),
+    printed = await jobs();
+  for (const [method, suffix] of [
+    ["GET", "deliveries"],
+    ["POST", "deliveries"],
+    ["POST", `deliveries/${randomUUID()}/to-receipt`],
+    ["GET", "receipt-print"],
+    ["POST", "receipt-print/retry"],
+    ["POST", "receipt-print/handover"],
+  ] as const) {
+    const body =
+      method === "POST"
+        ? { medium: "print", printerId: venue.printerId, requestKey: randomUUID() }
+        : undefined;
+    const denied = await send(
+      venue.app,
+      venue.cookie,
+      method,
+      `/api/transactions/${linked.id}/${suffix}`,
+      body,
+    );
+    expect(denied.json, suffix).toMatchObject({ code: "sale.not_found" });
+    const wrongDocument = await send(
+      venue.app,
+      venue.cookie,
+      method,
+      `/api/transactions/${simplified}/${suffix}`,
+      body,
+    );
+    expect(wrongDocument.json, suffix).toMatchObject({
+      code: "invoice_delivery.full_invoice_required",
+    });
+  }
+  expect(await snapshot()).toEqual(before);
+  expect(await jobs()).toEqual(printed);
 });
 it.each([false, true])(
   "a historical full invoice retains its own recipient, domicile and offset, paid=%s",

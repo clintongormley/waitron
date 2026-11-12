@@ -187,7 +187,7 @@ export async function retryEmailDelivery(
 export async function switchToReceipt(
   tx: Transaction,
   deps: { backend: FiscalBackend; cfg: OriginConfig },
-  sale: { id: string; workingOrderId: string },
+  sale: { id: string; workingOrderId: string | null },
   offer: PrinterOffer,
   deliveryId: string,
   request: Request,
@@ -230,7 +230,10 @@ export async function switchToReceipt(
     .returning({ id: invoiceDeliveries.id });
   if (switched.length === 0) throw new AppError("invoice_delivery.active", {});
   if (receipt.status === "not_queued") {
-    const ticket = await readSettledTicket(deps.backend, tx, deps.cfg, sale.workingOrderId);
+    const ticket =
+      sale.workingOrderId === null
+        ? await readTransactionReceipt(deps.backend, tx, deps.cfg, sale.id)
+        : await readSettledTicket(deps.backend, tx, deps.cfg, sale.workingOrderId);
     await enqueueOriginalReceipt(
       tx,
       deps.cfg,
