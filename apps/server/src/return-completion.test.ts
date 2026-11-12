@@ -103,7 +103,7 @@ it("retains completion in a fresh process and a later venue copy", async () => {
       import.meta.resolve("tsx"),
       "--input-type=module",
       "-e",
-      `import {openVenueDatabase} from "@waitron/db";
+      `import {openVenueDatabase} from ${JSON.stringify(import.meta.resolve("@waitron/db"))};
      import {readCompletedReturns} from ${JSON.stringify(new URL("./return-completion.ts", import.meta.url).href)};
      const venue = await openVenueDatabase(${JSON.stringify(directory)}, {exclusive: false});
      try { console.log(JSON.stringify([...await readCompletedReturns(venue.venue)])); }
