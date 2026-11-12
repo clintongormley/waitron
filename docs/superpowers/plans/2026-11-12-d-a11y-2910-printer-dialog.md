@@ -9,17 +9,17 @@ Recorded at `/Users/clintongormley/waitron-campaign-d/receipts/d-a11y-2910/reque
 
 ## Evidence and result
 
-Driver's provisional receipts: campaign `receipts/d-a11y-2910`. System font passes main `14931d8078` and parent `41272511e3`; Arial fails main in both themes, matching CI's Used-by heading/Delete-button ratios 2.71/2.11, but passes that parent. Footer positioning passes both; body `z-index: 0` or background does not. No implementation retained.
+Driver's receipts: campaign `receipts/d-a11y-2910`. System font passes main `14931d8078` and parent `41272511e3`; Arial fails main in both themes, matching CI's Used-by heading/Delete-button ratios 2.71/2.11, but passes that parent. Footer positioning passes both; body `z-index: 0` or background does not. No implementation retained.
 
-Preserve A1259 hidden-hint containment while preventing this stacked-dialog contrast regression.
+The screenshot shows no visible heading/button overlap. The claim is limited to the reproduced axe failure; footer-over-body paint order is the source-based explanation. `git rev-parse bf3fead0bf^` returned `41272511e386ddfede0a593207d60730a8e09b6f`. Preserve A1259 hidden-hint containment while preventing this stacked-dialog contrast-scan regression.
 
 ## Build and validate
 
-1. In `apps/dashboard/src/screens/printers-screen.a11y.test.ts`, pin `--wt-font-family: Arial` only in the selected fixture. Preserve every assertion; no extra sweep. Run `pnpm --filter @waitron/dashboard exec vitest run src/screens/printers-screen.a11y.test.ts -t 'keeps setup forms inside desktop and phone dialogs'`; observe both themes fail for the reported contrast reason.
+1. In `apps/dashboard/src/screens/printers-screen.a11y.test.ts`, pin `--wt-font-family: Arial, sans-serif` only in the selected fixture, with one short comment naming the layout it exercises. Preserve every assertion; no extra sweep. Run `pnpm --filter @waitron/dashboard exec vitest run src/screens/printers-screen.a11y.test.ts -t 'keeps setup forms inside desktop and phone dialogs'`; observe both themes fail for the reported contrast reason.
 2. Add only `position: relative` to `.footer` in `packages/ui/src/components/wt-dialog.ts`; retain `.body` positioning. Rerun green. Keep unchanged `wt-dialog.test.ts`'s “keeps hinted fields inside the body without scrolling the native dialog”.
-3. Run `pnpm --filter @waitron/ui exec vitest run src/components/wt-dialog.test.ts src/components/wt-dialog.a11y.test.ts src/components/wt-modal.test.ts src/components/wt-modal.a11y.test.ts`; leave these files unchanged. Run focused dashboard accessibility files using dialogs, including indirect consumers. Require actual passing test counts.
-4. Inspect local EN/ES, light/dark, phone/desktop screenshots using a screenshot-only temporary probe. Keep probe and mockups uncommitted. Search backlog; update only an entry naming this regression.
+3. Run `pnpm --filter @waitron/ui exec vitest run src/components/wt-dialog.test.ts src/components/wt-dialog.a11y.test.ts src/components/wt-modal.test.ts src/components/wt-modal.a11y.test.ts`; leave these files unchanged. Run the 45 dashboard accessibility files selected by `wt-modal|wt-dialog|openDetails|detailsEdit`; record their exact paths locally. Also run dialog accessibility files in other consumer packages, selected by `wt-modal|wt-dialog|WtDialog|WtModal`, plus staffing and payment-provider accessibility files for indirect consumers. Use focused file runs, not whole-package suites. Require actual passing test counts. The dashboard fixture edit selects its package for PR CI: require every selected ui/dashboard job, including all four dashboard shards, to pass on the current head.
+4. Inspect local EN/ES, light/dark, phone/desktop screenshots using a screenshot-only temporary probe. Keep probe and mockups uncommitted. Backlog search found no entry naming this regression, so no backlog change is needed.
 
 ## Bounds and clearance
 
-Forecast: production +1/-0; tests +1–3/-0; support 0; docs 20–40 lines. No palettes, controls, helpers, guide wording or other behaviour. Claude reviews this plan, then the watcher clears it before implementation; neither is owner design approval. One PR; notify K/L after landing.
+Forecast: production +1/-0; tests +1–3/-0; support 0; docs 20–40 lines. No palettes, controls, helpers, guide wording or other behaviour. Claude reviewed this plan (198 seconds); the driver accepted the test-selection, current-head CI, font fallback, parent-SHA and claim limits. The watcher must still clear it before implementation; neither is owner design approval. One PR; notify K/L after landing.
