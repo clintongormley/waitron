@@ -1,8 +1,11 @@
 import { BACKUP_ENV_FILE } from "@waitron/store";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { sha256Hex } from "@waitron/handover";
+import { canonicalize } from "@waitron/membership";
 import { AppError, isAppError } from "@waitron/shared";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
+import { isUnset } from "./env-value.js";
 import { writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
 
@@ -82,6 +85,27 @@ export function checkBackupSettings(value: unknown): BackupSettingsCheck {
     return { ok: false, reason: reason === "round_trip" ? "round_trip" : "control_char" };
   }
   return { ok: true, settings };
+}
+
+/**
+ * Only the settings holding a value, so a file with no values left, or a dangling link, is the same
+ * as no file: `null`. An empty value is unset (`isUnset`), the same as no line unless it hides that
+ * name in `trading.env` or `secrets.env`, which this does not read.
+ */
+export async function readBackupSettings(stateDir: string): Promise<Record<string, string> | null> {
+  let text: string;
+  try {
+    text = await readFile(join(stateDir, BACKUP_ENV_FILE), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  const settings = Object.entries(parseEnvFile(text)).filter(([, value]) => !isUnset(value));
+  return settings.length === 0 ? null : Object.fromEntries(settings);
+}
+
+export function backupSettingsDigestOf(settings: Record<string, string> | null): string | null {
+  return settings === null ? null : sha256Hex(canonicalize(settings));
 }
 
 /** Replaces `backup.env` whole with `settings`, or removes it for `null`. */

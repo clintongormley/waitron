@@ -1,5 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { stat } from "node:fs/promises";
 import type { KeyRing } from "@waitron/credentials";
 import {
   isSha256Hex,
@@ -14,15 +13,15 @@ import { canonicalize } from "@waitron/membership";
 import { imageMigrationHashes, manifestSets } from "@waitron/migrations";
 import { readModulePreparationRevisions } from "@waitron/provisioning";
 import { AppError, isAppError, type ErrorCode } from "@waitron/shared";
-import { parseEnvFile } from "./env-file.js";
-import { isUnset } from "./env-value.js";
+import {
+  BACKUP_ENV_FILE,
+  MODULE_PREPARATION_STATE_FILE,
+  MODULES_FILE,
+  SECRETS_ENV_FILE,
+} from "@waitron/store";
+import { backupSettingsDigestOf, readBackupSettings } from "./backup-env-writer.js";
 import { readModuleConfig } from "./module-config.js";
 import "./errors.js";
-
-const BACKUP_SETTINGS = "backup.env";
-const MODULE_SETTINGS = "modules.json";
-const RING = "secrets.env";
-const RETAINED_SELECTIONS = "module-preparation-state.json";
 
 /**
  * `secrets.env` carries its key versions, not a digest: the receiving box must hold every version
@@ -45,13 +44,13 @@ async function manifestItem(
 ): Promise<NodeLocalItem> {
   if (row.where !== "state") return { ...row };
   switch (row.item) {
-    case BACKUP_SETTINGS:
-      return { ...row, sha256: await backupSettingsDigest(stateDir) };
-    case MODULE_SETTINGS:
+    case BACKUP_ENV_FILE:
+      return { ...row, sha256: backupSettingsDigestOf(await readBackupSettings(stateDir)) };
+    case MODULES_FILE:
       return { ...row, sha256: await moduleSettingsDigest(stateDir) };
-    case RING:
+    case SECRETS_ENV_FILE:
       return { ...row, ringVersions: ringVersions(ring) };
-    case RETAINED_SELECTIONS: {
+    case MODULE_PREPARATION_STATE_FILE: {
       // The file holds parsed JSON, so each value is one a signed body can carry.
       const revisions = await readModulePreparationRevisions({ stateDir });
       return { ...row, revisions: revisions as readonly RetainedRevision[] };
@@ -83,7 +82,7 @@ export async function readOfferSettings(
   if (folder === null || !folder.isDirectory()) {
     throw new AppError(
       unreadable,
-      { file: BACKUP_SETTINGS },
+      { file: BACKUP_ENV_FILE },
       { reason: "the state folder cannot be read" },
     );
   }
@@ -101,9 +100,9 @@ export async function readOfferSettings(
         { reason: `${row.item}: ${cause ?? "unknown"}` },
       );
     }
-    if (row.where === "state" && row.item === BACKUP_SETTINGS) {
+    if (row.where === "state" && row.item === BACKUP_ENV_FILE) {
       backupSettings = item.sha256 ?? null;
-    } else if (row.where === "state" && row.item === MODULE_SETTINGS) {
+    } else if (row.where === "state" && row.item === MODULES_FILE) {
       moduleSettings = item.sha256 ?? null;
     }
   }
@@ -174,31 +173,6 @@ function ringVersions(ring: KeyRing): number[] {
   const versions = [ring.current.version];
   if (ring.previous !== undefined) versions.push(ring.previous.version);
   return versions.sort((a, b) => a - b);
-}
-
-/**
- * Only the settings holding a value, so a file with no values left, or a dangling link, is the same
- * as no file: `null`. An empty value is unset (`isUnset`), the same as no line unless it hides that
- * name in `trading.env` or `secrets.env`, which this does not read.
- */
-export async function readBackupSettings(stateDir: string): Promise<Record<string, string> | null> {
-  let text: string;
-  try {
-    text = await readFile(join(stateDir, BACKUP_SETTINGS), "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
-  const settings = Object.entries(parseEnvFile(text)).filter(([, value]) => !isUnset(value));
-  return settings.length === 0 ? null : Object.fromEntries(settings);
-}
-
-export function backupSettingsDigestOf(settings: Record<string, string> | null): string | null {
-  return settings === null ? null : sha256Hex(canonicalize(settings));
-}
-
-async function backupSettingsDigest(stateDir: string): Promise<string | null> {
-  return backupSettingsDigestOf(await readBackupSettings(stateDir));
 }
 
 /**

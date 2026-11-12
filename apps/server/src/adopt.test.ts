@@ -46,7 +46,8 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { tlsSetMatches } from "./testing/box-tls.js";
 import { runStagedReset, stageResetRequest } from "./reset-request.js";
 import { replaceBackupSettings } from "./backup-env-writer.js";
-import { readBackupSettings, readOfferSettings } from "./handover-manifest.js";
+import { readBackupSettings } from "./backup-env-writer.js";
+import { readOfferSettings } from "./handover-manifest.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { PAIR_BUNDLE_FIELDS, PAIR_STORE } from "./testing/pair-bundle.js";
 

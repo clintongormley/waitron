@@ -30,7 +30,7 @@ import {
   type ModuleOperations,
 } from "@waitron/module";
 import { caCertPath, caKeyPath, type EncodedKeyRing } from "./box-secrets.js";
-import { readBackupSettings } from "./handover-manifest.js";
+import { readBackupSettings } from "./backup-env-writer.js";
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { readNodeIdentityKey } from "./node-identity.js";

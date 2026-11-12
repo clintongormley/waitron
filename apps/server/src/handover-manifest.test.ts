@@ -9,13 +9,12 @@ import { canonicalize } from "@waitron/membership";
 import { isAppError } from "@waitron/shared";
 import { resolveBackupConfig } from "./backup-config.js";
 import { loadBoxEnv } from "./box-env.js";
-import { replaceBackupSettings } from "./backup-env-writer.js";
 import {
   backupSettingsDigestOf,
-  buildNodeLocalManifest,
   readBackupSettings,
-  readOfferSettings,
-} from "./handover-manifest.js";
+  replaceBackupSettings,
+} from "./backup-env-writer.js";
+import { buildNodeLocalManifest, readOfferSettings } from "./handover-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 
 const CURRENT_KEY = randomBytes(32);
