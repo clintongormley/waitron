@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,6 +35,7 @@ const stamp = new Date("2026-10-06T00:00:00Z");
 
 function deps(f: Awaited<ReturnType<typeof fixture>>, backends: StorageBackend[]) {
   return {
+    nodeId: BACKUP_NODE_ID,
     ...f,
     backends,
     db: {} as Database,

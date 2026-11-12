@@ -1,6 +1,6 @@
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { BACKUP_KEY_PREFIX, parseBackupArchiveKey } from "./backup-keys.js";
+import { BACKUP_KEY_PREFIX, ownArchiveStamp } from "./backup-keys.js";
 import type { StorageBackend, StoredObject } from "./storage-backend.js";
 import "./errors.js";
 
@@ -45,6 +45,7 @@ export function readDestinationStatus(
   backend: StorageBackend,
   staleAfterMs: number,
   now: Date,
+  nodeId: string,
   readTimeoutMs: number = STATUS_READ_TIMEOUT_MS,
 ): DestinationRead {
   const controller = new AbortController();
@@ -70,7 +71,7 @@ export function readDestinationStatus(
   );
   // `Promise.race` subscribes to the listing, so a failure after the limit is handled, not lost.
   const status = Promise.race([listing, limit]).then(
-    (objects) => freshness(backend.id, objects, staleAfterMs, now),
+    (objects) => freshness(backend.id, objects, staleAfterMs, now, nodeId),
     (err) => unreadDestination(backend.id, codeOf(err)),
   );
   return { status, settled };
@@ -81,11 +82,12 @@ function freshness(
   objects: StoredObject[],
   staleAfterMs: number,
   now: Date,
+  nodeId: string,
 ): DestinationStatus {
   // The listing is newest-first. A local folder's mtimes come from the box's clock, so after a
   // step back an archive can sit further ahead than staleAfterMs; it says nothing about how
   // recent the last backup is, so the newest archive not that far ahead is judged instead.
-  const archives = objects.filter(({ key }) => parseBackupArchiveKey(key) !== null);
+  const archives = objects.filter(({ key }) => ownArchiveStamp(key, nodeId) !== null);
   if (archives.length === 0) return unreadDestination(id, null);
   const judged = archives.find(({ mtimeMs }) => mtimeMs - now.getTime() <= staleAfterMs);
   const newest = judged ?? archives[0]!;

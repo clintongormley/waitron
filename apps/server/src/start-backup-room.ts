@@ -182,6 +182,7 @@ async function deleteToFloor(
   const floorBytes = deps.spareBytes + FULL_DISK_BYTES;
   try {
     await makeRoom({
+      nodeId: note.nodeId,
       neededBytes: 0,
       floorBytes,
       aimBytes: deps.floor,

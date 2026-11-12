@@ -203,6 +203,7 @@ it("roundtrips real SQLite and state through scheduled capture, local file stora
   const stamp = new Date("2026-10-06T00:00:00Z");
   guard.forbidden.add(join(f.stagingDir, "waitron-20261006T000000Z.dump"));
   await runOnce({
+    nodeId: ids.node,
     ...f,
     stateDir: captureState,
     db: suite.db,

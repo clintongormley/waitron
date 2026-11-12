@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { mkdir, mkdtemp, realpath, rm, stat, truncate, writeFile } from "node:fs/promises";
 import { lstatSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -38,7 +39,7 @@ async function fixture(count = 4) {
   await mkdir(dir, { recursive: true });
   const keys: string[] = [];
   for (let n = 1; n <= count; n += 1) {
-    const key = backupArchiveKey(hours(n));
+    const key = backupArchiveKey(hours(n), { nodeId: BACKUP_NODE_ID });
     await writeFile(join(dir, key), "");
     await truncate(join(dir, key), GIB);
     keys.push(key);
@@ -72,6 +73,7 @@ function deps(
     onArchivesDeleted,
     installationStartedAt,
     deps: {
+      nodeId: BACKUP_NODE_ID,
       dir: f.venue,
       staging: createStagingTurn(),
       backends: () => [{ id: "local", localDir: f.dir }],

@@ -69,6 +69,7 @@ if (request.command === "capture") {
   try {
     let artifact: Uint8Array | undefined;
     await runOnce({
+      nodeId: parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8")).WAITRON_NODE_ID!,
       backends: [
         {
           id: "cloud-test-capture",

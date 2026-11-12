@@ -5515,8 +5515,11 @@ by `since` even when it missed the run that cleared it.
   measured on ext4.
 - A backup folder on another disk is never deleted from, and a run can still fill that disk and
   fail `ENOSPC` there without being refused first.
-- A folder two boxes share holds archive names with no box id, so one box can delete the other's
-  archives, as its pruning can.
+- Archive retention, local space-making and freshness select only names carrying this box's full
+  node ID through `ownArchiveStamp` in `apps/server/src/backup-keys.ts`. Other node IDs and
+  unrecognised names take no retention slot and are never deleted by these paths. Ordinary
+  restore retains the archived node ID, so it continues that identity's retention; use a new
+  archive folder when every old copy must be kept.
 - An archive stamped while a clock read ahead can look newer than the installation start and so be
   deleted, and stays "the newest" in its folder until a later one exists, so the real latest backup
   can be deleted. A step the box made puts it last and stops it counting as the newest, but only

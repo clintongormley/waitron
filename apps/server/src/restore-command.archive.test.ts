@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -66,7 +67,7 @@ vi.mock("./archive-recovery-pack.js", async (importOriginal) => {
 const RECOVERY_KEY = "pack-recovery-key-value-7c1d";
 const SECRET_ACCESS_KEY = "pack-secret-access-key-value-93ab";
 const VAULT_KEY = Buffer.alloc(32, 5).toString("base64");
-const KEY = backupArchiveKey(new Date("2026-10-01T03:00:00Z"));
+const KEY = backupArchiveKey(new Date("2026-10-01T03:00:00Z"), { nodeId: BACKUP_NODE_ID });
 const COLD_RESTORE_NOTICE =
   "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten";
 const WRONG_KEY_LINE =

@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -63,6 +64,7 @@ describe("queued account mail after a real backup and restore", () => {
       const backend = new LocalFsBackend("mail", join(root, "archives"));
       const signal = new AbortController().signal;
       await runOnce({
+        nodeId: BACKUP_NODE_ID,
         backends: [backend],
         db: suite.db,
         node: suite.node,

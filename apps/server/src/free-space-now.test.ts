@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { existsSync } from "node:fs";
 import {
   lstat,
@@ -115,10 +116,10 @@ async function expectAllPresent(paths: string[]): Promise<void> {
   expect(missing).toEqual([]);
 }
 
-const ARCHIVE = backupArchiveKey(
-  new Date("2026-10-20T00:00:00Z"),
-  "8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
-);
+const ARCHIVE = backupArchiveKey(new Date("2026-10-20T00:00:00Z"), {
+  nodeId: BACKUP_NODE_ID,
+  nonce: "8c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+});
 
 const NOTHING = { freedBytes: 0, deleted: 0, failed: 0, backupRunning: false };
 

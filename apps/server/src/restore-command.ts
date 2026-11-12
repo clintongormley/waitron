@@ -599,7 +599,7 @@ async function sourceText(bytes: Uint8Array, code: keyof typeof NO_CODE): Promis
 function packRefusal(err: AppError): string | null {
   const words: Partial<Record<string, string>> = {
     "restore.archive_key_invalid":
-      "that is not the name of a backup archive; give the archive's file name exactly as the bucket lists it, such as waitron-20261001T030000Z-<id>.backup.enc",
+      "that is not the name of a backup archive; give the archive's file name exactly as the bucket lists it, such as waitron-20261001T030000Z-<node-id>-<nonce>.backup.enc",
     "restore.archive_missing":
       "the bucket holds no archive by that name in this venue's archive folder; check the name and that the pack is this venue's",
     "restore.archive_disk_full":

@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -317,7 +318,7 @@ describe("S3Backend", () => {
   });
 
   it("over the real file store, prunes nothing when a listing repeats the only archive on a second page", async () => {
-    const key = backupArchiveKey(new Date("2026-10-12T00:00:00Z"));
+    const key = backupArchiveKey(new Date("2026-10-12T00:00:00Z"), { nodeId: BACKUP_NODE_ID });
     const page = (more: boolean) =>
       `<ListBucketResult><Contents><Key>${key}</Key><Size>1</Size>` +
       "<LastModified>2026-10-12T00:00:00.000Z</LastModified></Contents>" +
@@ -332,7 +333,7 @@ describe("S3Backend", () => {
     );
     try {
       await expect(
-        pruneBackend(real, 1, 3650, Date.parse("2026-10-12T01:00:00Z"), call),
+        pruneBackend(real, 1, 3650, Date.parse("2026-10-12T01:00:00Z"), call, BACKUP_NODE_ID),
       ).rejects.toMatchObject({
         code: "backup.destination_request_failed",
         params: { operation: "list", name: "RepeatedKey" },

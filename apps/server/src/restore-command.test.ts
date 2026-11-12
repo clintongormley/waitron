@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -1345,7 +1346,7 @@ describe("waitron-restore restore, the venue folder", () => {
         argv = ["restore", await makeArtifact(dir)];
         extra.restore = heldDuringRestore;
       } else {
-        const key = backupArchiveKey(new Date("2026-10-01T03:00:00Z"));
+        const key = backupArchiveKey(new Date("2026-10-01T03:00:00Z"), { nodeId: BACKUP_NODE_ID });
         argv = ["restore", "--from-archive", await archivePackFile(dir), "--archive-key", key];
         const unused = async (): Promise<never> => {
           throw new Error("unexpected file-store operation");

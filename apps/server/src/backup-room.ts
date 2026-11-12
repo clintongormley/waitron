@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import { join, relative } from "node:path";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { parseBackupArchiveKey } from "./backup-keys.js";
+import { ownArchiveStamp } from "./backup-keys.js";
 import type { ClockStepHold } from "./backup-sweep.js";
 import { realOrNearest, type DeviceOf } from "./disk-usage.js";
 import { errnoOf } from "./errno.js";
@@ -27,7 +27,7 @@ export interface DeletableArchive {
 
 /**
  * The archives the box may delete to make room, oldest first (ties by key): regular files named as
- * archives, taken strictly after the current installation began, never the newest of those in their
+ * this node's archives, taken strictly after the current installation began, never the newest in their
  * folder. An unknown installation start offers nothing. An archive `held` by a clock step (see
  * {@link heldByStep}) is offered only after every other, and "the newest" is then the newest one not
  * held, or the newest held one when every one is held. `"everything"` offers nothing.
@@ -35,6 +35,7 @@ export interface DeletableArchive {
 export async function listDeletableArchives(
   folders: readonly BackupFolder[],
   installationStartedAt: Date | null,
+  nodeId: string,
   readdir: (dir: string) => Promise<string[]> = (dir) => fs.readdir(dir),
   held?: ClockStepHold | "everything",
 ): Promise<DeletableArchive[]> {
@@ -44,7 +45,7 @@ export async function listDeletableArchives(
     byAgeThenKey(a, b);
   const out: DeletableArchive[] = [];
   for (const { destination, dir } of folders) {
-    const archives = (await archivesIn(destination, dir, readdir)).filter(
+    const archives = (await archivesIn(destination, dir, nodeId, readdir)).filter(
       (a) => a.takenAt.getTime() > installationStartedAt.getTime(),
     );
     const free = archives.filter((a) => !heldByStep(held, a.takenAt.getTime()));
@@ -69,6 +70,7 @@ function byAgeThenKey(a: DeletableArchive, b: DeletableArchive): number {
 async function archivesIn(
   destination: string,
   dir: string,
+  nodeId: string,
   readdir: (dir: string) => Promise<string[]>,
 ): Promise<DeletableArchive[]> {
   let names: string[];
@@ -80,8 +82,8 @@ async function archivesIn(
   }
   const out: DeletableArchive[] = [];
   for (const key of names) {
-    const parsed = parseBackupArchiveKey(key);
-    if (parsed === null) continue;
+    const takenAt = ownArchiveStamp(key, nodeId);
+    if (takenAt === null) continue;
     let info;
     try {
       // `lstat`, so a link named like an archive is never followed, listed or counted as the newest.
@@ -90,7 +92,7 @@ async function archivesIn(
       continue;
     }
     if (!info.isFile()) continue;
-    out.push({ destination, dir, key, bytes: info.size, takenAt: parsed.timestamp });
+    out.push({ destination, dir, key, bytes: info.size, takenAt });
   }
   return out;
 }
@@ -176,6 +178,7 @@ export async function reportArchivesDeleted(
 }
 
 export interface MakeRoomOptions {
+  nodeId: string;
   neededBytes: number;
   floorBytes: number;
   aimBytes: number;
@@ -232,6 +235,7 @@ export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
   const archives = await listDeletableArchives(
     opts.folders,
     await opts.installationStartedAt(),
+    opts.nodeId,
     undefined,
     await opts.clockStepHold?.(),
   );

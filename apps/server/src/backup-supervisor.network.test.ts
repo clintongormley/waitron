@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 // What the supervisor's status says about each destination when one of them is slow or failing,
 // against a real migrated venue and real folder destinations.
 import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
@@ -94,6 +95,7 @@ async function supervisor(
   extra: Partial<BackupSupervisorDeps> = {},
 ): Promise<BackupSupervisor> {
   return new BackupSupervisor({
+    nodeId: BACKUP_NODE_ID,
     buildConfig: async () => cfg(),
     isManagedByEnvironment: () => false,
     readSingletonRole: () => "primary",

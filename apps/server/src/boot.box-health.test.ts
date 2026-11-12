@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { randomUUID } from "node:crypto";
 import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -251,7 +252,7 @@ describe("the running server's Box status read and free-space deletion", () => {
     await expect(
       start(undefined, async (scratch) => {
         const destination = join(scratch, "scratch/backup", "backup-encrypt-local");
-        archive = join(destination, backupArchiveKey(new Date()));
+        archive = join(destination, backupArchiveKey(new Date(), { nodeId: BACKUP_NODE_ID }));
         await mkdir(destination, { recursive: true });
         await writeFile(archive, Buffer.alloc(800, 1));
         return { WAITRON_BACKUP_DIR: destination, WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };

@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -121,6 +122,7 @@ beforeAll(async () => {
     await suite.db.archiveTo(database);
     const backend = new LocalFsBackend("receipt", join(root, `archives-${String(configured)}`));
     await runOnce({
+      nodeId: BACKUP_NODE_ID,
       backends: [backend],
       db: suite.db,
       node: suite.node,

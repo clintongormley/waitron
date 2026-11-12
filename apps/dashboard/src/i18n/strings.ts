@@ -2085,8 +2085,7 @@ export const en = {
   "backup.destination.nothing_chosen": "Choose a folder on this box, a bucket, or both.",
   "backup.destination.choice_local": "A folder on this box",
   "backup.destination.choice_custom": "An S3-compatible bucket",
-  "backup.destination.prefix_hint":
-    "Use a separate folder for each installation. After a restore, choose a new folder to keep the old box’s backups.",
+  "backup.destination.prefix_hint": "After a restore, choose a new folder to keep old backups.",
   "backup.destination.secret_keep": "Leave empty to keep the saved secret.",
   "backup.destination.secret_needed":
     "The bucket or access key changed, so enter the secret access key.",
@@ -6035,7 +6034,7 @@ export const es: Record<StringKey, string> = {
   "backup.destination.choice_local": "Una carpeta de esta caja",
   "backup.destination.choice_custom": "Un bucket compatible con S3",
   "backup.destination.prefix_hint":
-    "Usa una carpeta distinta para cada instalación. Tras una restauración, elige una carpeta nueva para conservar las copias de la caja anterior.",
+    "Tras restaurar, elige otra carpeta para conservar las copias anteriores.",
   "backup.destination.secret_keep": "Déjala vacía para conservar la clave guardada.",
   "backup.destination.secret_needed":
     "El bucket o la clave de acceso han cambiado: escribe la clave de acceso secreta.",

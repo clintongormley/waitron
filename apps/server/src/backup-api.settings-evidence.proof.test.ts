@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 // What `GET /api/backup/settings-evidence` must never do: change anything, wait for a Save, turn
@@ -134,6 +135,7 @@ const capture =
 
 function makeSupervisor(sc: Scenario): BackupSupervisor {
   const sup = new BackupSupervisor({
+    nodeId: BACKUP_NODE_ID,
     buildConfig: async () =>
       loadBackupSettings({
         managedByEnvironment: isBackupManagedByEnvironment(sc.base),
