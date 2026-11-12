@@ -1,7 +1,7 @@
 # A1209: Help tooltip placement
 
 Author: Codex Sol high; separate Lane D plan author.
-Status: pending Claude review and watcher clearance; no owner approval of this design.
+Status: Claude approach read completed; corrections applied, pending watcher clearance. No owner approval of this design.
 Do not implement before both gates.
 
 ## Request and smallest outcome
@@ -15,7 +15,7 @@ Open above the badge when below cannot fit and above can, leaving the badge clea
 `packages/ui/src/components/wt-help-tooltip.ts:192` clamps the below position upward.
 Its sole caller is `onTriggerClick`, synchronously after `showPopover()`.
 Keep that timing, the 4px gap and 8px viewport margin.
-Prefer below when it fits; otherwise choose above when it fits.
+Below fits when `anchor.bottom + 4 + height <= innerHeight - 8`; above fits when `anchor.top - 4 - height >= 8`. Prefer below when it fits; otherwise choose above when it fits.
 Retain the existing vertical fallback when neither side fits, and horizontal clamping.
 No resize listeners, observers, live positioning, guide text, framework or new helpers.
 
@@ -27,7 +27,9 @@ No resize listeners, observers, live positioning, guide text, framework or new h
    Reuse `mount`, `cleanup`, `userEvent.click` and real popup rectangles.
    Wait for final content/fonts, then assert measured room above, insufficient room below,
    `popup.bottom ≈ trigger.top - 4`, and the 8px viewport margin.
-   Give above generous headroom for CI fonts, including wrapped text and a guide link.
+   Use short static content and generous above headroom for CI fonts.
+   Add one neither-side-fits case: centred anchor, tall content, assert the retained
+   fallback ends 8px above the viewport bottom.
    Retain existing below-placement and left/right-clamp behavioural assertions.
 2. Red: `pnpm --filter @waitron/ui test src/components/wt-help-tooltip.test.ts -t 'opens above when below cannot fit'`.
    Confirm failure at the above-placement assertion.
@@ -41,6 +43,7 @@ No resize listeners, observers, live positioning, guide text, framework or new h
 
 ## Expected size
 
-Production: 8–15 changed lines, one component.
-Tests: 32–65 changed lines, existing test file; combined target 40–80.
-Support: two backlog removals and this plan; no helper changes.
+Production: 4–8 changed lines, one component.
+Tests: 25–55 changed lines, existing test file; combined target about 30–65.
+Test support: zero. Documentation: two backlog removals and this plan.
+Claude report: `~/waitron-campaign-d/receipts/a1209/plan-review.md`; all findings taken except the optional visual cut, because RUNNER requires both themes/widths.
