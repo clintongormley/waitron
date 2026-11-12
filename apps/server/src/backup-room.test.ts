@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID, OTHER_BACKUP_NODE_ID } from "./testing/backup-node.js";
 import {
   chmod,
   stat as fsStat,
@@ -57,7 +58,7 @@ async function folder(name: string): Promise<string> {
 }
 
 async function archive(dir: string, at: Date, bytes = 10, nonce?: string): Promise<string> {
-  const key = backupArchiveKey(at, nonce);
+  const key = backupArchiveKey(at, { nodeId: BACKUP_NODE_ID, nonce: nonce });
   await writeFile(join(dir, key), Buffer.alloc(bytes));
   return key;
 }
@@ -77,6 +78,7 @@ describe("listDeletableArchives", () => {
         { destination: "db", dir: b },
       ],
       T,
+      BACKUP_NODE_ID,
     );
 
     expect(listed.map((e) => e.key)).toEqual([a1, b1]);
@@ -89,7 +91,12 @@ describe("listDeletableArchives", () => {
     await archive(a, hours(3));
     const newestFirst = async (dir: string) => (await readdir(dir)).sort().reverse();
 
-    const listed = await listDeletableArchives([{ destination: "da", dir: a }], T, newestFirst);
+    const listed = await listDeletableArchives(
+      [{ destination: "da", dir: a }],
+      T,
+      BACKUP_NODE_ID,
+      newestFirst,
+    );
 
     expect(listed.map((e) => e.key)).toEqual([first, second]);
   });
@@ -102,7 +109,7 @@ describe("listDeletableArchives", () => {
     const after = await archive(a, hours(24));
     await archive(a, hours(48));
 
-    const listed = await listDeletableArchives([{ destination: "da", dir: a }], T);
+    const listed = await listDeletableArchives([{ destination: "da", dir: a }], T, BACKUP_NODE_ID);
 
     expect(listed.map((e) => e.key)).toEqual([after]);
   });
@@ -115,6 +122,7 @@ describe("listDeletableArchives", () => {
     const listed = await listDeletableArchives(
       [{ destination: "da", dir: a }],
       new Date(T.getTime() + 500),
+      BACKUP_NODE_ID,
     );
 
     expect(listed).toEqual([]);
@@ -125,7 +133,9 @@ describe("listDeletableArchives", () => {
     await archive(a, hours(1));
     await archive(a, hours(2));
 
-    expect(await listDeletableArchives([{ destination: "da", dir: a }], null)).toEqual([]);
+    expect(
+      await listDeletableArchives([{ destination: "da", dir: a }], null, BACKUP_NODE_ID),
+    ).toEqual([]);
   });
 
   it("never lists a symbolic link, never counts it as the newest, and leaves its target alone", async () => {
@@ -134,9 +144,9 @@ describe("listDeletableArchives", () => {
     await writeFile(outside, "keep me");
     const older = await archive(a, hours(1));
     await archive(a, hours(2));
-    await symlink(outside, join(a, backupArchiveKey(hours(3))));
+    await symlink(outside, join(a, backupArchiveKey(hours(3), { nodeId: BACKUP_NODE_ID })));
 
-    const listed = await listDeletableArchives([{ destination: "da", dir: a }], T);
+    const listed = await listDeletableArchives([{ destination: "da", dir: a }], T, BACKUP_NODE_ID);
 
     expect(listed.map((e) => e.key)).toEqual([older]);
     expect(await readFile(outside, "utf8")).toBe("keep me");
@@ -147,11 +157,11 @@ describe("listDeletableArchives", () => {
     const older = await archive(a, hours(1));
     await archive(a, hours(5));
     await writeFile(join(a, "waitron-not-a-stamp.backup.enc"), "x");
-    await writeFile(join(a, `${backupArchiveKey(hours(2))}.tmp`), "x");
-    await mkdir(join(a, backupArchiveKey(hours(3))));
+    await writeFile(join(a, `${backupArchiveKey(hours(2), { nodeId: BACKUP_NODE_ID })}.tmp`), "x");
+    await mkdir(join(a, backupArchiveKey(hours(3), { nodeId: BACKUP_NODE_ID })));
     await writeFile(join(a, "notes.txt"), "x");
 
-    const listed = await listDeletableArchives([{ destination: "da", dir: a }], T);
+    const listed = await listDeletableArchives([{ destination: "da", dir: a }], T, BACKUP_NODE_ID);
 
     expect(listed.map((e) => e.key)).toEqual([older]);
   });
@@ -160,16 +170,20 @@ describe("listDeletableArchives", () => {
     const a = await folder("a");
     const older = await archive(a, hours(1));
     await archive(a, hours(2));
-    await mkdir(join(a, backupArchiveKey(hours(3))));
+    await mkdir(join(a, backupArchiveKey(hours(3), { nodeId: BACKUP_NODE_ID })));
 
-    const listed = await listDeletableArchives([{ destination: "da", dir: a }], T);
+    const listed = await listDeletableArchives([{ destination: "da", dir: a }], T, BACKUP_NODE_ID);
 
     expect(listed.map((e) => e.key)).toEqual([older]);
   });
 
   it("lists nothing from a folder that does not exist", async () => {
     expect(
-      await listDeletableArchives([{ destination: "da", dir: join(root, "missing") }], T),
+      await listDeletableArchives(
+        [{ destination: "da", dir: join(root, "missing") }],
+        T,
+        BACKUP_NODE_ID,
+      ),
     ).toEqual([]);
   });
 
@@ -191,6 +205,7 @@ describe("listDeletableArchives", () => {
         { destination: "db", dir: b },
       ],
       T,
+      BACKUP_NODE_ID,
     );
 
     expect(listed).toEqual([
@@ -216,6 +231,7 @@ describe("listDeletableArchives", () => {
         { destination: "db", dir: b },
       ],
       T,
+      BACKUP_NODE_ID,
     );
 
     expect(listed.map((e) => [e.destination, e.key])).toEqual([
@@ -250,6 +266,7 @@ describe("listDeletableArchives", () => {
       const listed = await listDeletableArchives(
         [{ destination: "da", dir: f.a }],
         T,
+        BACKUP_NODE_ID,
         undefined,
         hold,
       );
@@ -260,7 +277,11 @@ describe("listDeletableArchives", () => {
     it("offers the same folder by stamp alone with no step", async () => {
       const f = await steppedBack();
 
-      const listed = await listDeletableArchives([{ destination: "da", dir: f.a }], T);
+      const listed = await listDeletableArchives(
+        [{ destination: "da", dir: f.a }],
+        T,
+        BACKUP_NODE_ID,
+      );
 
       expect(listed.map((e) => e.key)).toEqual([f.after2, f.after1, f.after0, f.ahead2, f.ahead1]);
     });
@@ -274,6 +295,7 @@ describe("listDeletableArchives", () => {
       const listed = await listDeletableArchives(
         [{ destination: "da", dir: a }],
         new Date(stepAt - 400 * DAY),
+        BACKUP_NODE_ID,
         undefined,
         hold,
       );
@@ -295,6 +317,7 @@ describe("listDeletableArchives", () => {
           { destination: "db", dir: b },
         ],
         new Date(stepAt - 10 * DAY),
+        BACKUP_NODE_ID,
         undefined,
         hold,
       );
@@ -311,6 +334,7 @@ describe("listDeletableArchives", () => {
       const listed = await listDeletableArchives(
         [{ destination: "da", dir: a }],
         at(stepAt + 2 * DAY),
+        BACKUP_NODE_ID,
         undefined,
         hold,
       );
@@ -322,7 +346,13 @@ describe("listDeletableArchives", () => {
       const f = await steppedBack();
 
       expect(
-        await listDeletableArchives([{ destination: "da", dir: f.a }], T, undefined, "everything"),
+        await listDeletableArchives(
+          [{ destination: "da", dir: f.a }],
+          T,
+          BACKUP_NODE_ID,
+          undefined,
+          "everything",
+        ),
       ).toEqual([]);
     });
   });
@@ -334,7 +364,9 @@ describe("listDeletableArchives", () => {
     // Read but not search permission: the names can be listed, each `lstat` is refused.
     await chmod(a, 0o444);
     try {
-      expect(await listDeletableArchives([{ destination: "da", dir: a }], T)).toEqual([]);
+      expect(
+        await listDeletableArchives([{ destination: "da", dir: a }], T, BACKUP_NODE_ID),
+      ).toEqual([]);
     } finally {
       await chmod(a, 0o755);
     }
@@ -545,6 +577,7 @@ describe("makeRoom", () => {
       log,
       onDeleted,
       args: {
+        nodeId: BACKUP_NODE_ID,
         neededBytes: NEED,
         floorBytes: FLOOR,
         aimBytes: AIM,
@@ -563,6 +596,28 @@ describe("makeRoom", () => {
 
   const deletedKeys = (onDeleted: ReturnType<typeof base>["onDeleted"]) =>
     onDeleted.mock.calls.map(([deleted]) => deleted.map((a) => a.key));
+
+  it("keeps foreign archives out of the offered bytes and newest-copy protection", async () => {
+    const f = await backups();
+    const foreignKeys = [];
+    for (const n of [5, 6]) {
+      const key = backupArchiveKey(hours(n), { nodeId: OTHER_BACKUP_NODE_ID });
+      await writeFile(join(f.dir, key), Buffer.alloc(SIZE));
+      foreignKeys.push(key);
+    }
+    const d = disk(
+      [...f.paths, ...foreignKeys.map((key) => join(f.dir, key))],
+      NEED + FLOOR - 3 * SIZE - 1,
+    );
+    const { args, onDeleted } = base(f, d);
+
+    await expect(makeRoom({ ...args, nodeId: BACKUP_NODE_ID })).rejects.toMatchObject({
+      code: "backup.staging_space_low",
+      params: { afterDeleting: false },
+    });
+    expect((await readdir(f.dir)).sort()).toEqual([...f.keys, ...foreignKeys].sort());
+    expect(onDeleted).not.toHaveBeenCalled();
+  });
 
   it("refuses, deleting nothing, when even every deletable archive cannot reach the need and the floor", async () => {
     const f = await backups();

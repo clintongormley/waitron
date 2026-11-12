@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID, OTHER_BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,7 +22,13 @@ const backend = (id: string, newestMtimeMs: number | null): StorageBackend => ({
   list: async (): Promise<StoredObject[]> =>
     newestMtimeMs === null
       ? []
-      : [{ key: backupArchiveKey(new Date(newestMtimeMs)), size: 1, mtimeMs: newestMtimeMs }],
+      : [
+          {
+            key: backupArchiveKey(new Date(newestMtimeMs), { nodeId: BACKUP_NODE_ID }),
+            size: 1,
+            mtimeMs: newestMtimeMs,
+          },
+        ],
 });
 
 const listing = (id: string, list: StorageBackend["list"]): StorageBackend => ({
@@ -40,11 +47,48 @@ const readAll = async (
 ) => ({
   configured: true,
   destinations: await Promise.all(
-    backends.map((b) => readDestinationStatus(b, staleAfterMs, now, readTimeoutMs).status),
+    backends.map(
+      (b) => readDestinationStatus(b, staleAfterMs, now, BACKUP_NODE_ID, readTimeoutMs).status,
+    ),
   ),
 });
 
 describe("readDestinationStatus", () => {
+  it("ignores a healthy neighbour when this box has only an old backup or none", async () => {
+    const foreign = {
+      key: backupArchiveKey(NOW, { nodeId: OTHER_BACKUP_NODE_ID }),
+      size: 1,
+      mtimeMs: NOW.getTime(),
+    };
+    const oldMs = NOW.getTime() - 120_000;
+    const own = {
+      key: backupArchiveKey(new Date(oldMs), { nodeId: BACKUP_NODE_ID }),
+      size: 1,
+      mtimeMs: oldMs,
+    };
+    const onlyForeign = listing("foreign-only", async () => [foreign]);
+    const mixed = listing("mixed", async () => [foreign, own]);
+
+    const result = await readAll([onlyForeign, mixed], 60_000, NOW);
+
+    expect(result.destinations).toEqual([
+      {
+        id: "foreign-only",
+        lastBackupAt: null,
+        ageSeconds: null,
+        stale: true,
+        readErrorCode: null,
+      },
+      {
+        id: "mixed",
+        lastBackupAt: new Date(oldMs).toISOString(),
+        ageSeconds: 120,
+        stale: true,
+        readErrorCode: null,
+      },
+    ]);
+  });
+
   it("reports fresh per destination", async () => {
     const s = await readAll([backend("a", NOW.getTime() - 1000)], 60_000, NOW);
     expect(s).toMatchObject({
@@ -63,7 +107,11 @@ describe("readDestinationStatus", () => {
       listing(id, async () =>
         [...mtimes]
           .sort((a, b) => b - a)
-          .map((mtimeMs) => ({ key: backupArchiveKey(new Date(mtimeMs)), size: 1, mtimeMs })),
+          .map((mtimeMs) => ({
+            key: backupArchiveKey(new Date(mtimeMs), { nodeId: BACKUP_NODE_ID }),
+            size: 1,
+            mtimeMs,
+          })),
       );
     const DAY = 86_400_000;
 
@@ -281,7 +329,7 @@ describe("readDestinationStatus", () => {
           });
         }),
     );
-    const read = readDestinationStatus(late, 60_000, NOW, 50);
+    const read = readDestinationStatus(late, 60_000, NOW, BACKUP_NODE_ID, 50);
     void read.settled.then(() => order.push("settled"));
     expect(await read.status).toMatchObject({ readErrorCode: "backup.destination_timed_out" });
     order.push("answered");
@@ -293,7 +341,13 @@ describe("readDestinationStatus", () => {
   });
 
   it("reports a listing that answers within the limit settled", async () => {
-    const read = readDestinationStatus(backend("local", NOW.getTime() - 1000), 60_000, NOW, 50);
+    const read = readDestinationStatus(
+      backend("local", NOW.getTime() - 1000),
+      60_000,
+      NOW,
+      BACKUP_NODE_ID,
+      50,
+    );
     await expect(read.settled).resolves.toBeUndefined();
     expect((await read.status).readErrorCode).toBeNull();
   });
@@ -336,7 +390,11 @@ describe("readDestinationStatus", () => {
         listing("local", async () => [
           { key: "waitron-20260905T115959Z.backup.enc", size: 1, mtimeMs: NOW.getTime() - 1000 },
           { key: "waitron-notes.txt", size: 1, mtimeMs: NOW.getTime() - 500 },
-          { key: backupArchiveKey(new Date(archiveMs)), size: 1, mtimeMs: archiveMs },
+          {
+            key: backupArchiveKey(new Date(archiveMs), { nodeId: BACKUP_NODE_ID }),
+            size: 1,
+            mtimeMs: archiveMs,
+          },
         ]),
         listing("other", async () => [
           { key: "waitron-x.backup.enc", size: 1, mtimeMs: NOW.getTime() - 1000 },
@@ -369,7 +427,10 @@ describe("readDestinationStatus", () => {
 
     it("reads a waitron-<ts>-<uuid>.backup.enc object as FRESH", async () => {
       dir = mkdtempSync(join(tmpdir(), "backup-status-enc-"));
-      const artifact = join(dir, backupArchiveKey(new Date("2026-09-05T11:59:00Z")));
+      const artifact = join(
+        dir,
+        backupArchiveKey(new Date("2026-09-05T11:59:00Z"), { nodeId: BACKUP_NODE_ID }),
+      );
       writeFileSync(artifact, "ciphertext");
       const mtime = new Date(NOW.getTime() - 30_000); // 30s old, well inside the 60s stale window
       await utimes(artifact, mtime, mtime);

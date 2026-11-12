@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 // A backup run while the box sets its own clock, with the real correction and the real run.
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -136,19 +137,20 @@ function box(options: { seatFails?: number } = {}) {
     boot: { readBoot: () => ({ ms: monoMs, id: "boot-1" }) },
     read: (fn) => fn(TX),
     transaction: (fn) => fn(TX),
-    nodeId: "node-1",
+    nodeId: BACKUP_NODE_ID,
     log: vi.fn(),
   });
 
   const backend = new MemoryBackend();
   const earlier = [
-    backupArchiveKey(new Date(START_MS - 2 * DAY)),
-    backupArchiveKey(new Date(START_MS - DAY)),
+    backupArchiveKey(new Date(START_MS - 2 * DAY), { nodeId: BACKUP_NODE_ID }),
+    backupArchiveKey(new Date(START_MS - DAY), { nodeId: BACKUP_NODE_ID }),
   ];
   for (const key of earlier) backend.objects.set(key, Buffer.from("old"));
 
   const backup = () =>
     runOnce({
+      nodeId: BACKUP_NODE_ID,
       backends: [backend],
       db: {} as Database,
       node: STUB_NODE,

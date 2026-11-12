@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -58,6 +59,7 @@ async function storedKey(dir: string): Promise<string> {
 }
 function deps(f: Awaited<ReturnType<typeof fixture>>, backends: LocalFsBackend[]) {
   return {
+    nodeId: BACKUP_NODE_ID,
     ...f,
     backends,
     db: {} as Database,

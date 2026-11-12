@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +11,7 @@ import type { RestoreFileDeps } from "./restore.js";
 
 it("resolves the archive target before downloading and removes its downloaded file after restore", async () => {
   const root = await mkdtemp(join(tmpdir(), "archive-resolved-target-"));
-  const key = backupArchiveKey(new Date("2026-10-01T03:00:00Z"));
+  const key = backupArchiveKey(new Date("2026-10-01T03:00:00Z"), { nodeId: BACKUP_NODE_ID });
   const packPath = join(root, "pack.txt");
   const payload = Buffer.from("downloaded archive bytes");
   const stateDir = join(root, "state");

@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./backup-node.js";
 import { createCipheriv, createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { access, open, rm, stat } from "node:fs/promises";
@@ -108,7 +109,7 @@ export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<v
   );
   await withBackend(async (backend, work) => {
     const recoveryKey = checkedRecoveryKey(RECOVERY_KEY)!;
-    const key = backupArchiveKey(new Date());
+    const key = backupArchiveKey(new Date(), { nodeId: BACKUP_NODE_ID });
     const plainHash = await step("uploaded", async () => {
       const archive = await syntheticArchive(work, bytes, SCENARIO, signal);
       expect(parseBackupArchiveKey(key)).not.toBeNull();
@@ -237,7 +238,7 @@ export async function runArchiveAbort(fixture: S3ScenarioFixture): Promise<Archi
   return withBackend(async (backend, work) => {
     const error = await step("aborted", async () => {
       const archive = await syntheticArchive(work, ABORT_ARCHIVE_BYTES, SCENARIO, fixture.signal);
-      const key = backupArchiveKey(new Date());
+      const key = backupArchiveKey(new Date(), { nodeId: BACKUP_NODE_ID });
       expect(parseBackupArchiveKey(key)).not.toBeNull();
       const thrown = await backend.putFile(key, archive.path, { signal }).then(
         () => undefined,

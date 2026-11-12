@@ -4,7 +4,7 @@ Conserva el paquete de recuperación anterior cuando cambies la clave de recuper
 
 Las copias programadas en un bucket usan la carpeta que elijas, sin añadir una carpeta para el local. Elige carpetas distintas para las copias programadas y la copia en el bucket. Ninguna puede estar dentro de la otra.
 
-Usa una carpeta de copias distinta para cada instalación. Una caja restaurada que conserva los ajustes anteriores puede eliminar las copias de la caja anterior. Elige una carpeta nueva para conservarlas.
+Puedes compartir una carpeta de copias entre cajas: cada caja elimina solo sus propias copias. Tras una restauración, elige una carpeta nueva si quieres conservar todas las copias anteriores, porque la caja restaurada puede seguir eliminándolas. Waitron deja intactas las copias de otras cajas y los archivos que no reconoce; gestiona esos archivos cuando necesites más espacio.
 
 ## Si se interrumpió la primera configuración {#interrupted-setup}
 

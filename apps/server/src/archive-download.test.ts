@@ -1,3 +1,4 @@
+import { OTHER_BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +14,7 @@ vi.mock("node:fs/promises", async (original) => {
   return { ...actual, rm: vi.fn(actual.rm), statfs: vi.fn(actual.statfs) };
 });
 
-const KEY = backupArchiveKey(new Date("2026-10-01T03:00:00Z"));
+const KEY = backupArchiveKey(new Date("2026-10-01T03:00:00Z"), { nodeId: OTHER_BACKUP_NODE_ID });
 const BODY = Buffer.from("WBK1 archive bytes");
 
 const PACK: ArchiveRecoveryPack = {

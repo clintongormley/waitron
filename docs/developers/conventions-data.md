@@ -5432,9 +5432,10 @@ floor) and `availableBytes`. If not, it deletes toward the aim when the sum reac
 the floor.
 
 **What may be deleted** (A1127 §4's set, `listDeletableArchives`). In each listed folder: plain
-files (`lstat`, so a link is never followed or counted) named as archives (`parseBackupArchiveKey`),
-never the newest in that folder, and only those taken strictly after the current installation
-began. The installation start comes from the fiscal seat's optional `installationStartedAt`
+files (`lstat`, so a link is never followed or counted) whose archive names carry this node's ID
+(`ownArchiveStamp`), never the newest of those in that folder, and only those taken strictly after
+the current installation began. The installation start comes from the fiscal seat's optional
+`installationStartedAt`
 (`packages/fiscal/src/contribution.ts`); the Veri\*Factu module answers the live `registro_sif`
 row's `registrado_en` (`packages/fiscal-verifactu/src/slot.ts`), or null when the node has none.
 `createBackupRoomHooks` (`apps/server/src/backup-deletion-alert.ts`) reads it inside
@@ -5515,8 +5516,11 @@ by `since` even when it missed the run that cleared it.
   measured on ext4.
 - A backup folder on another disk is never deleted from, and a run can still fill that disk and
   fail `ENOSPC` there without being refused first.
-- A folder two boxes share holds archive names with no box id, so one box can delete the other's
-  archives, as its pruning can.
+- Archive retention, local space-making and freshness select only names carrying this box's full
+  node ID through `ownArchiveStamp` in `apps/server/src/backup-keys.ts`. Other node IDs and
+  unrecognised names take no retention slot and are never deleted by these paths. Ordinary
+  restore retains the archived node ID, so it continues that identity's retention; use a new
+  archive folder when every old copy must be kept.
 - An archive stamped while a clock read ahead can look newer than the installation start and so be
   deleted, and stays "the newest" in its folder until a later one exists, so the real latest backup
   can be deleted. A step the box made puts it last and stops it counting as the newest, but only
@@ -5667,8 +5671,7 @@ only the rejoin's wipe, through `db-wipe.ts`, is guarded.
 - `venue.db`'s device number and birth time are not measured on Linux or in Docker; a mismatch
   skips, which is safe. The in-place-write control in `apps/server/src/backup-room-note.test.ts`, run
   by CI on Linux, is the only receipt that ordinary writes keep them.
-- A backup stamped by a clock that ran ahead, and a folder two boxes share, are the run's own limits
-  above.
+- A backup stamped by a clock that ran ahead is one of the run's own limits above.
 - A restore that crashes between placing the file and writing its new installation leaves the
   restored file holding the old installation start; the next reload writes a note with it, and a
   backup run reads it the same way.

@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 // `GET /api/backup/settings-evidence` on a real venue database, one case per row of the design's
 // cause table. Each failure is produced by a real supervisor loading the record as boot does, except
 // the `unknown` row: no read this suite can produce fails without a code, so that case swaps in a
@@ -113,6 +114,7 @@ async function scenario(over: Partial<Scenario> = {}): Promise<Scenario> {
 
 function makeSupervisor(sc: Scenario): BackupSupervisor {
   const sup = new BackupSupervisor({
+    nodeId: BACKUP_NODE_ID,
     buildConfig: async () =>
       loadBackupSettings({
         managedByEnvironment: isBackupManagedByEnvironment(sc.base),

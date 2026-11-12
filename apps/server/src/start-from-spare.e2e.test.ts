@@ -324,7 +324,7 @@ describe("a box started from its spare file", () => {
       log: () => undefined,
     });
     const archive = (at: Date, bytes: number) => {
-      const key = backupArchiveKey(at);
+      const key = backupArchiveKey(at, { nodeId: box.baseEnv.WAITRON_NODE_ID! });
       writeFileSync(join(folder, key), Buffer.alloc(bytes, 7));
       return key;
     };

@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -188,6 +189,7 @@ const readSealed = () => readArchiveSettings(suite.db, RING);
 
 function makeSupervisor(sc: Scenario): BackupSupervisor {
   const sup = new BackupSupervisor({
+    nodeId: BACKUP_NODE_ID,
     // As boot builds it.
     buildConfig: async () =>
       loadBackupSettings({
@@ -811,6 +813,7 @@ describe("backup admin routes", () => {
       keyRotatedAt: undefined,
     };
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => mismatch, // ignores the file the route writes
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",
@@ -860,6 +863,7 @@ describe("backup admin routes", () => {
       keyRotatedAt: undefined,
     };
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => pinned, // ignores the file the route writes, so KEY_1 stays effective
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",
@@ -1337,6 +1341,7 @@ describe("backup admin routes", () => {
     let buildCalls = 0;
     const base: NodeJS.ProcessEnv = {};
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => {
         buildCalls += 1;
         if (buildCalls === 1) {
@@ -1931,7 +1936,7 @@ describe("backup admin routes", () => {
     }, 60_000);
 
     it("Save tests the bucket with one object it then deletes alone", async () => {
-      const archive = backupArchiveKey(new Date());
+      const archive = backupArchiveKey(new Date(), { nodeId: BACKUP_NODE_ID });
       const seeded = [archive, "waitron-probe-other", "notes.txt"];
       for (const key of seeded) bucket.objects.set(key, Buffer.from(key));
       // A real listing under the probe's name also returns any longer key that starts with it.

@@ -149,6 +149,7 @@ export interface BackupSupervisorDeps {
   modules: readonly WaitronModule[];
   environment: DeploymentEnvironment;
   stateDir: string;
+  nodeId: string;
   jitterSeed: string;
   /** The venue's wall clock (tz + business-day cutover). */
   readClock: () => Promise<ScheduleClock>;
@@ -175,8 +176,6 @@ export interface BackupSupervisorDeps {
   recordArchivesDeleted?: (deleted: readonly DeletableArchive[], at: Date) => Promise<void>;
   /** DI for tests; passed to each run. */
   statfs?: Statfs;
-  /** Named in the backup room note; absent, no note is written. */
-  nodeId?: string;
   /** DI for tests; decides which folders the note names as on the venue's disk. */
   deviceOf?: DeviceOf;
 }
@@ -308,6 +307,7 @@ export class BackupSupervisor {
       this.#controller = controller;
       this.#backends = backends;
       this.#worker = runBackupSweep({
+        nodeId: this.#deps.nodeId,
         backends: this.#backends,
         db: venue.venue,
         node: venue.node,
@@ -361,7 +361,7 @@ export class BackupSupervisor {
   /** Leaves no note when the installation start is unknown or a `stop()` lands meanwhile. */
   async #writeNote(backends: readonly StorageBackend[]): Promise<void> {
     const { nodeId, readInstallationStart } = this.#deps;
-    if (nodeId === undefined || readInstallationStart === undefined) return;
+    if (readInstallationStart === undefined) return;
     let installationStartedAt: Date | null;
     let folders;
     try {
@@ -474,7 +474,13 @@ export class BackupSupervisor {
     now: Date,
   ): Promise<DestinationStatus> {
     return this.#statusClients.read(dest, (backend) =>
-      readDestinationStatus(backend, staleAfterMs, now, this.#deps.statusReadTimeoutMs),
+      readDestinationStatus(
+        backend,
+        staleAfterMs,
+        now,
+        this.#deps.nodeId,
+        this.#deps.statusReadTimeoutMs,
+      ),
     );
   }
 

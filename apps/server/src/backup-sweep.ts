@@ -32,7 +32,7 @@ import {
   BACKUP_KEY_PREFIX,
   backupArchiveKey,
   dumpFileName,
-  parseBackupArchiveKey,
+  ownArchiveStamp,
 } from "./backup-keys.js";
 import { withDestinationCall } from "./backup-destination-call.js";
 import {
@@ -67,6 +67,7 @@ export interface DestinationResult {
 }
 
 export interface BackupSweepDeps {
+  nodeId: string;
   backends: StorageBackend[];
   /** Read only for the manifest; the copy goes through {@link BackupSweepDeps.archive}. */
   db: Database;
@@ -242,6 +243,7 @@ export async function runOnce(
       copies = onDisk.copies;
       room = (neededBytes) =>
         makeRoom({
+          nodeId: deps.nodeId,
           neededBytes,
           floorBytes: deps.spaceFloorBytes ?? START_FREE_SPACE_FLOOR,
           aimBytes: deps.spaceAimBytes ?? SPACE_LOW_BYTES,
@@ -280,7 +282,7 @@ export async function runOnce(
     // The encrypted file can be larger than the estimate; each folder copy on the disk writes it
     // whole before its rename.
     if (room && copies > 0) await room((await stat(ciphertext)).size * copies);
-    const key = backupArchiveKey(stamp);
+    const key = backupArchiveKey(stamp, { nodeId: deps.nodeId });
     if (deps.outcomes?.runStopped) {
       delete deps.outcomes.runStopped;
       deps.onRunStoppedChanged?.();
@@ -297,7 +299,16 @@ export async function runOnce(
             deps.onUploaded?.(backend.id);
             if (deps.outcomes)
               recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
-            await pruneBackend(backend, deps.retain, deps.retainDays, nowMs, call, key, held);
+            await pruneBackend(
+              backend,
+              deps.retain,
+              deps.retainDays,
+              nowMs,
+              call,
+              deps.nodeId,
+              key,
+              held,
+            );
           });
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
@@ -400,12 +411,12 @@ export interface ClockStepHold {
 }
 
 /** Deletes an archive past EITHER cap: beyond the `retain` newest, or older than `retainDays`, both
- * by the stamp in its key, never the file's mtime. Only a name {@link parseBackupArchiveKey} reads
- * is an archive; any other name is left where it is and does not take a kept slot. `justStored`,
+ * by the stamp in its key, never the file's mtime. Only this node's recognised names take a kept
+ * slot or can be deleted; every other name is left where it is. `justStored`,
  * the archive this run put, ranks first among archives sharing its stamp and is never deleted. An
  * archive stamped more than a minute ahead of `nowMs` ranks after every other. One stamped outside
  * `held` (see {@link clockStepHold}) takes no kept slot; the `retain` newest of those by stamp are
- * kept and the rest deleted, so a destination holds at most twice `retain`. `"everything"` deletes
+ * kept and the rest deleted, so this node keeps at most twice `retain`. `"everything"` deletes
  * nothing. */
 export async function pruneBackend(
   backend: StorageBackend,
@@ -413,15 +424,16 @@ export async function pruneBackend(
   retainDays: number,
   nowMs: number,
   call: StorageCall,
+  nodeId: string,
   justStored?: string,
   held?: ClockStepHold | "everything",
 ): Promise<void> {
   if (held === "everything") return;
   const heldArchives: Array<{ key: string; ms: number }> = [];
   const archives = (await backend.list(BACKUP_KEY_PREFIX, call)).flatMap(({ key }) => {
-    const parsed = parseBackupArchiveKey(key);
-    if (parsed === null) return [];
-    const ms = parsed.timestamp.getTime();
+    const stamp = ownArchiveStamp(key, nodeId);
+    if (stamp === null) return [];
+    const ms = stamp.getTime();
     if (heldByStep(held, ms)) {
       heldArchives.push({ key, ms });
       return [];

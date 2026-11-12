@@ -3274,6 +3274,7 @@ async function bootServer(
       log,
       restoreSpare,
       freeOldBackups: lowSpaceBackupDeletion({
+        nodeId: tradingContext.nodeId,
         dir: config.venueDir,
         staging: stagingTurn,
         backends: () => runningLocalBackends(backupSupervisor.current()),

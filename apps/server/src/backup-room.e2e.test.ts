@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 // Needs its own filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_DIR_BACKUP_ROOM names, or on
 // macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case
 // is reported SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md,
@@ -21,8 +22,8 @@ const FLOOR = 1 * MiB;
 const AIM = 4 * MiB;
 const NOW = new Date("2026-10-28T12:00:00Z");
 const INSTALLED = new Date("2026-10-25T12:00:00Z");
-const OLDER = backupArchiveKey(new Date("2026-10-26T12:00:00Z"));
-const NEWEST = backupArchiveKey(new Date("2026-10-27T12:00:00Z"));
+const OLDER = backupArchiveKey(new Date("2026-10-26T12:00:00Z"), { nodeId: BACKUP_NODE_ID });
+const NEWEST = backupArchiveKey(new Date("2026-10-27T12:00:00Z"), { nodeId: BACKUP_NODE_ID });
 
 let opened: ReturnType<typeof openSmallDisk> | undefined;
 let disk: SmallDisk | undefined;
@@ -77,6 +78,7 @@ async function runCase(small: SmallDisk, name: string, c: Case) {
     let thrown: unknown = null;
     try {
       await runOnce({
+        nodeId: BACKUP_NODE_ID,
         backends: [new Counting("box", backupDir)],
         db: {} as Database,
         node: STUB_NODE,

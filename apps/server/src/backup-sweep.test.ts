@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID, OTHER_BACKUP_NODE_ID } from "./testing/backup-node.js";
 // Every case injects the archive step, which the supervisor binds to the venue store's `archiveTo`.
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -117,6 +118,7 @@ describe("runOnce (fan-out)", () => {
   });
 
   const deps = (backends: StorageBackend[], log = vi.fn()) => ({
+    nodeId: BACKUP_NODE_ID,
     backends,
     db: NO_DB,
     node: NODE_COPY,
@@ -149,10 +151,10 @@ describe("runOnce (fan-out)", () => {
 
   it("with one kept, keeps the archive it just stored over an earlier one from the same second", async () => {
     // The largest nonce a UUID can carry, so the key tie-break alone would keep this one.
-    const earlier = backupArchiveKey(
-      new Date("2026-09-05T00:00:00Z"),
-      "ffffffff-ffff-ffff-ffff-ffffffffffff",
-    );
+    const earlier = backupArchiveKey(new Date("2026-09-05T00:00:00Z"), {
+      nodeId: BACKUP_NODE_ID,
+      nonce: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    });
     const a = new FakeBackend("a");
     a.objects.set(earlier, Buffer.from("old"));
     await runOnce({ ...deps([a]), retain: 1 });
@@ -164,8 +166,8 @@ describe("runOnce (fan-out)", () => {
   it("keeps the archives a recent step of the box's clock holds, and asks for the step each run", async () => {
     const day = 24 * 60 * 60 * 1000;
     const nowMs = Date.parse("2026-09-05T00:00:00Z");
-    const behind = backupArchiveKey(new Date(nowMs - 401 * day));
-    const ahead = backupArchiveKey(new Date(nowMs + 399 * day));
+    const behind = backupArchiveKey(new Date(nowMs - 401 * day), { nodeId: BACKUP_NODE_ID });
+    const ahead = backupArchiveKey(new Date(nowMs + 399 * day), { nodeId: BACKUP_NODE_ID });
     const a = new FakeBackend("a");
     a.objects.set(behind, Buffer.from("behind"));
     a.objects.set(ahead, Buffer.from("ahead"));
@@ -183,7 +185,7 @@ describe("runOnce (fan-out)", () => {
   });
 
   it("stores the archive and deletes nothing while the box is setting its clock", async () => {
-    const old = backupArchiveKey(new Date("2026-09-01T00:00:00Z"));
+    const old = backupArchiveKey(new Date("2026-09-01T00:00:00Z"), { nodeId: BACKUP_NODE_ID });
     const a = new FakeBackend("a");
     a.objects.set(old, Buffer.from("old"));
 
@@ -199,7 +201,7 @@ describe("runOnce (fan-out)", () => {
   });
 
   it("stores the archive and deletes nothing when the step cannot be read, and logs why", async () => {
-    const old = backupArchiveKey(new Date("2026-09-01T00:00:00Z"));
+    const old = backupArchiveKey(new Date("2026-09-01T00:00:00Z"), { nodeId: BACKUP_NODE_ID });
     const a = new FakeBackend("a");
     a.objects.set(old, Buffer.from("old"));
     const log = vi.fn();
@@ -410,7 +412,7 @@ describe("runOnce (fan-out)", () => {
   it("prunes each backend to retain", async () => {
     const a = new FakeBackend("a");
     for (const d of ["2026-09-03T00:00:00Z", "2026-09-04T00:00:00Z"])
-      a.objects.set(backupArchiveKey(new Date(d)), Buffer.from("old"));
+      a.objects.set(backupArchiveKey(new Date(d), { nodeId: BACKUP_NODE_ID }), Buffer.from("old"));
     await runOnce({ ...deps([a]), retain: 1 });
     expect(a.objects.size).toBe(1);
     keyIn(a);
@@ -486,6 +488,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
 
   type LoopOverrides = Partial<BackupSweepDeps> & Pick<BackupSweepDeps, "signal" | "sleep" | "log">;
   const loopDeps = (backend: StorageBackend, overrides: LoopOverrides): BackupSweepDeps => ({
+    nodeId: BACKUP_NODE_ID,
     backends: [backend],
     db: NO_DB,
     node: NODE_COPY,
@@ -1157,17 +1160,55 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
 });
 
 describe("pruneBackend (dual count + age retention)", () => {
+  it("a promoted spare keeps the other node's archives outside its own retention slots", async () => {
+    const backend = new FakeBackend("shared");
+    const nowMs = Date.parse("2026-11-12T12:00:00Z");
+    const ownOld = backupArchiveKey(new Date(nowMs - 86_400_000), { nodeId: BACKUP_NODE_ID });
+    const ownNew = backupArchiveKey(new Date(nowMs), { nodeId: BACKUP_NODE_ID });
+    const otherOld = backupArchiveKey(new Date(nowMs - 2 * 86_400_000), {
+      nodeId: OTHER_BACKUP_NODE_ID,
+    });
+    const otherNew = backupArchiveKey(new Date(nowMs + 1_000), { nodeId: OTHER_BACKUP_NODE_ID });
+    const oldName = "waitron-20260101T120000Z-00000000-0000-4000-8000-000000000001.backup.enc";
+    const unknown = "personal-note.txt";
+    for (const key of [ownOld, ownNew, otherOld, otherNew, oldName, unknown])
+      backend.objects.set(key, Buffer.from("archive"));
+
+    await pruneBackend(
+      backend,
+      1,
+      365,
+      nowMs,
+      { signal: new AbortController().signal },
+      BACKUP_NODE_ID,
+    );
+
+    expect([...backend.objects.keys()].sort()).toEqual(
+      [ownNew, otherOld, otherNew, oldName, unknown].sort(),
+    );
+  });
+
   it("prunes by count AND age, whichever bites first", async () => {
     const backend = new FakeBackend("dual");
     const nowMs = Date.parse("2026-09-20T00:00:00Z");
     const day = 24 * 60 * 60 * 1000;
     const key = (ms: number) =>
-      backupArchiveKey(new Date(ms), "00000000-0000-4000-8000-000000000000");
+      backupArchiveKey(new Date(ms), {
+        nodeId: BACKUP_NODE_ID,
+        nonce: "00000000-0000-4000-8000-000000000000",
+      });
     const ages = [20, 10, 2, 1, 0];
     for (const d of ages) backend.objects.set(key(nowMs - d * day), Buffer.from(`age-${d}`));
 
     // Age 2d is within the count cap of 3 but past the 1-day age cap.
-    await pruneBackend(backend, 3, 1, nowMs, { signal: new AbortController().signal });
+    await pruneBackend(
+      backend,
+      3,
+      1,
+      nowMs,
+      { signal: new AbortController().signal },
+      BACKUP_NODE_ID,
+    );
 
     const survivors = [...backend.objects.keys()].sort();
     expect(survivors).toEqual(
@@ -1185,9 +1226,16 @@ describe("pruneBackend (dual count + age retention)", () => {
     // FakeBackend reports every mtime as 0, so an mtime-based prune would delete this.
     const backend = new FakeBackend("mtime");
     const nowMs = Date.parse("2026-09-20T00:00:00Z");
-    const freshKey = backupArchiveKey(new Date(nowMs));
+    const freshKey = backupArchiveKey(new Date(nowMs), { nodeId: BACKUP_NODE_ID });
     backend.objects.set(freshKey, Buffer.from("fresh"));
-    await pruneBackend(backend, 7, 1, nowMs, { signal: new AbortController().signal });
+    await pruneBackend(
+      backend,
+      7,
+      1,
+      nowMs,
+      { signal: new AbortController().signal },
+      BACKUP_NODE_ID,
+    );
     expect(backend.objects.has(freshKey)).toBe(true);
   });
 
@@ -1195,14 +1243,21 @@ describe("pruneBackend (dual count + age retention)", () => {
     const dir = await mkdtemp(join(tmpdir(), "backup-prune-odd-"));
     try {
       const nowMs = Date.UTC(2026, 9, 13);
-      const fresh = backupArchiveKey(new Date(Date.UTC(2026, 9, 12)));
-      const oldPlain = backupArchiveKey(new Date(Date.UTC(2025, 0, 2)));
+      const fresh = backupArchiveKey(new Date(Date.UTC(2026, 9, 12)), { nodeId: BACKUP_NODE_ID });
+      const oldPlain = backupArchiveKey(new Date(Date.UTC(2025, 0, 2)), { nodeId: BACKUP_NODE_ID });
       const oldOdd = "waitron-20250101T000000Z-a\\b.backup.enc";
       for (const name of [fresh, oldPlain, oldOdd]) await writeFile(join(dir, name), "x");
 
-      await pruneBackend(new LocalFsBackend("odd", dir), 5, 30, nowMs, {
-        signal: new AbortController().signal,
-      });
+      await pruneBackend(
+        new LocalFsBackend("odd", dir),
+        5,
+        30,
+        nowMs,
+        {
+          signal: new AbortController().signal,
+        },
+        BACKUP_NODE_ID,
+      );
 
       expect((await readdir(dir)).sort()).toEqual([fresh, oldOdd].sort());
     } finally {
@@ -1214,16 +1269,23 @@ describe("pruneBackend (dual count + age retention)", () => {
     const dir = await mkdtemp(join(tmpdir(), "backup-prune-odd-slot-"));
     try {
       const nowMs = Date.UTC(2026, 9, 13);
-      const plain = backupArchiveKey(new Date(Date.UTC(2026, 9, 10)));
+      const plain = backupArchiveKey(new Date(Date.UTC(2026, 9, 10)), { nodeId: BACKUP_NODE_ID });
       const odd = "waitron-20261011T000000Z-a\\b.backup.enc";
       await writeFile(join(dir, plain), "x");
       await writeFile(join(dir, odd), "x");
       await utimes(join(dir, plain), 1000, 1000);
       await utimes(join(dir, odd), 2000, 2000);
 
-      await pruneBackend(new LocalFsBackend("odd", dir), 1, 3650, nowMs, {
-        signal: new AbortController().signal,
-      });
+      await pruneBackend(
+        new LocalFsBackend("odd", dir),
+        1,
+        3650,
+        nowMs,
+        {
+          signal: new AbortController().signal,
+        },
+        BACKUP_NODE_ID,
+      );
 
       expect((await readdir(dir)).sort()).toEqual([plain, odd].sort());
     } finally {
@@ -1238,10 +1300,10 @@ describe("pruneBackend across a step the box made to its clock", () => {
   const stepAt = nowMs - day;
   let n = 0;
   const key = (ms: number) =>
-    backupArchiveKey(
-      new Date(ms),
-      `00000000-0000-4000-8000-${(++n).toString(16).padStart(12, "0")}`,
-    );
+    backupArchiveKey(new Date(ms), {
+      nodeId: BACKUP_NODE_ID,
+      nonce: `00000000-0000-4000-8000-${(++n).toString(16).padStart(12, "0")}`,
+    });
   function holding(stamps: number[]) {
     const backend = new FakeBackend("step");
     const keys = stamps.map(key);
@@ -1256,7 +1318,7 @@ describe("pruneBackend across a step the box made to its clock", () => {
     const behind = [0, 1, 2, 3, 4].map((d) => stepAt - 400 * day - d * day);
     const { backend, keys } = holding([...behind, stepAt + 60_000, nowMs - 60_000, nowMs]);
 
-    await pruneBackend(backend, 2, 7, nowMs, call(), undefined, hold(400 * day));
+    await pruneBackend(backend, 2, 7, nowMs, call(), BACKUP_NODE_ID, undefined, hold(400 * day));
 
     expect(kept(backend)).toEqual([keys[0]!, keys[1]!, keys[6]!, keys[7]!].sort());
   });
@@ -1266,7 +1328,7 @@ describe("pruneBackend across a step the box made to its clock", () => {
     const after = [stepAt + 60_000, nowMs - 12 * 3_600_000, nowMs - 60_000, nowMs];
     const { backend, keys } = holding([...ahead, ...after]);
 
-    await pruneBackend(backend, 3, 7, nowMs, call(), undefined, hold(-400 * day));
+    await pruneBackend(backend, 3, 7, nowMs, call(), BACKUP_NODE_ID, undefined, hold(-400 * day));
 
     expect(kept(backend)).toEqual([...keys.slice(0, 3), ...keys.slice(4)].sort());
   });
@@ -1284,11 +1346,29 @@ describe("pruneBackend across a step the box made to its clock", () => {
   it("prunes as without a step once the hold has lapsed, after either step", async () => {
     const later = stepAt + 8 * day;
     const behind = holding([stepAt - 400 * day, later - day, later]);
-    await pruneBackend(behind.backend, 3, 7, later, call(), undefined, hold(400 * day, later));
+    await pruneBackend(
+      behind.backend,
+      3,
+      7,
+      later,
+      call(),
+      BACKUP_NODE_ID,
+      undefined,
+      hold(400 * day, later),
+    );
     expect(kept(behind.backend)).toEqual([behind.keys[1]!, behind.keys[2]!].sort());
 
     const ahead = holding([stepAt + 400 * day, later - day, later]);
-    await pruneBackend(ahead.backend, 2, 7, later, call(), undefined, hold(-400 * day, later));
+    await pruneBackend(
+      ahead.backend,
+      2,
+      7,
+      later,
+      call(),
+      BACKUP_NODE_ID,
+      undefined,
+      hold(-400 * day, later),
+    );
     expect(kept(ahead.backend)).toEqual([ahead.keys[1]!, ahead.keys[2]!].sort());
   });
 
@@ -1309,7 +1389,7 @@ describe("pruneBackend across a step the box made to its clock", () => {
       const stored = key(at);
       backend.objects.set(stored, Buffer.from(stored));
       const held = clockStepHold({ confirmedAt, stepMs: 400 * day }, at, 7);
-      await pruneBackend(backend, retain, 7, at, call(), stored, held);
+      await pruneBackend(backend, retain, 7, at, call(), BACKUP_NODE_ID, stored, held);
       expect(backend.objects.size).toBeLessThanOrEqual(retain);
     }
   });
@@ -1324,7 +1404,7 @@ describe("pruneBackend across a step the box made to its clock", () => {
       backend.objects.set(stored, Buffer.from(stored));
       const confirmedAt = new Date(start + Math.floor(i / 6) * 6 * day).toISOString();
       const held = clockStepHold({ confirmedAt, stepMs: 5_000 }, at, 7);
-      await pruneBackend(backend, retain, 7, at, call(), stored, held);
+      await pruneBackend(backend, retain, 7, at, call(), BACKUP_NODE_ID, stored, held);
       expect(backend.objects.size).toBeLessThanOrEqual(2 * retain);
       expect(backend.objects.has(stored)).toBe(true);
     }
@@ -1332,18 +1412,36 @@ describe("pruneBackend across a step the box made to its clock", () => {
 
   it("ranks an archive stamped exactly at the step, or exactly a minute ahead, as any other", async () => {
     const atStep = holding([stepAt, nowMs]);
-    await pruneBackend(atStep.backend, 1, 7, nowMs, call(), undefined, hold(400 * day));
+    await pruneBackend(
+      atStep.backend,
+      1,
+      7,
+      nowMs,
+      call(),
+      BACKUP_NODE_ID,
+      undefined,
+      hold(400 * day),
+    );
     expect(kept(atStep.backend)).toEqual([atStep.keys[1]!]);
 
     const atTolerance = holding([nowMs + 60_000, nowMs - 60_000]);
-    await pruneBackend(atTolerance.backend, 1, 7, nowMs, call(), undefined, hold(400 * day));
+    await pruneBackend(
+      atTolerance.backend,
+      1,
+      7,
+      nowMs,
+      call(),
+      BACKUP_NODE_ID,
+      undefined,
+      hold(400 * day),
+    );
     expect(kept(atTolerance.backend)).toEqual([atTolerance.keys[0]!]);
   });
 
   it("with no step, ranks an archive stamped more than a minute ahead after every other", async () => {
     const { backend, keys } = holding([nowMs + 400 * day, nowMs + 60_000, nowMs - day]);
 
-    await pruneBackend(backend, 1, 3650, nowMs, call());
+    await pruneBackend(backend, 1, 3650, nowMs, call(), BACKUP_NODE_ID);
 
     expect(kept(backend)).toEqual([keys[1]!]);
   });
@@ -1356,7 +1454,7 @@ describe("pruneBackend across a step the box made to its clock", () => {
       nowMs - 180_000,
     ]);
 
-    await pruneBackend(backend, 1, 7, nowMs, call(), keys[3], hold(400 * day));
+    await pruneBackend(backend, 1, 7, nowMs, call(), BACKUP_NODE_ID, keys[3], hold(400 * day));
 
     expect(kept(backend)).toEqual([keys[0]!, keys[1]!, keys[3]!].sort());
   });
@@ -1370,7 +1468,16 @@ describe("pruneBackend across a step the box made to its clock", () => {
       const at = stepAt + i * day + 3_600_000;
       const stored = key(at);
       backend.objects.set(stored, Buffer.from(stored));
-      await pruneBackend(backend, retain, 14, at, call(), stored, hold(-400 * day, at, 14));
+      await pruneBackend(
+        backend,
+        retain,
+        14,
+        at,
+        call(),
+        BACKUP_NODE_ID,
+        stored,
+        hold(-400 * day, at, 14),
+      );
       expect(backend.objects.size).toBeLessThanOrEqual(retain + heldAtStep.size);
       expect(backend.objects.has(stored)).toBe(true);
       const stampedAhead = kept(backend).filter(
@@ -1413,8 +1520,14 @@ describe("pruneBackend (which names it reads, in what order, and how it deletes)
   }
 
   it("never deletes a malformed, foreign or old-format name, and none of them takes a kept slot", async () => {
-    const newest = backupArchiveKey(new Date(nowMs - 1 * day), nonce(1));
-    const older = backupArchiveKey(new Date(nowMs - 2 * day), nonce(2));
+    const newest = backupArchiveKey(new Date(nowMs - 1 * day), {
+      nodeId: BACKUP_NODE_ID,
+      nonce: nonce(1),
+    });
+    const older = backupArchiveKey(new Date(nowMs - 2 * day), {
+      nodeId: BACKUP_NODE_ID,
+      nonce: nonce(2),
+    });
     const foreign = [
       "waitron-20261012T235959Z.backup.enc",
       `waitron-20261012T235959Z-${nonce(0xabc).toUpperCase()}.backup.enc`,
@@ -1423,59 +1536,71 @@ describe("pruneBackend (which names it reads, in what order, and how it deletes)
       "waitron-notes.txt",
     ];
     const { backend, record } = recordingBackend([...foreign, newest, older]);
-    await pruneBackend(backend, 1, 3650, nowMs, call());
+    await pruneBackend(backend, 1, 3650, nowMs, call(), BACKUP_NODE_ID);
     expect(record.batches).toEqual([[older]]);
     expect(record.singles).toEqual([]);
   });
 
   it("keeps the larger key of two archives from the same second, whatever order the list gives", async () => {
     const at = new Date(nowMs - day);
-    const low = backupArchiveKey(at, nonce(1));
-    const high = backupArchiveKey(at, nonce(2));
+    const low = backupArchiveKey(at, { nodeId: BACKUP_NODE_ID, nonce: nonce(1) });
+    const high = backupArchiveKey(at, { nodeId: BACKUP_NODE_ID, nonce: nonce(2) });
     for (const listed of [
       [low, high],
       [high, low],
     ]) {
       const { backend, record } = recordingBackend(listed);
-      await pruneBackend(backend, 1, 3650, nowMs, call());
+      await pruneBackend(backend, 1, 3650, nowMs, call(), BACKUP_NODE_ID);
       expect(record.batches).toEqual([[low]]);
     }
   });
 
   it("keeps the archive this run just stored over a same-second archive with a larger key", async () => {
     const at = new Date(nowMs - day);
-    const stored = backupArchiveKey(at, nonce(1));
-    const other = backupArchiveKey(at, nonce(2));
+    const stored = backupArchiveKey(at, { nodeId: BACKUP_NODE_ID, nonce: nonce(1) });
+    const other = backupArchiveKey(at, { nodeId: BACKUP_NODE_ID, nonce: nonce(2) });
     for (const listed of [
       [stored, other],
       [other, stored],
     ]) {
       const { backend, record } = recordingBackend(listed);
-      await pruneBackend(backend, 1, 3650, nowMs, call(), stored);
+      await pruneBackend(backend, 1, 3650, nowMs, call(), BACKUP_NODE_ID, stored);
       expect(record.batches).toEqual([[other]]);
     }
   });
 
   it("never deletes the archive this run just stored, even behind newer stamps", async () => {
-    const stored = backupArchiveKey(new Date(nowMs - 2 * day), nonce(1));
-    const newer = backupArchiveKey(new Date(nowMs - day), nonce(2));
+    const stored = backupArchiveKey(new Date(nowMs - 2 * day), {
+      nodeId: BACKUP_NODE_ID,
+      nonce: nonce(1),
+    });
+    const newer = backupArchiveKey(new Date(nowMs - day), {
+      nodeId: BACKUP_NODE_ID,
+      nonce: nonce(2),
+    });
     const { backend, record } = recordingBackend([newer, stored]);
-    await pruneBackend(backend, 1, 3650, nowMs, call(), stored);
+    await pruneBackend(backend, 1, 3650, nowMs, call(), BACKUP_NODE_ID, stored);
     expect(record.batches).toEqual([]);
   });
 
   it("orders by the stamp in the name, not by the file's mtime", async () => {
     const dir = await mkdtemp(join(tmpdir(), "backup-prune-order-"));
     try {
-      const newer = backupArchiveKey(new Date(nowMs - 1 * day), nonce(1));
-      const older = backupArchiveKey(new Date(nowMs - 5 * day), nonce(2));
+      const newer = backupArchiveKey(new Date(nowMs - 1 * day), {
+        nodeId: BACKUP_NODE_ID,
+        nonce: nonce(1),
+      });
+      const older = backupArchiveKey(new Date(nowMs - 5 * day), {
+        nodeId: BACKUP_NODE_ID,
+        nonce: nonce(2),
+      });
       await writeFile(join(dir, newer), "x");
       await writeFile(join(dir, older), "x");
       // The older archive was touched last, so a newest-by-mtime list puts it first.
       await utimes(join(dir, newer), 1000, 1000);
       await utimes(join(dir, older), 2000, 2000);
 
-      await pruneBackend(new LocalFsBackend("order", dir), 1, 3650, nowMs, call());
+      await pruneBackend(new LocalFsBackend("order", dir), 1, 3650, nowMs, call(), BACKUP_NODE_ID);
 
       expect(await readdir(dir)).toEqual([newer]);
     } finally {
@@ -1484,12 +1609,15 @@ describe("pruneBackend (which names it reads, in what order, and how it deletes)
   });
 
   it("deletes more than 1,000 expired archives in batches of at most 1,000, one batch at a time", async () => {
-    const keep = backupArchiveKey(new Date(nowMs), nonce(0));
+    const keep = backupArchiveKey(new Date(nowMs), { nodeId: BACKUP_NODE_ID, nonce: nonce(0) });
     const expired = Array.from({ length: 1005 }, (_, i) =>
-      backupArchiveKey(new Date(nowMs - 10 * day - i * 1000), nonce(i + 1)),
+      backupArchiveKey(new Date(nowMs - 10 * day - i * 1000), {
+        nodeId: BACKUP_NODE_ID,
+        nonce: nonce(i + 1),
+      }),
     );
     const { backend, record } = recordingBackend([keep, ...expired]);
-    await pruneBackend(backend, 5000, 1, nowMs, call());
+    await pruneBackend(backend, 5000, 1, nowMs, call(), BACKUP_NODE_ID);
     expect(record.batches.map((b) => b.length)).toEqual([1000, 5]);
     expect(record.batches.flat().sort()).toEqual([...expired].sort());
     expect(record.maxInFlight).toBe(1);
@@ -1497,15 +1625,17 @@ describe("pruneBackend (which names it reads, in what order, and how it deletes)
   });
 
   it("asks for no delete when nothing is past either cap", async () => {
-    const { backend, record } = recordingBackend([backupArchiveKey(new Date(nowMs), nonce(1))]);
-    await pruneBackend(backend, 5, 30, nowMs, call());
+    const { backend, record } = recordingBackend([
+      backupArchiveKey(new Date(nowMs), { nodeId: BACKUP_NODE_ID, nonce: nonce(1) }),
+    ]);
+    await pruneBackend(backend, 5, 30, nowMs, call(), BACKUP_NODE_ID);
     expect(record.batches).toEqual([]);
   });
 
   it("deletes nothing and rejects when the listing fails", async () => {
     const refused = new Error("list refused");
     const { backend, record } = recordingBackend([], () => Promise.reject(refused));
-    await expect(pruneBackend(backend, 0, 0, nowMs, call())).rejects.toBe(refused);
+    await expect(pruneBackend(backend, 0, 0, nowMs, call(), BACKUP_NODE_ID)).rejects.toBe(refused);
     expect(record.batches).toEqual([]);
     expect(record.singles).toEqual([]);
   });
@@ -1533,6 +1663,7 @@ describe("runOnce with the real buildManifest (a migrated venue)", () => {
   it("packs a real manifest (env + a positive core schema version) into the archive", async () => {
     const a = new FakeBackend("a");
     await runOnce({
+      nodeId: BACKUP_NODE_ID,
       backends: [a],
       db: suite.db,
       node: suite.node,

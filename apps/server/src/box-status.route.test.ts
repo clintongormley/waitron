@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -201,7 +202,10 @@ describe("GET /api/box/status", () => {
   it("flows the per-destination backup shape through the route, reading a .backup.enc artifact as FRESH", async () => {
     const now = new Date("2026-08-29T10:00:00Z");
     const dir = mkdtempSync(join(tmpdir(), "box-status-backup-"));
-    const artifact = join(dir, backupArchiveKey(new Date("2026-08-29T09:59:00Z")));
+    const artifact = join(
+      dir,
+      backupArchiveKey(new Date("2026-08-29T09:59:00Z"), { nodeId: BACKUP_NODE_ID }),
+    );
     writeFileSync(artifact, "ciphertext");
     const mtime = new Date(now.getTime() - 30_000); // 30s old — inside the 60s stale window
     utimesSync(artifact, mtime, mtime);
@@ -213,7 +217,7 @@ describe("GET /api/box/status", () => {
       tlsCertPath: undefined,
       readBackup: async () => ({
         configured: true,
-        destinations: [await readDestinationStatus(backend, 60_000, now).status],
+        destinations: [await readDestinationStatus(backend, 60_000, now, BACKUP_NODE_ID).status],
       }),
     });
     const cookie = await login(backupApp, MANAGER_EMAIL);

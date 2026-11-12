@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 // The supervisor's lifecycle against a REAL migrated venue directory.
 import {
   chmod,
@@ -30,7 +31,7 @@ import { backupAlertSource, type BackupOutcomeHolder } from "./alert-sources.js"
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import type { BackupConfig } from "./backup-config.js";
-import { backupArchiveKey } from "./backup-keys.js";
+import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import {
   BackupSupervisor,
@@ -127,6 +128,7 @@ function makeSupervisor(
   overrides: Partial<BackupSupervisorDeps> = {},
 ): BackupSupervisor {
   return new BackupSupervisor({
+    nodeId: BACKUP_NODE_ID,
     buildConfig: async () => refs.config,
     isManagedByEnvironment: () => refs.managed,
     readSingletonRole: () => refs.role,
@@ -196,6 +198,14 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       await sup.reload();
       await waitForArchiveUnderCurrentKey(sup);
       await waitForEvent(refs, "backup.destination_completed");
+      const stored = await listArchives(dest);
+      expect(stored).toHaveLength(1);
+      expect(parseBackupArchiveKey(stored[0])?.nodeId).toBe(BACKUP_NODE_ID);
+      const status = await sup.status();
+      expect(status.backupStatus).toMatchObject({
+        configured: true,
+        destinations: [{ stale: false }],
+      });
     } finally {
       await sup.stop();
     }
@@ -394,6 +404,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       managed: false,
     };
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
       isManagedByEnvironment: () => refs.managed,
       readSingletonRole: () => refs.role,
@@ -422,7 +433,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       await sup.reload();
       await waitForEvent(refs, "backup.failed");
       await writeFile(
-        join(dest, backupArchiveKey(new Date("2020-01-01T00:00:00Z"))),
+        join(dest, backupArchiveKey(new Date("2020-01-01T00:00:00Z"), { nodeId: BACKUP_NODE_ID })),
         "old-key-ciphertext",
       );
       const s = await sup.status();
@@ -458,6 +469,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       releaseCopy = resolve;
     });
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
       isManagedByEnvironment: () => refs.managed,
       readSingletonRole: () => refs.role,
@@ -530,6 +542,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       return realList.apply(this, args);
     });
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
       isManagedByEnvironment: () => refs.managed,
       readSingletonRole: () => refs.role,
@@ -654,6 +667,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       release = r;
     });
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => {
         await gate;
         return undefined;
@@ -689,6 +703,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       managed: false,
     };
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
       isManagedByEnvironment: () => refs.managed,
       readSingletonRole: () => refs.role,
@@ -741,6 +756,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
     const reading = gate();
     let opens = 0;
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => {
         reading.entered();
         await reading.released;
@@ -776,6 +792,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
     let closes = 0;
     const logs: LogLine[] = [];
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => localFsConfig([dest], STRONG_KEY_1),
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",
@@ -813,6 +830,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
     const lines: Array<{ level: string; event: string; fields: unknown }> = [];
     let closes = 0;
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => localFsConfig([dest], STRONG_KEY_1),
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",
@@ -865,6 +883,7 @@ describe("BackupSupervisor when a destination fails to build", () => {
     let venueCloses = 0;
     let failing = true;
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => config(),
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",
@@ -988,6 +1007,7 @@ describe("BackupSupervisor closes the sweep's destinations", () => {
         managed: false,
       };
       const sup = new BackupSupervisor({
+        nodeId: BACKUP_NODE_ID,
         buildConfig: async () => refs.config,
         isManagedByEnvironment: () => false,
         readSingletonRole: () => refs.role,
@@ -1024,6 +1044,7 @@ describe("BackupSupervisor closes the sweep's destinations", () => {
       const [a, b] = [await makeDestDir(), await makeDestDir()];
       const logs: Array<{ level: string; event: string; fields: unknown }> = [];
       const sup = new BackupSupervisor({
+        nodeId: BACKUP_NODE_ID,
         buildConfig: async () => localFsConfig([a, b], STRONG_KEY_1),
         isManagedByEnvironment: () => false,
         readSingletonRole: () => "primary",
@@ -1056,6 +1077,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
 
   function supervisorFor(config: BackupConfig, built: BackupDestination[], venueDir: string) {
     return new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => config,
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",
@@ -1150,6 +1172,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
       loadErrorCode: "credentials.decrypt_failed",
     };
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => load,
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",
@@ -1278,8 +1301,8 @@ describe("BackupSupervisor hands each run the room hooks", () => {
     newestKey: string;
   }> {
     const dest = await makeDestDir();
-    const oldKey = backupArchiveKey(new Date(Date.now() - 2 * HOUR));
-    const newestKey = backupArchiveKey(new Date(Date.now() - HOUR));
+    const oldKey = backupArchiveKey(new Date(Date.now() - 2 * HOUR), { nodeId: BACKUP_NODE_ID });
+    const newestKey = backupArchiveKey(new Date(Date.now() - HOUR), { nodeId: BACKUP_NODE_ID });
     // Sparse, so it is large enough to cover the run's need without filling the disk.
     await writeFile(join(dest, oldKey), "");
     await truncate(join(dest, oldKey), 3 * 1024 ** 3);
@@ -1293,6 +1316,7 @@ describe("BackupSupervisor hands each run the room hooks", () => {
     extra: Partial<BackupSupervisorDeps>,
   ): BackupSupervisor {
     return new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
       isManagedByEnvironment: () => refs.managed,
       readSingletonRole: () => refs.role,
@@ -1346,7 +1370,9 @@ describe("BackupSupervisor hands each run the room hooks", () => {
 
   it("hands each run the box's latest clock step, so the archives it holds are kept", async () => {
     const dest = await makeDestDir();
-    const behindKey = backupArchiveKey(new Date(Date.now() - 400 * 24 * HOUR));
+    const behindKey = backupArchiveKey(new Date(Date.now() - 400 * 24 * HOUR), {
+      nodeId: BACKUP_NODE_ID,
+    });
     await writeFile(join(dest, behindKey), "behind");
     const refs: Refs = {
       config: localFsConfig([dest], STRONG_KEY_1),
@@ -1396,7 +1422,7 @@ describe("BackupSupervisor hands each run the room hooks", () => {
 });
 
 describe("BackupSupervisor keeps the backup room note in step", () => {
-  const NODE = "node-a";
+  const NODE = BACKUP_NODE_ID;
   const STARTED = new Date("2026-10-01T08:00:00.000Z");
   const OTHER_DEVICE = -1;
 
@@ -1700,6 +1726,7 @@ describe("BackupSupervisor keeps each settings load failure's safe facts", () =>
     let clock = Date.parse("2026-10-29T10:00:00.000Z");
     const logs: { level: string; event: string; fields: unknown }[] = [];
     const sup = new BackupSupervisor({
+      nodeId: BACKUP_NODE_ID,
       buildConfig: next,
       isManagedByEnvironment: () => false,
       readSingletonRole: () => "primary",

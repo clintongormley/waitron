@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -36,6 +37,7 @@ async function loopDeps(
   const outcomes: BackupOutcomeHolder = { failed: new Map() };
   const backend = new LocalFsBackend("a", join(root, "a"));
   const deps: BackupSweepDeps = {
+    nodeId: BACKUP_NODE_ID,
     backends: [backend],
     db: {} as Database,
     node: STUB_NODE,

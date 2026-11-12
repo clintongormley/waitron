@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID, OTHER_BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import {
@@ -55,7 +56,7 @@ afterEach(() => rm(root, { recursive: true, force: true }));
 
 /** A sparse archive, so its listed size costs no disk. */
 async function archive(dir: string, at: Date, mib: number): Promise<string> {
-  const key = backupArchiveKey(at);
+  const key = backupArchiveKey(at, { nodeId: BACKUP_NODE_ID });
   await writeFile(join(dir, key), "");
   await truncate(join(dir, key), mib * MIB);
   return key;
@@ -70,7 +71,7 @@ async function note(
   await writeBackupRoomNote({
     stateDir,
     venueDir,
-    nodeId: "node-1",
+    nodeId: BACKUP_NODE_ID,
     installationStartedAt: STARTED,
     managedByEnvironment: over.managedByEnvironment ?? false,
     folders: over.folders ?? [{ destination: "usb", dir: usb, configuredDir: usb }],
@@ -102,7 +103,7 @@ function disk(freeAtStart: number | Error, folders: string[] = [usb]) {
   });
 }
 
-const dashboardEnv = { WAITRON_NODE_ID: "node-1", WAITRON_BACKUP_RECOVERY_KEY: KEY };
+const dashboardEnv = { WAITRON_NODE_ID: BACKUP_NODE_ID, WAITRON_BACKUP_RECOVERY_KEY: KEY };
 
 function setup(over: Partial<StartBackupRoomDeps> = {}) {
   const log = vi.fn();
@@ -262,7 +263,7 @@ describe("deleteOldBackupsAtStart", () => {
       baseEnv,
       loadBoxEnv: async (base) => ({
         ...base,
-        WAITRON_NODE_ID: "node-1",
+        WAITRON_NODE_ID: BACKUP_NODE_ID,
       }),
       statfs: disk(10 * MIB, [usb, envFolder]),
     });
@@ -372,7 +373,7 @@ describe("deleteOldBackupsAtStart", () => {
       await fs.symlink(moved, link);
       const { deps, log } = setup({
         baseEnv: { WAITRON_BACKUP_DIR: link, WAITRON_BACKUP_RECOVERY_KEY: KEY },
-        loadBoxEnv: async (base) => ({ ...base, WAITRON_NODE_ID: "node-1" }),
+        loadBoxEnv: async (base) => ({ ...base, WAITRON_NODE_ID: BACKUP_NODE_ID }),
         statfs: disk(10 * MIB, [usb, moved]),
       });
 
@@ -474,7 +475,7 @@ describe("deleteOldBackupsAtStart", () => {
 
     it("the note names another node", () =>
       expectSkip("node_mismatch", {
-        loadBoxEnv: async () => ({ ...dashboardEnv, WAITRON_NODE_ID: "node-2" }),
+        loadBoxEnv: async () => ({ ...dashboardEnv, WAITRON_NODE_ID: OTHER_BACKUP_NODE_ID }),
       }));
 
     it("the box env names no node", () =>
@@ -521,13 +522,13 @@ describe("deleteOldBackupsAtStart", () => {
 
     it("the recovery key is missing", () =>
       expectSkip("recovery_key_missing", {
-        loadBoxEnv: async () => ({ WAITRON_NODE_ID: "node-1" }),
+        loadBoxEnv: async () => ({ WAITRON_NODE_ID: BACKUP_NODE_ID }),
       }));
 
     it("the recovery key cannot be used", () =>
       expectSkip("recovery_key_unusable", {
         loadBoxEnv: async () => ({
-          WAITRON_NODE_ID: "node-1",
+          WAITRON_NODE_ID: BACKUP_NODE_ID,
           WAITRON_BACKUP_RECOVERY_KEY: "short",
         }),
       }));
@@ -684,7 +685,7 @@ describe("deleteOldBackupsAtStart", () => {
       await note();
       const oldest = await archive(usb, days(1), 15);
       await archive(usb, days(2), 15);
-      const before = gone(backupArchiveKey(days(0.5)), days(0.5));
+      const before = gone(backupArchiveKey(days(0.5), { nodeId: BACKUP_NODE_ID }), days(0.5));
       // The same destination and key as the archive this start deletes.
       const again = { ...gone(oldest, days(1)), bytes: 15 * MIB };
       await earlierRecord(EARLIER, await venueDbNow(), [before, again]);
@@ -719,7 +720,9 @@ describe("deleteOldBackupsAtStart", () => {
       const oldest = await archive(usb, days(1), 15);
       await archive(usb, days(2), 15);
       const other = { ...(await venueDbNow()), ino: "1" };
-      await earlierRecord(EARLIER, other, [gone(backupArchiveKey(days(0.5)), days(0.5))]);
+      await earlierRecord(EARLIER, other, [
+        gone(backupArchiveKey(days(0.5), { nodeId: BACKUP_NODE_ID }), days(0.5)),
+      ]);
       const { deps } = setup();
 
       await deleteOldBackupsAtStart(deps);

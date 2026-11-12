@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { createServer, type Server } from "node:https";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
@@ -45,7 +46,9 @@ function harness() {
     (backend) => backend.close(),
   );
   const read = (dest: BackupDestination) =>
-    clients.read(dest, (backend) => readDestinationStatus(backend, DAY, NOW, 60_000));
+    clients.read(dest, (backend) =>
+      readDestinationStatus(backend, DAY, NOW, BACKUP_NODE_ID, 60_000),
+    );
   return {
     clients,
     built,
@@ -109,7 +112,9 @@ describe("StatusClients", () => {
     await settle();
     expect(h.built[0]!.closed).toBe(false);
 
-    h.answerHeldListing([{ key: backupArchiveKey(new Date(mtimeMs)), size: 1, mtimeMs }]);
+    h.answerHeldListing([
+      { key: backupArchiveKey(new Date(mtimeMs), { nodeId: BACKUP_NODE_ID }), size: 1, mtimeMs },
+    ]);
     const answered = await first;
     await settle();
     expect(h.built[0]!.closed).toBe(true);
@@ -266,7 +271,7 @@ describe("StatusClients against an HTTPS bucket", () => {
     const before = { connections, listings };
     for (let read = 0; read < 2; read += 1) {
       const status = await holder.read(dest(), (backend) =>
-        readDestinationStatus(backend, DAY, NOW, 10_000),
+        readDestinationStatus(backend, DAY, NOW, BACKUP_NODE_ID, 10_000),
       );
       expect(status.readErrorCode).toBeNull();
     }

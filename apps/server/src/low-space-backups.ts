@@ -18,6 +18,7 @@ import type { Logger } from "./logger.js";
 import type { StorageBackend } from "./storage-backend.js";
 
 export interface LowSpaceBackupDeps {
+  nodeId: string;
   /** The folder whose disk the free-space watch reads: the venue folder. */
   dir: string;
   staging: Pick<StagingTurn, "ifNoBackup">;
@@ -87,6 +88,7 @@ export function lowSpaceBackupDeletion(
         return at;
       };
       await makeRoom({
+        nodeId: deps.nodeId,
         neededBytes: 0,
         floorBytes: 0,
         aimBytes: SPACE_OK_BYTES,

@@ -1,3 +1,4 @@
+import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import {
   mkdir,
   mkdtemp,
@@ -66,6 +67,7 @@ const DUMP = "D".repeat(1000);
 
 function deps(f: Awaited<ReturnType<typeof fixture>>, backends: StorageBackend[]) {
   return {
+    nodeId: BACKUP_NODE_ID,
     ...f,
     backends,
     db: {} as Database,
@@ -397,7 +399,7 @@ async function seeded(f: Awaited<ReturnType<typeof fixture>>, archives: [Date, n
   await mkdir(dir, { recursive: true });
   const keys: string[] = [];
   for (const [at, bytes] of archives) {
-    const key = backupArchiveKey(at);
+    const key = backupArchiveKey(at, { nodeId: BACKUP_NODE_ID });
     await writeFile(join(dir, key), "");
     await truncate(join(dir, key), bytes);
     keys.push(key);
