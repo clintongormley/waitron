@@ -607,7 +607,12 @@ CREATE TABLE `floor_zones` (
 	`order_start` text,
 	`paid_when` text,
 	`collection_number` text,
+	`kept_open_day` text,
+	`kept_open_from` text,
+	`kept_open_until` text,
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "floor_zones_kept_open_ck" CHECK(("floor_zones"."kept_open_day" is null and "floor_zones"."kept_open_from" is null and "floor_zones"."kept_open_until" is null) or ("floor_zones"."kept_open_day" is not null and "floor_zones"."kept_open_from" is not null and "floor_zones"."kept_open_until" is not null)),
+	CONSTRAINT "floor_zones_kept_open_step_ck" CHECK(substr("floor_zones"."kept_open_from", 4, 2) in ('00', '15', '30', '45') and substr("floor_zones"."kept_open_until", 4, 2) in ('00', '15', '30', '45')),
 	CONSTRAINT "floor_zones_order_start_ck" CHECK("floor_zones"."order_start" in ('table', 'counter')),
 	CONSTRAINT "floor_zones_paid_when_ck" CHECK("floor_zones"."paid_when" in ('prepay', 'ticket_then_pay')),
 	CONSTRAINT "floor_zones_collection_number_ck" CHECK("floor_zones"."collection_number" in ('none', 'numbered'))
@@ -632,7 +637,18 @@ CREATE TABLE `kitchen_stations` (
 	`bump_mode` text DEFAULT 'line' NOT NULL,
 	`changes_after_sending` text DEFAULT 'held-or-waiting' NOT NULL,
 	`waits_for_pass` integer DEFAULT false NOT NULL,
+	`closed_on_day` text,
+	`closed_sends_to_station_id` text,
 	`created_at` text NOT NULL,
+	FOREIGN KEY (`closed_sends_to_station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "kitchen_stations_closed_sends_to_ck" CHECK("kitchen_stations"."closed_sends_to_station_id" is null or "kitchen_stations"."closed_on_day" is not null),
+	CONSTRAINT "kitchen_stations_closed_sends_to_not_self_ck" CHECK("kitchen_stations"."closed_sends_to_station_id" <> "kitchen_stations"."id"),
+	CONSTRAINT "kitchen_stations_warm_after_ck" CHECK("kitchen_stations"."warm_after_minutes" >= 1),
+	CONSTRAINT "kitchen_stations_ready_warning_after_ck" CHECK("kitchen_stations"."ready_warning_after_minutes" >= 1),
+	CONSTRAINT "kitchen_stations_colour_ck" CHECK("kitchen_stations"."colour" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey')),
+	CONSTRAINT "kitchen_stations_ticket_grouping_ck" CHECK("kitchen_stations"."ticket_grouping" in ('combined', 'separate')),
+	CONSTRAINT "kitchen_stations_bump_mode_ck" CHECK("kitchen_stations"."bump_mode" in ('line', 'ticket')),
+	CONSTRAINT "kitchen_stations_changes_after_sending_ck" CHECK("kitchen_stations"."changes_after_sending" in ('never', 'held', 'held-or-waiting')),
 	CONSTRAINT "kitchen_stations_thresholds_ordered" CHECK("kitchen_stations"."warm_after_minutes" < "kitchen_stations"."overdue_after_minutes" and "kitchen_stations"."overdue_after_minutes" < "kitchen_stations"."forgotten_after_minutes")
 );
 --> statement-breakpoint

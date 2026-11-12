@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2be26b98-8894-4651-bd42-8d851bfc396b",
+  "id": "50b9e8d0-1301-4839-a289-887337a211d9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4142,6 +4142,27 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "kept_open_day": {
+          "name": "kept_open_day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kept_open_from": {
+          "name": "kept_open_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kept_open_until": {
+          "name": "kept_open_until",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -4180,6 +4201,14 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "floor_zones_kept_open_ck": {
+          "name": "floor_zones_kept_open_ck",
+          "value": "(\"floor_zones\".\"kept_open_day\" is null and \"floor_zones\".\"kept_open_from\" is null and \"floor_zones\".\"kept_open_until\" is null) or (\"floor_zones\".\"kept_open_day\" is not null and \"floor_zones\".\"kept_open_from\" is not null and \"floor_zones\".\"kept_open_until\" is not null)"
+        },
+        "floor_zones_kept_open_step_ck": {
+          "name": "floor_zones_kept_open_step_ck",
+          "value": "substr(\"floor_zones\".\"kept_open_from\", 4, 2) in ('00', '15', '30', '45') and substr(\"floor_zones\".\"kept_open_until\", 4, 2) in ('00', '15', '30', '45')"
+        },
         "floor_zones_order_start_ck": {
           "name": "floor_zones_order_start_ck",
           "value": "\"floor_zones\".\"order_start\" in ('table', 'counter')"
@@ -4322,6 +4351,20 @@
           "autoincrement": false,
           "default": false
         },
+        "closed_on_day": {
+          "name": "closed_on_day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "closed_sends_to_station_id": {
+          "name": "closed_sends_to_station_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -4348,10 +4391,56 @@
           "where": "\"kitchen_stations\".\"is_default\""
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "kitchen_stations_closed_sends_to_station_id_kitchen_stations_id_fk": {
+          "name": "kitchen_stations_closed_sends_to_station_id_kitchen_stations_id_fk",
+          "tableFrom": "kitchen_stations",
+          "tableTo": "kitchen_stations",
+          "columnsFrom": [
+            "closed_sends_to_station_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "kitchen_stations_closed_sends_to_ck": {
+          "name": "kitchen_stations_closed_sends_to_ck",
+          "value": "\"kitchen_stations\".\"closed_sends_to_station_id\" is null or \"kitchen_stations\".\"closed_on_day\" is not null"
+        },
+        "kitchen_stations_closed_sends_to_not_self_ck": {
+          "name": "kitchen_stations_closed_sends_to_not_self_ck",
+          "value": "\"kitchen_stations\".\"closed_sends_to_station_id\" <> \"kitchen_stations\".\"id\""
+        },
+        "kitchen_stations_warm_after_ck": {
+          "name": "kitchen_stations_warm_after_ck",
+          "value": "\"kitchen_stations\".\"warm_after_minutes\" >= 1"
+        },
+        "kitchen_stations_ready_warning_after_ck": {
+          "name": "kitchen_stations_ready_warning_after_ck",
+          "value": "\"kitchen_stations\".\"ready_warning_after_minutes\" >= 1"
+        },
+        "kitchen_stations_colour_ck": {
+          "name": "kitchen_stations_colour_ck",
+          "value": "\"kitchen_stations\".\"colour\" in ('red', 'orange', 'amber', 'yellow', 'lime', 'green', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'purple', 'magenta', 'pink', 'brown', 'grey')"
+        },
+        "kitchen_stations_ticket_grouping_ck": {
+          "name": "kitchen_stations_ticket_grouping_ck",
+          "value": "\"kitchen_stations\".\"ticket_grouping\" in ('combined', 'separate')"
+        },
+        "kitchen_stations_bump_mode_ck": {
+          "name": "kitchen_stations_bump_mode_ck",
+          "value": "\"kitchen_stations\".\"bump_mode\" in ('line', 'ticket')"
+        },
+        "kitchen_stations_changes_after_sending_ck": {
+          "name": "kitchen_stations_changes_after_sending_ck",
+          "value": "\"kitchen_stations\".\"changes_after_sending\" in ('never', 'held', 'held-or-waiting')"
+        },
         "kitchen_stations_thresholds_ordered": {
           "name": "kitchen_stations_thresholds_ordered",
           "value": "\"kitchen_stations\".\"warm_after_minutes\" < \"kitchen_stations\".\"overdue_after_minutes\" and \"kitchen_stations\".\"overdue_after_minutes\" < \"kitchen_stations\".\"forgotten_after_minutes\""
