@@ -473,8 +473,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A1515. Set lunch menus, the _menú del día_ (owner, 2026-11-11): go-live.** One fixed price for a
   menu of courses, where the guest picks a dish for each course (say one of three starters), with
   bread, a drink or coffee included and an extra charge for a premium choice. The receipt shows one
-  line. Today a set lunch can only be sold as separate dishes with their own prices. Needs a design,
-  including how VAT is worked out on the one price (a question for the adviser).
+  line. Today a set lunch can only be sold as separate dishes with their own prices. The
+  [proposal](superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md) awaits Lane L's invoice review
+  before owner presentation, then owner choices and the adviser's VAT answer. Nothing is built.
   [Detail](backlog/catalogue.md#a1515-set-lunch-menus-the-menú-del-día)
 
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted

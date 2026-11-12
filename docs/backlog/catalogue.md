@@ -1076,7 +1076,9 @@ tests. Media still validates required image names and translates its refusal to
 
 ## A1515. Set lunch menus, the menú del día
 
-**Go-live (owner, 2026-11-11). Not designed; not started.** Most Spanish restaurants sell a fixed-price
+**Go-live (owner, 2026-11-11).** The [design proposal](../superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md)
+awaits Lane L's invoice review before owner presentation, then owner choices and the adviser's VAT
+answer. Implementation has not started. Most Spanish restaurants sell a fixed-price
 lunch menu. Waitron has no way to sell one: the demo's "Set lunch" is an ordinary menu whose dishes
 each carry their own price, sold, printed and taxed one by one. The catalogue design names this
 "bundles" and leaves it undesigned (`docs/superpowers/specs/2026-09-30-catalogue-menus-routing-design.md`,
