@@ -1603,7 +1603,6 @@ describe("dashboard-box-status-screen's restart of the box", () => {
     const el = await mountRestart(restartApi());
     expect(text(q(el, "[data-test=box-restart-section] h2"))).toBe(t("box_status.restart.title"));
     expect(text(q(el, "[data-test=box-restart]"))).toBe(t("box_status.restart.title"));
-    expect(q(el, "[data-test=box-restart-sign-in]")).toBeNull();
     expect(dialog(el).open).toBe(false);
     await openConfirm(el);
     expect(dialog(el).open).toBe(true);

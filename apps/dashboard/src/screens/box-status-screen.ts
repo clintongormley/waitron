@@ -286,9 +286,7 @@ export class BoxStatusScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) canOpen: (screen: string) => boolean = () => false;
-  /** Whether the session may confirm the box's clock from its own device (`person.admin`). */
   @property({ attribute: false }) canConfirmClock = false;
-  /** Whether the session may restart the box's server (`person.admin`). */
   @property({ attribute: false }) canRestart = false;
 
   @state() private network: BoxNetwork | null = null;
