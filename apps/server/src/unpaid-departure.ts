@@ -123,7 +123,7 @@ export async function recordUnpaidDeparture(
   }
   const open = owing.filter((bill) => bill.status === "open");
   const openIds = new Set(open.map((bill) => bill.workingOrderId));
-  const holding = open.find((bill) => bill.hasPayments);
+  const holding = toInvoice.find((bill) => bill.hasPayments);
   if (holding !== undefined) {
     throw new AppError("unpaid_departure.bill_holds_payment", {
       workingOrderId: holding.workingOrderId,

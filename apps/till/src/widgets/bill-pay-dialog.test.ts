@@ -1483,7 +1483,7 @@ describe("till-bill-pay-dialog: the bill's payments", () => {
     expect(asked).toEqual([{ paymentId: "pay-2" }]);
   });
 
-  it("offers no refund once the bill is no longer open, nor while the dialog is busy", async () => {
+  it("offers no refund once the bill is paid, nor while the dialog is busy", async () => {
     const closed = await mount({ balance: balanceOf({ status: "settled", payments: [cashPaid] }) });
     expect(root(closed).querySelector("[data-payment-refund]")).toBeNull();
 

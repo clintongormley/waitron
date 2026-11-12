@@ -1604,21 +1604,28 @@ export function paymentAttemptIsLive(db: Database, workingOrderId: string): bool
  * Refuse `order.payment_in_flight` while a card payment of any of these PLACED orders could still
  * file its sale: an integrated collection of it running in this process, or a payment its provider
  * has not resolved or no sale records yet. A placed order's collection writes no mark, so
- * `refusePaymentInFlight` does not see one.
+ * `refusePaymentInFlight` does not see one. `wholeOrderOnly` leaves out a card taken for a bill
+ * payment; such a card registers in `liveBillPaymentsOf` (bill-payments.ts), never in this map.
  */
 export async function refusePlacedPaymentInFlight(
   db: Database,
   tx: Transaction,
   orderIds: readonly string[],
+  options: UnfiledPaymentOptions = {},
 ): Promise<void> {
   const live = liveAttemptsOf(db);
   const notLive = orderIds.filter((id) => !live.has(id));
   const unfiled =
-    notLive.length === 0 ? new Set<string>() : await ordersWithUnfiledPayment(tx, notLive);
+    notLive.length === 0 ? new Set<string>() : await ordersWithUnfiledPayment(tx, notLive, options);
   const inFlight = orderIds.find((id) => live.has(id) || unfiled.has(id));
   if (inFlight !== undefined) {
     throw new AppError("order.payment_in_flight", { workingOrderId: inFlight });
   }
+}
+
+export interface UnfiledPaymentOptions {
+  /** Count only payments of the whole order, leaving out a card taken for a bill payment. */
+  wholeOrderOnly?: boolean;
 }
 
 /** A placed order writes no mark, so its entry in the live map carries this instead of one. */
@@ -1631,6 +1638,7 @@ const PLACED_ATTEMPT = "placed";
 export async function ordersWithUnfiledPayment(
   tx: Transaction,
   orderIds: readonly string[],
+  options: UnfiledPaymentOptions = {},
 ): Promise<Set<string>> {
   const rows = await tx
     .selectDistinct({ id: payments.workingOrderId })
@@ -1639,6 +1647,7 @@ export async function ordersWithUnfiledPayment(
     .where(
       and(
         inArray(payments.workingOrderId, [...orderIds]),
+        options.wholeOrderOnly === true ? isNull(payments.billPaymentId) : undefined,
         or(
           eq(payments.state, "attempting"),
           and(

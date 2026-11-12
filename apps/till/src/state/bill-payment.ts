@@ -326,10 +326,11 @@ export function refundableOf(payment: BillPaymentView): { applied: string; tip: 
   };
 }
 
-/** A refund is offered of a received payment of an open bill with something left to give back,
- * while none of its refunds is still waiting for the card provider. */
+/** A refund is offered of a received payment of an open, sent or presented bill with something
+ * left to give back, while none of its refunds is still waiting for the card provider. The balance
+ * does not say whether a sent bill's invoice is issued; the server refuses that refund. */
 export function refundOffered(payment: BillPaymentView, status: BillBalance["status"]): boolean {
-  if (status !== "open" || payment.state !== "received") return false;
+  if ((status !== "open" && status !== "placed") || payment.state !== "received") return false;
   if (payment.refunds.some((refund) => refund.state === "pending")) return false;
   const left = refundableOf(payment);
   return compareDecimal(moneyPlus(left.applied, left.tip), decimal("0")) > 0;

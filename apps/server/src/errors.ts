@@ -519,10 +519,13 @@ declare module "@waitron/shared" {
      * (`ordersWithUnfiledPayment`); or a cancel of any placed order while an integrated card
      * collection of it runs in this process (`paymentAttemptIsLive`). Also, while such a payment or
      * collection exists (`refusePlacedPaymentInFlight`): a collect of a placed order, an unpaid
-     * departure recorded for its party, and a card payment (`/api/pay`) of it other than one that
-     * files a card already charged, invoice or none; and setting the invoice choice or receipt
-     * language of a placed order with no invoice yet. The caller waits for the payment to settle or
-     * fail.
+     * departure recorded for its party, a payment of it or its preview in the bill's payment window
+     * (where a card taken for a part payment is not counted; its reservation is, as on an open bill,
+     * and refuses a payment with this code when it covers all that is left), and a card payment
+     * (`/api/pay`) of it other
+     * than one that files a card already charged, invoice or none; and setting the invoice choice or
+     * receipt language of a placed order with no invoice yet. The caller waits for the payment to
+     * settle or fail.
      */
     "order.payment_in_flight": { workingOrderId: string };
     /**
@@ -635,9 +638,10 @@ declare module "@waitron/shared" {
      */
     "unpaid_departure.unfired_dishes": { workingOrderId: string };
     /**
-     * Record unpaid departure found an open bill holding a payment, one given back in full
-     * included: collecting a presented bill refuses one that holds a payment (`collectOrder`,
-     * through `refuseBillWithPayments`), so the invoice issued now could not be collected later.
+     * Record unpaid departure found a bill it would invoice, open or presented, holding a payment,
+     * one given back in full included: collecting a presented bill refuses one that holds a payment
+     * (`collectOrder`, through `refuseBillWithPayments`), so the invoice issued now could not be
+     * collected later.
      */
     "unpaid_departure.bill_holds_payment": { workingOrderId: string };
     /**

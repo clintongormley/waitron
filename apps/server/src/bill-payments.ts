@@ -99,6 +99,7 @@ import {
   readOutstandingSaleForOrder,
   readTenderBlock,
   receiptQr,
+  refusePlacedPaymentInFlight,
 } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { fingerprint } from "./parties.js";
@@ -991,20 +992,41 @@ export async function requireOpenBill(tx: Transaction, workingOrderId: string): 
   }
 }
 
-async function requirePayableBill(tx: Transaction, workingOrderId: string): Promise<void> {
+async function hasInvoice(tx: Transaction, workingOrderId: string): Promise<boolean> {
+  const [invoice] = await tx
+    .select({ id: sales.id })
+    .from(sales)
+    .where(eq(sales.workingOrderId, workingOrderId))
+    .limit(1);
+  return invoice !== undefined;
+}
+
+/** A bill whose payments can still be refunded before its invoice: open, or sent or presented with
+ * no invoice issued; else `working_order.not_found` or `working_order.not_open`. Returns which of
+ * the two it found. */
+export async function requireRefundableBill(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<"open" | "placed"> {
+  const [order] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, workingOrderId));
+  if (order?.status === "placed" && !(await hasInvoice(tx, workingOrderId))) return "placed";
+  await requireOpenBill(tx, workingOrderId);
+  return "open";
+}
+
+async function requirePayableBill(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<"open" | "placed"> {
   const [order] = await tx
     .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order?.status === "placed") {
-    if (order.partyId === null) {
-      const [invoice] = await tx
-        .select({ id: sales.id })
-        .from(sales)
-        .where(eq(sales.workingOrderId, workingOrderId))
-        .limit(1);
-      if (invoice === undefined) return;
-    }
+    if (order.partyId === null && !(await hasInvoice(tx, workingOrderId))) return "placed";
     const [part] = await tx
       .select({ id: billPayments.id })
       .from(billPayments)
@@ -1012,9 +1034,10 @@ async function requirePayableBill(tx: Transaction, workingOrderId: string): Prom
         and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")),
       )
       .limit(1);
-    if (part !== undefined) return;
+    if (part !== undefined) return "placed";
   }
   await requireOpenBill(tx, workingOrderId);
+  return "open";
 }
 
 /** Design §3.6: what a payment of the bill would be, writing nothing. */
@@ -1026,7 +1049,9 @@ export async function previewBillPayment(
   operatorId: string | undefined,
 ): Promise<AllocationPreview> {
   return withTransaction(deps.db, async (tx) => {
-    await requirePayableBill(tx, workingOrderId);
+    if ((await requirePayableBill(tx, workingOrderId)) === "placed") {
+      await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId], { wholeOrderOnly: true });
+    }
     await requireOrderBillEditor(tx, workingOrderId, {
       operatorId,
       expectedEdit: ask.expectedEdit,
@@ -1116,9 +1141,10 @@ export async function findSubmission(
 /**
  * The start every payment of a bill shares, in the caller's transaction: the operator must still
  * be signed in on the requesting device ({@link assertStillSignedIn}); a retry finds its first row;
- * otherwise the bill must be open and no payment of the whole order in flight, the allocation must be
- * the one the operator saw (design §3.6), and the payment and its lines are inserted in `state`. A new
- * payment answers the bill's total too, which the insert leaves as it was.
+ * otherwise the bill must be payable (`requirePayableBill`) with no payment of the whole order in
+ * flight, the allocation must be the one the operator saw (design §3.6), and the payment and its
+ * lines are inserted in `state`. A new payment answers the bill's total too, which the insert
+ * leaves as it was.
  *
  * Keyed by `submissionId` within the bill (design §5.1): the same payment again, whatever its
  * `guestCount`, answers the first row and writes nothing; the id with another payment, or naming one of
@@ -1160,7 +1186,7 @@ async function beginBillPayment(
   await deps.backend.refuseWhileClockBehind(tx, reading);
   await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
-  await requirePayableBill(tx, workingOrderId);
+  const payable = await requirePayableBill(tx, workingOrderId);
   await requireOrderBillEditor(tx, workingOrderId, {
     operatorId: operator.personId,
     expectedEdit: req.expectedEdit,
@@ -1168,6 +1194,10 @@ async function beginBillPayment(
   await assertBillHasNoUnsent(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
+  // A part payment's card reserves its share, as on an open bill (design §5.2).
+  if (payable === "placed") {
+    await refusePlacedPaymentInFlight(deps.db, tx, [workingOrderId], { wholeOrderOnly: true });
+  }
   const held = await readPaymentMoney(tx, [workingOrderId]);
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await billPaymentTotal(tx, workingOrderId);
@@ -1240,8 +1270,9 @@ async function captureBillPaymentAttendance(
 }
 
 /**
- * Take a cash or hand-keyed card payment against an open bill, in one transaction: it is received
- * at once, and when it leaves the bill fully paid the same transaction issues the invoice.
+ * Take a cash or hand-keyed card payment against a bill `requirePayableBill` admits, in one
+ * transaction: it is received at once, and when it leaves the bill fully paid the same transaction
+ * issues the invoice.
  */
 export async function takeBillPayment(
   deps: BillPaymentDeps,

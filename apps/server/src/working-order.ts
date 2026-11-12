@@ -5375,6 +5375,16 @@ export async function refusePaymentInFlight(
 ): Promise<void> {
   await refuseRefundInProgress(tx, orderIds);
   await refuseOrderPaymentMarked(tx, orderIds);
+  await refusePendingPartPayment(tx, orderIds, "open");
+}
+
+/** Refuse `order.payment_in_flight` while a card part payment of one of these orders is pending;
+ * `"open"` looks only at open orders. */
+export async function refusePendingPartPayment(
+  tx: Transaction,
+  orderIds: readonly string[],
+  orders: "open" | "any",
+): Promise<void> {
   const [pending] = await tx
     .select({ workingOrderId: billPayments.workingOrderId })
     .from(billPayments)
@@ -5383,7 +5393,7 @@ export async function refusePaymentInFlight(
       and(
         inArray(billPayments.workingOrderId, [...orderIds]),
         eq(billPayments.state, "pending"),
-        eq(workingOrders.status, "open"),
+        orders === "open" ? eq(workingOrders.status, "open") : undefined,
       ),
     )
     .orderBy(billPayments.workingOrderId)

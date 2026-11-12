@@ -750,6 +750,42 @@ describe("bills already presented", () => {
       expect.objectContaining({ saleId: invoiced!.id, amount: 1800 }),
     ]);
   });
+
+  it("refuses a bill presented after a part payment at the counter, and writes nothing", async () => {
+    const party = await seatedWith(venue, "Caña");
+    const id = await placedCounterBillMovedTo(venue, prepayZone, party, false, async (sent) => {
+      const part = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${sent}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "5.00",
+          method: "cash",
+          tendered: "5.00",
+          applied: "5.00",
+          tip: "0.00",
+          expectedEdit: null,
+        },
+      );
+      expect(part.status).toBe(200);
+    });
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: revisionOf(party.partyId),
+      reason: REASON,
+    });
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: { code: "unpaid_departure.bill_holds_payment", params: { workingOrderId: id } },
+    });
+    expect(await salesOf(id)).toEqual([]);
+    await expectNothingWritten(party.partyId, id, "placed");
+    expect(await departuresOf(party.tabId)).toEqual([]);
+  });
 });
 
 describe("a presented bill whose card is in flight", () => {

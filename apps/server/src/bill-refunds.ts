@@ -44,7 +44,7 @@ import {
   findSubmission,
   readBillBalance,
   readOnePaymentMoney,
-  requireOpenBill,
+  requireRefundableBill,
   toRefundView,
 } from "./bill-payments.js";
 import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.js";
@@ -54,7 +54,11 @@ import { enqueueBillRefundDrawer } from "./receipt-print.js";
 import type { TenderKind } from "./device-session.js";
 import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
 import { fingerprint } from "./parties.js";
-import { refusePaymentInFlight } from "./working-order.js";
+import {
+  refusePaymentInFlight,
+  refusePendingPartPayment,
+  refuseRefundInProgress,
+} from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import "./errors.js";
@@ -637,9 +641,10 @@ async function refundOverrideToCheck(
 }
 
 /**
- * Give money back from one bill payment of an open bill, needing `sale.refund` from the operator or
- * the override. A payment gives back up to its net applied money; its tip comes back only with the
- * whole of what is left of it; an item payment only whole, which frees its lines.
+ * Give money back from one bill payment of a bill with no invoice yet (open, sent or presented),
+ * needing `sale.refund` from the operator or the override. A payment gives back up to its net
+ * applied money; its tip comes back only with the whole of what is left of it; an item payment only
+ * whole, which frees its lines.
  *
  * Keyed by `submissionId` across the whole bill (design §5.1): the same refund again answers the
  * first and writes nothing, except that a card refund still pending is resumed; the id with another
@@ -717,8 +722,12 @@ export async function refundBillPayment(
         await deps.backend.refuseWhileClockBehind(tx, reading);
         await deps.backend.refuseNewRefund(tx, cfg.nodeId);
 
-        await requireOpenBill(tx, workingOrderId);
-        await refusePaymentInFlight(tx, [workingOrderId]);
+        if ((await requireRefundableBill(tx, workingOrderId)) === "placed") {
+          await refuseRefundInProgress(tx, [workingOrderId]);
+          await refusePendingPartPayment(tx, [workingOrderId], "any");
+        } else {
+          await refusePaymentInFlight(tx, [workingOrderId]);
+        }
 
         const held = await readOnePaymentMoney(tx, payment);
         const [refundable, refundableTip] =
