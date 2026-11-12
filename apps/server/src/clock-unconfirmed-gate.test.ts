@@ -1,22 +1,45 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import type { Hono } from "hono";
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
+  billPaymentRefunds,
   captureError,
   deviceProfiles,
   devices,
   sales,
+  tenderRefunds,
   tenders,
   withTransaction,
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { FiscalBackend, SaleForFiscalRecord } from "@waitron/fiscal";
+import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError, decimal, jobOrigin, saleId as brandSaleId } from "@waitron/shared";
+import {
+  failAttempting,
+  insertAttempting,
+  insertInitiated,
+  recordHold,
+  type CardProviderContribution,
+} from "@waitron/payments";
+import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import {
+  AppError,
+  decimal,
+  deviceOrigin,
+  jobOrigin,
+  saleId as brandSaleId,
+  workingOrderId as brandWorkingOrderId,
+} from "@waitron/shared";
+import { attestCardRefund } from "./bill-refunds.js";
+import { mountPaymentsApi } from "./payments-api.js";
 import { startClockState } from "./start-clock-check.js";
 import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
+import { attestTenderRefund } from "./tender-refund-sends.js";
 import {
   fiscalRecordCount,
   inTx,
@@ -32,11 +55,24 @@ import { issueOrderInvoice } from "./testing/issue-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import {
+  signStripeBody,
+  stripeSessionEvent,
+  verifyingStripe,
+} from "./testing/fake-stripe-webhook.js";
+import { TradingAdmission } from "./trading-admission.js";
+import { mountWebhook } from "./webhook.js";
 import { parkOrder } from "./working-order.js";
 import "./errors.js";
 
+const RING = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+
 let venue: BillVenue;
 let counter: ZoneOffers;
+let managerCookie: string;
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -61,6 +97,23 @@ useVenueDb({
         .set({ capabilities: [...(profile!.capabilities as string[]), "close-by-transfer"] })
         .where(eq(deviceProfiles.id, device!.profileId));
     });
+    const session = await withTransaction(db, (tx) =>
+      startManagementSession(tx, { personId: venue.adminId }),
+    );
+    managerCookie = `${MANAGEMENT_COOKIE}=${session.token}`;
+    // The dashboard asks a stuck payment's provider only when it is connected: the fake is served
+    // under the Stripe seat's credential, which the webhook's secret also comes from.
+    await withTransaction(db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: "payments.stripe",
+        value: {
+          secretKey: "sk_test_ok",
+          webhookSecret: "whsec_gate",
+          successUrl: "https://example.test/ok",
+          cancelUrl: "https://example.test/no",
+        },
+      }),
+    );
   },
 });
 
@@ -209,19 +262,29 @@ function moneyState() {
     providerRefunds: rowCount("payment_refunds"),
     departures: rowCount("unpaid_departures"),
     transferClosures: rowCount("transfer_closures"),
+    holdOutcomes: rowCount("payment_hold_outcomes"),
+    settledRefunds:
+      rowCount("bill_payment_refunds", sql`state <> 'pending'`) +
+      rowCount("tender_refunds", sql`state <> 'pending'`),
     drawerJobs: rowCount("print_jobs", sql`kind = 'drawer'`),
     printJobs: rowCount("print_jobs"),
     collects: venue.card.collectCalls.length,
     refundSends: venue.card.refundCalls.length,
     lookups: venue.card.lookupCalls.length,
+    abandonedAsks: venue.card.abandonedAttemptCalls.length,
     orders: venue.db.all(
       sql`select id, status, revision, payment_attempt_at from working_orders order by id`,
     ),
     parties: venue.db.all(sql`select id, state, revision from parties order by id`),
+    billPaymentStates: venue.db.all(sql`select id, state from bill_payments order by id`),
+    providerPayments: venue.db.all(sql`select id, state from payments order by id`),
   };
 }
 
-type Counted = Exclude<keyof ReturnType<typeof moneyState>, "orders" | "parties">;
+type Counted = Exclude<
+  keyof ReturnType<typeof moneyState>,
+  "orders" | "parties" | "billPaymentStates" | "providerPayments"
+>;
 
 interface MoneyRoute {
   send: (app: Hono) => Promise<Answer>;
@@ -472,6 +535,14 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
       grows: ["transferClosures", "records"],
     };
   },
+  "a cancel's credit of an order whose invoice was filed": async () => {
+    const id = await counterOrder(true);
+    const body = { reason: "Wrong order", override: OVERRIDE() };
+    return {
+      send: (app) => as(app, "POST", `/api/working-orders/${id}/cancel`, body),
+      grows: ["sales", "records"],
+    };
+  },
 };
 
 describe("the till's money routes behind the start clock gate", () => {
@@ -507,4 +578,329 @@ describe("the till's money routes behind the start clock gate", () => {
         expect(after[counted], counted).toBeGreaterThan(before[counted]);
     },
   );
+});
+
+function paymentsApp(backend: FiscalBackend): Hono {
+  // The fake card provider, offered under the Stripe seat so the dashboard counts it connected.
+  const fakeSeat: CardProviderContribution = {
+    ...createStripeCardProvider((() => {
+      throw new Error("clock-unconfirmed-gate.test: the seat's own Stripe SDK is never built");
+    }) as unknown as MakeStripe),
+    providerId: "fake",
+  };
+  const app = new Hono();
+  mountPaymentsApi(
+    app,
+    {
+      isPrimary: () => true,
+      admission: testTradingAdmission(),
+      db: venue.db,
+      backend,
+      clock: venue.clock,
+      cfg: venue.cfg,
+      ring: RING,
+      environment: "preproduction",
+      pool: venue.pool,
+      providers: [fakeSeat],
+    },
+    () => {},
+  );
+  return app;
+}
+
+const manager = (app: Hono, path: string, body: unknown = {}) =>
+  send(app, managerCookie, "POST", path, body);
+
+const confirmedBy = (outcome: string) => ({ outcome, note: "Seen at the provider", pin: "1234" });
+
+/** A Paella bill's card part payment whose reader stopped answering, left pending. */
+async function stalledBillPayment(amount: string) {
+  const billId = await tabWith(venue, "Paella");
+  venue.card.stallNextCollect();
+  await as(venue.app, "POST", `/api/working-orders/${billId}/payments`, readerPart(amount));
+  const [row] = venue.db.all<{ id: string; paymentRef: string }>(sql`
+    select bp.id, p.payment_ref as paymentRef from bill_payments bp
+    join payments p on p.bill_payment_id = bp.id
+    where bp.working_order_id = ${billId} and bp.state = 'pending'
+  `);
+  return row!;
+}
+
+/** A refund of 5.00 the provider made but whose answer was lost, left pending; its row's id. */
+async function pendingRefund(kind: "bill" | "tender"): Promise<string> {
+  venue.card.scriptNextRefund({ made: "completed", answer: LOST });
+  if (kind === "bill") {
+    const { billId, paymentId } = await billPaid(readerPart("10.00"));
+    await billRefund(billId, paymentId)(venue.app);
+    const [row] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: billPaymentRefunds.id, state: billPaymentRefunds.state })
+        .from(billPaymentRefunds)
+        .where(eq(billPaymentRefunds.billPaymentId, paymentId)),
+    );
+    expect(row!.state).toBe("pending");
+    return row!.id;
+  }
+  const { saleId, tenderId } = await soldWhole("card");
+  await tenderRefund(saleId, tenderId)(venue.app);
+  const [row] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: tenderRefunds.id, state: tenderRefunds.state })
+      .from(tenderRefunds)
+      .where(eq(tenderRefunds.saleId, saleId)),
+  );
+  expect(row!.state).toBe("pending");
+  return row!.id;
+}
+
+const NOT_CHARGED = { outcome: "failed", cancelledAtProvider: true } as const;
+
+// Each row builds its own payment, hold or refund through the ungated till, so rows never share one.
+const dashboardResolutions: Record<string, () => Promise<MoneyRoute>> = {
+  "a stuck card payment's resolve": async () => {
+    const orderId = await tabWith(venue, "Caña");
+    await withTransaction(venue.db, async (tx) => {
+      await insertAttempting(tx, {
+        origin: deviceOrigin(venue.deviceId),
+        workingOrderId: brandWorkingOrderId(orderId),
+        nodeId: venue.cfg.nodeId,
+        provider: "fake",
+        paymentRef: randomUUID(),
+        amount: decimal("3.00"),
+      });
+      await tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: venue.clock.now().instant.toISOString() })
+        .where(eq(workingOrders.id, orderId));
+    });
+    const [stuck] = venue.db.all<{ id: string }>(
+      sql`select id from payments where working_order_id = ${orderId}`,
+    );
+    return {
+      send: async (app) => {
+        venue.card.scriptAbandonedAttempt(NOT_CHARGED);
+        const answer = await manager(app, `/management-api/payments/stuck/${stuck!.id}/resolve`);
+        venue.card.scriptAbandonedAttempt({ outcome: "unknown", reason: "unreachable" });
+        return answer;
+      },
+      grows: ["abandonedAsks"],
+    };
+  },
+  "a stuck bill payment's resolve": async () => {
+    const { id } = await stalledBillPayment("10.00");
+    return {
+      send: async (app) => {
+        venue.card.scriptAbandonedAttempt(NOT_CHARGED);
+        const answer = await manager(app, `/management-api/payments/bill-payments/${id}/resolve`);
+        venue.card.scriptAbandonedAttempt({ outcome: "unknown", reason: "unreachable" });
+        return answer;
+      },
+      grows: ["abandonedAsks"],
+    };
+  },
+  "a stuck bill payment's confirmed outcome": async () => {
+    const { id, paymentRef } = await stalledBillPayment("35.00");
+    await withTransaction(venue.db, (tx) => failAttempting(tx, { provider: "fake", paymentRef }));
+    const path = `/management-api/payments/bill-payments/${id}/attest`;
+    return {
+      send: (app) => manager(app, path, confirmedBy("received")),
+      grows: ["sales", "tenders", "records"],
+    };
+  },
+  "a held payment's outcome": async () => {
+    const id = randomUUID();
+    const paid = await as(venue.app, "POST", "/api/pay", {
+      id,
+      lines: tarta(),
+      zoneId: counter.zoneId,
+    });
+    expect(paid.status).toBe(200);
+    const [payment] = venue.db.all<{ id: string }>(
+      sql`select id from payments where working_order_id = ${id}`,
+    );
+    await withTransaction(venue.db, (tx) =>
+      recordHold(tx, {
+        paymentId: payment!.id,
+        providerAmount: decimal("1.80"),
+        foundAt: venue.clock.now().instant,
+      }),
+    );
+    const [hold] = venue.db.all<{ id: string }>(
+      sql`select id from payment_holds where payment_id = ${payment!.id}`,
+    );
+    const body = { outcome: "kept", note: "Kept", pin: "1234" };
+    return {
+      send: (app) => manager(app, `/management-api/payments/held/${hold!.id}/outcome`, body),
+      grows: ["holdOutcomes"],
+    };
+  },
+  "a pending bill refund's resolve": async () => {
+    const id = await pendingRefund("bill");
+    return {
+      send: (app) => manager(app, `/management-api/payments/bill-refunds/${id}/resolve`),
+      grows: ["lookups", "settledRefunds"],
+    };
+  },
+  "a pending bill refund's confirmed outcome": async () => {
+    const id = await pendingRefund("bill");
+    const path = `/management-api/payments/bill-refunds/${id}/attest`;
+    return {
+      send: (app) => manager(app, path, confirmedBy("completed")),
+      grows: ["settledRefunds"],
+    };
+  },
+  "a pending tender refund's resolve": async () => {
+    const id = await pendingRefund("tender");
+    return {
+      send: (app) => manager(app, `/management-api/payments/tender-refunds/${id}/resolve`),
+      grows: ["lookups", "settledRefunds"],
+    };
+  },
+  "a pending tender refund's confirmed outcome": async () => {
+    const id = await pendingRefund("tender");
+    const path = `/management-api/payments/tender-refunds/${id}/attest`;
+    return {
+      send: (app) => manager(app, path, confirmedBy("completed")),
+      grows: ["settledRefunds"],
+    };
+  },
+};
+
+describe("the dashboard's payment resolutions behind the start clock gate", () => {
+  it.each(Object.keys(dashboardResolutions))(
+    "%s: refuses clock.unconfirmed while the start waits, moving and writing nothing, and is served once confirmed",
+    async (name) => {
+      const route = await dashboardResolutions[name]!();
+      const state = startClockState();
+      const app = paymentsApp(
+        gateSeatOnStartClock(
+          venue.backend,
+          startClockGateHolds(
+            state,
+            () => true,
+            () => false,
+          ),
+        ),
+      );
+      const before = moneyState();
+
+      const refused = await route.send(app);
+
+      expect(refused.status).toBe(409);
+      expect(refused.json).toEqual({ code: "clock.unconfirmed", params: {} });
+      expect(moneyState()).toEqual(before);
+
+      state.confirm("by_person", {});
+      const served = await route.send(app);
+
+      expect(served.status).toBe(200);
+      const after = moneyState();
+      for (const counted of route.grows)
+        expect(after[counted], counted).toBeGreaterThan(before[counted]);
+    },
+  );
+});
+
+// The routes check first; these reach the confirmed-outcome writers' own check (`clockStopsRefund`).
+const confirmedOutcomes = {
+  "a bill refund's confirmed outcome, written by attestCardRefund": {
+    kind: "bill",
+    attest: attestCardRefund,
+  },
+  "a tender refund's confirmed outcome, written by attestTenderRefund": {
+    kind: "tender",
+    attest: attestTenderRefund,
+  },
+} as const;
+
+describe("a manager's confirmed refund outcome behind the start clock gate", () => {
+  it.each(Object.keys(confirmedOutcomes) as (keyof typeof confirmedOutcomes)[])(
+    "%s: throws clock.unconfirmed while the start waits, settling nothing, and settles once confirmed",
+    async (name) => {
+      const { kind, attest } = confirmedOutcomes[name];
+      const id = await pendingRefund(kind);
+      const state = startClockState();
+      const deps = {
+        db: venue.db,
+        backend: gateSeatOnStartClock(
+          venue.backend,
+          startClockGateHolds(
+            state,
+            () => true,
+            () => false,
+          ),
+        ),
+        admission: testTradingAdmission(),
+        clock: venue.clock,
+        cfg: venue.cfg,
+        refundProviderFor: (provider: string) => venue.pool.get(provider),
+      };
+      const confirmed = { attestedBy: venue.adminId, note: "Seen at the provider" };
+      const before = moneyState();
+
+      const error = await captureError(() => attest(deps, id, "completed", confirmed));
+
+      expect(error).toMatchObject({ code: "clock.unconfirmed", params: {} });
+      expect(moneyState()).toEqual(before);
+
+      state.confirm("by_person", {});
+      const settled = await attest(deps, id, "completed", confirmed);
+
+      expect(settled.state).toBe("completed");
+      expect(moneyState().settledRefunds).toBe(before.settledRefunds + 1);
+    },
+  );
+});
+
+describe("money already moved while the start waits", () => {
+  it("the webhook stores a hosted payment, with no seat to refuse it", async () => {
+    // The webhook takes no fiscal seat (`WebhookDeps`), so no gate can stand in front of it.
+    const state = startClockState();
+    expect(state.unconfirmed()).toBe(true);
+    const orderId = await tabWith(venue, "Caña");
+    const sessionId = `cs_${randomUUID()}`;
+    await withTransaction(venue.db, (tx) =>
+      insertInitiated(tx, {
+        origin: deviceOrigin(venue.deviceId),
+        workingOrderId: brandWorkingOrderId(orderId),
+        nodeId: venue.cfg.nodeId,
+        provider: "stripe",
+        paymentRef: randomUUID(),
+        externalRef: sessionId,
+        amount: decimal("3.00"),
+      }),
+    );
+    const admission = new TradingAdmission();
+    admission.admit();
+    const app = new Hono();
+    mountWebhook(
+      app,
+      {
+        db: venue.db,
+        ring: RING,
+        nodeId: venue.cfg.nodeId,
+        admission,
+        environment: "preproduction",
+        makeStripe: () => verifyingStripe(),
+      },
+      () => {},
+    );
+    const body = stripeSessionEvent({
+      type: "checkout.session.completed",
+      sessionId,
+      amountTotalMinor: 300,
+      created: Math.floor(Date.now() / 1000),
+    });
+
+    const res = await app.request("/webhooks/stripe", {
+      method: "POST",
+      headers: { "stripe-signature": signStripeBody(body, "whsec_gate") },
+      body,
+    });
+
+    expect(res.status).toBe(200);
+    expect(venue.db.all(sql`select state from payments where external_ref = ${sessionId}`)).toEqual(
+      [{ state: "captured" }],
+    );
+  });
 });

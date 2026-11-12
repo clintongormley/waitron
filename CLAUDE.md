@@ -925,8 +925,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   we either wait for two devices … Or we stop and ask a user to confirm that our current date+time
   is correct (or we ask them to correct it)"; "Orders still go"). Guards:
   `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-unconfirmed-gate.test.ts` and
-  `apps/server/src/boot.start-clock-gate.test.ts`, weaker than the rule: the seat's four writers and
-  one cash sale only; the record remedies, off in production, are outside it.
+  `apps/server/src/boot.start-clock-gate.test.ts`, weaker than the rule: the money routes in the
+  gate table only; the record remedies, off in production, are outside it.
   [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).
 - **More than a minute behind the latest fiscal record, write no record and take/refund no new money
   unless a clock confirmation covers it.** After replay, call `refuseWhileClockBehind` before
