@@ -131,7 +131,6 @@ describe("late issuance rolls back its initiating command", () => {
     "line edit",
     "adjustment",
     "line cancellation",
-    "bill split",
     "bill move-dishes",
     "table split",
     "draft save",
@@ -142,13 +141,9 @@ describe("late issuance rolls back its initiating command", () => {
     const [first, second] = await suite.db.select().from(products);
     if (first?.unitPrice == null || second?.unitPrice == null)
       throw new Error("fixture needs priced products");
-    const reduces = [
-      "adjustment",
-      "line cancellation",
-      "bill split",
-      "bill move-dishes",
-      "table split",
-    ].includes(kind);
+    const reduces = ["adjustment", "line cancellation", "bill move-dishes", "table split"].includes(
+      kind,
+    );
     const billId = await tabWith(venue, first.name, ...(reduces ? [second.name] : []));
     const [bill] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
     const partyId = bill!.partyId!;
@@ -244,13 +239,6 @@ describe("late issuance rolls back its initiating command", () => {
           note: "Revised note",
           portionLineNos: [],
         };
-      } else if (kind === "bill split") {
-        path = `/api/bills/${billId}/split`;
-        body = {
-          expectedPartyRevision: party!.revision,
-          expectedEdit: edit,
-          transfers: [{ lineNo: 2 }],
-        };
       } else if (kind === "bill move-dishes") {
         path = `/api/bills/${billId}/move-dishes`;
         body = {
@@ -317,14 +305,19 @@ describe("late issuance rolls back its initiating command", () => {
     async (failAt) => {
       const { partyId, tabId: bill1 } = await seatedWith(venue, "Caña", "Caña", "Paella", "Caña");
       const leaving = await joinSecondTable(partyId);
-      const carvePath = `/api/bills/${bill1}/split`;
+      const carvePath = `/api/bills/${bill1}/move-dishes`;
+      const carvedLines = await suite.db
+        .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, bill1));
       const carved = await send(
         venue.app,
         venue.cookie,
         "POST",
         carvePath,
         await observedBillActionBody(suite.db, carvePath, {
-          transfers: [{ lineNo: 3 }, { lineNo: 4 }],
+          lineIds: carvedLines.filter((line) => line.lineNo >= 3).map((line) => line.id),
+          toBillId: null,
           expectedPartyRevision: await partyRevision(partyId),
         }),
       );

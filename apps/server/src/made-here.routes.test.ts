@@ -974,7 +974,7 @@ describe("made-here route wiring", () => {
       { station_id: grillStationId, kind: "moved" },
     ]);
   });
-  it("keeps the made-here mark when splitting a drink onto another bill", async () => {
+  it("keeps the made-here mark when moving a drink onto another bill", async () => {
     const party = await seatedWith(venue);
     const sent = await sendGroupedDrinks(party, 2);
     expect(sent.status).toBe(200);
@@ -989,11 +989,12 @@ describe("made-here route wiring", () => {
       venue.app,
       venue.cookie,
       "POST",
-      `/api/bills/${party.tabId}/split`,
-      await observedBillActionBody(venue.db, `/api/bills/${party.tabId}/split`, {
+      `/api/bills/${party.tabId}/move-dishes`,
+      await observedBillActionBody(venue.db, `/api/bills/${party.tabId}/move-dishes`, {
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(party.partyId),
-        transfers: [{ lineNo: line!.lineNo, quantity: "1" }],
+        lineIds: [line!.id],
+        toBillId: null,
       }),
     );
     expect(split.status).toBe(200);

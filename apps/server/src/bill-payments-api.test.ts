@@ -506,19 +506,31 @@ async function partyRevisionOf(billId: string): Promise<number> {
   return row!.revision;
 }
 
-/** Split the items onto a new bill of the party, through the bill route. */
+/** Moves whole dishes, named by line number, to a new bill of the party, through Move dishes. */
 async function splitOff(
   billId: string,
-  transfers: { lineNo: number; quantity?: string }[],
+  lineNos: number[],
 ): Promise<{ status: number; json: Record<string, unknown> }> {
+  const path = `/api/bills/${billId}/move-dishes`;
   return request(
     "POST",
-    `/api/bills/${billId}/split`,
-    await observedBillActionBody(suite.db, `/api/bills/${billId}/split`, {
-      transfers,
+    path,
+    await observedBillActionBody(suite.db, path, {
+      lineIds: await lineIdsOf(billId, lineNos),
+      toBillId: null,
       expectedPartyRevision: await partyRevisionOf(billId),
     }),
   );
+}
+
+async function lineIdsOf(billId: string, lineNos: number[]): Promise<string[]> {
+  const rows = await inTx((tx) =>
+    tx
+      .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId)),
+  );
+  return lineNos.map((lineNo) => rows.find((row) => row.lineNo === lineNo)!.id);
 }
 
 interface PaymentBody {
@@ -1296,7 +1308,7 @@ describe("an item already paid for (design §8 test 5)", () => {
   it("refuses splitting the steak off", async () => {
     const billId = await steakPaid();
 
-    const split = await splitOff(billId, [{ lineNo: 2 }]);
+    const split = await splitOff(billId, [2]);
 
     expect(split.status).toBe(409);
     expect(split.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: 2 } });
@@ -1323,12 +1335,8 @@ describe("an item already paid for (design §8 test 5)", () => {
     expect(paid.status).toBe(200);
 
     const beers = await todayLineNos(suite, billId, 2);
-    const moved = await splitOff(
-      billId,
-      beers.length === 1
-        ? [{ lineNo: 2, quantity: "2" }]
-        : beers.slice(-2).map((lineNo) => ({ lineNo })),
-    );
+    expect(beers).toHaveLength(4);
+    const moved = await splitOff(billId, beers.slice(-2));
     const cutTooFar = await cancelItemHttp(
       suite.db,
       venue.app,
@@ -1630,7 +1638,7 @@ describe("a split after a contribution (design §8 test 6, §4.2)", () => {
     const billId = await bill120();
     expect((await contribute(billId, "50.00")).status).toBe(200);
 
-    const split = await splitOff(billId, [{ lineNo: 4 }, { lineNo: 5 }]);
+    const split = await splitOff(billId, [4, 5]);
     expect(split.status).toBe(200);
     const checkId = split.json.billId as string;
 
@@ -1657,7 +1665,7 @@ describe("a split after a contribution (design §8 test 6, §4.2)", () => {
     const billId = await bill120();
     expect((await contribute(billId, "100.00")).status).toBe(200);
 
-    const refused = await splitOff(billId, [{ lineNo: 1 }]);
+    const refused = await splitOff(billId, [1]);
 
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({
@@ -3280,7 +3288,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     const billId = await tabWith("Steak", "Cake");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
-    const split = await splitOff(billId, [{ lineNo: 2 }]);
+    const split = await splitOff(billId, [2]);
 
     expect(split.status).toBe(200);
     await expectInvoicedOnDevice(billId, 2500);
@@ -3347,7 +3355,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     if (route === "void") {
       return cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2);
     }
-    if (route === "split") return splitOff(billId, [{ lineNo: 2 }]);
+    if (route === "split") return splitOff(billId, [2]);
     if (route === "partial cancel") {
       return cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2, "1");
     }
@@ -3519,7 +3527,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
 describe("the bottle (design §8 test 9, §7)", () => {
   it("files one line of €30.00 and three tenders of €10.00", async () => {
     const tabId = await tabWith("Paella", "Wine bottle");
-    const split = await splitOff(tabId, [{ lineNo: 2 }]);
+    const split = await splitOff(tabId, [2]);
     const bottleBill = split.json.billId as string;
 
     for (let i = 0; i < 3; i++) {
@@ -3780,7 +3788,7 @@ describe("the single-payment routes on a bill holding bill payments (design §7)
 
   it("refuses merging a check holding money back into its tab", async () => {
     const tabId = await bill120();
-    const split = await splitOff(tabId, [{ lineNo: 5 }]);
+    const split = await splitOff(tabId, [5]);
     const checkId = split.json.billId as string;
     expect((await contribute(checkId, "5.00")).status).toBe(200);
 
@@ -4766,7 +4774,7 @@ describe("refund first (design §4.3, §6a)", () => {
   it("refuses moving €30.00 out by the €20.00 excess, and moves it after a €20.00 refund (design §8 test 7)", async () => {
     const { billId, paymentId } = await sixtyHoldingFifty();
 
-    const refused = await splitOff(billId, [{ lineNo: 2 }, { lineNo: 3 }]);
+    const refused = await splitOff(billId, [2, 3]);
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({
       code: "bill.received_exceeds_total",
@@ -4777,7 +4785,7 @@ describe("refund first (design §4.3, §6a)", () => {
     expect(
       (await refund(billId, paymentId, { appliedAmount: "20.00", tipAmount: "0.00" })).status,
     ).toBe(200);
-    const moved = await splitOff(billId, [{ lineNo: 2 }, { lineNo: 3 }]);
+    const moved = await splitOff(billId, [2, 3]);
 
     expect(moved.status).toBe(200);
     expect(await lineTotals(billId)).toEqual(["30.00"]);

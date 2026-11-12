@@ -533,7 +533,6 @@ const actionRoutes = [
   ["POST", "/api/bills/:id/move-dishes", 401],
   ["PUT", "/api/bills/:id/name", 401],
   ["POST", "/api/bills/:id/merge", 401],
-  ["POST", "/api/bills/:id/transfer", 401],
   ["POST", "/api/bills/:id/move/allergy-preview", 401],
   ["POST", "/api/bills/:id/move", 401],
 ] as const;

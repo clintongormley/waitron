@@ -1021,16 +1021,25 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
 
   it("refuses a void, a round and abandoning the bill while its card is at the reader, and leaves another bill of the party alone", async () => {
     const billId = await tabWithDishes("Paella", "Tarta", "Caña", "Caña");
+    const drinks = venue.db
+      .all<{
+        id: string;
+      }>(
+        sql`select id from working_order_lines where working_order_id = ${billId} and line_no in (3, 4)`,
+      )
+      .map((row) => row.id);
     const split = await send(
       venue.app,
       venue.cookie,
       "POST",
-      `/api/bills/${billId}/split`,
-      await observedBillActionBody(venue.db, `/api/bills/${billId}/split`, {
-        transfers: [{ lineNo: 3 }, { lineNo: 4 }],
+      `/api/bills/${billId}/move-dishes`,
+      await observedBillActionBody(venue.db, `/api/bills/${billId}/move-dishes`, {
+        lineIds: drinks,
+        toBillId: null,
         expectedPartyRevision: await partyRevisionOf(venue, billId),
       }),
     );
+    expect(split.status).toBe(200);
     const otherBill = split.json.billId as string;
     const card = await heldCard(billId, "10.00");
 

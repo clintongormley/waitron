@@ -682,7 +682,7 @@ describe("the writers with no route of their own", () => {
     ]);
   });
 
-  it("on a bill written before portions, refuses splitting off more of a line than is unpaid", async () => {
+  it("on a bill written before portions, refuses moving a line part of which is paid", async () => {
     const billId = await inTx(async (tx) => {
       const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: await freshTableIn(tx) });
       await writeGroupedLines(tx, venue.cfg, tabId, [{ menuItemId: offer("Beer"), quantity: "3" }]);
@@ -692,18 +692,16 @@ describe("the writers with no route of their own", () => {
       billId,
       cash("6.00", { kind: "items", amount: undefined, lines: [{ lineNo: 1, quantity: "2" }] }),
     );
-    const transfer = (quantity: string) =>
-      inTx((tx) => splitPartyBill(tx, venue.cfg, billId, [{ lineNo: 1, quantity }]));
-
-    expect(await codeOf(transfer("2"))).toBe("bill.line_paid");
-    await transfer("1");
+    expect(await codeOf(inTx((tx) => splitPartyBill(tx, venue.cfg, billId, [{ lineNo: 1 }])))).toBe(
+      "bill.line_paid",
+    );
     const [line] = await inTx((tx) =>
       tx
         .select({ quantity: workingOrderLines.quantity })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, billId)),
     );
-    expect(line!.quantity).toBe(2000);
+    expect(line!.quantity).toBe(3000);
   });
 });
 
