@@ -33,7 +33,7 @@ const RESTART_AWAY_MS = 30_000;
 /** The server's margin for an administrator's device agreeing with the box. */
 const AGREE_WITHIN_MS = 60_000;
 
-/** The reasons a refused set names that have their own sentence; `agrees` turns to Confirm. */
+/** The reasons a refused set names that have their own sentence. */
 const SET_REFUSALS = {
   same_machine: "box_status.clock.admin.set.refused.same_machine",
   not_stopped: "box_status.clock.admin.set.refused.not_stopped",
