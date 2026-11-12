@@ -91,8 +91,8 @@ printer keys.
 ## The form plumbing is hand-written per form
 
 Share repeated bottom-message assembly across dashboard and module forms, including Unit,
-Add/Edit staff, Section, Include folder, Category colour and Option label: their assembly still
-remains local; `bottomMessage` shares only the string joiner.
+Add/Edit staff, Section, Include folder, Category colour and Option label: their assembly
+stays local; `bottomMessage` shares only the string joiner.
 
 Move repeated attempt, refusal-dismissal and render-before-focus plumbing in the other dashboard
 editors, the image library, Stripe and SumUp forms, Voids and comps (`packages/adjustments`),

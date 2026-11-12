@@ -2673,7 +2673,7 @@ menu" in `apps/dashboard/src/screens/menus-screen.test.ts`; nothing checks a new
 render-before-focus work for forms that repeat it. Reset it when the form resets; call
 `newRefusal()` from the form's existing refusal-property change check. Preserve field mapping,
 validation, message precedence and direct `updated()` focus behavior when adopting it.
-Shared bottom-message assembly remains [open](../backlog/dashboard.md#the-form-plumbing-is-hand-written-per-form):
+Shared bottom-message assembly remains [open](../backlog/dashboard.md#the-form-plumbing-is-hand-written-per-form).
 `bottomMessage` joins message strings; `formMessage` renders them. Forms with only one attempt
 flag or one message joiner can keep that local state.
 
