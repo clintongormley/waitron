@@ -24,7 +24,6 @@ useLocale("es-ES");
 afterEach(cleanupWidgets);
 
 const OFF: BackupStatusView = {
-  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
@@ -61,7 +60,6 @@ it("does not offer key replacement without system.manage", async () => {
 });
 
 const ENABLED: BackupStatusView = {
-  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: true,
   isPrimary: true,
   managedByEnvironment: false,

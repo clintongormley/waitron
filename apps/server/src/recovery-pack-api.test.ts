@@ -61,7 +61,6 @@ function app(failing = false) {
       db: suite.db,
       nodeDb: suite.node,
       node,
-      venueId: "venue-one",
       modules: [module],
       now: () => new Date("2026-10-14T10:00:00.000Z"),
     },

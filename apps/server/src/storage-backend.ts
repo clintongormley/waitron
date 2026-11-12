@@ -58,5 +58,4 @@ export interface StorageBackend {
 /** A destination with everything needed to reach it, secrets included; never sent to a browser.
  * A bucket's `prefix` is the one chosen; its archives live under `archiveNamespace` of it. */
 export type BackupDestination =
-  | { kind: "local-fs"; id: string; dir: string }
-  | { kind: "s3"; id: string; bucket: BucketConfig; venueId: string };
+  { kind: "local-fs"; id: string; dir: string } | { kind: "s3"; id: string; bucket: BucketConfig };

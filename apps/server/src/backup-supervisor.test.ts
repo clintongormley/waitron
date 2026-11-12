@@ -1052,7 +1052,6 @@ describe("BackupSupervisor closes the sweep's destinations", () => {
 
 describe("BackupSupervisor with a switched-off record or a bucket destination", () => {
   const SECRET = "bucket-secret-access-key";
-  const VENUE = "c0000000-0000-4000-8000-000000000002";
   const REVISION = "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10";
 
   function supervisorFor(config: BackupConfig, built: BackupDestination[], venueDir: string) {
@@ -1232,7 +1231,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
           {
             kind: "s3",
             id: "bucket",
-            venueId: VENUE,
+
             bucket: {
               endpoint: "https://s3.example.test",
               region: "eu-north-1",
@@ -1259,7 +1258,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
           bucket: "owner-bucket",
           prefix: "waitron",
           accessKeyId: "AKIAVIEW",
-          namespace: `waitron/archives/${VENUE}/`,
+          namespace: "waitron/",
           credentialPresent: true,
         },
       ]);
@@ -1455,7 +1454,7 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
     config.destinations.push({
       kind: "s3",
       id: "bucket",
-      venueId: "c0000000-0000-4000-8000-000000000002",
+
       bucket: {
         endpoint: "https://s3.example.test",
         region: "eu-north-1",

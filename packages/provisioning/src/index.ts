@@ -34,8 +34,8 @@ export type { VenueFiscalSelection } from "./venue-fiscal.js";
 export {
   assertNoForeignTenant,
   assertNoOperationalVenue,
-  assertSingleOperationalVenue,
-  readOperationalVenueIds,
+  assertOperationalVenue,
+  hasOperationalVenue,
   readTenantIdentities,
 } from "./tenant-guard.js";
 export type { TenantIdentity } from "./tenant-guard.js";

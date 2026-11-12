@@ -35,7 +35,6 @@ export const FISCAL_RECOVERY_PACK: NonNullable<ModuleBackupContribution["recover
     taxpayerNif: tenant.taxId,
     softwareId: sif.idSistemaInformatico,
     environment,
-    recipientVenueId: node.venueId,
     requiredBases: await liveSeriesBases(tx, node),
   });
   if (!snapshot.ok) return refuse(snapshot.reason);

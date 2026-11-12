@@ -71,7 +71,7 @@ export function destinationView(d: BackupDestination): DestinationView {
     bucket: d.bucket.bucket,
     prefix: d.bucket.prefix,
     accessKeyId: d.bucket.accessKeyId,
-    namespace: archiveNamespace(d.bucket.prefix, d.venueId),
+    namespace: archiveNamespace(d.bucket.prefix),
     credentialPresent: true,
   };
 }

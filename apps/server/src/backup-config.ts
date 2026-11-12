@@ -145,7 +145,7 @@ function badEntry(): AppError {
 }
 
 /** Every refusal is `bad_entry` with no value in it: an entry may carry a secret. */
-function parseEntry(raw: unknown, venueId: string): BackupDestination {
+function parseEntry(raw: unknown): BackupDestination {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw badEntry();
   const entry = raw as Record<string, unknown>;
   const allowed = entry.kind === "local-fs" ? LOCAL_FIELDS : entry.kind === "s3" ? S3_FIELDS : null;
@@ -162,8 +162,8 @@ function parseEntry(raw: unknown, venueId: string): BackupDestination {
     const bucket = readBucketConfig(entry, () => {
       throw badEntry();
     });
-    archiveNamespace(bucket.prefix, venueId);
-    return { kind: "s3", id, bucket, venueId };
+    archiveNamespace(bucket.prefix);
+    return { kind: "s3", id, bucket };
   } catch {
     throw badEntry();
   }
@@ -177,7 +177,7 @@ function bucketPlace(b: BucketConfig): string {
 
 /** The environment's destinations, in the order listed: `WAITRON_BACKUP_DIR` first, then
  * `WAITRON_BACKUP_DESTINATIONS`. Unlike {@link loadBackupConfig}, requires no recovery key. */
-function parseDestinations(env: Env, venueId: string): BackupDestination[] {
+function parseDestinations(env: Env): BackupDestination[] {
   const out: BackupDestination[] = [];
   const dir = env.WAITRON_BACKUP_DIR;
   if (!isUnset(dir)) out.push({ kind: "local-fs", id: "primary", dir: resolve(dir) });
@@ -193,7 +193,7 @@ function parseDestinations(env: Env, venueId: string): BackupDestination[] {
     if (!Array.isArray(parsed)) {
       throw new AppError("backup.destinations_invalid", { reason: "not_array" });
     }
-    for (const raw of parsed) out.push(parseEntry(raw, venueId));
+    for (const raw of parsed) out.push(parseEntry(raw));
   }
 
   // Compared after `resolve`, so `/mnt/a` and `/mnt/a/` collide.
@@ -272,10 +272,10 @@ function requiredKey(env: Env): string {
 /**
  * The settings the environment injects. `undefined`, and no backup duty runs, when no destination is
  * configured. With one, the recovery key is required, so an unattended backup never writes an
- * unencrypted artifact. `venueId` is stamped on every bucket destination.
+ * unencrypted artifact.
  */
-export function loadBackupConfig(env: Env, venueId: string): BackupConfig | undefined {
-  return environmentConfig(env, parseDestinations(env, venueId));
+export function loadBackupConfig(env: Env): BackupConfig | undefined {
+  return environmentConfig(env, parseDestinations(env));
 }
 
 function environmentConfig(env: Env, destinations: BackupDestination[]): BackupConfig | undefined {
@@ -311,7 +311,6 @@ export function resolveBackupConfig(input: {
   managedByEnvironment: boolean;
   env: Env;
   sealed: ArchiveSettings | null;
-  venueId: string;
 }): BackupConfig | undefined {
   const { env, sealed } = input;
   const destinations = archiveDestinations(input);
@@ -341,9 +340,8 @@ export function archiveDestinations(input: {
   managedByEnvironment: boolean;
   env: Env;
   sealed: ArchiveSettings | null;
-  venueId: string;
 }): BackupDestination[] {
-  if (input.managedByEnvironment) return parseDestinations(input.env, input.venueId);
+  if (input.managedByEnvironment) return parseDestinations(input.env);
   return input.sealed?.destinations ?? [];
 }
 
@@ -374,11 +372,11 @@ type SealedReader =
  * fail (`StreamHost.start`).
  */
 export async function loadBackupSettings(
-  input: { managedByEnvironment: boolean; env: Env; venueId: string } & SealedReader,
+  input: { managedByEnvironment: boolean; env: Env } & SealedReader,
 ): Promise<BackupConfig | BackupConfigUnusable | undefined> {
-  const { managedByEnvironment, env, venueId } = input;
+  const { managedByEnvironment, env } = input;
   if (managedByEnvironment) {
-    return resolveBackupConfig({ managedByEnvironment, env, sealed: null, venueId });
+    return resolveBackupConfig({ managedByEnvironment, env, sealed: null });
   }
   let meta: ArchiveRecordMeta | null = null;
   try {
@@ -388,7 +386,7 @@ export async function loadBackupSettings(
     } else {
       ({ meta, settings: sealed } = await input.readSealedWithMeta());
     }
-    return resolveBackupConfig({ managedByEnvironment, env, sealed, venueId });
+    return resolveBackupConfig({ managedByEnvironment, env, sealed });
   } catch (error) {
     // A failure after a clean read names the record that read; a failing read carries its own.
     meta ??= recordMetaOf(error);
@@ -412,7 +410,7 @@ function heldUsableKey(env: Env): string | undefined {
 
 /** Used before startup sweeps, without requiring a recovery key or opening a database. */
 export async function assertBackupOutsideScratch(env: Env, stateDir: string): Promise<void> {
-  for (const destination of parseDestinations(env, "scratch-path-check")) {
+  for (const destination of parseDestinations(env)) {
     if (destination.kind === "local-fs")
       await assertOutsideScratchResolved(
         stateDir,

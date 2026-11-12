@@ -22,7 +22,7 @@ it("resolves the archive target before downloading and removes its downloaded fi
       encodeArchiveRecoveryPack({
         version: 1,
         format: "WBK1",
-        venueId: "venue-1",
+
         bucket: {
           region: "eu-west-1",
           bucket: "owner-bucket",
@@ -30,7 +30,7 @@ it("resolves the archive target before downloading and removes its downloaded fi
           accessKeyId: "AKIDEXAMPLE",
           secretAccessKey: "synthetic-secret",
         },
-        archivePrefix: archiveNamespace("waitron", "venue-1"),
+        archivePrefix: archiveNamespace("waitron"),
         recoveryKey: "synthetic-backup-key",
       }),
     );

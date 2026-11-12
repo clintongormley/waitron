@@ -19,19 +19,17 @@ export async function readTenantIdentities(
   return rows.rows.map((row) => ({ country: row.country, taxId: row.tax_id }));
 }
 
-export async function readOperationalVenueIds(
-  target: Pick<Database, "execute">,
-): Promise<string[]> {
-  const rows = await target.execute<{ id: string }>(sql`select id from locations order by id`);
-  return rows.rows.map((row) => row.id);
+export async function hasOperationalVenue(target: Pick<Database, "execute">): Promise<boolean> {
+  const rows = await target.execute(sql`select 1 from settings where module = 'venue' limit 1`);
+  return rows.rows.length > 0;
 }
 
-export function assertSingleOperationalVenue(presentVenueIds: readonly string[]): void {
-  if (presentVenueIds.length !== 1) throw new AppError("provisioning.second_venue", {});
+export function assertOperationalVenue(present: boolean): void {
+  if (!present) throw new AppError("provisioning.second_venue", {});
 }
 
-export function assertNoOperationalVenue(presentVenueIds: readonly string[]): void {
-  if (presentVenueIds.length > 0) throw new AppError("provisioning.second_venue", {});
+export function assertNoOperationalVenue(present: boolean): void {
+  if (present) throw new AppError("provisioning.second_venue", {});
 }
 
 /**

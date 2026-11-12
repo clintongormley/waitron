@@ -908,10 +908,7 @@ export async function resolveArtifactNode(
 }
 
 async function requireCopyNode(query: BackupQuery, node: ProvisionedNode): Promise<void> {
-  for await (const row of query.rows(
-    "select l.id from nodes n join locations l on l.id = n.location_id where n.id = ?",
-    [node.nodeId],
-  )) {
+  for await (const row of query.rows("select id from nodes where id = ?", [node.nodeId])) {
     if (typeof row.id === "string") return;
   }
   throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
@@ -930,20 +927,13 @@ export async function readArtifactNode(
   }
 }
 
-/** Interim: the venue id is the copy's one venue row, for backup settings; S18e or S28 removes it. */
-export async function readCopyNodeAndVenue(
+export async function readCopyNode(
   query: BackupQuery,
   secretEntries: readonly ArchiveEntry[],
-): Promise<{ node: ProvisionedNode; venueId: string }> {
+): Promise<{ node: ProvisionedNode }> {
   const { node } = readArtifactIdentity(secretEntries);
   await requireCopyNode(query, node);
-  const ids: unknown[] = [];
-  for await (const row of query.rows("select id from locations limit 2")) ids.push(row.id);
-  if (ids.length > 1) throw new AppError("provisioning.second_venue", {});
-  const [venueId] = ids;
-  if (typeof venueId !== "string")
-    throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
-  return { node, venueId };
+  return { node };
 }
 
 function wrapHookError(module: string, err: unknown): unknown {

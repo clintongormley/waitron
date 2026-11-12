@@ -246,7 +246,7 @@ describe("establishReservedStandbyIdentity", () => {
   });
   it("refuses with mirror.venue_not_copied before writing the standby's node when no venue row exists", async () => {
     const standby = generateStandbyIdentity();
-    await suite.db.execute(sql`delete from locations`);
+    await suite.db.execute(sql`delete from settings where module = 'venue'`);
     await expect(
       establishReservedStandbyIdentity(
         { ownerDb: suite.db },
@@ -279,7 +279,7 @@ describe("establishReservedStandbyIdentity", () => {
     const reservationsBefore = await suite.db.select().from(fiscalReservations);
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
-      await suite.db.execute(sql`delete from locations`);
+      await suite.db.execute(sql`delete from settings where module = 'venue'`);
     } finally {
       await suite.db.execute(sql`pragma foreign_keys = on`);
     }

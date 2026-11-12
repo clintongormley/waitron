@@ -1413,7 +1413,7 @@ export interface ModuleBackupContribution {
   /** Validate and return public recovery material; no private signing key or claim authority. */
   readonly recoveryPack?: (
     tx: Transaction,
-    node: import("./provisioning.js").ProvisionedNode & { readonly venueId: string },
+    node: import("./provisioning.js").ProvisionedNode,
     input: unknown,
   ) => Promise<unknown>;
   /** Describe the recovery pack's server-key page; the host draws it and commits `newKey` only after. */

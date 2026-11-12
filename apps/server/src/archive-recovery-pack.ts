@@ -1,6 +1,6 @@
 import { AppError, isAppError } from "@waitron/shared";
 import { readBucketConfig, type BucketConfig } from "@waitron/stream";
-import { archiveNamespace, hasExactKeys, isRecord, isText } from "./archive-settings.js";
+import { archiveNamespace, hasExactKeys, isRecord } from "./archive-settings.js";
 import { checkedRecoveryKey } from "./backup-config.js";
 import "./errors.js";
 
@@ -15,22 +15,12 @@ export interface ArchiveRecoveryPack {
   version: 1;
   /** The archive file format the cipher writes (`artifact-cipher.ts`). */
   format: "WBK1";
-  venueId: string;
-  /** `prefix` is the folder the owner selected, not the archive folder. */
   bucket: BucketConfig;
-  /** Always `archiveNamespace(bucket.prefix, venueId)`. */
   archivePrefix: string;
   recoveryKey: string;
 }
 
-const PACK_FIELDS = [
-  "version",
-  "format",
-  "venueId",
-  "bucket",
-  "archivePrefix",
-  "recoveryKey",
-] as const;
+const PACK_FIELDS = ["version", "format", "bucket", "archivePrefix", "recoveryKey"] as const;
 const BUCKET_FIELDS = ["region", "bucket", "prefix", "accessKeyId", "secretAccessKey"] as const;
 
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
@@ -79,11 +69,10 @@ export function decodeArchiveRecoveryPack(input: string): ArchiveRecoveryPack {
     refuse("encoding");
   }
   if (!isRecord(raw) || !hasExactKeys(raw, PACK_FIELDS)) refuse("shape");
-  const { version, format, venueId, archivePrefix, recoveryKey } = raw;
+  const { version, format, archivePrefix, recoveryKey } = raw;
   if (
     version !== 1 ||
     format !== "WBK1" ||
-    !isText(venueId) ||
     !usableKey(recoveryKey) ||
     typeof archivePrefix !== "string"
   ) {
@@ -99,10 +88,10 @@ export function decodeArchiveRecoveryPack(input: string): ArchiveRecoveryPack {
   let namespace: string;
   try {
     bucket = readBucketConfig(b, () => refuse("shape"));
-    namespace = archiveNamespace(bucket.prefix, venueId);
+    namespace = archiveNamespace(bucket.prefix);
   } catch {
     refuse("shape");
   }
   if (archivePrefix !== namespace) refuse("shape");
-  return { version: 1, format: "WBK1", venueId, bucket, archivePrefix, recoveryKey };
+  return { version: 1, format: "WBK1", bucket, archivePrefix, recoveryKey };
 }

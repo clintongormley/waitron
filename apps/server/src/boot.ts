@@ -120,7 +120,7 @@ import {
 import { recordIncidentOnce, markIncidentHandled } from "@waitron/core";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
-import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/provisioning";
+import { assertOperationalVenue, hasOperationalVenue } from "@waitron/provisioning";
 import {
   enabledModules,
   fiscalSlot,
@@ -1155,10 +1155,7 @@ async function bootServer(
       return { digest: createHash("sha256").update(staged.artifact).digest("hex"), newTaxpayer };
     },
     assertClaimAllowed: async () => {
-      if (
-        (await readTenantIdentities(db)).length > 0 ||
-        (await readOperationalVenueIds(db)).length > 0
-      )
+      if ((await readTenantIdentities(db)).length > 0 || (await hasOperationalVenue(db)))
         throw new AppError("setup.attempt_conflict", {});
     },
   });
@@ -1889,7 +1886,7 @@ async function bootServer(
   if (ownNode === undefined)
     throw new AppError("server.node_config_invalid", { key: "WAITRON_NODE_ID" });
   const node = config.node;
-  assertSingleOperationalVenue(await readOperationalVenueIds(db));
+  assertOperationalVenue(await hasOperationalVenue(db));
 
   await assertRestoredMembershipReadable(config.stateDir, db);
   // Not a self-promotion: it applies a promotion this box already committed and signed with its own
@@ -3159,7 +3156,6 @@ async function bootServer(
         managedByEnvironment: isBackupManagedByEnvironment(),
         env: await loadBoxEnv(base, config.stateDir),
         readSealedWithMeta: () => readArchiveSettingsWithMeta(db, ring),
-        venueId,
       }),
     isManagedByEnvironment: isBackupManagedByEnvironment,
     readSingletonRole: () => holders.singletonRole.current,
@@ -3571,7 +3567,6 @@ async function bootServer(
       db,
       nodeDb: store.node,
       node: tradingContext,
-      venueId,
       modules: setsToMigrate,
       now,
     },
@@ -3645,7 +3640,6 @@ async function bootServer(
       supervisor: backupSupervisor,
       db,
       ring,
-      venueId,
       stateDir: config.stateDir,
       readRecoveryKey,
       readBoxEnv: () => loadBoxEnv(base, config.stateDir),

@@ -1600,7 +1600,7 @@ export class BackupScreen extends LitElement {
           ? nothing
           : html`<p data-test="stream-location">
               <span class="field-label">${t("backup.destination.stream_location")}</span>
-              <span class="location">${streamLocation(bucket, this.status.venueId)}</span>
+              <span class="location">${streamLocation(bucket)}</span>
             </p>`
       }
     `;
@@ -1703,7 +1703,7 @@ export class BackupScreen extends LitElement {
           : html`<p data-test="custom-location">
               <span class="field-label">${t("backup.destination.stream_location")}</span>
               <span class="location"
-                >${streamLocation({ bucket, prefix: this.custom.prefix.trim() }, this.status.venueId)}</span
+                >${streamLocation({ bucket, prefix: this.custom.prefix.trim() })}</span
               >
             </p>`
       }

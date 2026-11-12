@@ -285,7 +285,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
       const local = await scenarioFixture(ctx, "archive-abort");
       const { client: admin } = requireServer(ctx);
       const { bucket, prefix } = local.fixture.bucket;
-      const folder = archiveNamespace(prefix, local.fixture.venueId);
+      const folder = archiveNamespace(prefix);
       await leave(admin, bucket, folder);
       await expect(
         planned(local, ARCHIVE_APIS, () => runArchiveAbort(local.fixture)),

@@ -6,14 +6,11 @@ import { attachRecordMeta } from "./backup-settings-evidence.js";
 import {
   BACKUP_ENV_KEYS,
   isBackupManagedByEnvironment,
-  loadBackupConfig as loadWithVenue,
+  loadBackupConfig,
   loadBackupSettings,
   loadRecoveryKey,
   resolveBackupConfig,
 } from "./backup-config.js";
-
-const VENUE = "c0000000-0000-4000-8000-000000000002";
-const loadBackupConfig = (env: Record<string, string | undefined>) => loadWithVenue(env, VENUE);
 
 describe("loadBackupConfig", () => {
   it("returns undefined when WAITRON_BACKUP_DIR is unset (backup off)", () => {
@@ -347,13 +344,12 @@ describe("loadBackupConfig bucket destinations", () => {
     throw new Error("expected a refusal");
   };
 
-  it("reads a bucket entry and stamps the venue id on it", () => {
-    const cfg = loadWithVenue(withEntries([s3]), VENUE)!;
+  it("reads a bucket entry with the selected folder", () => {
+    const cfg = loadBackupConfig(withEntries([s3]))!;
     expect(cfg.destinations).toEqual([
       {
         kind: "s3",
         id: "offsite",
-        venueId: VENUE,
         bucket: {
           endpoint: "https://s3.example.test",
           region: "eu-north-1",
@@ -371,11 +367,10 @@ describe("loadBackupConfig bucket destinations", () => {
     const bare = { ...s3 } as Partial<typeof s3>;
     delete bare.endpoint;
     delete bare.prefix;
-    const cfg = loadWithVenue(withEntries([bare]), VENUE)!;
+    const cfg = loadBackupConfig(withEntries([bare]))!;
     expect(cfg.destinations[0]).toEqual({
       kind: "s3",
       id: "offsite",
-      venueId: VENUE,
       bucket: {
         region: "eu-north-1",
         bucket: "owner-bucket",
@@ -393,13 +388,14 @@ describe("loadBackupConfig bucket destinations", () => {
     ["no secret", { ...s3, secretAccessKey: undefined }],
     ["an empty secret", { ...s3, secretAccessKey: "" }],
     ["an unknown field", { ...s3, sessionToken: "x" }],
+    ["a retired venue id", { ...s3, venueId: "v1" }],
     ["an unknown kind", { ...s3, kind: "gcs" }],
     ["a null entry", null],
     ["an array entry", [s3]],
     ["a bad endpoint", { ...s3, endpoint: "ftp://x" }],
     ["a prefix with a parent segment", { ...s3, prefix: "a/../b" }],
   ])("refuses %s with no value in the refusal", (_name, entry) => {
-    const r = refusalOf(() => loadWithVenue(withEntries([entry]), VENUE));
+    const r = refusalOf(() => loadBackupConfig(withEntries([entry])));
     expect(r).toEqual({ code: "backup.destinations_invalid", params: { reason: "bad_entry" } });
     expect(JSON.stringify(r)).not.toContain(SECRET);
   });
@@ -412,22 +408,21 @@ describe("loadBackupConfig bucket destinations", () => {
       prefix: "/waitron/",
       accessKeyId: "AKIAOTHER",
     };
-    expect(() => loadWithVenue(withEntries([s3, again]), VENUE)).toThrow(
+    expect(() => loadBackupConfig(withEntries([s3, again]))).toThrow(
       new AppError("backup.destinations_invalid", { reason: "duplicate_bucket" }),
     );
   });
 
   it("accepts two entries in different buckets", () => {
     const other = { ...s3, id: "offsite-2", bucket: "second-bucket" };
-    expect(loadWithVenue(withEntries([s3, other]), VENUE)!.destinations).toHaveLength(2);
+    expect(loadBackupConfig(withEntries([s3, other]))!.destinations).toHaveLength(2);
   });
 
   it("refuses a folder entry carrying a field a folder does not take", () => {
     expect(
       refusalOf(() =>
-        loadWithVenue(
+        loadBackupConfig(
           withEntries([{ kind: "local-fs", id: "usb", dir: "/mnt/usb", bucket: "x" }]),
-          VENUE,
         ),
       ),
     ).toEqual({ code: "backup.destinations_invalid", params: { reason: "bad_entry" } });
@@ -435,7 +430,7 @@ describe("loadBackupConfig bucket destinations", () => {
 
   it("refuses an id shared by a folder and a bucket", () => {
     expect(() =>
-      loadWithVenue(withEntries([{ kind: "local-fs", id: "offsite", dir: "/mnt/a" }, s3]), VENUE),
+      loadBackupConfig(withEntries([{ kind: "local-fs", id: "offsite", dir: "/mnt/a" }, s3])),
     ).toThrow(new AppError("backup.destinations_invalid", { reason: "duplicate_id" }));
   });
 });
@@ -470,7 +465,6 @@ describe("resolveBackupConfig", () => {
       managedByEnvironment: true,
       env: { WAITRON_BACKUP_DIR: "/mnt/env", WAITRON_BACKUP_RECOVERY_KEY: KEY },
       sealed,
-      venueId: VENUE,
     })!;
     expect(cfg.destinations).toEqual([{ kind: "local-fs", id: "primary", dir: "/mnt/env" }]);
     expect(cfg).toMatchObject({ source: "environment", revision: undefined, enabled: true });
@@ -482,7 +476,6 @@ describe("resolveBackupConfig", () => {
         managedByEnvironment: false,
         env: { WAITRON_BACKUP_DIR: "/mnt/leftover", WAITRON_BACKUP_RECOVERY_KEY: KEY },
         sealed: null,
-        venueId: VENUE,
       }),
     ).toBeUndefined();
   });
@@ -497,7 +490,6 @@ describe("resolveBackupConfig", () => {
         WAITRON_BACKUP_DESTINATION_TIMEOUT_MS: "60000",
       },
       sealed,
-      venueId: VENUE,
     });
     expect(cfg).toEqual({
       source: "dashboard",
@@ -519,15 +511,14 @@ describe("resolveBackupConfig", () => {
       managedByEnvironment: false,
       env: { WAITRON_BACKUP_RECOVERY_KEY: KEY },
       sealed: { ...sealed, enabled: false },
-      venueId: VENUE,
     });
     expect(cfg).toMatchObject({ enabled: false, source: "dashboard", revision: sealed.revision });
   });
 
   it("refuses an enabled record when no recovery key is held", () => {
-    expect(() =>
-      resolveBackupConfig({ managedByEnvironment: false, env: {}, sealed, venueId: VENUE }),
-    ).toThrow(new AppError("backup.recovery_key_missing", {}));
+    expect(() => resolveBackupConfig({ managedByEnvironment: false, env: {}, sealed })).toThrow(
+      new AppError("backup.recovery_key_missing", {}),
+    );
   });
 
   it("reports a switched-off record with no held key, without throwing", () => {
@@ -535,7 +526,6 @@ describe("resolveBackupConfig", () => {
       managedByEnvironment: false,
       env: {},
       sealed: { ...sealed, enabled: false },
-      venueId: VENUE,
     });
     expect(cfg).toMatchObject({ enabled: false, recoveryKey: undefined });
   });
@@ -554,7 +544,6 @@ describe("resolveBackupConfig with a held key under the length floor", () => {
         retention: { count: 7, days: 30 },
         destinationTimeoutMs: 900_000,
       },
-      venueId: VENUE,
     });
     expect(cfg).toMatchObject({ enabled: false, recoveryKey: undefined });
   });
@@ -582,7 +571,6 @@ describe("loadBackupSettings", () => {
           read = true;
           return sealed;
         },
-        venueId: VENUE,
       }),
     ).rejects.toMatchObject({ code: "backup.destinations_invalid" });
     expect(read).toBe(false);
@@ -594,7 +582,6 @@ describe("loadBackupSettings", () => {
         managedByEnvironment: false,
         env: { WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123" },
         readSealed: unreadable,
-        venueId: VENUE,
       }),
     ).toEqual({ loadErrorCode: "credentials.decrypt_failed" });
   });
@@ -605,7 +592,6 @@ describe("loadBackupSettings", () => {
         managedByEnvironment: false,
         env: {},
         readSealed: async () => sealed,
-        venueId: VENUE,
       }),
     ).toEqual({ loadErrorCode: "backup.recovery_key_missing" });
   });
@@ -616,7 +602,6 @@ describe("loadBackupSettings", () => {
         managedByEnvironment: false,
         env: {},
         readSealed: () => Promise.reject(new Error("secret-bearing message")),
-        venueId: VENUE,
       }),
     ).toEqual({ loadErrorCode: "unknown" });
   });
@@ -632,7 +617,6 @@ describe("loadBackupSettings", () => {
         env: KEY,
         readSealed: () =>
           Promise.reject(new AppError("backup.archive_settings_invalid", { reason: "retention" })),
-        venueId: VENUE,
       }),
     ).toEqual({
       loadErrorCode: "backup.archive_settings_invalid",
@@ -653,7 +637,6 @@ describe("loadBackupSettings", () => {
           attachRecordMeta(error, meta);
           return Promise.reject(error);
         },
-        venueId: VENUE,
       }),
     ).toEqual({
       loadErrorCode: "credentials.key_version_unknown",
@@ -668,7 +651,6 @@ describe("loadBackupSettings", () => {
         managedByEnvironment: false,
         env: KEY,
         readSealedWithMeta: unreadable,
-        venueId: VENUE,
       }),
     ).toEqual({ loadErrorCode: "credentials.decrypt_failed" });
   });
@@ -680,7 +662,6 @@ describe("loadBackupSettings", () => {
         managedByEnvironment: false,
         env: {},
         readSealedWithMeta,
-        venueId: VENUE,
       }),
     ).toEqual({ loadErrorCode: "backup.recovery_key_missing", record });
     expect(
@@ -688,7 +669,6 @@ describe("loadBackupSettings", () => {
         managedByEnvironment: false,
         env: { WAITRON_BACKUP_RECOVERY_KEY: "short" },
         readSealedWithMeta,
-        venueId: VENUE,
       }),
     ).toEqual({
       loadErrorCode: "backup.recovery_key_too_short",
@@ -700,7 +680,6 @@ describe("loadBackupSettings", () => {
         managedByEnvironment: false,
         env: { ...KEY, WAITRON_BACKUP_STALE_AFTER_MS: "soon" },
         readSealedWithMeta,
-        venueId: VENUE,
       }),
     ).toEqual({
       loadErrorCode: "server.config_invalid",
@@ -714,7 +693,6 @@ describe("loadBackupSettings", () => {
       managedByEnvironment: false,
       env: KEY,
       readSealed: async () => sealed,
-      venueId: VENUE,
     });
     expect(bare).toMatchObject({ source: "dashboard", revision: sealed.revision });
     expect(
@@ -722,7 +700,6 @@ describe("loadBackupSettings", () => {
         managedByEnvironment: false,
         env: KEY,
         readSealedWithMeta: async () => ({ meta, settings: sealed }),
-        venueId: VENUE,
       }),
     ).toEqual(bare);
     expect(
@@ -730,7 +707,6 @@ describe("loadBackupSettings", () => {
         managedByEnvironment: false,
         env: KEY,
         readSealedWithMeta: async () => ({ meta: null, settings: null }),
-        venueId: VENUE,
       }),
     ).toBeUndefined();
   });

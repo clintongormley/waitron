@@ -140,7 +140,6 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
         env: await loadBoxEnv(sc.base, sc.stateDir),
         readSealedWithMeta: () =>
           (sc.readRecord ?? (() => readArchiveSettingsWithMeta(suite.db, sc.ring)))(),
-        venueId: VENUE,
       }),
     isManagedByEnvironment: () => isBackupManagedByEnvironment(sc.base),
     readSingletonRole: () => sc.role,
@@ -186,7 +185,7 @@ function buildApp(
       supervisor: sup,
       db: suite.db,
       ring: sc.ring,
-      venueId: VENUE,
+
       stateDir: sc.stateDir,
       readRecoveryKey: readKey(sc),
       readBoxEnv: () => loadBoxEnv(sc.base, sc.stateDir),
@@ -333,10 +332,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
           const settings = folderSettings(folder);
           await write({
             ...settings,
-            destinations: [
-              ...settings.destinations,
-              { kind: "s3", id: "bucket", bucket: BUCKET, venueId: VENUE },
-            ],
+            destinations: [...settings.destinations, { kind: "s3", id: "bucket", bucket: BUCKET }],
           });
           return {};
         },
@@ -552,10 +548,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     const settings = folderSettings(folder);
     await write({
       ...settings,
-      destinations: [
-        ...settings.destinations,
-        { kind: "s3", id: "bucket", bucket: BUCKET, venueId: VENUE },
-      ],
+      destinations: [...settings.destinations, { kind: "s3", id: "bucket", bucket: BUCKET }],
     });
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING, {

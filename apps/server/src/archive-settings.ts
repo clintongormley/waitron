@@ -9,12 +9,7 @@ import {
 } from "@waitron/credentials";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
-import {
-  isKeySegment,
-  normalisePrefix,
-  readBucketConfig,
-  type BucketConfig,
-} from "@waitron/stream";
+import { normalisePrefix, readBucketConfig, type BucketConfig } from "@waitron/stream";
 import {
   MAX_DESTINATION_TIMEOUT_MS,
   MIN_DESTINATION_TIMEOUT_MS,
@@ -60,9 +55,7 @@ export function requestInvalid(field: string): AppError {
   return new AppError("backup.request_invalid", { field });
 }
 
-/** `<prefix>/archives/<venueId>/`, or `archives/<venueId>/` at the bucket root. */
-export function archiveNamespace(selectedPrefix: string, venueId: string): string {
-  if (!isKeySegment(venueId)) throw requestInvalid("venueId");
+export function archiveNamespace(selectedPrefix: string): string {
   const root = normalisePrefix(selectedPrefix);
   if (root !== "") {
     const segments = root.slice(0, -1).split("/");
@@ -74,7 +67,7 @@ export function archiveNamespace(selectedPrefix: string, venueId: string): strin
       throw requestInvalid("prefix");
     }
   }
-  return `${root}archives/${venueId}/`;
+  return root;
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -190,16 +183,16 @@ function parseStoredDestination(raw: unknown): BackupDestination {
     if (dir !== resolve(dir)) throw invalid();
     return { kind: "local-fs", id, dir };
   }
-  if (raw.kind !== "s3" || !hasExactKeys(raw, ["kind", "id", "bucket", "venueId"])) throw invalid();
-  const { id, venueId } = raw;
-  if (!isText(id) || typeof venueId !== "string") throw invalid();
+  if (raw.kind !== "s3" || !hasExactKeys(raw, ["kind", "id", "bucket"])) throw invalid();
+  const { id } = raw;
+  if (!isText(id)) throw invalid();
   const bucket = parseStoredBucket(raw.bucket);
   try {
-    archiveNamespace(bucket.prefix, venueId);
+    archiveNamespace(bucket.prefix);
   } catch {
     throw invalid();
   }
-  return { kind: "s3", id, bucket, venueId };
+  return { kind: "s3", id, bucket };
 }
 
 const SETTINGS_FIELDS = [
@@ -370,7 +363,6 @@ function sameBucketPlace(a: BucketConfig, b: BucketConfig): boolean {
 }
 
 const AWS = "aws";
-const STREAM_VENUES = "venues/";
 
 /**
  * Two spellings the S3 client sends to one URL compare equal. No endpoint is taken to be AWS's
@@ -394,16 +386,15 @@ export interface ArchivePlace {
   namespace: string;
 }
 
-export function archivePlace(bucket: BucketConfig, venueId: string): ArchivePlace {
+export function archivePlace(bucket: BucketConfig): ArchivePlace {
   return {
     ...(bucket.endpoint === undefined ? {} : { endpoint: bucket.endpoint }),
     region: bucket.region,
     bucket: bucket.bucket,
-    namespace: archiveNamespace(bucket.prefix, venueId),
+    namespace: archiveNamespace(bucket.prefix),
   };
 }
 
-/** Refuses an archive folder and a stream's venue folders that would share keys in one bucket. */
 export function refuseStreamOverlap(archive: ArchivePlace, stream: StreamSettings | null): void {
   if (stream === null) return;
   const s = stream.bucket;
@@ -414,16 +405,15 @@ export function refuseStreamOverlap(archive: ArchivePlace, stream: StreamSetting
   ) {
     return;
   }
-  // Every venue's stream folder sits under one `venues/` folder (`venuePrefix`, @waitron/stream).
-  const venues = normalisePrefix(s.prefix) + STREAM_VENUES;
-  if (archive.namespace.startsWith(venues) || venues.startsWith(archive.namespace)) {
+  const streamPrefix = normalisePrefix(s.prefix);
+  if (archive.namespace.startsWith(streamPrefix) || streamPrefix.startsWith(archive.namespace)) {
     throw new AppError("backup.archive_namespace_overlap", {});
   }
 }
 
 function customBucket(
   body: Record<string, unknown>,
-  ctx: { venueId: string; held: ArchiveSettings | null },
+  ctx: { held: ArchiveSettings | null },
 ): BucketConfig {
   if (!Object.keys(body).every((key) => CUSTOM_FIELDS.includes(key))) {
     throw requestInvalid("destination");
@@ -446,7 +436,6 @@ function customBucket(
   const held = ctx.held?.destinations.find(
     (d): d is Extract<BackupDestination, { kind: "s3" }> =>
       d.kind === "s3" &&
-      d.venueId === ctx.venueId &&
       d.bucket.accessKeyId === bucket.accessKeyId &&
       sameBucketPlace(d.bucket, bucket),
   );
@@ -460,7 +449,7 @@ function customBucket(
  */
 export function resolveArchiveChoice(
   destination: unknown,
-  ctx: { venueId: string; stream: StreamSettings | null; held: ArchiveSettings | null },
+  ctx: { stream: StreamSettings | null; held: ArchiveSettings | null },
 ): BackupDestination {
   if (!isRecord(destination)) throw requestInvalid("destination");
   switch (destination.kind) {
@@ -477,13 +466,13 @@ export function resolveArchiveChoice(
       if (!hasExactKeys(destination, ["kind"])) throw requestInvalid("destination");
       if (ctx.stream === null) throw new AppError("backup.stream_not_configured", {});
       const bucket = { ...ctx.stream.bucket };
-      archiveNamespace(bucket.prefix, ctx.venueId);
-      return { kind: "s3", id: BUCKET_ID, bucket, venueId: ctx.venueId };
+      refuseStreamOverlap(archivePlace(bucket), ctx.stream);
+      return { kind: "s3", id: BUCKET_ID, bucket };
     }
     case "custom-s3": {
       const bucket = customBucket(destination, ctx);
-      refuseStreamOverlap(archivePlace(bucket, ctx.venueId), ctx.stream);
-      return { kind: "s3", id: BUCKET_ID, bucket, venueId: ctx.venueId };
+      refuseStreamOverlap(archivePlace(bucket), ctx.stream);
+      return { kind: "s3", id: BUCKET_ID, bucket };
     }
     default:
       throw requestInvalid("destination");
@@ -512,7 +501,7 @@ export function checkArchiveChoiceList(raw: unknown): Record<string, unknown>[] 
 /** A Save's destinations: at most one folder and one bucket, returned folder first. */
 export function resolveArchiveChoices(
   choices: unknown,
-  ctx: { venueId: string; stream: StreamSettings | null; held: ArchiveSettings | null },
+  ctx: { stream: StreamSettings | null; held: ArchiveSettings | null },
 ): BackupDestination[] {
   const resolved = checkArchiveChoiceList(choices).map((c) => resolveArchiveChoice(c, ctx));
   return [

@@ -38,9 +38,7 @@ const BUCKET = {
 };
 const ARCHIVES: Omit<ArchiveSettings, "revision"> = {
   enabled: true,
-  destinations: [
-    { kind: "s3", id: "bucket", bucket: { ...BUCKET, prefix: "archives/" }, venueId: VENUE },
-  ],
+  destinations: [{ kind: "s3", id: "bucket", bucket: { ...BUCKET, prefix: "archives/" } }],
   schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
   retention: { count: 7, days: 30 },
   destinationTimeoutMs: 15 * 60 * 1000,
@@ -185,8 +183,8 @@ describe("the archives part", () => {
     await storeArchives();
     const built = await inTx((tx) => buildArchivesPart(tx, context));
     expect(decodeArchiveRecoveryPack(built.file.archiveCode!)).toMatchObject({
-      venueId: VENUE,
       recoveryKey: KEY,
+      archivePrefix: "archives/",
       bucket: { bucket: "venue-bucket", prefix: "archives/" },
     });
     expect(built.file.backupKey).toBeUndefined();
@@ -318,7 +316,7 @@ describe("the archives part", () => {
       enabled: false,
       destinations: [
         { kind: "local-fs", id: "primary", dir: "/var/backups/venue" },
-        { kind: "s3", id: "bucket", bucket, venueId: VENUE },
+        { kind: "s3", id: "bucket", bucket },
       ],
     });
     const built = await inTx((tx) => buildArchivesPart(tx, context));
@@ -326,9 +324,8 @@ describe("the archives part", () => {
     expect(decodeArchiveRecoveryPack(built.file.archiveCode!)).toEqual({
       version: 1,
       format: "WBK1",
-      venueId: VENUE,
       bucket,
-      archivePrefix: `archives/archives/${VENUE}/`,
+      archivePrefix: "archives/",
       recoveryKey: KEY,
     });
   });
@@ -351,7 +348,7 @@ describe("the archives part", () => {
     );
     expect(decodeArchiveRecoveryPack(built.file.archiveCode!)).toMatchObject({
       bucket: first,
-      archivePrefix: `-/archives/${VENUE}/`,
+      archivePrefix: "-/",
     });
   });
 

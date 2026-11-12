@@ -107,7 +107,6 @@ async function seedVenueWithBackupSettings(): Promise<void> {
           kind: "s3",
           id: "bucket",
           bucket: { ...BUCKET, prefix: "archives/" },
-          venueId: node.locationId,
         },
       ],
       schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },

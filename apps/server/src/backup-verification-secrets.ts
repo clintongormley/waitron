@@ -57,7 +57,7 @@ export async function verifyBackupKeyPlacement(
 
 export async function verifyBackupStateSecrets(
   entries: readonly ArchiveEntry[],
-  source: { nodeId: string; venueId: string },
+  source: { nodeId: string },
   now: Date,
   sealedState?: { sealed: Uint8Array; recoveryKey: string },
 ): Promise<StateResult> {
@@ -89,8 +89,7 @@ export async function verifyBackupStateSecrets(
   }
   try {
     loadRecoveryKey(env);
-    // Interim: the copy's venue row id; removed by S18e or S28.
-    loadBackupConfig(env, source.venueId);
+    loadBackupConfig(env);
     const config = byName.get("secrets/modules.json");
     if (config !== undefined) {
       const text = Buffer.from(config.bytes).toString("utf8");

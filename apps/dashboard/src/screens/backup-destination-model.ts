@@ -51,8 +51,8 @@ export function hasUnusableFolder(prefix: string): boolean {
 }
 
 /** Where the server's `archiveNamespace` puts archives in a bucket. */
-export function streamLocation(place: { bucket: string; prefix: string }, venueId: string): string {
-  return `${place.bucket}/${normalisePrefix(place.prefix)}archives/${venueId}/`;
+export function streamLocation(place: { bucket: string; prefix: string }): string {
+  return `${place.bucket}/${normalisePrefix(place.prefix)}`;
 }
 
 export function heldBucket(status: BackupStatusView | undefined): HeldBucket | null {

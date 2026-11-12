@@ -80,20 +80,25 @@ function refusal(run: () => unknown): { code: string; params: unknown } {
 }
 
 describe("archiveNamespace", () => {
-  it("puts the venue's archives under the selected prefix", () => {
-    expect(archiveNamespace("waitron", VENUE)).toBe(`waitron/archives/${VENUE}/`);
-    expect(archiveNamespace("/a/b/", VENUE)).toBe(`a/b/archives/${VENUE}/`);
+  it("uses the owner-selected folder itself for archives", () => {
+    expect(archiveNamespace("/nightly/")).toBe("nightly/");
+    expect(archiveNamespace("")).toBe("");
   });
 
-  it("uses archives/<venue>/ at the bucket root", () => {
-    expect(archiveNamespace("", VENUE)).toBe(`archives/${VENUE}/`);
-    expect(archiveNamespace("/", VENUE)).toBe(`archives/${VENUE}/`);
+  it("normalizes the selected prefix", () => {
+    expect(archiveNamespace("waitron")).toBe("waitron/");
+    expect(archiveNamespace("/a/b/")).toBe("a/b/");
+  });
+
+  it("uses the bucket root when no prefix is selected", () => {
+    expect(archiveNamespace("")).toBe("");
+    expect(archiveNamespace("/")).toBe("");
   });
 
   it.each(["a//b", "a/./b", "../b", "a/..", "a\u0000b", "a\u007fb", "a\u0085b"])(
     "refuses the prefix %j",
     (prefix) => {
-      expect(refusal(() => archiveNamespace(prefix, VENUE))).toEqual({
+      expect(refusal(() => archiveNamespace(prefix))).toEqual({
         code: "backup.request_invalid",
         params: { field: "prefix" },
       });
@@ -109,26 +114,33 @@ describe("archiveNamespace", () => {
     ["a lone high surrogate", "a\ud800b"],
     ["a lone low surrogate", "a\udc00"],
   ])("refuses a prefix holding %s", (_name, prefix) => {
-    expect(refusal(() => archiveNamespace(prefix, VENUE))).toEqual({
+    expect(refusal(() => archiveNamespace(prefix))).toEqual({
       code: "backup.request_invalid",
       params: { field: "prefix" },
     });
   });
 
   it("accepts a prefix holding a whole character outside the basic plane", () => {
-    expect(archiveNamespace("a\u{1f600}b", VENUE)).toBe(`a\u{1f600}b/archives/${VENUE}/`);
-  });
-
-  it.each(["", "a/b", "-a", "a.b"])("refuses the venue id %j", (venueId) => {
-    expect(refusal(() => archiveNamespace("p", venueId))).toEqual({
-      code: "backup.request_invalid",
-      params: { field: "venueId" },
-    });
+    expect(archiveNamespace("a\u{1f600}b")).toBe("a\u{1f600}b/");
   });
 });
 
 describe("resolveArchiveChoice", () => {
-  const ctx = { venueId: VENUE, stream, held: null };
+  it("refuses archives at the stream's chosen bucket and prefix", () => {
+    expect(
+      refusal(() =>
+        resolveArchiveChoice(
+          { kind: "stream-bucket" },
+          {
+            stream,
+            held: null,
+          },
+        ),
+      ),
+    ).toEqual({ code: "backup.archive_namespace_overlap", params: {} });
+  });
+
+  const ctx = { stream, held: null };
 
   it("resolves a local folder to an absolute path under the primary id", () => {
     expect(resolveArchiveChoice({ kind: "local-fs", dir: "backups" }, ctx)).toEqual({
@@ -148,38 +160,34 @@ describe("resolveArchiveChoice", () => {
     },
   );
 
-  it("snapshots the stream bucket's settings, secret included", () => {
-    const saved = resolveArchiveChoice({ kind: "stream-bucket" }, ctx);
-    if (saved.kind !== "s3") throw new Error("expected a bucket");
-    expect(saved.bucket.secretAccessKey).toBe(originalStreamSecret);
-    expect(saved).toEqual({ kind: "s3", id: "bucket", venueId: VENUE, bucket: stream.bucket });
-    expect(saved.bucket).not.toBe(stream.bucket);
-  });
-
   it("refuses the stream bucket when no stream is configured", () => {
     expect(
       refusal(() => resolveArchiveChoice({ kind: "stream-bucket" }, { ...ctx, stream: null })).code,
     ).toBe("backup.stream_not_configured");
   });
 
-  it.each([
-    "",
-    "venues",
-    "archives",
-    `venues/${VENUE}`,
-    `archives/${VENUE}`,
-    `x/archives/${VENUE}/venues`,
-    `x/venues/${VENUE}/archives`,
-  ])("keeps the stream bucket at prefix %j apart from its archives", (prefix) => {
-    const at = { ...stream, bucket: { ...stream.bucket, prefix } };
-    expect(resolveArchiveChoice({ kind: "stream-bucket" }, { ...ctx, stream: at }).kind).toBe("s3");
-  });
+  it.each(["", "venues", "archives", `venues/${VENUE}`])(
+    "refuses the shared bucket and prefix %j",
+    (prefix) => {
+      const at = { ...stream, bucket: { ...stream.bucket, prefix } };
+      expect(
+        refusal(() => resolveArchiveChoice({ kind: "stream-bucket" }, { ...ctx, stream: at })),
+      ).toEqual({ code: "backup.archive_namespace_overlap", params: {} });
+    },
+  );
 
-  it("keeps a stream at the bucket root apart from its archives", () => {
-    const rooted = { ...stream, bucket: { ...stream.bucket, prefix: "" } };
-    const saved = resolveArchiveChoice({ kind: "stream-bucket" }, { ...ctx, stream: rooted });
-    if (saved.kind !== "s3") throw new Error("expected a bucket");
-    expect(archiveNamespace(saved.bucket.prefix, saved.venueId)).toBe(`archives/${VENUE}/`);
+  it("refuses archives nested under the stream's selected folder", () => {
+    const body = {
+      ...custom,
+      endpoint: stream.bucket.endpoint,
+      region: stream.bucket.region,
+      bucket: stream.bucket.bucket,
+      prefix: "waitron/nightly",
+    };
+    expect(refusal(() => resolveArchiveChoice(body, ctx))).toEqual({
+      code: "backup.archive_namespace_overlap",
+      params: {},
+    });
   });
 
   it("refuses an archive prefix inside the stream's venue folder", () => {
@@ -278,7 +286,6 @@ describe("resolveArchiveChoice", () => {
     expect(resolveArchiveChoice(custom, ctx)).toEqual({
       kind: "s3",
       id: "bucket",
-      venueId: VENUE,
       bucket,
     });
   });
@@ -309,16 +316,6 @@ describe("resolveArchiveChoice", () => {
     ])("refuses an empty secret once the %s has moved", (field, value) => {
       const body = { ...custom, secretAccessKey: "", [field]: value };
       expect(refusal(() => resolveArchiveChoice(body, { ...ctx, held }))).toEqual({
-        code: "backup.request_invalid",
-        params: { field: "secretAccessKey" },
-      });
-    });
-
-    it("refuses an empty secret for another venue's archives", () => {
-      const other = { ...ctx, venueId: "d0000000-0000-4000-8000-000000000009", held };
-      expect(
-        refusal(() => resolveArchiveChoice({ ...custom, secretAccessKey: "" }, other)),
-      ).toEqual({
         code: "backup.request_invalid",
         params: { field: "secretAccessKey" },
       });
@@ -355,23 +352,24 @@ describe("resolveArchiveChoice", () => {
 });
 
 describe("resolveArchiveChoices", () => {
-  const ctx = { venueId: VENUE, stream, held: null };
+  const ctx = { stream, held: null };
   const folder = { kind: "local-fs", dir: "backups" };
   const streamBucket = { kind: "stream-bucket" };
+  const customBucket = custom;
   const resolvedFolder = { kind: "local-fs", id: "primary", dir: resolve("backups") };
-  const resolvedStream = { kind: "s3", id: "bucket", venueId: VENUE, bucket: stream.bucket };
+  const resolvedCustom = { kind: "s3", id: "bucket", bucket: without(custom, "kind") };
 
-  it("resolves a folder and the stream bucket together", () => {
-    expect(resolveArchiveChoices([folder, streamBucket], ctx)).toEqual([
+  it("resolves a folder and a separate bucket together", () => {
+    expect(resolveArchiveChoices([folder, customBucket], ctx)).toEqual([
       resolvedFolder,
-      resolvedStream,
+      resolvedCustom,
     ]);
   });
 
   it("puts the folder first when the bucket is listed first", () => {
-    expect(resolveArchiveChoices([streamBucket, folder], ctx)).toEqual([
+    expect(resolveArchiveChoices([customBucket, folder], ctx)).toEqual([
       resolvedFolder,
-      resolvedStream,
+      resolvedCustom,
     ]);
   });
 
@@ -427,7 +425,7 @@ describe("resolveArchiveChoices", () => {
 
 describe("parseArchiveSettings", () => {
   const local = { kind: "local-fs" as const, id: "primary", dir: "/var/backups" };
-  const bucket = resolveArchiveChoice(custom, { venueId: VENUE, stream: null, held: null });
+  const bucket = resolveArchiveChoice(custom, { stream: null, held: null });
   const valid = settingsWith([local, bucket]);
 
   it("reads back what it was given", () => {
@@ -473,7 +471,7 @@ describe("parseArchiveSettings", () => {
         ],
       }),
     ],
-    ["a bad venue id", (s) => ({ ...s, destinations: [{ ...bucket, venueId: "a/b" }] })],
+    ["a retired venue id", (s) => ({ ...s, destinations: [{ ...bucket, venueId: "a/b" }] })],
     ["schedule null", (s) => ({ ...s, schedule: null })],
     ["schedule an array", (s) => ({ ...s, schedule: [] })],
     ["an interval of zero", (s) => ({ ...s, schedule: { kind: "interval", ms: 0 } })],
@@ -549,7 +547,7 @@ describe("stored archive settings", () => {
     migrations: migrationOptionsFor(manifestSets(), null),
     timeoutMs: 60_000,
   });
-  const bucket = resolveArchiveChoice(custom, { venueId: VENUE, stream: null, held: null });
+  const bucket = resolveArchiveChoice(custom, { stream: null, held: null });
   const input = without(settingsWith([bucket]), "revision");
 
   it("reads nothing before anything is stored", async () => {

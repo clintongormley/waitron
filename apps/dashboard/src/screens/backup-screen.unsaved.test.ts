@@ -29,7 +29,6 @@ afterEach(() => {
 });
 type Screen = HTMLElementTagNameMap["dashboard-backup-screen"];
 const off: BackupStatusView = {
-  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
@@ -766,7 +765,7 @@ const streamDestination = {
   id: "bucket",
   kind: "s3",
   ...STREAM_BUCKET,
-  namespace: `venues/archives/${off.venueId}/`,
+  namespace: "venues/",
   credentialPresent: true,
 } as const;
 const folderAndBucket: BackupStatusView = {

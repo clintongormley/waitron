@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { BackupDestinationView, BackupStatusView } from "../api/client.js";
-import { EMPTY_CUSTOM, destinationsBody, openingDestinations } from "./backup-destination-model.js";
+import {
+  EMPTY_CUSTOM,
+  destinationsBody,
+  openingDestinations,
+  streamLocation,
+} from "./backup-destination-model.js";
 
 const stream = {
   endpoint: "https://s3.example.test",
@@ -15,7 +20,7 @@ const streamMatched: BackupDestinationView = {
   id: "d2",
   kind: "s3",
   ...stream,
-  namespace: "venue/archives/v1/",
+  namespace: "venue/",
   credentialPresent: true,
 };
 const otherBucket: BackupDestinationView = {
@@ -26,7 +31,7 @@ const otherBucket: BackupDestinationView = {
   bucket: "other",
   prefix: "copies",
   accessKeyId: "AKOTHER",
-  namespace: "copies/archives/v1/",
+  namespace: "copies/",
   credentialPresent: true,
 };
 
@@ -168,5 +173,12 @@ describe("destinationsBody", () => {
     ).toEqual([
       { kind: "custom-s3", region: "us-east-1", bucket: "other", accessKeyId: "AKOTHER" },
     ]);
+  });
+});
+
+describe("archive folder display", () => {
+  it("shows the selected bucket and folder without a venue suffix", () => {
+    expect(streamLocation({ bucket: "nightly", prefix: "/copies/" })).toBe("nightly/copies/");
+    expect(streamLocation({ bucket: "nightly", prefix: "" })).toBe("nightly/");
   });
 });

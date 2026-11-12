@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { lockVenueDatabase, openVenueDatabase, type VenueLock } from "@waitron/db";
-import { readOperationalVenueIds, readTenantIdentities } from "@waitron/provisioning";
+import { hasOperationalVenue, readTenantIdentities } from "@waitron/provisioning";
 import {
   BACKUP_ENV_FILE,
   SECRETS_ENV_FILE,
@@ -76,8 +76,8 @@ async function holdsVenue(venueDir: string): Promise<boolean> {
   try {
     store = await openVenueDatabase(venueDir);
     const tenants = await readTenantIdentities(store.venue);
-    const venues = await readOperationalVenueIds(store.venue);
-    return tenants.length > 0 || venues.length > 0;
+    const venues = await hasOperationalVenue(store.venue);
+    return tenants.length > 0 || venues;
   } catch {
     return true;
   } finally {

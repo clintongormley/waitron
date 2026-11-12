@@ -15,7 +15,6 @@ import { t } from "../i18n/t.js";
  */
 
 const OFF: BackupStatusView = {
-  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: false,
   isPrimary: true,
   managedByEnvironment: false,
@@ -31,7 +30,6 @@ const OFF: BackupStatusView = {
 };
 
 const ENABLED: BackupStatusView = {
-  venueId: "c0000000-0000-4000-8000-000000000002",
   enabled: true,
   isPrimary: true,
   managedByEnvironment: false,
@@ -77,7 +75,7 @@ const FAILING: BackupWriteAnswer = {
       bucket: "owner-bucket",
       prefix: "waitron",
       accessKeyId: "AKIAOWNER",
-      namespace: `waitron/archives/${ENABLED.venueId}/`,
+      namespace: "waitron/",
       credentialPresent: true,
     },
   ],

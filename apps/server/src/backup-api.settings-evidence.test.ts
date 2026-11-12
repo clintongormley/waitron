@@ -47,7 +47,6 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
 const KEY_1 = "recovery-key-one-strong";
-const VENUE = "c0000000-0000-4000-8000-000000000002";
 const ringOf = (byte: number, version: string, previous?: { byte: number; version: string }) =>
   loadKeyRing({
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, byte).toString("base64"),
@@ -120,7 +119,6 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
         env: await loadBoxEnv(sc.base, sc.stateDir),
         readSealedWithMeta: () =>
           (sc.readRecord ?? (() => readArchiveSettingsWithMeta(suite.db, sc.ring)))(),
-        venueId: VENUE,
       }),
     isManagedByEnvironment: () => isBackupManagedByEnvironment(sc.base),
     // A secondary starts no sweep, so a clean load writes nothing into the folders these cases look at.
@@ -158,7 +156,7 @@ function buildApp(sup: BackupSupervisor, sc: Scenario, extra: Partial<BackupApiD
       supervisor: sup,
       db: suite.db,
       ring: sc.ring,
-      venueId: VENUE,
+
       stateDir: sc.stateDir,
       readRecoveryKey: async () => undefined,
       readBoxEnv: () => loadBoxEnv(sc.base, sc.stateDir),
@@ -364,10 +362,7 @@ describe("GET /api/backup/settings-evidence", () => {
     const settings = folderSettings(folder);
     await write(RING, {
       ...settings,
-      destinations: [
-        ...settings.destinations,
-        { kind: "s3", id: "bucket", bucket: BUCKET, venueId: VENUE },
-      ],
+      destinations: [...settings.destinations, { kind: "s3", id: "bucket", bucket: BUCKET }],
     });
     const sc = await scenario();
     const sup = makeSupervisor(sc);
@@ -387,7 +382,7 @@ describe("GET /api/backup/settings-evidence", () => {
           region: BUCKET.region,
           bucket: BUCKET.bucket,
           accessKeyId: BUCKET.accessKeyId,
-          archiveFolder: archiveNamespace(BUCKET.prefix, VENUE),
+          archiveFolder: archiveNamespace(BUCKET.prefix),
         },
       ],
     });
@@ -633,7 +628,7 @@ describe("GET /api/backup/settings-evidence", () => {
     delete (amazon as { endpoint?: string }).endpoint;
     await write(RING, {
       ...folderSettings(destDir()),
-      destinations: [{ kind: "s3", id: "bucket", bucket: amazon, venueId: VENUE }],
+      destinations: [{ kind: "s3", id: "bucket", bucket: amazon }],
     });
     const sc = await scenario();
     const sup = makeSupervisor(sc);
@@ -648,7 +643,7 @@ describe("GET /api/backup/settings-evidence", () => {
           region: BUCKET.region,
           bucket: BUCKET.bucket,
           accessKeyId: BUCKET.accessKeyId,
-          archiveFolder: archiveNamespace(BUCKET.prefix, VENUE),
+          archiveFolder: archiveNamespace(BUCKET.prefix),
         },
       ],
     });

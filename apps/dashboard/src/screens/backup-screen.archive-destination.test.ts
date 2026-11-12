@@ -16,8 +16,7 @@ import type { RecoveryPackCard } from "./recovery-pack-card.js";
 
 afterEach(cleanupWidgets);
 
-const VENUE = "c0000000-0000-4000-8000-000000000002";
-const NAMESPACE = `waitron/archives/${VENUE}/`;
+const NAMESPACE = "waitron/";
 
 const quiet: BackupDestinationStatus = {
   id: "primary",
@@ -31,7 +30,6 @@ const quiet: BackupDestinationStatus = {
 };
 
 const TWO: BackupStatusView = {
-  venueId: VENUE,
   enabled: true,
   isPrimary: true,
   managedByEnvironment: false,
@@ -416,7 +414,7 @@ const ON_STREAM_BUCKET: BackupStatusView = {
       id: "bucket",
       kind: "s3",
       ...STREAM_BUCKET,
-      namespace: `venues/archives/${VENUE}/`,
+      namespace: "venues/",
       credentialPresent: true,
     },
   ],
@@ -566,9 +564,7 @@ describe("choosing where backups go", () => {
     expect(shown).not.toContain(
       "Las copias van solo a este bucket, no a una carpeta de esta caja.",
     );
-    expect(text(q(el, "[data-test=stream-location]")!)).toContain(
-      `stream-bucket/venues/archives/${VENUE}/`,
-    );
+    expect(text(q(el, "[data-test=stream-location]")!)).toContain("stream-bucket/venues/");
     q(el, "[data-test=apply]")!.click();
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
     const body = vi.mocked(api.applyBackup).mock.calls[0]![0];
@@ -1000,9 +996,7 @@ describe("another S3-compatible bucket", () => {
     const { el } = await openConfigure();
     await choose(el, "custom-s3");
     await fillCustom(el, "SECRET-1");
-    expect(text(q(el, "[data-test=custom-location]")!)).toContain(
-      `my-bucket/shop/archives/${VENUE}/`,
-    );
+    expect(text(q(el, "[data-test=custom-location]")!)).toContain("my-bucket/shop/");
   });
 
   it("a first save with no secret is held by the form's own check: the secret is marked, no request goes", async () => {
@@ -1392,7 +1386,7 @@ describe("another S3-compatible bucket", () => {
           bucket: "my-bucket",
           prefix: "shop",
           accessKeyId: "AKIAMINE",
-          namespace: `shop/archives/${VENUE}/`,
+          namespace: "shop/",
           credentialPresent: true,
         },
       ],

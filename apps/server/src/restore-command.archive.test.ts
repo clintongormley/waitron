@@ -94,7 +94,7 @@ const suite = useVenueDb({
 const PACK: ArchiveRecoveryPack = {
   version: 1,
   format: "WBK1",
-  venueId: "venue-1",
+
   bucket: {
     region: "eu-west-1",
     bucket: "owner-bucket",
@@ -102,7 +102,7 @@ const PACK: ArchiveRecoveryPack = {
     accessKeyId: "AKIDEXAMPLE",
     secretAccessKey: SECRET_ACCESS_KEY,
   },
-  archivePrefix: archiveNamespace("waitron", "venue-1"),
+  archivePrefix: archiveNamespace("waitron"),
   recoveryKey: RECOVERY_KEY,
 };
 
@@ -511,12 +511,12 @@ describe("waitron-restore restore --from-archive", () => {
   });
 
   it("restores through a pack whose selected folder is a hyphen", async () => {
-    const archivePrefix = archiveNamespace("-", "venue-1");
+    const archivePrefix = archiveNamespace("-");
     const f = await fixture({ ...PACK, bucket: { ...PACK.bucket, prefix: "-" }, archivePrefix });
     const { code } = await run(f);
     expect(code).toBe(0);
     expect(f.storeCalls).toEqual([`open:${archivePrefix}`, `list:${KEY}`, `getFile:${KEY}`]);
-    expect(archivePrefix).toBe("-/archives/venue-1/");
+    expect(archivePrefix).toBe("-/");
   });
 
   it.each<[string, (f: Fixture) => Promise<ArchiveRecoveryPack | void>]>([

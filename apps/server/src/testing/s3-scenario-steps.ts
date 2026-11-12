@@ -74,7 +74,7 @@ export function scenarioSteps(
       const work = await mkdtemp(join(fixture.scratch, `${scenario}-`));
       try {
         const backend = buildBackupBackend(
-          { kind: "s3", id: "rehearsal", bucket: fixture.bucket, venueId: fixture.venueId },
+          { kind: "s3", id: "rehearsal", bucket: fixture.bucket },
           { observe },
         );
         try {

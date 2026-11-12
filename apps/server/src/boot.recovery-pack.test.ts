@@ -38,7 +38,7 @@ const bases = [
   { code: "FF", purpose: "full" },
 ];
 
-it("the actual trading listener downloads the named node key and signed register without bucket or subscription", async () => {
+it("the actual trading listener makes a recovery pack from the first-setup source, without bucket or subscription", async () => {
   await seedTenants(suite.db);
   await suite.db.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
   await suite.db.update(nodes).set({ filingModule: "verifactu" }).where(eq(nodes.id, node.nodeId));
@@ -68,10 +68,7 @@ it("the actual trading listener downloads the named node key and signed register
   const keys = generateKeyPairSync("ed25519");
   const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
   const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-  const block = signPaperBlock(
-    { ...fixture.state.evidence.block.payload, recipientVenueId: node.locationId },
-    privateKey,
-  );
+  const block = signPaperBlock(fixture.state.evidence.block.payload, privateKey);
   const custodian = {
     custodianId: block.payload.custodianId,
     publicKey,

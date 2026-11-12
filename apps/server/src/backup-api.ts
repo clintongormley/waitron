@@ -66,7 +66,6 @@ export interface BackupApiDeps {
   db: Database;
   /** Seals the archive settings, and opens the stream's for a `stream-bucket` choice. */
   ring: KeyRing;
-  venueId: string;
   stateDir: string;
   /** The recovery key from the box env, read afresh each call. Answers with no archive destination
    * configured, which the supervisor's `current()` cannot. */
@@ -350,7 +349,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     const key = await recoveryKeyFacts(env, () => deps.supervisor.current().recoveryKey);
     return {
       ...projectStatus(await deps.supervisor.status()),
-      venueId: deps.venueId,
       ...(key.fileKey === undefined
         ? {}
         : { keyFingerprint: keyFingerprint(key.fileKey), keyRotatedAt: loadKeyRotatedAt(env) }),
@@ -442,7 +440,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           ? await readBucketCopySettings(deps.db, deps.ring)
           : null;
         const destinations = resolveArchiveChoices(body.destinations, {
-          venueId: deps.venueId,
           stream,
           held: heldSettings,
         });
@@ -476,7 +473,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           managedByEnvironment: false,
           env: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey },
           sealed: archiveRecord(settings).stored,
-          venueId: deps.venueId,
         });
         const bucketDestination = destinations.find((d) => d.kind === "s3");
         if (bucketDestination !== undefined) {

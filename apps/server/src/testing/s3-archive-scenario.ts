@@ -136,9 +136,9 @@ export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<v
     const saved = encodeArchiveRecoveryPack({
       version: 1,
       format: "WBK1",
-      venueId: fixture.venueId,
+
       bucket: fixture.bucket,
-      archivePrefix: archiveNamespace(fixture.bucket.prefix, fixture.venueId),
+      archivePrefix: archiveNamespace(fixture.bucket.prefix),
       recoveryKey,
     } satisfies ArchiveRecoveryPack);
     const pack = decodeArchiveRecoveryPack(saved);
@@ -274,7 +274,7 @@ export async function runArchiveAbort(fixture: S3ScenarioFixture): Promise<Archi
       return { partsBeforeAbort, abortStatus: aborts[0]!.httpStatus as number };
     });
 
-    const folder = archiveNamespace(fixture.bucket.prefix, fixture.venueId);
+    const folder = archiveNamespace(fixture.bucket.prefix);
     await step("uploads-after", async () => {
       const left = await fixture.ownedUploads(folder);
       expect(left).toEqual([]);

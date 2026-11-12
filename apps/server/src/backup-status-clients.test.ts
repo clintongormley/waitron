@@ -59,7 +59,7 @@ const folder = (id: string, dir: string): BackupDestination => ({ kind: "local-f
 const bucket = (secretAccessKey: string): BackupDestination => ({
   kind: "s3",
   id: "cloud",
-  venueId: "venue-1",
+
   bucket: {
     region: "eu-south-2",
     bucket: "b",
@@ -240,7 +240,7 @@ describe("StatusClients against an HTTPS bucket", () => {
   const dest = (): BackupDestination => ({
     kind: "s3",
     id: "cloud",
-    venueId: "venue-1",
+
     bucket: {
       endpoint: `https://127.0.0.1:${port}`,
       region: "eu-south-2",

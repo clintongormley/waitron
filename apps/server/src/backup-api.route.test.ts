@@ -194,7 +194,6 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
         managedByEnvironment: isBackupManagedByEnvironment(sc.base),
         env: await loadBoxEnv(sc.base, sc.stateDir),
         readSealed: () => (sc.readRecord ?? readSealed)(),
-        venueId: VENUE,
       }),
     buildBackend,
     isManagedByEnvironment: () => isBackupManagedByEnvironment(sc.base),
@@ -243,7 +242,7 @@ function buildApp(
       db: suite.db,
       ring: RING,
       buildBackend,
-      venueId: VENUE,
+
       stateDir,
       readRecoveryKey,
       readBoxEnv: () => loadBoxEnv(base, stateDir),
@@ -1348,7 +1347,6 @@ describe("backup admin routes", () => {
           managedByEnvironment: false,
           env: await loadBoxEnv(base, stateDir),
           sealed: await readSealed(),
-          venueId: VENUE,
         });
       },
       isManagedByEnvironment: () => false,
@@ -1731,27 +1729,19 @@ describe("backup admin routes", () => {
       expect(await backupEnvKeys(sc.stateDir)).toEqual(["WAITRON_BACKUP_RECOVERY_KEY"]);
     }, 60_000);
 
-    it("the stream's bucket is copied with its secret, which no status shows", async () => {
+    it("refuses the stream's folder for archives without saving or exposing its secret", async () => {
       await storeStream();
       const { post, status } = await primaryApp();
       const res = await post("/api/backup/apply", applyBody({ kind: "stream-bucket" }));
-      expect(res.status).toBe(200);
-      const answered = await res.text();
-      const savedS3 = (await readSealed())!.destinations[0] as Extract<
-        BackupDestination,
-        { kind: "s3" }
-      >;
-      expect(savedS3.bucket.secretAccessKey).toBe(STREAM_SECRET);
-      expect(savedS3).toMatchObject({
-        kind: "s3",
-        venueId: VENUE,
-        bucket: { bucket: "venue-copy" },
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "backup.archive_namespace_overlap" },
       });
-      expect(answered).not.toContain(STREAM_SECRET);
+      expect(await readSealed()).toBeNull();
       expect(JSON.stringify(await status())).not.toContain(STREAM_SECRET);
     }, 60_000);
 
-    it("removing the stream leaves the archive's copied bucket alone", async () => {
+    it("removing the stream leaves a separate archive bucket alone", async () => {
       await storeStream();
       const { app, cookie, post, status } = await primaryApp({}, (app, sc) =>
         mountStreamApi(
@@ -1776,9 +1766,10 @@ describe("backup admin routes", () => {
           () => {},
         ),
       );
-      expect((await post("/api/backup/apply", applyBody({ kind: "stream-bucket" }))).status).toBe(
-        200,
-      );
+      expect(
+        (await post("/api/backup/apply", applyBody({ ...CUSTOM, secretAccessKey: CUSTOM_SECRET })))
+          .status,
+      ).toBe(200);
       const saved = await status();
       const sealedBefore = await readSealed();
       const removed = await app.request("/api/backup/stream", {
@@ -1794,7 +1785,7 @@ describe("backup admin routes", () => {
       expect(
         (sealedAfter!.destinations[0] as Extract<BackupDestination, { kind: "s3" }>).bucket
           .secretAccessKey,
-      ).toBe(STREAM_SECRET);
+      ).toBe(CUSTOM_SECRET);
     }, 60_000);
 
     it("a custom bucket's first Save with no secret is refused before anything is written", async () => {
@@ -1916,11 +1907,6 @@ describe("backup admin routes", () => {
         loadErrorCode: "backup.archive_settings_invalid",
       });
       expect(JSON.stringify(answered)).not.toContain(password);
-    }, 60_000);
-
-    it("status carries the venue id", async () => {
-      const { status } = await primaryApp();
-      expect((await status()).venueId).toBe(VENUE);
     }, 60_000);
 
     it("an archive folder overlapping the stream's venue folder is refused with nothing written", async () => {
@@ -2308,7 +2294,7 @@ describe("backup admin routes", () => {
 
     const applyList = (destinations: unknown) => ({ ...applyBody(undefined), destinations });
 
-    it("a folder and the bucket copy's bucket are both stored, folder first, with only the bucket tested, and a sweep writes to each", async () => {
+    it("a folder and a separate archive bucket are both stored, folder first, with only the bucket tested, and a sweep writes to each", async () => {
       await storeStream();
       const probed: string[] = [];
       const { post, status } = await primaryApp({
@@ -2320,7 +2306,10 @@ describe("backup admin routes", () => {
       const dir = makeDestDir();
       const res = await post(
         "/api/backup/apply",
-        applyList([{ kind: "stream-bucket" }, { kind: "local-fs", dir }]),
+        applyList([
+          { ...CUSTOM, secretAccessKey: CUSTOM_SECRET },
+          { kind: "local-fs", dir },
+        ]),
       );
       expect(res.status).toBe(200);
       expect(probed).toEqual(["s3"]);
@@ -2328,7 +2317,7 @@ describe("backup admin routes", () => {
       expect((await readdir(dir)).filter((f) => f.startsWith("waitron-probe-"))).toEqual([]);
       expect((await readSealed())!.destinations).toEqual([
         { kind: "local-fs", id: "primary", dir },
-        expect.objectContaining({ kind: "s3", id: "bucket", venueId: VENUE }),
+        expect.objectContaining({ kind: "s3", id: "bucket" }),
       ]);
       const answered = await status();
       expect(answered.destinations.map((d: { id: string }) => d.id)).toEqual(["primary", "bucket"]);

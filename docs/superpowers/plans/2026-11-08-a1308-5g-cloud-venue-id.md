@@ -236,3 +236,5 @@ None: `EQUAL`.
 - [ ] **Step 2:** Finish lines 6–8.
 - [ ] **Step 3:** `pnpm format:check`; commit; `/finish-branch`. The owner lands it with the Cloud
   lane's pull request.
+
+2026-11-12, watcher clearance 08:53: 5f adapts the archive-only callers in `backup-recovery-pack-parts.ts` and `stream-api.ts`, plus dashboard status/display types; stream and kit ids, signed bytes, prefixes and Cloud calls stay for 5g.

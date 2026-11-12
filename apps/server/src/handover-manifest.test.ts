@@ -175,9 +175,7 @@ describe("buildNodeLocalManifest", () => {
     /** The backup settings this folder's box runs on, as a start reads them. */
     async function backupSettingsRead(folder: string): Promise<string> {
       const env = await loadBoxEnv({}, folder);
-      return JSON.stringify(
-        resolveBackupConfig({ managedByEnvironment: true, env, sealed: null, venueId: "venue" }),
-      );
+      return JSON.stringify(resolveBackupConfig({ managedByEnvironment: true, env, sealed: null }));
     }
 
     const SETTINGS = `WAITRON_BACKUP_DIR=/mnt/usb\nWAITRON_BACKUP_RECOVERY_KEY=${"k".repeat(40)}\n`;
