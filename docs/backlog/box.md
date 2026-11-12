@@ -69,6 +69,8 @@ Three parts:
 
 **2026-11-09:** A950 is go-live work again. The [two-group plan](../superpowers/plans/2026-11-09-a950-shorter-upgrades.md) is approved (owner, 22:04); Lane F builds its first group after A739 and A840/A842/A848. The owner chose steps 2/3/4/8 first, with no other-project dependency: copy/restore, readiness and a real sale on a disposable copy, online trial migration (A799), and safe manual install-fix-now from current data. Later: signed releases (A940/B3), timer/window, status/email, then pairs needing a new A947 upgrade-hold decision. No btrfs requirement. First-group host status/logs do not promise email; the owner accepts no email when neither version starts. Any copy-sale refusal fails readiness. Manual failure offers restore/keep; automatic failure restores by itself. Cloud hold, password-checked manual go-back, proof-of-close and backup-stream handoff are after-first-venue work. Runtime qualification remains UNVERIFIED / NOT RUN.
 
+**Remaining first-group work:** install the host adapter/runtime and restart/recovery services (2b), qualify shutdown completion, contain readiness and the mandatory sale on a disposable copy (3), add the online trial (4), then activate the manual commands (8). Step 2a supplies stopped-tree copy/restore and a durable manual/automatic attempt controller; no installed command or service uses it. Its filesystem unit tests do not qualify Docker operation, real power loss or upgrades of a venue.
+
 **Historical design summary, 2026-10-29; retained receipts, superseded delivery requirements.**
 The [approved design](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the
 owner's 28 October answer: rollback closes automatically only after a successful restart of
