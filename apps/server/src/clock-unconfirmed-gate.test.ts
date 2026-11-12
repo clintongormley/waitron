@@ -678,7 +678,7 @@ describe("the till's money routes behind the start clock gate", () => {
   );
 });
 
-function paymentsApp(backend: FiscalBackend): Hono {
+function paymentsApp(backend: FiscalBackend, clockUnconfirmed?: () => boolean): Hono {
   // The fake card provider, offered under the Stripe seat so the dashboard counts it connected.
   const fakeSeat: CardProviderContribution = {
     ...createStripeCardProvider((() => {
@@ -700,6 +700,7 @@ function paymentsApp(backend: FiscalBackend): Hono {
       environment: "preproduction",
       pool: venue.pool,
       providers: [fakeSeat],
+      ...(clockUnconfirmed === undefined ? {} : { clockUnconfirmed }),
     },
     () => {},
   );
@@ -950,33 +951,95 @@ describe("a manager's confirmed refund outcome behind the start clock gate", () 
   );
 });
 
-/** Refund loop deps on the gate's seat, given the gate as boot gives it, `minutesOn` ahead so each
- * pending refund is due for a lookup. */
-function loopOn(holds: () => boolean, minutesOn: number) {
+/** The gate's seat, and the till's and dashboard's routes and the refund loops given the gate as
+ * boot gives it; the loops `minutesOn` ahead so each pending refund is due for a lookup. */
+function gatedOn(holds: () => boolean, minutesOn: number) {
+  const backend = gateSeatOnStartClock(venue.backend, holds);
   const base = venue.clock.now();
   const later = { ...base, instant: new Date(base.instant.getTime() + minutesOn * 60_000) };
   return {
-    db: venue.db,
-    backend: gateSeatOnStartClock(venue.backend, holds),
-    admission: testTradingAdmission(),
-    clock: { ...venue.clock, now: () => later },
-    cfg: venue.cfg,
-    refundProviderFor: (provider: string) => venue.pool.get(provider),
-    clockUnconfirmed: holds,
+    app: venue.appWith({ backend, clockUnconfirmed: holds }),
+    dashboard: paymentsApp(backend, holds),
+    loop: {
+      db: venue.db,
+      backend,
+      admission: testTradingAdmission(),
+      clock: { ...venue.clock, now: () => later },
+      cfg: venue.cfg,
+      refundProviderFor: (provider: string) => venue.pool.get(provider),
+      clockUnconfirmed: holds,
+    },
   };
 }
 
-const refundLoops = {
-  "the tender-refund loop": { kind: "tender", pass: recoverTenderRefunds },
-  "the bill-refund half of the pass": { kind: "bill", pass: settlePendingBillPayments },
-} as const;
+type Gated = ReturnType<typeof gatedOn>;
 
-describe("a refund loop whose wait for the time begins during the provider's lookup", () => {
-  it.each(Object.keys(refundLoops) as (keyof typeof refundLoops)[])(
-    "%s leaves the refund pending, and settles it once confirmed",
+interface RefundWait {
+  /** The provider call after whose answer the gate starts holding; a lookup unless given. */
+  during?: "lookupRefund" | "sendRefund";
+  run: (gated: Gated) => Promise<unknown>;
+  /** A route's answer when it leaves the refund pending; 200 unless given. */
+  answers?: object;
+  /** Sends `run` makes while the gate starts holding. */
+  sends?: number;
+  /** Settles the refund once confirmed; `run` again unless given. */
+  settle?: (gated: Gated) => Promise<unknown>;
+}
+
+/** A card refund the provider never made, its answer lost, left pending; the till asks again. */
+async function unmadeRefund(kind: "bill" | "tender"): Promise<RefundWait> {
+  venue.card.scriptNextRefund({ made: false, answer: LOST });
+  if (kind === "bill") {
+    const { billId, paymentId } = await billPaid(readerPart("10.00"));
+    const resend = billRefund(billId, paymentId);
+    expect((await resend(venue.app)).json).toMatchObject({ refund: { state: "pending" } });
+    return { run: ({ app }) => resend(app) };
+  }
+  const { saleId, tenderId } = await soldWhole("card");
+  const asked = await tenderRefund(saleId, tenderId)(venue.app);
+  expect(asked.json).toMatchObject({ state: "pending" });
+  const path = `/api/tender-refunds/${asked.json.id as string}/retry`;
+  return { run: ({ app }) => as(app, "POST", path, { override: OVERRIDE() }) };
+}
+
+async function resolvedOnDashboard(kind: "bill" | "tender"): Promise<RefundWait> {
+  const path = `/management-api/payments/${kind}-refunds/${await pendingRefund(kind)}/resolve`;
+  const answers = { status: 409, json: { code: `${kind}.refund_outcome_unconfirmed` } };
+  return { run: ({ dashboard }) => manager(dashboard, path), answers };
+}
+
+// Each row builds its own refund, so rows never share one.
+const refundWaits: Record<string, () => Promise<RefundWait>> = {
+  "a tender refund's retry on the till": () => unmadeRefund("tender"),
+  "a bill refund's resend on the till": () => unmadeRefund("bill"),
+  "a bill refund's resolve on the dashboard": () => resolvedOnDashboard("bill"),
+  "a tender refund's resolve on the dashboard": () => resolvedOnDashboard("tender"),
+  "the tender-refund loop": async () => {
+    await pendingRefund("tender");
+    return { run: ({ loop }) => recoverTenderRefunds(loop) };
+  },
+  "the bill-refund half of the pass": async () => {
+    await pendingRefund("bill");
+    return { run: ({ loop }) => settlePendingBillPayments(loop) };
+  },
+  "a new tender refund on the till": async () => {
+    const { saleId, tenderId } = await soldWhole("card");
+    const ask = tenderRefund(saleId, tenderId);
+    return {
+      during: "sendRefund",
+      run: ({ app }) => ask(app),
+      sends: 1,
+      settle: ({ loop }) => recoverTenderRefunds(loop),
+    };
+  },
+};
+
+describe("a card refund whose wait for the time begins during the provider's answer", () => {
+  it.each(Object.keys(refundWaits))(
+    "%s sends nothing more and settles nothing, and settles once confirmed",
     async (name) => {
-      const { kind, pass } = refundLoops[name];
-      await pendingRefund(kind);
+      const wait = await refundWaits[name]!();
+      const during = wait.during ?? "lookupRefund";
       const state = startClockState();
       let filing = false;
       const holds = startClockGateHolds(
@@ -984,30 +1047,33 @@ describe("a refund loop whose wait for the time begins during the provider's loo
         () => filing,
         () => false,
       );
-      const card = venue.card as unknown as { lookupRefund: (query: unknown) => Promise<unknown> };
-      const lookup = card.lookupRefund.bind(venue.card);
-      const spy = vi.spyOn(card, "lookupRefund").mockImplementation(async (query) => {
-        const answer = await lookup(query);
+      const card = venue.card as unknown as Record<typeof during, (q: unknown) => unknown>;
+      const answer = card[during].bind(venue.card);
+      const spy = vi.spyOn(card, during).mockImplementation(async (query) => {
+        const answered = await answer(query);
         filing = true;
-        return answer;
+        return answered;
       });
       const before = moneyState();
 
       try {
-        await pass(loopOn(holds, 1));
+        const answered = (await wait.run(gatedOn(holds, 1))) as Answer | undefined;
+        // A loop's pass answers a report, not a route's answer.
+        if (answered !== undefined && "status" in answered)
+          expect(answered).toMatchObject(wait.answers ?? { status: 200 });
       } finally {
         spy.mockRestore();
       }
 
       expect(filing).toBe(true);
       expect(moneyState()).toMatchObject({
-        refundSends: before.refundSends,
+        refundSends: before.refundSends + (wait.sends ?? 0),
         settledRefunds: before.settledRefunds,
         providerRefunds: before.providerRefunds,
       });
 
       state.confirm("by_person", {});
-      await pass(loopOn(holds, 10));
+      await (wait.settle ?? wait.run)(gatedOn(holds, 10));
 
       expect(moneyState().settledRefunds).toBeGreaterThan(before.settledRefunds);
     },

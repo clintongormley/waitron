@@ -136,6 +136,9 @@ export interface PaymentsApiDeps {
   /** Injected by tests; production gets one `createPinThrottle()` per mount. */
   pinThrottle?: PinThrottle;
   attendance?: AttendanceRecorder;
+  /** The start clock gate, for a card refund's check after a provider wait; a live boot always
+   * supplies it. */
+  clockUnconfirmed?: () => boolean;
 }
 
 const PAYMENTS_MANAGE: Permission = "hardware.manage";
@@ -1516,6 +1519,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     clock: deps.clock,
     attendance: deps.attendance,
     refundProviderFor: refundProvidersOf({ simulator: deps.simulator, pool: deps.pool }),
+    clockUnconfirmed: deps.clockUnconfirmed,
   };
 
   // Card refunds of a bill that nothing is driving any more (bill payments design §6b).
