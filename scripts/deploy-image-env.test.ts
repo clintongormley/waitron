@@ -1180,10 +1180,10 @@ describe("the box image carries Litestream's licence and a notice naming the pin
     expect(section).toContain("`licenses/Apache-2.0.txt`");
   });
 
-  it("names no version in the notice but libvips's, Litestream's, versitygw's and Iosevka's", () => {
+  it("names only pinned versions in the image and host runtime notices", () => {
     const { packageVersion, libvips } = libvipsRelease();
     expect(new Set(NOTICES.match(/\b\d+\.\d+\.\d+\b/g))).toEqual(
-      new Set([libvips, packageVersion, pinned, versitygwPin(), fontRelease()]),
+      new Set([libvips, packageVersion, pinned, versitygwPin(), fontRelease(), "26.7.0"]),
     );
   });
 
