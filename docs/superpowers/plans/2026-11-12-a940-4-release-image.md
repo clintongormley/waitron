@@ -163,27 +163,36 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
   `packages/fiscal-verifactu/src/declaration/agree.e2e.test.ts` (header comment and one case)
 
 **Interfaces:**
+- Produces: `isReleaseVersion(value: string): boolean` in `packages/shared/src/built-release.ts`:
+  plain `major.minor.patch` with no leading zeros, at most 50 characters (the record's
+  `SistemaInformatico.Version` bound, `@waitron/verifactu` 0.2.1 `dist/validate.js:459`). The
+  declaration command's `--version` uses it; `bundle-node.mjs` keeps a copy, held to the same
+  answers by a case in `bundle-node.test.mjs`.
 - Produces: `type BuiltRelease = { bundled: false } | { bundled: true; version: string | null }`;
-  `builtRelease(): BuiltRelease` reading the global `__WAITRON_RELEASE__` (undefined → not bundled;
-  `null` → bundled, no release; `{ version }` with a valid version → that version; any other shape →
-  bundled, no release).
+  `builtRelease(): BuiltRelease` reading the global `__WAITRON_RELEASE_VERSION__` (undefined → not
+  bundled; `null` → bundled, no release; `{ version }` with a valid version → that version; any
+  other shape → bundled, no release).
 - Produces: `releaseDefine(env: Record<string, string | undefined>): string` in `bundle-node.mjs`,
   answering the JSON literal (`null` or `{"version":"1.2.3"}`) from `env.WAITRON_RELEASE_VERSION`
   (unset or `""` → `null`, per `isUnset`'s rule), throwing `Not a release version: <value>` for a
   malformed one; `bundle()` takes `releaseVersion` and, when it is given (`null` included), adds
-  `--define:__WAITRON_RELEASE__=__waitronRelease` with the frozen literal in the banner, as the hour
-  stamp is added (`bundle-node.mjs:42`); the command-line block always gives it, so every image
-  bundle is stamped and a test's direct `bundle()` call is not (departure 3).
-- Produces: `softwareVersion(commit = BUILD_COMMIT, release = builtRelease())`: a release's version
-  when `release.bundled && release.version !== null`, otherwise today's `0.0.0-dev[+commit]`.
+  `--define:__WAITRON_RELEASE_VERSION__=__waitronReleaseVersion` with the frozen literal in the
+  banner, as the hour stamp is added (`bundle-node.mjs:42`); the command-line block always gives
+  it, so every image bundle is stamped and a test's direct `bundle()` call is not (departure 3).
+- Produces: `softwareVersion(commit = BUILD_COMMIT, release = BUILD_RELEASE)`, where
+  `BUILD_RELEASE = builtRelease()` is read once when the module loads, as `BUILD_COMMIT` is: a
+  release's version when `release.bundled && release.version !== null`, otherwise today's
+  `0.0.0-dev[+commit]`.
 
-- [ ] **Step 1: Failing tests.** `built-release.test.ts`: with `__WAITRON_RELEASE__` undefined →
+- [ ] **Step 1: Failing tests.** `built-release.test.ts`: with `__WAITRON_RELEASE_VERSION__`
+  undefined →
   `{ bundled: false }`; `null` → `{ bundled: true, version: null }`; `{ version: "1.2.3" }` →
   version `"1.2.3"`; `{ version: "1.2" }` and `"1.2.3"` (a string) → version `null` (use
   `vi.stubGlobal`). Bundler test: `releaseDefine({})` and `({ WAITRON_RELEASE_VERSION: "" })` →
   `"null"`; `"1.2.3"` → `'{"version":"1.2.3"}'`; `"1.2.3-rc1"`, `"v1.2.3"`, `"01.2.3"` throw; the
-  esbuild arguments `bundle()` passes contain `--define:__WAITRON_RELEASE__=__waitronRelease` when
-  given `releaseVersion` `null` and `"1.2.3"`, and not when given none (the stub `run` records them);
+  esbuild arguments `bundle()` passes contain
+  `--define:__WAITRON_RELEASE_VERSION__=__waitronReleaseVersion` when given `releaseVersion`
+  `null` and `"1.2.3"`, and not when given none (the stub `run` records them);
   the command-line block passes `releaseDefine(process.env)` (a case that runs the script with the
   stub, as the file's other CLI cases do). `software-identity.test.ts`:
   `softwareVersion(null, { bundled: true, version: "1.2.3" })` → `"1.2.3"`; with a commit and a
@@ -201,7 +210,7 @@ Branch `feat/a940-4-release-version`. Path: FULL (design §10; the records' vers
   unedited:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts inmutabilidad`.
   Deletion control: make `softwareVersion` ignore the release; the agree case fails. Record it.
 - [ ] **Step 5: Measure the bundle.** `WAITRON_RELEASE_VERSION=1.2.3 pnpm --filter @waitron/server build`
-  then `grep -c '__waitronRelease = Object.freeze({"version":"1.2.3"})' apps/server/dist/server.js`
+  then `grep -c '__waitronReleaseVersion = Object.freeze({"version":"1.2.3"})' apps/server/dist/server.js`
   prints 1; unset, the same grep for `Object.freeze(null)` prints 1. (A failing case would print 0.)
 - [ ] **Step 6: Commit** (`git commit -s`).
 

@@ -74,6 +74,15 @@ describe("softwareVersion", () => {
     expect(fresh.softwareVersion()).toBe(`0.0.0-dev+${COMMIT}`);
   });
 
+  it("reads the release stamp once, when it loads", async () => {
+    vi.stubGlobal("__WAITRON_RELEASE_VERSION__", { version: "1.2.3" });
+    vi.resetModules();
+    const fresh = await import("./software-identity.js");
+    vi.unstubAllGlobals();
+    expect(fresh.BUILD_RELEASE).toEqual({ bundled: true, version: "1.2.3" });
+    expect(fresh.softwareVersion()).toBe("1.2.3");
+  });
+
   it.each([{}, { sourceCommit: "short" }, { sourceCommit: `${COMMIT}a` }, null])(
     "treats a stamp with no usable commit (%j) as none",
     async (stamp) => {

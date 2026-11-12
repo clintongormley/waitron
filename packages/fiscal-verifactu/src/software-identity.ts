@@ -57,9 +57,11 @@ function stampedCommit(): string | null {
 
 export const BUILD_COMMIT: string | null = stampedCommit();
 
+export const BUILD_RELEASE: BuiltRelease = builtRelease();
+
 export function softwareVersion(
   commit: string | null = BUILD_COMMIT,
-  release: BuiltRelease = builtRelease(),
+  release: BuiltRelease = BUILD_RELEASE,
 ): string {
   if (release.bundled && release.version !== null) return release.version;
   return commit === null ? "0.0.0-dev" : `0.0.0-dev+${commit}`;

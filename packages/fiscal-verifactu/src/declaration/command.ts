@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { AppError, isAppError, readSoftwareProducer } from "@waitron/shared";
+import { AppError, isAppError, isReleaseVersion, readSoftwareProducer } from "@waitron/shared";
 import {
   refuseProducerSettings,
   runningProducer,
@@ -55,8 +55,6 @@ interface Arguments {
   out: string;
 }
 
-const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-
 function refuse(argument: string): never {
   throw new AppError("declaration.argument_invalid", { argument });
 }
@@ -88,7 +86,7 @@ function parse(argv: string[]): { command: Subcommand; args: Arguments } {
     if (name !== "draft" && values[name] === undefined) refuse(`--${name}`);
   }
   const args = values as Partial<Arguments>;
-  if (!VERSION.test(args.version!)) refuse("--version");
+  if (!isReleaseVersion(args.version!)) refuse("--version");
   // The place is written into the source before its markup is read, so it may carry none.
   if (
     args.place !== undefined &&

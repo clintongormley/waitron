@@ -90,6 +90,17 @@ describe("runDeclarationCommand", () => {
     });
   });
 
+  it("writes and checks a version as long as a record's Version field holds", async () => {
+    const longest = `${"9".repeat(46)}.2.3`;
+    const signing = ["--version", longest, "--place", "Elche", "--date", "2026-10-22"];
+
+    expect((await run(unblocked, ["write", ...signing], {})).status).toBe(0);
+    expect(await run(unblocked, ["check", "--version", longest], {})).toMatchObject({
+      status: 0,
+      stdout: `declarations/v${longest}.md agrees\n`,
+    });
+  });
+
   it("refuses a written version whose 1.a has been edited", async () => {
     await run(unblocked, ["write", ...SIGNING]);
     const file = join(unblocked, "declarations/v1.0.0.md");
@@ -173,6 +184,11 @@ describe("runDeclarationCommand", () => {
     ],
     ["a version with a leading zero", ["check", "--version", "1.01.0"], invalid("--version")],
     ["a version with a suffix", ["check", "--version", "1.0.0-rc.1"], invalid("--version")],
+    [
+      "a version longer than a record's Version field holds",
+      ["check", "--version", `${"9".repeat(47)}.2.3`],
+      invalid("--version"),
+    ],
     ["an empty place", place(" "), invalid("--place")],
     ["a place with a line break", place("A\nB"), invalid("--place")],
     ["a place with a line separator", place("A\u2028B"), invalid("--place")],

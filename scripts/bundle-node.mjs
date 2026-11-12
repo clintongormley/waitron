@@ -25,13 +25,17 @@ export function esbuildArgs(entry, outfile) {
   ];
 }
 
+// A copy of `isReleaseVersion` in packages/shared/src/built-release.ts, which says where the 50
+// comes from; `scripts/bundle-node.test.mjs` holds the two to the same answers.
 const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 /** Unset or empty, as `isUnset` reads a setting, is not a release. */
 export function releaseDefine(env) {
   const value = env.WAITRON_RELEASE_VERSION;
   if (value === undefined || value === "") return "null";
-  if (!RELEASE_VERSION.test(value)) throw new Error(`Not a release version: ${value}`);
+  if (value.length > 50 || !RELEASE_VERSION.test(value)) {
+    throw new Error(`Not a release version: ${value}`);
+  }
   return JSON.stringify({ version: value });
 }
 
@@ -61,9 +65,9 @@ export function bundle(
   for (const { entry, outfile } of pairs) {
     const args = esbuildArgs(entry, outfile);
     if (releaseLiteral !== undefined) {
-      args.push("--define:__WAITRON_RELEASE__=__waitronRelease");
+      args.push("--define:__WAITRON_RELEASE_VERSION__=__waitronReleaseVersion");
       const banner = args.findIndex((arg) => arg.startsWith("--banner:js="));
-      args[banner] += `\nconst __waitronRelease = Object.freeze(${releaseLiteral});`;
+      args[banner] += `\nconst __waitronReleaseVersion = Object.freeze(${releaseLiteral});`;
     }
     if (release !== undefined) {
       const literal = JSON.stringify(release);
