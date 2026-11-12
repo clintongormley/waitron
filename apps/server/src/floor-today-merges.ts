@@ -1,10 +1,5 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
-import {
-  partyTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
-  floorTodayTables,
-} from "@waitron/db";
+import { partyTables, floorTodayJoins, floorTodayJoinTables, floorTodayTables } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, freeSide, touchingPlace, type JoinPlace, type JoinSide } from "@waitron/shared";
 import {
@@ -20,6 +15,7 @@ import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { joinTables } from "./table-actions.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
+import { refuseDeliveryPending } from "./floor-today-store.js";
 import "./errors.js";
 
 /**
@@ -137,15 +133,6 @@ export async function joinMergeMembers(
   }
 }
 
-/**
- * `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table,
- * nor a table still joined in either that goes in the merge, may be held, need clearing or need
- * moving.
- * This never puts a joined table in a merge: its tables still joined are split off it and go in
- * instead, and its guests pass to them; the caller tells the kitchen. A joined `target` a reset
- * already left in a merge stays whole in it, and a joined `moving` table in one is refused
- * `table.merged`.
- */
 export async function writeMerge(
   tx: Transaction,
   _cfg: TradingContext,
@@ -160,8 +147,14 @@ export async function writeMerge(
   refuseUnmovable(moving, target);
   if (moving.merge !== null) throw new AppError("table.merged", { tableId: moving.tableId });
   if (args.free) {
-    await refuseUnfree(tx, [moving.tableId, target.tableId]);
-    await refuseNeedsMoving(tx, [moving.tableId, target.tableId]);
+    const joining = [
+      moving.tableId,
+      target.tableId,
+      ...(target.merge?.members ?? []).map((m) => m.tableId).filter((id) => id !== target.tableId),
+    ];
+    await refuseUnfree(tx, joining);
+    await refuseNeedsMoving(tx, joining);
+    if (target.merge !== null) for (const id of joining) await refuseDeliveryPending(tx, id);
   }
   if (zoneId !== moving.zoneId) {
     throw new AppError("service_zone.join_mismatch", {
@@ -175,7 +168,10 @@ export async function writeMerge(
 
   let joinId = target.merge?.joinId;
   if (joinId === undefined) {
-    const [join] = await tx.insert(floorTodayJoins).values({ zoneId, seats }).returning({ id: floorTodayJoins.id });
+    const [join] = await tx
+      .insert(floorTodayJoins)
+      .values({ zoneId, seats })
+      .returning({ id: floorTodayJoins.id });
     joinId = join!.id;
     await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, target));
   } else {

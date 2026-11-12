@@ -1885,8 +1885,7 @@ export class TillFloorScreen extends LitElement {
           ...splitting,
           sent: null,
           refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
-          seatsRequired:
-            splitting.seatsRequired || code === "merge.seats_required",
+          seatsRequired: splitting.seatsRequired || code === "merge.seats_required",
         };
       else if (this.splittingJoined === sending || this.splittingJoined === null) {
         this.splittingJoined = null;

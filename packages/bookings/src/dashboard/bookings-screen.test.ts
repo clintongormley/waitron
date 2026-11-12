@@ -486,7 +486,7 @@ describe("bookings-screen", () => {
   });
 
   const refusedTable = {
-    code: "table.in_joined_table",
+    code: "table.not_found",
     params: { tableId: "t-1", field: "tableId" },
     status: 409,
   };
@@ -519,7 +519,7 @@ describe("bookings-screen", () => {
       const table = form(el).shadowRoot!.querySelector<HTMLElement & { error: string }>(
         "[data-test=booking-table]",
       )!;
-      expect(table.error).toBe(codeMessage("table.in_joined_table"));
+      expect(table.error).toBe(codeMessage("table.not_found"));
       expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
     },
   );
@@ -807,7 +807,7 @@ it.each([
   },
 );
 
-it.each(["floor_today_tables", "floor_zones", "floor_plan_table_parts"])(
+it.each(["floor_today_tables", "floor_zones"])(
   "refreshes table choices after %s changes",
   async (type) => {
     const liveData = new LiveData();

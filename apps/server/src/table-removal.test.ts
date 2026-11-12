@@ -497,7 +497,10 @@ describe("removing a table of a joined table split today", () => {
     await giveKeptSize(v, zone.master.c4!, { width: 2, height: 2 });
     await inTx(v, (tx) =>
       splitOff(tx, v.cfg, NONE, NOW, {
-        tableId: zone.table.c3!, partIds: [zone.table.c5!], seats: 6, expectedParties: [],
+        tableId: zone.table.c3!,
+        partIds: [zone.table.c5!],
+        seats: 6,
+        expectedParties: [],
       }),
     );
     return zone;

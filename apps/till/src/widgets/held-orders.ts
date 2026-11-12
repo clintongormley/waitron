@@ -298,8 +298,7 @@ export class TillHeldOrders extends LitElement {
   #picker(order: HeldOrderSummary): TemplateResult {
     const tables = this.tables.filter(
       (table) =>
-
-        (table.party !== null || seatsGuests(this.zones.find((zone) => zone.id === table.zoneId))),
+        table.party !== null || seatsGuests(this.zones.find((zone) => zone.id === table.zoneId)),
     );
     return html`<wt-dialog
       ${trackDialog()}

@@ -63,11 +63,6 @@ export async function nameToday(
   });
 }
 
-/**
- * Any other table's saved name, any other group's today's name, and any other shown table's
- * today's name — a table the map does not draw because of a joined table is not shown. A group's
- * own members count as other tables.
- */
 async function refuseInUse(
   tx: Transaction,
   name: string,
@@ -86,9 +81,7 @@ async function refuseInUse(
     .select({ tableId: floorTodayTables.tableId, name: floorTodayTables.name })
     .from(floorTodayTables)
     .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
-    .where(
-      isNotNull(floorTodayTables.name),
-    );
+    .where(isNotNull(floorTodayTables.name));
   if (todays.some((t) => t.tableId !== selfTable && sameName(t.name!, name))) throw taken;
 
   const groups = await tx

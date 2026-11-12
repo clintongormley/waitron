@@ -234,7 +234,11 @@ describe("the till's table-state answer carries today's plan", () => {
     const group = states.get(liveId(c3))!.today!.joinId;
     expect(group).not.toBeNull();
     for (const part of [c3, c4, c5]) {
-      expect(states.get(liveId(part))!.today).toMatchObject({ joinId: group, joinName: long, joinSeats: 10 });
+      expect(states.get(liveId(part))!.today).toMatchObject({
+        joinId: group,
+        joinName: long,
+        joinSeats: 10,
+      });
       expect(states.get(liveId(part))!.today).not.toHaveProperty("joined");
     }
     expect(states.has(liveId(long))).toBe(false);
@@ -285,7 +289,9 @@ describe("the till's table-state answer carries the room's revision", () => {
     const unplanned = await v.table(fresh("Unplanned"));
     const noToday = await v.table(fresh("No today"), v.tables.zoneId, { today: false });
     const revisionsOf = (states: Map<string, TableState>, tables: Record<string, string>) =>
-      Object.values(tables).filter((id) => id != null).map((id) => states.get(id)!.today!.zoneRevision);
+      Object.values(tables)
+        .filter((id) => id != null)
+        .map((id) => states.get(id)!.today!.zoneRevision);
 
     const first = await read();
     expect(revisionsOf(first, one.table)).toEqual([1, 1, 1, 1]);
@@ -335,7 +341,10 @@ describe("the till's table-state answer carries today's names", () => {
 
     const states = await read();
     expect(states.get(named.table.bar!)!.today).toMatchObject({ name: tableName, joinName: null });
-    expect(states.get(named.table.c3!)!.today).toMatchObject({ name: null, joinName: expect.any(String) });
+    expect(states.get(named.table.c3!)!.today).toMatchObject({
+      name: null,
+      joinName: expect.any(String),
+    });
     const members = ["bar", "c3", "c4", "c5"].map((key) => grouped.table[key]!);
     for (const member of members) {
       expect(states.get(member)!.today).toMatchObject({ name: null, joinName: groupName });
@@ -406,37 +415,51 @@ describe("the till's table-state answer says what needs moving", () => {
     expect(await zoneRevisionOf(v, z.d.zoneId)).toBe(before + 1);
   });
 
-  it.each([2, 3])("a marked saved group of %i members stays pending while its far member still moves", async (count) => {
-    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
-    const keys = count === 2 ? ["t4", "t5"] : ["t3", "t4", "t5"];
-    const s = await standardAndDinner(v, NOW,
-      [...keys.map((key) => ({ key, label: fresh(key) })),
-       { key: "group", label: fresh("Saved group"), partKeys: keys }],
-      { standard: Object.fromEntries([...keys.map((key, i) => [key, i * 20]), ["group", null]]),
-        dinner: Object.fromEntries([...keys.map((key) => [key, null]), ["group", 0]]) });
-    await s.onto(s.d.dinner);
-    const ids = keys.map(s.live);
-    await seatAndFinishAcross(ids[0]!, () => s.onto(s.d.standard));
-    await catchUp();
-    const states = await read();
-    for (const id of ids) {
-      expect(states.get(id)!.today!.needsMoving).toBe(true);
-      expect(states.get(id)!.today!.placement).not.toBeNull();
-      expect(await readyToMoveOf(id)).toBe(true);
-    }
-    await inTx(v, async (tx) => {
-      await leaveMergesRestoring(tx, ids);
-      await takeOffToday(tx, ids[0]!);
-      await moveToday(tx, ids.at(-1)!, { x: 99, y: 0 });
-    });
-    expect((await todayRow(v, ids.at(-1)!))!.x).toBe(99);
-    const due = await inTx(v, (tx) => tx.select({ id: floorZones.id }).from(floorZones)
-      .where(and(eq(floorZones.id, s.d.zoneId), catchUpDue(floorZones.id))));
-    expect(due).toEqual([]);
-    await catchUp();
-    for (const id of ids) expect(await readyToMoveOf(id)).toBe(true);
-    expect((await todayRow(v, ids.at(-1)!))!.x).toBe(99);
-  });
+  it.each([2, 3])(
+    "a marked saved group of %i members stays pending while its far member still moves",
+    async (count) => {
+      await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
+      const keys = count === 2 ? ["t4", "t5"] : ["t3", "t4", "t5"];
+      const s = await standardAndDinner(
+        v,
+        NOW,
+        [
+          ...keys.map((key) => ({ key, label: fresh(key) })),
+          { key: "group", label: fresh("Saved group"), partKeys: keys },
+        ],
+        {
+          standard: Object.fromEntries([...keys.map((key, i) => [key, i * 20]), ["group", null]]),
+          dinner: Object.fromEntries([...keys.map((key) => [key, null]), ["group", 0]]),
+        },
+      );
+      await s.onto(s.d.dinner);
+      const ids = keys.map(s.live);
+      await seatAndFinishAcross(ids[0]!, () => s.onto(s.d.standard));
+      await catchUp();
+      const states = await read();
+      for (const id of ids) {
+        expect(states.get(id)!.today!.needsMoving).toBe(true);
+        expect(states.get(id)!.today!.placement).not.toBeNull();
+        expect(await readyToMoveOf(id)).toBe(true);
+      }
+      await inTx(v, async (tx) => {
+        await leaveMergesRestoring(tx, ids);
+        await takeOffToday(tx, ids[0]!);
+        await moveToday(tx, ids.at(-1)!, { x: 99, y: 0 });
+      });
+      expect((await todayRow(v, ids.at(-1)!))!.x).toBe(99);
+      const due = await inTx(v, (tx) =>
+        tx
+          .select({ id: floorZones.id })
+          .from(floorZones)
+          .where(and(eq(floorZones.id, s.d.zoneId), catchUpDue(floorZones.id))),
+      );
+      expect(due).toEqual([]);
+      await catchUp();
+      for (const id of ids) expect(await readyToMoveOf(id)).toBe(true);
+      expect((await todayRow(v, ids.at(-1)!))!.x).toBe(99);
+    },
+  );
 
   it("a member of a marked group whose own change is seats only (seats changed today) reads false", async () => {
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));

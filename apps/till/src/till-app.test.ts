@@ -10106,11 +10106,11 @@ describe("till-app", () => {
         expect(tableOrder(el)).not.toBeNull();
       });
 
-      it("a join-tables refused table.in_joined_table says so in its own words", async () => {
+      it("a join-tables refused table.not_found says so in its own words", async () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          joinTables: vi.fn().mockRejectedValue({ code: "table.in_joined_table", tableId: "t9" }),
+          joinTables: vi.fn().mockRejectedValue({ code: "table.not_found", tableId: "t9" }),
         });
         const screen = await toTableOrder(el, openTable);
 
@@ -10119,7 +10119,7 @@ describe("till-app", () => {
 
         expect(tableOrder(el)).not.toBeNull();
         const banner = el.shadowRoot!.querySelector(".error")!.textContent!;
-        expect(banner).toContain(codeMessage("table.in_joined_table"));
+        expect(banner).toContain(codeMessage("table.not_found"));
         expect(banner).not.toContain(t("table.error"));
       });
 

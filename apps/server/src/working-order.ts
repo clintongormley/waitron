@@ -77,10 +77,7 @@ import {
 import type { PassRow } from "./pass-card.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
-import {
-  needsMoving,
-  tableInService,
-} from "@waitron/db";
+import { needsMoving, tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import {

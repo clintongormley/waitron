@@ -252,7 +252,7 @@ describe("zones and their tables", () => {
     const part = table({
       id: "c3",
       label: "Counter 3",
-      today: today({ }),
+      today: today({}),
     });
     const joined = table({ id: "long", label: "Long table", today: today() });
     expect(read([part, joined]).map((each) => each.id)).toEqual(["c3", "long"]);
@@ -262,7 +262,7 @@ describe("zones and their tables", () => {
     const part = table({
       id: "c3",
       condition: "needs_clearing",
-      today: today({ }),
+      today: today({}),
     });
     expect(listedTables([part])).toEqual([part]);
     expect(mapTables([part], now).map((each) => each.id)).toEqual(["c3"]);

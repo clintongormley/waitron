@@ -30,7 +30,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { floorDeletionFor } from "./floor-delete.js";
-import { splitJoinedTable } from "./floor-today-split.js";
+import { splitOff } from "./floor-today-split-group.js";
 import { leaveTables, finishTable } from "./testing/party-close-fixture.js";
 import {
   setupPartyVenue,
@@ -646,9 +646,18 @@ describe("floor hierarchy deletion", () => {
       NOW,
     );
     await inTx(v, (tx) =>
-      splitJoinedTable(tx, v.cfg, { tableId: table.long!, partIds: [table.c5!], seats: 6 }),
+      splitOff(tx, v.cfg, [], NOW, {
+        tableId: table.c3!,
+        partIds: [table.c5!],
+        seats: 6,
+        expectedParties: [],
+      }),
     );
-    expect(await inTx(v, (tx) => tx.select().from(floorTodaySplitParts))).not.toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(floorTodayJoinTables).where(eq(floorTodayJoinTables.tableId, table.c3!)),
+      ),
+    ).toHaveLength(1);
     await inTx(v, (tx) => seatFor().clear(tx, [zoneId], NOW));
     expect(await inTx(v, (tx) => tx.select().from(floorTodaySplitParts))).toEqual([]);
     expect(

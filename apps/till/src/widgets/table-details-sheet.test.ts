@@ -102,8 +102,8 @@ describe("till-table-details-sheet", () => {
         seats: 10,
         fixed: false,
         takenOff: false,
-        joinId: null,
-        joinSeats: null,
+        joinId: "saved-group",
+        joinSeats: 10,
         zoneRevision: 0,
       },
     });
@@ -112,51 +112,6 @@ describe("till-table-details-sheet", () => {
     setLocale("es-ES");
     const es = await mount({ table: long, heading: "Long table", actions: true });
     expect(text(es, '[data-today-action="split-off"]')).toBe("Separar mesas…");
-  });
-
-  describe("Reset table", () => {
-    const todayOf = (over: Partial<NonNullable<TableState["today"]>>) => ({
-      placement: { x: 10, y: 20, width: 6, height: 2, shape: "rect" as const, rotation: 0 },
-      seats: 4,
-      fixed: false,
-      takenOff: false,
-      joinId: null,
-      joinSeats: null,
-      zoneRevision: 0,
-      ...over,
-    });
-    const long = table({
-      id: "long",
-      label: "Long table",
-      today: todayOf({
-        seats: 10,
-      }),
-    });
-    const c5 = table({ id: "c5", label: "Counter 5", today: todayOf({ }) });
-
-    it("labels Reset table in English and Spanish", async () => {
-      const el = await mount({
-        table: long,
-        heading: "Long table",
-        actions: true,
-        tables: [long, c5],
-      });
-      expect(text(el, '[data-today-action="reset-table"]')).toBe("Reset table");
-      setLocale("es-ES");
-      const es = await mount({
-        table: c5,
-        heading: "Counter 5",
-        actions: true,
-        tables: [long, c5],
-      });
-      expect(text(es, '[data-today-action="reset-table"]')).toBe("Restablecer mesa");
-    });
-
-    it("offers no Reset table without the zone's tables", async () => {
-      const el = await mount({ table: long, heading: "Long table", actions: true });
-      expect(find(el, '[data-today-action="split-off"]')).not.toBeNull();
-      expect(find(el, '[data-today-action="reset-table"]')).toBeNull();
-    });
   });
 
   it("is closed with no table", async () => {

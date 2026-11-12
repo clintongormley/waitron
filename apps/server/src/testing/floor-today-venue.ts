@@ -10,7 +10,6 @@ import {
   floorPlanTableSizes,
   floorTodayJoinTables,
   floorTodayJoins,
-  floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
   floorZones,
@@ -339,15 +338,6 @@ export async function needingMoving(v: PartyVenue, now: Date = new Date()) {
     await ensureToday(tx, REMOVALS, now);
   });
   return { ...z, tableId, spare };
-}
-
-/** Records `partTableId` as split off joined table `joinedTableId` today, as the split route will. */
-export async function splitOffRow(
-  v: PartyVenue,
-  joinedTableId: string,
-  partTableId: string,
-): Promise<void> {
-  await inTx(v, (tx) => tx.insert(floorTodaySplitParts).values({ joinedTableId, partTableId }));
 }
 
 export async function todayRow(

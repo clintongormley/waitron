@@ -3,13 +3,7 @@
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import {
-  tableInService,
-  diningTables,
-  floorZones,
-  refusalOn,
-  UNIQUE_VIOLATION,
-} from "@waitron/db";
+import { tableInService, diningTables, floorZones, refusalOn, UNIQUE_VIOLATION } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 
 /** `createdAt` is an ISO string. */
@@ -39,9 +33,7 @@ export async function listTables(
     .where(
       and(
         eq(floorZones.active, true),
-        options.includeDisabled
-          ? undefined
-          : tableInService(diningTables.id),
+        options.includeDisabled ? undefined : tableInService(diningTables.id),
       ),
     )
     .orderBy(diningTables.label);

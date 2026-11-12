@@ -320,12 +320,12 @@ describe("booking-form", () => {
   it("shows a refusal naming the table under Table, and clears it once the table changes", async () => {
     const { el } = await mountWidget<BookingForm>(
       "dashboard-booking-form",
-      baseProps({ tableRefusal: "table.in_joined_table" }),
+      baseProps({ tableRefusal: "table.not_found" }),
     );
     const field = el.shadowRoot!.querySelector<TableField & { error: string }>(
       "[data-test=booking-table]",
     )!;
-    expect(field.error).toBe(codeMessage("table.in_joined_table"));
+    expect(field.error).toBe(codeMessage("table.not_found"));
     await setSelect(el, "booking-table", "t-2");
     expect(field.error).toBe("");
   });
@@ -341,13 +341,13 @@ describe("booking-form", () => {
       try {
         const { el } = await mountWidget<BookingForm>(
           "dashboard-booking-form",
-          baseProps({ tableRefusal: "table.in_joined_table" }),
+          baseProps({ tableRefusal: "table.not_found" }),
         );
         const row = el.shadowRoot!.querySelector("wt-form-actions")!;
         await row.updateComplete;
         const bottom = (await formMessageOf(row))!;
         expect(bottom.textContent!.trim()).toBe(sentence);
-        expect(bottom.textContent).not.toContain(codeMessage("table.in_joined_table"));
+        expect(bottom.textContent).not.toContain(codeMessage("table.not_found"));
         await setSelect(el, "booking-table", "t-2");
         await row.updateComplete;
         expect(await formMessageOf(row)).toBeNull();

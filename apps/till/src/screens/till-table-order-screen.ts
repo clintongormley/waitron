@@ -172,10 +172,7 @@ import {
 } from "../state/draft-layout.js";
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuests } from "../state/receipt-guests.js";
-import {
-  seatsGuests,
-  shownName as tableShownName,
-} from "../state/floor-today.js";
+import { seatsGuests, shownName as tableShownName } from "../state/floor-today.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";

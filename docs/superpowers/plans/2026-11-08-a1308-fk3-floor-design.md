@@ -1,6 +1,8 @@
 # A1308 fk3 — the floor's design tables take in their parts, kept sizes and set names: implementation plan
 
-> 2026-11-12: implementation instructions are superseded by the [fk3 refresh](2026-11-12-a1308-fk3-floor-design-refresh.md), Claude-read and pending watcher clearance after fk5 PR B. This file remains the historical plan; the refresh uses PR B's ordinary groups and records the unlanded fixture-tool prerequisite.
+> 2026-11-12: implementation instructions are superseded by the [fk3 refresh](2026-11-12-a1308-fk3-floor-design-refresh.md), read by Claude and cleared with changes by the watcher at 08:41. Build after fk5 PR B. This file remains the historical plan; the refresh uses PR B's ordinary groups and records the fixture-tool staging.
+
+> 2026-11-12, superseded by [fk5 PR B](2026-11-11-a1308-fk5-ordinary-groups.md): The former ports of floor-today-parts.ts and joined-parts.ts, the split-row fixture and synthetic-parent assertions (original lines 65–69, 95, 280 and 309) are void. Keep the remaining design membership, size and schema work.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. Every step also

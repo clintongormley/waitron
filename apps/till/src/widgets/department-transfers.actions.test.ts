@@ -2,7 +2,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { mountWidget, cleanupWidgets } from "./test-helpers.js";
 import { TillApi } from "../api/client.js";
 import { TillDepartmentTransfers } from "./department-transfers.js";
-import { codeMessage } from "../i18n/codes.js";
 import type { DepartmentTransferDetail, TableState } from "../api/client.js";
 
 const request = {
@@ -355,12 +354,7 @@ it("offers the zone's tables in number order after no table", async () => {
 });
 
 const joinedFloor = (): TableState[] => {
-  const row = (
-    id: string,
-    label: string,
-    inJoinedTable: string | null,
-    placed = false,
-  ): TableState => ({
+  const row = (id: string, label: string, placed = false): TableState => ({
     id,
     label,
     shortName: label,
@@ -386,15 +380,15 @@ const joinedFloor = (): TableState[] => {
     signals: [],
   });
   return [
-    row("c3", "Counter 3", "Long table"),
-    row("c4", "Counter 4", "Long table"),
-    row("c5", "Counter 5", "Long table"),
-    row("long", "Long table", null, true),
-    row("stool-2", "Stool 2", null),
+    row("c3", "Counter 3"),
+    row("c4", "Counter 4"),
+    row("c5", "Counter 5"),
+    row("long", "Long table", true),
+    row("stool-2", "Stool 2"),
   ];
 };
 
-it("offers no part of a joined table as the destination table", async () => {
+it("offers real tables under their own ids as destination tables", async () => {
   const { el } = await mount(undefined, joinedFloor());
   click(el, "[data-accept]");
   await vi.waitFor(() =>
@@ -408,7 +402,7 @@ it("offers no part of a joined table as the destination table", async () => {
     el
       .shadowRoot!.querySelector<HTMLElement & { options: { value: string }[] }>("[name=tableId]")!
       .options.map((option) => option.value),
-  ).toEqual(["", "long", "stool-2"]);
+  ).toEqual(["", "c3", "c4", "c5", "long", "stool-2"]);
 });
 
 it("offers a table that needs moving as the destination table, as one that needs clearing", async () => {
@@ -432,33 +426,7 @@ it("offers a table that needs moving as the destination table, as one that needs
     el
       .shadowRoot!.querySelector<HTMLElement & { options: { value: string }[] }>("[name=tableId]")!
       .options.map((option) => option.value),
-  ).toEqual(["", "long", "stool-2"]);
-});
-
-it("shows table.in_joined_table beside the destination table", async () => {
-  const { el, writes } = await mount("table.in_joined_table", joinedFloor(), {
-    tableId: "long",
-    field: "tableId",
-  });
-  click(el, "[data-accept]");
-  await vi.waitFor(() =>
-    expect(
-      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
-        ?.disabled,
-    ).toBe(false),
-  );
-  await change(el, "zoneId", "terrace");
-  await change(el, "tableId", "long");
-  click(el, "[data-save-transfer]");
-  await vi.waitFor(() => expect(writes).toHaveLength(1));
-  await vi.waitFor(() =>
-    expect(
-      el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[name=tableId]")!.error,
-    ).toBe("That table is part of a joined table"),
-  );
-  expect(
-    el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
-  ).not.toContain(codeMessage("table.in_joined_table"));
+  ).toEqual(["", "c3", "c4", "c5", "long", "stool-2"]);
 });
 
 it("refuses a retained selected table removed from the current table list", async () => {

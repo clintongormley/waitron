@@ -109,7 +109,6 @@ describe("movesTable and the SQL rule the till and the refusals read", () => {
             .insert(floorTodayJoinTables)
             .values({ joinId: join!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
         }
-
       }
     });
 

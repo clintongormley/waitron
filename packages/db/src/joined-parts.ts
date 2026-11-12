@@ -1,10 +1,6 @@
 import { sql, type AnyColumn, type SQL, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import {
-  floorResetTables,
-  floorTodayJoinTables,
-  floorTodayTables,
-} from "./schema/floor-plans.js";
+import { floorResetTables, floorTodayJoinTables, floorTodayTables } from "./schema/floor-plans.js";
 
 type ResetRowColumns = Record<
   "tableId" | "x" | "y" | "width" | "height" | "shape" | "rotation",

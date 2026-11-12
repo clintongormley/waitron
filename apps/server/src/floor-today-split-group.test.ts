@@ -11,7 +11,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   diningTables,
-  floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodayTables,
@@ -23,8 +22,6 @@ import { hashPin, loginWithPin } from "@waitron/identity";
 import { partyTablesName } from "@waitron/shared";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { foodOnItsWay } from "./delivery-release.js";
-import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
-import { defaultLayout } from "./testing/floor-sets.js";
 import { leaveMergesRestoring } from "./floor-today-merges.js";
 import { resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -123,33 +120,7 @@ async function LONG_TABLE() {
   );
   for (const key of ["c3", "c4", "c5"])
     await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
-  await inTx(v, tx => resetZone(tx, enabledTableRemovals(ALL_MODULES), zone.zoneId, NOW, "due"));
-  return zone;
-}
-
-/** Long table (12 seats, 8 × 2 at 10, 20) = Counter 3, 4, 5 and 6 (2 seats each), kept 2 × 2; Bar as above. */
-async function LONG_OF_FOUR() {
-  const zone = await plannedZone(
-    v,
-    [
-      { key: "c3", label: "Counter 3", seats: 2, place: null },
-      { key: "c4", label: "Counter 4", seats: 2, place: null },
-      { key: "c5", label: "Counter 5", seats: 2, place: null },
-      { key: "c6", label: "Counter 6", seats: 2, place: null },
-      {
-        key: "long",
-        label: "Long table",
-        seats: 12,
-        place: { x: 10, y: 20, width: 8, height: 2 },
-        partKeys: ["c3", "c4", "c5", "c6"],
-      },
-      { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0, width: 2, height: 2 } },
-    ],
-    NOW,
-  );
-  for (const key of ["c3", "c4", "c5", "c6"])
-    await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
-  await inTx(v, tx => resetZone(tx, enabledTableRemovals(ALL_MODULES), zone.zoneId, NOW, "due"));
+  await inTx(v, (tx) => resetZone(tx, enabledTableRemovals(ALL_MODULES), zone.zoneId, NOW, "due"));
   return zone;
 }
 
@@ -304,10 +275,7 @@ async function refused(
   });
 }
 
-const NO_PLACE = { x: null, y: null, width: null, height: null };
-
 describe("Split tables… on a group with nobody seated", () => {
-
   it("A pushed onto B's right, A or B ticked from either table: the group ends and A goes back where it stood", async () => {
     for (const [from, ticked] of [
       ["a", "b"],
@@ -583,7 +551,12 @@ describe("Split tables… on a group with guests seated", () => {
     const { table, guests } = await guestsAtGroup();
 
     const groupId = (await mergeOf(v, table.bar!))!.joinId;
-    const [group] = await inTx(v, tx => tx.select({ name: floorTodayJoins.name }).from(floorTodayJoins).where(eq(floorTodayJoins.id, groupId)));
+    const [group] = await inTx(v, (tx) =>
+      tx
+        .select({ name: floorTodayJoins.name })
+        .from(floorTodayJoins)
+        .where(eq(floorTodayJoins.id, groupId)),
+    );
     await ok(splitOff(table.bar!, [table.bar!], 10));
 
     expect((await activeTablesOf(v, guests.partyId)).sort()).toEqual(
@@ -793,9 +766,9 @@ async function shortOnLong() {
   );
   for (const key of ["c3", "c4", "c5", "c6", "c7"])
     await giveKeptSize(v, zone.master[key]!, { width: 2, height: 2 });
-  await inTx(v, tx => resetZone(tx, enabledTableRemovals(ALL_MODULES), zone.zoneId, NOW, "due"));
+  await inTx(v, (tx) => resetZone(tx, enabledTableRemovals(ALL_MODULES), zone.zoneId, NOW, "due"));
   const { table } = zone;
-  await inTx(v, tx => leaveMergesRestoring(tx, [table.c6!, table.c7!]));
+  await inTx(v, (tx) => leaveMergesRestoring(tx, [table.c6!, table.c7!]));
   await merge(table.c6!, table.c5!, "right", 14);
   await merge(table.c7!, table.c6!, "right", 14);
   expect(await groupOf(table.c3!)).toEqual({
@@ -808,7 +781,6 @@ async function shortOnLong() {
 }
 
 describe("Split tables… on a group holding the tables of two joined tables", () => {
-
   it("Counter 5 and 7 ticked: Counter 3, 4 and 6 come from both, so they stay a group with the seats sent", async () => {
     const { table, zoneId } = await shortOnLong();
     const before = await everything();
@@ -862,20 +834,14 @@ describe("Split tables… on a group: refusals write nothing", () => {
     expect(await everything()).toEqual(before);
   });
 
-  it("seats missing when Long table comes back partly is refused joined_table.seats_required", async () => {
+  it("seats missing when Long table comes back partly is refused merge.seats_required", async () => {
     const { table } = await barOnLong();
     const before = await everything();
 
-    await refused(
-      splitOff(table.bar!, [table.bar!, table.c5!]),
-      400,
-      "merge.seats_required",
-      {},
-    );
+    await refused(splitOff(table.bar!, [table.bar!, table.c5!]), 400, "merge.seats_required", {});
     expect(await everything()).toEqual(before);
   });
 });
-
 
 describe("split party observations", () => {
   const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";

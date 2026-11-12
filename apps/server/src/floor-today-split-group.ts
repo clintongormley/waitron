@@ -1,9 +1,5 @@
 import { eq } from "drizzle-orm";
-import {
-  floorTodayJoins,
-  nowIso,
-  type Transaction,
-} from "@waitron/db";
+import { floorTodayJoins, nowIso, type Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { leaveMergesRestoring } from "./floor-today-merges.js";
@@ -35,10 +31,12 @@ export async function splitOff(
   args: SplitArgs,
 ): Promise<void> {
   const today = await todayOf(tx, args.tableId);
-  if (today.merge === null) throw new AppError("merge.member_invalid", { tableId: args.tableId, field: "partIds" });
+  if (today.merge === null)
+    throw new AppError("merge.member_invalid", { tableId: args.tableId, field: "partIds" });
   const members = today.merge.members.map((member) => member.tableId);
   for (const partId of args.partIds) {
-    if (!members.includes(partId)) throw new AppError("merge.member_invalid", { tableId: partId, field: "partIds" });
+    if (!members.includes(partId))
+      throw new AppError("merge.member_invalid", { tableId: partId, field: "partIds" });
   }
   const holding = new Set((await holdersOf(tx, args.partIds)).values());
   const expected = new Map(args.expectedParties.map((party) => [party.id, party.revision]));
@@ -82,16 +80,16 @@ async function splitGroup(
     cfg,
     { parties: [...new Set(holders.values())], deliveredTo: members },
     async () => {
-        for (const partyId of losing) {
-          await checkAndBumpParty(
-            tx,
-            partyId,
-            expectedParties.find((party) => party.id === partyId)!.revision,
-            "open",
-          );
-        }
-        if (leaving.length > 0) await leaveForClearing(tx, leaving, nowIso());
-        await leaveAsGroup(tx, merge.joinId, partIds, staying.length >= 2 ? seats : null);
+      for (const partyId of losing) {
+        await checkAndBumpParty(
+          tx,
+          partyId,
+          expectedParties.find((party) => party.id === partyId)!.revision,
+          "open",
+        );
+      }
+      if (leaving.length > 0) await leaveForClearing(tx, leaving, nowIso());
+      await leaveAsGroup(tx, merge.joinId, partIds, staying.length >= 2 ? seats : null);
     },
   );
 }

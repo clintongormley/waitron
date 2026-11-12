@@ -30,7 +30,7 @@ import {
 import { assertZoneTakesNewOrders } from "./zone-closed-times.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
-export type { DepartmentTransferActor,DepartmentTransferReceiver } from "@waitron/module";
+export type { DepartmentTransferActor, DepartmentTransferReceiver } from "@waitron/module";
 
 export interface DepartmentTransferSettings {
   departmentId: string;

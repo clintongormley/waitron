@@ -631,25 +631,24 @@ describe("till-held-orders: moving a counter order to a table", () => {
     ]);
   });
 
-  it("Move to table lists no part of a joined table", async () => {
-    const spare = (inJoinedTable: string | null) => ({
+  it("Move to table lists real tables under their own ids", async () => {
+    const spare = () => ({
       placement: null,
       seats: 2,
       fixed: false,
       takenOff: false,
       joinId: null,
       joinSeats: null,
-      inJoinedTable,
       zoneRevision: 0,
     });
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [labeledOrder],
       tables: [
-        tableRow("c3", "Counter 3", { today: spare("Long table") }),
-        tableRow("c4", "Counter 4", { today: spare("Long table") }),
-        tableRow("c5", "Counter 5", { today: spare("Long table") }),
+        tableRow("c3", "Counter 3", { today: spare() }),
+        tableRow("c4", "Counter 4", { today: spare() }),
+        tableRow("c5", "Counter 5", { today: spare() }),
         tableRow("long", "Long table"),
-        tableRow("stool-2", "Stool 2", { today: spare(null) }),
+        tableRow("stool-2", "Stool 2", { today: spare() }),
       ],
     });
 
@@ -659,7 +658,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
       [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(
         (row) => row.dataset.target,
       ),
-    ).toEqual(["long", "stool-2"]);
+    ).toEqual(["c3", "c4", "c5", "long", "stool-2"]);
   });
 
   it("Move to table lists a table that needs moving but cannot pick it, saying why", async () => {

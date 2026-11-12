@@ -635,40 +635,9 @@ it("explains why an extra cannot move independently in both languages", () => {
   );
 });
 
-it("says a part of a joined table cannot be used, in English and Spanish", () => {
-  expect(codeMessage("table.in_joined_table", "en")).toBe("That table is part of a joined table");
-  expect(codeMessage("table.in_joined_table", "es")).toBe("Esa mesa forma parte de una mesa unida");
-});
-
 it("says a name another table already has, in English and Spanish", () => {
   expect(codeMessage("table.label_taken", "en")).toBe("Another table already has that name");
   expect(codeMessage("table.label_taken", "es")).toBe("Otra mesa ya tiene ese nombre");
-});
-
-it("says each joined-table refusal in English and Spanish", () => {
-  const words: [string, string, string][] = [
-    ["joined_table.not_found", "That table is not a joined table", "Esa mesa no es una mesa unida"],
-    [
-      "joined_table.part_invalid",
-      "That table is no longer part of this joined table",
-      "Esa mesa ya no forma parte de esta mesa unida",
-    ],
-    ["joined_table.split_all", "Leave at least one table joined", "Deja al menos una mesa unida"],
-    [
-      "joined_table.seats_required",
-      "Enter the seats for the joined table",
-      "Indica las plazas de la mesa unida",
-    ],
-    [
-      "joined_table.parts_split_off",
-      "Some of its tables are split off. Reset the table first",
-      "Algunas de sus mesas están separadas. Restablece la mesa primero",
-    ],
-  ];
-  for (const [code, en, es] of words) {
-    expect(codeMessage(code, "en")).toBe(en);
-    expect(codeMessage(code, "es")).toBe(es);
-  }
 });
 
 it("says each refusal of splitting tables off a group in English and Spanish", () => {
@@ -707,40 +676,6 @@ it("says the layout changed under a till, in English and Spanish", () => {
   expect(codeMessage("floor_today.layout_changed", "es")).toBe(
     "El plano ha cambiado. Revisa la sala e inténtalo de nuevo",
   );
-});
-
-it("says Reset table's refusals, and Back's and Take off's on a table split off, in English and Spanish", () => {
-  const words: [string, string, string][] = [
-    ["joined_table.nothing_to_join", "Nothing to reset now", "Ahora no hay nada que restablecer"],
-    [
-      "joined_table.out_of_date",
-      "Its tables have changed. Check and try again",
-      "Sus mesas han cambiado. Revísalo e inténtalo de nuevo",
-    ],
-    [
-      "table.split_off",
-      "That table was split off. Reset its table first",
-      "Esa mesa está separada. Restablece su mesa primero",
-    ],
-  ];
-  for (const [code, en, es] of words) {
-    expect(codeMessage(code, "en")).toBe(en);
-    expect(codeMessage(code, "es")).toBe(es);
-  }
-});
-
-it("says each Reset table refusal in English and Spanish", () => {
-  const words: [string, string, string][] = [
-    [
-      "joined_table.tables_in_group",
-      "Some of its tables are in a group with guests. Split them off first",
-      "Algunas de sus mesas están en un grupo con clientes. Sepáralas primero",
-    ],
-  ];
-  for (const [code, en, es] of words) {
-    expect(codeMessage(code, "en")).toBe(en);
-    expect(codeMessage(code, "es")).toBe(es);
-  }
 });
 
 it("tells staff a department without a tax-agency description cannot sell, and who fixes it, in both languages", () => {

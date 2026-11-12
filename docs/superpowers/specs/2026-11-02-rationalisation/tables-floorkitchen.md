@@ -1,5 +1,7 @@
 > Appendix to [README.md](README.md), the rationalisation design of 2 November 2026: one researcher's proposal for this area, written to the shared rules. Where README.md §5 decides differently, README.md wins.
 
+> 2026-11-12: [fk5 PR B](../../plans/2026-11-11-a1308-fk5-ordinary-groups.md) supersedes the split-origin proposal in §§1.3, 1.8 and 5. The watcher withdrew split_from_table_id, its key, check and index on 2026-11-11 at 17:12; floor_today_split_parts is deleted in the storage fold, with no replacement column. Saved joined designs become ordinary live groups.
+
 # Floor, parties, bookings and kitchen — proposed tables
 
 Area: the floor plan, tables, parties and bookings, the kitchen (stations, courses, tickets,

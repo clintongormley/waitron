@@ -2,15 +2,11 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  floorPlanPlacements,
   floorPlanSets,
   floorPlanTableParts,
   floorPlanTables,
   floorPlans,
-  floorResetTableParts,
-  floorResetTables,
   floorTodayTables,
-  floorTodayZones,
   floorZones,
   newId,
   nowIso,
@@ -771,7 +767,10 @@ describe("a part of a joined table on a layout", () => {
     const table = await longTable();
     for (const date of ["2026-08-20", "2027-01-15"]) {
       const { id } = await book(createdBy, date, table.c4);
-      expect((await scoped((tx) => getBooking(tx, id)))!).toMatchObject({ tableId: table.c4, bookingDate: date });
+      expect((await scoped((tx) => getBooking(tx, id)))!).toMatchObject({
+        tableId: table.c4,
+        bookingDate: date,
+      });
     }
     const count = await db.execute<{ n: number }>(sql`select count(*) as n from bookings`);
     expect(count.rows[0]!.n).toBe(2);
@@ -784,6 +783,9 @@ describe("a part of a joined table on a layout", () => {
     await scoped((tx) => updateBooking(tx, id, { tableId: table.c5 }));
     expect((await scoped((tx) => getBooking(tx, id)))!.tableId).toBe(table.c5);
     await scoped((tx) => updateBooking(tx, id, { bookingDate: "2027-01-15" }));
-    expect((await scoped((tx) => getBooking(tx, id)))!).toMatchObject({ bookingDate: "2027-01-15", tableId: table.c5 });
+    expect((await scoped((tx) => getBooking(tx, id)))!).toMatchObject({
+      bookingDate: "2027-01-15",
+      tableId: table.c5,
+    });
   });
 });

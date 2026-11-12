@@ -63,11 +63,11 @@ const party: TableParty = {
 
 const longTable = (over: Partial<TableState> = {}) =>
   table("long", "Long table", {
-    today: today(10, { }),
+    today: today(10, {}),
     ...over,
   });
 const part = (id: string, label: string, seats: number | null) =>
-  table(id, label, { today: today(seats, { }) });
+  table(id, label, { today: today(seats, {}) });
 const parts = () => [
   part("c3", "Counter 3", 2),
   part("c4", "Counter 4", 6),
@@ -81,7 +81,8 @@ async function mount(props: Partial<TillSplitJoinedDialog> = {}): Promise<TillSp
     name: "Long table",
     guestsMoveTo: groupSplitOf(
       { ...(props.parts ?? parts())[0]!, today: today(10, { joinId: "g" }) },
-      (props.parts ?? parts()).map((each) => ({ ...each,
+      (props.parts ?? parts()).map((each) => ({
+        ...each,
         today: { ...each.today!, joinId: "g" },
         party: props.joined?.party?.tableIds.includes(each.id) ? props.joined.party : each.party,
       })),
@@ -382,7 +383,7 @@ for (const [width, height] of [
 describe("on a group", () => {
   const inGroup = (id: string, label: string, seats: number, over: Partial<TableToday> = {}) =>
     table(id, label, { today: today(seats, { joinId: "g", ...over }) });
-  const splitOff = { };
+  const splitOff = {};
   const bar = inGroup("bar", "Bar", 4);
   const zone = [
     inGroup("c5", "Counter 5", 4, splitOff),

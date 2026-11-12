@@ -475,7 +475,7 @@ describe("spares and taken-off tables", () => {
 
   it("offers every unplaced real table as a spare", () => {
     const part = (id: string, label: string) =>
-      table(id, label, { today: today({ placement: null, }) });
+      table(id, label, { today: today({ placement: null }) });
     const long = table("long", "Long table");
     const stool = table("stool-2", "Stool 2", { today: today({ placement: null }) });
     const zone = [
@@ -595,7 +595,6 @@ describe("Split tables… on a group", () => {
       expect(groupSplitOf(bar, seated)!.guestsMoveTo(["bar"])).toEqual([]);
     });
   });
-
 });
 
 describe("today's names", () => {
@@ -730,7 +729,15 @@ describe("today's names on a drop and a group split", () => {
 
 it("draws an ordinary table from the new wire shape and offers ordinary actions", () => {
   const plain = table("member", "Counter 3");
-  for (const key of ["inJoinedTable", "joined", "splitOffFrom"] as const) delete (plain.today as unknown as Record<string, unknown>)[key];
+  for (const key of ["inJoinedTable", "joined", "splitOffFrom"] as const)
+    delete (plain.today as unknown as Record<string, unknown>)[key];
   expect(onTodaysPlan(plain)).toBe(true);
-  expect(sheetActions(plain)).toEqual(["join-with", "rotate", "seats", "rename", "back", "take-off"]);
+  expect(sheetActions(plain)).toEqual([
+    "join-with",
+    "rotate",
+    "seats",
+    "rename",
+    "back",
+    "take-off",
+  ]);
 });

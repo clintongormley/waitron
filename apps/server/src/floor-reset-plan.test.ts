@@ -559,10 +559,7 @@ describe("targetsFromMaster", () => {
 
 describe("movesTable", () => {
   const at = (x: number) => ({ x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 });
-  const drawn = (
-    x: number,
-    over: { takenOff?: boolean; inMerge?: boolean;  } = {},
-  ) => ({
+  const drawn = (x: number, over: { takenOff?: boolean; inMerge?: boolean } = {}) => ({
     placement: at(x),
     takenOff: false,
     inMerge: false,

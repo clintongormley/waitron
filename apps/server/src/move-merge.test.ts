@@ -1353,7 +1353,9 @@ describe("A803 split: what the kitchen is told", () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       try {
         const command = await commandFor(v, partyId);
-        await inTx(v, (tx) => moveGuests(tx, v.cfg, partyId, second, { ...command, otherPartyId: null }));
+        await inTx(v, (tx) =>
+          moveGuests(tx, v.cfg, partyId, second, { ...command, otherPartyId: null }),
+        );
       } finally {
         vi.useRealTimers();
       }

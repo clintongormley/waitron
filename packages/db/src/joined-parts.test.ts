@@ -1,30 +1,16 @@
-import { eq, inArray, sql, type SQL } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  joinedOutOfService,
-  joinedTableApart,
-  needsMoving,
-  savedPart,
-  stillJoinedPart,
-} from "./joined-parts.js";
+import { needsMoving } from "./joined-parts.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { diningTables } from "./schema/dining-tables.js";
 import {
-  floorPlanPlacements,
-  floorPlanSets,
-  floorPlanTableParts,
-  floorPlanTables,
-  floorPlans,
   floorResetTableParts,
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
-  floorTodaySplitParts,
   floorTodayTables,
-  floorTodayZones,
 } from "./schema/floor-plans.js";
 import { floorZones } from "./schema/floor-zones.js";
-import { parties, partyTables } from "./schema/parties.js";
 import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { venueLocationId } from "./venue.js";
@@ -41,8 +27,6 @@ const COUNTER_3_ROW = "dddddddd-0000-4000-8000-000000000003";
 const COUNTER_4_ROW = "dddddddd-0000-4000-8000-000000000004";
 const COUNTER_5_ROW = "dddddddd-0000-4000-8000-000000000005";
 const PLAIN_ROW = "dddddddd-0000-4000-8000-000000000009";
-const WAITING_PART_ROW = "dddddddd-0000-4000-8000-000000000006";
-const OPERATOR = "99999999-0000-4000-8000-000000000001";
 
 type Db = ReturnType<typeof useVenueDb>["db"];
 

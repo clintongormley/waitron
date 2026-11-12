@@ -1,5 +1,7 @@
 # A878 "Leave it here": clear a table's Needs moving for today — implementation plan
 
+> 2026-11-12: the ordinary-groups change supersedes synthetic live joined tables, split-origin rows and Reset table below. See [fk5 PR B](../plans/2026-11-11-a1308-fk5-ordinary-groups.md). Saved design membership and the remaining floor storage work still apply.
+
 > Superseded 2026-11-11 by [fk4-hands](2026-11-11-a1308-fk4-hands.md): Mark moved, Back to its saved place and Reset table accept occupied places. Automatic reset keeps its place check. The refusal-only Leave it here offer is retired.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development

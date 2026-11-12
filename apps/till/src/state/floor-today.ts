@@ -195,9 +195,7 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
   if (draggedGroup.members.length > 1) return { kind: "say", message: t("floor.drop_merge") };
 
   const both = [...draggedGroup.members, ...targetGroup.members];
-  const heading =
-    targetGroup.members[0]!.today?.joinName ??
-    mergeLabel(both.map(shownName));
+  const heading = targetGroup.members[0]!.today?.joinName ?? mergeLabel(both.map(shownName));
   const dropped: TodayPlacement = { ...from, x: drop.x, y: drop.y };
   const nearest = nearestMember(targetGroup.members, centre(dropped));
   const fixedSide = draggedGroup.fixed || targetGroup.fixed;
@@ -308,15 +306,9 @@ export function needsMovingToday(table: TableState): boolean {
 }
 
 export function onTodaysPlan(table: TableState): boolean {
-  return (
-    table.today !== null &&
-    table.today.placement !== null &&
-    !table.today.takenOff
-  );
+  return table.today !== null && table.today.placement !== null && !table.today.takenOff;
 }
 
-/** Today's tables with no place, not taken off, not fixed and in no joined table: what Add a spare
- * table offers. */
 export function sparesOf(zoneTables: readonly TableState[]): TableState[] {
   return zoneTables.filter(
     (table) =>
@@ -346,8 +338,6 @@ export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: nu
 export type SheetAction =
   "join-with" | "split-off" | "rotate" | "seats" | "rename" | "back" | "take-off";
 
-/** Slice 4 decisions 12 and 16: the details sheet's changes for today that apply to `table`, in
- * order. Reset table is offered only when `zoneTables` holds the joined table and its split-off tables. */
 export function sheetActions(
   table: TableState,
   _zoneTables: readonly TableState[] = [],
@@ -370,8 +360,6 @@ export function sheetActions(
   return applies.filter(([, offered]) => offered).map(([action]) => action);
 }
 
-/** Split tables… on `table` splits its group, as the server's `splitOff` decides: a joined table
- * with a table still joined splits as a joined table even in a group. */
 export function splitsGroup(table: TableState): boolean {
   return table.today?.joinId != null;
 }
@@ -389,13 +377,6 @@ export interface GroupSplit {
   strandsGuests(ticked: readonly string[]): boolean;
 }
 
-/** Split tables… on a table in a group: its members in number order, its name, and whether the
- * tables `staying` need seats. None are asked when no member has a party (as `splitGroup`'s holders
- * check in apps/server/src/floor-today-split-group.ts) and what stays is every table split off one
- * joined table with none of its tables still joined, none with food on its way. Left to the server:
- * a part held by a party when the joined table went live, which the till's tables do not show, and
- * whether each stands where that joined table's layout puts it. Its seats refusal makes the window
- * ask Seats. */
 export function groupSplitOf(
   table: TableState,
   zoneTables: readonly TableState[],

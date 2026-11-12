@@ -57,7 +57,7 @@ describe.each(["light", "dark"] as const)("booking Save accessibility (%s)", (th
     )) as BookingForm;
     el.open = true;
     el.defaultDate = "2026-10-14";
-    el.tableRefusal = "table.in_joined_table";
+    el.tableRefusal = "table.not_found";
     await el.updateComplete;
     el.shadowRoot!.querySelector("[data-test=contact-phone]")!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "600100200" } }),

@@ -265,31 +265,6 @@ on the plan at its kept size, shows no visible name (A503 part 3's look, shots
 is seen more. A672 decided its handles: a selected 2 × 2 shows its four corners and no side dots.
 Next: its name waits on the same decision as A561, in `wt-floor-plan-canvas`.
 
-## A563. The till says "part of a joined table" for a joined table that has come apart
-
-**A563 (2026-10-13).** Since #1604 `table.in_joined_table` also refuses a joined table with fewer
-than two tables still joined, and the till shows the same sentence ("That table is part of a joined
-table") for it, which is not accurate. Next: give that case its own wording, or its own code if the
-server should say which case it is.
-
-## A591. A split down to one loses a table that had guests when its joined table went live
-
-**A591 (2026-10-13).** A table that holds guests when its joined table is put on the map is not a
-part still joined (`stillJoinedPart`, `packages/db/src/joined-parts.ts`), and splitting the joined
-table down to one (`splitJoinedTable`, `apps/server/src/floor-today-split.ts`) writes split rows
-only for the parts still joined. A room's reset no longer puts a joined table on the map while one of
-its tables has guests: it leaves the whole group waiting (the case "leaves Long table's whole group
-waiting: Long table cannot be put on the map", `apps/server/src/floor-today-reset-table.test.ts`).
-Reset table still does. A throwaway case run on A504's branch (2026-10-18), built on that file's
-`longAroundHeldCounter3`: Long table over Counter 4 and 5, guests at Counter 3, a layout joining
-Counter 3 into Long table, the room's reset (the group waits), Counter 5 split off, Reset table
-taking back Counter 4 and 5 (Long table back while Counter 3's guests stay), then Counter 5 split off
-again. The split wrote rows for Counter 4 and 5 only. Once Counter 3's party finished and the zone
-caught up, Counter 3 had no place on today's map and seating it was refused `table.in_joined_table`;
-a further Reset table taking back Counter 4 and 5 left it so. Next: write a split row for such a
-table in the split down to one, as `writeMerge` (`apps/server/src/floor-today-merges.ts`) does for a
-push into a group.
-
 ## A592. A party that joins a group's table names the group's other tables in random order
 
 **2026-10-14 — A618:** The five reads now break same-time ties by writing order. Number order is
@@ -305,8 +280,7 @@ The original measurement below describes the reads before A618; no writer change
 same millisecond, so their order on the bill falls to the random id. Seen in A579 part 3a: guests
 at Long table, Long table dragged onto a Bar and Stool group, read "Bar, Stool, …" 13 times in 15
 and "Stool, Bar, …" twice. That joinMergeMembers predates part 3a is read from `git log`, not run
-on main. Next: give each table the group adds a later `joined_at` in number order, as `passGuests`
-does (`apps/server/src/floor-today-parts.ts`). Seating a party at a group has the same tie
+on main. Next: give each table the group adds a later `joined_at` in number order, by their table labels. Seating a party at a group has the same tie
 (`seatMergeMembers`, same file as `joinMergeMembers`): A579 part 3b's moved notice read "Counter 4,
 Counter 3, Counter 5" in one run.
 
@@ -316,9 +290,7 @@ Counter 3, Counter 5" in one run.
 leaves the rest of its group free (`apps/server/src/move-bill.ts`, the `openParty` call), so a party
 can hold some of a group's tables. Seating, the party join and Move guests all treat a group whole.
 Found by A579 part 3b's review: Split tables… ticking that table would have left the party open with
-no table; it is now refused `merge.strands_party`. Reset table (A579 part 4b) keeps a table split off a
-joined table apart while a party holds any table of its group, so a group such a party holds only part of
-is not ended under it. Next: decide whether the moved bill's party takes the
+no table; it is now refused `merge.strands_party`. Next: decide whether the moved bill's party takes the
 whole group, as seating at one of its tables does.
 
 Such a party can also lose a group's today's name with no MOVED slip (A581 part 2's review,
@@ -327,39 +299,6 @@ the code has been re-read, not re-run): Move guests onto a table another party h
 group can end the group (`leaveMergeOf`) after `combineAt` has queued its slips (`moveGuests`,
 `apps/server/src/table-actions.ts`). It needs a party holding part of a group, so taking the whole
 group should remove it (reasoned, not tested).
-
-## A603. Reset table does not wait for food on its way to a group's other tables, nor for a table a module refuses to remove
-
-**A603 (2026-10-13).** Reset table keeps a split-off table apart for guests at it or anywhere in its
-group, and for food on its way to the table itself (`resetTable`,
-`apps/server/src/floor-today-reset-table.ts`). From reading, not running: food on its way to another
-table of the group does not keep it apart, and neither does a table a module refuses to remove, which
-the floor-wide reset counts as waiting (`refusedByAModule` in `apps/server/src/floor-today-store.ts`).
-Raised in A579 part 4b's finish review and its fix report; neither changed. Next: reproduce each in a
-test, then decide whether Reset table waits as the floor-wide reset does.
-
-## A598. A table held by guests when its joined table went live is neither joined nor split off
-
-**A598 (2026-10-13).** Split tables… on a joined table leaves a table that a party held when the
-joined table went live out of its split-off list, while a merge records such a table as split off
-(`splitInUse`, `apps/server/src/floor-today-merges.ts`). A group of the other split-off tables then
-never rejoins (`rejoining` needs every part split off, `apps/server/src/floor-today-split-group.ts`),
-but the till's data cannot show why, so its Split tables… window asks no Seats and the server refuses
-`merge.seats_required`; the window then asks Seats (A579 part 3c). A room's reset no longer reaches
-this state; Reset table does: the throwaway case described under A591 split Counter 5 off Long table
-after Reset table had put it back around Counter 3's guests, and the split rows named Counter 4 and 5
-only. Nothing after the split rows was re-run on that path. Same shape as A591. Next:
-record the held table as split off on that path too, as the merge does.
-
-## A593. A table the reset turns into a joined table inside a waiting group keeps its old outline
-
-**A593 (2026-10-13).** Bar pushed onto an ordinary Long table, guests seated, then a layout makes
-Long table of Counter 3, 4 and 5: the reset makes Long a joined table while the seated group waits, and
-Long keeps today's 8-wide row rather than its joined outline. A split that leaves two counters joined
-then lays them side by side from Long's left edge (the case in `apps/server/src/floor-catch-up.test.ts`
-matched by `-t "the reset leaves in one"` reads Long 16 wide after the split). Seen by A579 part 3a's
-finish-branch worker (#1626) and left as it is. Next: decide whether the reset should apply the joined
-outline when the group ends, or the split should lay out from the layout's outline.
 
 ## A565. A reset does not wait for food on its way to an ordinary table
 
@@ -393,23 +332,6 @@ growth then the same shrink need not put the table back
 Owner question asked 2026-10-16: (a) keep it so, which is what A672 built; or (b) let a saved
 position go below 0 so the turned outline can touch the edge, a separate job in which the database
 and the server accept a wider range. Pictures were removed from the repository on 2026-11-02. Next: the owner's answer.
-
-## A575. Reset table's window: two things seen in #1608's look
-
-**A575 (2026-10-13).** Wording and layout calls for the owner, seen in #1608's screenshots
-(`~/waitron-campaign-c/a503-4-shots`), neither a defect:
-
-- The Spanish `joined_table.out_of_date` sentence ("Sus mesas han cambiado. Revísalo e inténtalo de
-  nuevo", `apps/till/src/i18n/codes.ts`) wraps to two lines at 390 px. A579 part 4b's look did not
-  shoot it; the three of its four new floor sentences it shot (all but `floor.table_in_group`, the one-table
-  form) fit at 390 px in Spanish
-  (`~/waitron-campaign-c/a579-4b-shots`).
-- In the Reset table window (the Join again window before A579) the lines naming each table that
-  stays apart sit below the Seats field (`apps/till/src/widgets/reset-table-dialog.ts`), so the
-  reason is read after the field it explains; A579 part 4b's look found them there still.
-
-Take off for today on a joined table with tables split off, the third point, is allowed by the
-owner's A579 design and left as it is.
 
 ## A508. A table's QR code: order, call a waiter, ask for the bill or pay
 
@@ -1122,19 +1044,6 @@ The automatic catch-up decides whether a table's new place is taken in `catchUpP
 `catchUpDue`/`placeTaken` (`apps/server/src/floor-today-store.ts`). Only their geometry is pinned
 across the two (`apps/server/src/reset-row-moves.test.ts`). Next: share or test the exclusions too.
 Manual actions no longer apply this rule. Left open by A504.
-
-## A879. After Leave it here, bookings and the dashboard's table list still follow the last reset's copy
-
-**A879 (2026-10-18).** Leave it here (A878) leaves a joined group as today's map has it, but whether
-a table is a saved part is still read from what the zone's last reset copied (`savedPart`,
-`packages/db/src/joined-parts.ts`), not from today's map. Where the new layout joins 4 and 5 and
-staff leave 4 and 5 standing apart, the dashboard's table list (`GET /api/tables`,
-`apps/server/src/tables.ts`) leaves out 4 and 5 and lists the off-map 4+5, and a booking for today
-at 4 is refused `table.in_joined_table` (`requireActiveTable`, `packages/bookings/src/bookings.ts`)
-until the next reset. A878's plan review ran both (experiments P3 and P4, 2026-10-18; the plan's
-reader table, [plan](../superpowers/plans/2026-10-18-a878-leave-it-here.md)). It was already so
-while 4 and 5 needed moving, so Leave it here only makes it last until the next reset. Next: decide
-whether those reads should follow today's map once a group is left.
 
 ## A1330. A step started by a serving comes back after its bill moves (seen in A803 slice 4b's re-read; the same with the service-step code before that slice's fix).
 
@@ -1868,9 +1777,6 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   lane C's `a292-shots/`): in the dark theme an available plain tile is only about 1.10:1 lighter
   than a sold-out one, and in the light theme a pale stripe shows mostly through the dark line
   beside it.
-- **A575. Reset table's window: two things seen in #1608's look (2026-10-13).** A Spanish wrap,
-  and where the stays-apart lines sit.
-  [Detail](till.md#a575-reset-tables-window-two-things-seen-in-1608s-look)
 - **A856. A table that needs moving looks like one that needs clearing on the till's map
   (2026-10-18).** It takes the `clearing` fill; its words are on the list card, the Mark moved
   question and its accessible name. A marker of its own needs a new token pair or badge in
@@ -2049,10 +1955,6 @@ Printer identity is separate from the till route inventory.
 
 4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A591. A split down to one loses a table that had guests when its joined table went live
-  (2026-10-13).** It is off the map once they leave. Reset table still reaches it; a room's reset
-  no longer does. Found by A579 part 3a's review.
-  [Detail](till.md#a591-a-split-down-to-one-loses-a-table-that-had-guests-when-its-joined-table-went-live)
 - **A592. A party that joins a group's table names the group's other tables in random order
   (2026-10-13).** Group members are written in table-id order; number order remains open. A618
   makes same-time reads follow writing order. Seen in A579 part 3a's tests.
@@ -2061,19 +1963,10 @@ Printer identity is separate from the till route inventory.
   holds part of the group, and can lose the group's today's name with no MOVED slip. Found by A579
   part 3b's review.
   [Detail](till.md#a594-moving-a-bill-to-a-free-table-in-a-group-seats-only-that-table)
-- **A598. A table held by guests when its joined table went live is neither joined nor split off
-  (2026-10-13).** So the till cannot see that the rest will not rejoin; it asks Seats only after the
-  server refuses. Reset table still reaches it. Found by A579 part 3c's review.
-  [Detail](till.md#a598-a-table-held-by-guests-when-its-joined-table-went-live-is-neither-joined-nor-split-off)
-
 ## Bundle: One rule for what holds a table back at a reset
 
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A603. Reset table does not wait for food on its way to a group's other tables, nor for a table a
-  module refuses to remove (2026-10-13).** The floor-wide reset waits for the second. Found reading,
-  not run, in A579 part 4b's reviews.
-  [Detail](till.md#a603-reset-table-does-not-wait-for-food-on-its-way-to-a-groups-other-tables-nor-for-a-table-a-module-refuses-to-remove)
 - **A565. A reset does not wait for food on its way to an ordinary table (2026-10-13).** Dates
   from floor plans slice 1; #1604 made only split groups wait.
   [Detail](till.md#a565-a-reset-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
@@ -2246,13 +2139,6 @@ Printer identity is separate from the till route inventory.
 - **A857. A booking can take a table the evening's layout puts away (2026-10-18).** Nothing compares
   the table with the layout due at the booking's time.
   [Detail](till.md#a857-a-booking-can-take-a-table-the-evenings-layout-puts-away-2026-10-18)
-- **A879. After Leave it here, bookings and the dashboard's table list still follow the last
-  reset's copy, not today's map (2026-10-18).** Where the new layout joins 4 and 5, the dashboard
-  list leaves out 4 and 5 and lists the off-map 4+5, and a booking today at 4 is refused
-  `table.in_joined_table`, until the next reset. It was already so while they needed moving.
-  Left open by A878.
-  [Detail](till.md#a879-after-leave-it-here-bookings-and-the-dashboards-table-list-still-follow-the-last-resets-copy)
-
 ## Bundle: A bill another till moved, merged or part-paid
 
 2 entries, size M.
@@ -2318,9 +2204,6 @@ Printer identity is separate from the till route inventory.
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
   unmeasured screen-reader activation and two wordings. Left open by A429 slice 3.
   [Detail](till.md#a470--the-tills-floor-map-follow-ups)
-- **A563. The till says "part of a joined table" for a joined table that has come apart
-  (2026-10-13).** `table.in_joined_table` covers both cases since #1604.
-  [Detail](till.md#a563-the-till-says-part-of-a-joined-table-for-a-joined-table-that-has-come-apart)
 - **A1106. The till's List cards say "1 items".** Seen, 2026-10-25 (the A797 slice 1 look,
   `h-list-dining-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): Window 1's card reads
   "€6.50, 1 items". Fix: a singular wording for a count of 1.

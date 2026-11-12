@@ -31,10 +31,7 @@ export type { SQL } from "drizzle-orm";
 export { runMigrations } from "./migrate.js";
 export { tableExists } from "./table-exists.js";
 export { tableInService } from "./table-in-service.js";
-export {
-  needsMoving,
-  resetRowMoves,
-} from "./joined-parts.js";
+export { needsMoving, resetRowMoves } from "./joined-parts.js";
 export type { MigrationDatabase, MigrationOptions } from "./migrate.js";
 export { claimRows } from "./job-claim.js";
 export type { ClaimSpec } from "./job-claim.js";

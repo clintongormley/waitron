@@ -37,9 +37,9 @@ export interface LiveTable {
   tied: boolean;
   /** It has a today's row. */
   hasToday: boolean;
-  /** It is in a today's merge holding a waiting table: held, refused, or in a waiting split group. */
+
   mergedWithHeld: boolean;
-  /** It is in a split group, a joined table and the parts split off it today, one of whose members waits or has food on its way. */
+
   /** It needs clearing, so it waits as a held table does, and is seeded as one is. */
   clearing: boolean;
   /** It is in a joined group of the reset, a joined table and its parts, with a waiting member. */
@@ -77,7 +77,7 @@ export function planReset(input: {
   takenElsewhere: ReadonlySet<string>;
   /** Short-name keys of the venue's live tables in other zones. */
   shortNameKeysElsewhere: ReadonlySet<string>;
-  /** Targets with no table yet, a joined table to create whose group waits. */
+
   waitingToCreate?: ReadonlySet<Target>;
 }): ResetPlan {
   const live = new Map(input.live.map((table) => [table.id, table]));

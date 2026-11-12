@@ -39,10 +39,7 @@ function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
 }
 
-async function requireActiveTable(
-  tx: Transaction,
-  tableId: string,
-): Promise<void> {
+async function requireActiveTable(tx: Transaction, tableId: string): Promise<void> {
   const [table] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)

@@ -54,11 +54,7 @@ import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js
 import { leaveMerges } from "./floor-today-merges.js";
 import { withMovedSlips } from "./moved-slips.js";
 import { holdersOf } from "./parties.js";
-import {
-  refuseUnfree,
-  refuseUnmovable,
-  todayOf,
-} from "./floor-today-table.js";
+import { refuseUnfree, refuseUnmovable, todayOf } from "./floor-today-table.js";
 import { refusedByAModule, removeLiveTables, tablesTied } from "./table-removal.js";
 import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
@@ -397,8 +393,6 @@ async function catchUpPass(
     .leftJoin(groupPart, eq(groupPart.id, floorResetTableParts.partResetTableId))
     .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
   if (zoneRows.length === 0) throw new AppError("zone.not_found", { zoneId });
-  // A pending joined row's group, by reset row, so a joined table still to create is in it too.
-  // Once the joined table's row is applied, the group no longer waits.
   const groupOf = new Map<string, ResetGroup>();
   const byId = new Map<string, NonNullable<(typeof zoneRows)[number]["row"]>>();
   for (const { row, partRowId, partTableId } of zoneRows) {
@@ -516,7 +510,12 @@ async function catchUpPass(
       : [];
   });
   const waiting = new Set([...held, ...refused, ...clearing, ...otherGroup]);
-  const foodComing = await foodComingTo(tx, groups.flatMap((group) => group.rows.flatMap((row) => row.tableId === null ? [] : [row.tableId])));
+  const foodComing = await foodComingTo(
+    tx,
+    groups.flatMap((group) =>
+      group.rows.flatMap((row) => (row.tableId === null ? [] : [row.tableId])),
+    ),
+  );
   const removing = new Set(targets.filter((target) => target.remove).map((t) => t.tableId));
   const tied = await tablesTied(
     tx,
@@ -911,12 +910,6 @@ function mergesOf(
     .where(inArray(floorTodayJoinTables.tableId, [...zoneTableIds]));
 }
 
-/**
- * Grows `waiting` until it is closed under every tie: a merge with a waiting table waits whole, so
- * does a split group with a waiting member or a member in `foodComing`, and so does a joined group
- * of the reset with a waiting member. Applying any table of one would move a waiting table or one
- * food is on its way to.
- */
 function waitingTogether(
   merges: readonly { joinId: string; tableId: string }[],
   joinedGroups: readonly ResetGroup[],

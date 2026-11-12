@@ -1,4 +1,6 @@
 > 2026-10-17, A766: `wt-floor-map` sets `--floor-map-ratio` on its own host and the till only
+
+> 2026-11-12: the ordinary-groups change supersedes synthetic live joined tables, split-origin rows and Reset table below. See [fk5 PR B](../plans/2026-11-11-a1308-fk5-ordinary-groups.md). Saved design membership and the remaining floor storage work still apply.
 > reads it, and `wt-table-drag-end`'s `targetId` is the table the drop-target highlight marks, not
 > the table under the release point, and a fixed table's `drag-link` line goes to that marked
 > table. See [the A766 plan](2026-10-17-a766-till-floor-grows-on-drag.md).

@@ -993,21 +993,15 @@ describe("till-floor-screen: today's names", () => {
     expect(options.map((option) => option.label)).toEqual(["Window", "Counter 5"]);
   });
 
-  it("Split tables… on a renamed joined table is headed with its name for today", async () => {
-    const part = (id: string, label: string) => ({
-      ...planned(id, 0, { placement: null, }),
-      label,
-      shortName: label,
-    });
-    const long = {
-      ...planned("tl", 2, {
-        name: "Window table",
-      }),
-      label: "Long table",
-      shortName: "Long table",
-    };
-    const el = await mount([long, part("t3", "Counter 3"), part("t6", "Counter 6")], stubApi());
-    await press(el, "tl", "split-off");
+  it("Split tables… on a named group is headed with its name for today", async () => {
+    const el = await mount(
+      [
+        planned("t3", 2, { joinId: "J", joinSeats: 4, joinName: "Window table" }),
+        planned("t6", 4, { joinId: "J", joinSeats: 4, joinName: "Window table" }),
+      ],
+      stubApi(),
+    );
+    await press(el, "t3", "split-off");
     expect(splitWindow(el).name).toBe("Window table");
   });
 

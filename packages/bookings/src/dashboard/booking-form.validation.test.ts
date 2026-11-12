@@ -75,7 +75,7 @@ describe.each([
       setLocale(locale);
       const el = await mount();
       await validExceptName(el);
-      el.tableRefusal = "table.in_joined_table";
+      el.tableRefusal = "table.not_found";
       await el.updateComplete;
       const phone = field(el, "contact-phone");
       await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
@@ -87,7 +87,7 @@ describe.each([
       expect(await bottom(el)).toBe(sentence);
       expect(field(el, "contact-name").error).toBe(nameError);
       expect(el.shadowRoot!.querySelector("wt-combobox")!.error).toBe(
-        codeMessage("table.in_joined_table"),
+        codeMessage("table.not_found"),
       );
       await expectDisabled(el, true);
       await change(el, "contact-name", "Morgan");

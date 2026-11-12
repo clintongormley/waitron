@@ -50,15 +50,25 @@ function table(id: string, label: string, x: number, over: Partial<TableToday> =
 }
 
 const longTable = (parts = ["c3", "c4", "c5"], _splitOff: string[] = []) =>
-  table("c3", "Counter 3", 10, { joinId: parts.length >= 2 ? "g" : null, joinSeats: 10, joinName: "Long table" });
+  table("c3", "Counter 3", 10, {
+    joinId: parts.length >= 2 ? "g" : null,
+    joinSeats: 10,
+    joinName: "Long table",
+  });
 const part = (id: string, label: string) =>
   table(id, label, id === "c4" ? 12 : 14, { joinId: "g", joinSeats: 10, joinName: "Long table" });
 const floor = () => [longTable(), part("c4", "Counter 4"), part("c5", "Counter 5")];
-const splitDownToNone = () => floor().map((each) => ({ ...each, today: { ...each.today!, joinId: null, joinName: null } }));
-const c5SplitOff = () => floor().map((each) => each.id === "c5" ? { ...each, today: { ...each.today!, joinId: null, joinName: null } } : each);
-const twoJoined = () => [...floor(),
+const splitDownToNone = () =>
+  floor().map((each) => ({ ...each, today: { ...each.today!, joinId: null, joinName: null } }));
+const c5SplitOff = () =>
+  floor().map((each) =>
+    each.id === "c5" ? { ...each, today: { ...each.today!, joinId: null, joinName: null } } : each,
+  );
+const twoJoined = () => [
+  ...floor(),
   table("b1", "Bar 1", 40, { joinId: "h", joinName: "Bar table" }),
-  table("b2", "Bar 2", 42, { joinId: "h", joinName: "Bar table" })];
+  table("b2", "Bar 2", 42, { joinId: "h", joinName: "Bar table" }),
+];
 
 function stubApi() {
   return {
@@ -232,7 +242,7 @@ describe("till-floor-screen: splitting a saved ordinary group", () => {
     el.tables = [
       longTable(["c3", "c4"], ["c5"]),
       part("c4", "Counter 4"),
-      table("c5", "Counter 5", 30, { }),
+      table("c5", "Counter 5", 30, {}),
     ];
     await settle(el);
     expect(windowOf(el)!.parts.map((each) => each.id)).toEqual(["c3", "c4"]);
@@ -276,9 +286,9 @@ describe("till-floor-screen: splitting a saved ordinary group", () => {
     await openSplit(el);
 
     el.tables = [
-      table("c3", "Counter 3", 10, { }),
-      table("c4", "Counter 4", 20, { }),
-      table("c5", "Counter 5", 30, { }),
+      table("c3", "Counter 3", 10, {}),
+      table("c4", "Counter 4", 20, {}),
+      table("c5", "Counter 5", 30, {}),
     ];
     await settle(el);
     expect(windowOf(el)).toBeNull();
