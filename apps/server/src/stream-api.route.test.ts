@@ -830,6 +830,84 @@ describe("stream settings routes", () => {
     }
   });
 
+  it("refuses bucket settings when a pair link commits during the probe, saving nothing", async () => {
+    await clearBucket();
+    const { app, reload } = harness(
+      {
+        probe: vi.fn(async () => {
+          await withNodeTransaction(suite.node, (tx) =>
+            writePairLinkTx(tx, RING, nodeId, {
+              role: "streams",
+              state: "pending",
+              peerNodeId: "00000000-0000-4000-8000-0000000000aa",
+              peerPublicKey: "pub",
+              storeUrl: "https://box-7777.waitron.local:7443",
+              venueId: VENUE_ID,
+              accessKeyId: "spare-access-key",
+              secretAccessKey: "spare-secret-key",
+            }),
+          );
+          return { ok: true as const };
+        }),
+      },
+      "recovery-key-one-strong",
+    );
+    try {
+      const cookie = await login(app);
+      const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "backup.spare_stream_active" } });
+      expect(reload).not.toHaveBeenCalled();
+      expect(await storedBucket()).toBeNull();
+    } finally {
+      await withNodeTransaction(suite.node, (tx) => deletePairLinkTx(tx, nodeId));
+    }
+  });
+
+  it("waits at its final step for a join that holds node.db's lock, then refuses the link it wrote", async () => {
+    await clearBucket();
+    // The join's shape: under node.db's lock it has checked for bucket settings and found none,
+    // and writes its link only once released.
+    let entered!: () => void;
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => (entered = resolve));
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const joining = withNodeTransaction(suite.node, async (tx) => {
+      entered();
+      await gate;
+      await writePairLinkTx(tx, RING, nodeId, {
+        role: "streams",
+        state: "pending",
+        peerNodeId: "00000000-0000-4000-8000-0000000000aa",
+        peerPublicKey: "pub",
+        storeUrl: "https://box-7777.waitron.local:7443",
+        venueId: VENUE_ID,
+        accessKeyId: "spare-access-key",
+        secretAccessKey: "spare-secret-key",
+      });
+    });
+    await ready;
+    const { app, deps, reload } = harness({}, "recovery-key-one-strong");
+    // A save that stored its settings without waiting for the lock releases the join at once, so
+    // the join's link lands after them; one that waits is released by the timer.
+    credentialWrites.onPut = () => release();
+    try {
+      const cookie = await login(app);
+      const saving = app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+      await vi.waitFor(() => expect(deps.sealedState.refresh).toHaveBeenCalled());
+      setTimeout(release, 50);
+      const res = await saving;
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "backup.spare_stream_active" } });
+      expect(reload).not.toHaveBeenCalled();
+      expect(await storedBucket()).toBeNull();
+    } finally {
+      release();
+      await joining;
+      await withNodeTransaction(suite.node, (tx) => deletePairLinkTx(tx, nodeId));
+    }
+  });
+
   it("switching off removes the bucket and stops streaming", async () => {
     const { app, reload, seenByReload } = harness({}, "recovery-key-one-strong");
     const cookie = await login(app);

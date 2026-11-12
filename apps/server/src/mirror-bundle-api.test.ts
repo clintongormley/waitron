@@ -1363,6 +1363,100 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(await reservedAndListed()).toEqual(before);
     });
 
+    it("refuses a join when bucket settings are saved after its early refusals, reserving nothing and writing no link", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated);
+      const before = await reservedAndListed();
+      pause.beforeModuleConfigRead = async () => {
+        await withTransaction(db, (tx) =>
+          putCredential(tx, RING, {
+            purpose: "backup.stream",
+            value: streamSettingsPayload({
+              venueId: "venue",
+              bucket: {
+                endpoint: "https://s3.example.test",
+                region: "eu-west-1",
+                bucket: "venue-bucket",
+                prefix: "",
+                accessKeyId: "bucket-access-key",
+                secretAccessKey: "bucket-secret-key",
+              },
+            }),
+          }),
+        );
+      };
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(pause.beforeModuleConfigRead).toBeUndefined();
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.bucket_stream_active", params: {} },
+      });
+      expect(await reservedAndListed()).toEqual(before);
+      expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
+    });
+
+    it("waits for a bucket Save that holds node.db's lock, then refuses the settings it stored", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated);
+      const before = await reservedAndListed();
+      // Bucket Save's shape: under node.db's lock it has found no pair link, and stores its
+      // settings only once released. A join that checks without waiting for the lock has done so
+      // by the time the timer releases the save.
+      let entered!: () => void;
+      let release!: () => void;
+      const ready = new Promise<void>((resolve) => (entered = resolve));
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const saving = withNodeTransaction(suite.node, async () => {
+        entered();
+        await gate;
+        await withTransaction(db, (tx) =>
+          putCredential(tx, RING, {
+            purpose: "backup.stream",
+            value: streamSettingsPayload({
+              venueId: "venue",
+              bucket: {
+                endpoint: "https://s3.example.test",
+                region: "eu-west-1",
+                bucket: "venue-bucket",
+                prefix: "",
+                accessKeyId: "bucket-access-key",
+                secretAccessKey: "bucket-secret-key",
+              },
+            }),
+          }),
+        );
+      });
+      await ready;
+      pause.beforeModuleConfigRead = async () => {
+        setTimeout(release, 50);
+      };
+
+      let res: Response;
+      try {
+        res = await post(app, {
+          personId: adminPersonId,
+          password: ADMIN_PASSWORD,
+          ...validStandby(),
+        });
+      } finally {
+        release();
+        await saving;
+      }
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.bucket_stream_active", params: {} },
+      });
+      expect(await reservedAndListed()).toEqual(before);
+      expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
+    });
+
     it("refuses a join while the venue holds stream settings this box cannot open, as it does readable ones", async () => {
       const { designated, adminPersonId } = await setupVenue();
       const app = mountApp(designated);

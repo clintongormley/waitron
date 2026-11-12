@@ -1,6 +1,12 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
+import {
+  withNodeTransaction,
+  withTransaction,
+  type Database,
+  type NodeDatabase,
+  type NodeTransaction,
+} from "@waitron/db";
 import {
   credentialRevision,
   deleteCredential,
@@ -171,6 +177,12 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     }
   };
 
+  const refuseWhilePaired = async (node: NodeDatabase | NodeTransaction): Promise<void> => {
+    if ((await readPairLink(node, deps.nodeId)) !== null) {
+      throw new AppError("backup.spare_stream_active", {});
+    }
+  };
+
   const heldKeyOrRefuse = async (): Promise<string | undefined> => {
     const held = await deps.readRecoveryKey();
     if (held === undefined && deps.isManagedByEnvironment()) {
@@ -248,9 +260,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       await authorize(c);
       guardPrimary();
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
-      if ((await readPairLink(deps.node, deps.nodeId)) !== null) {
-        throw new AppError("backup.spare_stream_active", {});
-      }
+      await refuseWhilePaired(deps.node);
       await heldKeyOrRefuse();
       const bucket = await readBucketBody(c);
       await refuseArchiveOverlap(bucket);
@@ -267,12 +277,17 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
           await deps.writeRecoveryKey(mintRecoveryKey());
         }
         await deps.sealedState.refresh();
-        await withTransaction(deps.db, (tx) =>
-          putCredential(tx, deps.ring, {
-            purpose: STREAM_PURPOSE,
-            value: streamSettingsPayload({ venueId: deps.venueId, bucket }),
-          }),
-        );
+        // Again, under node.db's lock: a join checks for these settings and writes its pair link
+        // under the same lock (`mirror-bundle-api.ts`), so one of the two sees the other.
+        await withNodeTransaction(deps.node, async (nodeTx) => {
+          await refuseWhilePaired(nodeTx);
+          await withTransaction(deps.db, (tx) =>
+            putCredential(tx, deps.ring, {
+              purpose: STREAM_PURPOSE,
+              value: streamSettingsPayload({ venueId: deps.venueId, bucket }),
+            }),
+          );
+        });
         await deps.stream.reload();
         return c.json(await view());
       });
