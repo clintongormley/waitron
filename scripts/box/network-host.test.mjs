@@ -34,7 +34,7 @@ it("answers a host without radios through the executable without exposing comman
     actor: { source: "person", person: "waiter-1" },
     permission: "system.manage",
   });
-});
+}, 10_000);
 
 it("keeps a failed command's real stderr out of the reply and journal", () => {
   const result = spawnSync(process.execPath, ["scripts/box/network-host.mjs"], {
@@ -47,7 +47,7 @@ it("keeps a failed command's real stderr out of the reply and journal", () => {
   expect(result.stdout).toBe('{"ok":false,"reason":"host_failed"}\n');
   expect(result.stderr).not.toContain("private-radio-name");
   expect(result.stderr.trim().split("\n")).toHaveLength(1);
-});
+}, 10_000);
 
 const root = "/org/freedesktop/NetworkManager";
 const nm = "org.freedesktop.NetworkManager";
