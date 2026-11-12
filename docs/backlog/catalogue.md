@@ -711,7 +711,7 @@ till no longer offers a separate Allergens screen.
 
 The owner accepted bringing forward a basic printable guest menu through
 [A1517](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
-on 11 November 2026. The [design proposal](../superpowers/plans/2026-11-12-a670-printable-guest-menu.md) is watcher-cleared with English/Spanish and inline allergen words plus one key, while the owner answers those choices; no menu implementation is recorded here.
+on 11 November 2026. The owner stopped the build on 12 November at 02:43 pending a menu design and asked for mock-ups first. The [earlier proposal](../superpowers/plans/2026-11-12-a670-printable-guest-menu.md) is reference only; whether to print and the language/key choices wait for the owner's design review.
 
 ## The products' made-at read has no screen since A655
 
