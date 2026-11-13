@@ -2,7 +2,7 @@
 
 ## 2026-11-13 — CURRENT-MAIN PREFLIGHT
 
-**DRAFT — awaiting Claude review and watcher clearance; no build begun.** Base `4e930fd07c`;
+**DRAFT — Claude reviewed in 213 seconds; findings folded in; awaiting watcher clearance.** Base `4e930fd07c`;
 fk7 merged `9dbea6ba9e`, exact-merge CI `43482596862` succeeded (Runner receipt). Preserve the
 historical decisions/tests below. After fk8, allergy snapshots live on tickets, MOVED distinguishes
 alike dishes, routing periods derive their department, and tickets need no node column.
@@ -38,7 +38,9 @@ files. Focused suites under `apps/server/src/`:
 `attendance-kitchen-service.test.ts`, `till-api.test.ts`, `till-api.fiscal-sale-paths.test.ts`,
 `till-api.courses.test.ts`, `till-api.sell-published.test.ts`, `venue-settings-api.orders-open.test.ts`,
 `till-api.profile-actions.test.ts`, `till-api.profile-zones.test.ts`, `till-device-proof.test.ts`;
-also `apps/till/src/api/client.test.ts`. Re-run the search after removal; add no permanent guard.
+also `apps/till/src/api/client.test.ts`. Re-run the name search and
+`rg -n 'working-orders/.*(/prep|/lines/recall)|orders/.*stations/.*advance' apps packages`,
+including tests; review every remaining hit. Add no permanent guard.
 
 **Storage ports and checks.** Service schema lives in `packages/db/src/schema/venue-service/`;
 `ticket-items.ts` stays in its parent. Remove the export from
@@ -66,8 +68,14 @@ the captured schema has no automatic flag CHECK. Claude/watcher must settle whet
 differences stop work, never assume equality. Run TDD, the original finish line and
 `pass-lifetime.test.ts` and `station-outputs-down.test.ts` in `apps/server/src/`, unchanged.
 
+**Cleanup backlog / review.** Delete the finished whole-ticket-route entry in
+`docs/backlog/kitchen.md:181-187` and `docs/backlog/architecture.md:1518-1520`; reduce the latter
+bundle count from 21 to 20. Ask the watcher to confirm that its older “FULL review path” means
+the usual two Claude run-it reviews for this migration branch, with lane landing as below.
+
 **Size / stop.** Provisional counted additions: production ≈225, tests/ports ≈410,
-support/script/docs ≈100, total ≈735 (original ≈630). Separately uncounted: pure deletions,
+support/script/docs ≈120, total ≈755 (original ≈630). This forecast is itself at the stop;
+seek the watcher's outside opinion on scope/size before build, rather than treating it as room. Separately uncounted: pure deletions,
 generated migrations, committed fixture-script output; script source/manual ports count.
 Retain the original **20% outside-opinion stop at 756**: consult the watcher before exceeding it.
 No framework, new guard or permanent mutation
@@ -264,6 +272,14 @@ B1, B3, B4 as in [fk1](2026-11-08-a1308-fk1-zone-service-rules.md#assumptions-ab
 
 | Where | Change | Design |
 | --- | --- | --- |
+| `apps/server/src/venue-settings-api.orders-open.test.ts` | Delete only `/prep` probes after receipt-language checks; retain language and sent/unsent-state checks; drop the late-send assertion, not replace it with a direct call | R2 proposal 4, watcher 2026-11-11 17:15 |
+| `apps/server/src/till-api.sell-published.test.ts`, `counter-release.test.ts` | Remove duplicate `/prep` probes; retain successful-sale, queued-item and surrounding assertions | same |
+| `apps/server/src/till-api.fiscal-sale-paths.test.ts` | Remove the retired `/prep` request/refusal probes at :1903-1911 and later in that case; keep sale and station-queue assertions at :1890-1901/:1913-1926; remove only the late-send describe at :3035-3126 | same |
+| `apps/server/src/attendance-final-order-paths.test.ts` | Remove only the three legacy-prep cases at :103-153 and their exclusive helper; retain all other attendance cases | same |
+| `apps/server/src/working-order.test.ts`, `working-order.pay-and-dispatch.test.ts`, `till-api.test.ts` | Remove checks exclusively of the two retired functions/routes; port setup to supported send/advance paths and preserve shared state/queue assertions | same |
+| `apps/server/src/kitchen-request.send.test.ts` | Remove the retired whole-ticket held no-op at :421; keep per-item held refusal and group-ready non-change checks | same |
+| `apps/server/src/attendance-kitchen-service.test.ts`, `till-api.profile-actions.test.ts`, `till-api.profile-zones.test.ts`, `till-device-proof.test.ts` | Remove only retired-route inventory rows/probes; retain supported per-item advance, attendance, profile and proof assertions | same |
+| `apps/till/src/api/client.test.ts` | Remove only the `sendToPrep` request-shape case with its deleted method | same |
 | `packages/db/src/schema/venue-service/migrations.test.ts:302-308` | `routing_cell_periods`' keys read `(period_id) -> menu_periods(id) on delete cascade` instead of the composite | §1.21, §5 |
 | same file `:326-331` | `kitchen_notices`' keys gain `(ticket_item_id) -> ticket_items(id) on delete set null` | design "Additions" (A1366) |
 | same file `:856` | the case that a period of another department is refused through the composite key goes: the database no longer holds the department copy; the writer's and the import's refusals (`routing-store.ts`, `configuration-transfer.ts:549-551`) still refuse it, proved by Task 5's test | §1.21, §6 |
