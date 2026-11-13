@@ -149,7 +149,6 @@ describe("the venue document", () => {
       province: "Coast",
       city: "Harbour",
       holidayArea: null,
-      country: null,
     });
   });
 

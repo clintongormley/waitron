@@ -1,4 +1,4 @@
-import { seedVenueSettings, seedBusinessDay, seedTenant } from "./testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "./testing/seed.js";
 import type { VenueSettings } from "./venue-settings.js";
 import { describe, expect, it, vi } from "vitest";
 import type { Transaction } from "./client.js";
@@ -113,7 +113,7 @@ describe("the venue accessor", () => {
     expect(await withTransaction(suite.db, readVenueClock)).toEqual(clock);
     expect(await withTransaction(suite.db, readVenueClockAndPlace)).toEqual({
       clock,
-      place: { province: "Las Palmas", city: "Telde", holidayArea: null, country: null },
+      place: { province: "Las Palmas", city: "Telde", holidayArea: null },
     });
   });
 
@@ -149,30 +149,9 @@ describe("the venue accessor", () => {
         dayCutover: "05:00",
         cutoverChanges: [{ effectiveBusinessDay: "2026-04-01", dayCutover: "06:00" }],
       },
-      place: { province: "Madrid", city: "Getafe", holidayArea: null, country: null },
+      place: { province: "Madrid", city: "Getafe", holidayArea: null },
     });
     expect(statements).toHaveLength(1);
-  });
-
-  it("reads the taxpayer's country with the clock, in the same one statement", async () => {
-    await seedTenant(suite.db);
-    await insertVenue({ province: "Madrid", city: "Getafe" });
-
-    const { result, statements } = await selectsDuring(readVenueClockAndPlace);
-
-    expect(result.place).toEqual({
-      province: "Madrid",
-      city: "Getafe",
-      holidayArea: null,
-      country: "ES",
-    });
-    expect(statements).toHaveLength(1);
-  });
-
-  it("reads no country when there is no taxpayer row", async () => {
-    await insertVenue();
-
-    expect((await withTransaction(suite.db, readVenueClockAndPlace)).place.country).toBeNull();
   });
 
   it("reads a venue with no cutover changes as having none", async () => {

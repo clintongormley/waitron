@@ -1025,7 +1025,7 @@ describe("readServiceDayPlan on a repeating date that follows a holiday's name",
     expect(prepared.plan!.special.get("2026-12-25")?.specialDayId).toBe(id);
   });
 
-  it("reads the venue settings once and the tenant only with the clock", async () => {
+  it("reads the venue settings once, with the clock", async () => {
     await madridChristmas();
     await scoped(async (tx) => {
       const session = (
@@ -1035,7 +1035,6 @@ describe("readServiceDayPlan on a repeating date that follows a holiday's name",
       try {
         await readServiceDayPlan(tx, new Date("2026-12-25T11:00:00Z"));
         const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
-        expect(texts.filter((text) => text.includes('from "tenants"'))).toEqual([]);
         expect(texts.filter((text) => text.includes('"settings"'))).toHaveLength(1);
       } finally {
         spy.mockRestore();

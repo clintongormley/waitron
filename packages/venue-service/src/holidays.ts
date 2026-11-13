@@ -90,12 +90,11 @@ function matches(row: GeographyRow, address: Address): boolean {
  */
 export function createHolidayStore(findPack: PackLookup = getCountryPack) {
   async function readAddress(tx: Transaction, place?: VenuePlace): Promise<Address> {
-    const taxpayerCountry =
-      place?.country === undefined ? ((await readTenant(tx))?.country ?? null) : place.country;
+    const tenant = await readTenant(tx);
     const doc = place?.holidayArea === undefined ? (await readVenueSettings(tx)).doc : place;
     const venue = place ?? doc;
-    const pack = taxpayerCountry === null ? undefined : findPack(taxpayerCountry);
-    const country = pack?.countryCode ?? taxpayerCountry?.trim().toUpperCase() ?? "";
+    const pack = tenant === null ? undefined : findPack(tenant.country);
+    const country = pack?.countryCode ?? tenant?.country.trim().toUpperCase() ?? "";
     const province = venue.province;
     const provinceCode =
       pack === undefined || province === null
