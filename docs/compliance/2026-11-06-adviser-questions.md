@@ -133,12 +133,14 @@ is found out is explained under
   the order the records were made in, and the record has no field for marking the step, so nothing is
   marked.
 
-  Example, added 13 November 2026: the box issues invoices 2, 3 and 4 with its clock an hour fast. The
-  clock is then set back an hour. Waitron stops recording sales until a person or the internet
-  confirms the new time. Invoice 5 then carries a time earlier than invoices 2, 3 and 4.
+  Example, added 13 November 2026: the box issues invoices 2, 3 and 4, and its clock then moves back an
+  hour. Someone may have corrected a clock that ran fast, or a restart may have reset it. Waitron stops
+  recording sales until a person or the internet confirms the new time. Invoice 5 then carries a time
+  earlier than invoices 2, 3 and 4.
   - Is that acceptable as it stands?
-  - Or must invoices 2, 3 and 4 be corrected? Our answer is no while their date is right, as in T6,
-    and a corrective as in T7 only when the hour moved one of them to another day.
+  - Or must the invoices on the wrong side of the step be corrected? Our answer is no while their date
+    is right, as in T6, and a corrective as in T7 only when the wrong hour put one of them on another
+    day.
 - **T6. Only the hour is wrong.** Take a ticket stamped 21:10 for a sale at 20:50 the same day. An invoice
   must show its date, not its time (RD 1619/2012 articles 6.1.b and 7.1.b), and the developer FAQ says
   «La hora de expedición e impresión material de la factura no forma parte del RF». So we think no
