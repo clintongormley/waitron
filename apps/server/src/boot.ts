@@ -90,6 +90,7 @@ import {
   whenCopyNeeded,
   type FirstCopyStatus,
 } from "./spare-copy.js";
+import { placeFirstCopy } from "./spare-copy-placement.js";
 import { startStoreListener } from "./spare-pipe.js";
 import { runSpareJoin } from "./spare-join.js";
 import { finishPromotedRole } from "./promoted-role.js";
@@ -1241,6 +1242,9 @@ async function bootServer(
   // entry's ahead check, whose close drains the old file's -wal before placing removes it (pinned in
   // `boot.place-copy.test.ts`). A box with no identity has no node id to read an operation by, and
   // nothing is placed.
+  // The latch start that took this copy restarts into here.
+  if (config.node !== undefined)
+    await placeFirstCopy({ stateDir: config.stateDir, venueDir: config.venueDir, log });
   const placement =
     config.node === undefined
       ? null

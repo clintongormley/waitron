@@ -28,6 +28,7 @@ const REPLACES: readonly string[] = [
   "apps/server/src/handover-place-copy.ts",
   "apps/server/src/restore.ts",
   "apps/server/src/restore-request.ts",
+  "apps/server/src/spare-copy-placement.ts",
   "packages/provisioning/src/environment-recovery-move.ts",
   "packages/provisioning/src/first-setup-start-again-deletion.ts",
   "packages/provisioning/src/first-setup-start-again-set-aside.ts",
@@ -52,6 +53,7 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
     "checks venue.db exists; removes its own marker and state files",
   "apps/server/src/restore-flow.ts": "removes only restore attachments under flows/restore",
   "apps/server/src/restore-stream.ts": "restores into a scratch folder it removes",
+  "apps/server/src/spare-copy.ts": "removes only its own pair-copy folder",
   "apps/server/src/start-backup-room-record.ts":
     "names venue.db in prose; unlinks only the start's deletion record",
   "apps/server/src/testing/handover-placed-copy.ts": "test harness: a spare's own stopped files",
