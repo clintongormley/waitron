@@ -50,6 +50,7 @@ export const kitchenStations = table(
       .notNull()
       .default("held-or-waiting"),
     waitsForPass: flag("waits_for_pass").notNull().default(false),
+    // station-printers.ts checks printer existence; withPrinter deduplicates; deletePrinter clears IDs.
     printerIds: json<string[]>("printer_ids").notNull().default([]),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     closedOnDay: day("closed_on_day"),

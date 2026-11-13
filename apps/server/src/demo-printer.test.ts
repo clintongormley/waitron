@@ -139,9 +139,18 @@ describe("the Demo printer", () => {
     const { deviceId, profileId } = await venue();
     const [station] = await suite.db
       .insert(kitchenStations)
-      .values({ name: "Grill" })
+      .values([{ name: "Grill" }, { name: "Bar" }])
       .returning({ id: kitchenStations.id });
     const demo = await configureDemoPrinter(suite.db, true);
+    expect(
+      await suite.db
+        .select({ name: kitchenStations.name, printerIds: kitchenStations.printerIds })
+        .from(kitchenStations)
+        .orderBy(kitchenStations.name),
+    ).toEqual([
+      { name: "Bar", printerIds: [demo!.printerId] },
+      { name: "Grill", printerIds: [demo!.printerId] },
+    ]);
     await withTransaction(suite.db, (tx) =>
       enqueuePrintJob(
         tx,
