@@ -1453,6 +1453,11 @@ declare module "@waitron/shared" {
      * the check and never a value, which may be the backup recovery key. */
     "spare.settings_invalid": { reason: string };
     /**
+     * This box's `nodes` row for its spare holds another public key than the pair link names: a
+     * fault in Waitron, logged only. The link stays `pending` and is not asked again.
+     */
+    "spare.join_key_mismatch": { peerNodeId: string };
+    /**
      * A module declared a `backup.nonDbState` `source` the resolver map carries no entry for. Fails
      * the backup loudly rather than skip that state. `source` is the module's own identifier.
      */

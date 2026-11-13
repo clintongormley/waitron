@@ -84,6 +84,7 @@ import {
 import { readVenueAuthority } from "./boot-peer-check.js";
 import { startSpareStore } from "./spare-store.js";
 import { startStoreListener } from "./spare-pipe.js";
+import { runSpareJoin } from "./spare-join.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import {
   recordSupersededAtStart,
@@ -3326,6 +3327,30 @@ async function bootServer(
     streamService(streamHost, () => holders.singletonRole.current === "primary"),
   );
   health.readStream = () => streamHost.status();
+  // Only the one main box records its spare.
+  const spareJoinController = new AbortController();
+  const spareJoinRun = acceptingSales
+    ? runSpareJoin({
+        db,
+        node: store.node,
+        ring,
+        nodeId: tradingContext.nodeId,
+        stateDir: config.stateDir,
+        stream: streamHost,
+        log,
+        signal: spareJoinController.signal,
+      })
+    : undefined;
+  const spareJoin =
+    spareJoinRun === undefined
+      ? undefined
+      : {
+          stop: () => {
+            spareJoinController.abort();
+            return spareJoinRun;
+          },
+        };
+  undoOnFailure.push(async () => spareJoin?.stop());
 
   // Dashboard alerts, mounted after the backup supervisor exists because the backups source reads
   // it. The claims come from every module; the checks run only for the enabled set, whose tables are
@@ -4319,6 +4344,7 @@ async function bootServer(
     handoverDestinationDuty,
     chartPost,
     spareStore,
+    spareJoin,
   });
   const started = makeStartedServer(
     server,

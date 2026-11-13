@@ -20,7 +20,8 @@ export interface ReservedNodeInput {
 /**
  * Insert the standby's OWN dormant node row: its distinct nodeId, its public key, and the primary's
  * endorsement of that key, all in one INSERT so public_key and endorsement land together. Nothing
- * in the database refuses another writer this table; adopt is the only writer by convention.
+ * in the database refuses another writer this table; by convention, production code calls this only
+ * from adopt, on the spare, and from the main box's spare join (`apps/server/src/spare-join.ts`).
  */
 export async function insertReservedNodeTx(
   tx: Transaction,

@@ -294,3 +294,22 @@ describe("fiscal reconciliation shutdown", () => {
     expect(closed).toBe(true);
   });
 });
+
+describe("spare join shutdown", () => {
+  it("stops the spare join at a stepdown, once, after the box emails", async () => {
+    const calls: string[] = [];
+    const handles = Object.assign(recordingHandles(calls), {
+      spareJoin: { stop: () => void calls.push("stop spareJoin") },
+    });
+    const duties = backgroundDuties(handles);
+    expect(duties.closers.find((item) => item.name === "spareJoin")?.atStepdown).toBe(true);
+    await stopBackgroundDuties(duties);
+    expect(calls.filter((call) => call === "stop spareJoin")).toHaveLength(1);
+    expect(calls.indexOf("stop spareJoin")).toBe(calls.indexOf("stop boxEmails") + 1);
+  });
+
+  it("has no spare join closer on a box that did not start one", () => {
+    const duties = backgroundDuties(recordingHandles([]));
+    expect(duties.closers.map((closer) => closer.name)).not.toContain("spareJoin");
+  });
+});

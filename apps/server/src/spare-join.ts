@@ -1,0 +1,179 @@
+import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { eq } from "drizzle-orm";
+import { readPairSecret, setPairLinkStateTx, type KeyRing } from "@waitron/credentials";
+import {
+  insertReservedNodeTx,
+  nodes,
+  withNodeTransaction,
+  withTransaction,
+  type Database,
+  type NodeDatabase,
+} from "@waitron/db";
+import { endorseKey } from "@waitron/membership";
+import { readPairLink, type PairLink } from "@waitron/node-db";
+import { codeOf } from "@waitron/server-kit";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { createS3ObjectStore, probeBucket } from "@waitron/stream";
+import { TLS_CLIENT_CERT_FILE, TLS_CLIENT_KEY_FILE } from "@waitron/store";
+import type { BoxAddresses } from "./box-lookup.js";
+import { caCertPath } from "./box-secrets.js";
+import "./errors.js";
+import type { Logger } from "./logger.js";
+import { readNodeIdentityKey } from "./node-identity.js";
+import { startStorePipe } from "./spare-pipe.js";
+import { SPARE_STORE_BUCKET, SPARE_STORE_REGION } from "./spare-store.js";
+import type { StreamHost } from "./stream-host.js";
+
+const INTERVAL_MS = 5_000;
+
+export interface SpareJoinDeps {
+  db: Database;
+  node: NodeDatabase;
+  ring: KeyRing;
+  nodeId: string;
+  /** Holds the venue authority and this box's client certificate, for the default probe's pipe. */
+  stateDir: string;
+  stream: Pick<StreamHost, "reload">;
+  /** Whether the spare's store answers the pair's key; through a store pipe when absent. */
+  probe?: (link: PairLink, signal: AbortSignal) => Promise<boolean>;
+  /** The default probe's pipe's address lookup; the venue network's answer when absent. */
+  storeLookup?: (hostname: string) => Promise<BoxAddresses>;
+  intervalMs?: number;
+  log: Logger;
+  signal: AbortSignal;
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
+
+/**
+ * While this box's pair link is `pending`, asks the spare's store every `intervalMs`; once it
+ * answers, records the spare in venue.db's `nodes` (which makes it a counted peer at a later start)
+ * and marks the link `streaming`, then reloads the stream so the copy goes to the spare. Resolves
+ * once `signal` aborts; never rejects.
+ */
+export async function runSpareJoin(deps: SpareJoinDeps): Promise<void> {
+  const intervalMs = deps.intervalMs ?? INTERVAL_MS;
+  const probe = deps.probe ?? storeProbe(deps);
+  // The link a key mismatch refused, so it is logged once and not asked again.
+  let refused: PairLink | undefined;
+  while (!deps.signal.aborted) {
+    try {
+      const link = await readPairLink(deps.node, deps.nodeId);
+      if (
+        link?.role === "streams" &&
+        link.state === "pending" &&
+        !sameLink(link, refused) &&
+        (await probe(link, deps.signal)) &&
+        !deps.signal.aborted
+      ) {
+        try {
+          if (await recordSpare(deps, link)) {
+            deps.log("info", "spare.joined", { peerNodeId: link.peerNodeId });
+            await deps.stream.reload();
+          }
+        } catch (error) {
+          if (!isAppError(error) || !hasCode(error, "spare.join_key_mismatch")) throw error;
+          refused = link;
+          deps.log("error", "spare.join_key_mismatch", { peerNodeId: link.peerNodeId });
+        }
+      }
+    } catch (error) {
+      if (!deps.signal.aborted) deps.log("warn", "spare.join_failed", { errorCode: codeOf(error) });
+    }
+    await sleep(intervalMs, deps.signal);
+  }
+}
+
+function sameLink(link: PairLink, other: PairLink | undefined): boolean {
+  return (
+    other !== undefined &&
+    other.peerNodeId === link.peerNodeId &&
+    other.createdAt.getTime() === link.createdAt.getTime()
+  );
+}
+
+/**
+ * Whether the spare was recorded. Node.db's lock is held from the re-read to the link's write, so a
+ * link replaced while the probe ran leaves no row, and the joining route cannot replace the link
+ * once it is `streaming`. Venue.db commits first and node.db after: a crash between leaves the row
+ * and a `pending` link, and the next run finds the row and only marks the link.
+ */
+async function recordSpare(deps: SpareJoinDeps, probed: PairLink): Promise<boolean> {
+  const signingKey = await readNodeIdentityKey(deps.node, deps.ring, deps.nodeId);
+  return withNodeTransaction(deps.node, async (ntx) => {
+    const link = await readPairLink(ntx, deps.nodeId);
+    if (link?.role !== "streams" || link.state !== "pending" || !sameLink(link, probed))
+      return false;
+    await withTransaction(deps.db, async (tx) => {
+      const [existing] = await tx
+        .select({ publicKey: nodes.publicKey })
+        .from(nodes)
+        .where(eq(nodes.id, link.peerNodeId));
+      if (existing !== undefined) {
+        if (existing.publicKey !== link.peerPublicKey)
+          throw new AppError("spare.join_key_mismatch", { peerNodeId: link.peerNodeId });
+        return;
+      }
+      const [main] = await tx.select().from(nodes).where(eq(nodes.id, deps.nodeId));
+      await insertReservedNodeTx(tx, {
+        id: link.peerNodeId,
+        name: `${main!.name} (standby)`,
+        filingModule: main!.filingModule,
+        taxModule: main!.taxModule,
+        publicKey: link.peerPublicKey,
+        endorsement: endorseKey(link.peerNodeId, link.peerPublicKey, deps.nodeId, signingKey),
+      });
+    });
+    await setPairLinkStateTx(ntx, deps.nodeId, "streaming");
+    return true;
+  });
+}
+
+/** Writes, reads, lists and deletes one object in the spare's store under the pair's key. */
+function storeProbe(
+  deps: SpareJoinDeps,
+): (link: PairLink, signal: AbortSignal) => Promise<boolean> {
+  let lastReason: string | undefined;
+  return async (link, signal) => {
+    const pipe = await startStorePipe({
+      storeUrl: link.storeUrl,
+      authorityPem: await readFile(caCertPath(deps.stateDir), "utf8"),
+      clientCertFile: join(deps.stateDir, TLS_CLIENT_CERT_FILE),
+      clientKeyFile: join(deps.stateDir, TLS_CLIENT_KEY_FILE),
+      lookup: deps.storeLookup,
+      log: deps.log,
+    });
+    try {
+      const store = createS3ObjectStore({
+        endpoint: pipe.loopbackUrl,
+        region: SPARE_STORE_REGION,
+        bucket: SPARE_STORE_BUCKET,
+        prefix: "",
+        accessKeyId: link.accessKeyId,
+        secretAccessKey: await readPairSecret(deps.node, deps.ring, deps.nodeId),
+      });
+      const result = await probeBucket(store, undefined, { signal }).catch(
+        (error: unknown) => ({ ok: false, reason: codeOf(error) }) as const,
+      );
+      const reason = result.ok ? undefined : result.reason;
+      if (reason !== undefined && reason !== lastReason)
+        deps.log("info", "spare.store_probe_refused", { reason });
+      lastReason = reason;
+      return result.ok;
+    } finally {
+      await pipe.close();
+    }
+  };
+}
