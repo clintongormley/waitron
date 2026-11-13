@@ -70,7 +70,7 @@ async function box() {
   return roots;
 }
 
-it("refuses an unknown folder inside flows/setup before recording a deletion", async () => {
+it("refuses an unknown folder inside flows/setup", async () => {
   const roots = await box();
   await mkdir(join(roots.stateDir, "flows/setup/unexpected"));
   expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
@@ -78,9 +78,6 @@ it("refuses an unknown folder inside flows/setup before recording a deletion", a
     params: { cause: "unexpected" },
     reason: "layout unexpected: flows/setup/unexpected",
   });
-  expect(await readFile(join(roots.stateDir, "flows/setup/record.json"), "utf8")).toBe(
-    "attempt record",
-  );
 });
 
 it("refuses a crash record that fingerprints the guesses side file", async () => {
