@@ -451,3 +451,11 @@ case: a ticket under another box's `node_id`, still waiting, is shown.
 - [ ] Re-run `scripts/floor-kitchen-triggers.test.ts` (fk6); expect pass unchanged.
 - [ ] Protection list compare; paste and mark (with or without the † lines). Finish line;
   `/finish-branch`.
+
+## 2026-11-13 review and rebase decisions
+
+The watcher requires the missing-ticket refusal to stay (lane E questions.md, 21:04): the writer
+checks its skipped rows and throws `ticket_item.not_found` for an absent ticket. Restore the orphan
+case against that domain code. Duplicate ids get only a PR-thread note; no caller produces them
+according to the reviewed caller trace, and no extra guard is built. The 7f60fa9c7f rebase preserves
+A1002's access-role storage; this slice now raises configuration format 29 to 30 and regenerates core.

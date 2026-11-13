@@ -1024,8 +1024,6 @@ declare module "@waitron/shared" {
      * repeat, or backwards). Its conditional UPDATE is the check: an illegal move matches no row.
      */
     "ticket.invalid_transition": { ticketItemId: string };
-    /** A ticket-item bump named an item that does not exist. */
-    "ticket_item.not_found": { ticketItemId: string };
     "ticket.already_fired": { workingOrderId: string };
 
     "ticket.not_fired": { workingOrderId: string };

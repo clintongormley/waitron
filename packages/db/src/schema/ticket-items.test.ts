@@ -58,6 +58,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   // The Drizzle builder rather than raw SQL: `id` and `queued_at` are `$defaultFn` columns
   // applied CLIENT-side, so a raw insert is refused NOT NULL.
   async function seedOrderLine(
+    node: string,
     product: string,
   ): Promise<{ orderId: string; lineId: string }> {
     orderNumberSeq += 1;

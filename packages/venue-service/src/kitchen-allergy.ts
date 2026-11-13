@@ -1,6 +1,8 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { statementChunks, ticketItems, type Transaction } from "@waitron/db";
 import type { KitchenAllergyBlock, TicketAllergyCopy } from "@waitron/module";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
 
 export async function recordTicketAllergies(
   tx: Transaction,
@@ -14,9 +16,20 @@ export async function recordTicketAllergies(
       ),
       sql`, `,
     );
-    await tx.run(sql`with v(id, o, c) as (values ${values})
+    const written = await tx.run(sql`with v(id, o, c) as (values ${values})
       update ticket_items set allergy_frozen = 1, allergy_original = v.o, allergy_current = v.c
       from v where ticket_items.id = v.id and ticket_items.allergy_frozen = 0`);
+    if (written.changes < chunk.length) {
+      const ids = chunk.map((row) => row.ticketItemId);
+      const found = await tx
+        .select({ id: ticketItems.id })
+        .from(ticketItems)
+        .where(inArray(ticketItems.id, ids));
+      const existing = new Set(found.map((row) => row.id));
+      const missing = ids.find((id) => !existing.has(id));
+      if (missing !== undefined)
+        throw new AppError("ticket_item.not_found", { ticketItemId: missing });
+    }
   }
 }
 

@@ -162,7 +162,7 @@ describe("A669 storage", () => {
     ).toEqual([]);
   });
 
-  it("stores a frozen unticked ticket", async () => {
+  it("stores a frozen unticked ticket and refuses orphan ticket copies", async () => {
     hasStorage();
     await putCopy(null, null);
     expect(
@@ -176,6 +176,17 @@ describe("A669 storage", () => {
         current_block: null,
       },
     ]);
+    const missingTicketId = randomUUID();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.recordTicketAllergies(tx, [
+          { ticketItemId: missingTicketId, originalBlock: original, currentBlock: original },
+        ]),
+      ),
+    ).rejects.toMatchObject({
+      code: "ticket_item.not_found",
+      params: { ticketItemId: missingTicketId },
+    });
   });
 
   it("keeps the kitchen copy when the last live guest is deleted", async () => {
