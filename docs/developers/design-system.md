@@ -2349,7 +2349,7 @@ means a click on a showing tooltip does not press its button. Customise anchors 
 the trailing edge to keep it inside the screen. The folded sidebar's strip buttons have their own resting, open
 and current look and the tooltip beside them (Dashboard sidebar navigation). Guards:
 `packages/ui/src/components/wt-icon-button.test.ts`, its sibling axe suite,
-`packages/ui/src/icon-button.test.ts`, and the tooltip cases in
+`packages/ui/src/icon-button.test.ts`, `packages/ui/src/icon-button.touch.test.ts`, and the tooltip cases in
 `packages/ui/src/components/wt-data-table.test.ts`,
 `apps/dashboard/src/widgets/catalogue-browser.test.ts`,
 `apps/dashboard/src/screens/menus-screen.a11y.test.ts` and

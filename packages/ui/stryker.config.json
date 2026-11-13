@@ -6,7 +6,13 @@
   "vitest": {
     "configFile": "vitest.config.ts"
   },
-  "mutate": ["src/**/*.ts", "!src/**/*.test.ts", "!src/test-helpers.ts", "!src/a11y-helpers.ts"],
+  "mutate": [
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/test-helpers.ts",
+    "!src/a11y-helpers.ts",
+    "!src/icon-button-test-helpers.ts"
+  ],
   "thresholds": { "high": 95, "low": 90 },
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",

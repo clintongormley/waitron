@@ -84,8 +84,10 @@ const clickForNewPage: BrowserCommand<
   }
 };
 
-const touchTooltipTest =
-  "on a touch screen a tapped icon button shows no tooltip over what lies beneath it";
+// A crashed Stryker run leaves mutated copies of the source in .stryker-tmp, which Vitest would
+// otherwise run as real test files.
+const exclude = [...configDefaults.exclude, "**/.stryker-tmp/**"];
+const touchTests = "src/icon-button.touch.test.ts";
 
 export default defineConfig({
   optimizeDeps: {
@@ -99,20 +101,20 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    // A crashed Stryker run leaves mutated copies of the source in .stryker-tmp, which Vitest would
-    // otherwise run as real test files.
-    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+    exclude,
     browser: {
       enabled: true,
       provider: playwright({}),
       headless: true,
       instances: [
-        { browser: "chromium", testNamePattern: new RegExp(`^(?!${touchTooltipTest}$)`) },
+        // An instance's own `exclude` replaces the root one rather than adding to it.
+        { browser: "chromium", exclude: [...exclude, touchTests] },
+        // A touch context makes `(hover: hover)` false for the whole page, so touch tests get their
+        // own instance; it is split by file because Stryker replaces every instance's test-name filter.
         {
           browser: "chromium",
           name: "chromium-touch",
-          include: ["src/icon-button.test.ts"],
-          testNamePattern: new RegExp(`^${touchTooltipTest}$`),
+          include: [touchTests],
           provider: playwright({ contextOptions: { hasTouch: true } }),
         },
       ],
@@ -135,9 +137,10 @@ export default defineConfig({
         // The hand-run icon generator's whole job is shelling out to Inkscape, which is not a
         // workspace dependency.
         "brand/**",
-        // Helpers that exist only for *.test.ts files (mounting, axe).
+        // Helpers that exist only for *.test.ts files (mounting, axe, icon buttons).
         "src/test-helpers.ts",
         "src/a11y-helpers.ts",
+        "src/icon-button-test-helpers.ts",
       ],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

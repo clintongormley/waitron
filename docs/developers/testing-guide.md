@@ -2365,15 +2365,26 @@ Each of those packages' vitest configs says so in a comment beside the registrat
 
 ## Keep the touch tooltip case in its own browser instance
 
-`packages/ui/vitest.config.ts` selects the existing touch tooltip case in a `hasTouch` Chromium
-instance; desktop runs the other cases. In Linux probe
+`packages/ui/vitest.config.ts` runs `packages/ui/src/icon-button.touch.test.ts` only in a `hasTouch`
+Chromium instance, `chromium-touch`; the desktop instance excludes that file. In Linux probe
 [43281279397](https://github.com/clintongormley/waitron/actions/runs/43281279397), disabling runtime
 touch emulation left hover and fine-pointer media false: the following component tooltip assertion
 failed (1 failed, 14 passed). Explicit media restoration also failed in
 [43281857420](https://github.com/clintongormley/waitron/actions/runs/43281857420). Separate profiles
 passed all 15 original cases in
-[43283623327](https://github.com/clintongormley/waitron/actions/runs/43283623327); each profile
-filters the cases belonging to the other. No runtime touch toggle is needed.
+[43283623327](https://github.com/clintongormley/waitron/actions/runs/43283623327). No runtime touch
+toggle is needed.
+
+The two instances are split by file, never by `testNamePattern`: Stryker's Vitest runner (10.1.1)
+sets every project's `testNamePattern` to its own filter, or clears it for the initial run, so a
+name filter left the touch instance running every case in its file. The desktop tooltip case then
+failed there and stopped mutation shards 24, 26 and 27 of
+[43369710774](https://github.com/clintongormley/waitron/actions/runs/43369710774). An instance's own
+`exclude` replaces the root `test.exclude` (Vitest 4.1.12's `cloneConfig`), so the desktop instance
+repeats the root list. The touch test's `iconButton()` fixture lives in
+`packages/ui/src/icon-button-test-helpers.ts`, not `test-helpers.ts`: Stryker runs only the test
+files that import a mutated file, and nearly every ui test imports `test-helpers.ts`, so an import
+of `icon-button.js` there would make most of the package's test files run for `icon-button.ts`.
 
 When tracing a failure, preserve test ordering: enlarging this file moved it earlier in Vitest’s
 size ordering and hid the failure in three diagnostic runs. Restoring its original sorting rank
