@@ -73,7 +73,7 @@ describe("parties, party_tables and service_commands", () => {
 
   it("stores an allergy answer with its person and time", async () => {
     const id = await party();
-    await inTx((tx) =>
+    await inTx(async (tx) =>
       tx.execute(
         sql`update parties set allergy_answer = 'none', allergy_answered_by = ${OPERATOR}, allergy_answered_at = '2026-11-13T12:00:00.000Z' where id = ${id}`,
       ),
@@ -105,7 +105,9 @@ describe("parties, party_tables and service_commands", () => {
   ])("refuses an %s", async (_name, assignment, constraint) => {
     const id = await party();
     const error = await captureError(() =>
-      inTx((tx) => tx.execute(sql`update parties set ${sql.raw(assignment!)} where id = ${id}`)),
+      inTx(async (tx) =>
+        tx.execute(sql`update parties set ${sql.raw(assignment!)} where id = ${id}`),
+      ),
     );
     expect(checkFailed(error, constraint!)).toBe(true);
   });
@@ -113,7 +115,7 @@ describe("parties, party_tables and service_commands", () => {
   it("refuses an allergy answer by a person who does not exist", async () => {
     const id = await party();
     await expect(
-      inTx((tx) =>
+      inTx(async (tx) =>
         tx.execute(
           sql`update parties set allergy_answer = 'none', allergy_answered_by = ${randomUUID()}, allergy_answered_at = '2026-11-13T12:00:00.000Z' where id = ${id}`,
         ),
