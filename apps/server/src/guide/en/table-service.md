@@ -111,6 +111,19 @@ For an older full invoice with no bill, open it from **Transactions** and choose
 Use **Receipt** for a compact copy once an original has completed. If printing fails, check the
 destination named by **Retry original** or choose the named receipt printer instead.
 
+## Print from dashboard Orders {#dashboard-documents}
+
+For a document later, open **Orders** in the dashboard and choose **Print / Reprint** on the bill.
+For a full invoice, choose **Receipt** for receipt paper or **Invoice** for the mixed printer list;
+both keep the recorded invoice and customer. A simplified invoice opens its receipt printers directly.
+Wait for any queued original on A4 or by email to finish before choosing Receipt for a full invoice.
+
+Choose your printer and press **Print on {printer}** or **Print a copy on {printer}**. **A4** marks an
+office printer. This browser remembers the last accepted printer separately for Receipt and Invoice.
+If that printer is unavailable, choose again. When you open the printer list, a sole available
+printer starts selected.
+Use **Refresh printers** when none are listed, or **Cancel** to leave without printing.
+
 ## Avoid duplicate card slips {#reader-slips}
 
 Select **Print card slip** before taking the card if the payer wants one. It starts off for each payer and prints after the card is confirmed. If the reader answer is unclear or the box restarts before printing, use a copy instead.

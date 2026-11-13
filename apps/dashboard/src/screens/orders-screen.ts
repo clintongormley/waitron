@@ -105,8 +105,7 @@ export class OrdersScreen extends LitElement {
   @state() private loadingMore = false;
   @state() private openId: string | null = null;
   @state() private reprintRow: OrderRowDto | null = null;
-  /** `invoice` when `reprintRow` is a full invoice being printed again on any printer. */
-  @state() private reprintMode: "receipt" | "invoice" = "receipt";
+  @state() private reprintMode: "receipt" | "choose" = "receipt";
   @state() private findingCustomer = false;
   #textTimer?: ReturnType<typeof setTimeout>;
 
@@ -205,8 +204,8 @@ export class OrdersScreen extends LitElement {
     return row.kind === "bill" && row.invoiceNumber !== null && row.invoiceType === "F1";
   }
 
-  #openPrint(row: OrderRowDto, mode: "receipt" | "invoice"): void {
-    this.reprintMode = mode;
+  #openPrint(row: OrderRowDto): void {
+    this.reprintMode = row.invoiceType === "F1" ? "choose" : "receipt";
     this.reprintRow = row;
   }
 
@@ -281,25 +280,16 @@ export class OrdersScreen extends LitElement {
               }}
               >${t("orders.view")}</wt-button
             >${
-              this.#mayReprint(row)
+              this.#mayReprint(row) || this.#mayPrintInvoice(row)
                 ? html`<wt-button
                     variant="secondary"
                     @click=${(event: Event) => {
                       event.stopPropagation();
-                      this.#openPrint(row, "receipt");
+                      this.#openPrint(row);
                     }}
-                    >${t("orders.reprint")}</wt-button
+                    >${t("orders.print_document.title")}</wt-button
                   >`
-                : this.#mayPrintInvoice(row)
-                  ? html`<wt-button
-                      variant="secondary"
-                      @click=${(event: Event) => {
-                        event.stopPropagation();
-                        this.#openPrint(row, "invoice");
-                      }}
-                      >${t("orders.print_invoice")}</wt-button
-                    >`
-                  : nothing
+                : nothing
             }</wt-row-actions
           >`,
       },
@@ -446,10 +436,10 @@ export class OrdersScreen extends LitElement {
         .mayReprint=${(row: OrderRowDto) => this.#mayReprint(row)}
         .mayExport=${this.canExport}
         @order-reprint=${(event: CustomEvent<{ row: OrderRowDto }>) => {
-          this.#openPrint(event.detail.row, "receipt");
+          this.#openPrint(event.detail.row);
         }}
         @order-invoice-print=${(event: CustomEvent<{ row: OrderRowDto }>) => {
-          this.#openPrint(event.detail.row, "invoice");
+          this.#openPrint(event.detail.row);
         }}
         @wt-close=${() => {
           this.openId = null;
