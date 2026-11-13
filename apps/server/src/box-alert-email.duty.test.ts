@@ -27,7 +27,11 @@ type Line = [string, string, Record<string, unknown> | undefined];
 
 const VENUE = "Corner Bistro";
 const SMTP = { url: "smtp://127.0.0.1:1", from: "box@example.test" };
-const ANA: ManagerEmailRecipient = { personId: "p-ana", email: "ana@example.test", language: "es" };
+const ANNA: ManagerEmailRecipient = {
+  personId: "p-ana",
+  email: "ana@example.test",
+  language: "es",
+};
 const BEN: ManagerEmailRecipient = { personId: "p-ben", email: "ben@example.test", language: "en" };
 
 function at(minute: number): Date {
@@ -37,7 +41,7 @@ function at(minute: number): Date {
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 beforeEach(async () => {
   await seedVenue(suite.db, { name: VENUE });
-  for (const recipient of [ANA, BEN]) {
+  for (const recipient of [ANNA, BEN]) {
     await seedPersons(suite.db, {
       id: recipient.personId,
       displayName: recipient.personId,
@@ -115,7 +119,7 @@ function duty({ startedAt = at(0) } = {}) {
   const state = {
     diskSince: null as Date | null,
     lowSince: null as Date | null,
-    recipients: [ANA, BEN] as readonly ManagerEmailRecipient[],
+    recipients: [ANNA, BEN] as readonly ManagerEmailRecipient[],
     delivery: { mode: "smtp", smtp: SMTP } as EmailDelivery,
     notices: { notices: [], unavailable: [] } as StaffNoticesRead,
     incidents: [] as readonly EmailedIncident[],
@@ -340,7 +344,7 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
     d.state.incidents = [FIRST_STEP];
     await d.tick();
     await d.tick();
-    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, ANA), clockEmail(FIRST_STEP, BEN)]);
+    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, ANNA), clockEmail(FIRST_STEP, BEN)]);
   });
 
   it("emails both of two steps inside one check interval, each once, though the first is handled", async () => {
@@ -352,9 +356,9 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
     await d.tick();
     await d.tick();
     expect(d.sent()).toEqual([
-      clockEmail(FIRST_STEP, ANA),
+      clockEmail(FIRST_STEP, ANNA),
       clockEmail(FIRST_STEP, BEN),
-      clockEmail(SECOND_STEP, ANA),
+      clockEmail(SECOND_STEP, ANNA),
       clockEmail(SECOND_STEP, BEN),
     ]);
   });
@@ -387,7 +391,7 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
 
   it("ends a handled step's email for a manager whose address was refused outright", async () => {
     const d = duty();
-    d.state.recipients = [ANA, BEN];
+    d.state.recipients = [ANNA, BEN];
     d.send.mockImplementation(async ({ recipient }) =>
       recipient === BEN.email ? "rejected" : "sent",
     );
@@ -395,9 +399,9 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
     await d.remember(SECOND_STEP);
     for (let i = 0; i < 4; i++) await d.tick();
     expect(d.sent()).toEqual([
-      clockEmail(FIRST_STEP, ANA),
+      clockEmail(FIRST_STEP, ANNA),
       clockEmail(FIRST_STEP, BEN),
-      clockEmail(SECOND_STEP, ANA),
+      clockEmail(SECOND_STEP, ANNA),
       clockEmail(SECOND_STEP, BEN),
     ]);
     expect(d.context).toHaveBeenCalledTimes(1);
@@ -419,7 +423,7 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
     await d.tick();
     d.state.incidents = [];
     for (let i = 0; i < 3; i++) await d.tick();
-    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, ANA), clockEmail(FIRST_STEP, BEN)]);
+    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, ANNA), clockEmail(FIRST_STEP, BEN)]);
     expect(d.context).toHaveBeenCalledTimes(1);
   });
 
@@ -480,7 +484,7 @@ describe("startBoxEmailDuty", () => {
     d.state.lowSince = at(1);
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("storage.space_low", ANA),
+      expected("storage.space_low", ANNA),
       expected("storage.space_low", BEN),
     ]);
     expect(d.send.mock.calls[0]![0].smtp).toEqual(SMTP);
@@ -499,7 +503,7 @@ describe("startBoxEmailDuty", () => {
     await d.tick();
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("storage.disk_full", ANA),
+      expected("storage.disk_full", ANNA),
       expected("storage.disk_full", BEN),
     ]);
   });
@@ -512,9 +516,9 @@ describe("startBoxEmailDuty", () => {
     await d.tick();
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("storage.space_low", ANA),
+      expected("storage.space_low", ANNA),
       expected("storage.space_low", BEN),
-      expected("storage.disk_full", ANA),
+      expected("storage.disk_full", ANNA),
       expected("storage.disk_full", BEN),
     ]);
   });
@@ -529,7 +533,7 @@ describe("startBoxEmailDuty", () => {
     d.state.diskSince = at(3);
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("storage.disk_full", ANA),
+      expected("storage.disk_full", ANNA),
       expected("storage.disk_full", BEN),
     ]);
   });
@@ -551,7 +555,7 @@ describe("startBoxEmailDuty", () => {
 
   it("a full disk whose email never went sends the low-space email once the stop lifts", async () => {
     const d = duty();
-    d.state.recipients = [ANA];
+    d.state.recipients = [ANNA];
     d.send.mockImplementation(async () => "unknown");
     d.state.lowSince = at(1);
     d.state.diskSince = at(1);
@@ -561,9 +565,9 @@ describe("startBoxEmailDuty", () => {
     d.state.diskSince = null;
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("storage.disk_full", ANA),
-      expected("storage.disk_full", ANA),
-      expected("storage.space_low", ANA),
+      expected("storage.disk_full", ANNA),
+      expected("storage.disk_full", ANNA),
+      expected("storage.space_low", ANNA),
     ]);
     await d.tick();
     expect(d.send).toHaveBeenCalledTimes(3);
@@ -579,24 +583,24 @@ describe("startBoxEmailDuty", () => {
     d.state.delivery = { mode: "smtp", smtp: SMTP };
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("storage.space_low", ANA),
+      expected("storage.space_low", ANNA),
       expected("storage.space_low", BEN),
     ]);
   });
 
   it("a manager added after the stop lifts, while space stays low, gets the low-space email and the others nothing more", async () => {
     const d = duty();
-    d.state.recipients = [ANA];
+    d.state.recipients = [ANNA];
     d.state.lowSince = at(1);
     d.state.diskSince = at(1);
     await d.tick();
     d.state.diskSince = null;
     await d.tick();
-    d.state.recipients = [ANA, BEN];
+    d.state.recipients = [ANNA, BEN];
     await d.tick();
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("storage.disk_full", ANA),
+      expected("storage.disk_full", ANNA),
       expected("storage.space_low", BEN),
     ]);
   });
@@ -610,9 +614,9 @@ describe("startBoxEmailDuty", () => {
     d.state.lowSince = at(3);
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("storage.space_low", ANA),
+      expected("storage.space_low", ANNA),
       expected("storage.space_low", BEN),
-      expected("storage.space_low", ANA),
+      expected("storage.space_low", ANNA),
       expected("storage.space_low", BEN),
     ]);
   });
@@ -620,13 +624,13 @@ describe("startBoxEmailDuty", () => {
   it("a send that could not be made is tried the next minute; one already accepted is not", async () => {
     const d = duty();
     d.send.mockImplementation(async ({ recipient }) =>
-      recipient === ANA.email && d.send.mock.calls.length === 1 ? "unknown" : "sent",
+      recipient === ANNA.email && d.send.mock.calls.length === 1 ? "unknown" : "sent",
     );
     d.state.lowSince = at(1);
     await d.tick();
-    expect(d.sent().map((m) => m.recipient)).toEqual([ANA.email, BEN.email]);
+    expect(d.sent().map((m) => m.recipient)).toEqual([ANNA.email, BEN.email]);
     await d.tick();
-    expect(d.sent().map((m) => m.recipient)).toEqual([ANA.email, BEN.email, ANA.email]);
+    expect(d.sent().map((m) => m.recipient)).toEqual([ANNA.email, BEN.email, ANNA.email]);
     await d.tick();
     expect(d.send).toHaveBeenCalledTimes(3);
   });
@@ -638,10 +642,10 @@ describe("startBoxEmailDuty", () => {
     );
     d.state.lowSince = at(1);
     await d.tick();
-    expect(d.sent().map((m) => m.recipient)).toEqual([ANA.email, BEN.email]);
+    expect(d.sent().map((m) => m.recipient)).toEqual([ANNA.email, BEN.email]);
     expect(d.events("box_email.sent")).toHaveLength(1);
     await d.tick();
-    expect(d.sent().map((m) => m.recipient)).toEqual([ANA.email, BEN.email, BEN.email]);
+    expect(d.sent().map((m) => m.recipient)).toEqual([ANNA.email, BEN.email, BEN.email]);
     expect(d.events("box_email.sent")).toHaveLength(2);
     await d.tick();
     expect(d.send).toHaveBeenCalledTimes(3);
@@ -654,9 +658,9 @@ describe("startBoxEmailDuty", () => {
     });
     d.state.lowSince = at(1);
     await d.tick();
-    expect(d.sent().map((m) => m.recipient)).toEqual([ANA.email, BEN.email]);
+    expect(d.sent().map((m) => m.recipient)).toEqual([ANNA.email, BEN.email]);
     await d.tick();
-    expect(d.sent().map((m) => m.recipient)).toEqual([ANA.email, BEN.email, ANA.email]);
+    expect(d.sent().map((m) => m.recipient)).toEqual([ANNA.email, BEN.email, ANNA.email]);
   });
 
   it("without email settings it sends nothing, says so once, and sends once settings appear", async () => {
@@ -672,20 +676,20 @@ describe("startBoxEmailDuty", () => {
     d.state.delivery = { mode: "smtp", smtp: SMTP };
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("storage.space_low", ANA),
+      expected("storage.space_low", ANNA),
       expected("storage.space_low", BEN),
     ]);
   });
 
   it("a manager added during an episode gets it at the next check", async () => {
     const d = duty();
-    d.state.recipients = [ANA];
+    d.state.recipients = [ANNA];
     d.state.lowSince = at(1);
     await d.tick();
-    d.state.recipients = [ANA, BEN];
+    d.state.recipients = [ANNA, BEN];
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("storage.space_low", ANA),
+      expected("storage.space_low", ANNA),
       expected("storage.space_low", BEN),
     ]);
   });
@@ -733,7 +737,7 @@ describe("startBoxEmailDuty", () => {
     const d = duty();
     d.state.notices = { notices: [notice("clock.unusable")], unavailable: [] };
     await d.tick();
-    expect(d.sent()).toEqual([expected("clock.unusable", ANA), expected("clock.unusable", BEN)]);
+    expect(d.sent()).toEqual([expected("clock.unusable", ANNA), expected("clock.unusable", BEN)]);
     await d.tick();
     expect(d.send).toHaveBeenCalledTimes(2);
     d.state.notices = { notices: [], unavailable: [] };
@@ -741,9 +745,9 @@ describe("startBoxEmailDuty", () => {
     d.state.notices = { notices: [notice("clock.unusable")], unavailable: [] };
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("clock.unusable", ANA),
+      expected("clock.unusable", ANNA),
       expected("clock.unusable", BEN),
-      expected("clock.unusable", ANA),
+      expected("clock.unusable", ANNA),
       expected("clock.unusable", BEN),
     ]);
   });
@@ -762,13 +766,13 @@ describe("startBoxEmailDuty", () => {
 
   it("tries a failed clock email again while its module's check fails", async () => {
     const d = duty();
-    d.state.recipients = [ANA];
+    d.state.recipients = [ANNA];
     d.send.mockImplementationOnce(async () => "rejected");
     d.state.notices = { notices: [notice("clock.unusable")], unavailable: [] };
     await d.tick();
     d.state.notices = { notices: [], unavailable: ["fiscal-verifactu"] };
     await d.tick();
-    expect(d.sent()).toEqual([expected("clock.unusable", ANA), expected("clock.unusable", ANA)]);
+    expect(d.sent()).toEqual([expected("clock.unusable", ANNA), expected("clock.unusable", ANNA)]);
     await d.tick();
     expect(d.send).toHaveBeenCalledTimes(2);
   });
@@ -792,7 +796,7 @@ describe("startBoxEmailDuty", () => {
     await d.tick();
     expect(d.sent()).toEqual([
       {
-        recipient: ANA.email,
+        recipient: ANNA.email,
         subject: SPANISH_STOP.subject.replaceAll("{venue}", VENUE),
         text: SPANISH_STOP.text
           .replaceAll("{clockAt}", "14/03/2025 09:12")
@@ -849,9 +853,9 @@ describe("startBoxEmailDuty", () => {
     await d.tick();
     await d.tick();
     expect(d.sent()).toEqual([
-      clockEmail(RESTART, ANA),
+      clockEmail(RESTART, ANNA),
       clockEmail(RESTART, BEN),
-      clockEmail(MISDATED, ANA),
+      clockEmail(MISDATED, ANNA),
       clockEmail(MISDATED, BEN),
     ]);
     expect(d.sent()[1]!.text).toContain("confirmed by an administrator");
@@ -953,7 +957,7 @@ describe("startBoxEmailDuty", () => {
     await turn();
     await turn();
     expect(settled).toBe(false);
-    read.release({ venue: VENUE, recipients: [ANA, BEN], delivery: { mode: "smtp", smtp: SMTP } });
+    read.release({ venue: VENUE, recipients: [ANNA, BEN], delivery: { mode: "smtp", smtp: SMTP } });
     await stopping;
     await turn();
     await turn();
@@ -996,7 +1000,7 @@ describe("startBoxEmailDuty", () => {
 
   it("logs each kind of failed send once per recipient, however the failures alternate", async () => {
     const d = duty();
-    const anaOutcomes = [
+    const annaOutcomes = [
       "rejected",
       "rejected",
       "rejected",
@@ -1005,12 +1009,12 @@ describe("startBoxEmailDuty", () => {
       "unknown",
       "rejected",
     ] as const;
-    let anaCalls = 0;
+    let annaCalls = 0;
     d.send.mockImplementation(async ({ recipient }) =>
-      recipient === ANA.email ? (anaOutcomes[anaCalls++] ?? "sent") : "sent",
+      recipient === ANNA.email ? (annaOutcomes[annaCalls++] ?? "sent") : "sent",
     );
     d.state.lowSince = at(1);
-    for (let i = 0; i < anaOutcomes.length; i++) await d.tick({ advanceMs: 3_600_000 });
+    for (let i = 0; i < annaOutcomes.length; i++) await d.tick({ advanceMs: 3_600_000 });
     const failure = (outcome: string) => [
       "warn",
       "box_email.send_failed",
@@ -1018,7 +1022,7 @@ describe("startBoxEmailDuty", () => {
     ];
     expect(d.events("box_email.send_failed")).toEqual([failure("rejected"), failure("unknown")]);
     await d.tick({ advanceMs: 3_600_000 });
-    expect(d.sent().filter((m) => m.recipient === ANA.email)).toHaveLength(8);
+    expect(d.sent().filter((m) => m.recipient === ANNA.email)).toHaveLength(8);
     expect(d.events("box_email.sent")).toHaveLength(2);
     expect(d.events("box_email.send_failed")).toHaveLength(2);
   });
@@ -1050,7 +1054,7 @@ describe("startBoxEmailDuty for backups", () => {
     d.state.incidents = [DELETED];
     await d.tick();
     await d.tick();
-    expect(d.sent()).toEqual([clockEmail(DELETED, ANA), clockEmail(DELETED, BEN)]);
+    expect(d.sent()).toEqual([clockEmail(DELETED, ANNA), clockEmail(DELETED, BEN)]);
     expect(d.sent()[1]!.text).toBe(
       "Low disk space: the box deleted its 3 oldest backups (28 Oct 2026).",
     );
@@ -1074,7 +1078,7 @@ describe("startBoxEmailDuty for backups", () => {
     d.state.backupStopped = REFUSED;
     await d.tick();
     await d.tick();
-    expect(d.sent()).toEqual([refusedEmail(ANA), refusedEmail(BEN)]);
+    expect(d.sent()).toEqual([refusedEmail(ANNA), refusedEmail(BEN)]);
     expect(d.sent()[1]!.text).toBe(
       "Backup not made: it needs 6.3 GB free and the disk has 1.9 GB.",
     );
@@ -1201,7 +1205,7 @@ describe("box email queue episodes", () => {
         Date.parse(row.notAfter) - Date.parse(row.queuedAt),
       ]),
     ).toEqual([
-      [ANA.personId, "storage.space_low", 86400000],
+      [ANNA.personId, "storage.space_low", 86400000],
       [BEN.personId, "storage.space_low", 86400000],
     ]);
     const lock = vi.spyOn(suite.db, "withWriteLock");
@@ -1248,7 +1252,7 @@ describe("box email queue episodes", () => {
     await b.tick();
     await b.tick();
     expect((await b.rows()).map((row) => row.id)).toEqual(before.map((row) => row.id));
-    expect(b.sent()).toEqual([clockEmail(RESTART, ANA), clockEmail(RESTART, BEN)]);
+    expect(b.sent()).toEqual([clockEmail(RESTART, ANNA), clockEmail(RESTART, BEN)]);
   });
   it("a restart cancels a disk episode's leftover unsent rows and queues them again", async () => {
     const a = duty();
@@ -1266,7 +1270,7 @@ describe("box email queue episodes", () => {
       "sent",
     ]);
     expect(b.sent()).toEqual([
-      expected("storage.space_low", ANA),
+      expected("storage.space_low", ANNA),
       expected("storage.space_low", BEN),
     ]);
   });
@@ -1300,7 +1304,7 @@ describe("box email queue episodes", () => {
     lock.mockRestore();
     expect(await d.rows()).toEqual([]);
     expect(d.sent()).toEqual([
-      expected("storage.disk_full", ANA),
+      expected("storage.disk_full", ANNA),
       expected("storage.disk_full", BEN),
     ]);
     expect(d.moduleNotices).not.toHaveBeenCalled();
@@ -1309,7 +1313,7 @@ describe("box email queue episodes", () => {
   it("does not send a box email again that may have been delivered", async () => {
     const d = duty();
     d.state.lowSince = at(1);
-    d.state.recipients = [ANA];
+    d.state.recipients = [ANNA];
     d.send.mockResolvedValue("uncertain");
     await d.tick();
     await d.tick();
@@ -1319,7 +1323,7 @@ describe("box email queue episodes", () => {
   it("retries an email that never reached the mail server on the waits 1, 1, 5 and 15 minutes", async () => {
     const d = duty();
     d.state.lowSince = at(1);
-    d.state.recipients = [ANA];
+    d.state.recipients = [ANNA];
     d.send.mockResolvedValue("unknown");
     await d.tick();
     for (let minute = 1; minute <= 22; minute++) {
@@ -1333,7 +1337,7 @@ describe("box email queue episodes", () => {
     d.state.lowSince = at(1);
     await d.tick();
     expect(d.sent()).toEqual([
-      expected("storage.space_low", ANA),
+      expected("storage.space_low", ANNA),
       expected("storage.space_low", BEN),
     ]);
   });

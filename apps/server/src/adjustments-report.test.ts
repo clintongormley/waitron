@@ -287,20 +287,20 @@ describe("whose sales an adjustment rate is measured against (plan D21, spec §7
 
 describe("a kitchen cancellation is not a voided invoice (spec §7)", () => {
   it("reports the cancellation as a cancellation, writes no void, and reads nothing from an invoice's later void", async () => {
-    const lucia = await member("Lucy");
+    const lucy = await member("Lucy");
     // A sent dish's cancel needs the refund permission, which a supervisor holds.
-    const pablo = await member("Paul", "supervisor");
-    const rosa = await member("Rose");
-    const { partyId, billId } = await seat(lucia);
-    await submit(lucia, partyId, await draft(lucia, partyId, ["Burger", "Steak"]));
+    const paul = await member("Paul", "supervisor");
+    const rose = await member("Rose");
+    const { partyId, billId } = await seat(lucy);
+    await submit(lucy, partyId, await draft(lucy, partyId, ["Burger", "Steak"]));
     const voidsBefore = await voidCount();
 
-    await adjust(pablo, billId, "Steak", "cancel");
-    const invoice = await payInFull(rosa, billId, "12.00");
+    await adjust(paul, billId, "Steak", "cancel");
+    const invoice = await payInFull(rose, billId, "12.00");
     const report = await readReport();
 
     expect(await voidCount()).toBe(voidsBefore);
-    expect(rowOf(report, pablo)).toMatchObject({
+    expect(rowOf(report, paul)).toMatchObject({
       count: 1,
       byAction: {
         cancel: { count: 1, reduction: "25.00", cancelledNominalValue: "25.00" },
@@ -308,7 +308,7 @@ describe("a kitchen cancellation is not a voided invoice (spec §7)", () => {
       },
     });
     // The Steak left the bill; it stays in Lucy's sales through the cancellation's snapshot.
-    expect(salesOf(report, lucia)).toBe("37.00");
+    expect(salesOf(report, lucy)).toBe("37.00");
 
     const manager = await inTx(venue, (tx) =>
       loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.managerId, pin: PINS.manager }),

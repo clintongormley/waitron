@@ -436,7 +436,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
       const k = await kitchen(true);
       const [desserts] = await place(k, [{ names: ["Tarta", "Red wine bottle"], release: "hold" }]);
       await inTx(k.v, async (tx) => {
-        const [vino] = await tx
+        const [wine] = await tx
           .select({ id: workingOrderLines.id })
           .from(workingOrderLines)
           .where(
@@ -448,7 +448,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
         await tx
           .update(ticketItems)
           .set({ madeHere: true })
-          .where(eq(ticketItems.workingOrderLineId, vino!.id));
+          .where(eq(ticketItems.workingOrderLineId, wine!.id));
       });
       await fire(k, desserts!);
       const bar = await papers(k, k.barPrinter);
