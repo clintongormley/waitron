@@ -81,7 +81,18 @@ async function fixture(
   return { host, bound, context, read, args, database, claim };
 }
 
-it("attributes a setup clock request to the administrator reserved for that attempt", async () => {
+const clockRequest = {
+  offsetMs: 60_000,
+  agreesWithinMs: 30_000,
+  measuredAt: { wallMs: 1_794_571_200_000, monoMs: 1_000 },
+  reading: {
+    boxAt: "2026-11-13T12:00:00.000Z",
+    witnessAt: "2026-11-13T12:01:00.000Z",
+    uncertaintyMs: 40,
+  },
+};
+
+it("attributes a setup clock request to the administrator held in setup state", async () => {
   const received: unknown[] = [];
   const f = await fixture({
     setBoxClock: async (input, person) => {
@@ -89,23 +100,27 @@ it("attributes a setup clock request to the administrator reserved for that atte
       return { status: "refused", reason: "synchronised" };
     },
   });
-  const input = {
-    offsetMs: 60_000,
-    agreesWithinMs: 30_000,
-    measuredAt: { wallMs: 1_794_571_200_000, monoMs: 1_000 },
-    reading: {
-      boxAt: "2026-11-13T12:00:00.000Z",
-      witnessAt: "2026-11-13T12:01:00.000Z",
-      uncertaintyMs: 40,
-    },
-  };
-  expect(await f.bound.setBoxClock!(f.context.binding, input)).toEqual({
+  const administratorId = (await f.host.store.read())!.frozen.administratorId;
+  expect(await f.bound.setBoxClock!(f.context.binding, structuredClone(clockRequest))).toEqual({
     status: "refused",
     reason: "synchronised",
   });
   expect(received).toEqual([
-    { input, person: { id: (await f.host.store.read())!.frozen.administratorId, name: "Elena" } },
+    { input: clockRequest, person: { id: administratorId, name: "Elena" } },
   ]);
+});
+
+it("refuses the clock requester lookup when setup state is absent", async () => {
+  const f = await fixture({
+    setBoxClock: async (_input, person) => {
+      await person();
+      return { status: "set" };
+    },
+  });
+  await rm(f.args.stateDir, { recursive: true, force: true });
+  await expect(f.bound.setBoxClock!(f.context.binding, clockRequest)).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
 });
 
 it("reads the frozen setup scope and real module history under the preparation hold", async () => {
