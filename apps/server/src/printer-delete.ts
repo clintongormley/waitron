@@ -14,7 +14,8 @@ import {
   printerHolders,
   printers,
   printJobs,
-  stationPrinters,
+  stationPrinterPairs,
+  removeIdFromJson,
   type Transaction,
 } from "@waitron/db";
 import { endDeletedPrinterJobs, readPrinterDeleteJobIds } from "@waitron/printing";
@@ -128,9 +129,9 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
 
   const stations = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name })
-    .from(stationPrinters)
-    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
-    .where(eq(stationPrinters.printerId, id));
+    .from(stationPrinterPairs)
+    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinterPairs.stationId))
+    .where(eq(stationPrinterPairs.printerId, id));
 
   const ends: DeleteImpactItem[] = [
     { key: "print_jobs", count: jobIds.length, targets: [] },
@@ -181,7 +182,7 @@ export async function deletePrinter(
       .where(eq(devices[column], id));
   }
   await tx.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.printerId, id));
-  await tx.delete(stationPrinters).where(eq(stationPrinters.printerId, id));
+  await removeIdFromJson(tx, kitchenStations.printerIds, id);
   await tx.delete(printerHolders).where(eq(printerHolders.printerId, id));
   await tx
     .update(printers)

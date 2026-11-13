@@ -326,7 +326,7 @@ it.each([
   ],
   // `/management-api/printer-stations` (apps/server/src/print-api.ts): the station rows, joined to
   // their station's name.
-  ["listPrinterStationNames", [], ["station_printers", "kitchen_stations"]],
+  ["listPrinterStationNames", [], ["kitchen_stations"]],
   // `printerDeleteRules` (apps/server/src/printer-delete.ts): the printer, its live jobs and
   // invoice receipts, its holder, the devices choosing or inheriting it and the profile rows they
   // inherit through, and the stations it prints for, each named.
@@ -342,7 +342,6 @@ it.each([
       "device_profiles",
       "device_profile_printers",
       "kitchen_stations",
-      "station_printers",
     ],
   ],
   // `deviceDeleteRules` (apps/server/src/device-delete.ts): the device, its pending payments and
@@ -1023,7 +1022,6 @@ it.each(["Course", "Station"] as const)(
 );
 
 const stationDeleteReads = [
-  "kitchen_stations",
   "ticket_items",
   "working_order_lines",
   "working_orders",
@@ -1033,7 +1031,7 @@ const stationDeleteReads = [
   "parties",
   "order_drafts",
   "order_draft_lines",
-  "station_printers",
+  "kitchen_stations",
   "printers",
   "device_made_here_stations",
   "devices",

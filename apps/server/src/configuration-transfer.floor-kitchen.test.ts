@@ -7,6 +7,7 @@ import {
   floorZones,
   floorPlanTables,
   kitchenStations,
+  printers,
   todaySet,
   withTransaction,
 } from "@waitron/db";
@@ -16,7 +17,12 @@ import { planVenue, type VenueRequest } from "@waitron/provisioning";
 import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
-import { buildConfigurationBundle, importConfigurationTables } from "./configuration-transfer.js";
+import {
+  buildConfigurationBundle,
+  importConfigurationTables,
+  decodeConfigurationBundle,
+  encodeConfigurationBundle,
+} from "./configuration-transfer.js";
 import { useTestProducer } from "./testing/test-producer.js";
 
 useTestProducer();
@@ -109,6 +115,15 @@ it("exports neither today's keep-open nor station closure, and imports both as o
     new Date("2026-11-12T22:00:00Z"),
     versions,
   );
+  expect(() =>
+    decodeConfigurationBundle(
+      encodeConfigurationBundle(
+        { ...bundle, version: 27 } as unknown as typeof bundle,
+        "a secure passphrase",
+      ),
+      "a secure passphrase",
+    ),
+  ).toThrowError(expect.objectContaining({ code: "setup.configuration_outdated" }));
   expect(bundle.tables.floor_zones!.length).toBeGreaterThan(0);
   expect(bundle.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const row of bundle.tables.floor_zones!)
@@ -243,4 +258,57 @@ it("A1510 exports where a station's dishes go when closed, and imports it naming
     { name: "Early grill", sendsTo: "Late fryer" },
     { name: "Late fryer", sendsTo: "Early grill" },
   ]);
+});
+
+it("imports station lists under the destination printer ids and prunes a deleted printer", async () => {
+  const prepared = await applyHistoricalTestVenue(planVenue(request("B44001166"), ALL_MODULES), {
+    db: source.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(source.db, async (tx) => {
+    await tx.insert(printers).values([
+      { id: "source-p", name: "One", transport: "cloud_poll", pollId: "one" },
+      { id: "source-q", name: "Two", transport: "cloud_poll", pollId: "two" },
+      {
+        id: "source-old",
+        name: "Deleted",
+        transport: "cloud_poll",
+        pollId: "old",
+        active: false,
+        deletedAt: "2026-11-13T10:00:00Z",
+      },
+    ]);
+    await tx.insert(kitchenStations).values([
+      { name: "S", printerIds: ["source-p", "source-q"] },
+      { name: "T", printerIds: ["source-old"] },
+    ]);
+  });
+  const versions = await schemaVersionsByModule(
+    { venue: source.db, node: source.node },
+    ALL_MODULES,
+  );
+  const bundle = await buildConfigurationBundle(
+    source.db,
+    prepared,
+    ALL_MODULES,
+    new Date("2026-11-13T10:00:00Z"),
+    versions,
+  );
+  await applyHistoricalTestVenue(planVenue(request("B44001177"), ALL_MODULES), {
+    db: target.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
+  });
+  const imported = await target.db.select().from(printers).orderBy(printers.name);
+  expect(imported.map((p) => p.name)).toEqual(["One", "Two"]);
+  for (const printer of imported)
+    expect(["source-p", "source-q", "source-old"]).not.toContain(printer.id);
+  const stations = await target.db.select().from(kitchenStations);
+  expect(stations.find((s) => s.name === "S")!.printerIds).toEqual(
+    imported.map((p) => p.id).sort(),
+  );
+  expect(stations.find((s) => s.name === "T")!.printerIds).toEqual([]);
+  for (const station of stations)
+    for (const id of station.printerIds)
+      expect(["source-p", "source-q", "source-old"]).not.toContain(id);
 });

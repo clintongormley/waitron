@@ -13,7 +13,7 @@ import {
   orderTableLabels,
   printJobs,
   printers,
-  stationPrinters,
+  stationPrinterPairs,
   tableNames,
   ticketItems,
   ticketState,
@@ -155,16 +155,16 @@ export async function printerMappings(
 ): Promise<PrinterMapping[]> {
   return tx
     .select({
-      stationId: stationPrinters.stationId,
-      printerId: stationPrinters.printerId,
+      stationId: stationPrinterPairs.stationId,
+      printerId: stationPrinterPairs.printerId,
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
     })
-    .from(stationPrinters)
-    .innerJoin(printers, eq(stationPrinters.printerId, printers.id))
+    .from(stationPrinterPairs)
+    .innerJoin(printers, eq(stationPrinterPairs.printerId, printers.id))
     .where(
       and(
-        inArray(stationPrinters.stationId, stationIds),
+        inArray(stationPrinterPairs.stationId, stationIds),
         switchedOffToo ? isNull(printers.deletedAt) : eq(printers.active, true),
       ),
     );

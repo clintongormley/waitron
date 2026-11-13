@@ -1,7 +1,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { locations, readVenue } from "@waitron/db";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -21,7 +21,6 @@ import {
   printJobs,
   printerHolders,
   printers,
-  stationPrinters,
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
@@ -5120,10 +5119,8 @@ describe("a deleted printer's alerts", () => {
     );
     const deleted = await createNetworkPrinter(app, "10.78.0.1", 9100, "Old kitchen");
     const live = await createNetworkPrinter(app, "10.78.0.2", 9100, "Live kitchen");
-    await suite.db.insert(stationPrinters).values([
-      { stationId: station.id, printerId: deleted },
-      { stationId: station.id, printerId: live },
-    ]);
+    await attachStationPrinterForTest(suite.db, station.id, deleted);
+    await attachStationPrinterForTest(suite.db, station.id, live);
     const oldJob = await enqueue(deleted, esc(WIDE).line("Table 1").cut().bytes());
     await enqueue(live, esc(WIDE).line("Table 2").cut().bytes());
     const kept = () =>

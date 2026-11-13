@@ -4,7 +4,7 @@ import {
   CORE_MIGRATIONS,
   kitchenStations,
   printers,
-  stationPrinters,
+  stationPrinterPairs,
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -169,7 +169,13 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
   }
 
   const allLinks = () =>
-    db.select().from(stationPrinters).orderBy(stationPrinters.stationId, stationPrinters.printerId);
+    db
+      .select({
+        stationId: stationPrinterPairs.stationId,
+        printerId: stationPrinterPairs.printerId,
+      })
+      .from(stationPrinterPairs)
+      .orderBy(stationPrinterPairs.stationId, stationPrinterPairs.printerId);
 
   it("refuses attaching, detaching and listing by it with printer.not_found, changing nothing", async () => {
     const { cfg, s1, gone } = await venueWithLinks();
@@ -252,4 +258,69 @@ it("configuration printer lists hide removed stations", async () => {
       code: "station.not_found",
       params: { stationId },
     });
+});
+
+it("attaches one sorted copy and replaces it with exactly the requested sorted list", async () => {
+  const cfg = await setupVenue();
+  const id = await station(cfg, "Sorted links");
+  const ids = [
+    await printer(cfg, "One"),
+    await printer(cfg, "Two"),
+    await printer(cfg, "Three"),
+  ].sort();
+  const stored = async () =>
+    (await db.select().from(kitchenStations).where(eq(kitchenStations.id, id)))[0]!.printerIds;
+  for (const printerId of [ids[1]!, ids[0]!, ids[1]!])
+    await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: id, printerId }));
+  expect(await stored()).toEqual([ids[0], ids[1]]);
+  await asApp(cfg, (tx) => replaceStationPrinters(tx, id, [ids[2]!, ids[0]!, ids[2]!]));
+  expect(await stored()).toEqual([ids[0], ids[2]]);
+});
+
+it("refuses a newly attached switched-off printer without changing the list", async () => {
+  const cfg = await setupVenue();
+  const stationId = await station(cfg, "Off printer");
+  const printerId = await printer(cfg, "Off");
+  await asApp(cfg, (tx) => updatePrinter(tx, printerId, { active: false }));
+  await expect(
+    asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId, printerId })),
+  ).rejects.toMatchObject({ code: "printer.not_found", params: { id: printerId } });
+  expect(
+    (await db.select().from(kitchenStations).where(eq(kitchenStations.id, stationId)))[0]!
+      .printerIds,
+  ).toEqual([]);
+});
+
+it("deleting a printer removes it from every station's stored list and reports both", async () => {
+  const cfg = await setupVenue();
+  const first = await station(cfg, "First");
+  const second = await station(cfg, "Second");
+  const removed = await printer(cfg, "Removed");
+  const kept = await printer(cfg, "Keep");
+  await db
+    .update(kitchenStations)
+    .set({ printerIds: [removed, kept].sort() })
+    .where(eq(kitchenStations.id, first));
+  await db
+    .update(kitchenStations)
+    .set({ printerIds: [removed] })
+    .where(eq(kitchenStations.id, second));
+  const impact = await asApp(cfg, (tx) => deletePrinter(tx, removed));
+  expect(impact.removes).toContainEqual({
+    key: "station_printers",
+    count: 2,
+    targets: [
+      { id: first, name: "First" },
+      { id: second, name: "Second" },
+    ],
+  });
+  expect(
+    await db
+      .select({ id: kitchenStations.id, printerIds: kitchenStations.printerIds })
+      .from(kitchenStations)
+      .orderBy(kitchenStations.name),
+  ).toEqual([
+    { id: first, printerIds: [kept] },
+    { id: second, printerIds: [] },
+  ]);
 });

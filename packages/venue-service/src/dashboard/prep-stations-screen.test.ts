@@ -2994,7 +2994,7 @@ it("the station editor preserves an open printer draft when mappings refresh liv
   const { el, a } = await mountStations({ liveData, load });
   await openPrinters(el);
   await pickPrinters(el, ["old", "next"]);
-  liveData.invalidate([{ type: "station_printers", id: "bar" }]);
+  liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
   await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
   await settleEditor(el);
   const retained = printersOf(el);

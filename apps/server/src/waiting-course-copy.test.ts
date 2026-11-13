@@ -14,7 +14,7 @@ import {
   parties,
   partyTables,
   printJobs,
-  stationPrinters,
+  stationPrinterPairs,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -1754,9 +1754,9 @@ const paperStations: string[] = [];
 
 async function printerOf(stationId: string): Promise<string> {
   const [row] = await v.db
-    .select({ printerId: stationPrinters.printerId })
-    .from(stationPrinters)
-    .where(eq(stationPrinters.stationId, stationId));
+    .select({ printerId: stationPrinterPairs.printerId })
+    .from(stationPrinterPairs)
+    .where(eq(stationPrinterPairs.stationId, stationId));
   return row!.printerId;
 }
 

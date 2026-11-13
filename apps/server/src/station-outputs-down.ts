@@ -6,7 +6,7 @@ import {
   kitchenStations,
   printJobs,
   printers,
-  stationPrinters,
+  stationPrinterPairs,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -63,9 +63,9 @@ export function stationPrintersDownQuery(
       printerName: printers.name,
       since: min(printJobs.createdAt),
     })
-    .from(stationPrinters)
-    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
-    .innerJoin(printers, eq(printers.id, stationPrinters.printerId))
+    .from(stationPrinterPairs)
+    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinterPairs.stationId))
+    .innerJoin(printers, eq(printers.id, stationPrinterPairs.printerId))
     .innerJoin(
       sql`${printJobs} indexed by print_jobs_pull_idx`,
       eq(printJobs.printerId, printers.id),

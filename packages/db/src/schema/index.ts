@@ -31,7 +31,6 @@ export * from "./invoice-corrections.js";
 export * from "./invoice-correction-refunds.js";
 export * from "./kitchen-print-job-lines.js";
 export * from "./kitchen-print-jobs.js";
-export * from "./station-printers.js";
 export * from "./ticket-item-moves.js";
 export * from "./drawer-opens.js";
 export * from "./catalogue.js";

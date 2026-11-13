@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bc5b451b-e3b4-451b-a4ac-7468a8cb982d",
+  "id": "298adca4-77e4-4443-aa9e-e1f87a395b83",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4225,6 +4225,14 @@
           "autoincrement": false,
           "default": false
         },
+        "printer_ids": {
+          "name": "printer_ids",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -4303,6 +4311,10 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "kitchen_stations_printer_ids_ck": {
+          "name": "kitchen_stations_printer_ids_ck",
+          "value": "json_valid(\"kitchen_stations\".\"printer_ids\") and json_type(\"kitchen_stations\".\"printer_ids\") = 'array'"
+        },
         "kitchen_stations_closed_sends_to_ck": {
           "name": "kitchen_stations_closed_sends_to_ck",
           "value": "\"kitchen_stations\".\"closed_sends_to_station_id\" is null or \"kitchen_stations\".\"closed_on_day\" is not null"
@@ -6221,65 +6233,6 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "station_printers": {
-      "name": "station_printers",
-      "columns": {
-        "station_id": {
-          "name": "station_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "printer_id": {
-          "name": "printer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "station_printers_station_id_kitchen_stations_id_fk": {
-          "name": "station_printers_station_id_kitchen_stations_id_fk",
-          "tableFrom": "station_printers",
-          "tableTo": "kitchen_stations",
-          "columnsFrom": [
-            "station_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "station_printers_printer_id_printers_id_fk": {
-          "name": "station_printers_printer_id_printers_id_fk",
-          "tableFrom": "station_printers",
-          "tableTo": "printers",
-          "columnsFrom": [
-            "printer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "station_printers_pk": {
-          "columns": [
-            "station_id",
-            "printer_id"
-          ],
-          "name": "station_printers_pk"
-        }
-      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },

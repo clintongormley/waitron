@@ -123,9 +123,10 @@ useVenueDb({
     });
     // Every station prints to the receipt printer, so a fire is seen as kitchen print jobs.
     db.run(sql`
-      insert into station_printers (station_id, printer_id)
-      select distinct k.id, d.receipt_printer_id from kitchen_stations k, devices d
-      where d.receipt_printer_id is not null
+      update kitchen_stations set printer_ids = (
+        select json_group_array(distinct receipt_printer_id) from devices
+        where receipt_printer_id is not null
+      )
     `);
     const [, ...device] = venue.cookie.split("; ");
     supervisorCookie = [`${SESSION_COOKIE}=${session.token}`, ...device].join("; ");

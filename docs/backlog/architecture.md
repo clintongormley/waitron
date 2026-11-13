@@ -1326,7 +1326,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`locations`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`media_image_data`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
 - **`payment_refunds`: decide the remaining DELETE restriction (A805 follow-up).**
-- **`station_printers`: decide the remaining UPDATE restriction (A805 follow-up).**
 - **`workforce_chains`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`working_order_counters`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind

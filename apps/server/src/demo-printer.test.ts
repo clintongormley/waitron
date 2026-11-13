@@ -13,7 +13,7 @@ import {
   printAgents,
   printJobs,
   printers,
-  stationPrinters,
+  stationPrinterPairs,
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
@@ -174,9 +174,12 @@ describe("the Demo printer", () => {
     ).toEqual([]);
     expect(
       await suite.db
-        .select()
-        .from(stationPrinters)
-        .where(eq(stationPrinters.stationId, station!.id)),
+        .select({
+          stationId: stationPrinterPairs.stationId,
+          printerId: stationPrinterPairs.printerId,
+        })
+        .from(stationPrinterPairs)
+        .where(eq(stationPrinterPairs.stationId, station!.id)),
     ).toEqual([]);
     const [job] = await suite.db.select({ status: printJobs.status }).from(printJobs);
     expect(job?.status).toBe("failed");
@@ -264,7 +267,13 @@ describe("the Demo printer", () => {
 
     expect(await profileLists(profileId)).toEqual(lists);
     expect(
-      await suite.db.select().from(stationPrinters).where(eq(stationPrinters.printerId, gone)),
+      await suite.db
+        .select({
+          stationId: stationPrinterPairs.stationId,
+          printerId: stationPrinterPairs.printerId,
+        })
+        .from(stationPrinterPairs)
+        .where(eq(stationPrinterPairs.printerId, gone)),
     ).toEqual([]);
   });
 

@@ -104,7 +104,7 @@ export const QUERY_DEPENDENCIES = {
     "device_profile_service_access",
     "departments",
   ],
-  listPrinterStationNames: ["station_printers", "kitchen_stations"],
+  listPrinterStationNames: ["kitchen_stations"],
   listPagePrinters: ["page_printers", "print_agents"],
   getPagePrinterDeleteImpact: [
     "page_printers",
@@ -123,7 +123,6 @@ export const QUERY_DEPENDENCIES = {
     "device_profiles",
     "device_profile_printers",
     "kitchen_stations",
-    "station_printers",
   ],
   getDeviceDeleteImpact: [
     "devices",
@@ -449,7 +448,6 @@ export const QUERY_DEPENDENCIES = {
     "floor_zones",
   ],
   getStationDeleteImpact: [
-    "kitchen_stations",
     "ticket_items",
     "working_order_lines",
     "working_orders",
@@ -459,7 +457,7 @@ export const QUERY_DEPENDENCIES = {
     "parties",
     "order_drafts",
     "order_draft_lines",
-    "station_printers",
+    "kitchen_stations",
     "printers",
     "device_made_here_stations",
     "devices",
@@ -507,7 +505,7 @@ export const QUERY_DEPENDENCIES = {
     "employments",
   ],
   getRoster: ["shifts", "roster_versions", "employments", "absences"],
-  listPrinterStations: ["station_printers"],
+  listPrinterStations: ["kitchen_stations"],
   listPurchaseInvoices: ["purchase_invoices", "purchase_invoice_vat"],
   getDepartmentReceipt: [
     "department_receipts",

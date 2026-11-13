@@ -43,7 +43,6 @@ import {
   kitchenStations,
   printJobs,
   printers,
-  stationPrinters,
   openVenueDatabase,
   readDeploymentEnvironment,
   readMembershipTrustSet,
@@ -110,6 +109,7 @@ import {
   seedDeviceProfiles,
   seedVenueSettings,
   seedWorkingOrder,
+  attachStationPrinterForTest,
 } from "@waitron/db/testing/seed.js";
 import {
   TILL_LOCATION_ID,
@@ -3281,9 +3281,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       .insert(kitchenStations)
       .values({ name: "Probe kitchen", isDefault: false })
       .returning({ id: kitchenStations.id });
-    await sharedDb
-      .insert(stationPrinters)
-      .values({ stationId: station!.id, printerId: printer!.id });
+    await attachStationPrinterForTest(sharedDb, station!.id, printer!.id);
     const [job] = await sharedDb
       .insert(printJobs)
       .values({
@@ -3328,7 +3326,10 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       });
     } finally {
       await sharedDb.delete(printJobs).where(eq(printJobs.id, job!.id));
-      await sharedDb.delete(stationPrinters).where(eq(stationPrinters.stationId, station!.id));
+      await sharedDb
+        .update(kitchenStations)
+        .set({ printerIds: [] })
+        .where(eq(kitchenStations.id, station!.id));
       await sharedDb.delete(kitchenStations).where(eq(kitchenStations.id, station!.id));
       await sharedDb.delete(printers).where(eq(printers.id, printer!.id));
     }

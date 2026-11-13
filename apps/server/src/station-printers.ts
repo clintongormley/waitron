@@ -3,8 +3,13 @@ import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { refuseDeletedPrinters } from "@waitron/layouts";
-import { kitchenStations, printers, stationPrinters } from "@waitron/db";
-import type { SQL } from "drizzle-orm";
+import {
+  kitchenStations,
+  printers,
+  readStationPrinterPairs,
+  withPrinter,
+  withoutId,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 
 // The station → printer mapping verbs. The `hardware.manage` gate is applied at the route, not here.
@@ -14,17 +19,12 @@ export interface StationPrinter {
   printerId: string;
 }
 
-/**
- * Record that a fire at this station prints a ticket at this printer. Both ends must be active. The
- * table's only unique constraint is its `(station_id, printer_id)` key, so the untargeted
- * `onConflictDoNothing` makes re-attaching an attached pair a no-op.
- */
 export async function attachPrinterToStation(
   tx: Transaction,
   { stationId, printerId }: StationPrinter,
 ): Promise<void> {
   const [live] = await tx
-    .select({ id: kitchenStations.id })
+    .select({ id: kitchenStations.id, printerIds: kitchenStations.printerIds })
     .from(kitchenStations)
     .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
   if (live === undefined) throw new AppError("station.not_found", { stationId });
@@ -35,7 +35,10 @@ export async function attachPrinterToStation(
     .where(and(eq(printers.id, printerId), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
 
-  await tx.insert(stationPrinters).values({ stationId, printerId }).onConflictDoNothing();
+  await tx
+    .update(kitchenStations)
+    .set({ printerIds: withPrinter(live.printerIds, printerId) })
+    .where(eq(kitchenStations.id, stationId));
 }
 
 export async function detachPrinterFromStation(
@@ -48,9 +51,14 @@ export async function detachPrinterFromStation(
 }
 
 async function removeMapping(tx: Transaction, { stationId, printerId }: StationPrinter) {
+  const [station] = await tx
+    .select({ printerIds: kitchenStations.printerIds })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.id, stationId));
   await tx
-    .delete(stationPrinters)
-    .where(and(eq(stationPrinters.stationId, stationId), eq(stationPrinters.printerId, printerId)));
+    .update(kitchenStations)
+    .set({ printerIds: withoutId(station!.printerIds, printerId) })
+    .where(eq(kitchenStations.id, stationId));
 }
 
 export async function replaceStationPrinters(
@@ -77,19 +85,11 @@ export async function listStationPrinters(
 ): Promise<StationPrinter[]> {
   if (filter?.stationId !== undefined) await requireStation(tx, filter.stationId);
   if (filter?.printerId !== undefined) await refuseDeletedPrinters(tx, [filter.printerId]);
-  const conditions: SQL[] = [eq(kitchenStations.active, true)];
-  if (filter?.stationId !== undefined) {
-    conditions.push(eq(stationPrinters.stationId, filter.stationId));
-  }
-  if (filter?.printerId !== undefined) {
-    conditions.push(eq(stationPrinters.printerId, filter.printerId));
-  }
-  return tx
-    .select({ stationId: stationPrinters.stationId, printerId: stationPrinters.printerId })
-    .from(stationPrinters)
-    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
-    .where(and(...conditions))
-    .orderBy(stationPrinters.stationId, stationPrinters.printerId);
+  return readStationPrinterPairs(tx, {
+    stationIds: filter?.stationId === undefined ? undefined : [filter.stationId],
+    printerId: filter?.printerId,
+    activeStationsOnly: true,
+  });
 }
 
 async function requireStation(tx: Transaction, stationId: string): Promise<void> {

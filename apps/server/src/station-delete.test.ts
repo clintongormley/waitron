@@ -11,7 +11,6 @@ import {
   devices,
   deviceMadeHereStations,
   kitchenStations,
-  stationPrinters,
   printJobs,
   kitchenPrintJobs,
   ticketItemMoves,
@@ -29,6 +28,7 @@ import {
   seedDeviceProfiles,
   seedWorkingOrder,
   seedActivityActor,
+  attachStationPrinterForTest,
 } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -144,7 +144,6 @@ async function snapshot(v: PartyVenue) {
     const result: Record<string, unknown> = {};
     for (const name of [
       "kitchen_stations",
-      "station_printers",
       "device_made_here_stations",
       "routing_cells",
       "routing_cell_periods",
@@ -341,7 +340,7 @@ describe("permanent station deletion", () => {
         .returning(),
     );
     await inTx(v, async (tx) => {
-      await tx.insert(stationPrinters).values({ stationId: id, printerId: printer!.id });
+      await attachStationPrinterForTest(tx, id, printer!.id);
       await tx
         .insert(deviceMadeHereStations)
         .values({ stationId: id, deviceId: v.cfg.origin.deviceId });
@@ -409,7 +408,11 @@ describe("permanent station deletion", () => {
       code: "draft.out_of_date",
       params: { draftId: draft.id, revision: draft.revision + 1 },
     });
-    for (const table of [stationPrinters, deviceMadeHereStations])
+    expect(
+      (await suite.db.select().from(kitchenStations).where(eq(kitchenStations.id, id)))[0]!
+        .printerIds,
+    ).toEqual([]);
+    for (const table of [deviceMadeHereStations])
       expect(await inTx(v, (tx) => tx.select().from(table))).toEqual([]);
     expect((await inTx(v, (tx) => listStations(tx))).some((row) => row.id === id)).toBe(false);
     for (const action of [
@@ -640,7 +643,7 @@ describe("permanent station deletion", () => {
           pollId: randomUUID(),
         })
         .returning();
-      await tx.insert(stationPrinters).values({ stationId: id, printerId: printer!.id });
+      await attachStationPrinterForTest(tx, id, printer!.id);
       for (const status of ["queued", "printing", "done", "failed"] as const) {
         const [job] = await tx
           .insert(printJobs)

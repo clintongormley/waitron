@@ -8,7 +8,19 @@ import {
 import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import { count, day, flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
+import {
+  count,
+  day,
+  flag,
+  id,
+  json,
+  jsonShapeCheck,
+  label,
+  newId,
+  nowIso,
+  table,
+  tsString,
+} from "./columns.js";
 
 /**
  * A kitchen station: the routing target a fired line resolves to. The `is_default` station is the
@@ -38,6 +50,7 @@ export const kitchenStations = table(
       .notNull()
       .default("held-or-waiting"),
     waitsForPass: flag("waits_for_pass").notNull().default(false),
+    printerIds: json<string[]>("printer_ids").notNull().default([]),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     closedOnDay: day("closed_on_day"),
     closedSendsToStationId: id("closed_sends_to_station_id").references(
@@ -48,6 +61,7 @@ export const kitchenStations = table(
     ),
   },
   (t) => [
+    check("kitchen_stations_printer_ids_ck", jsonShapeCheck(t.printerIds, "array")),
     check(
       "kitchen_stations_closed_sends_to_ck",
       sql`${t.closedSendsToStationId} is null or ${t.closedOnDay} is not null`,

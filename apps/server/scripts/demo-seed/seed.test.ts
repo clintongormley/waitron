@@ -216,7 +216,7 @@ describe("seedDemoRestaurant", () => {
       ticket_stations: number;
     }>(sql`
       select p.id, p.name, p.transport, p.has_cash_drawer,
-        (select cast(count(*) as integer) from station_printers sp where sp.printer_id = p.id) as ticket_stations
+        (select cast(count(*) as integer) from kitchen_stations ks, json_each(ks.printer_ids) sp where sp.value = p.id) as ticket_stations
       from printers p`);
     expect(printers).toEqual([
       {

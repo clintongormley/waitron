@@ -28,7 +28,7 @@ import {
   printers,
   printTransport,
   readVenue,
-  stationPrinters,
+  stationPrinterPairs,
   withTransaction,
   type Database,
   type Transaction,
@@ -1927,14 +1927,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({
-            printerId: stationPrinters.printerId,
+            printerId: stationPrinterPairs.printerId,
             stationId: kitchenStations.id,
             stationName: kitchenStations.name,
           })
-          .from(stationPrinters)
-          .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
+          .from(stationPrinterPairs)
+          .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinterPairs.stationId))
           .where(eq(kitchenStations.active, true))
-          .orderBy(kitchenStations.name, kitchenStations.id, stationPrinters.printerId),
+          .orderBy(kitchenStations.name, kitchenStations.id, stationPrinterPairs.printerId),
       );
       return c.json(rows);
     }),

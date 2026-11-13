@@ -10,7 +10,7 @@ import {
   kitchenStations,
   printAgents,
   printers,
-  stationPrinters,
+  withPrinter,
   withTransaction,
   type Database,
   type Transaction,
@@ -127,12 +127,14 @@ export async function routeToDemoPrinter(tx: Transaction, printerId: string): Pr
         lists.cashDrawerPrinterDefaultId ?? (opensDrawer ? printerId : null),
     });
   }
-  const stations = await tx.select({ id: kitchenStations.id }).from(kitchenStations);
+  const stations = await tx
+    .select({ id: kitchenStations.id, printerIds: kitchenStations.printerIds })
+    .from(kitchenStations);
   for (const station of stations) {
     await tx
-      .insert(stationPrinters)
-      .values({ stationId: station.id, printerId })
-      .onConflictDoNothing();
+      .update(kitchenStations)
+      .set({ printerIds: withPrinter(station.printerIds, printerId) })
+      .where(eq(kitchenStations.id, station.id));
   }
 }
 

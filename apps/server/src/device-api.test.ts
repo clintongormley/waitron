@@ -1,6 +1,10 @@
 import { builtInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { personStaffRoles, staffRoles, persons } from "@waitron/db";
-import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
+import {
+  seedDeviceProfiles,
+  seedZone,
+  attachStationPrinterForTest,
+} from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -22,7 +26,6 @@ import {
   printJobs,
   printers,
   shortNameColumns,
-  stationPrinters,
   ticketItems,
   withTransaction,
   workingOrders,
@@ -1052,10 +1055,8 @@ describe("Device API — the device-guarded routes", () => {
 
     const ownPrinter = await seedPrinter();
     const foreignPrinter = await seedPrinter();
-    await suite.db.insert(stationPrinters).values([
-      { stationId: venue.defaultStationId, printerId: ownPrinter },
-      { stationId: cold.id, printerId: foreignPrinter },
-    ]);
+    await attachStationPrinterForTest(suite.db, venue.defaultStationId, ownPrinter);
+    await attachStationPrinterForTest(suite.db, cold.id, foreignPrinter);
     for (const printerId of [ownPrinter, foreignPrinter]) {
       await suite.db.insert(printJobs).values({
         printerId,
@@ -1367,7 +1368,7 @@ describe("Device API — the device-guarded routes", () => {
     it("keeps its printers-down line with its waiting dishes", async () => {
       const { venue, app, cold, items } = await seed();
       const printerId = await seedPrinter();
-      await suite.db.insert(stationPrinters).values({ stationId: cold, printerId });
+      await attachStationPrinterForTest(suite.db, cold, printerId);
       await suite.db.insert(printJobs).values({
         printerId,
         payload: Uint8Array.of(1),
@@ -1587,7 +1588,7 @@ describe("Device API — the device-guarded routes", () => {
     for (const stationId of [venue.defaultStationId, pastry!.id]) {
       const printerId = await seedPrinter();
       printerAt.set(stationId, printerId);
-      await suite.db.insert(stationPrinters).values({ stationId, printerId });
+      await attachStationPrinterForTest(suite.db, stationId, printerId);
       await suite.db.insert(printJobs).values({
         printerId,
         payload: Uint8Array.of(1),

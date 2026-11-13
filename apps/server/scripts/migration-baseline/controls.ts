@@ -415,18 +415,18 @@ export const CONTROLS: readonly Control[] = [
     label: "primary key columns changed",
     change: {
       rewrite: {
-        name: "station_printers",
-        from: "PRIMARY KEY(`station_id`, `printer_id`)",
-        to: "PRIMARY KEY(`printer_id`, `station_id`)",
+        name: "menu_version_images",
+        from: "PRIMARY KEY(`version_id`, `filename`)",
+        to: "PRIMARY KEY(`filename`, `version_id`)",
       },
     },
     expect: [
-      "changed table station_printers.columns[station_id].primaryKeyPosition",
-      "changed table station_printers.columns[printer_id].primaryKeyPosition",
-      "missing table station_printers.keys[PRIMARY KEY(station_id,printer_id)]",
-      "extra table station_printers.keys[PRIMARY KEY(printer_id,station_id)]",
-      "missing index station_printers.primary key(station_id,printer_id)",
-      "extra index station_printers.primary key(printer_id,station_id)",
+      "changed table menu_version_images.columns[version_id].primaryKeyPosition",
+      "changed table menu_version_images.columns[filename].primaryKeyPosition",
+      "missing table menu_version_images.keys[PRIMARY KEY(version_id,filename)]",
+      "extra table menu_version_images.keys[PRIMARY KEY(filename,version_id)]",
+      "missing index menu_version_images.primary key(version_id,filename)",
+      "extra index menu_version_images.primary key(filename,version_id)",
     ],
   },
   {
