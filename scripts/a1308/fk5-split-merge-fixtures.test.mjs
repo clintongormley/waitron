@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { expect, it, vi } from "vitest";
 import { foldInserts } from "./lib/fold-inserts.mjs";
 import { rules } from "./fk5-split-merge-fixtures.mjs";
