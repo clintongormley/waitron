@@ -5,8 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
   floorResetTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
+  tableMerges,
   needsMoving,
   OFF_FLOOR,
   todaySet,
@@ -83,9 +82,9 @@ describe("movesTable and the SQL rule the till and the refusals read", () => {
       await tx.update(diningTables).set(OFF_FLOOR).where(inArray(diningTables.id, ids));
       await tx.delete(floorResetTables).where(inArray(floorResetTables.tableId, ids));
       const [join] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       for (const [i, c] of CASES.entries()) {
         const tableId = ids[i]!;
         if (c.today !== null) {
@@ -111,8 +110,9 @@ describe("movesTable and the SQL rule the till and the refusals read", () => {
         });
         if (c.inMerge) {
           await tx
-            .insert(floorTodayJoinTables)
-            .values({ joinId: join!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+            .update(diningTables)
+            .set({ mergeId: join!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+            .where(eq(diningTables.id, tableId));
         }
       }
     });

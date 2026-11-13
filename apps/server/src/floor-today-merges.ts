@@ -1,12 +1,6 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
-import {
-  partyTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
-  todaySet,
-  diningTables,
-} from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import { partyTables, tableMerges, mergeOf, LEFT_MERGE, todaySet, diningTables } from "@waitron/db";
+import type { Transaction, MergeMember } from "@waitron/db";
 import { AppError, freeSide, touchingPlace, type JoinPlace, type JoinSide } from "@waitron/shared";
 import {
   refuseNeedsMoving,
@@ -29,31 +23,31 @@ import "./errors.js";
  */
 export async function leaveMerges(tx: Transaction, tableIds: readonly string[]): Promise<void> {
   const left = await tx
-    .delete(floorTodayJoinTables)
-    .where(inArray(floorTodayJoinTables.tableId, [...tableIds]))
-    .returning({ joinId: floorTodayJoinTables.joinId });
-  for (const joinId of new Set(left.map((row) => row.joinId))) {
+    .select({ joinId: diningTables.mergeId })
+    .from(diningTables)
+    .where(and(inArray(diningTables.id, [...tableIds]), isNotNull(diningTables.mergeId)));
+  if (left.length === 0) return;
+  await tx
+    .update(diningTables)
+    .set(LEFT_MERGE)
+    .where(inArray(diningTables.id, [...tableIds]));
+  for (const joinId of new Set(left.map((row) => row.joinId!))) {
     const rest = await tx
-      .select({
-        tableId: floorTodayJoinTables.tableId,
-        beforeX: floorTodayJoinTables.beforeX,
-        beforeY: floorTodayJoinTables.beforeY,
-        beforeRotation: floorTodayJoinTables.beforeRotation,
-      })
-      .from(floorTodayJoinTables)
-      .where(eq(floorTodayJoinTables.joinId, joinId));
+      .select(mergeOf)
+      .from(diningTables)
+      .where(eq(diningTables.mergeId, joinId));
     if (rest.length >= 2) continue;
     for (const member of rest) {
       await putBack(tx, member);
     }
-    await tx.delete(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, joinId));
-    await tx.delete(floorTodayJoins).where(eq(floorTodayJoins.id, joinId));
+    await tx.update(diningTables).set(LEFT_MERGE).where(eq(diningTables.mergeId, joinId));
+    await tx.delete(tableMerges).where(eq(tableMerges.id, joinId));
   }
 }
 
 async function putBack(
   tx: Transaction,
-  member: { tableId: string; beforeX: number; beforeY: number; beforeRotation: number },
+  member: Pick<MergeMember, "tableId" | "beforeX" | "beforeY" | "beforeRotation">,
 ): Promise<void> {
   await tx
     .update(diningTables)
@@ -67,14 +61,9 @@ export async function leaveMergesRestoring(
   tableIds: readonly string[],
 ): Promise<void> {
   const leaving = await tx
-    .select({
-      tableId: floorTodayJoinTables.tableId,
-      beforeX: floorTodayJoinTables.beforeX,
-      beforeY: floorTodayJoinTables.beforeY,
-      beforeRotation: floorTodayJoinTables.beforeRotation,
-    })
-    .from(floorTodayJoinTables)
-    .where(inArray(floorTodayJoinTables.tableId, [...tableIds]));
+    .select(mergeOf)
+    .from(diningTables)
+    .where(and(inArray(diningTables.id, [...tableIds]), isNotNull(diningTables.mergeId)));
   for (const member of leaving) {
     await putBack(tx, member);
   }
@@ -84,14 +73,14 @@ export async function leaveMergesRestoring(
 /** Every member of `tableId`'s merge by table id, `tableId` included, or [] when it is in none. */
 export async function mergeMembers(tx: Transaction, tableId: string): Promise<string[]> {
   const own = tx
-    .select({ joinId: floorTodayJoinTables.joinId })
-    .from(floorTodayJoinTables)
-    .where(eq(floorTodayJoinTables.tableId, tableId));
+    .select({ joinId: diningTables.mergeId })
+    .from(diningTables)
+    .where(eq(diningTables.id, tableId));
   const members = await tx
-    .select({ tableId: floorTodayJoinTables.tableId })
-    .from(floorTodayJoinTables)
-    .where(inArray(floorTodayJoinTables.joinId, own))
-    .orderBy(asc(floorTodayJoinTables.tableId));
+    .select({ tableId: diningTables.id })
+    .from(diningTables)
+    .where(inArray(diningTables.mergeId, own))
+    .orderBy(asc(diningTables.id));
   return members.map((m) => m.tableId);
 }
 
@@ -168,13 +157,16 @@ export async function writeMerge(
   let joinId = target.merge?.joinId;
   if (joinId === undefined) {
     const [join] = await tx
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId, seats })
-      .returning({ id: floorTodayJoins.id });
+      .returning({ id: tableMerges.id });
     joinId = join!.id;
-    await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, target));
+    await tx
+      .update(diningTables)
+      .set(beforeRow(joinId, target))
+      .where(eq(diningTables.id, target.tableId));
   } else {
-    await tx.update(floorTodayJoins).set({ seats }).where(eq(floorTodayJoins.id, joinId));
+    await tx.update(tableMerges).set({ seats }).where(eq(tableMerges.id, joinId));
   }
   const goes = { width: moving.row.width!, height: moving.row.height! };
   const against = placeOf(target.row);
@@ -182,7 +174,10 @@ export async function writeMerge(
   const side = freeSide(against, goes, members, args.side);
   const at = touchingPlace(against, goes, side);
 
-  await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, moving));
+  await tx
+    .update(diningTables)
+    .set(beforeRow(joinId, moving))
+    .where(eq(diningTables.id, moving.tableId));
   await tx.update(diningTables).set(todaySet(at)).where(eq(diningTables.id, moving.row.tableId));
 }
 
@@ -192,10 +187,9 @@ function placeOf(row: Today["row"]): JoinPlace {
 
 function beforeRow(joinId: string, today: Today) {
   return {
-    joinId,
-    tableId: today.tableId,
-    beforeX: today.row.x!,
-    beforeY: today.row.y!,
-    beforeRotation: today.row.rotation!,
+    mergeId: joinId,
+    mergeBeforeX: today.row.x!,
+    mergeBeforeY: today.row.y!,
+    mergeBeforeRotation: today.row.rotation!,
   };
 }

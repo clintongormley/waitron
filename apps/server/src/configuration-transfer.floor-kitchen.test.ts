@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
+  tableMerges,
   floorZones,
   floorPlanTables,
   kitchenStations,
@@ -63,7 +64,12 @@ it("exports neither today's keep-open nor station closure, and imports both as o
       .insert(floorPlanTables)
       .values({ zoneId: zone!.id, label: "Saved table", shortName: "S1" })
       .returning();
+    await tx.insert(tableMerges).values({ id: "export-merge", zoneId: zone!.id, seats: 6 });
     await tx.insert(diningTables).values({
+      mergeId: "export-merge",
+      mergeBeforeX: 1,
+      mergeBeforeY: 2,
+      mergeBeforeRotation: 30,
       id: "export-table",
       zoneId: zone!.id,
       label: "Saved table",
@@ -138,6 +144,10 @@ it("exports neither today's keep-open nor station closure, and imports both as o
       "today_rotation",
       "taken_off",
       "today_name",
+      "merge_id",
+      "merge_before_x",
+      "merge_before_y",
+      "merge_before_rotation",
     ])
       expect(row).not.toHaveProperty(column);
   for (const row of bundle.tables.kitchen_stations!)
@@ -148,7 +158,20 @@ it("exports neither today's keep-open nor station closure, and imports both as o
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
   });
-  expect(target.db.all(sql`select on_floor from dining_tables`)).toEqual([{ on_floor: 0 }]);
+  expect(bundle.tables).not.toHaveProperty("table_merges");
+  expect(
+    target.db.all(
+      sql`select on_floor, merge_id, merge_before_x, merge_before_y, merge_before_rotation from dining_tables`,
+    ),
+  ).toEqual([
+    {
+      on_floor: 0,
+      merge_id: null,
+      merge_before_x: null,
+      merge_before_y: null,
+      merge_before_rotation: null,
+    },
+  ]);
   expect(target.db.all(sql`select today_business_day from floor_zones`)).toEqual(
     bundle.tables.floor_zones!.map(() => ({ today_business_day: null })),
   );

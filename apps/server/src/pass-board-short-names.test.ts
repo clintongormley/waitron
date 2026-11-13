@@ -1,3 +1,4 @@
+import { inArray } from "drizzle-orm";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { and, eq, isNull } from "drizzle-orm";
@@ -5,8 +6,7 @@ import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   diningTables,
-  floorTodayJoinTables,
-  floorTodayJoins,
+  tableMerges,
   parties,
   partyTables,
   shortNameColumns,
@@ -245,18 +245,13 @@ describe("a table named for today keeps its short name on the pass", () => {
     const { zoneId } = await tableRow(v, first);
     await inTx(v, async (tx) => {
       const [joined] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId, seats: 4, name })
-        .returning({ id: floorTodayJoins.id });
-      await tx.insert(floorTodayJoinTables).values(
-        [first, second].map((tableId) => ({
-          joinId: joined!.id,
-          tableId,
-          beforeX: 0,
-          beforeY: 0,
-          beforeRotation: 0,
-        })),
-      );
+        .returning({ id: tableMerges.id });
+      await tx
+        .update(diningTables)
+        .set({ mergeId: joined!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+        .where(inArray(diningTables.id, [first, second]));
     });
     const { partyId } = await seat(v, first);
     const { tabId } = await orderForParty(v, partyId, ["Burger"]);

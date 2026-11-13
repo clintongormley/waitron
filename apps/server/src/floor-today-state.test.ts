@@ -5,14 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  floorResetTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
-  floorZones,
-  todaySet,
-  diningTables,
-} from "@waitron/db";
+import { floorResetTables, tableMerges, floorZones, todaySet, diningTables } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
@@ -117,13 +110,14 @@ describe("the till's table-state answer carries today's plan", () => {
         .set(todaySet({ takenOff: true }))
         .where(eq(diningTables.id, off));
       const [join] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId, seats: 7 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       for (const tableId of [a, b]) {
         await tx
-          .insert(floorTodayJoinTables)
-          .values({ joinId: join!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+          .update(diningTables)
+          .set({ mergeId: join!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+          .where(eq(diningTables.id, tableId));
       }
       return join!.id;
     });
@@ -333,10 +327,7 @@ describe("the till's table-state answer carries today's names", () => {
         .update(diningTables)
         .set(todaySet({ name: tableName }))
         .where(eq(diningTables.id, named.table.bar!));
-      await tx
-        .update(floorTodayJoins)
-        .set({ name: groupName })
-        .where(eq(floorTodayJoins.id, joinId));
+      await tx.update(tableMerges).set({ name: groupName }).where(eq(tableMerges.id, joinId));
     });
 
     const states = await read();

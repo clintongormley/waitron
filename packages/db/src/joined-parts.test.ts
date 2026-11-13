@@ -1,10 +1,11 @@
+import { LEFT_MERGE } from "./floor-today-columns.js";
 import { todaySet } from "@waitron/db";
 import { eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { needsMoving } from "./joined-parts.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { diningTables } from "./schema/dining-tables.js";
-import { floorResetTables, floorTodayJoinTables, floorTodayJoins } from "./schema/floor-plans.js";
+import { floorResetTables, tableMerges } from "./schema/floor-plans.js";
 import { seedVenue, seedZone } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
@@ -97,14 +98,15 @@ describe("needs moving", () => {
 
   it("is true in a merge", async () => {
     const [join] = await suite.db
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId: ZONE, seats: 8 })
-      .returning({ id: floorTodayJoins.id });
+      .returning({ id: tableMerges.id });
     await suite.db
-      .insert(floorTodayJoinTables)
-      .values({ joinId: join!.id, tableId: PLAIN, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+      .update(diningTables)
+      .set({ mergeId: join!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+      .where(eq(diningTables.id, PLAIN));
     expect(await plain()).toBe(1);
-    await suite.db.delete(floorTodayJoinTables).where(eq(floorTodayJoinTables.tableId, PLAIN));
+    await suite.db.update(diningTables).set(LEFT_MERGE).where(eq(diningTables.id, PLAIN));
     expect(await plain()).toBe(0);
   });
 

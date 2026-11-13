@@ -2,8 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  floorTodayJoins,
-  floorTodayJoinTables,
+  tableMerges,
   parties,
   partyTables,
   workingOrders,
@@ -60,18 +59,15 @@ describe("A765 table names in order lists", () => {
       for (const label of ["North 1", "North 2"])
         tables.push(await createTable(tx, venue.cfg, { label, zoneId: venue.zoneId }));
       const [join] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: venue.zoneId, seats: 6, name: "Garden party" })
         .returning();
       const [party] = await tx.insert(parties).values({ openedBy: venue.operatorId }).returning();
       for (const table of tables) {
-        await tx.insert(floorTodayJoinTables).values({
-          joinId: join!.id,
-          tableId: table.id,
-          beforeX: 0,
-          beforeY: 0,
-          beforeRotation: 0,
-        });
+        await tx
+          .update(diningTables)
+          .set({ mergeId: join!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+          .where(eq(diningTables.id, table.id));
         await tx.insert(partyTables).values({ partyId: party!.id, tableId: table.id });
       }
       await seedWorkingOrder(tx, {

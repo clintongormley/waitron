@@ -1,3 +1,5 @@
+import { isNotNull } from "drizzle-orm";
+import { mergeOf as mergeColumns } from "@waitron/db";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { and, asc, eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -8,8 +10,7 @@ import {
   floorPlanPlacements,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoinTables,
-  floorTodayJoins,
+  tableMerges,
   workingOrders,
   todayColumns,
   todaySet,
@@ -74,17 +75,19 @@ async function merge(
 ): Promise<void> {
   await inTx(v, async (tx) => {
     const [join] = await tx
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId, seats: 8 })
-      .returning({ id: floorTodayJoins.id });
+      .returning({ id: tableMerges.id });
     for (const member of members) {
-      await tx.insert(floorTodayJoinTables).values({
-        joinId: join!.id,
-        tableId: member.tableId,
-        beforeX: member.beforeX,
-        beforeY: member.beforeY,
-        beforeRotation: 0,
-      });
+      await tx
+        .update(diningTables)
+        .set({
+          mergeId: join!.id,
+          mergeBeforeX: member.beforeX,
+          mergeBeforeY: member.beforeY,
+          mergeBeforeRotation: 0,
+        })
+        .where(eq(diningTables.id, member.tableId));
     }
   });
 }
@@ -141,8 +144,12 @@ async function everything() {
       .from(diningTables)
       .where(eq(diningTables.onFloor, true))
       .orderBy(asc(diningTables.id)),
-    joins: await tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
-    joinTables: await tx.select().from(floorTodayJoinTables).orderBy(asc(floorTodayJoinTables.id)),
+    joins: await tx.select().from(tableMerges).orderBy(asc(tableMerges.id)),
+    joinTables: await tx
+      .select(mergeColumns)
+      .from(diningTables)
+      .where(isNotNull(diningTables.mergeId))
+      .orderBy(asc(diningTables.id)),
   }));
 }
 
@@ -395,9 +402,9 @@ describe("today's changes", () => {
             : row,
       ),
     );
-    const joinId = before.joinTables.find((row) => row.tableId === table.a)!.joinId;
+    const joinId = before.joinTables.find((row) => row.tableId === table.a)!.mergeId;
     expect(after.joins).toEqual(before.joins.filter((row) => row.id !== joinId));
-    expect(after.joinTables).toEqual(before.joinTables.filter((row) => row.joinId !== joinId));
+    expect(after.joinTables).toEqual(before.joinTables.filter((row) => row.mergeId !== joinId));
     expect(await mergeOf(v, table.a!)).toBeNull();
     expect(await mergeOf(v, table.b!)).toBeNull();
   });

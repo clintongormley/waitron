@@ -2,7 +2,7 @@ import { type SQL, and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { partyTablesName } from "@waitron/shared";
 import type { Transaction } from "./client.js";
 import { diningTables } from "./schema/dining-tables.js";
-import { floorTodayJoins, floorTodayJoinTables } from "./schema/floor-plans.js";
+import { tableMerges } from "./schema/floor-plans.js";
 import { partyTables } from "./schema/parties.js";
 
 function shown(row: { label: string; name: string | null; joinName: string | null }): string {
@@ -15,11 +15,10 @@ function readShownNames(tx: Transaction, where: SQL | undefined) {
       id: diningTables.id,
       label: diningTables.label,
       name: diningTables.todayName,
-      joinName: floorTodayJoins.name,
+      joinName: tableMerges.name,
     })
     .from(diningTables)
-    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
-    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+    .leftJoin(tableMerges, eq(tableMerges.id, diningTables.mergeId))
     .where(where);
 }
 
@@ -45,13 +44,12 @@ async function readActiveTables(
       id: partyTables.tableId,
       label: diningTables.label,
       name: diningTables.todayName,
-      joinId: floorTodayJoins.id,
-      joinName: floorTodayJoins.name,
+      joinId: tableMerges.id,
+      joinName: tableMerges.name,
     })
     .from(partyTables)
     .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, partyTables.tableId))
-    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+    .leftJoin(tableMerges, eq(tableMerges.id, diningTables.mergeId))
     .where(and(inArray(partyTables.partyId, [...partyIds]), isNull(partyTables.leftAt)))
     .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`);
   for (const { partyId, ...table } of rows) byParty.get(partyId)!.push(table);

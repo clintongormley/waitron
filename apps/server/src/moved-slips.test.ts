@@ -3,7 +3,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorTodayJoins, todaySet, diningTables } from "@waitron/db";
+import { tableMerges, todaySet, diningTables } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { kitchenNotices } from "@waitron/venue-service";
 import { writeMerge } from "./floor-today-merges.js";
@@ -136,7 +136,7 @@ describe("withMovedSlips", () => {
     }
 
     const nameGroup = (tx: Transaction, joinId: string, name: string) =>
-      tx.update(floorTodayJoins).set({ name }).where(eq(floorTodayJoins.id, joinId));
+      tx.update(tableMerges).set({ name }).where(eq(tableMerges.id, joinId));
 
     it("reaches the party at another table of the group", async () => {
       const { table, merge, tabId } = await groupWithParty();

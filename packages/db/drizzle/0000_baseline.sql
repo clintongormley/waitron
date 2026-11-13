@@ -261,8 +261,17 @@ CREATE TABLE `dining_tables` (
 	`today_rotation` integer,
 	`taken_off` integer DEFAULT false NOT NULL,
 	`today_name` text,
+	`merge_id` text,
+	`merge_before_x` integer,
+	`merge_before_y` integer,
+	`merge_before_rotation` integer,
 	FOREIGN KEY (`plan_table_id`) REFERENCES `floor_plan_tables`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`merge_id`) REFERENCES `table_merges`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "dining_tables_merge_before_x_ck" CHECK("dining_tables"."merge_before_x" is null or "dining_tables"."merge_before_x" between 0 and 999),
+	CONSTRAINT "dining_tables_merge_before_y_ck" CHECK("dining_tables"."merge_before_y" is null or "dining_tables"."merge_before_y" between 0 and 999),
+	CONSTRAINT "dining_tables_merge_before_rotation_ck" CHECK("dining_tables"."merge_before_rotation" is null or ("dining_tables"."merge_before_rotation" between 0 and 345 and "dining_tables"."merge_before_rotation" % 15 = 0)),
+	CONSTRAINT "dining_tables_merge_before_ck" CHECK(("dining_tables"."merge_id" is null) = ("dining_tables"."merge_before_x" is null) and ("dining_tables"."merge_id" is null) = ("dining_tables"."merge_before_y" is null) and ("dining_tables"."merge_id" is null) = ("dining_tables"."merge_before_rotation" is null)),
 	CONSTRAINT "dining_tables_today_seats_ck" CHECK("dining_tables"."today_seats" is null or "dining_tables"."today_seats" between 0 and 999),
 	CONSTRAINT "dining_tables_today_x_ck" CHECK("dining_tables"."today_x" is null or "dining_tables"."today_x" between 0 and 999),
 	CONSTRAINT "dining_tables_today_y_ck" CHECK("dining_tables"."today_y" is null or "dining_tables"."today_y" between 0 and 999),
@@ -271,9 +280,10 @@ CREATE TABLE `dining_tables` (
 	CONSTRAINT "dining_tables_today_rotation_ck" CHECK("dining_tables"."today_rotation" is null or ("dining_tables"."today_rotation" between 0 and 345 and "dining_tables"."today_rotation" % 15 = 0)),
 	CONSTRAINT "dining_tables_today_shape_ck" CHECK("dining_tables"."today_shape" in ('rect', 'round')),
 	CONSTRAINT "dining_tables_today_placement_ck" CHECK(("dining_tables"."today_x" is null and "dining_tables"."today_y" is null and "dining_tables"."today_width" is null and "dining_tables"."today_height" is null and "dining_tables"."today_shape" is null and "dining_tables"."today_rotation" is null) or ("dining_tables"."today_x" is not null and "dining_tables"."today_y" is not null and "dining_tables"."today_width" is not null and "dining_tables"."today_height" is not null and "dining_tables"."today_shape" is not null and "dining_tables"."today_rotation" is not null)),
-	CONSTRAINT "dining_tables_off_floor_ck" CHECK("dining_tables"."on_floor" = 1 or ("dining_tables"."today_seats" is null and "dining_tables"."today_fixed" = 0 and "dining_tables"."today_x" is null and "dining_tables"."today_y" is null and "dining_tables"."today_width" is null and "dining_tables"."today_height" is null and "dining_tables"."today_shape" is null and "dining_tables"."today_rotation" is null and "dining_tables"."taken_off" = 0 and "dining_tables"."today_name" is null))
+	CONSTRAINT "dining_tables_off_floor_ck" CHECK("dining_tables"."on_floor" = 1 or ("dining_tables"."today_seats" is null and "dining_tables"."today_fixed" = 0 and "dining_tables"."today_x" is null and "dining_tables"."today_y" is null and "dining_tables"."today_width" is null and "dining_tables"."today_height" is null and "dining_tables"."today_shape" is null and "dining_tables"."today_rotation" is null and "dining_tables"."taken_off" = 0 and "dining_tables"."today_name" is null and "dining_tables"."merge_id" is null))
 );
 --> statement-breakpoint
+CREATE INDEX `dining_tables_merge_idx` ON `dining_tables` (`merge_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `dining_tables_short_name_key_uq` ON `dining_tables` (`short_name_key`);--> statement-breakpoint
 CREATE UNIQUE INDEX `dining_tables_label_key` ON `dining_tables` (`label`);--> statement-breakpoint
 CREATE TABLE `floor_plan_placements` (
@@ -375,42 +385,16 @@ CREATE TABLE `floor_reset_tables` (
 CREATE INDEX `floor_reset_tables_zone_pending_idx` ON `floor_reset_tables` (`zone_id`,`pending`);--> statement-breakpoint
 CREATE INDEX `floor_reset_tables_part_of_idx` ON `floor_reset_tables` (`part_of_reset_table_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `floor_reset_tables_table_key` ON `floor_reset_tables` (`table_id`);--> statement-breakpoint
-CREATE TABLE `floor_today_join_tables` (
-	`id` text PRIMARY KEY NOT NULL,
-	`join_id` text NOT NULL,
-	`table_id` text NOT NULL,
-	`before_x` integer NOT NULL,
-	`before_y` integer NOT NULL,
-	`before_rotation` integer NOT NULL,
-	FOREIGN KEY (`join_id`) REFERENCES `floor_today_joins`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "floor_today_join_tables_before_x_ck" CHECK("floor_today_join_tables"."before_x" is null or "floor_today_join_tables"."before_x" between 0 and 999),
-	CONSTRAINT "floor_today_join_tables_before_y_ck" CHECK("floor_today_join_tables"."before_y" is null or "floor_today_join_tables"."before_y" between 0 and 999),
-	CONSTRAINT "floor_today_join_tables_before_rotation_ck" CHECK("floor_today_join_tables"."before_rotation" is null or ("floor_today_join_tables"."before_rotation" between 0 and 345 and "floor_today_join_tables"."before_rotation" % 15 = 0))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `floor_today_join_tables_table_key` ON `floor_today_join_tables` (`table_id`);--> statement-breakpoint
-CREATE TABLE `floor_today_joins` (
+CREATE TABLE `table_merges` (
 	`id` text PRIMARY KEY NOT NULL,
 	`zone_id` text NOT NULL,
 	`seats` integer NOT NULL,
 	`name` text,
 	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "floor_today_joins_seats_ck" CHECK("floor_today_joins"."seats" >= 1)
+	CONSTRAINT "table_merges_seats_ck" CHECK("table_merges"."seats" >= 1)
 );
 --> statement-breakpoint
-CREATE INDEX `floor_today_joins_zone_idx` ON `floor_today_joins` (`zone_id`);--> statement-breakpoint
-CREATE TABLE `floor_today_split_parts` (
-	`id` text PRIMARY KEY NOT NULL,
-	`joined_table_id` text NOT NULL,
-	`part_table_id` text NOT NULL,
-	FOREIGN KEY (`joined_table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`part_table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "floor_today_split_parts_not_self_ck" CHECK("floor_today_split_parts"."joined_table_id" <> "floor_today_split_parts"."part_table_id")
-);
---> statement-breakpoint
-CREATE INDEX `floor_today_split_parts_joined_idx` ON `floor_today_split_parts` (`joined_table_id`);--> statement-breakpoint
-CREATE UNIQUE INDEX `floor_today_split_parts_part_key` ON `floor_today_split_parts` (`part_table_id`);--> statement-breakpoint
+CREATE INDEX `table_merges_zone_idx` ON `table_merges` (`zone_id`);--> statement-breakpoint
 CREATE TABLE `parties` (
 	`id` text PRIMARY KEY NOT NULL,
 	`guest_count` integer,

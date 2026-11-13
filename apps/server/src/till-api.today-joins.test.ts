@@ -1,3 +1,5 @@
+import { isNotNull } from "drizzle-orm";
+import { mergeOf as mergeColumns } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
@@ -10,15 +12,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
-import {
-  diningTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
-  floorTodaySplitParts,
-  partyTables,
-  workingOrders,
-  todayColumns,
-} from "@waitron/db";
+import { diningTables, tableMerges, partyTables, workingOrders, todayColumns } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { hashPin, loginWithPin } from "@waitron/identity";
@@ -677,19 +671,18 @@ describe("a party change that changes a room answers its revision", () => {
         .where(eq(diningTables.onFloor, true))
         .orderBy(asc(diningTables.id)),
     );
-    const split = await inTx(v, (tx) =>
-      tx.select().from(floorTodaySplitParts).orderBy(asc(floorTodaySplitParts.id)),
-    );
-    const joins = await inTx(v, (tx) =>
-      tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
-    );
+    const joins = await inTx(v, (tx) => tx.select().from(tableMerges).orderBy(asc(tableMerges.id)));
     const joinTables = await inTx(v, (tx) =>
-      tx.select().from(floorTodayJoinTables).orderBy(asc(floorTodayJoinTables.id)),
+      tx
+        .select(mergeColumns)
+        .from(diningTables)
+        .where(isNotNull(diningTables.mergeId))
+        .orderBy(asc(diningTables.id)),
     );
     const parties = await inTx(v, (tx) =>
       tx.select().from(partyTables).orderBy(asc(partyTables.id)),
     );
-    return { today, split, joins, joinTables, parties };
+    return { today, joins, joinTables, parties };
   }
 
   /** The party's one bill that is not abandoned; these cases each leave a party one. */

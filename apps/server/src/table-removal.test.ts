@@ -1,3 +1,4 @@
+import { writeMerge } from "./floor-today-merges.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -13,8 +14,7 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
+  tableMerges,
   partyTables,
   ticketItems,
   withTransaction,
@@ -257,6 +257,48 @@ describe("removing a live table the master no longer has", () => {
     expect((await partyRow(v, partyId)).tableNames).toEqual(["T4"]);
   });
 
+  it("a reset hides a removed merged table while an unpaid delivery still names it", async () => {
+    const {
+      zoneId,
+      ids: [first, second],
+    } = await plannedZone("Hidden merge 1", "Hidden merge 2");
+    await inTx(v, async (tx) => {
+      for (const [tableId, x] of [
+        [first!, 0],
+        [second!, 20],
+      ] as const)
+        await tx
+          .update(diningTables)
+          .set(todaySet({ x, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 }))
+          .where(eq(diningTables.id, tableId));
+      await writeMerge(tx, v.cfg, {
+        movingId: second!,
+        targetId: first!,
+        side: "right",
+        seats: 8,
+        free: true,
+      });
+    });
+    await delivery(first!, "Water");
+    await deleteFromMaster(first!);
+
+    await reset(zoneId);
+
+    expect(await todayRow(first!)).toBeUndefined();
+    expect(await tableRow(v, first!)).toMatchObject({
+      id: first,
+      mergeId: null,
+      mergeBeforeX: null,
+      mergeBeforeY: null,
+      mergeBeforeRotation: null,
+    });
+    expect(await tableRow(v, second!)).toMatchObject({ id: second, mergeId: null });
+    expect(
+      await inTx(v, (tx) => tx.select().from(tableMerges).where(eq(tableMerges.zoneId, zoneId))),
+    ).toEqual([]);
+    expect(await resetRowOf(first!)).toMatchObject({ remove: true, pending: true });
+  });
+
   it("frees the name for a table created in the same catch-up", async () => {
     const {
       zoneId,
@@ -367,9 +409,6 @@ describe("what a removed table's delete waits on", () => {
   const LETS_GO: Record<string, string> = {
     "bookings.table_id": "BOOKINGS_TABLE_REMOVAL.release, passed when bookings has been installed",
     "floor_reset_tables.table_id": "removeLiveTables deletes it",
-    "floor_today_join_tables.table_id": "leaveMerges",
-    "floor_today_split_parts.joined_table_id": "empty dormant table; no runtime writer",
-    "floor_today_split_parts.part_table_id": "empty dormant table; no runtime writer",
     "party_tables.table_id": "closePartyTables when the party closes; an open party ties the table",
     "working_orders.delivery_table_id": "releaseDeliveries",
   };
@@ -383,8 +422,8 @@ describe("what a removed table's delete waits on", () => {
     const rows = await inTx(
       v,
       async (tx) =>
-        await tx.all<{ name: string; column: string }>(
-          sql`select m.name, p."from" as "column" from sqlite_master m, pragma_foreign_key_list(m.name) p where m.type = 'table' and p."table" = 'dining_tables'`,
+        await tx.all<{ name: string; column: string; onDelete: string }>(
+          sql`select m.name, p."from" as "column", p.on_delete as "onDelete" from sqlite_master m, pragma_foreign_key_list(m.name) p where m.type = 'table' and p."table" = 'dining_tables'`,
         ),
     );
     const named = Object.fromEntries(
@@ -395,6 +434,12 @@ describe("what a removed table's delete waits on", () => {
     );
 
     expect(named).toEqual(LETS_GO);
+    expect(rows.map((row) => [row.name, row.column, row.onDelete]).sort()).toEqual([
+      ["bookings", "table_id", "NO ACTION"],
+      ["floor_reset_tables", "table_id", "NO ACTION"],
+      ["party_tables", "table_id", "NO ACTION"],
+      ["working_orders", "delivery_table_id", "NO ACTION"],
+    ]);
   });
 
   it.each(["leave", "join"] as const)(
@@ -658,17 +703,18 @@ describe("removeLiveTables", () => {
     } = await plannedZone("Merged 1", "Merged 2");
     await inTx(v, async (tx) => {
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       await tx
         .update(diningTables)
         .set(todaySet({ x: 50, y: 50, width: 8, height: 8, shape: "rect", rotation: 0 }))
         .where(eq(diningTables.id, t2!));
       for (const tableId of [t1!, t2!]) {
         await tx
-          .insert(floorTodayJoinTables)
-          .values({ joinId: merge!.id, tableId, beforeX: 3, beforeY: 4, beforeRotation: 90 });
+          .update(diningTables)
+          .set({ mergeId: merge!.id, mergeBeforeX: 3, mergeBeforeY: 4, mergeBeforeRotation: 90 })
+          .where(eq(diningTables.id, tableId));
       }
     });
 
@@ -676,7 +722,7 @@ describe("removeLiveTables", () => {
 
     expect(await tableExists(t1!)).toBe(false);
     const merges = await inTx(v, (tx) =>
-      tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, zoneId)),
+      tx.select().from(tableMerges).where(eq(tableMerges.zoneId, zoneId)),
     );
     expect(merges).toEqual([]);
     expect(await todayRow(t2!)).toMatchObject({ x: 3, y: 4, rotation: 90 });

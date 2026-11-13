@@ -1,3 +1,5 @@
+import { LEFT_MERGE } from "@waitron/db";
+import { inArray } from "drizzle-orm";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { OFF_FLOOR } from "@waitron/db";
 import { eq } from "drizzle-orm";
@@ -7,8 +9,7 @@ import { describe, expect, it, onTestFinished } from "vitest";
 import {
   CORE_MIGRATIONS,
   diningTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
+  tableMerges,
   floorZones,
   parties,
   partyTables,
@@ -255,21 +256,24 @@ describe("mountReportApi — /reports/overview", () => {
         .set({ onFloor: true })
         .where(eq(diningTables.id, table.id));
     const [group] = await suite.db
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId: zone!.id, name: "Long table", seats: 10 })
       .returning();
-    await suite.db.insert(floorTodayJoinTables).values(
-      tables.map((t) => ({
-        joinId: group!.id,
-        tableId: t.id,
-        beforeX: 0,
-        beforeY: 0,
-        beforeRotation: 0,
-      })),
-    );
+    await suite.db
+      .update(diningTables)
+      .set({ mergeId: group!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+      .where(
+        inArray(
+          diningTables.id,
+          tables.map((t) => t.id),
+        ),
+      );
     onTestFinished(async () => {
-      await suite.db.delete(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, group!.id));
-      await suite.db.delete(floorTodayJoins).where(eq(floorTodayJoins.id, group!.id));
+      await suite.db
+        .update(diningTables)
+        .set(LEFT_MERGE)
+        .where(eq(diningTables.mergeId, group!.id));
+      await suite.db.delete(tableMerges).where(eq(tableMerges.id, group!.id));
       for (const t of tables) {
         await suite.db.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, t.id));
         await suite.db.delete(diningTables).where(eq(diningTables.id, t.id));

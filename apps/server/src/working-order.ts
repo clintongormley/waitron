@@ -168,8 +168,7 @@ import {
   billPayments,
   devices,
   diningTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
+  tableMerges,
   invoiceSeries,
   isUniqueViolation,
   kitchenCourses,
@@ -8950,17 +8949,16 @@ async function readTodayTables(tx: Transaction): Promise<Map<string, TableToday>
       height: diningTables.todayHeight,
       shape: diningTables.todayShape,
       rotation: diningTables.todayRotation,
-      joinId: floorTodayJoins.id,
-      joinSeats: floorTodayJoins.seats,
+      joinId: tableMerges.id,
+      joinSeats: tableMerges.seats,
       zoneRevision: floorZones.todayRevision,
       name: diningTables.todayName,
-      joinName: floorTodayJoins.name,
+      joinName: tableMerges.name,
       needsMoving: needsMoving(diningTables.id).mapWith(Boolean),
     })
     .from(diningTables)
     .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
-    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
-    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+    .leftJoin(tableMerges, eq(tableMerges.id, diningTables.mergeId))
     .where(eq(diningTables.onFloor, true));
   return new Map(
     rows.map((row) => [

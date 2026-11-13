@@ -1,3 +1,4 @@
+import { mergeOf as mergeColumns } from "@waitron/db";
 import { seedBusinessDay, seedZone } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
@@ -15,8 +16,7 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
+  tableMerges,
   floorZones,
   dayCutoverChanges,
   shortNameColumns,
@@ -250,10 +250,10 @@ async function liveTablesOf(zoneId: string) {
 async function mergeMembersIn(zoneId: string): Promise<string[]> {
   const rows = await inTx(v, (tx) =>
     tx
-      .select({ tableId: floorTodayJoinTables.tableId })
-      .from(floorTodayJoinTables)
-      .innerJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
-      .where(eq(floorTodayJoins.zoneId, zoneId)),
+      .select({ tableId: diningTables.id })
+      .from(diningTables)
+      .innerJoin(tableMerges, eq(tableMerges.id, diningTables.mergeId))
+      .where(eq(tableMerges.zoneId, zoneId)),
   );
   return rows.map((row) => row.tableId).sort();
 }
@@ -422,13 +422,14 @@ describe("building today's plan from a zone's layout", () => {
     await join(v, partyId, t2);
     await inTx(v, async (tx) => {
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       for (const tableId of [t1, t2]) {
         await tx
-          .insert(floorTodayJoinTables)
-          .values({ joinId: merge!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+          .update(diningTables)
+          .set({ mergeId: merge!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+          .where(eq(diningTables.id, tableId));
       }
     });
     await editMaster(master.get("Merge 1")!, { x: 20, label: "Patio 1" });
@@ -439,7 +440,11 @@ describe("building today's plan from a zone's layout", () => {
     expect(await todayRow(t1)).toMatchObject({ x: 0, y: 0 });
     expect(await todayRow(t2)).toMatchObject({ x: 10, y: 0 });
     expect((await tableRow(v, t1)).label).toBe("Merge 1");
-    expect(await inTx(v, (tx) => tx.select().from(floorTodayJoinTables))).toEqual(
+    expect(
+      await inTx(v, (tx) =>
+        tx.select(mergeColumns).from(diningTables).where(isNotNull(diningTables.mergeId)),
+      ),
+    ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ tableId: t1 }),
         expect.objectContaining({ tableId: t2 }),
@@ -699,13 +704,14 @@ describe("building today's plan from a zone's layout", () => {
     await reset(z);
     const mergeId = await inTx(v, async (tx) => {
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 12 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       for (const tableId of [t1, u1, u2]) {
         await tx
-          .insert(floorTodayJoinTables)
-          .values({ joinId: merge!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+          .update(diningTables)
+          .set({ mergeId: merge!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+          .where(eq(diningTables.id, tableId));
       }
       return merge!.id;
     });
@@ -719,7 +725,7 @@ describe("building today's plan from a zone's layout", () => {
     await catchUp(z);
 
     const members = await inTx(v, (tx) =>
-      tx.select().from(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, mergeId)),
+      tx.select(mergeColumns).from(diningTables).where(eq(diningTables.mergeId, mergeId)),
     );
     expect(members.map((m) => m.tableId).sort()).toEqual([u1, u2].sort());
   });
@@ -761,13 +767,14 @@ describe("building today's plan from a zone's layout", () => {
         .set(todaySet({ x: 70, takenOff: true }))
         .where(eq(diningTables.id, t1));
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       for (const tableId of [t1, t2]) {
         await tx
-          .insert(floorTodayJoinTables)
-          .values({ joinId: merge!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+          .update(diningTables)
+          .set({ mergeId: merge!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+          .where(eq(diningTables.id, tableId));
       }
     });
 
@@ -793,15 +800,17 @@ describe("building today's plan from a zone's layout", () => {
         .set(todaySet({ x: 9 }))
         .where(eq(diningTables.id, u1));
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       await tx
-        .insert(floorTodayJoinTables)
-        .values({ joinId: merge!.id, tableId: t1, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+        .update(diningTables)
+        .set({ mergeId: merge!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+        .where(eq(diningTables.id, t1));
       await tx
-        .insert(floorTodayJoinTables)
-        .values({ joinId: merge!.id, tableId: u1, beforeX: 30, beforeY: 40, beforeRotation: 90 });
+        .update(diningTables)
+        .set({ mergeId: merge!.id, mergeBeforeX: 30, mergeBeforeY: 40, mergeBeforeRotation: 90 })
+        .where(eq(diningTables.id, u1));
     });
 
     await inTx(v, (tx) =>
@@ -831,15 +840,17 @@ describe("building today's plan from a zone's layout", () => {
         .set(todaySet({ x: 9 }))
         .where(eq(diningTables.id, u1));
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       await tx
-        .insert(floorTodayJoinTables)
-        .values({ joinId: merge!.id, tableId: t1, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+        .update(diningTables)
+        .set({ mergeId: merge!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+        .where(eq(diningTables.id, t1));
       await tx
-        .insert(floorTodayJoinTables)
-        .values({ joinId: merge!.id, tableId: u1, beforeX: 30, beforeY: 40, beforeRotation: 90 });
+        .update(diningTables)
+        .set({ mergeId: merge!.id, mergeBeforeX: 30, mergeBeforeY: 40, mergeBeforeRotation: 90 })
+        .where(eq(diningTables.id, u1));
     });
     await deleteFromMaster(master.get("Lost merge 1")!);
 
@@ -854,7 +865,7 @@ describe("building today's plan from a zone's layout", () => {
     expect((await liveTablesOf(z)).map((t) => t.id)).toEqual([u1]);
     expect(await mergeMembersIn(z)).toEqual([]);
     expect(
-      await inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, z))),
+      await inTx(v, (tx) => tx.select().from(tableMerges).where(eq(tableMerges.zoneId, z))),
     ).toEqual([]);
     expect(await todayRow(u1)).toMatchObject({ x: 30, y: 40, rotation: 90 });
   });
@@ -1190,17 +1201,14 @@ it.each([false, true])(
     if (partyId !== null) await join(v, partyId, t2);
     await inTx(v, async (tx) => {
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       for (const tableId of [t1, t2]) {
-        await tx.insert(floorTodayJoinTables).values({
-          joinId: merge!.id,
-          tableId,
-          beforeX: 0,
-          beforeY: 0,
-          beforeRotation: 0,
-        });
+        await tx
+          .update(diningTables)
+          .set({ mergeId: merge!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+          .where(eq(diningTables.id, tableId));
       }
     });
 
@@ -1218,7 +1226,7 @@ it.each([false, true])(
     expect(await liveTablesOf(z)).toEqual([]);
     expect(await mergeMembersIn(z)).toEqual([]);
     expect(
-      await inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, z))),
+      await inTx(v, (tx) => tx.select().from(tableMerges).where(eq(tableMerges.zoneId, z))),
     ).toEqual([]);
     expect(await todayRow(t1)).toBeUndefined();
     expect(await todayRow(t2)).toBeUndefined();
@@ -1344,9 +1352,8 @@ describe("the parts of joined tables in the till's copy", () => {
   async function stillJoined(ids: string[]): Promise<Record<string, number>> {
     const rows = await inTx(v, (tx) =>
       tx
-        .select({ id: diningTables.id, joined: floorTodayJoinTables.tableId })
+        .select({ id: diningTables.id, joined: diningTables.mergeId })
         .from(diningTables)
-        .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
         .where(inArray(diningTables.id, ids)),
     );
     return Object.fromEntries(rows.map((row) => [row.id, Number(row.joined !== null)]));
@@ -2066,17 +2073,15 @@ it("a saved joined table resets to one named group of its real tables", async ()
     tx.select().from(floorPlanTables).where(eq(floorPlanTables.id, master.long!)),
   );
   expect(
-    await inTx(v, (tx) =>
-      tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, zoneId)),
-    ),
+    await inTx(v, (tx) => tx.select().from(tableMerges).where(eq(tableMerges.zoneId, zoneId))),
   ).toEqual([expect.objectContaining({ id: group!.joinId, name: saved!.label, seats: 5 })]);
   const members = await inTx(v, (tx) =>
-    tx.select().from(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, group!.joinId)),
+    tx.select(mergeColumns).from(diningTables).where(eq(diningTables.mergeId, group!.joinId)),
   );
   expect(
     members
       .map((m) => ({ tableId: m.tableId, x: m.beforeX, y: m.beforeY, rotation: m.beforeRotation }))
-      .sort((a, b) => a.x - b.x),
+      .sort((a, b) => a.x! - b.x!),
   ).toEqual([
     { tableId: table.t2, x: 20, y: 31, rotation: 0 },
     { tableId: table.t10, x: 24, y: 30, rotation: 0 },

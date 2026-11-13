@@ -19,8 +19,8 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
+  tableMerges,
+  mergeOf,
   floorZones,
   needsMoving,
   resetRowMoves,
@@ -787,18 +787,20 @@ async function catchUpPass(
     if (joined.x !== null) {
       await leaveMergesRestoring(tx, memberIds);
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId, name: joined.label, seats: joined.seats! })
-        .returning({ id: floorTodayJoins.id });
-      await tx.insert(floorTodayJoinTables).values(
-        parts.map((row) => ({
-          joinId: merge!.id,
-          tableId: row.tableId!,
-          beforeX: row.x!,
-          beforeY: row.y!,
-          beforeRotation: row.rotation!,
-        })),
-      );
+        .returning({ id: tableMerges.id });
+      for (const row of parts) {
+        await tx
+          .update(diningTables)
+          .set({
+            mergeId: merge!.id,
+            mergeBeforeX: row.x!,
+            mergeBeforeY: row.y!,
+            mergeBeforeRotation: row.rotation!,
+          })
+          .where(eq(diningTables.id, row.tableId!));
+      }
     }
     await tx
       .update(floorResetTables)
@@ -916,9 +918,10 @@ function mergesOf(
   zoneTableIds: readonly string[],
 ): Promise<{ joinId: string; tableId: string }[]> {
   return tx
-    .select({ joinId: floorTodayJoinTables.joinId, tableId: floorTodayJoinTables.tableId })
-    .from(floorTodayJoinTables)
-    .where(inArray(floorTodayJoinTables.tableId, [...zoneTableIds]));
+    .select({ joinId: mergeOf.mergeId, tableId: mergeOf.tableId })
+    .from(diningTables)
+    .where(and(inArray(diningTables.id, [...zoneTableIds]), isNotNull(diningTables.mergeId)))
+    .then((rows) => rows.map((row) => ({ ...row, joinId: row.joinId! })));
 }
 
 function waitingTogether(
@@ -1260,10 +1263,7 @@ export async function seatsToday(tx: Transaction, tableId: string, seats: number
   const today = await todayOf(tx, tableId);
   if (today.row.takenOff) throw new AppError("table.taken_off", { tableId });
   if (today.merge !== null) {
-    await tx
-      .update(floorTodayJoins)
-      .set({ seats })
-      .where(eq(floorTodayJoins.id, today.merge.joinId));
+    await tx.update(tableMerges).set({ seats }).where(eq(tableMerges.id, today.merge.joinId));
     return;
   }
   await tx

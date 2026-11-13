@@ -1,12 +1,6 @@
 import { alias } from "drizzle-orm/sqlite-core";
 import { eq, isNotNull } from "drizzle-orm";
-import {
-  diningTables,
-  floorPlanTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
-  todaySet,
-} from "@waitron/db";
+import { diningTables, floorPlanTables, tableMerges, todaySet } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, normalisePartyName } from "@waitron/shared";
 import { todayOf } from "./floor-today-table.js";
@@ -36,9 +30,9 @@ export async function nameToday(
   if (today.merge !== null) {
     const { joinId } = today.merge;
     const [group] = await tx
-      .select({ name: floorTodayJoins.name })
-      .from(floorTodayJoins)
-      .where(eq(floorTodayJoins.id, joinId));
+      .select({ name: tableMerges.name })
+      .from(tableMerges)
+      .where(eq(tableMerges.id, joinId));
     if (wanted === group!.name) return;
     if (wanted !== null) await refuseInUse(tx, wanted, { joinId });
     await withMovedSlips(
@@ -46,10 +40,7 @@ export async function nameToday(
       cfg,
       { tables: today.merge.members.map((member) => member.tableId) },
       async () => {
-        await tx
-          .update(floorTodayJoins)
-          .set({ name: wanted })
-          .where(eq(floorTodayJoins.id, joinId));
+        await tx.update(tableMerges).set({ name: wanted }).where(eq(tableMerges.id, joinId));
       },
     );
     return;
@@ -86,11 +77,10 @@ async function refuseInUse(
 
   const member = alias(floorPlanTables, "saved_group_member");
   const savedGroups = await tx
-    .select({ label: floorPlanTables.label, joinId: floorTodayJoinTables.joinId })
+    .select({ label: floorPlanTables.label, joinId: diningTables.mergeId })
     .from(member)
     .innerJoin(floorPlanTables, eq(floorPlanTables.id, member.partOfTableId))
-    .leftJoin(diningTables, eq(diningTables.planTableId, member.id))
-    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id));
+    .leftJoin(diningTables, eq(diningTables.planTableId, member.id));
   const reserved = savedGroups.filter((g) => sameName(g.label, name));
   if (reserved.length > 0 && !reserved.some((g) => selfJoin !== null && g.joinId === selfJoin))
     throw taken;
@@ -102,8 +92,8 @@ async function refuseInUse(
   if (todays.some((t) => t.tableId !== selfTable && sameName(t.name!, name))) throw taken;
 
   const groups = await tx
-    .select({ id: floorTodayJoins.id, name: floorTodayJoins.name })
-    .from(floorTodayJoins)
-    .where(isNotNull(floorTodayJoins.name));
+    .select({ id: tableMerges.id, name: tableMerges.name })
+    .from(tableMerges)
+    .where(isNotNull(tableMerges.name));
   if (groups.some((g) => g.id !== selfJoin && sameName(g.name!, name))) throw taken;
 }

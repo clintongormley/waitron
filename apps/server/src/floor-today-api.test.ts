@@ -1,3 +1,4 @@
+import { mergeOf as mergeColumns } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -14,9 +15,7 @@ import {
   tableInService,
   diningTables,
   floorPlans,
-  floorTodayJoins,
-  floorTodayJoinTables,
-  floorTodaySplitParts,
+  tableMerges,
   partyTables,
   parties,
   ticketItems,
@@ -185,17 +184,16 @@ async function everything() {
       .where(eq(diningTables.onFloor, true))
       .orderBy(asc(diningTables.id)),
   );
-  const split = await inTx(v, (tx) =>
-    tx.select().from(floorTodaySplitParts).orderBy(asc(floorTodaySplitParts.id)),
-  );
-  const joins = await inTx(v, (tx) =>
-    tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
-  );
+  const joins = await inTx(v, (tx) => tx.select().from(tableMerges).orderBy(asc(tableMerges.id)));
   const joinTables = await inTx(v, (tx) =>
-    tx.select().from(floorTodayJoinTables).orderBy(asc(floorTodayJoinTables.id)),
+    tx
+      .select(mergeColumns)
+      .from(diningTables)
+      .where(isNotNull(diningTables.mergeId))
+      .orderBy(asc(diningTables.id)),
   );
   const parties = await inTx(v, (tx) => tx.select().from(partyTables).orderBy(asc(partyTables.id)));
-  return { today, split, joins, joinTables, parties };
+  return { today, joins, joinTables, parties };
 }
 
 async function resetZoneToday(zoneId: string, body: unknown = {}): Promise<Response> {

@@ -847,9 +847,7 @@ const FLOOR_ROWS = [
   "floor_plan_tables",
   "floor_plan_placements",
   "floor_reset_tables",
-  "floor_today_joins",
-  "floor_today_join_tables",
-  "floor_today_split_parts",
+  "table_merges",
 ] as const;
 const HISTORY_ROWS = [
   "sales",

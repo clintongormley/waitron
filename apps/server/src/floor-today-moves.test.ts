@@ -6,8 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   floorPlanPlacements,
   floorPlanTables,
-  floorTodayJoinTables,
-  floorTodayJoins,
+  tableMerges,
   todaySet,
   diningTables,
 } from "@waitron/db";
@@ -49,13 +48,14 @@ async function setToday(
 async function merge(zoneId: string, tableIds: string[]): Promise<void> {
   await inTx(v, async (tx) => {
     const [join] = await tx
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId, seats: 8 })
-      .returning({ id: floorTodayJoins.id });
+      .returning({ id: tableMerges.id });
     for (const tableId of tableIds) {
       await tx
-        .insert(floorTodayJoinTables)
-        .values({ joinId: join!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+        .update(diningTables)
+        .set({ mergeId: join!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+        .where(eq(diningTables.id, tableId));
     }
   });
 }

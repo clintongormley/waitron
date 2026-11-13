@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { diningTables, OFF_FLOOR, floorTodayJoins, todaySet, floorZones } from "@waitron/db";
+import { diningTables, OFF_FLOOR, tableMerges, todaySet, floorZones } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
@@ -263,7 +263,7 @@ describe("roomPrints", () => {
     const { joinId } = (await mergeOf(v, table.bar!))!;
 
     await inTx(v, (tx) =>
-      tx.update(floorTodayJoins).set({ seats: 12 }).where(eq(floorTodayJoins.id, joinId)),
+      tx.update(tableMerges).set({ seats: 12 }).where(eq(tableMerges.id, joinId)),
     );
 
     expect(await printOf(zoneId)).not.toBe(before);
@@ -302,9 +302,9 @@ describe("roomPrints", () => {
 
     await inTx(v, (tx) =>
       tx
-        .update(floorTodayJoins)
+        .update(tableMerges)
         .set({ name: `García birthday ${randomUUID().slice(0, 6)}` })
-        .where(eq(floorTodayJoins.id, joinId)),
+        .where(eq(tableMerges.id, joinId)),
     );
 
     expect(await printOf(zoneId)).not.toBe(before);

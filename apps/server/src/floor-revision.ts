@@ -2,8 +2,7 @@ import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   diningTables,
   floorResetTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
+  tableMerges,
   type Transaction,
   floorZones,
 } from "@waitron/db";
@@ -78,17 +77,16 @@ export async function roomPrints(
       rotation: diningTables.todayRotation,
       takenOff: diningTables.takenOff,
       name: diningTables.todayName,
-      joinId: floorTodayJoinTables.joinId,
-      beforeX: floorTodayJoinTables.beforeX,
-      beforeY: floorTodayJoinTables.beforeY,
-      beforeRotation: floorTodayJoinTables.beforeRotation,
-      groupSeats: floorTodayJoins.seats,
-      groupName: floorTodayJoins.name,
+      joinId: diningTables.mergeId,
+      beforeX: diningTables.mergeBeforeX,
+      beforeY: diningTables.mergeBeforeY,
+      beforeRotation: diningTables.mergeBeforeRotation,
+      groupSeats: tableMerges.seats,
+      groupName: tableMerges.name,
       readyToMove: floorResetTables.readyToMove,
     })
     .from(diningTables)
-    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
-    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+    .leftJoin(tableMerges, eq(tableMerges.id, diningTables.mergeId))
     .leftJoin(floorResetTables, eq(floorResetTables.tableId, diningTables.id))
     .where(inArray(diningTables.zoneId, [...zoneIds]))
     .orderBy(asc(diningTables.id));

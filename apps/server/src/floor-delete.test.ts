@@ -1,3 +1,4 @@
+import { mergeOf as mergeColumns } from "@waitron/db";
 import { addFloorPlanSet } from "@waitron/venue-service";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -13,9 +14,7 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
-  floorTodaySplitParts,
+  tableMerges,
   floorZones,
   locations,
   parties,
@@ -86,9 +85,7 @@ const floorRows = {
   floorPlanTables,
   floorPlanPlacements,
   floorResetTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
-  floorTodaySplitParts,
+  tableMerges,
 };
 async function snapshot(tx: Transaction) {
   const result: Record<string, unknown[]> = {};
@@ -161,22 +158,16 @@ async function planned(z: string, prefix: string) {
         ),
       )
       .returning(todayColumns);
-    const [todayJoin] = await tx
-      .insert(floorTodayJoins)
-      .values({ zoneId: z, seats: 12 })
-      .returning();
-    const todayMembers = await tx
-      .insert(floorTodayJoinTables)
-      .values(
-        live.map((table) => ({
-          joinId: todayJoin!.id,
-          tableId: table.id,
-          beforeX: 3,
-          beforeY: 4,
-          beforeRotation: 90,
-        })),
-      )
-      .returning();
+    const [todayJoin] = await tx.insert(tableMerges).values({ zoneId: z, seats: 12 }).returning();
+    await tx
+      .update(diningTables)
+      .set({ mergeId: todayJoin!.id, mergeBeforeX: 3, mergeBeforeY: 4, mergeBeforeRotation: 90 })
+      .where(
+        inArray(
+          diningTables.id,
+          live.map((table) => table.id),
+        ),
+      );
     const [todayZone] = await tx
       .update(floorZones)
       .set({ todayBusinessDay: "2026-10-11", todayRevision: 7 })
@@ -201,7 +192,7 @@ async function planned(z: string, prefix: string) {
       pending: pending!,
       today,
       todayJoin: todayJoin!,
-      todayMembers,
+
       todayZone: todayZone!,
       noToday: noToday!,
     };
@@ -405,8 +396,7 @@ describe("floor hierarchy deletion", () => {
       floorPlans: [own.plan],
       floorPlanTables: own.masters,
       floorResetTables: [...own.resets, own.pending],
-      floorTodayJoins: [own.todayJoin],
-      floorTodayJoinTables: own.todayMembers,
+      tableMerges: [own.todayJoin],
     };
     for (const [key, rows] of Object.entries(removed)) {
       const ids = new Set(rows.map((row) => row.id));
@@ -693,11 +683,13 @@ describe("floor hierarchy deletion", () => {
     );
     expect(
       await inTx(v, (tx) =>
-        tx.select().from(floorTodayJoinTables).where(eq(floorTodayJoinTables.tableId, table.c3!)),
+        tx
+          .select(mergeColumns)
+          .from(diningTables)
+          .where(and(eq(diningTables.id, table.c3!), isNotNull(diningTables.mergeId))),
       ),
     ).toHaveLength(1);
     await inTx(v, (tx) => seatFor().clear(tx, [zoneId], NOW));
-    expect(await inTx(v, (tx) => tx.select().from(floorTodaySplitParts))).toEqual([]);
     expect(
       await inTx(v, (tx) => tx.select().from(diningTables).where(eq(diningTables.zoneId, zoneId))),
     ).toEqual([]);

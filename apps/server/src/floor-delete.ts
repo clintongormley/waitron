@@ -5,8 +5,8 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoins,
-  floorTodayJoinTables,
+  tableMerges,
+  LEFT_MERGE,
   parties,
   partyTables,
   workingOrders,
@@ -55,17 +55,13 @@ async function inventory(tx: Transaction, zoneIds: readonly string[]) {
   tables.sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
   const plans = await tx.select().from(floorPlans).where(inArray(floorPlans.zoneId, ids));
   const saved = await tx.select().from(floorPlanTables).where(inArray(floorPlanTables.zoneId, ids));
-  const todayJoins = await tx
-    .select()
-    .from(floorTodayJoins)
-    .where(inArray(floorTodayJoins.zoneId, ids));
+  const todayJoins = await tx.select().from(tableMerges).where(inArray(tableMerges.zoneId, ids));
   const todayMembers = await tx
-    .select({ joinId: floorTodayJoinTables.joinId, id: diningTables.id, label: diningTables.label })
-    .from(floorTodayJoinTables)
-    .innerJoin(diningTables, eq(diningTables.id, floorTodayJoinTables.tableId))
+    .select({ joinId: diningTables.mergeId, id: diningTables.id, label: diningTables.label })
+    .from(diningTables)
     .where(
       inArray(
-        floorTodayJoinTables.joinId,
+        diningTables.mergeId,
         todayJoins.map((join) => join.id),
       ),
     );
@@ -76,7 +72,14 @@ async function inventory(tx: Transaction, zoneIds: readonly string[]) {
   const removes: DeleteImpactItem[] = [
     { key: "tables", count: tables.length, targets: labelled(tables) },
     { key: "saved_tables", count: saved.length, targets: labelled(saved) },
-    { key: "today_joins", count: todayJoins.length, targets: joins(todayJoins, todayMembers) },
+    {
+      key: "today_joins",
+      count: todayJoins.length,
+      targets: joins(
+        todayJoins,
+        todayMembers.map((m) => ({ ...m, joinId: m.joinId! })),
+      ),
+    },
     { key: "reset_targets", count: reset.length, targets: labelled(reset) },
   ].filter((item) => item.count > 0);
   return { ids, tables, plans, saved, todayJoins, removes };
@@ -168,9 +171,10 @@ export function floorDeletionFor(removals: readonly TableRemoval[]): FloorDeleti
         });
       const todayJoinIds = floor.todayJoins.map((join) => join.id);
       await tx
-        .delete(floorTodayJoinTables)
-        .where(inArray(floorTodayJoinTables.joinId, todayJoinIds));
-      await tx.delete(floorTodayJoins).where(inArray(floorTodayJoins.id, todayJoinIds));
+        .update(diningTables)
+        .set(LEFT_MERGE)
+        .where(inArray(diningTables.mergeId, todayJoinIds));
+      await tx.delete(tableMerges).where(inArray(tableMerges.id, todayJoinIds));
       await tx
         .update(floorZones)
         .set({

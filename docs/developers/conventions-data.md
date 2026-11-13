@@ -2320,8 +2320,8 @@ later catch-up keeps an already formed group's identity.
 `GET /api/tables` and bookings offer real members under their own labels and ids. They have no
 saved-part exclusion. Today's table reads carry ordinary `joinId`, `joinSeats` and `joinName`;
 there is no synthetic joined-table row, joined-only action or Reset table route. Split tables…
-uses `splitGroup`; Join with… uses `writeMerge`. Fixed seats retain their party joins. The unused
-`floor_today_split_parts` schema and protections remain until the fk5 storage fold deletes them.
+uses `splitGroup`; Join with… uses `writeMerge`. Fixed seats retain their party joins. Merge membership and its three before-place values live on `dining_tables`; `table_merges`
+holds the group name and seats. Its members leave before the group row is deleted.
 
 Split tables… also requires the till's `expectedParties`, distinct party ids and revisions from
 its ticked tables. After validating the
@@ -2351,7 +2351,7 @@ A live table carries today's state in its `today_*` columns, `on_floor` and `tak
 also clears the other today values; `dining_tables_off_floor_ck` refuses a partial clear.
 
 A table's name for today is `dining_tables.today_name`, a group's is
-`floor_today_joins.name`; null means the saved name. `POST /api/tables/:id/today/name` writes it
+`table_merges.name`; null means the saved name. `POST /api/tables/:id/today/name` writes it
 (`nameToday`, `apps/server/src/floor-today-name.ts`); a table in a group names the group. A name is
 refused `table.label_taken` when, compared after `normalize("NFC")` and `toLowerCase()` in
 JavaScript (`sameName`), it is the saved name of another table or the today's name
@@ -2380,6 +2380,11 @@ Cascading here would allow removal to discard the records the release and refusa
 handle. The only trigger whose SQL names `dining_tables` is `parties_clear_table_status`.
 **2026-10-19:** A757 slice 2 dropped `parties_clear_table_status` (core 0180).
 **2026-11-12:** fk4 removes the `floor_today_tables.table_id` key: today's values now live on the table itself. The earlier measurement above remains historical.
+**2026-11-13:** fk5 removes the membership and dormant split keys. The fully migrated
+`table-removal.test.ts` inventory checks the four surviving keys: `bookings.table_id`,
+`floor_reset_tables.table_id`, `party_tables.table_id` and `working_orders.delivery_table_id`,
+all `NO ACTION`. Merge membership alone no longer blocks a direct table deletion;
+`removeLiveTables` leaves the merge before deleting its live row.
 
 > Added 2026-10-13 by A503 part 3: two more incoming keys, `floor_today_split_parts.joined_table_id`
 > and `.part_table_id`, both `no action`.
