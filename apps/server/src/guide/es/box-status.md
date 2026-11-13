@@ -331,8 +331,9 @@ Un administrador puede confirmarla antes en esta página:
   reloj en hora, el diálogo ofrece **Usar esta hora**, que pone el reloj del servidor a la hora de tu
   dispositivo y la confirma.
 
-Mientras no responda la parte del servidor que lee su hora de internet, la fila **Reloj** lo dice y el
-servidor espera así en cada arranque. Su hora se puede confirmar entonces, pero no corregir, hasta que
+Mientras no responda la parte del servidor que lee su hora de internet, la fila **Reloj** de la espera
+de un arranque lo dice y el servidor espera así en cada arranque. Su hora se puede confirmar entonces,
+pero no corregir, hasta que
 esa parte responda.
 
 ## El servicio de hora del servidor {#clock-service}

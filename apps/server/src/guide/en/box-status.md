@@ -305,8 +305,8 @@ An administrator can confirm it sooner on this page:
   confirms the box's time. When they are further apart and the box can set its clock, the dialog
   offers **Use this time**, which sets the box's clock from your device and confirms it.
 
-While the part of the box that reads its internet time is not answering, the **Clock** row says so,
-and the box waits like this at every start. Its time can then be confirmed, but not corrected, until
+While the part of the box that reads its internet time is not answering, the **Clock** row of a
+start's wait says so, and the box waits like this at every start. Its time can then be confirmed, but not corrected, until
 that part answers.
 
 ## The box's time service {#clock-service}
