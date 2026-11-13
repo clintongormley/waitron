@@ -242,9 +242,19 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     total: 1234,
     method: "cash",
   });
-  const marthaCash = await seedSale(db, at, { code: "TB", number: 31, total: 5678, method: "cash" });
+  const marthaCash = await seedSale(db, at, {
+    code: "TB",
+    number: 31,
+    total: 5678,
+    method: "cash",
+  });
   const marthaCard = await seedSale(db, at, { code: "TA", number: 9, total: 4321, method: "card" });
-  const lewisVoided = await seedSale(db, at, { code: "TA", number: 8, total: 9876, method: "cash" });
+  const lewisVoided = await seedSale(db, at, {
+    code: "TA",
+    number: 8,
+    total: 9876,
+    method: "cash",
+  });
   const lewisRefunded = await seedSale(db, at, {
     code: "TB",
     number: 32,
