@@ -1709,8 +1709,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 - **The bell's printer check reads every print job.**
   [Detail](backlog/box.md#the-bells-printer-check-reads-every-print-job)
 
-- **Card reader alerts** (bundle of 2, 2 important, size S). [Detail](backlog/box.md#bundle-card-reader-alerts)
-
 - **Does a SumUp Solo that is on but idle report itself offline?** The owner's unused Solo read
   `OFFLINE` (slice 10 plan P11), and SumUp's client maps anything but `ONLINE` to offline, so if an
   idle Solo does the same, the bell carries a standing `reader.offline` warning. For the owner to
