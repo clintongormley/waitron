@@ -43,3 +43,17 @@ every one.
 
 **Export these cases for your tax adviser** reads the box again and downloads one file with every
 open case, not only the 200 on screen, together with the rest of the page.
+
+## Possibly missing history {#missing-history}
+
+**Possibly missing history** shows where AEAT may hold invoices that this box does not. Neither list
+says that an invoice is missing.
+
+- **Invoices AEAT holds that this box did not issue**: each invoice that a check with AEAT found
+  under a series this box no longer uses, and that this box did not issue.
+- **Identity changes without a handover**: each time this box's fiscal identity changed other than
+  by a handover, for example after a restore, with the last invoice the box holds under the earlier
+  identity, if it holds any.
+
+When either list has a line, choose **Export these cases for your tax adviser**: the file carries
+both lists.

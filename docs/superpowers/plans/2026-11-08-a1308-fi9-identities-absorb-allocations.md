@@ -496,6 +496,12 @@ W41s-9 slice 1 (2026-11-10) added a reader of `registro_sif`, which this slice r
 `packages/fiscal-verifactu/src/filing-overview.ts`, through `readActiveConflicts`, and
 `openFilingCases` in `filing-cases.ts`, which joins it for each case's installation. The Fiscal filing screen and its export name each case by its record id (`registroId`).
 
+W41s-9 slice 2 (2026-11-11) added readers of `fiscal_allocations` and `registro_sif`, which this
+slice merges: handwritten SQL in `filing-overview.ts`'s `readIdentityChanges`, whose order rests on
+an identity row and its activation row being inserted together (`allocation.ts:441`, `:465`), and a
+drizzle `exists` over `fiscalAllocations` in `readMissingHistory`. `filing-overview.history.test.ts`'s
+`activate` writes an activation row of its own.
+
 **Landed by: owner.**
 
 ---

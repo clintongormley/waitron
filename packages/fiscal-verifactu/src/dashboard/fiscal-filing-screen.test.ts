@@ -11,6 +11,8 @@ import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { FiscalFilingScreen } from "./fiscal-filing-screen.js";
 import type { FilingOverviewAnswer } from "../filing-overview-types.js";
 import {
+  IDENTITY_CHANGE,
+  NOT_ISSUED_HERE,
   OURS,
   PREVIOUS,
   THEIRS,
@@ -242,6 +244,99 @@ describe("vf-fiscal-filing-screen", () => {
     const spanish = await mount(vi.fn(answer));
     expect(text(spanish.screen, "[data-test=conflict] li")).toContain(
       "La AEAT tiene la factura T1/99; este equipo no la emitió.",
+    );
+  });
+
+  it("lists invoices AEAT holds that this box did not issue, and identity changes without a handover", async () => {
+    const answer = (): Promise<FilingOverviewAnswer> =>
+      Promise.resolve(
+        overview({
+          missingHistory: {
+            notIssuedHere: [
+              NOT_ISSUED_HERE,
+              {
+                ...NOT_ISSUED_HERE,
+                seriesCode: "T9",
+                fingerprint: null,
+                system: null,
+                invoice: { ...NOT_ISSUED_HERE.invoice, NumSerieFactura: "T9/3" },
+              },
+            ],
+            identityChanges: [IDENTITY_CHANGE],
+          },
+        }),
+      );
+    const { screen } = await mount(vi.fn(answer));
+    const notIssued = [...screen.shadowRoot!.querySelectorAll("[data-test=not-issued-here] li")];
+    expect(notIssued).toHaveLength(2);
+    expect(unfolded(notIssued[0]!)).toBe(
+      `AEAT holds invoice T0/12 (2026-10-28); this box did not issue it. Series T0 · Found ${formatIsoMinute("2026-11-04T10:15:00.000Z")}`,
+    );
+    const evidence = flat(notIssued[0]!.querySelector("wt-disclosure[data-test=technical]"));
+    for (const shown of ["Correcto", THEIRS, "B87654321", "XX", "ELSEWHERE-7"])
+      expect(evidence).toContain(shown);
+    expect(unfolded(notIssued[1]!)).toContain("AEAT holds invoice T9/3 (2026-10-28)");
+    const change = text(screen, "[data-test=identity-changes] li");
+    expect(change).toBe(
+      "The fiscal identity changed from BOX-01 to BOX-02 without a handover. The last invoice this box holds under BOX-01 is T1/40 (2026-11-02). Invoices under BOX-01 that this box does not hold may exist. " +
+        `Changed ${formatIsoMinute("2026-11-03T08:00:00.000Z")}`,
+    );
+    expect(
+      screen.shadowRoot!.querySelector("[data-test=missing-history] [data-test=empty]"),
+    ).toBeNull();
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(answer));
+    expect(
+      unfolded(spanish.screen.shadowRoot!.querySelector("[data-test=not-issued-here] li")!),
+    ).toContain("La AEAT tiene la factura T0/12 (2026-10-28); este equipo no la emitió.");
+    expect(text(spanish.screen, "[data-test=identity-changes] li")).toContain(
+      "La identidad fiscal cambió de BOX-01 a BOX-02 sin un traspaso. La última factura que este equipo tiene bajo BOX-01 es la T1/40 (2026-11-02). Puede haber facturas bajo BOX-01 que este equipo no tiene.",
+    );
+  });
+
+  it("says the box holds no invoice under the earlier identity when it holds none", async () => {
+    const answer = (): Promise<FilingOverviewAnswer> =>
+      Promise.resolve(
+        overview({
+          missingHistory: {
+            notIssuedHere: [],
+            identityChanges: [{ ...IDENTITY_CHANGE, lastHeldInvoice: null }],
+          },
+        }),
+      );
+    const { screen } = await mount(vi.fn(answer));
+    expect(text(screen, "[data-test=identity-changes] li")).toBe(
+      "The fiscal identity changed from BOX-01 to BOX-02 without a handover. This box holds no invoice under BOX-01. Invoices under BOX-01 that this box does not hold may exist. " +
+        `Changed ${formatIsoMinute("2026-11-03T08:00:00.000Z")}`,
+    );
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(answer));
+    expect(text(spanish.screen, "[data-test=identity-changes] li")).toContain(
+      "La identidad fiscal cambió de BOX-01 a BOX-02 sin un traspaso. Este equipo no tiene ninguna factura bajo BOX-01. Puede haber facturas bajo BOX-01 que este equipo no tiene.",
+    );
+  });
+
+  it("says so when neither possibly-missing-history list has anything", async () => {
+    const answer = (): Promise<FilingOverviewAnswer> =>
+      Promise.resolve(overview({ missingHistory: { notIssuedHere: [], identityChanges: [] } }));
+    const { screen } = await mount(vi.fn(answer));
+    expect(screen.shadowRoot!.querySelectorAll("[data-test=missing-history] li")).toHaveLength(0);
+    expect(
+      screen.shadowRoot!.querySelectorAll("[data-test=missing-history] [data-test=empty]"),
+    ).toHaveLength(2);
+    expect(text(screen, "[data-test=not-issued-here]")).toBe(
+      "Invoices AEAT holds that this box did not issue None found.",
+    );
+    expect(text(screen, "[data-test=identity-changes]")).toBe(
+      "Identity changes without a handover The fiscal identity has not changed without a handover.",
+    );
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(answer));
+    expect(text(spanish.screen, "[data-test=identity-changes]")).toBe(
+      "Cambios de identidad sin traspaso La identidad fiscal no ha cambiado sin un traspaso.",
     );
   });
 

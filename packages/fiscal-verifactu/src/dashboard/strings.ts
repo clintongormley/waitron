@@ -190,6 +190,21 @@ const en = {
   "fiscal_filing.none": "None",
   "fiscal_filing.cases": "Filing cases",
   "fiscal_filing.held_without_case": "Held with no case: {count}",
+  "fiscal_filing.history": "Possibly missing history",
+  "fiscal_filing.history.not_issued": "Invoices AEAT holds that this box did not issue",
+  "fiscal_filing.history.not_issued.line":
+    "AEAT holds invoice {number} ({date}); this box did not issue it.",
+  "fiscal_filing.history.not_issued.series": "Series {series}",
+  "fiscal_filing.history.not_issued.system": "Invoicing system (as AEAT holds it)",
+  "fiscal_filing.history.not_issued.none": "None found.",
+  "fiscal_filing.history.identity": "Identity changes without a handover",
+  "fiscal_filing.history.identity.line":
+    "The fiscal identity changed from {earlier} to {new} without a handover. The last invoice this box holds under {earlier} is {number}. Invoices under {earlier} that this box does not hold may exist.",
+  "fiscal_filing.history.identity.line_none_held":
+    "The fiscal identity changed from {earlier} to {new} without a handover. This box holds no invoice under {earlier}. Invoices under {earlier} that this box does not hold may exist.",
+  "fiscal_filing.history.identity.invoice": "{number} ({date})",
+  "fiscal_filing.history.identity.changed": "Changed {time}",
+  "fiscal_filing.history.identity.none": "The fiscal identity has not changed without a handover.",
   "fiscal_filing.cases.none": "No case needs a decision.",
   "fiscal_filing.cases.bounded": "The newest {shown} of {total}",
   "fiscal_filing.cases.no_correction": "Waitron cannot correct these records yet.",
@@ -457,6 +472,21 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.none": "Ninguno",
   "fiscal_filing.cases": "Casos de remisión",
   "fiscal_filing.held_without_case": "Detenidos sin caso: {count}",
+  "fiscal_filing.history": "Historial que puede faltar",
+  "fiscal_filing.history.not_issued": "Facturas que la AEAT tiene y este equipo no emitió",
+  "fiscal_filing.history.not_issued.line":
+    "La AEAT tiene la factura {number} ({date}); este equipo no la emitió.",
+  "fiscal_filing.history.not_issued.series": "Serie {series}",
+  "fiscal_filing.history.not_issued.system": "Sistema informático según la AEAT",
+  "fiscal_filing.history.not_issued.none": "No se ha encontrado ninguna.",
+  "fiscal_filing.history.identity": "Cambios de identidad sin traspaso",
+  "fiscal_filing.history.identity.line":
+    "La identidad fiscal cambió de {earlier} a {new} sin un traspaso. La última factura que este equipo tiene bajo {earlier} es la {number}. Puede haber facturas bajo {earlier} que este equipo no tiene.",
+  "fiscal_filing.history.identity.line_none_held":
+    "La identidad fiscal cambió de {earlier} a {new} sin un traspaso. Este equipo no tiene ninguna factura bajo {earlier}. Puede haber facturas bajo {earlier} que este equipo no tiene.",
+  "fiscal_filing.history.identity.invoice": "{number} ({date})",
+  "fiscal_filing.history.identity.changed": "Cambio: {time}",
+  "fiscal_filing.history.identity.none": "La identidad fiscal no ha cambiado sin un traspaso.",
   "fiscal_filing.cases.none": "Ningún caso necesita una decisión.",
   "fiscal_filing.cases.bounded": "Los {shown} más recientes de {total}",
   "fiscal_filing.cases.no_correction": "Waitron todavía no puede corregir estos registros.",

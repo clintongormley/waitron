@@ -388,7 +388,16 @@ describe("readFilingOverview", () => {
     const comparison = ["kind", "storedFingerprint", "storedSystem"];
     const lookup = ["invoice", "state", "fingerprint", "system"];
     const expected: Record<string, string[]> = {
-      "": ["readAt", "progress", "cases", "totalCases", "heldWithoutCase", "activeConflicts"],
+      "": [
+        "readAt",
+        "progress",
+        "cases",
+        "totalCases",
+        "heldWithoutCase",
+        "activeConflicts",
+        "missingHistory",
+      ],
+      ".missingHistory": ["notIssuedHere", "identityChanges"],
       ".progress": ["counts", "oldestWaitingGeneratedAt", "lastConfirmedAt"],
       ".progress.counts": [
         "pendiente",

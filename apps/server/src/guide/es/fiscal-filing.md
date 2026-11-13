@@ -46,3 +46,17 @@ todos.
 
 **Exportar estos casos para tu asesor fiscal** vuelve a leer el equipo y descarga un archivo con
 todos los casos abiertos, no solo los 200 de la pantalla, junto con el resto de la página.
+
+## Historial que puede faltar {#missing-history}
+
+**Historial que puede faltar** muestra dónde la AEAT puede tener facturas que este equipo no tiene.
+Ninguna de las dos listas dice que falte una factura.
+
+- **Facturas que la AEAT tiene y este equipo no emitió**: cada factura que una comprobación con la
+  AEAT encontró bajo una serie que este equipo ya no usa y que este equipo no emitió.
+- **Cambios de identidad sin traspaso**: cada vez que la identidad fiscal de este equipo cambió sin
+  un traspaso, por ejemplo tras una restauración, con la última factura que el equipo tiene bajo la
+  identidad anterior, si tiene alguna.
+
+Si alguna de las dos listas tiene una línea, elige **Exportar estos casos para tu asesor fiscal**: el
+archivo incluye las dos listas.
