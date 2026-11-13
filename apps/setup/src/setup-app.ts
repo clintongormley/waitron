@@ -173,6 +173,32 @@ export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
   return body as ProvisionBody;
 }
 
+/**
+ * What an accepted fiscal test is bound to: the mode, the certificate (whose passphrase the server
+ * needs to open it), and the four venue fields `fiscalReadinessInput` keys the stored result on. A
+ * rejected or uncertain result came from a real submission built from the whole venue, so it is
+ * bound to the whole venue.
+ */
+function fiscalTestInputs(
+  draft: DeepPartial<ProvisionBody>,
+  status: "accepted" | "rejected" | "uncertain" | undefined,
+) {
+  const venue = draft.venue;
+  return {
+    mode: draft.mode,
+    aeatCert: draft.aeatCert,
+    venue:
+      status === "accepted"
+        ? {
+            country: venue?.country,
+            taxId: venue?.taxId,
+            legalName: venue?.legalName,
+            fiscalTerritory: venue?.fiscalTerritory,
+          }
+        : venue,
+  };
+}
+
 /** Text on screen is kept as a way to word it, so a language switch re-words it in place. */
 type Message = () => string;
 
@@ -941,6 +967,7 @@ export class SetupApp extends LitElement {
       return;
     }
     this.#registerRoot();
+    const before = this.draft;
     const mode = event.detail.patch.mode;
     if (
       mode !== undefined &&
@@ -962,9 +989,12 @@ export class SetupApp extends LitElement {
       delete this.draft.demoVenueNameSource;
       delete this.draft.configurationImport;
       delete this.draft.newTaxpayer;
-      this.#invalidateFiscalTest();
     }
     this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
+    const status = this.fiscalTestStatus;
+    if (!sameDraftValue(fiscalTestInputs(before, status), fiscalTestInputs(this.draft, status))) {
+      this.#invalidateFiscalTest();
+    }
     this.#rootScope?.changed();
   }
 
@@ -1933,6 +1963,7 @@ export class SetupApp extends LitElement {
       } = event.detail;
       if (action === "restore") {
         if (!pointId || pointId !== this.cloudRecoveryView?.point?.id) throw new Error();
+        this.#clearProvisionOutcome();
         phase = "provisioning";
         this.screen = phase;
         await this.api.restoreFromCloud(

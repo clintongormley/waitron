@@ -9,7 +9,7 @@ import { SetupRecoveryCopy } from "./recovery-copy.js";
 import type { CloudRecoveryView } from "../api/client.js";
 import { dispatchSetupGoto } from "../events.js";
 import { errorStyles, fieldStyles } from "../form-styles.js";
-import { t } from "../i18n/t.js";
+import { localTime, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
 
@@ -222,7 +222,12 @@ export class SetupCloudRestoreScreen extends LitElement {
             : html`
                 <p>${t("cloud_restore.enter_code")}</p>
                 <p class="code" data-test="code">${this.view.code}</p>
-                <p>${t("cloud_restore.expires")} <time>${this.view.expiresAt}</time></p>
+                <p>
+                  ${t("cloud_restore.expires")}
+                  <time datetime=${this.view.expiresAt}
+                    >${localTime(this.view.expiresAt) ?? this.view.expiresAt}</time
+                  >
+                </p>
                 <p>
                   <a
                     data-test="open-cloud"
@@ -242,7 +247,12 @@ export class SetupCloudRestoreScreen extends LitElement {
                   approved
                     ? html`
                         <h2>${t("cloud_restore.approved_heading")}</h2>
-                        <p>${t("cloud_restore.captured")} <time>${approved.capturedAt}</time></p>
+                        <p>
+                          ${t("cloud_restore.captured")}
+                          <time datetime=${approved.capturedAt}
+                            >${localTime(approved.capturedAt) ?? approved.capturedAt}</time
+                          >
+                        </p>
                         <setup-recovery-copy
                           .errorMessage=${!this.refusalDismissed && !this.fieldRefusalDismissed ? this.errorMessage : undefined}
                           .refusedField=${this.invalidField}

@@ -1,4 +1,4 @@
-import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
+import { coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import type { BrowserCommand } from "vitest/node";
 
@@ -27,7 +27,6 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
-    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     browser: {
       enabled: true,
       // The wizard follows navigator.languages, which is otherwise the machine's locale.

@@ -731,25 +731,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   // Once at mount, not per request: the box's mode is not otherwise visible in the request log.
   log("info", "setup.mode_active", { environment: deps.environment });
 
-  app.get("/setup-api/venue-defaults", (c) =>
-    c.json(
-      Object.fromEntries(
-        ALL_MODULES.flatMap(({ fiscal }) =>
-          fiscal === undefined
-            ? []
-            : [
-                [
-                  fiscal.id,
-                  {
-                    operationDescription: fiscal.venueFields?.defaults?.operationDescription ?? "",
-                  },
-                ],
-              ],
-        ),
-      ),
-    ),
-  );
-
   app.get("/setup-api/status", async (c) => {
     let operation: Awaited<ReturnType<SetupOperationStore["read"]>> | undefined;
     let operationBlocked = false;

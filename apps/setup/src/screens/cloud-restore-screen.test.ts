@@ -107,7 +107,7 @@ describe("Cloud restore screen", () => {
       oldBoxGone: false,
     });
     expect(q(el, "[data-test=live-warning]")).toBeNull();
-    expect(el.shadowRoot!.textContent).toContain("2026-09-24");
+    expect(q(el, "time[datetime='2026-09-24T10:00:00.000Z']")).not.toBeNull();
   });
   it("offers a new request only when the displayed request has expired", async () => {
     const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
@@ -526,6 +526,30 @@ describe("Cloud restore screen in Spanish", () => {
     expect(q(el, "h1")!.textContent).toBe("Restaurar desde Waitron Cloud");
     expect((q(el, "[data-test=acknowledge]") as HTMLInputElement).checked).toBe(true);
   });
+});
+
+describe("Cloud restore screen times", () => {
+  it.each(["en-GB", "es-ES"])(
+    "shows the deadline and capture time as %s date-times",
+    async (lang) => {
+      setLocale(lang);
+      const view = approvedView();
+      const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+        view,
+      });
+      const shown = [...el.shadowRoot!.querySelectorAll("time")].map((time) => ({
+        text: time.textContent,
+        datetime: time.getAttribute("datetime"),
+      }));
+      const local = (iso: string) =>
+        new Date(iso).toLocaleString(lang, { dateStyle: "medium", timeStyle: "short" });
+      expect(shown).toEqual([
+        { text: local(view.expiresAt), datetime: view.expiresAt },
+        { text: local(view.point.capturedAt), datetime: view.point.capturedAt },
+      ]);
+      expect(shown.map((time) => time.text)).not.toContain(view.expiresAt);
+    },
+  );
 });
 
 describe("Cloud restore retry confirmations", () => {

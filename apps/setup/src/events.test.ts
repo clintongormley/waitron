@@ -1,9 +1,12 @@
 import { expect, test } from "vitest";
 import {
   dispatchAdoptRequested,
+  dispatchBucketRestoreRequested,
   dispatchConfigurationRequested,
+  dispatchFiscalTestRequested,
   dispatchProvisionRequested,
   dispatchResetRequested,
+  dispatchRestoreRequested,
   dispatchSetupAdvance,
   dispatchSetupGoto,
   dispatchSetupPatch,
@@ -82,6 +85,41 @@ test("dispatchConfigurationRequested fires a composed, bubbling configuration-re
 test("dispatchTaxpayerChosen fires a composed, bubbling taxpayer-chosen carrying the choice", () => {
   const e = capture("taxpayer-chosen", (el) => dispatchTaxpayerChosen(el, true));
   expect(e.detail).toEqual({ newTaxpayer: true });
+  expect(e.bubbles).toBe(true);
+  expect(e.composed).toBe(true);
+});
+
+test("dispatchRestoreRequested fires a composed, bubbling restore-requested wrapping the request", () => {
+  const request = {
+    artifact: new File(["archive"], "venue.waitron-backup"),
+    recoveryKey: "recovery key",
+    environment: "production" as const,
+    oldBoxGone: true,
+  };
+  const e = capture("restore-requested", (el) => dispatchRestoreRequested(el, request));
+  expect(e.detail).toEqual({ request });
+  expect(e.bubbles).toBe(true);
+  expect(e.composed).toBe(true);
+});
+
+test("dispatchBucketRestoreRequested fires a composed, bubbling bucket-restore-requested wrapping the request", () => {
+  const request = {
+    kit: "restore kit",
+    environment: "preproduction" as const,
+    oldBoxGone: false,
+    venueConfirmed: null,
+  };
+  const e = capture("bucket-restore-requested", (el) =>
+    dispatchBucketRestoreRequested(el, request),
+  );
+  expect(e.detail).toEqual({ request });
+  expect(e.bubbles).toBe(true);
+  expect(e.composed).toBe(true);
+});
+
+test("dispatchFiscalTestRequested fires a composed, bubbling fiscal-test-requested with no detail", () => {
+  const e = capture("fiscal-test-requested", (el) => dispatchFiscalTestRequested(el));
+  expect(e.detail).toBeNull();
   expect(e.bubbles).toBe(true);
   expect(e.composed).toBe(true);
 });

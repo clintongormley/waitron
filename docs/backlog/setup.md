@@ -3,24 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "The setup wizard, onboarding and the demo venue". This file holds
 their full text.
 
-## `#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`
-
-- `apps/setup` code, found by #567. `#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`, so a
-  rejected or uncertain fiscal-test banner, and an accepted result, survive leaving that screen and
-  coming back, even after the certificate changes (found by reading, not run; whether that is
-  wanted is undecided); a cloud restore opens the provisioning screen (`#onCloudRestoreAction`)
-  without `#clearProvisionOutcome()`, which the four other ways onto that screen call first, so an
-  earlier attempt's message could show there (found by reading, not run); `AdoptOutcome`'s
-  `breakGlassSecret` is typed as required, but a replayed adopt answers without it
-  (`apps/server/src/setup-api.ts`); the mode screen's own text says a live server files real
-  invoices, which a live run on a development box does not; `setup-app.test.ts`
-  has two test titles naming a `SyntaxError` from a non-JSON error body that `apiError` turns into
-  `server.internal`; `events.test.ts` has no case for the restore and fiscal-test dispatchers; the
-  `*.css?inline` declaration in `vite-env.d.ts` is redundant (vite/client declares it);
-  `vitest.config.ts` excludes `.stryker-tmp` in a package with no Stryker config; `paintCanvas` in
-  `widgets/test-helpers.ts` has no accessibility suite that fails without it; and `connection-screen.ts`'s `connection-continue` event is not named `wt-*`
-  and carries no `detail`.
-
 ## Setup wizard — the constraints A2's rework left behind (A2)
 
 What constrains the next change to the wizard:
@@ -475,19 +457,6 @@ that operation's reader. Do not remove exact-content checks to make a large file
   one in use.** A joined spare then cannot open its own signing key after a restart. Left open by
   A947 slice 3a.
   [Detail](setup.md#a1284-where-the-environment-sets-the-vault-key-a-move-or-a-join-leaves-a-ring-that-is-not-the-one-in-use)
-
-## Bundle: Setup wizard tidy
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
-  Several small wizard leftovers remain.
-  [Detail](setup.md#ongoto-in-setup-appts-keeps-fiscalteststatus)
-- **The Cloud restore screen shows capture and expiry times as the server's raw ISO text** in both
-  languages. Left open by C42 (#837).
-- **The setup route `GET /setup-api/venue-defaults` has no production reader** — left open by
-  A1315 PR 5, which took setup's only call to it away (`apps/server/src/setup-api.ts`). Retiring it
-  means removing the route's two direct cases in `apps/server/src/setup-api.test.ts`.
 
 ## Bundle: File input sweep
 

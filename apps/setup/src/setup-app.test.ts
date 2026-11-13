@@ -1104,7 +1104,11 @@ describe("setup-app", () => {
     expect((await screenHost(el, "cloud-restore")).shadowRoot!.textContent).toContain("12345678");
     cloudRecoveryAction(el, "status");
     await flush(el);
-    expect((await screenHost(el, "cloud-restore")).shadowRoot!.textContent).toContain("2026-09-24");
+    expect(
+      (await screenHost(el, "cloud-restore")).shadowRoot!.querySelector(
+        "time[datetime='2026-09-24T10:00:00.000Z']",
+      ),
+    ).not.toBeNull();
     cloudRecoveryAction(el, "restore", pointId);
     await flush(el);
     expect(restoreFromCloud).toHaveBeenCalledWith(pointId, false);
@@ -1687,7 +1691,10 @@ describe("setup-app", () => {
 
   it.each([
     ["a bare TypeError (network drop mid-provision)", new TypeError("network")],
-    ["a SyntaxError (non-JSON 502 error body)", new SyntaxError("Unexpected token < in JSON")],
+    [
+      "a SyntaxError (a success answer whose body is not JSON)",
+      new SyntaxError("Unexpected token < in JSON"),
+    ],
   ])(
     "routes a code-less rejection (%s) to the generic retryable failure without stranding",
     async (_label, rejection) => {
@@ -2268,7 +2275,10 @@ describe("setup-app", () => {
 
   it.each([
     ["a bare TypeError (network drop mid-adopt)", new TypeError("network")],
-    ["a SyntaxError (non-JSON 502 error body)", new SyntaxError("Unexpected token < in JSON")],
+    [
+      "a SyntaxError (a success answer whose body is not JSON)",
+      new SyntaxError("Unexpected token < in JSON"),
+    ],
   ])(
     "routes a code-less adopt rejection (%s) back to connect without stranding",
     async (_l, rejection) => {
@@ -3431,9 +3441,14 @@ describe("page shell", () => {
     await aboutModal(el).updateComplete;
     expect(aboutModal(el).open).toBe(true);
 
+    const closed = new Promise((resolve) =>
+      aboutSheet(el).addEventListener("about-close", resolve, { once: true }),
+    );
     await close(el);
-    await vi.waitFor(() => expect(aboutModal(el).open).toBe(false));
+    await closed;
     await el.updateComplete;
+    await aboutSheet(el).updateComplete;
+    expect(aboutModal(el).open).toBe(false);
     expect(aboutSheet(el).shadowRoot!.querySelector("iframe")).toBeNull();
     expect(info.shadowRoot!.activeElement).toBe(info.shadowRoot!.querySelector("button"));
   });
@@ -3983,6 +3998,107 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       "AEAT accepted",
     );
     expect(screen.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
+  });
+
+  describe("a fiscal test result and a later change to what it ran on", () => {
+    const cert = { pfxBase64: "AAAA", passphrase: "pw", certKind: "sello" } as const;
+    const venue = {
+      country: "ES",
+      fiscalTerritory: "ES-common",
+      taxId: "B00000000",
+      legalName: "Bar Uno SL",
+      name: "Bar Uno",
+      seriesCode: "A",
+    } as const;
+
+    async function tested(status: "accepted" | "rejected" | "uncertain"): Promise<SetupApp> {
+      const el = await mountSetupApp(
+        stubApi({ runFiscalTest: vi.fn().mockResolvedValue({ status, rejections: [] }) }),
+      );
+      patch(el, { mode: "live", aeatCert: cert, venue });
+      goto(el, "fiscal-test");
+      fiscalTestRequest(el);
+      await flush(el);
+      expect(readState(el, ["fiscalTestStatus"]).fiscalTestStatus).toBe(status);
+      return el;
+    }
+
+    const accepted = () => tested("accepted");
+
+    it.each([
+      ["a different certificate file", { aeatCert: { pfxBase64: "b3RoZXI=" } }],
+      ["a different passphrase", { aeatCert: { passphrase: "other" } }],
+      ["a different certificate kind", { aeatCert: { certKind: "representante" } }],
+      ["a tax number change", { venue: { taxId: "B12345674" } }],
+      ["a legal name change", { venue: { legalName: "Bar Dos SL" } }],
+      ["a fiscal territory change", { venue: { fiscalTerritory: "ES-navarra" } }],
+      ["a country change", { venue: { country: "PT" } }],
+      ["a mode choice", { mode: "prepare" }],
+      ["a switch to demo", { mode: "demo" }],
+    ] as const)("asks for the test again after %s", async (_label, change) => {
+      const el = await accepted();
+      goto(el, "cert");
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-cert]")).not.toBeNull();
+      patch(el, change as DeepPartial<ProvisionBody>);
+      goto(el, "fiscal-test");
+      await flush(el);
+      expect(readState(el, ["fiscalTestStatus"]).fiscalTestStatus).toBeUndefined();
+      const screen = await screenHost(el, "fiscal-test");
+      expect(screen.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+    });
+
+    it("keeps the result when the certificate screen's Next sends the same certificate", async () => {
+      const el = await accepted();
+      goto(el, "cert");
+      await flush(el);
+      const certScreen = await screenHost(el, "cert");
+      certScreen.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-fiscal-test]")).not.toBeNull();
+      expect(readState(el, ["fiscalTestStatus"]).fiscalTestStatus).toBe("accepted");
+      const screen = await screenHost(el, "fiscal-test");
+      expect(screen.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
+    });
+
+    it.each([
+      ["the sender email", { email: { from: "venue@example.com" } }],
+      ["the administrator's name", { venue: { admin: { firstNames: "Another" } } }],
+      ["the venue's trading name", { venue: { name: "Bar Tres" } }],
+      ["the venue values it already holds", { venue: { ...venue } }],
+      ["the same mode and certificate", { mode: "live", aeatCert: { ...cert } }],
+    ] as const)("keeps the result after a patch of %s", async (_label, change) => {
+      const el = await accepted();
+      patch(el, change as DeepPartial<ProvisionBody>);
+      goto(el, "fiscal-test");
+      await flush(el);
+      expect(readState(el, ["fiscalTestStatus"]).fiscalTestStatus).toBe("accepted");
+      const screen = await screenHost(el, "fiscal-test");
+      expect(screen.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
+    });
+
+    it.each([
+      ["rejected", "a series code change", { venue: { seriesCode: "B" } }],
+      ["rejected", "a trading name change", { venue: { name: "Bar Tres" } }],
+      ["uncertain", "a series code change", { venue: { seriesCode: "B" } }],
+    ] as const)("drops a result that was %s after %s", async (status, _label, change) => {
+      const el = await tested(status);
+      patch(el, change as DeepPartial<ProvisionBody>);
+      goto(el, "fiscal-test");
+      await flush(el);
+      expect(readState(el, ["fiscalTestStatus"]).fiscalTestStatus).toBeUndefined();
+    });
+
+    it.each(["rejected", "uncertain"] as const)(
+      "keeps a %s result when the same venue, mode and certificate are sent again",
+      async (status) => {
+        const el = await tested(status);
+        patch(el, { mode: "live", aeatCert: { ...cert }, venue: { ...venue } });
+        goto(el, "fiscal-test");
+        await flush(el);
+        expect(readState(el, ["fiscalTestStatus"]).fiscalTestStatus).toBe(status);
+      },
+    );
   });
 
   it("shows the authority rejection from the API and clears it after an uncertain retry", async () => {
@@ -4860,6 +4976,29 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
   async function cloudScreen(el: SetupApp): Promise<SetupCloudRestoreScreen> {
     return (await screenHost(el, "cloud-restore")) as SetupCloudRestoreScreen;
   }
+
+  it("shows the provisioning screen while the restore is staged, with no earlier failure on it", async () => {
+    const pending = deferred();
+    const el = await mountSetupApp(
+      stubApi({
+        provision: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        cloudRecoveryStatus: vi.fn().mockResolvedValue(approved()),
+        restoreFromCloud: vi.fn().mockReturnValue(pending.promise),
+      }),
+    );
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).not.toBeNull();
+    goto(el, "cloud-restore");
+    await flush(el);
+    cloudRecoveryAction(el, "status");
+    await flush(el);
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).not.toBeNull();
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toBeNull();
+    pending.resolve({ restoreStaged: true, restarting: true });
+  });
 
   it.each(["server.internal", "restore.stream_source_unchecked", "setup.request_invalid"])(
     "retains the native Cloud safety confirmations after a deferred %s refusal",
