@@ -22,12 +22,12 @@ import type { TillPassScreen } from "./till-pass-screen.js";
 import "./till-pass-screen.js";
 
 const stations = [
-  { id: "st-1", name: "Parrilla", available: true },
-  { id: "st-2", name: "Freidora", available: false },
+  { id: "st-1", name: "Grill", available: true },
+  { id: "st-2", name: "Fryer", available: false },
 ];
 const zones = [
-  { id: "z-1", name: "Terraza", available: false },
-  { id: "z-2", name: "Sala", available: true },
+  { id: "z-1", name: "Terrace", available: false },
+  { id: "z-2", name: "Dining room", available: true },
 ];
 
 /** Every dish detail the board draws: cross-station references of each kind, an extra, as-served
@@ -43,7 +43,7 @@ const detailed = {
         addAllergens: { gluten: { kinds: ["wheat" as const] } },
       },
       { kind: "for" as const, name: "BURG", stationName: "Grill" },
-      { kind: "for" as const, name: "AGUA", stationName: null },
+      { kind: "for" as const, name: "WATER", stationName: null },
     ],
     modifiers: [{ name: "GLUTEN FREE" }],
     asServed: { allergens: { milk: {} }, pending: false },
@@ -61,7 +61,7 @@ const detailed = {
       vegetarian: "unknown" as const,
       contains: ["meat" as const],
     },
-    note: "poco hecho por dentro",
+    note: "rare inside",
   },
 } satisfies Record<string, Partial<PassCardItem>>;
 
@@ -85,23 +85,23 @@ const populated = (): PassBoard =>
       passCard({
         key: "bill:wo-f",
         target: { kind: "bill", workingOrderId: "wo-f" },
-        orders: [{ orderId: "wo-f", orderNumber: 3, tableLabel: "Mesa 2", kitchenNote: null }],
-        items: [passItem({ id: "it-f", name: "Pulpo", orderId: "wo-f", phase: "requested" })],
+        orders: [{ orderId: "wo-f", orderNumber: 3, tableLabel: "Table 2", kitchenNote: null }],
+        items: [passItem({ id: "it-f", name: "Octopus", orderId: "wo-f", phase: "requested" })],
         releaseTicketItemIds: ["it-f"],
         releaseContext: "ctx-1",
       }),
     ],
     inProgress: [
-      passCard({ items: [passItem({ id: "it-fresh", name: "Croquetas", ...detailed.fresh })] }),
+      passCard({ items: [passItem({ id: "it-fresh", name: "Croquettes", ...detailed.fresh })] }),
       passCard({
         key: "bill:wo-old",
         target: { kind: "bill", workingOrderId: "wo-old" },
         requestedAt: minutesAgo(40),
-        orders: [{ orderId: "wo-old", orderNumber: 4, tableLabel: "Mesa 5", kitchenNote: null }],
+        orders: [{ orderId: "wo-old", orderNumber: 4, tableLabel: "Table 5", kitchenNote: null }],
         items: [
           passItem({
             id: "it-old",
-            name: "Ensalada",
+            name: "Salad",
             orderId: "wo-old",
             queuedAt: minutesAgo(40),
             requestedAt: minutesAgo(40),
@@ -119,8 +119,8 @@ const groupCard = (groupId: string, position: number, overrides: Partial<PassCar
     kind: "next_course",
     party: { id: "v-7", revision: 3 },
     group: { displayNumber: position, position },
-    orders: [{ orderId: "wo-p", orderNumber: 9, tableLabel: "Mesa 7", kitchenNote: null }],
-    items: [passItem({ id: `it-${groupId}`, name: "Croquetas", orderId: "wo-p", course: null })],
+    orders: [{ orderId: "wo-p", orderNumber: 9, tableLabel: "Table 7", kitchenNote: null }],
+    items: [passItem({ id: `it-${groupId}`, name: "Croquettes", orderId: "wo-p", course: null })],
     ...overrides,
   });
 
@@ -134,7 +134,7 @@ const party = (): PassBoard =>
         items: [
           passItem({
             id: "it-steak",
-            name: "Solomillo",
+            name: "Sirloin",
             orderId: "wo-p",
             phase: "held",
             firedAt: null,
@@ -204,7 +204,7 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
     const { el, host } = await mount({
       api,
       deviceMode: true,
-      deviceName: "Pantalla Pase",
+      deviceName: "Pass screen",
       runsPass: true,
       initialBoard: board,
     });
@@ -323,7 +323,7 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
           api,
           deviceMode: true,
           monitor: true,
-          deviceName: "Pared del pase",
+          deviceName: "Pass wall",
           runsPass: true,
           initialBoard: board,
         },
@@ -380,7 +380,7 @@ describe.each(["light", "dark"] as const)("the pass's help badges a11y (%s theme
         } as unknown as TillApi,
         deviceMode: true,
         monitor,
-        deviceName: "Pase",
+        deviceName: "Pass",
         runsPass: true,
         reducedMotion: true,
         initialBoard: board,

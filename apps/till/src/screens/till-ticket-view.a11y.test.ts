@@ -16,7 +16,7 @@ const result: TillSaleResult = {
   receiptTrim: {},
   venueAddress: [],
   receiptSettings: { printAddress: false },
-  orderLabel: "Mesa 6",
+  orderLabel: "Table 6",
   orderNumber: 41,
   invoiceNumber: "A/1",
   issuedAt: "2026-08-05T12:34:56.000Z",

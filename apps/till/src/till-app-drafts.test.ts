@@ -1276,7 +1276,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     expect(tableOrder(el)).toBeNull();
   });
 
-  it("shows Mesa 4 on the floor with an unsent-order mark once the save has landed", async () => {
+  it("shows Table 4 on the floor with an unsent-order mark once the save has landed", async () => {
     const { el } = await mountApp(lateSaveLiveFloor());
     await openTable(el);
     await tap(el, "Beer");
@@ -6649,7 +6649,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       await flush(el);
     }
 
-    /** Opens Mesa 4 while the zone offers no menu; the question that raises is still open. */
+    /** Opens Table 4 while the zone offers no menu; the question that raises is still open. */
     async function openWithMenuOff(): Promise<TillApp> {
       const { el } = await mountApp({ listZoneOffers: vi.fn().mockResolvedValue(menuOff()) });
       await openTable(el);
@@ -6665,7 +6665,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       await flush(el, 8);
     }
 
-    /** Opens Mesa 4 while the zone offers no menu, puts that question aside, and then lets a poll
+    /** Opens Table 4 while the zone offers no menu, puts that question aside, and then lets a poll
      * find `back` offered. */
     async function menuComesBack(back: ZoneOfferCatalogue, version: string): Promise<TillApp> {
       const el = await openWithMenuOff();

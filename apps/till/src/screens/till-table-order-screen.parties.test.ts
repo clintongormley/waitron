@@ -178,8 +178,8 @@ describe("till-table-order-screen: the party's bills", () => {
 
   it("names an unnamed party's bills by number, and never after a bill's own label", async () => {
     const el = await mountScreen({
-      party: { ...party, name: null, displayName: "Mesa 4, 5" },
-      bills: [paidTab, { ...check, label: "Mesa 4" }],
+      party: { ...party, name: null, displayName: "Table 4, 5" },
+      bills: [paidTab, { ...check, label: "Table 4" }],
     });
 
     expect(rowText(el, "wo-check", "label")).toBe(t("floor.unsent_bill").replace("{n}", "2"));

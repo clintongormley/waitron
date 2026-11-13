@@ -108,7 +108,7 @@ function heldOrder(
   return {
     id: "wo-9",
     orderNumber: 12,
-    label: "Mesa 4",
+    label: "Table 4",
     revision,
     kitchenNote: {
       scope: { workingOrderId: "wo-9" },

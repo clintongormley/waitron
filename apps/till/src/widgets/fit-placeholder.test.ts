@@ -145,13 +145,13 @@ describe("PlaceholderFit", () => {
   it("leaves no font listener or resize observer behind when removed with an update queued", async () => {
     const attached = watchAttachments();
     const { el, host } = await mountWidget<PlaceholderFitProbe>("placeholder-fit-probe", {
-      text: "Mesa 1",
+      text: "Table 1",
     });
     const field = el.shadowRoot!.querySelector("wt-input")!;
     expect(attached.fontListeners()).toBe(1);
     expect(attached.observersOf(field)).toBe(1);
 
-    el.text = "Mesa 2";
+    el.text = "Table 2";
     host.remove();
     await el.updateComplete;
 
@@ -162,7 +162,7 @@ describe("PlaceholderFit", () => {
   it("listens for fonts and watches the field again when its host is put back", async () => {
     const attached = watchAttachments();
     const { el, host } = await mountWidget<PlaceholderFitProbe>("placeholder-fit-probe", {
-      text: "Mesa 1",
+      text: "Table 1",
     });
     const field = el.shadowRoot!.querySelector("wt-input")!;
 

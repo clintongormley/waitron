@@ -19,7 +19,7 @@ async function mount(over: Partial<TillPresentedPayDialog> = {}) {
   const { el } = await mountWidget<TillPresentedPayDialog>("till-presented-pay-dialog", {
     open: true,
     amount: "62.40",
-    tableName: "Mesa 4",
+    tableName: "Table 4",
     takesReaderCard: true,
     takesCash: true,
     takesManualCard: true,
@@ -82,7 +82,7 @@ describe("till-presented-pay-dialog: what it shows", () => {
     expect(root(el).querySelector('input[name="way"]')).toBeNull();
     expect(root(el).querySelector("[data-pay-way]")).toBeNull();
     expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
-      "Cobrar · Mesa 4",
+      "Cobrar · Table 4",
     );
     expect(text(root(el).querySelector("[data-presented-pay-balance]"))).toBe(
       `Cuenta presentada ${money("62.40")}`,

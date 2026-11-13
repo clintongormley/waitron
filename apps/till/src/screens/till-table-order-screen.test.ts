@@ -3792,7 +3792,7 @@ describe("till-table-order-screen", () => {
       expect(tableMenuOpen(el)).toBe(false);
     });
 
-    /** Ana at Mesa 4 (and Mesa 5 with `atTwo`), and the floor around her. */
+    /** Ana at Table 4 (and Table 5 with `atTwo`), and the floor around her. */
     const partyTables = (atTwo = false) => {
       const ana: TableParty = {
         ...anaParty,
@@ -3813,11 +3813,11 @@ describe("till-table-order-screen", () => {
       return {
         party: ana,
         tables: [
-          held("t4", "Mesa 4", ana),
-          ...(atTwo ? [held("t5", "Mesa 5", ana)] : []),
-          held("t7", "Mesa 7", luis),
-          tableState({ id: "t6", label: "Mesa 6", condition: "needs_clearing" }),
-          tableState({ id: "t9", label: "Mesa 9" }),
+          held("t4", "Table 4", ana),
+          ...(atTwo ? [held("t5", "Table 5", ana)] : []),
+          held("t7", "Table 7", luis),
+          tableState({ id: "t6", label: "Table 6", condition: "needs_clearing" }),
+          tableState({ id: "t9", label: "Table 9" }),
         ],
       };
     };
@@ -3895,7 +3895,7 @@ describe("till-table-order-screen", () => {
     });
 
     describe("Move this bill", () => {
-      /** Ana's second bill on screen, at Mesa 4, with the floor around her. */
+      /** Ana's second bill on screen, at Table 4, with the floor around her. */
       const onCheck = () => ({
         lines: [pendingLine],
         orderId: "wo-check",
@@ -4082,10 +4082,10 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
-        t("table.move_guests_heading").replace("{party}", "Ana (Mesa 4)"),
+        t("table.move_guests_heading").replace("{party}", "Ana (Table 4)"),
       );
       expect(targetIds(el)).toEqual(["t6", "t7", "t9"]);
-      expect(target(el, "t9")!.textContent).toContain("Mesa 9");
+      expect(target(el, "t9")!.textContent).toContain("Table 9");
       expect(target(el, "t9")!.textContent).toContain(t("floor.free"));
       expect(target(el, "t7")!.textContent).toContain(
         t("table.held_by").replace("{party}", "Luis"),
@@ -4105,7 +4105,7 @@ describe("till-table-order-screen", () => {
       const floor = partyTables();
       const unnamed = floor.tables.map((table) =>
         table.id === "t7"
-          ? { ...table, party: { ...table.party!, name: null, displayName: "Mesa 7" } }
+          ? { ...table, party: { ...table.party!, name: null, displayName: "Table 7" } }
           : table,
       );
       const { el } = await mount({
@@ -4119,7 +4119,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(target(el, "t7")!.textContent).toContain(
-        t("table.held_by").replace("{party}", "Mesa 7"),
+        t("table.held_by").replace("{party}", "Table 7"),
       );
     });
 
@@ -4175,7 +4175,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="join"]');
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
-        t("table.join_heading").replace("{party}", "Ana (Mesa 4)"),
+        t("table.join_heading").replace("{party}", "Ana (Table 4)"),
       );
 
       click(el, '[data-target="t9"]');
@@ -4251,7 +4251,7 @@ describe("till-table-order-screen", () => {
         layoutDue: null,
         serviceMode,
       });
-      /** Ana at Mesa 4 in the dining room; Luis holds Mesa 7 at the bar, where Mesa 8 is free. */
+      /** Ana at Table 4 in the dining room; Luis holds Table 7 at the bar, where Table 8 is free. */
       const floor = (barMode: FloorZone["serviceMode"] = "prepay") => {
         const { party, tables } = partyTables();
         const bar = new Set(["t7", "t8"]);
@@ -4261,7 +4261,7 @@ describe("till-table-order-screen", () => {
           party,
           bills: partyBills().bills,
           zones: [zone("zone-dining", "table_tab"), zone("zone-bar", barMode)],
-          tables: [...tables, tableState({ id: "t8", label: "Mesa 8" })].map((table) => ({
+          tables: [...tables, tableState({ id: "t8", label: "Table 8" })].map((table) => ({
             ...table,
             zoneId: bar.has(table.id) ? "zone-bar" : "zone-dining",
           })),
@@ -4412,7 +4412,7 @@ describe("till-table-order-screen", () => {
         tables: [
           tableState({
             id: "t4",
-            label: "Mesa 4",
+            label: "Table 4",
             state: "open-tab",
             condition: "held",
             party: anaParty,
@@ -4461,13 +4461,13 @@ describe("till-table-order-screen", () => {
           tables: [
             tableState({
               id: "t4",
-              label: "Mesa 4",
+              label: "Table 4",
               state: "open-tab",
               condition: "held",
               party: anaParty,
             }),
-            tableState({ id: "t5", label: "Mesa 5", today: onMap(true) }),
-            tableState({ id: "t6", label: "Mesa 6", today: onMap(false) }),
+            tableState({ id: "t5", label: "Table 5", today: onMap(true) }),
+            tableState({ id: "t6", label: "Table 6", today: onMap(false) }),
           ],
         });
         await toMenu(el);
@@ -4556,7 +4556,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
-        t("table.move_guests_heading").replace("{party}", "Ana (Mesa 4, Terrace)"),
+        t("table.move_guests_heading").replace("{party}", "Ana (Table 4, Terrace)"),
       );
       expect(target(el, "t9")!.querySelector(".target-label")!.textContent).toBe("Window");
     });
@@ -4581,7 +4581,7 @@ describe("till-table-order-screen", () => {
         ),
       ).toEqual([
         ["t9", "Arch"],
-        ["t6", "Mesa 6"],
+        ["t6", "Table 6"],
         ["t7", "Zinc"],
       ]);
     });
@@ -4600,7 +4600,7 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
         t("table.move_guests_heading").replace("{party}", "García birthday"),
       );
-      expect(target(el, "t5")!.querySelector(".target-label")!.textContent).toBe("Mesa 5");
+      expect(target(el, "t5")!.querySelector(".target-label")!.textContent).toBe("Table 5");
     });
 
     it("Name the party shows an unnamed party at a group named for today by the group's name once, as the field's placeholder", async () => {
@@ -4635,7 +4635,7 @@ describe("till-table-order-screen", () => {
         HTMLElement & { value: string; tables: string; refusal: string }
       >("till-party-name-dialog")!;
       expect(dialog.value).toBe("Ana");
-      expect(dialog.tables).toBe("Mesa 4, 5");
+      expect(dialog.tables).toBe("Table 4, 5");
       expect(dialog.refusal).toBe("");
 
       dialog.dispatchEvent(
@@ -4914,7 +4914,7 @@ describe("till-table-order-screen", () => {
       >("till-party-guests-dialog")!;
       expect(dialog.value).toBe("3");
       expect(dialog.savedValue).toBe("3");
-      expect(dialog.tables).toBe("Mesa 4, 5");
+      expect(dialog.tables).toBe("Table 4, 5");
       expect(dialog.refusal).toBe("");
 
       dialog.dispatchEvent(

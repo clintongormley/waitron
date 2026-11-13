@@ -45,7 +45,7 @@ function groupCard(groupId: string, position: number, dish: string): PassCard {
     kind: "next_course",
     party: { id: "v-4", revision: 7 },
     group: { displayNumber: position, position },
-    orders: [{ orderId: "wo-9", orderNumber: 9, tableLabel: "Mesa 4", kitchenNote: null }],
+    orders: [{ orderId: "wo-9", orderNumber: 9, tableLabel: "Table 4", kitchenNote: null }],
     items: [passItem({ id: `it-${groupId}`, name: dish, orderId: "wo-9", course: null })],
   });
 }

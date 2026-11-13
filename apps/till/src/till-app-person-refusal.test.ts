@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deviceZonesFixture } from "../test/device-zones.js";
-import { billOf, mesa, offers, till, zone } from "../test/bill-pay-app.js";
+import { billOf, heldTable, offers, till, zone } from "../test/bill-pay-app.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
 import { PERSON_HEADER } from "@waitron/shared";
@@ -76,7 +76,7 @@ function anaDraft(): Draft {
 }
 
 function anaTable(): TableState {
-  return mesa({
+  return heldTable({
     unsentDrafts: [
       {
         billId: "wo-4",

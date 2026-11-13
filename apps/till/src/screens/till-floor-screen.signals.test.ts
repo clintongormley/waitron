@@ -24,7 +24,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
     guestCount: 2,
     state: "open",
     name: null,
-    displayName: "Mesa 2",
+    displayName: "Table 2",
     openingBillId: "wo-2",
     outstanding: "20.00",
     billCount: 1,
@@ -50,7 +50,7 @@ function today(): TableToday {
 function table(over: Partial<TableState> & { enRoute?: number } = {}): TableState {
   return {
     id: "t2",
-    label: "Mesa 2",
+    label: "Table 2",
     zoneId: "z1",
     state: "open-tab",
     condition: "held",
@@ -65,7 +65,7 @@ function table(over: Partial<TableState> & { enRoute?: number } = {}): TableStat
     today: null,
     party: party(),
     signals: [],
-    shortName: over.label ?? "Mesa 2",
+    shortName: over.label ?? "Table 2",
     ...over,
   };
 }
@@ -99,7 +99,7 @@ async function mountFloor(
     zones: [
       {
         id: "z1",
-        name: "Comedor",
+        name: "Dining room",
         displayOrder: 0,
         active: true,
         closesAt: null,
@@ -188,7 +188,7 @@ describe("till-floor-screen: the signals at a table", () => {
     const readyOnly = table({ readyToServe: 2, signals: [ready(["bar", "Bar", 2])] });
     const enRoute = table({
       id: "t3",
-      label: "Mesa 3",
+      label: "Table 3",
       party: party({ id: "v3" }),
       enRoute: 1,
       readyToServe: 1,
@@ -237,8 +237,8 @@ describe("till-floor-screen: the signals at a table", () => {
 describe("till-floor-screen: what each station has ready", () => {
   const table8 = table({
     id: "t8",
-    label: "Mesa 8",
-    party: party({ id: "v8", displayName: "Mesa 8", tableIds: ["t8"] }),
+    label: "Table 8",
+    party: party({ id: "v8", displayName: "Table 8", tableIds: ["t8"] }),
     signals: [ready(["bar", "Bar", 1], ["kitchen", "Kitchen", 2])],
   });
   const joined = (id: string, label: string) =>
@@ -251,9 +251,9 @@ describe("till-floor-screen: what each station has ready", () => {
   const floor = [
     table({ signals: [ready(["bar", "Bar", 3])] }),
     table8,
-    joined("t5", "Mesa 5"),
-    joined("t6", "Mesa 6"),
-    table({ id: "t9", label: "Mesa 9", party: null, state: "free", signals: [] }),
+    joined("t5", "Table 5"),
+    joined("t6", "Table 6"),
+    table({ id: "t9", label: "Table 9", party: null, state: "free", signals: [] }),
   ];
   const summary = (el: TillFloorScreen) =>
     [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-station-ready]")].map((row) => ({
@@ -264,8 +264,8 @@ describe("till-floor-screen: what each station has ready", () => {
   it("lists each station's tables with their counts, a party at joined tables once", async () => {
     const el = await mountFloor(floor);
     expect(summary(el)).toEqual([
-      { station: "bar", text: "Bar: Mesa 2 ×3, Mesa 8 ×1, Ana ×2" },
-      { station: "kitchen", text: "Kitchen: Mesa 8 ×2" },
+      { station: "bar", text: "Bar: Table 2 ×3, Table 8 ×1, Ana ×2" },
+      { station: "kitchen", text: "Kitchen: Table 8 ×2" },
     ]);
   });
 
@@ -287,7 +287,7 @@ describe("till-floor-screen: what each station has ready", () => {
       zones: [
         {
           id: "z1",
-          name: "Comedor",
+          name: "Dining room",
           displayOrder: 0,
           active: true,
           closesAt: null,
@@ -299,7 +299,7 @@ describe("till-floor-screen: what each station has ready", () => {
         },
         {
           id: "z2",
-          name: "Terraza",
+          name: "Terrace",
           displayOrder: 1,
           active: true,
           closesAt: null,
@@ -312,8 +312,8 @@ describe("till-floor-screen: what each station has ready", () => {
       ],
     });
     expect(summary(el).map((row) => row.text)).toEqual([
-      "Bar: Mesa 2 ×3, Mesa 8 ×1",
-      "Kitchen: Mesa 8 ×2",
+      "Bar: Table 2 ×3, Table 8 ×1",
+      "Kitchen: Table 8 ×2",
     ]);
   });
 
@@ -340,14 +340,14 @@ describe("till-floor-screen: what each station has ready", () => {
 
   it("says it in Spanish", async () => {
     setLocale("es");
-    const el = await mountFloor([table({ signals: [ready(["bar", "Barra", 3])] })], {
+    const el = await mountFloor([table({ signals: [ready(["bar", "Bar", 3])] })], {
       canOpenStation: true,
     });
     expect(el.shadowRoot!.querySelector("[data-station-summary] h2")!.textContent!.trim()).toBe(
       "Listo",
     );
     expect(el.shadowRoot!.querySelector('[data-open-station="bar"]')!.textContent!.trim()).toBe(
-      "Abrir Barra",
+      "Abrir Bar",
     );
   });
 });

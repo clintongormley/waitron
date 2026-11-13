@@ -1341,7 +1341,7 @@ describe("A768 the left draft saves in the background", () => {
     expect(rows(el)).toEqual([]);
   });
 
-  /** Mesa 9 free, its seating held until `seat` is called, and who each save was sent as. */
+  /** Table 9 free, its seating held until `seat` is called, and who each save was sent as. */
   function mountHeldSeating(): {
     savedBy: string[];
     seat: () => void;

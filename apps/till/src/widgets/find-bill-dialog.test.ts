@@ -12,7 +12,7 @@ const debt: BillLookupRow = {
   orderNumber: 12,
   label: "Birthday",
   partyName: "Familia Ruiz",
-  tables: ["Mesa 4"],
+  tables: ["Table 4"],
   invoiceNumber: "A/12",
   openedAt: "2026-10-01T18:00:00.000Z",
   departedAt: "2026-10-01T21:30:00.000Z",
@@ -82,7 +82,7 @@ describe("Find a bill", () => {
     const el = await mount();
     expect(el.shadowRoot!.textContent).toContain("Familia Ruiz");
     expect(el.shadowRoot!.textContent).toContain("A/12");
-    expect(el.shadowRoot!.textContent).toContain("Mesa 4");
+    expect(el.shadowRoot!.textContent).toContain("Table 4");
     expect(el.shadowRoot!.textContent).toContain("30.00");
   });
 

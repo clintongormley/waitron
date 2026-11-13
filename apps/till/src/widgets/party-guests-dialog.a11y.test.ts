@@ -21,7 +21,7 @@ describe.each(["light", "dark"] as const)("till-party-guests-dialog a11y (%s the
     setLocale("es-ES");
     const { el, host } = await mountWidget<TillPartyGuestsDialog>(
       "till-party-guests-dialog",
-      { tables: "Mesa 4, 5", value: "2", savedValue: "2" },
+      { tables: "Table 4, 5", value: "2", savedValue: "2" },
       theme,
     );
     await saveButton(el).updateComplete;
@@ -34,7 +34,7 @@ describe.each(["light", "dark"] as const)("till-party-guests-dialog a11y (%s the
     setLocale("es-ES");
     const { el, host } = await mountWidget<TillPartyGuestsDialog>(
       "till-party-guests-dialog",
-      { tables: "Mesa 4, 5", value: "2", savedValue: "2" },
+      { tables: "Table 4, 5", value: "2", savedValue: "2" },
       theme,
     );
     await fill(el, "4");
@@ -47,7 +47,7 @@ describe.each(["light", "dark"] as const)("till-party-guests-dialog a11y (%s the
     setLocale("es-ES");
     const { el, host } = await mountWidget<TillPartyGuestsDialog>(
       "till-party-guests-dialog",
-      { tables: "Mesa 4, 5", value: "2", savedValue: "2" },
+      { tables: "Table 4, 5", value: "2", savedValue: "2" },
       theme,
     );
     await fill(el, "0");
@@ -61,7 +61,7 @@ describe.each(["light", "dark"] as const)("till-party-guests-dialog a11y (%s the
     setLocale("es-ES");
     const { host } = await mountWidget<TillPartyGuestsDialog>(
       "till-party-guests-dialog",
-      { tables: "Mesa 4, 5", value: "4", savedValue: "2", refusal: t("seat.guest_count_invalid") },
+      { tables: "Table 4, 5", value: "4", savedValue: "2", refusal: t("seat.guest_count_invalid") },
       theme,
     );
     await expectNoA11yViolations(host);

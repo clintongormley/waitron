@@ -175,7 +175,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
           {
             orderId: "wo-1",
             orderNumber: 5,
-            label: "Mesa 4",
+            label: "Table 4",
             queuedAt: "2026-08-17T10:00:00.000Z",
             thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
             items: [

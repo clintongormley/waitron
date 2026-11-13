@@ -15,7 +15,7 @@ describe.each(["light", "dark"] as const)("till-party-name-dialog a11y (%s theme
     setLocale("es-ES");
     const { el, host } = await mountWidget<TillPartyNameDialog>(
       "till-party-name-dialog",
-      { tables: "Mesa 4, 5", value: "Ana", savedValue: "Ana" },
+      { tables: "Table 4, 5", value: "Ana", savedValue: "Ana" },
       theme,
     );
     await saveButton(el).updateComplete;
@@ -28,7 +28,7 @@ describe.each(["light", "dark"] as const)("till-party-name-dialog a11y (%s theme
     setLocale("es-ES");
     const { el, host } = await mountWidget<TillPartyNameDialog>(
       "till-party-name-dialog",
-      { tables: "Mesa 4, 5", value: "Ana", savedValue: "Ana" },
+      { tables: "Table 4, 5", value: "Ana", savedValue: "Ana" },
       theme,
     );
     const field = el.shadowRoot!.querySelector("wt-input")!;
@@ -43,7 +43,7 @@ describe.each(["light", "dark"] as const)("till-party-name-dialog a11y (%s theme
     setLocale("es-ES");
     const { host } = await mountWidget<TillPartyNameDialog>(
       "till-party-name-dialog",
-      { tables: "Mesa 4, 5", value: "Ana", refusal: t("table.name_too_long") },
+      { tables: "Table 4, 5", value: "Ana", refusal: t("table.name_too_long") },
       theme,
     );
     await expectNoA11yViolations(host);

@@ -731,9 +731,9 @@ describe("till-tender-pay", () => {
     el.addEventListener("park-order", (e) => spy((e as CustomEvent).detail));
     click(el, ".hold");
     await el.updateComplete;
-    await typeLabel(el, "Mesa 4");
+    await typeLabel(el, "Table 4");
     click(el, ".park");
-    expect(spy).toHaveBeenCalledWith({ label: "Mesa 4" });
+    expect(spy).toHaveBeenCalledWith({ label: "Table 4" });
   });
 
   it("emits park-order with no label when the field is left empty", async () => {
@@ -768,7 +768,7 @@ describe("till-tender-pay", () => {
     el.addEventListener("park-order", () => spy());
     click(el, ".hold");
     await el.updateComplete;
-    await typeLabel(el, "Mesa 4"); // a label is part-entered
+    await typeLabel(el, "Table 4"); // a label is part-entered
     click(el, ".cancel");
     await el.updateComplete;
     expect(query(el, ".pay")).not.toBeNull(); // back to the idle Cash button

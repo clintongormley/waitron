@@ -123,7 +123,7 @@ function heldOrder(
     id: "wo-9",
     expectedEdit: null,
     orderNumber: 12,
-    label: "Mesa 4",
+    label: "Table 4",
     revision,
     lines: [
       {
@@ -1846,7 +1846,7 @@ describe("till-app: comping a stored counter order", () => {
               items: [],
               id: "wo-9",
               orderNumber: 12,
-              label: "Mesa 4",
+              label: "Table 4",
               counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
               total: "8.50",
               outstanding: "4.50",
@@ -1994,7 +1994,7 @@ describe("till-app: comping a stored counter order", () => {
             items: [],
             id: "wo-9",
             orderNumber: 12,
-            label: "Mesa 4",
+            label: "Table 4",
             counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
             total: "7.50",
             outstanding: "3.50",

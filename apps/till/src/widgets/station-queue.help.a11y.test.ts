@@ -41,12 +41,12 @@ const groups: StationQueueGroup[] = [
     kitchenNote: null,
     orderId: "wo-1",
     orderNumber: 5,
-    label: "Mesa 4",
+    label: "Table 4",
     queuedAt: SENT,
     status: "placed",
     thresholds: THRESHOLDS,
     bumpMode: "line",
-    items: [dish("ti-1", "queued", "Paella"), dish("ti-2", "preparing", "Agua")],
+    items: [dish("ti-1", "queued", "Paella"), dish("ti-2", "preparing", "Water")],
   },
   {
     kitchenNote: null,
@@ -57,7 +57,7 @@ const groups: StationQueueGroup[] = [
     status: "placed",
     thresholds: THRESHOLDS,
     bumpMode: "line",
-    items: [dish("ti-3", "preparing", "Vino")],
+    items: [dish("ti-3", "preparing", "Wine")],
   },
 ];
 
@@ -66,7 +66,7 @@ const notices: KitchenNotice[] = [
     id: "kn-void",
     stationId: "st-1",
     workingOrderId: "wo-1",
-    orderLabel: "#5 · Mesa 4",
+    orderLabel: "#5 · Table 4",
     kind: "void",
     lineName: "Burger",
     unitName: null,

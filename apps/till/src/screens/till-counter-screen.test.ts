@@ -292,7 +292,7 @@ describe("till-counter-screen", () => {
         items: [],
         id: "wo-1",
         orderNumber: 5,
-        label: "Mesa 4",
+        label: "Table 4",
         counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
         total: "3.00",
         outstanding: "3.00",
@@ -309,7 +309,7 @@ describe("till-counter-screen", () => {
   });
 
   it("passes the floor tables to held orders for Move to table", async () => {
-    const tables = [{ id: "t9", label: "Mesa 9" }];
+    const tables = [{ id: "t9", label: "Table 9" }];
     const { el } = await mount({ tables, heldOrders: [heldOrder], orderList: "parked" } as never);
     expect(heldList(el).tables).toBe(tables);
   });

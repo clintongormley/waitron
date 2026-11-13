@@ -12,7 +12,7 @@ const labeledOrder: HeldOrderSummary = {
   items: [],
   id: "wo-1",
   orderNumber: 5,
-  label: "Mesa 4",
+  label: "Table 4",
   counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
   total: "3.00",
   outstanding: "3.00",
@@ -110,7 +110,7 @@ describe("till-held-orders", () => {
     const rows = el.shadowRoot!.querySelectorAll(".order");
     expect(rows).toHaveLength(2);
     expect(rows[0]!.textContent).toContain("5");
-    expect(rows[0]!.textContent).toContain("Mesa 4");
+    expect(rows[0]!.textContent).toContain("Table 4");
     expect(
       [...rows[0]!.querySelectorAll("[data-count]")].map((chip) => chip.textContent!.trim()),
     ).toEqual([countText(2, "order_counts.items", "order_counts.items_one")]);
@@ -278,8 +278,8 @@ describe("till-held-orders", () => {
     });
     const retrieves = el.shadowRoot!.querySelectorAll("wt-button.retrieve");
     const discards = el.shadowRoot!.querySelectorAll("wt-button.discard");
-    expect(retrieves[0]!.getAttribute("aria-label")).toBe(`${t("held.retrieve")} #5 Mesa 4`);
-    expect(discards[0]!.getAttribute("aria-label")).toBe(`${t("held.discard")} #5 Mesa 4`);
+    expect(retrieves[0]!.getAttribute("aria-label")).toBe(`${t("held.retrieve")} #5 Table 4`);
+    expect(discards[0]!.getAttribute("aria-label")).toBe(`${t("held.discard")} #5 Table 4`);
     expect(retrieves[1]!.getAttribute("aria-label")).toBe(`${t("held.retrieve")} #6`);
     expect(discards[1]!.getAttribute("aria-label")).toBe(`${t("held.discard")} #6`);
   });
@@ -300,8 +300,8 @@ describe("A803 a table bill's number and name in the parked list", () => {
     [...el.shadowRoot!.querySelectorAll(".summary .label")].map((span) => span.textContent);
 
   it.each([
-    ["en-GB", ["4 · Bill 3 · Sam", "4 · Bill 1", "Mesa 4"]],
-    ["es-ES", ["4 · Cuenta 3 · Sam", "4 · Cuenta 1", "Mesa 4"]],
+    ["en-GB", ["4 · Bill 3 · Sam", "4 · Bill 1", "Table 4"]],
+    ["es-ES", ["4 · Cuenta 3 · Sam", "4 · Cuenta 1", "Table 4"]],
   ])(
     "names a table bill as the table screen does, and a counter order by its label (%s)",
     async (locale, labels) => {
@@ -460,9 +460,9 @@ describe("till-held-orders: moving a counter order to a table", () => {
     reminder: null,
   };
   const tables = [
-    tableRow("t7", "Mesa 7", { state: "open-tab", condition: "held", party: luis }),
-    tableRow("t6", "Mesa 6", { condition: "needs_clearing" }),
-    tableRow("t9", "Mesa 9"),
+    tableRow("t7", "Table 7", { state: "open-tab", condition: "held", party: luis }),
+    tableRow("t6", "Table 6", { condition: "needs_clearing" }),
+    tableRow("t9", "Table 9"),
   ];
   const partyBill: HeldOrderSummary = {
     ...labeledOrder,
@@ -502,7 +502,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
     const moves = moveButtons(el);
     expect(moves).toHaveLength(1);
     expect(moves[0]!.textContent!.trim()).toBe(t("held.move_to_table"));
-    expect(moves[0]!.getAttribute("aria-label")).toBe(`${t("held.move_to_table")} #5 Mesa 4`);
+    expect(moves[0]!.getAttribute("aria-label")).toBe(`${t("held.move_to_table")} #5 Table 4`);
   });
 
   it("says what a partly paid order still owes", async () => {
@@ -524,7 +524,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
     await openPicker(el);
 
     expect(opened).toEqual([null]);
-    expect(picker(el)!.heading).toBe(t("table.move_bill_heading").replace("{bill}", "#5 Mesa 4"));
+    expect(picker(el)!.heading).toBe(t("table.move_bill_heading").replace("{bill}", "#5 Table 4"));
     expect(
       [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(
         (row) => row.dataset.target,
@@ -675,8 +675,8 @@ describe("till-held-orders: moving a counter order to a table", () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [labeledOrder],
       tables: [
-        tableRow("t1", "Mesa 1", { today: onMap(true) }),
-        tableRow("t2", "Mesa 2", { today: onMap(false) }),
+        tableRow("t1", "Table 1", { today: onMap(true) }),
+        tableRow("t2", "Table 2", { today: onMap(false) }),
       ],
     });
     const moved = heard(el, "move-held-order");

@@ -47,7 +47,7 @@ import {
   equipmentWith,
   SECOND_READER,
   lock,
-  mesa,
+  heldTable,
   money,
   paymentOf,
   roleOf,
@@ -3688,7 +3688,7 @@ describe("the document choice on a handheld", () => {
         { code },
         {
           getTablesState: vi.fn(async () => [
-            mesa({
+            heldTable({
               outstanding: vi.mocked(api.finishTable).mock.calls.length < 2 ? "170.00" : "50.00",
             }),
           ]),
@@ -3940,7 +3940,7 @@ describe("the document choice on a handheld", () => {
     const { el } = await mountApp(
       onPhone({
         getPartyBills,
-        getTablesState: vi.fn().mockResolvedValue([mesa({ billCount: 2 })]),
+        getTablesState: vi.fn().mockResolvedValue([heldTable({ billCount: 2 })]),
         findBillOptions: vi.fn().mockResolvedValue(billOptions),
         listBills: vi.fn().mockResolvedValue(listPage([counter])),
         getFindBill: vi.fn().mockResolvedValue(counter),
@@ -4071,7 +4071,7 @@ describe("the document choice on a handheld", () => {
         ),
         getTablesState: vi
           .fn()
-          .mockResolvedValue([mesa({ billCount: before.length, outstanding: "170.00" })]),
+          .mockResolvedValue([heldTable({ billCount: before.length, outstanding: "170.00" })]),
         ...overrides,
       });
     }
@@ -4132,7 +4132,7 @@ describe("the document choice on a handheld", () => {
       expect(tableOrder(el).orderId).toBe("wo-5");
       expect(tableOrder(el).lines).toEqual(nextLines);
 
-      answerFloor([mesa({ billCount: 3, outstanding: "50.00" })]);
+      answerFloor([heldTable({ billCount: 3, outstanding: "50.00" })]);
       await flush(el);
 
       expect(tableOrder(el).lines).toEqual(nextLines);
@@ -4144,7 +4144,7 @@ describe("the document choice on a handheld", () => {
       const { el } = await payBillOne(threeBills);
       await firstDrawn(el);
       vi.mocked(api.getTablesState).mockResolvedValue([
-        mesa({ billCount: 3, outstanding: "50.00" }),
+        heldTable({ billCount: 3, outstanding: "50.00" }),
       ]);
 
       backButton(el).click();
@@ -4188,7 +4188,7 @@ describe("the document choice on a handheld", () => {
         });
         await firstDrawn(el);
         vi.mocked(api.getTablesState).mockResolvedValue([
-          mesa({ billCount: 3, outstanding: "50.00" }),
+          heldTable({ billCount: 3, outstanding: "50.00" }),
         ]);
 
         await pressFinish(el);
@@ -4205,7 +4205,7 @@ describe("the document choice on a handheld", () => {
         });
         await firstDrawn(el);
         vi.mocked(api.getTablesState).mockResolvedValue([
-          mesa({ billCount: 3, outstanding: "50.00" }),
+          heldTable({ billCount: 3, outstanding: "50.00" }),
         ]);
 
         await pressFinish(el);
@@ -4363,7 +4363,7 @@ describe("the document choice on a handheld", () => {
           getPartyBills,
           getTablesState: vi
             .fn()
-            .mockResolvedValue([mesa({ billCount: 3, outstanding: "170.00" })]),
+            .mockResolvedValue([heldTable({ billCount: 3, outstanding: "170.00" })]),
           ...overrides,
         },
         tillOver,
@@ -4504,7 +4504,7 @@ describe("the document choice on a handheld", () => {
 
       read.answer(billOnePaid);
       await flush(el);
-      floor.answer([mesa({ billCount: 3, outstanding: "50.00" })]);
+      floor.answer([heldTable({ billCount: 3, outstanding: "50.00" })]);
       await flush(el);
 
       expect(documentChoice(el)).not.toBeNull();
@@ -4589,7 +4589,7 @@ describe("the document choice on a handheld", () => {
 
     it("a re-read whose floor read is still out from before the last payment reads no more bills", async () => {
       const floorRead = heldRead<unknown>();
-      const tables = [mesa({ billCount: 3, outstanding: "170.00" })];
+      const tables = [heldTable({ billCount: 3, outstanding: "170.00" })];
       const { el, getPartyBills } = await payBillOneAfter(
         async () => threeBills,
         async () => billOnePaid,
@@ -4622,7 +4622,7 @@ describe("the document choice on a handheld", () => {
       expect(inChoice(el, '[data-test="finish-table"]')).toBeNull();
 
       vi.mocked(api.getTablesState).mockResolvedValue([
-        mesa({ billCount: 1, outstanding: "0.00" }),
+        heldTable({ billCount: 1, outstanding: "0.00" }),
       ]);
       backButton(el).click();
       await flush(el);
@@ -6268,7 +6268,7 @@ describe("till-app: Finish table refused from the ⋮ on a handheld opened from 
         onPhone({
           getTablesState: vi
             .fn()
-            .mockResolvedValue([mesa({ outstanding: "148.50", billCount: 2 })]),
+            .mockResolvedValue([heldTable({ outstanding: "148.50", billCount: 2 })]),
           getPartyBills: vi.fn().mockResolvedValue([
             billOf(),
             billOf({

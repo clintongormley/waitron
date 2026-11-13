@@ -5345,7 +5345,7 @@ describe("till-app when the server reports another build", () => {
     const reload = vi.fn();
     const { el } = await mountApp({}, { reload });
     const c = await toCounter(el);
-    c.store.label = "Mesa 4";
+    c.store.label = "Table 4";
     await flush(el);
     emit(shell(el)!, "logout");
     await flush(el);

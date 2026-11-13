@@ -1809,9 +1809,9 @@ describe("till-bill-pay-dialog: on a handheld", () => {
 
   it("titles itself with the table", async () => {
     setLocale("es");
-    const el = await handheld({ tableName: "Mesa 4" });
+    const el = await handheld({ tableName: "Table 4" });
     expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
-      "Cobrar · Mesa 4",
+      "Cobrar · Table 4",
     );
   });
 
@@ -1981,7 +1981,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
   it("on a counter till offers four ways and two methods, with no table title", async () => {
     // The two methods are also pinned by "offers cash by default, with no line about taking it at
     // a till" above.
-    const el = await mount({ takesManualCard: true, tableName: "Mesa 4" });
+    const el = await mount({ takesManualCard: true, tableName: "Table 4" });
     expect(radios(el, "way").map((radio) => radio.value)).toEqual([
       "contribution",
       "share",

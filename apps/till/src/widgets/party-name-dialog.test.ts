@@ -10,7 +10,7 @@ beforeEach(() => setLocale("en"));
 
 async function mountDialog(props: Partial<TillPartyNameDialog> = {}): Promise<TillPartyNameDialog> {
   const { el } = await mountWidget<TillPartyNameDialog>("till-party-name-dialog", {
-    tables: "Mesa 4, 5",
+    tables: "Table 4, 5",
     ...props,
   });
   return el;
@@ -85,7 +85,7 @@ describe("till-party-name-dialog", () => {
     const el = await mountDialog();
 
     expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
-      t("table.name_title").replace("{tables}", "Mesa 4, 5"),
+      t("table.name_title").replace("{tables}", "Table 4, 5"),
     );
     expect(nativeInput(el).name).toBe("partyName");
     expect(nativeInput(el).maxLength).toBe(40);
@@ -100,11 +100,11 @@ describe("till-party-name-dialog", () => {
       const previousLocale = currentLocale();
       try {
         setLocale(locale);
-        const el = await mountDialog({ tables: "Mesa 4, 5", value: "" });
+        const el = await mountDialog({ tables: "Table 4, 5", value: "" });
 
-        expect(field(el).placeholder).toBe("Mesa 4, 5");
+        expect(field(el).placeholder).toBe("Table 4, 5");
         expect(field(el).hint).toBe("");
-        expect(nativeInput(el).placeholder).toBe("Mesa 4, 5");
+        expect(nativeInput(el).placeholder).toBe("Table 4, 5");
       } finally {
         setLocale(previousLocale);
       }

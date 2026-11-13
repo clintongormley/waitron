@@ -38,21 +38,21 @@ const luis: TableParty = {
 };
 
 const tables = [
-  tableRow("t7", "Mesa 7", { state: "open-tab", condition: "held", party: luis }),
-  tableRow("t6", "Mesa 6", { condition: "needs_clearing" }),
-  tableRow("t9", "Mesa 9"),
+  tableRow("t7", "Table 7", { state: "open-tab", condition: "held", party: luis }),
+  tableRow("t6", "Table 6", { condition: "needs_clearing" }),
+  tableRow("t9", "Table 9"),
 ];
 
 describe("partyScope", () => {
   it("names a seated party with no name by the tables the floor lists for it", () => {
-    const unnamed = { ...luis, name: null, displayName: "Mesa 7", tableIds: ["t7", "t-gone"] };
+    const unnamed = { ...luis, name: null, displayName: "Table 7", tableIds: ["t7", "t-gone"] };
 
-    expect(partyScope(unnamed, [{ ...tables[0]!, party: unnamed }, tables[2]!])).toBe("Mesa 7");
+    expect(partyScope(unnamed, [{ ...tables[0]!, party: unnamed }, tables[2]!])).toBe("Table 7");
   });
 
   it("names a party exactly as typed when its name spells the tables' slot", () => {
     const typed = { ...luis, name: "Ana {tables} $&" };
 
-    expect(partyScope(typed, [{ ...tables[0]!, party: typed }])).toBe("Ana {tables} $& (Mesa 7)");
+    expect(partyScope(typed, [{ ...tables[0]!, party: typed }])).toBe("Ana {tables} $& (Table 7)");
   });
 });

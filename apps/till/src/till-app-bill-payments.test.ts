@@ -5,7 +5,7 @@ import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import type { TillFindBillDialog } from "./widgets/find-bill-dialog.js";
 import {
   discardUnsavedLeave,
-  mesa,
+  heldTable,
   billOf,
   line,
   paella,
@@ -942,7 +942,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
           window.dispatchEvent(event);
           dirtyAtRead.push(event.defaultPrevented);
         }
-        return [mesa()];
+        return [heldTable()];
       }),
     });
     await openTable(el);
@@ -1455,7 +1455,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
           ...offers,
           context: { ...offers.context },
         }),
-        getTablesState: vi.fn().mockResolvedValue([{ ...mesa(), zonePolicy: {} }]),
+        getTablesState: vi.fn().mockResolvedValue([{ ...heldTable(), zonePolicy: {} }]),
         ...(status === "open" ? { recordSale: send } : { collectOrder: send }),
         findBillOptions: vi.fn().mockResolvedValue(billOptions),
         listBills: vi.fn().mockResolvedValue(listPage([selected])),
@@ -1537,7 +1537,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
           ...offers,
           context: { ...offers.context },
         }),
-        getTablesState: vi.fn().mockResolvedValue([{ ...mesa(), zonePolicy: {} }]),
+        getTablesState: vi.fn().mockResolvedValue([{ ...heldTable(), zonePolicy: {} }]),
       });
       await openTable(el);
       emit(shell(el), "find-bill");
@@ -1782,7 +1782,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     const { el } = await mountApp({
       previewBillPayment: vi.fn().mockResolvedValue(cash("120.00", "30.00")),
       takeBillPayment: vi.fn(async () => {
-        vi.mocked(api.getTablesState).mockResolvedValue([mesa({ guestCount: 9 })]);
+        vi.mocked(api.getTablesState).mockResolvedValue([heldTable({ guestCount: 9 })]);
         throw new TypeError("Failed to fetch");
       }),
     });
@@ -2000,7 +2000,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
       const question = el.shadowRoot!.querySelector("wt-unsaved-changes");
       if (question?.open) await discardUnsavedLeave(el);
       vi.mocked(api.getTablesState).mockResolvedValue([
-        mesa({ guestCount: 9, outstanding: "0.00" }),
+        heldTable({ guestCount: 9, outstanding: "0.00" }),
       ]);
       vi.mocked(api.getPartyBills).mockResolvedValue([
         billOf({
@@ -2563,7 +2563,7 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     const held = new Promise<void>((resolve) => (release = resolve));
     vi.mocked(api.getTablesState).mockImplementation(async () => {
       await held;
-      return [mesa()];
+      return [heldTable()];
     });
     await contribute(el);
     expect(dialog(el)!.busy).toBe(false);
@@ -2713,7 +2713,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     expect(dialog(el)).toBeNull();
     drafts.drafts.push(savedDraft("p2", "Luis"));
     vi.mocked(api.getTablesState).mockResolvedValue([
-      mesa({ unsentDrafts: [unsentEntry("p2", "Luis")] }),
+      heldTable({ unsentDrafts: [unsentEntry("p2", "Luis")] }),
     ]);
 
     const order = await reopenTable(el);
@@ -2733,7 +2733,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
-        .mockResolvedValue([mesa({ unsentDrafts: [unsentEntry("p1", "Ana")] })]),
+        .mockResolvedValue([heldTable({ unsentDrafts: [unsentEntry("p1", "Ana")] })]),
     });
     const order = await openTable(el);
     await showBillFooter(order);
@@ -2757,7 +2757,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
-        .mockResolvedValue([mesa({ unsentDrafts: [unsentEntry("p2", "Luis")] })]),
+        .mockResolvedValue([heldTable({ unsentDrafts: [unsentEntry("p2", "Luis")] })]),
     });
     const order = await openTable(el);
     await showBillFooter(order);
@@ -2805,7 +2805,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     await flush(el);
     drafts.drafts.push({ ...savedDraft(...owner), billId });
     vi.mocked(api.getTablesState).mockResolvedValue([
-      mesa({
+      heldTable({
         unsentDrafts: [{ ...unsentEntry(...owner), billId, billNumber: billId === "wo-4" ? 1 : 2 }],
       }),
     ]);
@@ -3063,7 +3063,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     async (way) => {
       drafts.drafts.push(savedDraft("p2", "Luis"));
       const otherTable: TableState = {
-        ...mesa({ id: "v2", openingBillId: "wo-9", tableIds: ["t5"] }),
+        ...heldTable({ id: "v2", openingBillId: "wo-9", tableIds: ["t5"] }),
         id: "t5",
         label: "5",
         shortName: "5",
@@ -3071,7 +3071,10 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
       const { el } = await mountApp({
         getTablesState: vi
           .fn()
-          .mockResolvedValue([mesa({ unsentDrafts: [unsentEntry("p2", "Luis")] }), otherTable]),
+          .mockResolvedValue([
+            heldTable({ unsentDrafts: [unsentEntry("p2", "Luis")] }),
+            otherTable,
+          ]),
         getPartyBills: vi.fn(async (partyId: string) => [
           partyId === "v2" ? billOf({ workingOrderId: "wo-9", partyId }) : billOf(),
         ]),
@@ -3106,8 +3109,8 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
       getTablesState: vi
         .fn()
         .mockResolvedValue([
-          mesa(joined),
-          { ...mesa(joined), id: "t5", label: "5", shortName: "5" },
+          heldTable(joined),
+          { ...heldTable(joined), id: "t5", label: "5", shortName: "5" },
         ]),
     });
     const order = await openTable(el);
@@ -4984,7 +4987,7 @@ describe("till-app: the guests the receipt of a bill paid in parts prints", () =
   it("starts the field empty on a split bill and sends null", async () => {
     const { el } = await mountApp({
       ...twoContributions(),
-      getTablesState: vi.fn().mockResolvedValue([mesa({ billCount: 2 })]),
+      getTablesState: vi.fn().mockResolvedValue([heldTable({ billCount: 2 })]),
     });
     await openTable(el);
     await openDialog(el, "contribution");
@@ -5078,7 +5081,9 @@ describe("till-app: the owner's split after a contribution", () => {
       moveDishes,
       previewBillPayment: vi.fn().mockResolvedValue(cash("30.00", "0.00")),
       takeBillPayment,
-      getTablesState: vi.fn().mockResolvedValue([mesa({ billCount: 2, outstanding: "70.00" })]),
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([heldTable({ billCount: 2, outstanding: "70.00" })]),
     });
     const order = await openTable(el);
 
@@ -6845,7 +6850,7 @@ describe("till-app: giving back a bill payment", () => {
         window.dispatchEvent(event);
         dirtyAtRead.push(event.defaultPrevented);
       }
-      return [mesa()];
+      return [heldTable()];
     });
     const el = await askRefund(
       {

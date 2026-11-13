@@ -369,7 +369,7 @@ describe("till-floor-screen: a table's unsent orders", () => {
     );
   }
 
-  it("shows Mesa 4 with a mark naming who has an unsent order and how many items", async () => {
+  it("shows Table 4 with a mark naming who has an unsent order and how many items", async () => {
     const el = await mountFloor([
       seated(
         {},

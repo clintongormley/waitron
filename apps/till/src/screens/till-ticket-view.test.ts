@@ -25,7 +25,7 @@ const result: TillSaleResult = {
   receiptTrim: {},
   venueAddress: [],
   receiptSettings: { printAddress: false },
-  orderLabel: "Mesa 6",
+  orderLabel: "Table 6",
   orderNumber: 41,
   invoiceNumber: "A/1",
   issuedAt: "2026-08-05T12:34:56.000Z",
@@ -771,7 +771,7 @@ describe("till-ticket-view", () => {
 
   it("prints the order grouping label and number so split documents can be collected together", async () => {
     const { el } = await mount();
-    expect(text(el)).toContain("Mesa 6 · Pedido 41");
+    expect(text(el)).toContain("Table 6 · Pedido 41");
 
     const { el: unlabelled } = await mount({ orderLabel: null, orderNumber: 42 });
     expect(text(unlabelled)).toContain("Pedido 42");
@@ -1807,7 +1807,7 @@ describe("till-ticket-view: the sale's own language", () => {
         ),
       )}`,
     );
-    expect(rows(el, ".order-group")).toEqual(["Mesa 6 · Comanda 41"]);
+    expect(rows(el, ".order-group")).toEqual(["Table 6 · Comanda 41"]);
     expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("ca-ES");
     expect(rows(el, ".lines > li")).toEqual(["Cafè 2 3,00 €", "Pernil 1 6,40 €"]);
     expect(rows(el, ".vat-row")).toEqual([
@@ -1859,7 +1859,7 @@ describe("till-ticket-view: the sale's own language", () => {
       "Com el vol?: Poc fet",
       "Pa 1,40 €",
     ]);
-    expect(rows(el, ".order-group")).toEqual(["Mesa 6 · Pedido 41"]);
+    expect(rows(el, ".order-group")).toEqual(["Table 6 · Pedido 41"]);
     expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("es-ES");
   });
 

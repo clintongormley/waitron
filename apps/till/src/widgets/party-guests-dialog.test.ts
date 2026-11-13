@@ -11,7 +11,7 @@ async function mountDialog(
   props: Partial<TillPartyGuestsDialog> = {},
 ): Promise<TillPartyGuestsDialog> {
   const { el } = await mountWidget<TillPartyGuestsDialog>("till-party-guests-dialog", {
-    tables: "Mesa 4, 5",
+    tables: "Table 4, 5",
     ...props,
   });
   return el;
@@ -42,8 +42,8 @@ function captured(el: TillPartyGuestsDialog) {
 
 describe("till-party-guests-dialog", () => {
   it.each([
-    ["en", "Guests at Mesa 4, 5", "Guests", "Save"],
-    ["es", "Comensales en Mesa 4, 5", "Comensales", "Guardar"],
+    ["en", "Guests at Table 4, 5", "Guests", "Save"],
+    ["es", "Comensales en Table 4, 5", "Comensales", "Guardar"],
   ])(
     "names the tables in its heading, and its one optional field guestCount, in %s",
     async (locale, heading, label, saveLabel) => {

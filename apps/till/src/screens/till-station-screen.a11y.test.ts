@@ -47,7 +47,7 @@ const groups: StationQueueGroup[] = [
     kitchenNote: null,
     orderId: "wo-1",
     orderNumber: 5,
-    label: "Mesa 4",
+    label: "Table 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "settled", // collectable — surfaces the card's collect button for the a11y sweep
     thresholds: DEFAULT_THRESHOLDS,
@@ -172,7 +172,7 @@ const baseNotice: KitchenNotice = {
   id: "kn-void",
   stationId: "st-1",
   workingOrderId: "wo-1",
-  orderLabel: "#5 · Mesa 4",
+  orderLabel: "#5 · Table 4",
   kind: "void",
   lineName: "Burger",
   unitName: null,
