@@ -56,7 +56,7 @@ import { seatTable } from "./parties.js";
 import { markGroupServed, markServed, unmarkServed } from "./working-order.js";
 import "./errors.js";
 import { cutParts, splitBill } from "./testing/bill-action-fixture.js";
-import { cancelLine } from "./testing/cancel-line.js";
+import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
@@ -122,6 +122,7 @@ interface Venue {
 }
 
 async function setupVenue(): Promise<Venue> {
+  await withTransaction(suite.db, (tx) => ensureOperator(tx, ALEX));
   taxIds += 1;
   const venue = await applyVenue(
     planVenue(

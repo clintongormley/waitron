@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -272,6 +272,7 @@ async function refund(
  * touches, and history on Bar till that a delete must keep.
  */
 async function seed() {
+  await seedPerson(suite.db, { id: OPERATOR });
   const venue = await setupVenue(suite.db);
   const cfg = venue.cfg;
   const tills = await profile("Tills");

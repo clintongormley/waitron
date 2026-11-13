@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { createZone as createTableZone } from "./testing/service-zone.js";
@@ -580,7 +581,7 @@ describe("/management-api/zones", () => {
     await withTransaction(suite.db, async (tx) => {
       const [party] = await tx
         .insert(parties)
-        .values({ openedBy: randomUUID() })
+        .values({ openedBy: await seedPerson(tx, { displayName: "Seating operator" }) })
         .returning({ id: parties.id });
       await tx.insert(partyTables).values({ partyId: party!.id, tableId: table.id });
     });

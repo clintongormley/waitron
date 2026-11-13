@@ -1,4 +1,4 @@
-import { seedZone } from "@waitron/db/testing/seed.js";
+import { seedZone, seedPerson } from "@waitron/db/testing/seed.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -79,6 +79,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
+    await seedPerson(db, { id: MOVER, displayName: "Moving operator" });
     ticketThenPayZone = await inTx(v, async (tx) => {
       const [zone] = [await seedZone(tx, { name: "Invoice counter" })];
       return (

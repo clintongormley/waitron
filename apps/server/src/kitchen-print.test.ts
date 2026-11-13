@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
@@ -358,6 +359,7 @@ describe("show the rest of the order", () => {
         vatClass: "general",
         lineTotal: 100,
       });
+      await seedPerson(tx, { id: OPERATOR });
       const [party] = await tx
         .insert(parties)
         .values({ openedBy: OPERATOR })
@@ -2843,6 +2845,7 @@ describe("the party's name on a kitchen ticket", () => {
   });
 
   it("prints the name of the party a bill's party was merged into", async () => {
+    await seedPerson(db, { id: OPERATOR });
     const v = await setupPartyVenue(db);
     const printer = await kitchenPrinter(v);
     const table72 = await v.table("Table 72");

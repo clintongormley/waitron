@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -211,7 +212,7 @@ async function tableAction(billId: string, otherBillId?: string) {
       expectedPartyRevision: party.revision,
       otherPartyId: other?.id ?? null,
       ...(other === null ? {} : { expectedOtherPartyRevision: other.revision }),
-      operatorId: randomUUID(),
+      operatorId: await seedPerson(suite.db, { displayName: randomUUID() }),
     },
   };
 }

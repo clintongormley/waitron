@@ -74,8 +74,8 @@ const original: KitchenAllergyBlock = {
   },
 };
 beforeEach(async () => {
-  await seedPersons(suite.db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   v = await setupPartyVenue(suite.db);
+  await seedPersons(v.db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   const token = randomUUID();
   await v.db
     .update(sessions)

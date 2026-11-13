@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { mergeOf as mergeColumns } from "@waitron/db";
 import { addFloorPlanSet } from "@waitron/venue-service";
 import { seedZone } from "@waitron/db/testing/seed.js";
@@ -303,14 +304,18 @@ describe("floor hierarchy deletion", () => {
     const table = await v.table("Combined table", z);
     const party = randomUUID();
     await inTx(v, async (tx) => {
-      await tx.insert(parties).values({ id: party, openedBy: randomUUID(), name: "Party" });
+      await tx.insert(parties).values({
+        id: party,
+        openedBy: await seedPerson(tx, { displayName: randomUUID() }),
+        name: "Party",
+      });
       await tx
         .insert(partyTables)
         .values({ partyId: party, tableId: table, leftAt: NOW.toISOString() });
     });
     const order = await delivery(table, "Order");
     const booking = randomUUID();
-    await inTx(v, (tx) =>
+    await inTx(v, async (tx) =>
       tx.insert(bookings).values({
         id: booking,
         tableId: table,
@@ -318,7 +323,7 @@ describe("floor hierarchy deletion", () => {
         bookingTime: "19:00:00",
         partySize: 2,
         contactName: "Ada",
-        createdBy: randomUUID(),
+        createdBy: await seedPerson(tx, { displayName: randomUUID() }),
         status: "seated",
       }),
     );
@@ -360,7 +365,7 @@ describe("floor hierarchy deletion", () => {
     await pay(v, order, "20.00");
     await inTx(v, (tx) => handOverOrder(tx, v.cfg, order));
     const booking = randomUUID();
-    await inTx(v, (tx) =>
+    await inTx(v, async (tx) =>
       tx.insert(bookings).values({
         id: booking,
         tableId: own.noToday.id,
@@ -368,7 +373,7 @@ describe("floor hierarchy deletion", () => {
         bookingTime: "19:00:00",
         partySize: 2,
         contactName: "Old guest",
-        createdBy: randomUUID(),
+        createdBy: await seedPerson(tx, { displayName: randomUUID() }),
         status: "completed",
       }),
     );
@@ -461,7 +466,7 @@ describe("floor hierarchy deletion", () => {
       );
     });
     const bookingId = randomUUID();
-    await inTx(v, (tx) =>
+    await inTx(v, async (tx) =>
       tx.insert(bookings).values({
         id: bookingId,
         tableId: own.live[1]!.id,
@@ -469,7 +474,7 @@ describe("floor hierarchy deletion", () => {
         bookingTime: "19:00:00",
         partySize: 2,
         contactName: "Rollback guest",
-        createdBy: randomUUID(),
+        createdBy: await seedPerson(tx, { displayName: randomUUID() }),
         status: "completed",
       }),
     );

@@ -1,3 +1,4 @@
+import { seedPerson } from "./testing/seed.js";
 import { todaySet } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -53,6 +54,7 @@ describe("party table labels", () => {
     }[] = [],
   ): Promise<string> {
     return inTx(async (tx) => {
+      await seedPerson(tx, { id: OPERATOR });
       const [row] = await tx
         .insert(parties)
         .values({ openedBy: OPERATOR })

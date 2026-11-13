@@ -56,7 +56,7 @@ import "./errors.js";
 import { mergeBills as mergeBillsCommand, splitBill } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
-import { cancelLine } from "./testing/cancel-line.js";
+import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import type { TradingContext } from "./trading-context.js";
 
@@ -99,6 +99,7 @@ interface Venue {
 }
 
 async function setupVenue(): Promise<Venue> {
+  await withTransaction(db, (tx) => ensureOperator(tx, ALEX));
   await seedTenant(db);
   await seedLegacySellingUnits(db);
   await seedVenue(db, {

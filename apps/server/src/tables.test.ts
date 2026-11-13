@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { closePartyTables } from "./parties.js";
 import { deleteZone } from "@waitron/venue-service";
 import { floorDeletionFor } from "./floor-delete.js";
@@ -651,7 +652,7 @@ it("refuses zone removal while an open party occupies a table there", async () =
   await asApp(cfg, async (tx) => {
     const [party] = await tx
       .insert(parties)
-      .values({ openedBy: randomUUID() })
+      .values({ openedBy: await seedPerson(tx, { displayName: randomUUID() }) })
       .returning({ id: parties.id });
     await tx.insert(partyTables).values({ partyId: party!.id, tableId });
   });
@@ -688,14 +689,14 @@ it("allows removing a zone with a closed party while another zone has an open pa
     const [closed] = await tx
       .insert(parties)
       .values({
-        openedBy: randomUUID(),
+        openedBy: await seedPerson(tx, { displayName: randomUUID() }),
         state: "closed",
         closedAt: new Date().toISOString(),
       })
       .returning({ id: parties.id });
     const [open] = await tx
       .insert(parties)
-      .values({ openedBy: randomUUID() })
+      .values({ openedBy: await seedPerson(tx, { displayName: randomUUID() }) })
       .returning({ id: parties.id });
     await tx.insert(partyTables).values([
       { partyId: closed!.id, tableId: removedTable },

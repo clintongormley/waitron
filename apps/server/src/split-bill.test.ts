@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import type { TradingContext } from "./trading-context.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
@@ -436,7 +437,7 @@ async function splitToT2(
         partyId: party.id,
         expectedPartyRevision: party.revision,
         otherPartyId: null,
-        operatorId: randomUUID(),
+        operatorId: await seedPerson(tx, { displayName: randomUUID() }),
       },
     );
   });
@@ -753,7 +754,7 @@ describe("moving sent work to another table tells the kitchen", () => {
       await moveGuests(tx, cfg, party.id, tableId2, {
         expectedPartyRevision: party.revision,
         otherPartyId: null,
-        operatorId: randomUUID(),
+        operatorId: await seedPerson(tx, { displayName: randomUUID() }),
       });
     });
 

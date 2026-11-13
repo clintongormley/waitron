@@ -34,6 +34,8 @@ added here (below).
 
 **Watcher reconciliation, 2026-11-13 06:53:** `packages/bookings/src/schema/bookings.test.ts` also gains only `bookings_created_by_fk` in its exact key-name list. Other schema pins of this plan's own changes are ported without another question and listed in the PR's Changed test checks.
 
+**Watcher reconciliation, 2026-11-13 07:26:** Keep the planned history row and exactly the two guest triggers. They refuse inserting or reassigning guests to an unanswered party. No trigger refuses clearing the answer columns directly through SQL; the clearing writer deletes guests first. Its explicit deletion stays as the clearing operation's invariant, including when there are no guests to delete.
+
 ## What it builds
 
 - `parties.allergy_answer` (`none` | `allergies`, null = not asked yet), `allergy_answered_by` (key

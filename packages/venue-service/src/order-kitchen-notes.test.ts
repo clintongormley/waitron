@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
@@ -20,7 +21,10 @@ beforeEach(async () => {
 });
 async function owner(kind: "order" | "party") {
   if (kind === "party") {
-    const [row] = await suite.db.insert(parties).values({ openedBy: randomUUID() }).returning();
+    const [row] = await suite.db
+      .insert(parties)
+      .values({ openedBy: await seedPerson(suite.db, { displayName: randomUUID() }) })
+      .returning();
     return { partyId: row!.id };
   }
   const row = await seedWorkingOrder(suite.db, { source: "dashboard", orderNumber: 1 });

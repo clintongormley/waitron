@@ -68,6 +68,19 @@ it("combining an unanswered party with no-allergies clears both answers without 
   expect(await history()).toEqual(before);
 });
 
+it("combining allergy answers preserves guests without adding history", async () => {
+  const a = await party(),
+    b = await party();
+  await tx((t) => writePartyAllergy(t, a, { answer: "allergies", guests: [guest] }, person));
+  const before = await history();
+  await tx((t) => mergePartyAllergies(t, a, b, person));
+  expect(await tx((t) => readPartyAllergy(t, b))).toMatchObject({
+    answer: "allergies",
+    guests: [expect.objectContaining(guest)],
+  });
+  expect(await history()).toEqual(before);
+});
+
 it("splitting and moving a bill copy the answer without history", async () => {
   const a = await party(),
     b = await party(),

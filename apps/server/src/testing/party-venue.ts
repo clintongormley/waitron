@@ -1,3 +1,4 @@
+import { ensureOperator } from "./cancel-line.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { addTabRound } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -24,7 +25,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { ensureFixtureJobRole, seedPerson } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { planVenue } from "@waitron/provisioning";
@@ -139,7 +140,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
-  await seedPerson(db, { id: OPERATOR });
   const operator = {
     personId: OPERATOR,
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
@@ -214,7 +214,10 @@ export async function seat(
   tableId: string,
   guestCount: number | null = null,
 ): Promise<{ partyId: string; tabId: string; revision: number }> {
-  return inTx(v, (tx) => seatTable(tx, v.cfg, { tableId, guestCount, operatorId: OPERATOR }));
+  return inTx(v, async (tx) => {
+    await ensureOperator(tx, OPERATOR);
+    return seatTable(tx, v.cfg, { tableId, guestCount, operatorId: OPERATOR });
+  });
 }
 
 export async function seatWithNoAllergies(

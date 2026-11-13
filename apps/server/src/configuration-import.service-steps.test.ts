@@ -72,13 +72,18 @@ it("a configuration import over a venue whose closed party has a completed step 
     beforeCommit: async (tx) => {
       const [step] = await tx.select({ id: serviceSteps.id }).from(serviceSteps).limit(1);
       expect(step).toBeDefined();
+      const [actor] = await tx
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.role, "admin"));
+      expect(actor).toBeDefined();
       const [party] = await tx
         .insert(parties)
         .values({
-          openedBy: "sender",
+          openedBy: actor!.id,
           state: "closed",
           closedAt: "2026-10-22T21:00:00.000Z",
-          closedBy: "sender",
+          closedBy: actor!.id,
         })
         .returning({ id: parties.id });
       partyId = party!.id;
@@ -86,7 +91,7 @@ it("a configuration import over a venue whose closed party has a completed step 
         partyId,
         stepId: step!.id,
         doneAt: "2026-10-22T20:33:00.000Z",
-        doneBy: "waiter-1",
+        doneBy: actor!.id,
       });
       await importConfigurationTables(tx, bundle, ALL_MODULES, versions);
     },

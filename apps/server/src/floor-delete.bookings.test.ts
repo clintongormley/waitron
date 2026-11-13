@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -108,14 +109,14 @@ for (const enabled of [true, false]) {
         expect(new TextDecoder().decode((await reader.read()).value)).toContain("event: ready");
         expect(bus.subscriberCount).toBe(1);
         if (enabled) {
-          await withTransaction(suite.db, (tx) =>
+          await withTransaction(suite.db, async (tx) =>
             tx.insert(bookings).values({
               tableId: table!.id,
               bookingDate: "2026-10-11",
               bookingTime: "20:00",
               partySize: 2,
               contactName: "Ana",
-              createdBy: randomUUID(),
+              createdBy: await seedPerson(suite.db, { displayName: randomUUID() }),
             }),
           );
         } else {
@@ -166,7 +167,7 @@ for (const enabled of [true, false]) {
               bookingTime: "20:00:00",
               partySize: 2,
               contactName: "Ana",
-              createdBy: randomUUID(),
+              createdBy: await seedPerson(suite.db, { displayName: randomUUID() }),
               status: "seated",
             })
             .returning();
