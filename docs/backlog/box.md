@@ -548,7 +548,7 @@ Plan one multi-platform application image with arm64 smoke, and an arm64 install
 
 ## B3. The bootable USB installer
 
-- A USB recipe’s Live updates keep the practice inbox profile: `scripts/box/upgrades/host.mjs` restarts it without `waitron.sh`’s production selector (env5 fixes-read limit; watcher, 2026-11-13 04:06).
+- Live updates of existing installations keep the practice inbox profile, through both `waitron.sh`’s checked manual-upgrade path and the USB recipe’s updater: `scripts/box/upgrades/host.mjs` restarts it without the production selector (env5 limit; watcher, 2026-11-13 06:07).
 
 The [network display](../superpowers/plans/2026-11-12-b3-20-network-screen.md) shows the installed host’s wired and Wi-Fi observation on Settings → Box status. Network controls, scan/join/forget and Wi-Fi boot-copy reconciliation remain to be built.
 

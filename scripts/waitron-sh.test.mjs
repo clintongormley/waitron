@@ -2571,10 +2571,13 @@ describe("waitron.sh --reset install", () => {
   it("keeps its checked installer when the requested ref carries an older script", () => {
     const sb = sandbox({ refScript: "pre-reset", systemd: true });
     installedBox(sb);
+    const profiles = "COMPOSE_PROFILES=practice-inbox\n";
+    writeFileSync(join(sb.boxDir, ".env"), profiles);
     const before = readFileSync(sb.script, "utf8");
     const r = run(sb, ["install", "old-branch"]);
     expect(r.status).toBe(0);
     expect(readFileSync(sb.script, "utf8")).toBe(before);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toContain(profiles);
     expect(loggedCalls(sb).filter((c) => c.startsWith("waitron.sh-start "))).toEqual([]);
     expect(readFileSync(sb.log, "utf8")).toContain(
       `cli.mjs apply ${sb.boxDir} bash ${join(sb.root, "host/waitron.sh")} __candidate old-branch`,
@@ -2951,9 +2954,8 @@ describe("the installed practice inbox", () => {
   });
 });
 
-it("selects the requested image before reading an existing box's production state", () => {
+it("selects the requested image before reading retained state on a first install", () => {
   const sb = sandbox();
-  installedBox(sb);
   const r = run(sb, ["install"]);
   expect(r.status, r.stderr).toBe(0);
   const calls = readFileSync(sb.log, "utf8").split("\n");
@@ -2988,7 +2990,6 @@ it.each([
   ["practice-inbox # inbox", "practice-inbox", "production", ""],
 ])("keeps Compose's decoded profile value for %s", (raw, decoded, mode, expected) => {
   const sb = sandbox({ tradingEnv: `WAITRON_ENV=${mode}` });
-  installedBox(sb);
   writeFileSync(join(sb.boxDir, ".env"), `COMPOSE_PROFILES=${raw}\n`);
   const r = run(sb, ["install"], { WT_COMPOSE_ENV_PROFILES: decoded });
   expect(r.status, r.stderr).toBe(0);

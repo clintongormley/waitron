@@ -132,6 +132,15 @@ from the installed environment. These fixes follow the watcher's
 installations. USB Live updates keep the inbox profile; record that in the existing box-installation
 backlog, with no USB updater behaviour change in this slice.
 
+**13 November 2026, watcher 06:07, after A950 (#3030).** This supersedes the update-selection
+claim in Review Focus 4 and the placement notes above and below. Existing installations now enter
+`cmd_manual_install` before the profile selector. Keep that flow: both `waitron.sh` updates and
+USB updater runs retain the installed inbox profile. First installs and resets keep their profile
+selection; the image-before-production-read test uses first installation with retained state.
+The watcher's words in Lane H's questions.md: "Keep that flow; extend the already-cleared
+inbox-limit wording to updates of existing installations, name both paths in the box-installation
+bundle line, and keep first-install/reset profile selection and the backup behaviour."
+
 `deploy/waitron.sh` gains `select_practice_inbox <on|off|decide>`. It reads `.env`'s
 `COMPOSE_PROFILES` line (comma-separated), adds or removes only the entry `practice-inbox`, keeps every
 other entry an operator set (for example `staff-tunnel`), and writes the result with the script's
