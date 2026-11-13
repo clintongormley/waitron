@@ -624,12 +624,10 @@ describe("partly refunded charges", () => {
     const el = await mount(
       stubApi({
         listStuckPayments: vi.fn().mockResolvedValue([row]),
-        releasePartialRefund: vi
-          .fn()
-          .mockRejectedValue({
-            code: "payment.outcome_unknown",
-            params: { reason: "refund_reference_missing" },
-          }),
+        releasePartialRefund: vi.fn().mockRejectedValue({
+          code: "payment.outcome_unknown",
+          params: { reason: "refund_reference_missing" },
+        }),
       }),
     );
     q(el, "[data-test=release-partial-p-part]")!.click();

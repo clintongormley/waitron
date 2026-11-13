@@ -134,12 +134,10 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
         "dashboard-payments-screen",
         {
           api: stubApi({
-            releasePartialRefund: vi
-              .fn()
-              .mockRejectedValue({
-                code: "payment.outcome_unknown",
-                params: { reason: "refund_reference_missing" },
-              }),
+            releasePartialRefund: vi.fn().mockRejectedValue({
+              code: "payment.outcome_unknown",
+              params: { reason: "refund_reference_missing" },
+            }),
             listStuckPayments: vi.fn().mockResolvedValue([
               {
                 ...STUCK[0]!,
