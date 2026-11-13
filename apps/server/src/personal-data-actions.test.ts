@@ -22,8 +22,8 @@ import { formatInvoiceNumber } from "@waitron/core";
 import type { PersonalDataPart, PersonalDataSubject } from "@waitron/module";
 import { ACTIONS_FILES, actionsPersonalData } from "./personal-data-actions.js";
 
-const MARTA = "cccccccc-0000-4000-8000-0000000000a1";
-const LUIS = "cccccccc-0000-4000-8000-0000000000b2";
+const MARTHA = "cccccccc-0000-4000-8000-0000000000a1";
+const LEWIS = "cccccccc-0000-4000-8000-0000000000b2";
 const NOBODY = "cccccccc-0000-4000-8000-0000000000c3";
 
 interface Place {
@@ -176,7 +176,7 @@ async function seedBillPayment(
       ...(bill.method === "cash" ? { tendered: bill.applied } : {}),
       state: "received",
       receivedAt: "2026-10-20T08:00:00.000Z",
-      requestedBy: MARTA,
+      requestedBy: MARTHA,
       source: "device",
       deviceId: at.deviceId,
     })
@@ -278,20 +278,20 @@ async function seedActions(db: Database, at: Place): Promise<void> {
 
   await seedVoid(db, martaVoided.saleId, {
     id: "00000000-0000-4000-8000-00000000f001",
-    voidedBy: MARTA,
+    voidedBy: MARTHA,
     voidedAt: "2026-10-20T09:15:00.000Z",
   });
   await seedVoid(db, luisVoided.saleId, {
     id: "00000000-0000-4000-8000-00000000f002",
-    voidedBy: LUIS,
+    voidedBy: LEWIS,
     voidedAt: "2026-10-20T09:20:00.000Z",
   });
   await seedTenderRefund(db, at, martaCard, {
     id: "00000000-0000-4000-8000-00000000a001",
     appliedAmount: 1111,
     tipAmount: 0,
-    requestedBy: MARTA,
-    authorizedBy: MARTA,
+    requestedBy: MARTHA,
+    authorizedBy: MARTHA,
     method: "card",
     state: "pending",
     createdAt: "2026-10-20T11:45:00.000Z",
@@ -300,8 +300,8 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     id: "00000000-0000-4000-8000-00000000a002",
     appliedAmount: 2345,
     tipAmount: 150,
-    requestedBy: MARTA,
-    authorizedBy: LUIS,
+    requestedBy: MARTHA,
+    authorizedBy: LEWIS,
     method: "cash",
     state: "completed",
     createdAt: "2026-10-20T10:30:00.000Z",
@@ -310,8 +310,8 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     id: "00000000-0000-4000-8000-00000000a003",
     appliedAmount: 3456,
     tipAmount: 25,
-    requestedBy: LUIS,
-    authorizedBy: LUIS,
+    requestedBy: LEWIS,
+    authorizedBy: LEWIS,
     method: "cash",
     state: "completed",
     createdAt: "2026-10-20T10:40:00.000Z",
@@ -319,15 +319,15 @@ async function seedActions(db: Database, at: Place): Promise<void> {
   // Dated before her first void but given a later id, so the voids too must be sorted by time.
   await seedVoid(db, martaVoidedEarlier.saleId, {
     id: "00000000-0000-4000-8000-00000000f003",
-    voidedBy: MARTA,
+    voidedBy: MARTHA,
     voidedAt: "2026-10-20T09:05:00.000Z",
   });
   await seedTenderRefund(db, at, martaAuthorized, {
     id: "00000000-0000-4000-8000-00000000a005",
     appliedAmount: 3210,
     tipAmount: 45,
-    requestedBy: LUIS,
-    authorizedBy: MARTA,
+    requestedBy: LEWIS,
+    authorizedBy: MARTHA,
     method: "cash",
     state: "completed",
     createdAt: "2026-10-20T10:50:00.000Z",
@@ -336,9 +336,9 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     id: "00000000-0000-4000-8000-00000000a004",
     appliedAmount: 5432,
     tipAmount: 99,
-    requestedBy: LUIS,
-    authorizedBy: LUIS,
-    attestedBy: MARTA,
+    requestedBy: LEWIS,
+    authorizedBy: LEWIS,
+    attestedBy: MARTHA,
     method: "card",
     manual: true,
     state: "completed",
@@ -348,9 +348,9 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     id: "00000000-0000-4000-8000-00000000a006",
     appliedAmount: 6789,
     tipAmount: 12,
-    requestedBy: LUIS,
-    authorizedBy: LUIS,
-    attestedBy: LUIS,
+    requestedBy: LEWIS,
+    authorizedBy: LEWIS,
+    attestedBy: LEWIS,
     method: "card",
     manual: true,
     state: "completed",
@@ -389,9 +389,9 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     id: "00000000-0000-4000-8000-00000000b001",
     appliedAmount: 4567,
     tipAmount: 89,
-    requestedBy: LUIS,
-    authorizedBy: LUIS,
-    attestedBy: MARTA,
+    requestedBy: LEWIS,
+    authorizedBy: LEWIS,
+    attestedBy: MARTHA,
     createdAt: "2026-10-20T11:10:00.000Z",
   });
   // Shares its time with her 10:30 tender refund and has the lower id, so a tie is broken by id.
@@ -399,16 +399,16 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     id: "00000000-0000-4000-8000-000000009002",
     appliedAmount: 1357,
     tipAmount: 20,
-    requestedBy: MARTA,
-    authorizedBy: LUIS,
+    requestedBy: MARTHA,
+    authorizedBy: LEWIS,
     createdAt: "2026-10-20T10:30:00.000Z",
   });
   await seedBillRefund(db, at, luisBill.billPaymentId, {
     id: "00000000-0000-4000-8000-000000009003",
     appliedAmount: 8765,
     tipAmount: 55,
-    requestedBy: LUIS,
-    authorizedBy: LUIS,
+    requestedBy: LEWIS,
+    authorizedBy: LEWIS,
     createdAt: "2026-10-20T10:45:00.000Z",
   });
 
@@ -416,30 +416,30 @@ async function seedActions(db: Database, at: Place): Promise<void> {
   await seedDrawerOpen(db, at, {
     id: "00000000-0000-4000-8000-00000000d001",
     reason: "calibration",
-    personId: MARTA,
-    authorizedBy: MARTA,
+    personId: MARTHA,
+    authorizedBy: MARTHA,
     openedAt: "2026-10-20T12:20:00.000Z",
   });
   await seedDrawerOpen(db, at, {
     id: "00000000-0000-4000-8000-00000000d002",
     reason: "manual",
-    personId: LUIS,
-    authorizedBy: MARTA,
+    personId: LEWIS,
+    authorizedBy: MARTHA,
     viaOverride: true,
     openedAt: "2026-10-20T12:10:00.000Z",
   });
   await seedDrawerOpen(db, at, {
     id: "00000000-0000-4000-8000-00000000d003",
     reason: "card_slip",
-    personId: MARTA,
+    personId: MARTHA,
     billPaymentId: martaInvoicedCard.billPaymentId,
     openedAt: "2026-10-20T09:40:00.000Z",
   });
   await seedDrawerOpen(db, at, {
     id: "00000000-0000-4000-8000-00000000d004",
     reason: "tender_refund",
-    personId: MARTA,
-    authorizedBy: LUIS,
+    personId: MARTHA,
+    authorizedBy: LEWIS,
     saleId: martaCash.saleId,
     tenderRefundId: "00000000-0000-4000-8000-00000000a002",
     openedAt: "2026-10-20T10:31:00.000Z",
@@ -447,21 +447,21 @@ async function seedActions(db: Database, at: Place): Promise<void> {
   await seedDrawerOpen(db, at, {
     id: "00000000-0000-4000-8000-00000000d005",
     reason: "bill_payment",
-    personId: MARTA,
+    personId: MARTHA,
     billPaymentId: martaInvoicedCash.billPaymentId,
     openedAt: "2026-10-20T08:40:00.000Z",
   });
   await seedDrawerOpen(db, at, {
     id: "00000000-0000-4000-8000-00000000d006",
     reason: "cash_sale",
-    personId: MARTA,
+    personId: MARTHA,
     saleId: martaCash.saleId,
     openedAt: "2026-10-20T08:30:00.000Z",
   });
   await seedDrawerOpen(db, at, {
     id: "00000000-0000-4000-8000-00000000d007",
     reason: "cash_sale",
-    personId: LUIS,
+    personId: LEWIS,
     saleId: luisRefunded.saleId,
     openedAt: "2026-10-20T12:15:00.000Z",
   });
@@ -521,7 +521,7 @@ describe("actionsPersonalData", () => {
   });
 
   it("writes the person's sale voids, refunds and drawer openings, and nobody else's", async () => {
-    expect(JSON.parse(await text(MARTA))).toEqual({
+    expect(JSON.parse(await text(MARTHA))).toEqual({
       counts: { voids: 2, refunds: 6, drawerOpenings: 6 },
       voids: [
         { sale: formatInvoiceNumber("TA", 11), amount: "24.68", at: "2026-10-20T09:05:00.000Z" },
@@ -637,7 +637,7 @@ describe("actionsPersonalData", () => {
   });
 
   it("writes each entry's keys in the plan's order", async () => {
-    const file = JSON.parse(await text(MARTA));
+    const file = JSON.parse(await text(MARTHA));
     expect(JSON.stringify(Object.keys(file))).toBe(
       JSON.stringify(["counts", "voids", "refunds", "drawerOpenings"]),
     );
@@ -679,7 +679,7 @@ describe("actionsPersonalData", () => {
   });
 
   it("names none of a colleague's sales or amounts", async () => {
-    const content = await text(MARTA);
+    const content = await text(MARTHA);
     expect(content).toContain(formatInvoiceNumber("TB", 31));
     for (const value of [
       formatInvoiceNumber("TA", 8),
@@ -698,14 +698,14 @@ describe("actionsPersonalData", () => {
   });
 
   it("names no person, the colleague who acted with her nor herself", async () => {
-    const content = await text(MARTA);
+    const content = await text(MARTHA);
     expect(content).toContain(formatInvoiceNumber("TA", 9));
-    expect(content).not.toContain(LUIS);
-    expect(content).not.toContain(MARTA);
+    expect(content).not.toContain(LEWIS);
+    expect(content).not.toContain(MARTHA);
   });
 
   it("holds no reason or note anybody typed", async () => {
-    const content = await text(MARTA);
+    const content = await text(MARTHA);
     const typed = [
       ...(await suite.db.select({ text: saleVoids.reason }).from(saleVoids)),
       ...(await suite.db.select({ text: tenderRefunds.reason }).from(tenderRefunds)),
@@ -723,9 +723,9 @@ describe("actionsPersonalData", () => {
   });
 
   it("builds the same file in bounded turns, one per row read and one per chunk of ids", async () => {
-    const expected = await download(MARTA);
+    const expected = await download(MARTHA);
     const { part } = onlyPart(actionsPersonalData(suite.db, { chunk: 2 }));
-    const build = await suite.db.withWriteLock(() => part.prepare(suite.db, subject(MARTA)));
+    const build = await suite.db.withWriteLock(() => part.prepare(suite.db, subject(MARTHA)));
     const lock = vi.spyOn(suite.db, "withWriteLock");
     try {
       const files = await build();
@@ -741,7 +741,7 @@ describe("actionsPersonalData", () => {
 
   it("looks up a sale or bill payment named twice only once", async () => {
     const { part } = onlyPart(actionsPersonalData(suite.db, { chunk: 1 }));
-    const build = await suite.db.withWriteLock(() => part.prepare(suite.db, subject(MARTA)));
+    const build = await suite.db.withWriteLock(() => part.prepare(suite.db, subject(MARTHA)));
     const lock = vi.spyOn(suite.db, "withWriteLock");
     try {
       await build();
@@ -759,8 +759,8 @@ describe("actionsPersonalData", () => {
   });
 
   it("builds the same file one sale at a time", async () => {
-    const files = await download(MARTA);
-    expect(await download(MARTA, onlyPart(actionsPersonalData(suite.db, { chunk: 1 })))).toEqual(
+    const files = await download(MARTHA);
+    expect(await download(MARTHA, onlyPart(actionsPersonalData(suite.db, { chunk: 1 })))).toEqual(
       files,
     );
   });
@@ -789,7 +789,7 @@ describe("actionsPersonalData", () => {
     try {
       let locksDuringPrepare = -1;
       const build = await suite.db.withWriteLock(async () => {
-        const returned = await part.prepare(throwingTx, subject(MARTA));
+        const returned = await part.prepare(throwingTx, subject(MARTHA));
         locksDuringPrepare = lock.mock.calls.length;
         return returned;
       });
@@ -821,14 +821,14 @@ describe("actionsPersonalData after the snapshot turn", () => {
   it("holds an action committed after the snapshot turn closed", async () => {
     const db = laterSuite.db;
     const { part } = onlyPart(actionsPersonalData(db));
-    const build = await db.withWriteLock(() => part.prepare(db, subject(MARTA)));
+    const build = await db.withWriteLock(() => part.prepare(db, subject(MARTHA)));
     const sale = await withTransaction(db, (tx) =>
       seedSale(tx, later, { code: "TA", number: 12, total: 3579, method: "cash" }),
     );
     await withTransaction(db, (tx) =>
       seedVoid(tx, sale.saleId, {
         id: "00000000-0000-4000-8000-00000000f004",
-        voidedBy: MARTA,
+        voidedBy: MARTHA,
         voidedAt: "2026-10-20T09:25:00.000Z",
       }),
     );

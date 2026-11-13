@@ -82,7 +82,7 @@ const FILES = [
   "actions.json",
 ];
 
-const MARTA = {
+const MARTHA = {
   name: "Martha Canary",
   email: "marta.canary@example.test",
   passkeyOfferedAt: "2026-02-27T11:11:11.000Z",
@@ -117,7 +117,7 @@ const COLLEAGUE = {
   billRefundAmountCents: 3197,
   billRefundedAt: "2026-05-16T21:52:00.000Z",
 };
-const MARTA_ACTIONS = {
+const MARTHA_ACTIONS = {
   voidSale: { code: "TA", number: 41, total: 2468 },
   voidedAt: "2026-05-04T08:21:00.000Z",
   refundSale: { code: "TB", number: 52, total: 3579 },
@@ -133,9 +133,9 @@ const ADMIN = { name: "Anna Admin", email: "ana.admin@example.test" };
 const MANAGER = { name: "Lewis Manager", email: "luis.manager@example.test" };
 
 /** One of Martha's values per file and table, each beside the file it must be found in. */
-const MARTA_VALUES: [file: string, value: string][] = [
-  ["profile.json", MARTA.email],
-  ["sign-in.json", MARTA.passkeyOfferedAt],
+const MARTHA_VALUES: [file: string, value: string][] = [
+  ["profile.json", MARTHA.email],
+  ["sign-in.json", MARTHA.passkeyOfferedAt],
   ["employment.json", '"payRate": "12.34"'],
   ["employment.json", "2025-02-20T09:15:00.000Z"],
   ["absences.json", "Family wedding"],
@@ -153,15 +153,15 @@ const MARTA_VALUES: [file: string, value: string][] = [
   ["time-record.csv", "2026-03-03T00:30:00+01:00"],
   ["actions.json", `"sale": "TA/41"`],
   ["actions.json", '"amount": "24.68"'],
-  ["actions.json", MARTA_ACTIONS.voidedAt],
+  ["actions.json", MARTHA_ACTIONS.voidedAt],
   ["actions.json", `"sale": "TB/52"`],
   ["actions.json", '"amount": "13.57"'],
-  ["actions.json", MARTA_ACTIONS.refundedAt],
+  ["actions.json", MARTHA_ACTIONS.refundedAt],
   ["actions.json", `"sale": "TA/63"`],
-  ["actions.json", MARTA_ACTIONS.drawerOpenedAt],
+  ["actions.json", MARTHA_ACTIONS.drawerOpenedAt],
   ["actions.json", `"sale": "TB/27"`],
   ["actions.json", '"amount": "28.64"'],
-  ["actions.json", MARTA_ACTIONS.billRefundedAt],
+  ["actions.json", MARTHA_ACTIONS.billRefundedAt],
 ];
 
 /** The colleague's values in the same places as Martha's. */
@@ -195,7 +195,7 @@ const COLLEAGUE_VALUES = [
 ];
 
 const logger = vi.fn();
-let martaId: string, colleagueId: string, managerId: string, cookie: string;
+let marthaId: string, colleagueId: string, managerId: string, cookie: string;
 let adminCookie: string;
 
 beforeEach(async () => {
@@ -206,12 +206,12 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
   });
   await suite.db.insert(nodes).values({ id: NODE_ID, name: "Box" });
-  const [marta, colleague, manager, admin] = await seedPersons(suite.db, [
+  const [martha, colleague, manager, admin] = await seedPersons(suite.db, [
     {
-      displayName: MARTA.name,
-      email: MARTA.email,
+      displayName: MARTHA.name,
+      email: MARTHA.email,
       pinHash: hashPin("4821"),
-      passkeyOfferedAt: MARTA.passkeyOfferedAt,
+      passkeyOfferedAt: MARTHA.passkeyOfferedAt,
     },
     {
       displayName: COLLEAGUE.name,
@@ -222,7 +222,7 @@ beforeEach(async () => {
     { displayName: MANAGER.name, email: MANAGER.email, role: "manager" },
     { displayName: ADMIN.name, email: ADMIN.email, role: "admin" },
   ]);
-  martaId = marta!.id;
+  marthaId = martha!.id;
   colleagueId = colleague!.id;
   managerId = manager!.id;
 
@@ -238,18 +238,18 @@ beforeEach(async () => {
     await withTransaction(suite.db, (tx) => backend.clockIn(tx, event(inAt)));
     await withTransaction(suite.db, (tx) => backend.clockOut(tx, event(outAt)));
   };
-  await clock(martaId, "2026-03-02T23:30:00.000Z", "2026-03-03T07:15:00.000Z");
+  await clock(marthaId, "2026-03-02T23:30:00.000Z", "2026-03-03T07:15:00.000Z");
   await clock(colleagueId, COLLEAGUE.clockInAt, "2026-03-04T17:43:00.000Z");
 
   const [entry] = await suite.db
     .select({ id: timeEntries.id })
     .from(timeEntries)
-    .where(eq(timeEntries.personId, martaId))
+    .where(eq(timeEntries.personId, marthaId))
     .limit(1);
 
   await suite.db.insert(employments).values([
     {
-      personId: martaId,
+      personId: marthaId,
       contractedMinutesPerWeek: 1200,
       contractType: "part_time",
       startDate: "2025-03-01",
@@ -268,7 +268,7 @@ beforeEach(async () => {
 
   await suite.db.insert(absences).values([
     {
-      personId: martaId,
+      personId: marthaId,
       kind: "holiday",
       startsOn: "2026-05-18",
       endsOn: "2026-05-22",
@@ -304,7 +304,7 @@ beforeEach(async () => {
     .insert(shifts)
     .values([
       {
-        personId: martaId,
+        personId: marthaId,
         startsAt: "2026-02-14T03:41:00Z",
         startsOffsetMinutes: 60,
         endsAt: "2026-02-14T11:41:00Z",
@@ -326,7 +326,7 @@ beforeEach(async () => {
 
   await suite.db.insert(availability).values([
     {
-      personId: martaId,
+      personId: marthaId,
       weekday: 2,
       availableFromMinute: 1050,
       availableToMinute: 1305,
@@ -347,7 +347,7 @@ beforeEach(async () => {
 
   await suite.db.insert(shiftSwaps).values([
     {
-      requestedByPersonId: martaId,
+      requestedByPersonId: marthaId,
       fromShiftId: martaShift!.id,
       toPersonId: colleagueId,
       toShiftId: colleagueShift!.id,
@@ -370,7 +370,7 @@ beforeEach(async () => {
   await suite.db.insert(attendanceQuestions).values([
     {
       id: martaQuestion,
-      personId: martaId,
+      personId: marthaId,
       businessDay: "2026-04-18",
       startAt: "2026-04-18T04:00:00.000Z",
       endAt: "2026-04-19T04:00:00.000Z",
@@ -396,7 +396,7 @@ beforeEach(async () => {
   for (const row of [
     {
       questionId: martaQuestion,
-      personId: martaId,
+      personId: marthaId,
       status: "sent",
       claimToken: MARTA_CLAIM_TOKEN,
       claimedAt: "2026-04-19T04:01:00.000Z",
@@ -432,8 +432,8 @@ beforeEach(async () => {
   };
   await response({
     id: "00000000-0000-4000-8000-0000000000b1",
-    by: martaId,
-    personId: martaId,
+    by: marthaId,
+    personId: marthaId,
     questionId: martaQuestion,
     action: "request",
     input: {
@@ -449,12 +449,12 @@ beforeEach(async () => {
   await response({
     id: "00000000-0000-4000-8000-0000000000b2",
     by: managerId,
-    personId: martaId,
+    personId: marthaId,
     questionId: null,
     action: "propose",
     input: {
       action: "propose",
-      personId: martaId,
+      personId: marthaId,
       changes: [
         { target: { missingKind: "out" }, at: "2026-04-19T00:10:00.000Z", offsetMinutes: 120 },
       ],
@@ -479,7 +479,7 @@ beforeEach(async () => {
     {
       source: "clock",
       key: "clock:marta-2",
-      personId: martaId,
+      personId: marthaId,
       kind: "break",
       at: "2026-03-07T21:30:00.000Z",
       offsetMinutes: 60,
@@ -516,7 +516,7 @@ beforeEach(async () => {
   ] as const)
     await suite.db.run(sql`insert into staff_roles (id, name) values (${id}, ${name})`);
   for (const [personId, roleId] of [
-    [martaId, bartender],
+    [marthaId, bartender],
     [colleagueId, sommelier],
   ] as const)
     await suite.db.run(
@@ -538,12 +538,12 @@ beforeEach(async () => {
       await setFreshManagementSignIn(tx, session.token);
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });
-  cookie = await sessionCookie(martaId);
+  cookie = await sessionCookie(marthaId);
   adminCookie = await sessionCookie(admin!.id);
   await suite.db
     .update(managementSessions)
     .set({ createdAt: SESSION_OPENED_AT })
-    .where(eq(managementSessions.personId, martaId));
+    .where(eq(managementSessions.personId, marthaId));
 });
 
 type Sale = { code: string; number: number; total: number };
@@ -594,7 +594,7 @@ async function seedActions(colleague: string): Promise<void> {
     return { saleId: row!.id, tenderId: tender!.id };
   };
   const rows = [
-    { personId: martaId, authorizer: colleague, a: MARTA_ACTIONS },
+    { personId: marthaId, authorizer: colleague, a: MARTHA_ACTIONS },
     { personId: colleague, authorizer: managerId, a: COLLEAGUE },
   ];
   for (const { personId, authorizer, a } of rows) {
@@ -762,7 +762,7 @@ const readme = (language: "en" | "es") =>
   personalDataReadme({
     language,
     venue: "Test SL",
-    person: MARTA.name,
+    person: MARTHA.name,
     date: "2026-06-01",
     privacyNoticeUrl: undefined,
     files: FILES,
@@ -773,9 +773,9 @@ describe("a staff member's whole personal-data download", () => {
     "detects planted colleague values in every file of the %s download",
     async (audience) => {
       if (audience === "administrator")
-        await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, martaId));
+        await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, marthaId));
       const files = await download(
-        audience === "own" ? PATH : `/management-api/staff/${martaId}/personal-data/export`,
+        audience === "own" ? PATH : `/management-api/staff/${marthaId}/personal-data/export`,
         audience === "own" ? cookie : adminCookie,
       );
       const text = await readable(files);
@@ -811,7 +811,7 @@ describe("a staff member's whole personal-data download", () => {
     const text = await readable(files);
     expect(text["sign-in.json"]).toContain(SESSION_OPENED_AT);
 
-    expect(MARTA_VALUES.filter(([file, value]) => !text[file]!.includes(value))).toEqual([]);
+    expect(MARTHA_VALUES.filter(([file, value]) => !text[file]!.includes(value))).toEqual([]);
 
     const colleagueAsOther = `"otherPerson": "${COLLEAGUE.name}"`;
     expect(occurrences(text["rota.json"]!, colleagueAsOther)).toBe(1);
@@ -859,44 +859,44 @@ describe("a staff member's whole personal-data download", () => {
     const [pin] = await suite.db
       .select({ hash: persons.pinHash })
       .from(persons)
-      .where(eq(persons.id, martaId));
+      .where(eq(persons.id, marthaId));
     const [session] = await suite.db
       .select({ hash: managementSessions.tokenHash })
       .from(managementSessions)
-      .where(eq(managementSessions.personId, martaId));
+      .where(eq(managementSessions.personId, marthaId));
     const [entry] = await suite.db
       .select({ hash: timeEntries.entryHash })
       .from(timeEntries)
-      .where(eq(timeEntries.personId, martaId));
+      .where(eq(timeEntries.personId, marthaId));
     const secrets = [pin!.hash!, session!.hash, MARTA_CLAIM_TOKEN, entry!.hash];
     const text = await readable(await download());
     const found = Object.entries(text).flatMap(([file, content]) =>
       secrets.filter((secret) => content.includes(secret)).map((secret) => [file, secret]),
     );
     expect(found).toEqual([]);
-    expect(text["profile.json"]!.includes(MARTA.email)).toBe(true);
+    expect(text["profile.json"]!.includes(MARTHA.email)).toBe(true);
   });
 
   it("gives an admin every file and value of hers once she is disabled, and none of a colleague's or a secret", async () => {
     const [pin] = await suite.db
       .select({ hash: persons.pinHash })
       .from(persons)
-      .where(eq(persons.id, martaId));
+      .where(eq(persons.id, marthaId));
     const [session] = await suite.db
       .select({ hash: managementSessions.tokenHash })
       .from(managementSessions)
-      .where(eq(managementSessions.personId, martaId));
-    await suite.db.run(sql`update persons set status = 'suspended' where id = ${martaId}`);
+      .where(eq(managementSessions.personId, marthaId));
+    await suite.db.run(sql`update persons set status = 'suspended' where id = ${marthaId}`);
 
     const files = await download(
-      `/management-api/staff/${martaId}/personal-data/export`,
+      `/management-api/staff/${marthaId}/personal-data/export`,
       adminCookie,
     );
     expect(Object.keys(files)).toEqual(["README.txt", ...FILES]);
     const text = await readable(files);
     expect(text["sign-in.json"]).toContain(SESSION_OPENED_AT);
 
-    expect(MARTA_VALUES.filter(([file, value]) => !text[file]!.includes(value))).toEqual([]);
+    expect(MARTHA_VALUES.filter(([file, value]) => !text[file]!.includes(value))).toEqual([]);
 
     const colleagueAsOther = `"otherPerson": "${COLLEAGUE.name}"`;
     expect(occurrences(text["rota.json"]!, colleagueAsOther)).toBe(1);
@@ -920,11 +920,11 @@ describe("a staff member's whole personal-data download", () => {
       secrets.filter((secret) => content.includes(secret)).map((secret) => [file, secret]),
     );
     expect(found).toEqual([]);
-    expect(text["profile.json"]!.includes(MARTA.email)).toBe(true);
+    expect(text["profile.json"]!.includes(MARTHA.email)).toBe(true);
   });
 
   it("is in Spanish when her saved language is Spanish", async () => {
-    await suite.db.update(persons).set({ locale: "es-ES" }).where(eq(persons.id, martaId));
+    await suite.db.update(persons).set({ locale: "es-ES" }).where(eq(persons.id, marthaId));
     const files = await download();
     expect(new TextDecoder().decode(files["README.txt"])).toBe(readme("es"));
     const spanish = await existingExport("es");
