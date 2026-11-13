@@ -115,7 +115,7 @@ registros del local. El plazo de un mes para responder y las demás obligaciones
 ## Eliminar un rol de personal {#delete-staff-role}
 
 En la lista de roles de personal, elige **Eliminar** en el menú del rol. Comprueba cuántas
-personas lo tienen y confirma. Esto quita sus puestos y los bloques del plan de personal.
+personas lo tienen y qué perfiles de dispositivo no tienen ningún otro puesto visible seleccionado; después confirma. Esto quita sus puestos y los bloques del plan de personal.
 Los turnos existentes conservan el nombre del puesto. Para asignar nuevos turnos, elige otro.
 
 ## Puestos por persona {#job-roles}

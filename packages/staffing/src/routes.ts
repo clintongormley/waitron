@@ -36,6 +36,7 @@ import {
   createStaffRole,
   deleteStaffRole,
   listStaffRolesWithHolderNames,
+  profilesLeftEmptyBy,
   setPersonStaffRoles,
   reorderStaffRoles,
   setStaffRoleHolders,
@@ -372,6 +373,15 @@ export const STAFFING_ROUTES: ModuleRoutes = {
           });
         });
         return c.json({ staffRoleIds });
+      }),
+    );
+
+    app.get(`${BASE}/:staffRoleId/empty-devices`, (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = staffRoleIdParam(c.req.param("staffRoleId"));
+        const profiles = await gated(sessionId, (tx) => profilesLeftEmptyBy(tx, id));
+        return c.json({ profiles });
       }),
     );
 

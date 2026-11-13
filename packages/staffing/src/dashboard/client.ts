@@ -210,6 +210,17 @@ export class StaffingApi {
     return this.request(`${BASE}/order`, "PUT", { staffRoleIds });
   }
 
+  async profilesLeftEmptyBy(staffRoleId: string): Promise<{ id: string; name: string }[]> {
+    return (
+      await this.request<{ profiles: { id: string; name: string }[] }>(
+        `${path(staffRoleId)}/empty-devices`,
+        "GET",
+        undefined,
+        { passive: true },
+      )
+    ).profiles;
+  }
+
   deleteStaffRole(
     staffRoleId: string,
   ): Promise<{ outcome: "deleted" | "hidden"; removedFrom: number }> {

@@ -17,6 +17,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { expectChooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
 import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
+import { liveConnectionFixture } from "../../test/live-connection.js";
 import type { ServerStatus } from "../api/server-router.js";
 
 const ana: StaffMember = { personId: "p1", displayName: "Ana" };
@@ -79,6 +80,134 @@ afterEach(() => {
 });
 
 describe("till-lock-screen", () => {
+  it("reads again for a job change delivered while the initial staff read waits", async () => {
+    const live = liveConnectionFixture();
+    let answer!: (value: StaffMember[]) => void;
+    const listStaff = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<StaffMember[]>((resolve) => {
+            answer = resolve;
+          }),
+      )
+      .mockResolvedValue([ana, ben]);
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi({ listStaff }),
+      live: live.connection,
+    });
+    await flush(el);
+    live.ready();
+    live.change("person_staff_roles");
+    await flush(el);
+    answer([ana]);
+    await flush(el);
+    expect(query(el, '[data-person="p2"]')?.textContent).toContain("Ben");
+    live.connection.stop();
+  });
+
+  it("stops reading staff when a used lock screen leaves the page", async () => {
+    const live = liveConnectionFixture();
+    const listStaff = vi.fn().mockResolvedValue([ana, ben]);
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi({ listStaff }),
+      live: live.connection,
+    });
+    await flush(el);
+    click(el, '[data-person="p2"]');
+    await flush(el);
+    const reads = listStaff.mock.calls.length;
+    el.remove();
+    await flush(el);
+    live.change("person_staff_roles");
+    await flush(el);
+    expect(listStaff).toHaveBeenCalledTimes(reads);
+    live.connection.stop();
+  });
+
+  it("shares the initial staff read with an already connected live stream", async () => {
+    const live = liveConnectionFixture();
+    live.ready();
+    let answer!: (value: StaffMember[]) => void;
+    const response = new Promise<StaffMember[]>((resolve) => {
+      answer = resolve;
+    });
+    const listStaff = vi.fn(() => response);
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi({ listStaff }),
+      live: live.connection,
+    });
+    await flush(el);
+    expect(listStaff).toHaveBeenCalledOnce();
+    answer([ana, ben]);
+    await flush(el);
+    expect(query(el, '[data-person="p2"]')?.textContent).toContain("Ben");
+    live.connection.stop();
+  });
+
+  it("keeps the known sign-in list when a live read fails", async () => {
+    const live = liveConnectionFixture();
+    const listStaff = vi.fn().mockResolvedValue([ana, ben]);
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi({ listStaff }),
+      live: live.connection,
+    });
+    await flush(el);
+    listStaff.mockRejectedValueOnce({ code: "connection.failed" });
+    live.change("person_staff_roles");
+    await flush(el);
+    expect(query(el, '[data-person="p2"]')?.textContent).toContain("Ben");
+    expect(query(el, '[role="alert"]')).toBeNull();
+    live.connection.stop();
+  });
+
+  it("a failed live read and its recovery leave a wrong-PIN refusal alone", async () => {
+    const live = liveConnectionFixture();
+    const listStaff = vi.fn().mockResolvedValue([ana, ben]);
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi({ listStaff, login: vi.fn().mockRejectedValue({ code: "pin.invalid" }) }),
+      live: live.connection,
+    });
+    await flush(el);
+    click(el, '[data-person="p2"]');
+    await flush(el);
+    await type(el, "12");
+    click(el, ".submit");
+    await flush(el);
+    expect(query(el, ".error")!.textContent).toContain(t("pin.invalid"));
+    listStaff.mockRejectedValueOnce({ code: "connection.failed" });
+    live.change("person_staff_roles");
+    await flush(el);
+    expect(query(el, ".error")!.textContent).toContain(t("pin.invalid"));
+    live.change("person_staff_roles");
+    await flush(el);
+    expect(query(el, ".error")!.textContent).toContain(t("pin.invalid"));
+    live.connection.stop();
+  });
+
+  it("keeps the chosen operator and entered PIN when job membership refreshes", async () => {
+    localStorage.setItem("waitron.lastOperator.dev1", ana.personId);
+    const live = liveConnectionFixture();
+    const api = stubApi();
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api,
+      live: live.connection,
+      deviceId: "dev1",
+    });
+    await flush(el);
+    click(el, ".cancel");
+    await flush(el);
+    click(el, '[data-person="p2"]');
+    await flush(el);
+    await type(el, "12");
+    live.change("person_staff_roles");
+    await flush(el);
+    click(el, ".submit");
+    await flush(el);
+    expect(api.login).toHaveBeenCalledWith("p2", "12");
+    live.connection.stop();
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-lock-screen")).toBe(TillLockScreen);
   });

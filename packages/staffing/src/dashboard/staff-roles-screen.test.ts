@@ -70,6 +70,7 @@ function fakeRequest(roles: () => Role[], routes: Routes = {}) {
   return vi.fn(async (path: string, method: string = "GET", body?: unknown) => {
     const route = routes[`${method} ${path}`];
     if (route) return route(body);
+    if (method === "GET" && path.endsWith("/empty-devices")) return { profiles: [] };
     if (method === "GET" && path === BASE)
       return { staffRoles: roles().map((role) => listed(role)) };
     if (method === "GET" && path === "/management-api/staff") return people;
@@ -519,7 +520,57 @@ describe("the staff roles page", () => {
     expect(alertText("action-alert")).toBe("");
   });
 
-  it("confirms once with the holder count, without reading a preview", async () => {
+  it.each(["en", "es"] as const)(
+    "names profiles left with nobody before confirming in %s",
+    async (locale) => {
+      setLocale(locale);
+      await mount(
+        fakeRequest(() => [cook], {
+          [`GET ${BASE}/role-c/empty-devices`]: () => ({
+            profiles: [
+              { id: "front", name: "Front till" },
+              { id: "bar", name: "Bar tablet" },
+            ],
+          }),
+        }),
+      );
+      await choose("delete-role-c");
+      expect(dialogText()).toContain(
+        locale === "en"
+          ? "Deleting it leaves nobody able to sign in on: Front till, Bar tablet."
+          : "Al eliminarlo nadie podrá iniciar sesión en: Front till, Bar tablet.",
+      );
+      expect(confirmDelete().disabled).toBe(false);
+    },
+  );
+
+  it("holds Delete while the empty-device read waits or fails and retries it", async () => {
+    let answer!: (value: unknown) => void;
+    let reject!: (reason: unknown) => void;
+    const request = await mount(
+      fakeRequest(() => [cook], {
+        [`GET ${BASE}/role-c/empty-devices`]: () =>
+          new Promise((resolve, refuse) => {
+            answer = resolve;
+            reject = refuse;
+          }),
+      }),
+    );
+    await choose("delete-role-c");
+    expect(confirmDelete().disabled).toBe(true);
+    reject({ code: "connection.failed" });
+    await settle();
+    expect(confirmDelete().disabled).toBe(true);
+    expect(await deleteMessage()).toContain(codeMessage("connection.failed"));
+    inDialog('[data-test="delete-retry"]').click();
+    await settle();
+    answer({ profiles: [] });
+    await settle();
+    expect(confirmDelete().disabled).toBe(false);
+    expect(request.mock.calls.filter(([path]) => path.endsWith("empty-devices"))).toHaveLength(2);
+  });
+
+  it("confirms once with the holder count after reading affected profiles", async () => {
     const request = await mount(fakeRequest(() => [cook]));
     await choose("delete-role-c");
     expect(dialogText()).toContain(

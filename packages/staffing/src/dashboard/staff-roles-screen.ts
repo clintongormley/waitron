@@ -29,6 +29,9 @@ type Deletion = {
   staffRoleId: string;
   impact: DeleteImpact;
   holderCount: number;
+  profiles: { id: string; name: string }[];
+  reading: boolean;
+  readError: string;
   actionError: string;
   busy: boolean;
 };
@@ -158,9 +161,34 @@ export class StaffRolesScreen extends LitElement {
         removes: [],
       },
       holderCount: staffRole.holderIds.length,
+      profiles: [],
+      reading: true,
+      readError: "",
       actionError: "",
       busy: false,
     };
+    void this.#readEmptyDevices();
+  }
+
+  async #readEmptyDevices(): Promise<void> {
+    const current = this.#deletion;
+    this.deleting = { ...this.deleting!, reading: true, readError: "" };
+    try {
+      const profiles = await this.api.profilesLeftEmptyBy(this.deleting.staffRoleId);
+      if (current !== this.#deletion) return;
+      this.deleting = { ...this.deleting!, profiles, reading: false };
+    } catch (error) {
+      if (current !== this.#deletion) return;
+      if (codeOf(error) === "staff_role.not_found") {
+        this.#staffRoleGone();
+        return;
+      }
+      this.deleting = {
+        ...this.deleting!,
+        reading: false,
+        readError: tf("staffing.role.load_error", { reason: codeMessage(codeOf(error)) }),
+      };
+    }
   }
 
   #closeDelete(): void {
@@ -177,7 +205,7 @@ export class StaffRolesScreen extends LitElement {
 
   async #delete(staffRoleId: string): Promise<void> {
     const deletion = this.deleting!;
-    if (deletion.busy) return;
+    if (deletion.busy || deletion.reading || deletion.readError) return;
     const current = this.#deletion;
     this.deleting = { ...deletion, busy: true, actionError: "" };
     try {
@@ -270,7 +298,13 @@ export class StaffRolesScreen extends LitElement {
         .impact=${deletion.impact}
         .submitting=${deletion.busy}
         .actionError=${deletion.actionError}
-        .copy=${staffRoleDeleteCopy(deletion.holderCount)}
+        .loading=${deletion.reading}
+        .readError=${deletion.readError}
+        .copy=${staffRoleDeleteCopy(deletion.holderCount, deletion.profiles)}
+        @wt-delete-retry=${(event: Event) => {
+          event.stopPropagation();
+          void this.#readEmptyDevices();
+        }}
         @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
           event.stopPropagation();
           void this.#delete(event.detail.id);

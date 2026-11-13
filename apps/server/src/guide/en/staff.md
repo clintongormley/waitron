@@ -103,7 +103,7 @@ venue's other duties, see [Data protection](data-protection.md#who-does-what).
 ## Delete a staff role {#delete-staff-role}
 
 In the staff roles list, choose **Delete** from the role's row menu. Check how many people
-hold it, then confirm. This removes their memberships and the role's staffing blocks.
+hold it and which device profiles have no other visible job selected, then confirm. This removes their memberships and the role's staffing blocks.
 Existing shifts keep the role's name. To assign new shifts, choose another role.
 
 ## Job roles per person {#job-roles}

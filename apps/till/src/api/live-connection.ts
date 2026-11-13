@@ -88,6 +88,7 @@ const KITCHEN_TYPES = [
 ];
 
 export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
+  signIn: [...DEVICE_TYPES, "staff_roles", "person_staff_roles", "persons"],
   station: KITCHEN_TYPES,
   pass: KITCHEN_TYPES,
   deliveries: [

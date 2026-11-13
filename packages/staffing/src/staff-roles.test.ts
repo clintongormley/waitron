@@ -23,6 +23,7 @@ import { seedVenueWithStaff } from "../test/seed.js";
 import {
   createStaffRole,
   deleteStaffRole,
+  profilesLeftEmptyBy,
   listStaffRoles,
   listStaffRolesWithHolderNames,
   reorderStaffRoles,
@@ -77,6 +78,44 @@ async function assignShift(v: Venue, personId: string, staffRoleId: string) {
 }
 
 describe("staff roles", () => {
+  it("names only live profiles whose sole visible job is being deleted", async () => {
+    await seedVenueWithStaff(suite.db);
+    await inTx(async (tx) => {
+      const team = await createStaffRole(tx, { name: "Team", colour: "blue" }, { personId: null });
+      const other = await createStaffRole(tx, { name: "Chef", colour: "red" }, { personId: null });
+      const [hidden] = await tx
+        .insert(staffRoles)
+        .values({ name: "Old job", hiddenAt: new Date().toISOString() })
+        .returning();
+      const profiles = await seedDeviceProfiles(tx, [
+        ...["Till", "Handheld", "Kitchen"].map((name) => ({
+          name,
+          formFactor: "till" as const,
+          admitted: [team.id],
+        })),
+        { name: "Both jobs", formFactor: "till", admitted: [team.id, other.id] },
+        { name: "Hidden alternative", formFactor: "till", admitted: [team.id, hidden!.id] },
+        { name: "Already empty", formFactor: "till", admitted: [] },
+        {
+          name: "Retired",
+          formFactor: "till",
+          retiredAt: new Date().toISOString(),
+          admitted: [team.id],
+        },
+      ]);
+      expect(await profilesLeftEmptyBy(tx, team.id)).toEqual(
+        [profiles[1]!, profiles[4]!, profiles[2]!, profiles[0]!].map(({ id, name }) => ({
+          id,
+          name,
+        })),
+      );
+      expect(await profilesLeftEmptyBy(tx, other.id)).toEqual([]);
+      await expect(profilesLeftEmptyBy(tx, randomUUID())).rejects.toMatchObject({
+        code: "staff_role.not_found",
+      });
+    });
+  });
+
   it("logs lifecycle and each holder change by id, but no-op saves log nothing", async () => {
     const v = await seedVenueWithStaff(suite.db);
     const actor = { personId: v.ana };
