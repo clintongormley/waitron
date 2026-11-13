@@ -3460,6 +3460,7 @@ export class TillApp extends LitElement {
     correctionId: string;
     session: InvoiceCorrectionSession;
     legsRevision: number;
+    cardNotice: { key: StringKey } | null;
   } | null = null;
   @state() private tenderRefunding: {
     visit: object;
@@ -8814,6 +8815,7 @@ export class TillApp extends LitElement {
       correctionId,
       session: new InvoiceCorrectionSession(this.#tenderRefundScope, this.api),
       legsRevision: 0,
+      cardNotice: null,
     };
   }
 
@@ -8826,16 +8828,40 @@ export class TillApp extends LitElement {
     const receipt = this.historicalReceipt;
     const session = this.#operatorSession;
     const api = this.api;
-    if (this.invoiceCorrecting?.session !== correcting) return;
-    if (!(await this.#readRefundableTenders())) return;
-    if (
-      !this.isConnected ||
-      this.historicalReceipt !== receipt ||
-      this.#operatorSession !== session ||
-      this.api !== api ||
-      this.invoiceCorrecting?.session !== correcting
-    )
+    if (this.invoiceCorrecting?.session !== correcting || this.tenderRefunding) return;
+    this.invoiceCorrecting = { ...this.invoiceCorrecting, cardNotice: null };
+    const read = await this.#readRefundableTenders();
+    const same = () =>
+      this.isConnected &&
+      this.historicalReceipt === receipt &&
+      this.#operatorSession === session &&
+      this.api === api &&
+      this.invoiceCorrecting?.session === correcting;
+    // The window's own message, and a fresh read of the correction, since the main screen's error
+    // sits behind the window and the step pressed may be gone.
+    const refused = (key: StringKey) => {
+      if (this.invoiceCorrecting?.session === correcting)
+        this.invoiceCorrecting = {
+          ...this.invoiceCorrecting,
+          legsRevision: this.invoiceCorrecting.legsRevision + 1,
+          cardNotice: { key },
+        };
+    };
+    if (!read) {
+      refused("invoice_correction.card_unread");
       return;
+    }
+    if (!same() || this.tenderRefunding) return;
+    const card = this.refundableTenders.find((row) => row.tenderId === leg.tenderId);
+    if (
+      card === undefined ||
+      card.pendingRefundId !== null ||
+      compareDecimal(decimal(card.appliedRemaining), decimal("0")) <= 0 ||
+      !this.#refundMethodAllowed(card)
+    ) {
+      refused("invoice_correction.card_changed");
+      return;
+    }
     this.#openTenderRefund({
       target: leg.target,
       startReasonId: leg.startReasonId,
@@ -8844,6 +8870,7 @@ export class TillApp extends LitElement {
       invoiceCorrectionId: leg.correctionId,
       tenderId: leg.tenderId,
     });
+    if (!this.tenderRefunding) refused("invoice_correction.card_not_opened");
   }
 
   #renderInvoiceCorrection(): TemplateResult | typeof nothing {
@@ -8858,6 +8885,7 @@ export class TillApp extends LitElement {
       .session=${open.session}
       .capabilities=${this.capabilities}
       .legsRevision=${open.legsRevision}
+      .cardNotice=${open.cardNotice}
       @invoice-correction-card=${(event: CustomEvent<InvoiceCorrectionCardLeg>) => {
         event.stopPropagation();
         void this.#openCorrectionCard(open.session, event.detail);

@@ -159,6 +159,12 @@ export class TillInvoiceCorrectionDialog extends LitElement {
   /** Raised by the app when a card refund this window started has ended, to read the correction
    * again. */
   @property({ type: Number }) legsRevision = 0;
+  /** Raised by the app when Refund to card did not open Refund a payment; shown until staff press
+   * another of the correction's steps. */
+  @property({ attribute: false }) cardNotice: { key: StringKey } | null = null;
+  @state() private dismissedNotice: { key: StringKey } | null = null;
+  /** A Confirm press was dropped because the form changed while its preview was asked again. */
+  @state() private changedWhileChecking = false;
   @state() private correction: InvoiceCorrectionView | null = null;
   @state() private tenders: RefundableTender[] = [];
   @state() private sendRefusal: PayRefusal | null = null;
@@ -383,6 +389,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
   async #confirm(): Promise<void> {
     if (!this.active || this.busy || this.confirming) return;
     this.attempted = true;
+    this.changedWhileChecking = false;
     if (this.#errors().size > 0) {
       await this.updateComplete;
       await focusFirstInvalid(this.shadowRoot!);
@@ -396,7 +403,10 @@ export class TillInvoiceCorrectionDialog extends LitElement {
       await this.#preview();
       this.confirming = false;
       if (!this.isConnected || !this.active || this.busy) return;
-      if (JSON.stringify(this.#comparable(this.draft)) !== pressed) return;
+      if (JSON.stringify(this.#comparable(this.draft)) !== pressed) {
+        this.changedWhileChecking = true;
+        return;
+      }
     }
     const answer = this.#answer();
     if (answer === null || this.#errors().size > 0) return;
@@ -658,7 +668,9 @@ export class TillInvoiceCorrectionDialog extends LitElement {
               ? this.#refusalText(refusal)
               : this.sendRefusal !== null
                 ? this.#sendText(this.sendRefusal)
-                : ""
+                : this.changedWhileChecking
+                  ? t("invoice_correction.changed_while_checking")
+                  : ""
         }
         >${this.#cancelButton()}
         <wt-button
@@ -706,7 +718,9 @@ export class TillInvoiceCorrectionDialog extends LitElement {
         data-choice=${name}
         .disabled=${this.busy}
         @click=${() => {
-          if (this.active && !this.busy) run();
+          if (!this.active || this.busy) return;
+          this.dismissedNotice = this.cardNotice;
+          run();
         }}
         >${label}</wt-button
       >
@@ -869,7 +883,14 @@ export class TillInvoiceCorrectionDialog extends LitElement {
             )
           : nothing
       }
-      <wt-form-actions .error=${this.sendRefusal === null ? "" : this.#sendText(this.sendRefusal)}
+      <wt-form-actions
+        .error=${
+          this.sendRefusal !== null
+            ? this.#sendText(this.sendRefusal)
+            : this.cardNotice !== null && this.cardNotice !== this.dismissedNotice
+              ? t(this.cardNotice.key)
+              : ""
+        }
         >${this.#cancelButton()}</wt-form-actions
       >`;
   }

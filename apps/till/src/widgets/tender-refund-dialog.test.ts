@@ -132,11 +132,11 @@ it("refunds the original card's remaining applied amount and tip, explicitly lea
 it.each([
   [
     "en",
-    "This refund is part of the invoice's correction. Once all its money is back, Waitron files the corrective invoice by itself when it can; otherwise Correct invoice shows what is left to do.",
+    "This refund is part of the invoice's correction. Once all its money is back, Waitron files the corrective invoice by itself when it can; otherwise Find a bill lists it under Corrections under way, with what is left to do.",
   ],
   [
     "es",
-    "Esta devolución forma parte de la rectificación de la factura. Cuando se haya devuelto todo su dinero, Waitron presenta la factura rectificativa por sí solo si puede; si no, Rectificar factura muestra lo que queda por hacer.",
+    "Esta devolución forma parte de la rectificación de la factura. Cuando se haya devuelto todo su dinero, Waitron presenta la factura rectificativa por sí solo si puede; si no, Buscar cuenta la muestra en Rectificaciones en curso, con lo que queda por hacer.",
   ],
 ] as const)(
   "says in %s that a correction's card refund leads to its corrective invoice",

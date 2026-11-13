@@ -788,6 +788,9 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(api.openInvoiceCorrection).not.toHaveBeenCalled();
     expect(api.giveInvoiceCorrectionCash).not.toHaveBeenCalled();
+    expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+      t("invoice_correction.changed_while_checking"),
+    );
 
     confirm(el).click();
     await vi.waitFor(() => expect(api.giveInvoiceCorrectionCash).toHaveBeenCalledOnce());

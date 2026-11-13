@@ -4619,6 +4619,46 @@ describe("till-app: service cancellation consent", () => {
       expect(refundForm(el)!.correcting).toBe(true);
     });
 
+    it.each([
+      [
+        "cannot be read again",
+        () => Promise.reject(new TypeError("Failed to fetch")),
+        "invoice_correction.card_unread",
+      ],
+      [
+        "has changed since the window showed it",
+        () => Promise.resolve([{ ...resumedCard, appliedRemaining: "0.00" }]),
+        "invoice_correction.card_changed",
+      ],
+    ] as const)(
+      "says so in Correct invoice, and reads the correction again, when the card's payment %s",
+      async (_case, reread, key) => {
+        const fresh = [{ ...resumedCard, appliedRemaining: "4.00" }];
+        const getInvoiceCorrection = vi.fn().mockResolvedValue(resumedCorrection);
+        const methods = paidMethods({
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            capabilities: [...till.capabilities, "take-cash", "integrated-card-payment"],
+          }),
+          getRefundableTenders: vi
+            .fn()
+            .mockResolvedValueOnce(fresh)
+            .mockResolvedValueOnce(fresh)
+            .mockImplementationOnce(reread)
+            .mockResolvedValue(fresh),
+          getInvoiceCorrection,
+        });
+        const el = await resumeCorrection(methods);
+        const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog")!;
+
+        await expect
+          .poll(() => correcting().shadowRoot!.querySelector("wt-form-actions")!.error)
+          .toBe(t(key));
+        await expect.poll(() => getInvoiceCorrection).toHaveBeenCalledTimes(2);
+        expect(refundForm(el)).toBeNull();
+      },
+    );
+
     it("opens no Refund a payment when the waiter leaves the bill while the card's payment is read again", async () => {
       const fresh = [{ ...resumedCard, appliedRemaining: "4.00" }];
       let answer!: (rows: typeof fresh) => void;

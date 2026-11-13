@@ -117,7 +117,7 @@ export const en = {
   "tender_refund.total": "Total to return",
   "tender_refund.invoice_unchanged": "This returns money only. The original invoice is unchanged.",
   "tender_refund.correction_leg":
-    "This refund is part of the invoice's correction. Once all its money is back, Waitron files the corrective invoice by itself when it can; otherwise Correct invoice shows what is left to do.",
+    "This refund is part of the invoice's correction. Once all its money is back, Waitron files the corrective invoice by itself when it can; otherwise Find a bill lists it under Corrections under way, with what is left to do.",
   "tender_refund.choose": "Original payment",
   "tender_refund.unavailable": "No cash or card money is available to refund.",
   "tender_refund.applied": "Payment amount to return",
@@ -172,6 +172,14 @@ export const en = {
   "invoice_correction.close_keeping_hint":
     "Ends the correction without a corrective invoice. The money given back stays given back.",
   "invoice_correction.refund_still": "Refund a payment still gives money back.",
+  "invoice_correction.card_unread":
+    "The card's payment could not be read. Choose Refund to card again.",
+  "invoice_correction.card_changed":
+    "This card's payment has changed since it was shown. Check what is left to give back and choose again.",
+  "invoice_correction.card_not_opened":
+    "Refund a payment could not save its request on this device, so it did not open. Choose Refund to card again.",
+  "invoice_correction.changed_while_checking":
+    "The correction changed while it was being checked. Check the VAT shown and press Correct and refund again.",
   "invoice_correction.filed": "Corrective invoice filed for {amount}.",
   "invoice_correction.closed":
     "Correction closed without a corrective invoice. The {amount} given back stays given back.",
@@ -2187,7 +2195,7 @@ export const es: Record<StringKey, string> = {
   "tender_refund.total": "Total que se devuelve",
   "tender_refund.invoice_unchanged": "Esto solo devuelve dinero. La factura original no cambia.",
   "tender_refund.correction_leg":
-    "Esta devolución forma parte de la rectificación de la factura. Cuando se haya devuelto todo su dinero, Waitron presenta la factura rectificativa por sí solo si puede; si no, Rectificar factura muestra lo que queda por hacer.",
+    "Esta devolución forma parte de la rectificación de la factura. Cuando se haya devuelto todo su dinero, Waitron presenta la factura rectificativa por sí solo si puede; si no, Buscar cuenta la muestra en Rectificaciones en curso, con lo que queda por hacer.",
   "tender_refund.choose": "Pago original",
   "tender_refund.unavailable": "No hay dinero en efectivo o tarjeta disponible para devolver.",
   "tender_refund.applied": "Importe del pago que se devuelve",
@@ -2244,6 +2252,14 @@ export const es: Record<StringKey, string> = {
   "invoice_correction.close_keeping_hint":
     "Termina la rectificación sin factura rectificativa. El dinero devuelto queda devuelto.",
   "invoice_correction.refund_still": "Devolver un pago sigue permitiendo devolver dinero.",
+  "invoice_correction.card_unread":
+    "No se ha podido leer el pago con tarjeta. Vuelve a elegir Devolver a la tarjeta.",
+  "invoice_correction.card_changed":
+    "El pago con tarjeta ha cambiado desde que se mostró. Revisa lo que queda por devolver y vuelve a elegir.",
+  "invoice_correction.card_not_opened":
+    "Devolver un pago no ha podido guardar su solicitud en este dispositivo, así que no se ha abierto. Vuelve a elegir Devolver a la tarjeta.",
+  "invoice_correction.changed_while_checking":
+    "La rectificación cambió mientras se comprobaba. Revisa el IVA que se muestra y vuelve a pulsar Rectificar y devolver.",
   "invoice_correction.filed": "Factura rectificativa presentada por {amount}.",
   "invoice_correction.closed":
     "Rectificación cerrada sin factura rectificativa. Los {amount} devueltos quedan devueltos.",
