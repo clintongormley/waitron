@@ -3954,6 +3954,7 @@ describe("the document choice on a handheld", () => {
         getPartyBills,
         getTablesState: vi.fn().mockResolvedValue([heldTable({ billCount: 2 })]),
         findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listInvoiceCorrections: vi.fn().mockResolvedValue([]),
         listBills: vi.fn().mockResolvedValue(listPage([counter])),
         getFindBill: vi.fn().mockResolvedValue(counter),
         retrieveWorkingOrder: vi.fn().mockResolvedValue({
@@ -6366,6 +6367,7 @@ describe("a presented counter bill from Find a bill, on a device with no counter
     const { el } = await mountApp({
       ...device,
       findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listInvoiceCorrections: vi.fn().mockResolvedValue([]),
       listBills: vi.fn().mockResolvedValue(listPage([row])),
       getFindBill: vi.fn().mockResolvedValue(row),
       retrievePlacedOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
@@ -6428,6 +6430,7 @@ describe("a presented counter bill from Find a bill, on a device with no counter
     const { el } = await mountApp({
       ...device,
       findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listInvoiceCorrections: vi.fn().mockResolvedValue([]),
       listBills: vi.fn().mockResolvedValue(listPage([])),
     });
     await flush(el);
@@ -6624,6 +6627,7 @@ describe("a parked counter bill from Find a bill, on a device with no counter sc
     const { el } = await mountApp({
       ...device,
       findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listInvoiceCorrections: vi.fn().mockResolvedValue([]),
       listBills: vi.fn().mockResolvedValue(listPage([row])),
       getFindBill: vi.fn().mockResolvedValue(row),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({

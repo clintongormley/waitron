@@ -1890,6 +1890,7 @@ describe("A768 the order screen shows at once", () => {
     const offers = deferred<ZoneOfferCatalogue>();
     const { el } = await mountApp({
       findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listInvoiceCorrections: vi.fn().mockResolvedValue([]),
       listBills: vi.fn().mockResolvedValue(listPage()),
       getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "v1", workingOrderId: "wo-4" })),
       listZoneOffers: vi.fn(() => offers.promise),

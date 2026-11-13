@@ -1458,6 +1458,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
         getTablesState: vi.fn().mockResolvedValue([{ ...heldTable(), zonePolicy: {} }]),
         ...(status === "open" ? { recordSale: send } : { collectOrder: send }),
         findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listInvoiceCorrections: vi.fn().mockResolvedValue([]),
         listBills: vi.fn().mockResolvedValue(listPage([selected])),
         getFindBill: vi.fn().mockResolvedValue(selected),
       });
@@ -1526,6 +1527,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
         getPartyBills: bills,
         collectOrder: send,
         findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listInvoiceCorrections: vi.fn().mockResolvedValue([]),
         listBills: vi.fn().mockResolvedValue(listPage([selected])),
         getFindBill: vi.fn().mockResolvedValue(selected),
         getTill: vi.fn().mockResolvedValue({ ...till }),

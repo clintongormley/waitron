@@ -1767,6 +1767,7 @@ describe("a handheld's zones", () => {
       const { el } = await mountHandheld(noZones, "phone-portrait", {
         listDefaultZoneOffers: refusedOffers(),
         findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listInvoiceCorrections: vi.fn().mockResolvedValue([]),
         listBills: vi.fn().mockResolvedValue(listPage([])),
       });
       await vi.waitFor(() => expect(empty(el)).not.toBeNull());
@@ -1997,6 +1998,7 @@ describe("a handheld's zones", () => {
       });
       const { el } = await mountTables(selection(["bar", "room"], "room"), "phone-portrait", {
         findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listInvoiceCorrections: vi.fn().mockResolvedValue([]),
         listBills: vi.fn().mockResolvedValue(listPage([row])),
         getFindBill: vi.fn().mockResolvedValue(row),
       });
@@ -2900,6 +2902,7 @@ describe("a handheld's zones", () => {
           saveDraft: drafts.saveDraft,
           submitDraft: drafts.submitDraft,
           findBillOptions: vi.fn().mockResolvedValue(billOptions),
+          listInvoiceCorrections: vi.fn().mockResolvedValue([]),
           listBills: vi.fn().mockResolvedValue(listPage()),
         });
         el.parentElement!.id = "app";

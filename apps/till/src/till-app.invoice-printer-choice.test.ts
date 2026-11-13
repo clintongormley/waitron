@@ -500,6 +500,7 @@ it("Back to Find a bill leaves a pending device save without changing the return
   const { el, api } = await sold({
     setDeviceEquipment: vi.fn().mockReturnValue(saving.promise),
     findBillOptions: vi.fn().mockResolvedValue(billOptions),
+    listInvoiceCorrections: vi.fn().mockResolvedValue([]),
     listBills: vi.fn().mockResolvedValue(listPage([])),
     listTransactions: vi.fn().mockResolvedValue(listPage([])),
     getTransactionReceipt: vi.fn().mockResolvedValue({ ...invoiceOf("12.00"), invoiceType: "F1" }),

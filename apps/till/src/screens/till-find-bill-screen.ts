@@ -185,12 +185,35 @@ export class TillFindBillScreen extends LitElement {
       if (controller === this.#correctionsController) this.correctionsError = true;
     }
   }
+  /** Fills every placeholder in one pass, so a reason holding `{left}` or `$&` stays as typed. */
+  #correctionRow(correction: OpenInvoiceCorrection, timeZone: string): string {
+    const money = (value: string) => formatMoney(value, currentLocale());
+    const values: Record<string, string> = {
+      when: new Date(correction.openedAt).toLocaleString(currentLocale(), { timeZone }),
+      reason: correction.reason,
+      left: money(correction.left),
+      gross: money(correction.gross),
+    };
+    return label("correction_row").replace(
+      /\{(\w+)\}/g,
+      (match, key: string) => values[key] ?? match,
+    );
+  }
   #correctionsList(timeZone: string) {
     if (this.corrections.length === 0 && !this.correctionsError) return nothing;
-    const money = (value: string) => formatMoney(value, currentLocale());
     return html`<section class="corrections" data-corrections>
       <h2>${label("corrections")}</h2>
-      ${this.correctionsError ? html`<p role="alert" class="error">${label("load_failed")}</p>` : nothing}
+      ${
+        this.correctionsError
+          ? html`<p role="alert" class="error">${label("load_failed")}</p>
+              <wt-button
+                variant="secondary"
+                data-corrections-retry
+                @click=${() => void this.#loadCorrections()}
+                >${label("retry")}</wt-button
+              >`
+          : nothing
+      }
       ${this.corrections.map(
         (correction) =>
           html`<wt-button
@@ -198,14 +221,7 @@ export class TillFindBillScreen extends LitElement {
             data-correction=${correction.id}
             .disabled=${this.busy}
             @click=${() => this.#emit("find-correction-open", { correction })}
-            >${label("correction_row")
-              .replace(
-                "{when}",
-                new Date(correction.openedAt).toLocaleString(currentLocale(), { timeZone }),
-              )
-              .replace("{reason}", correction.reason)
-              .replace("{left}", money(correction.left))
-              .replace("{gross}", money(correction.gross))}</wt-button
+            >${this.#correctionRow(correction, timeZone)}</wt-button
           >`,
       )}
     </section>`;

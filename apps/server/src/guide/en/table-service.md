@@ -302,9 +302,14 @@ someone who may enters their PIN.
 
 When the bill was paid only in cash, the cash drawer opens and the corrective invoice is filed at
 once: give the customer the amount the window shows. Otherwise the window shows what is left to
-give back, with a step for each payment. **Give back €6.05 in cash** opens the cash drawer.
-**Refund to card** opens **Refund a payment** filled in for that card; refund the cards one at a
-time. While a card refund waits for the card company, choose **Check again** to see its answer.
+give back, with a cash step, and a **Refund to card** step for each card. **Give back €6.05 in
+cash** opens the cash drawer. **Refund to card** opens **Refund a payment** filled in for that
+card; refund the cards one at a time. While a card refund waits for the card company, choose
+**Check again** to see its answer.
+
+When a card refund finishes a correction later, its corrective receipt does not print by itself.
+To give it to the customer, open it in **Find a bill**, on the **Transactions** tab, where its type
+is **Correction**, and print it there.
 
 If you close the window before the money is all back, the correction stays open. **Find a bill**
 lists it under **Corrections under way**; choose it to carry on, then choose one of these:
@@ -316,8 +321,7 @@ lists it under **Corrections under way**; choose it to carry on, then choose one
 - **Close keeping the refunds** ends it without a corrective invoice, when the window says one
   cannot be filed. The money given back stays given back.
 
-If the window says an earlier request got no answer, choose **Send again**. It sends that same
-request, so nothing happens twice.
+If the window says an earlier request got no answer, choose **Send again**.
 
 ## Refund a card payment on a separate terminal {#separate-terminal}
 

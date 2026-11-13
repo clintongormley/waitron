@@ -754,6 +754,21 @@ it("filters actual completed refund rows without changing their identity, sign o
   expect(grid.shadowRoot!.textContent).toContain("-€13.75");
 });
 
+const openCorrection = (patch: Record<string, unknown> = {}) => ({
+  id: "correction-1",
+  saleId: "sale-1",
+  state: "open",
+  gross: "6.05",
+  moneyBack: "2.00",
+  pending: "0.00",
+  left: "4.05",
+  reason: "Overcharged",
+  openedAt: "2026-10-15T12:00:00Z",
+  correctiveSaleId: null,
+  legs: [],
+  ...patch,
+});
+
 it("lists the corrections under way and opens the one chosen", async () => {
   const correction = {
     id: "correction-1",
@@ -794,4 +809,55 @@ it("shows no corrections section when none is under way", async () => {
   await vi.waitFor(() => expect(requests(fetcher, "/api/invoice-corrections")).toHaveLength(1));
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-corrections]")).toBeNull();
+});
+
+it("writes a reason exactly as typed, even one holding replacement patterns", async () => {
+  const reason = "Paid $& twice {left}";
+  const { el } = await mount(findBillApi(undefined, [openCorrection({ reason })]));
+  await ready(el);
+  const button = await vi.waitFor(() => {
+    const found = el.shadowRoot!.querySelector<HTMLElement>('[data-correction="correction-1"]');
+    expect(found).not.toBeNull();
+    return found!;
+  });
+  expect(button.textContent!.replace(/\s+/g, " ").trim()).toBe(
+    `15/10/2026, 14:00:00 · ${reason} · €4.05 of €6.05 left to give back`,
+  );
+});
+
+it("offers Retry when the corrections cannot be read, still loading the bills", async () => {
+  let fail = true;
+  const source = findBillApi(async (url) =>
+    json(
+      url.pathname.endsWith("options")
+        ? billOptions
+        : url.pathname === "/api/bills"
+          ? listPage()
+          : { ...listPage([transactionRow()]), dates: resolvedDates },
+    ),
+  );
+  const answer = source.fetcher.getMockImplementation()!;
+  source.fetcher.mockImplementation(async (url, init) =>
+    new URL(String(url), location.origin).pathname === "/api/invoice-corrections"
+      ? fail
+        ? json({ error: { code: "server.internal" } }, 500)
+        : json({ corrections: [openCorrection()] })
+      : answer(url, init),
+  );
+  const { el, fetcher } = await mount(source);
+  const bills = await ready(el);
+  expect(bills.rows).toHaveLength(1);
+  const section = () => el.shadowRoot!.querySelector("[data-corrections]")!;
+  await vi.waitFor(() =>
+    expect(section().querySelector('[role="alert"]')!.textContent).toBe(
+      "The list could not be loaded. Try again.",
+    ),
+  );
+  fail = false;
+  await userEvent.click(section().querySelector<HTMLElement>("[data-corrections-retry]")!);
+  await vi.waitFor(() =>
+    expect(section().querySelector('[data-correction="correction-1"]')).not.toBeNull(),
+  );
+  expect(section().querySelector('[role="alert"]')).toBeNull();
+  expect(requests(fetcher, "/api/invoice-corrections")).toHaveLength(2);
 });

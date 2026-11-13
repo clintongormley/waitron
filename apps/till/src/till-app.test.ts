@@ -442,6 +442,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     })),
     getTill: vi.fn().mockResolvedValue(till),
     findBillOptions: vi.fn().mockResolvedValue(billOptions),
+    listInvoiceCorrections: vi.fn().mockResolvedValue([]),
     listBills: vi.fn().mockResolvedValue(listPage()),
     listTransactions: vi
       .fn()
@@ -22986,6 +22987,7 @@ describe("A737 Find a bill page", () => {
   async function open(overrides: Record<string, unknown> = {}) {
     const { el } = await mountApp({
       findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listInvoiceCorrections: vi.fn().mockResolvedValue([]),
       listBills: vi.fn().mockResolvedValue(listPage()),
       listTransactions: vi
         .fn()
@@ -23198,6 +23200,7 @@ describe("A737 Find a bill page", () => {
     history.replaceState(null, "", "/tabs/counter/view/find-bill");
     const { el } = await mountApp({
       findBillOptions: vi.fn().mockResolvedValue(billOptions),
+      listInvoiceCorrections: vi.fn().mockResolvedValue([]),
       listBills: vi.fn().mockResolvedValue(listPage()),
     });
     await toCounter(el);
