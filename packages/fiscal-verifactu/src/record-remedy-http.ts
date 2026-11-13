@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { readHistoryNodes, readTenant, type Transaction } from "@waitron/db";
 import { prepareIssueClock } from "@waitron/fiscal";
 import type { ModuleRouteContext } from "@waitron/module";
+import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, compareDecimal, decimal, readSaleOrigin, saleId } from "@waitron/shared";
 import type { AltaInput } from "@waitron/verifactu";
 import { applyRecordCorrection, type RemedyKind } from "./record-remedy.js";
@@ -95,6 +96,23 @@ function refuseChangedAmountsOrClass(
   });
 }
 
+function refuseChangedPrintedFacts(
+  registroId: string,
+  facts: CorrectedRecordFacts,
+  original: Pick<AltaInput, "NombreRazonEmisor" | "TipoFactura" | "Destinatarios">,
+) {
+  if (facts.issuerName !== undefined && facts.issuerName !== original.NombreRazonEmisor)
+    throw new AppError("fiscal.remedy_issuer_changed", { registroId });
+  if (facts.invoiceType !== undefined && facts.invoiceType !== original.TipoFactura)
+    throw new AppError("fiscal.remedy_printed_fact_changed", { registroId, field: "invoiceType" });
+  if (
+    facts.recipients !== undefined &&
+    canonicalJson(facts.recipients) !==
+      canonicalJson(original.Destinatarios?.IDDestinatario ?? null)
+  )
+    throw new AppError("fiscal.remedy_printed_fact_changed", { registroId, field: "recipients" });
+}
+
 export async function applyCorrectedRecordFacts(
   tx: Transaction,
   generation: NonNullable<ModuleRouteContext["recordGeneration"]>,
@@ -130,6 +148,7 @@ export async function applyCorrectedRecordFacts(
   const original = fromRegistroRow(target);
   if (!("TipoFactura" in original)) throw new AppError("fiscal.remedy_invalid", { registroId });
   refuseChangedAmountsOrClass(registroId, facts, original);
+  refuseChangedPrintedFacts(registroId, facts, original);
   const clock = await prepareIssueClock(tx, { nodeId: generation.nodeId }, generation.clock);
   const reading = clock.now();
   const sif = await currentSif(tx, generation.nodeId);

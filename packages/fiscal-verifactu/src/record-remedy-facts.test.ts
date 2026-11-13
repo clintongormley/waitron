@@ -114,12 +114,7 @@ async function snapshot() {
 
 it("corrects stored invoice facts without changing the issued sale, original record or delivery", async () => {
   const before = await snapshot();
-  const res = await send({
-    issuerName: "Corrected Issuer",
-    invoiceType: "F1",
-    recipients: [recipient],
-    description: "Corrected restaurant service",
-  });
+  const res = await send({ description: "Corrected restaurant service" });
   expect(res.status).toBe(200);
   const result = (await res.json()) as { registroId: string; eventId: string };
   const after = await snapshot();
@@ -131,9 +126,9 @@ it("corrects stored invoice facts without changing the issued sale, original rec
     idEmisorFactura: "89890001K",
     numSerieFactura: "A/1",
     fechaExpedicionFactura: "2026-07-20",
-    nombreRazonEmisor: "Corrected Issuer",
-    tipoFactura: "F1",
-    destinatarios: { IDDestinatario: [recipient] },
+    nombreRazonEmisor: "Waitron SL",
+    tipoFactura: "F2",
+    destinatarios: null,
     desglose: before.records[0]!.desglose,
     cuotaTotal: before.records[0]!.cuotaTotal,
     importeTotal: before.records[0]!.importeTotal,
@@ -161,7 +156,7 @@ it.each([
   "refuses a fix that changes the invoice's amounts, without a write: %j",
   async ({ facts, field }) => {
     const before = await snapshot();
-    const res = await send({ issuerName: "Corrected Issuer", ...facts });
+    const res = await send({ description: "Corrected restaurant service", ...facts });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: {
@@ -174,26 +169,12 @@ it.each([
 );
 
 it.each([
-  { facts: { issuerName: "Corrected Issuer" }, row: { nombreRazonEmisor: "Corrected Issuer" } },
   {
-    facts: {
-      invoiceType: "F1",
-      recipients: [
-        {
-          NombreRazon: "Foreign Customer",
-          IDOtro: { CodigoPais: "FR", IDType: "02", ID: "FR12345678901" },
-        },
-      ],
-    },
+    facts: { description: "Corrected restaurant service" },
     row: {
-      destinatarios: {
-        IDDestinatario: [
-          {
-            NombreRazon: "Foreign Customer",
-            IDOtro: { CodigoPais: "FR", IDType: "02", ID: "FR12345678901" },
-          },
-        ],
-      },
+      descripcionOperacion: "Corrected restaurant service",
+      nombreRazonEmisor: "Waitron SL",
+      tipoFactura: "F2",
     },
   },
 ])("retains a partial corrected-fact decision %j", async ({ facts, row }) => {
@@ -206,83 +187,77 @@ it.each([
   expect(after.sales).toEqual(before.sales);
 });
 
-it.each(["R1", "F3"])(
-  "corrects %s reference facts while preserving their calendar date across a new generation offset",
-  async (invoiceType) => {
-    instant = new Date("2026-12-20T17:20:35Z");
-    const facts =
-      invoiceType === "R1"
-        ? {
-            invoiceType,
-            correctionType: "S",
-            correctedInvoices: [reference],
-            correctionAmounts: {
-              BaseRectificada: "0.00",
-              CuotaRectificada: "0.00",
-              CuotaRecargoRectificado: "0.00",
-            },
-            recipients: [recipient],
-          }
-        : { invoiceType, substitutedInvoices: [reference], recipients: [recipient] };
-    const res = await send(facts);
-    expect(res.status).toBe(200);
-    const after = await snapshot();
-    expect(after.records[1]).toMatchObject({
-      tipoFactura: invoiceType,
-      fechaExpedicionFactura: "2026-07-20",
-      offsetMinutos: 60,
-      tipoRectificativa: invoiceType === "R1" ? "S" : null,
-      facturasRectificadas:
-        invoiceType === "R1"
-          ? { IDFacturaRectificada: [{ ...reference, FechaExpedicionFactura: "19-07-2026" }] }
-          : null,
-      facturasSustituidas:
-        invoiceType === "F3"
-          ? { IDFacturaSustituida: [{ ...reference, FechaExpedicionFactura: "19-07-2026" }] }
-          : null,
-      importeRectificacion:
-        invoiceType === "R1"
-          ? {
-              BaseRectificada: "0.00",
-              CuotaRectificada: "0.00",
-              CuotaRecargoRectificado: "0.00",
-            }
-          : null,
-    });
-  },
-);
-
-it("can explicitly remove optional facts from the next version without removing them from the rejected one", async () => {
-  expect(
-    (
-      await send({
-        invoiceType: "R1",
-        correctionType: "S",
-        correctedInvoices: [reference],
-        correctionAmounts: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
-        recipients: [recipient],
-      })
-    ).status,
-  ).toBe(200);
-  const first = (await snapshot()).records[1]!;
-  await withTransaction(suite.db, async (tx) => {
-    await tx
-      .update(envios)
-      .set({ estado: "rechazado", codigoError: "1161" })
-      .where(eq(envios.registroId, first.id));
-    const filingCase = await openFilingCase(tx, {
-      registroId: first.id,
-      cause: "fiscal.registro_rechazado",
-      evidence: { codigo: 1161, mensaje: null, csv: null },
-      now: NOW,
-    });
-    body = {
-      ...body,
-      caseId: filingCase.id,
-      registroId: first.id,
-      actionKey: "remove-optional-facts",
-    };
+it("refuses a fix that changes the issuer's name, without a write", async () => {
+  const before = await snapshot();
+  const res = await send({ issuerName: "Corrected Issuer" });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toEqual({
+    error: { code: "fiscal.remedy_issuer_changed", params: { registroId: body.registroId } },
   });
+  expect(await snapshot()).toEqual(before);
+});
+
+it("accepts the issuer's own name unchanged", async () => {
+  const res = await send({ issuerName: "Waitron SL", description: "Corrected restaurant service" });
+  expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+  expect((await snapshot()).records[1]).toMatchObject({
+    nombreRazonEmisor: "Waitron SL",
+    descripcionOperacion: "Corrected restaurant service",
+  });
+});
+
+it.each([
+  { facts: { invoiceType: "F1" }, field: "invoiceType" },
+  { facts: { recipients: [recipient] }, field: "recipients" },
+  {
+    facts: {
+      invoiceType: "F1",
+      recipients: [
+        {
+          NombreRazon: "Foreign Customer",
+          IDOtro: { CodigoPais: "FR", IDType: "02", ID: "FR12345678901" },
+        },
+      ],
+    },
+    field: "invoiceType",
+  },
+  {
+    facts: { recipients: [{ NombreRazon: "Invalid Customer", NIF: "invalid" }] },
+    field: "recipients",
+  },
+  { facts: { invoiceType: "R1", correctionType: "S" }, field: "invoiceType" },
+  {
+    facts: {
+      invoiceType: "R1",
+      correctionType: "S",
+      correctedInvoices: [reference],
+      correctionAmounts: {
+        BaseRectificada: "0.00",
+        CuotaRectificada: "0.00",
+        CuotaRecargoRectificado: "0.00",
+      },
+      recipients: [recipient],
+    },
+    field: "invoiceType",
+  },
+  {
+    facts: { invoiceType: "F3", substitutedInvoices: [reference], recipients: [recipient] },
+    field: "invoiceType",
+  },
+])("refuses a fix that changes a printed fact, without a write: %j", async ({ facts, field }) => {
+  const before = await snapshot();
+  const res = await send({ description: "Corrected restaurant service", ...facts });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toEqual({
+    error: {
+      code: "fiscal.remedy_printed_fact_changed",
+      params: { registroId: body.registroId, field },
+    },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
+it("accepts explicit removal of optional facts the record does not carry", async () => {
   const before = await snapshot();
   const res = await send({
     invoiceType: "F2",
@@ -294,8 +269,8 @@ it("can explicitly remove optional facts from the next version without removing 
   });
   expect(res.status).toBe(200);
   const after = await snapshot();
-  expect(after.records.slice(0, 2)).toEqual(before.records);
-  expect(after.records[2]).toMatchObject({
+  expect(after.records[0]).toEqual(before.records[0]);
+  expect(after.records[1]).toMatchObject({
     tipoFactura: "F2",
     tipoRectificativa: null,
     facturasRectificadas: null,
@@ -308,12 +283,7 @@ it("can explicitly remove optional facts from the next version without removing 
 
 it("replays complete facts in another key order after the clock and delivery change", async () => {
   const filed = (await snapshot()).records[0]!.desglose as Record<string, string>[];
-  const facts = {
-    invoiceType: "F1",
-    recipients: [recipient],
-    breakdown: filed,
-    description: "Corrected restaurant service",
-  };
+  const facts = { breakdown: filed, description: "Corrected restaurant service" };
   const first = await send(facts);
   expect(first.status).toBe(200);
   const result = await first.json();
@@ -326,8 +296,6 @@ it("replays complete facts in another key order after the clock and delivery cha
   const replay = await send({
     description: "Corrected restaurant service",
     breakdown: filed.map((item) => Object.fromEntries(Object.entries(item).reverse())),
-    recipients: [{ NIF: "B12345674", NombreRazon: "Corrected Customer" }],
-    invoiceType: "F1",
   });
   expect(replay.status).toBe(200);
   expect(await replay.json()).toEqual(result);
@@ -364,20 +332,16 @@ async function targetAcceptedWithErrors() {
 it("applies complete facts under an explicit accepted-with-errors decision while retaining both case histories", async () => {
   await targetAcceptedWithErrors();
   const before = await snapshot();
-  const res = await send({
-    invoiceType: "F1",
-    recipients: [recipient],
-    description: "Corrected restaurant service",
-  });
+  const res = await send({ description: "Corrected restaurant service" });
   expect(res.status).toBe(200);
   const after = await snapshot();
   expect(after.records.slice(0, 2)).toEqual(before.records);
   expect(after.records[2]).toMatchObject({
-    tipoFactura: "F1",
+    tipoFactura: "F2",
     subsanacion: "S",
     rechazoPrevio: "N",
     descripcionOperacion: "Corrected restaurant service",
-    destinatarios: { IDDestinatario: [recipient] },
+    destinatarios: null,
   });
   expect(after.cases.find((item) => item.id !== body.caseId)).toEqual(
     before.cases.find((item) => item.id !== body.caseId),
@@ -390,11 +354,7 @@ it("applies complete facts under an explicit accepted-with-errors decision while
 it("refuses an amount change under an explicit accepted-with-errors decision, without a write", async () => {
   await targetAcceptedWithErrors();
   const before = await snapshot();
-  const res = await send({
-    invoiceType: "F1",
-    recipients: [recipient],
-    total: "123.46",
-  });
+  const res = await send({ description: "Corrected restaurant service", total: "123.46" });
   expect(res.status).toBe(400);
   expect(await res.json()).toEqual({
     error: {
@@ -405,36 +365,11 @@ it("refuses an amount change under an explicit accepted-with-errors decision, wi
   expect(await snapshot()).toEqual(before);
 });
 
-it.each([
-  { correctionType: "I", correctionAmounts: null },
-  { correctedInvoices: [{ ...reference, NumSerieFactura: "PRIOR/2" }] },
-])(
-  "refuses changed corrective-reference decisions under a saved action key: %j",
-  async (change) => {
-    const facts = {
-      invoiceType: "R1",
-      correctionType: "S",
-      correctedInvoices: [reference],
-      correctionAmounts: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
-      recipients: [recipient],
-    };
-    expect((await send(facts)).status).toBe(200);
-    const before = await snapshot();
-    const res = await send({ ...facts, ...change });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "filing_case.action_mismatch" } });
-    expect(await snapshot()).toEqual(before);
-  },
-);
-
 it("refuses a fix that gives an invoice non-zero correction amounts, without a write", async () => {
   const before = await snapshot();
   const res = await send({
-    invoiceType: "R1",
-    correctionType: "S",
-    correctedInvoices: [reference],
+    description: "Corrected restaurant service",
     correctionAmounts: { BaseRectificada: "201.00", CuotaRectificada: "20.00" },
-    recipients: [recipient],
   });
   expect(res.status).toBe(400);
   expect(await res.json()).toEqual({
@@ -470,15 +405,10 @@ it.each(
   expect(await snapshot()).toEqual(before);
 });
 
-it.each([{ issuerName: "Another Issuer" }, { invoiceType: "F2" }, { recipients: null }])(
+it.each([{ description: "Another restaurant service" }])(
   "refuses changed saved facts %j",
   async (change) => {
-    const facts = {
-      issuerName: "Corrected Issuer",
-      invoiceType: "F1",
-      recipients: [recipient],
-      description: "Corrected restaurant service",
-    };
+    const facts = { description: "Corrected restaurant service" };
     expect((await send(facts)).status).toBe(200);
     const before = await snapshot();
     const res = await send({ ...facts, ...change });
@@ -498,12 +428,7 @@ it.each([
 ])(
   "refuses an amount change after a saved decision, without a write: %j",
   async ({ change, field }) => {
-    const facts = {
-      issuerName: "Corrected Issuer",
-      invoiceType: "F1",
-      recipients: [recipient],
-      description: "Corrected restaurant service",
-    };
+    const facts = { description: "Corrected restaurant service" };
     expect((await send(facts)).status).toBe(200);
     const before = await snapshot();
     const res = await send({ ...facts, ...change });
@@ -567,11 +492,7 @@ it.each(
 it.each([false, true])(
   "keeps complete-fact corrections disabled by server policy on replay %s",
   async (replay) => {
-    const facts = {
-      invoiceType: "F1",
-      recipients: [recipient],
-      description: "Corrected restaurant service",
-    };
+    const facts = { description: "Corrected restaurant service" };
     if (replay) expect((await send(facts)).status).toBe(200);
     const before = await snapshot();
     const res = await send(facts, false);
@@ -599,11 +520,7 @@ it.each(
 });
 
 it.each(
-  [
-    { invoiceType: "F1" },
-    { invoiceType: "R1", correctionType: "S" },
-    { recipients: [{ NombreRazon: "Invalid Customer", NIF: "invalid" }] },
-  ].map((facts) => ({ facts })),
+  [{ correctionType: "S" }, { substitutedInvoices: [reference] }].map((facts) => ({ facts })),
 )(
   "keeps complete-record fiscal validation after applying structurally valid facts: %j",
   async ({ facts }) => {
