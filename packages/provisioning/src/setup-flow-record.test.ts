@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { request, PASSWORD } from "../test/first-setup-request.js";
@@ -114,4 +114,45 @@ it("refuses a linked record without changing its target", async () => {
     code: "setup.attempt_invalid",
   });
   expect(await readFile(target)).toEqual(bytes);
+});
+
+it.each([
+  ["nodeKey", 4096],
+  ["publicEvidence", 64 * 1024],
+  ["recoveryManifests", 16 * 1024],
+] as const)("an oversized %s write keeps the previous record", async (section, bytes) => {
+  const f = await fixture();
+  await updateSetupFlowSection(f.stateDir, "attempt", () => f.attempt);
+  const before = await readFile(f.path);
+  const value = { padding: "x".repeat(bytes) };
+  await expect(
+    updateSetupFlowSection(f.stateDir, section, () =>
+      section === "recoveryManifests" ? { probe: value } : value,
+    ),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect(await readFile(f.path)).toEqual(before);
+});
+
+it("recovery manifests are bounded individually", async () => {
+  const f = await fixture();
+  await updateSetupFlowSection(f.stateDir, "attempt", () => f.attempt);
+  const manifests = { first: { padding: "x".repeat(9000) }, second: { padding: "y".repeat(9000) } };
+  await updateSetupFlowSection(f.stateDir, "recoveryManifests", () => manifests);
+  expect((await readSetupFlowRecord(f.stateDir))?.recoveryManifests).toEqual(manifests);
+});
+
+it("two spellings of one folder share the section turn", async () => {
+  const f = await fixture();
+  const aliasRoot = await mkdtemp(join(tmpdir(), "setup-flow-alias-"));
+  roots.push(aliasRoot);
+  await symlink(dirname(f.stateDir), join(aliasRoot, "parent"), "dir");
+  const alias = join(aliasRoot, "parent", basename(f.stateDir));
+  await updateSetupFlowSection(f.stateDir, "attempt", () => f.attempt);
+  await Promise.all([
+    updateSetupFlowSection(f.stateDir, "nodeKey", () => ({ stageId: "one" })),
+    updateSetupFlowSection(alias, "publicEvidence", () => ({ modules: {} })),
+  ]);
+  const record = await readSetupFlowRecord(f.stateDir);
+  expect(record?.nodeKey).toEqual({ stageId: "one" });
+  expect(record?.publicEvidence).toEqual({ modules: {} });
 });

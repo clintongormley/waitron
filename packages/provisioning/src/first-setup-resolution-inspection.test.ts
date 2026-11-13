@@ -644,7 +644,7 @@ it("leaves a damaged ownership record and its marker as they are when inspected"
   await writeFile(path, "{damaged setup state");
   const before = await readFile(path);
   const marker = await readFile(join(f.stateDir, "flows/setup/record.json"));
-  await f.service.inspectFirstSetupResolution();
+  expect((await f.service.inspectFirstSetupResolution()).pair).toBe("invalid");
   expect(await readFile(path)).toEqual(before);
   expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(marker);
 });

@@ -32,8 +32,8 @@ import { writeTradingEnv } from "../src/trading-config.js";
 export interface HeldSetupOptions {
   /** Invoice records written through the fiscal module's own write path after activation. */
   invoices?: number;
-  /** `committed`: publication fails after activation; `complete`: publication succeeds. */
-  status?: "committed" | "complete";
+  /** `publication` expects the caller to interrupt the final record write. */
+  status?: "committed" | "publication" | "complete";
   /** Publication writes `<state>/trading.env` before it fails or completes. */
   tradingSettings?: boolean;
   /** One committed row left in `venue.db-wal` and not in `venue.db`, with the `-shm` beside them. */
@@ -181,7 +181,9 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
         },
       }),
     });
-    expect(activated.status).toBe(status === "committed" ? 500 : 200);
+    expect(activated.status).toBe(
+      status === "committed" ? 500 : status === "publication" ? 409 : 200,
+    );
     const attempt = (await host.store.read())!;
     expect(attempt.status).toBe(status);
     const installationName = (

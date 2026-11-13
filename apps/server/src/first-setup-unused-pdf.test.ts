@@ -192,6 +192,7 @@ it.each([
   "unknown-input",
   "orphan-document",
   "orphan-manifest",
+  "bare-module-file",
 ] as const)("unused-PDF reset refuses %s evidence", async (why) => {
   const f = await fixture();
   const directory = join(f.stateDir, "flows/setup/documents");
@@ -200,6 +201,10 @@ it.each([
       ...current,
       unknown: {},
     }));
+  if (why === "bare-module-file") {
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, f.module), "{}");
+  }
   if (why === "key") {
     await updateSetupFlowSection(f.stateDir, "nodeKey", () => ({}));
   }

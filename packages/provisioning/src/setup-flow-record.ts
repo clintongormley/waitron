@@ -1,6 +1,7 @@
 import { FIRST_SETUP_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { canonicalFirstSetupDirectory } from "./first-setup-directories.js";
 import { inTurn } from "./attempt-turns.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import type { FirstSetupState } from "./first-setup-state.js";
@@ -16,6 +17,12 @@ export interface SetupFlowRecord {
 export type SetupFlowSection = "attempt" | "nodeKey" | "publicEvidence" | "recoveryManifests";
 const limit = 1024 * 1024;
 const turns = {};
+const sectionLimits = {
+  attempt: limit,
+  nodeKey: 4096,
+  publicEvidence: 64 * 1024,
+  recoveryManifests: 16 * 1024,
+};
 const invalid = (): never => {
   throw new AppError("setup.attempt_invalid", {});
 };
@@ -42,11 +49,27 @@ export async function updateSetupFlowSection<K extends SetupFlowSection>(
   section: K,
   change: (current: SetupFlowRecord[K] | undefined) => SetupFlowRecord[K],
 ): Promise<void> {
-  return inTurn(turns, resolve(stateDir), async () => {
-    const current = await readSetupFlowRecord(stateDir);
+  const root = await canonicalFirstSetupDirectory(stateDir);
+  return inTurn(turns, root, async () => {
+    const current = await readSetupFlowRecord(root);
     if (current === null && section !== "attempt") invalid();
-    const next = { ...current, version: 1, [section]: change(current?.[section]) };
+    const value = change(current?.[section]);
+    try {
+      const values =
+        section === "recoveryManifests" && object(value) ? Object.values(value) : [value];
+      if (
+        values.some(
+          (entry) =>
+            entry !== undefined &&
+            Buffer.byteLength(JSON.stringify(entry)) > sectionLimits[section],
+        )
+      )
+        invalid();
+    } catch {
+      invalid();
+    }
+    const next = { ...current, version: 1, [section]: value };
     if (!object(next.attempt)) invalid();
-    await writeDurableHostJson(join(stateDir, FIRST_SETUP_FILE), next, limit);
+    await writeDurableHostJson(join(root, FIRST_SETUP_FILE), next, limit);
   });
 }

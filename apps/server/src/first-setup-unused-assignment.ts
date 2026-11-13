@@ -71,6 +71,7 @@ export async function firstSetupUnusedAssignment(
     let assignments = 0;
     let recoveryRecordDamaged = false;
     const names = new Set<string>();
+    const manifestModules = new Set<string>();
     for (const module of state.frozen.modules) {
       if (!Object.hasOwn(state.inputs, module.module) && module.request === null) continue;
       const installed = modules.find((entry) => entry.name === module.module);
@@ -87,7 +88,7 @@ export async function firstSetupUnusedAssignment(
       }
       const imported = seat.inspect(context, state.inputs[module.module]);
       if (seat.recoveryDocument !== undefined) {
-        names.add(module.module);
+        manifestModules.add(module.module);
         let manifest: ReturnType<typeof readFirstSetupRecoveryDeliverySnapshot>;
         try {
           manifest = readFirstSetupRecoveryDeliverySnapshot(
@@ -146,7 +147,7 @@ export async function firstSetupUnusedAssignment(
       assignments++;
     }
     return assignments > 0 &&
-      Object.keys(flow?.recoveryManifests ?? {}).every((module) => names.has(module)) &&
+      Object.keys(flow?.recoveryManifests ?? {}).every((module) => manifestModules.has(module)) &&
       originals.every(
         (original) =>
           !original.name.startsWith("state/flows/setup/documents/") ||

@@ -147,7 +147,13 @@ it.each(["missing", "corrupt", "replaced", "oversize"])(
       await updateSetupFlowSection(f.stateDir, "publicEvidence", () => data);
     }
     if (why === "oversize")
-      await updateSetupFlowSection(f.stateDir, "publicEvidence", () => " ".repeat(65537));
+      await writeFile(
+        f.path,
+        JSON.stringify({
+          ...(await readSetupFlowRecord(f.stateDir)),
+          publicEvidence: " ".repeat(65537),
+        }),
+      );
     await expect(f.evidence.read(f.context.binding)).rejects.toMatchObject({
       code: expect.stringMatching(/setup.attempt_invalid|sif.allocation_invalid/),
     });

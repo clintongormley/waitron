@@ -1,21 +1,36 @@
+import * as fs from "node:fs/promises";
+import { loadKeyRing } from "@waitron/credentials";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import {
+  createFiscalReadinessStore,
+  fiscalReadinessDatabaseKey,
+  stageConfigurationImport,
+  encodeConfigurationBundle,
+  updateSetupFlowSection,
+  writeDurableHostJson,
+  type FiscalReadinessInput,
+} from "@waitron/provisioning";
+import { configurationBundle } from "../../../packages/provisioning/test/configuration-bundle.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { clock, external } from "../test/hour-recovery-host.js";
 import { heldSetup } from "../test/held-setup-database.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { request } from "../test/first-fiscal.js";
-import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { emptyScratch } from "./scratch.js";
 
+vi.mock("node:fs/promises", { spy: true });
 const early = useVenueDb({ migrations: TEST_MIGRATIONS });
 const roots: string[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 it.each([
@@ -28,13 +43,25 @@ it.each([
   let host: ReturnType<typeof createFirstSetupModuleHost>;
   let folders: { stateDir: string; venueDir: string };
   if (status === "committed" || status === "publication") {
-    const held = await heldSetup();
+    let injected = false;
+    if (status === "publication") {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+      vi.spyOn(fs, "rename").mockImplementation(async (from, to) => {
+        if (
+          !injected &&
+          String(to).endsWith("/flows/setup/record.json") &&
+          JSON.parse(await actual.readFile(from, "utf8")).attempt?.status === "complete"
+        ) {
+          injected = true;
+          throw new Error("final setup record write interrupted");
+        }
+        return actual.rename(from, to);
+      });
+    }
+    const held = await heldSetup({ status, tradingSettings: status === "publication" });
     host = held.host;
     folders = held.roots;
-    if (status === "publication") {
-      const state = (await host.store.read())!;
-      await host.store.update(state.frozen.attemptId, state.revision, { kind: "publication" });
-    }
+    if (status === "publication") expect(injected).toBe(true);
   } else {
     const root = await mkdtemp(join(tmpdir(), "setup-stage-leftovers-"));
     roots.push(root);
@@ -74,6 +101,56 @@ it.each([
       }
     }
   }
+  const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 8).toString("base64") });
+  const readiness: FiscalReadinessInput = {
+    requirement: "accepted-test-submission",
+    fiscalModule: "fiscal-verifactu",
+    country: request.country,
+    taxId: request.taxId,
+    legalName: request.legalName,
+    fiscalTerritory: request.fiscalTerritory,
+    submissionTarget: "preproduction",
+    certificateFingerprint: null,
+    certificateKind: null,
+    moduleVersions: {},
+    applicationVersion: "test",
+  };
+  await createFiscalReadinessStore(
+    folders.stateDir,
+    async () => ({ status: "accepted" }),
+    ring.current.key,
+  ).run(readiness);
+  const readinessFolder = `fiscal-readiness-db-${fiscalReadinessDatabaseKey(readiness)}`;
+  await applyMigrations(
+    join(folders.stateDir, readinessFolder),
+    migrationOptionsFor(manifestSets(), null),
+  );
+  const readinessBefore = await readFile(join(folders.stateDir, readinessFolder, "venue.db"));
+  const passphrase = "synthetic import passphrase";
+  await stageConfigurationImport(
+    folders.stateDir,
+    ring,
+    encodeConfigurationBundle(configurationBundle(), passphrase),
+    passphrase,
+    async () => {},
+  );
+  await updateSetupFlowSection(folders.stateDir, "publicEvidence", () => ({
+    version: 1,
+    modules: {},
+    history: [],
+  }));
+  if (status === "committed" || status === "publication")
+    await writeDurableHostJson(
+      join(folders.stateDir, "flows/setup/documents/attachment.json"),
+      { data: "setup attachment" },
+      8192,
+    );
+  expect(await readFile(join(folders.stateDir, "flows/setup/readiness.json"))).toBeInstanceOf(
+    Buffer,
+  );
+  expect(await readFile(join(folders.stateDir, "flows/setup/import/artifact"))).toBeInstanceOf(
+    Buffer,
+  );
   expect((await host.store.read())?.status).toBe(status);
   const inspected = await host.resolution.inspectFirstSetupResolution();
   const ids = {
@@ -104,8 +181,15 @@ it.each([
     "tls",
     "venue",
   ];
-  expect((await readdir(folders.stateDir)).filter((name) => !allowed.includes(name))).toEqual([]);
+  expect(
+    (await readdir(folders.stateDir)).filter(
+      (name) => !allowed.includes(name) && name !== readinessFolder,
+    ),
+  ).toEqual([]);
   expect(await readdir(join(folders.stateDir, "flows"))).toEqual([]);
+  expect(await readFile(join(folders.stateDir, readinessFolder, "venue.db"))).toEqual(
+    readinessBefore,
+  );
   expect(
     await readdir(join(folders.stateDir, "scratch")).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return [];

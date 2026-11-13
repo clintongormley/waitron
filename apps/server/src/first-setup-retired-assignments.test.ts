@@ -176,7 +176,7 @@ async function fixture(
     history?: unknown;
     previousIndex?: number;
     document?: boolean;
-    damage?: "missing-original" | "syntax" | "binding" | "digest";
+    damage?: "missing-original" | "section-type" | "binding" | "digest";
     source?: "local" | "outside";
     outsideChange?: "replace" | "remove";
   },
@@ -233,8 +233,12 @@ async function fixture(
       JSON.stringify((await readSetupFlowRecord(anchor.stateDir))?.recoveryManifests?.[MODULE]),
     );
     if (retained.damage === "missing-original")
-      await updateSetupFlowSection(anchor.stateDir, "recoveryManifests", () => ({}));
-    if (retained.damage === "syntax")
+      await updateSetupFlowSection(anchor.stateDir, "recoveryManifests", (current) => {
+        const { [MODULE]: removed, ...remaining } = current!;
+        void removed;
+        return remaining;
+      });
+    if (retained.damage === "section-type")
       await updateSetupFlowSection(anchor.stateDir, "recoveryManifests", () => ({
         [MODULE]: "{damaged recovery document",
       }));
@@ -352,7 +356,7 @@ it("Start again starts an unused named replacement again in the same folders", a
   });
   await expectStartAgainDeleted(f.state);
 });
-it.each(["syntax", "binding", "digest"] as const)(
+it.each(["section-type", "binding", "digest"] as const)(
   "a damaged recovery document %s is treated as missing, and the summary says so",
   async (damage) => {
     const f = await fixture(43, request.taxId, "production", false, 42, { document: true, damage });
