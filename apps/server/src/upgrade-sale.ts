@@ -5,6 +5,8 @@ import {
   openVenueDatabase,
   withTransaction,
   persons,
+  staffRoles,
+  personStaffRoles,
   sales,
   readVenue,
   readVenueClock,
@@ -65,7 +67,14 @@ async function prepareSale(config: ServerConfig) {
         formFactor: "till",
         capabilities: ["take-orders", "take-cash"],
       });
-      await setProfileAdmission(tx, profile.id, { admittedRoles: ["admin"], personExceptions: [] });
+      const [staffRole] = await tx
+        .insert(staffRoles)
+        .values({ name })
+        .returning({ id: staffRoles.id });
+      await tx
+        .insert(personStaffRoles)
+        .values({ personId: person!.id, staffRoleId: staffRole!.id });
+      await setProfileAdmission(tx, profile.id, { admittedStaffRoleIds: [staffRole!.id] });
       const location = await readVenue(tx);
       const menu = await createCatalogue(tx, { name });
       const product = await createProduct(tx, {

@@ -714,7 +714,7 @@ describe("waitron.sh recovery owner", () => {
       const host = join(sb.root, "host");
       mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
       copyFileSync(HOST_NODE_STUB, join(host, "node-v26.7.0/bin/node"));
-      writeFileSync(join(sb.root, "units/waitron-app.service"), "installed owner");
+      writeFileSync(join(sb.root, "etc/systemd/system/waitron-app.service"), "installed owner");
       const result = run(sb, [verb]);
       expect(result.status).toBe(0);
       expect(loggedCalls(sb).some((line) => line.includes("restart waitron-app.service"))).toBe(
@@ -741,7 +741,7 @@ describe("waitron.sh recovery owner", () => {
     mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
     copyFileSync(HOST_NODE_STUB, join(host, "node-v26.7.0/bin/node"));
     mkdirSync(`${sb.boxDir}.upgrades/attempt`, { recursive: true });
-    writeFileSync(join(sb.root, "units/waitron-app.service"), "installed owner");
+    writeFileSync(join(sb.root, "etc/systemd/system/waitron-app.service"), "installed owner");
     const result = run(sb, [verb]);
     expect(result.status).toBe(0);
     expect(loggedCalls(sb)).toContain("systemctl --no-block restart waitron-app.service");
@@ -2877,7 +2877,7 @@ it.each([
 ])("refuses %j while another host operation owns the managed box", (...args) => {
   const sb = sandbox({ systemd: true });
   installedBox(sb);
-  writeFileSync(join(sb.root, "units/waitron-app.service"), "installed gate");
+  writeFileSync(join(sb.root, "etc/systemd/system/waitron-app.service"), "installed gate");
   const result = run(sb, args, { WT_UPGRADE_BUSY: "1" });
   expect(result.status).toBe(1);
   expect(result.stderr).toContain("another host operation");
