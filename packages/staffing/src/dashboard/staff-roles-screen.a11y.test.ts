@@ -46,6 +46,7 @@ async function screen(
   const el = document.createElement("dashboard-staff-roles-screen") as StaffRolesScreen;
   const request = vi.fn((path: string, method: string = "GET") => {
     if (method !== "GET") return options.write?.(path, method) ?? Promise.resolve(undefined);
+    if (path.endsWith("/empty-devices")) return Promise.resolve({ profiles: [] });
     return list();
   });
   el.api = new StaffingApi(request as unknown as DashboardRequest, options.liveData);

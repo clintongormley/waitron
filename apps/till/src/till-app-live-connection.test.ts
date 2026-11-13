@@ -28,6 +28,27 @@ afterEach(() => {
   setLocale(locale);
 });
 
+it.each(["staff_roles", "person_staff_roles"])(
+  "%s refreshes the lock-screen staff without reload",
+  async (type) => {
+    const stream = liveReadFixture();
+    const { el } = await mountApp({ readLiveEvents: stream.read });
+    await flush(el);
+    stream.event("ready");
+    await flush(el);
+    expect(lock(el)!.shadowRoot!.querySelector('[data-person="new-waiter"]')).toBeNull();
+    api.listStaff!.mockResolvedValue([{ personId: "new-waiter", displayName: "New waiter" }]);
+    // Deliver only a source the real stream was asked to send.
+    if (stream.reads.at(-1)!.types.includes(type))
+      stream.event("change", JSON.stringify([{ type }]));
+    await vi.waitFor(() =>
+      expect(
+        lock(el)!.shadowRoot!.querySelector('[data-person="new-waiter"]')?.textContent,
+      ).toContain("New waiter"),
+    );
+  },
+);
+
 it("the till quiets one-box probes on ready and resumes them when its device connection stops", async () => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   const stream = liveReadFixture();

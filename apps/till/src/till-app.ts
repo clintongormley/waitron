@@ -21993,6 +21993,7 @@ export class TillApp extends LitElement {
                         `${this.#lockLanguagePicks}:${this.#operatorSession}`,
                         html`<till-lock-screen
                           .api=${this.api}
+                          .live=${this.#live}
                           .deviceName=${this.deviceName}
                           .legalName=${this.issuer?.venueName ?? ""}
                           .deviceId=${this.deviceId}

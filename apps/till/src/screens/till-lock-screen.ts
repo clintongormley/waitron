@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   ThemeChoiceController,
@@ -19,6 +19,8 @@ import { themeChooser } from "../widgets/theme-chooser.js";
 import "../widgets/about-button.js";
 import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
 import { staffNoticeText } from "../i18n/staff-notices.js";
+import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
+import { queuedLiveRefresh } from "../state/live-gate.js";
 import type { ServerStatus } from "../api/server-router.js";
 
 /** Keyed by deviceId so two enrolled browsers at one venue remember their last operator independently. */
@@ -165,6 +167,8 @@ export class TillLockScreen extends LitElement {
   /** The HTTP face of the till. Set before the element connects (its lifecycle fetches the roster). */
   @property({ attribute: false }) api!: TillApi;
 
+  @property({ attribute: false }) live?: TillLiveConnection;
+
   @property() deviceName?: string;
 
   /** Names the venue's logo for a screen reader. */
@@ -198,13 +202,28 @@ export class TillLockScreen extends LitElement {
   readonly #venueLogo = new VenueLogoController(this);
   #throttleTimer?: ReturnType<typeof setInterval>;
   #connection = 0;
+  #staffLive?: { stop(): void };
 
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#loadStaff();
   }
 
+  override updated(changed: PropertyValues): void {
+    if (changed.has("live")) {
+      this.#staffLive?.stop();
+      this.#staffLive = undefined;
+    }
+    if (this.live && !this.#staffLive)
+      this.#staffLive = queuedLiveRefresh(this.live, {
+        types: TILL_LIVE_TYPES.signIn!,
+        run: () => this.#loadStaff(),
+      });
+  }
+
   override disconnectedCallback(): void {
+    this.#staffLive?.stop();
+    this.#staffLive = undefined;
     super.disconnectedCallback();
     this.#connection++;
     this.pin = "";
@@ -216,6 +235,7 @@ export class TillLockScreen extends LitElement {
   }
 
   async #loadStaff(): Promise<void> {
+    const initial = this.staff === undefined;
     const connection = this.#connection;
     try {
       const staff = await this.api.listStaff();
@@ -227,7 +247,7 @@ export class TillLockScreen extends LitElement {
       this.errorKey = "login.load_failed";
       return;
     }
-    this.#preselectRemembered();
+    if (initial) this.#preselectRemembered();
   }
 
   /** The read is wrapped because localStorage can throw in a private window. */

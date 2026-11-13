@@ -17,6 +17,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { expectChooserFaces, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
 import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
+import { liveConnectionFixture } from "../../test/live-connection.js";
 import type { ServerStatus } from "../api/server-router.js";
 
 const ana: StaffMember = { personId: "p1", displayName: "Ana" };
@@ -79,6 +80,29 @@ afterEach(() => {
 });
 
 describe("till-lock-screen", () => {
+  it("keeps the chosen operator and entered PIN when job membership refreshes", async () => {
+    localStorage.setItem("waitron.lastOperator.dev1", ana.personId);
+    const live = liveConnectionFixture();
+    const api = stubApi();
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api,
+      live: live.connection,
+      deviceId: "dev1",
+    });
+    await flush(el);
+    click(el, ".cancel");
+    await flush(el);
+    click(el, '[data-person="p2"]');
+    await flush(el);
+    await type(el, "12");
+    live.change("person_staff_roles");
+    await flush(el);
+    click(el, ".submit");
+    await flush(el);
+    expect(api.login).toHaveBeenCalledWith("p2", "12");
+    live.connection.stop();
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-lock-screen")).toBe(TillLockScreen);
   });

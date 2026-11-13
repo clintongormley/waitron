@@ -150,6 +150,8 @@ const en = {
   "staffing.role.delete_question":
     "{count} people hold this role. Deleting it removes it from them, from every device and from the staffing plan. Shifts that used it keep its name.",
   "staffing.role.delete_heading": "Delete staff role",
+  "staffing.role.empty_devices": "Deleting it leaves nobody able to sign in on: {profiles}.",
+  "staffing.role.retry": "Try again",
   "staffing.role.delete_error": "Could not delete the staff role: {reason}",
   "staffing.role.holders_none": "No people",
   "staffing.role.holders_other": "{count} people",
@@ -372,6 +374,8 @@ const es: Record<keyof typeof en, string> = {
   "staffing.role.delete_question":
     "{count} personas tienen este puesto. Al eliminarlo se quita de ellas, de todos los dispositivos y del plan de personal. Los turnos que lo usaron conservan su nombre.",
   "staffing.role.delete_heading": "Eliminar rol de personal",
+  "staffing.role.empty_devices": "Al eliminarlo nadie podrá iniciar sesión en: {profiles}.",
+  "staffing.role.retry": "Intentar de nuevo",
   "staffing.role.delete_error": "No se pudo eliminar el rol de personal: {reason}",
   "staffing.role.holders_none": "Nadie",
   "staffing.role.holders_other": "{count} personas",

@@ -1,5 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -112,6 +112,25 @@ async function answers(response: Response, status: number, body?: unknown) {
 const refusal = (code: string, params: Record<string, unknown>) => ({ error: { code, params } });
 
 describe("the staff-role routes", () => {
+  it("reads profiles left empty only with schedule.manage", async () => {
+    const r = await routed();
+    const role = await r.create("Team");
+    const [profile] = await withTransaction(suite.db, (tx) =>
+      seedDeviceProfiles(tx, { name: "Front till", formFactor: "till", admitted: [role.id] }),
+    );
+    const path = `/${role.id}/empty-devices`;
+    await answers(await r.send("GET", path, ""), 401);
+    await answers(
+      await r.send("GET", path, r.supervisor),
+      403,
+      refusal("authorization.not_permitted", { permission: "schedule.manage" }),
+    );
+    await answers(await r.send("GET", path, r.manager), 200, {
+      profiles: [{ id: profile!.id, name: "Front till" }],
+    });
+    await answers(await r.send("GET", `/${randomUUID()}/empty-devices`, r.manager), 404);
+  });
+
   it("sets per-person job roles only with schedule.manage and returns a stale-save refusal", async () => {
     const r = await routed();
     const role = await r.create("Waiter");

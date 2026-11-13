@@ -1,5 +1,6 @@
 import {
   deviceProfileAdmissionRoles,
+  deviceProfiles,
   insertInChunks,
   recordActivity,
   personStaffRoles,
@@ -137,6 +138,25 @@ export async function listStaffRolesWithHolderNames(tx: Transaction): Promise<Li
       holderNames: held.map((h) => h.name).sort(compare),
     };
   });
+}
+
+export async function profilesLeftEmptyBy(
+  tx: Transaction,
+  staffRoleId: string,
+): Promise<{ id: string; name: string }[]> {
+  await assertStaffRoleExists(tx, staffRoleId);
+  return tx
+    .select({ id: deviceProfiles.id, name: deviceProfiles.name })
+    .from(deviceProfiles)
+    .innerJoin(
+      deviceProfileAdmissionRoles,
+      eq(deviceProfileAdmissionRoles.deviceProfileId, deviceProfiles.id),
+    )
+    .innerJoin(staffRoles, eq(staffRoles.id, deviceProfileAdmissionRoles.staffRoleId))
+    .where(and(isNull(deviceProfiles.retiredAt), isNull(staffRoles.hiddenAt)))
+    .groupBy(deviceProfiles.id, deviceProfiles.name)
+    .having(sql`count(*) = 1 and min(${staffRoles.id}) = ${staffRoleId}`)
+    .orderBy(asc(deviceProfiles.name));
 }
 
 export async function createStarterStaffRole(tx: Transaction, name: string): Promise<string> {
