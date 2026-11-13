@@ -236,57 +236,57 @@ async function seedDrawerOpen(
 
 // Each refund's id sorts opposite to its time, so a list ordered by id alone comes out reversed.
 async function seedActions(db: Database, at: Place): Promise<void> {
-  const martaVoided = await seedSale(db, at, {
+  const marthaVoided = await seedSale(db, at, {
     code: "TA",
     number: 7,
     total: 1234,
     method: "cash",
   });
-  const martaCash = await seedSale(db, at, { code: "TB", number: 31, total: 5678, method: "cash" });
-  const martaCard = await seedSale(db, at, { code: "TA", number: 9, total: 4321, method: "card" });
-  const luisVoided = await seedSale(db, at, { code: "TA", number: 8, total: 9876, method: "cash" });
-  const luisRefunded = await seedSale(db, at, {
+  const marthaCash = await seedSale(db, at, { code: "TB", number: 31, total: 5678, method: "cash" });
+  const marthaCard = await seedSale(db, at, { code: "TA", number: 9, total: 4321, method: "card" });
+  const lewisVoided = await seedSale(db, at, { code: "TA", number: 8, total: 9876, method: "cash" });
+  const lewisRefunded = await seedSale(db, at, {
     code: "TB",
     number: 32,
     total: 6543,
     method: "cash",
   });
-  const martaVoidedEarlier = await seedSale(db, at, {
+  const marthaVoidedEarlier = await seedSale(db, at, {
     code: "TA",
     number: 11,
     total: 2468,
     method: "cash",
   });
-  const martaAuthorized = await seedSale(db, at, {
+  const marthaAuthorized = await seedSale(db, at, {
     code: "TB",
     number: 33,
     total: 8642,
     method: "cash",
   });
-  const martaAttested = await seedSale(db, at, {
+  const marthaAttested = await seedSale(db, at, {
     code: "TA",
     number: 10,
     total: 7531,
     method: "card",
   });
-  const luisAttested = await seedSale(db, at, {
+  const lewisAttested = await seedSale(db, at, {
     code: "TB",
     number: 34,
     total: 9753,
     method: "card",
   });
 
-  await seedVoid(db, martaVoided.saleId, {
+  await seedVoid(db, marthaVoided.saleId, {
     id: "00000000-0000-4000-8000-00000000f001",
     voidedBy: MARTHA,
     voidedAt: "2026-10-20T09:15:00.000Z",
   });
-  await seedVoid(db, luisVoided.saleId, {
+  await seedVoid(db, lewisVoided.saleId, {
     id: "00000000-0000-4000-8000-00000000f002",
     voidedBy: LEWIS,
     voidedAt: "2026-10-20T09:20:00.000Z",
   });
-  await seedTenderRefund(db, at, martaCard, {
+  await seedTenderRefund(db, at, marthaCard, {
     id: "00000000-0000-4000-8000-00000000a001",
     appliedAmount: 1111,
     tipAmount: 0,
@@ -296,7 +296,7 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     state: "pending",
     createdAt: "2026-10-20T11:45:00.000Z",
   });
-  await seedTenderRefund(db, at, martaCash, {
+  await seedTenderRefund(db, at, marthaCash, {
     id: "00000000-0000-4000-8000-00000000a002",
     appliedAmount: 2345,
     tipAmount: 150,
@@ -306,7 +306,7 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     state: "completed",
     createdAt: "2026-10-20T10:30:00.000Z",
   });
-  await seedTenderRefund(db, at, luisRefunded, {
+  await seedTenderRefund(db, at, lewisRefunded, {
     id: "00000000-0000-4000-8000-00000000a003",
     appliedAmount: 3456,
     tipAmount: 25,
@@ -317,12 +317,12 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     createdAt: "2026-10-20T10:40:00.000Z",
   });
   // Dated before her first void but given a later id, so the voids too must be sorted by time.
-  await seedVoid(db, martaVoidedEarlier.saleId, {
+  await seedVoid(db, marthaVoidedEarlier.saleId, {
     id: "00000000-0000-4000-8000-00000000f003",
     voidedBy: MARTHA,
     voidedAt: "2026-10-20T09:05:00.000Z",
   });
-  await seedTenderRefund(db, at, martaAuthorized, {
+  await seedTenderRefund(db, at, marthaAuthorized, {
     id: "00000000-0000-4000-8000-00000000a005",
     appliedAmount: 3210,
     tipAmount: 45,
@@ -332,7 +332,7 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     state: "completed",
     createdAt: "2026-10-20T10:50:00.000Z",
   });
-  await seedTenderRefund(db, at, martaAttested, {
+  await seedTenderRefund(db, at, marthaAttested, {
     id: "00000000-0000-4000-8000-00000000a004",
     appliedAmount: 5432,
     tipAmount: 99,
@@ -344,7 +344,7 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     state: "completed",
     createdAt: "2026-10-20T11:10:00.000Z",
   });
-  await seedTenderRefund(db, at, luisAttested, {
+  await seedTenderRefund(db, at, lewisAttested, {
     id: "00000000-0000-4000-8000-00000000a006",
     appliedAmount: 6789,
     tipAmount: 12,
@@ -357,35 +357,35 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     createdAt: "2026-10-20T11:20:00.000Z",
   });
 
-  const martaInvoicedCard = await seedBillPayment(db, at, { method: "card", applied: 6000 });
+  const marthaInvoicedCard = await seedBillPayment(db, at, { method: "card", applied: 6000 });
   await seedSale(db, at, {
     code: "TB",
     number: 41,
     total: 6000,
     method: "card",
-    workingOrderId: martaInvoicedCard.workingOrderId,
+    workingOrderId: marthaInvoicedCard.workingOrderId,
   });
-  const martaOpenBill = await seedBillPayment(db, at, { method: "cash", applied: 2000 });
-  const luisBill = await seedBillPayment(db, at, { method: "cash", applied: 9000 });
+  const marthaOpenBill = await seedBillPayment(db, at, { method: "cash", applied: 2000 });
+  const lewisBill = await seedBillPayment(db, at, { method: "cash", applied: 9000 });
   await seedSale(db, at, {
     code: "TB",
     number: 42,
     total: 9000,
     method: "cash",
-    workingOrderId: luisBill.workingOrderId,
+    workingOrderId: lewisBill.workingOrderId,
   });
-  const martaInvoicedCash = await seedBillPayment(db, at, { method: "cash", applied: 3000 });
+  const marthaInvoicedCash = await seedBillPayment(db, at, { method: "cash", applied: 3000 });
   await seedSale(db, at, {
     code: "TA",
     number: 44,
     total: 3000,
     method: "cash",
-    workingOrderId: martaInvoicedCash.workingOrderId,
+    workingOrderId: marthaInvoicedCash.workingOrderId,
   });
 
   // Dated between her tender refunds of 10:30 and 11:45, so the refunds must be merged by time; it
   // shares its time with her 11:10 tender refund and has the higher id.
-  await seedBillRefund(db, at, martaInvoicedCard.billPaymentId, {
+  await seedBillRefund(db, at, marthaInvoicedCard.billPaymentId, {
     id: "00000000-0000-4000-8000-00000000b001",
     appliedAmount: 4567,
     tipAmount: 89,
@@ -395,7 +395,7 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     createdAt: "2026-10-20T11:10:00.000Z",
   });
   // Shares its time with her 10:30 tender refund and has the lower id, so a tie is broken by id.
-  await seedBillRefund(db, at, martaOpenBill.billPaymentId, {
+  await seedBillRefund(db, at, marthaOpenBill.billPaymentId, {
     id: "00000000-0000-4000-8000-000000009002",
     appliedAmount: 1357,
     tipAmount: 20,
@@ -403,7 +403,7 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     authorizedBy: LEWIS,
     createdAt: "2026-10-20T10:30:00.000Z",
   });
-  await seedBillRefund(db, at, luisBill.billPaymentId, {
+  await seedBillRefund(db, at, lewisBill.billPaymentId, {
     id: "00000000-0000-4000-8000-000000009003",
     appliedAmount: 8765,
     tipAmount: 55,
@@ -432,7 +432,7 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     id: "00000000-0000-4000-8000-00000000d003",
     reason: "card_slip",
     personId: MARTHA,
-    billPaymentId: martaInvoicedCard.billPaymentId,
+    billPaymentId: marthaInvoicedCard.billPaymentId,
     openedAt: "2026-10-20T09:40:00.000Z",
   });
   await seedDrawerOpen(db, at, {
@@ -440,7 +440,7 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     reason: "tender_refund",
     personId: MARTHA,
     authorizedBy: LEWIS,
-    saleId: martaCash.saleId,
+    saleId: marthaCash.saleId,
     tenderRefundId: "00000000-0000-4000-8000-00000000a002",
     openedAt: "2026-10-20T10:31:00.000Z",
   });
@@ -448,31 +448,31 @@ async function seedActions(db: Database, at: Place): Promise<void> {
     id: "00000000-0000-4000-8000-00000000d005",
     reason: "bill_payment",
     personId: MARTHA,
-    billPaymentId: martaInvoicedCash.billPaymentId,
+    billPaymentId: marthaInvoicedCash.billPaymentId,
     openedAt: "2026-10-20T08:40:00.000Z",
   });
   await seedDrawerOpen(db, at, {
     id: "00000000-0000-4000-8000-00000000d006",
     reason: "cash_sale",
     personId: MARTHA,
-    saleId: martaCash.saleId,
+    saleId: marthaCash.saleId,
     openedAt: "2026-10-20T08:30:00.000Z",
   });
   await seedDrawerOpen(db, at, {
     id: "00000000-0000-4000-8000-00000000d007",
     reason: "cash_sale",
     personId: LEWIS,
-    saleId: luisRefunded.saleId,
+    saleId: lewisRefunded.saleId,
     openedAt: "2026-10-20T12:15:00.000Z",
   });
 }
 
-// The distinct sales Marta's rows name (voids TA/11 and TA/7; tender refunds TB/31, TB/33, TA/10 and
+// The distinct sales Martha's rows name (voids TA/11 and TA/7; tender refunds TB/31, TB/33, TA/10 and
 // TA/9; her cash-sale and tender-refund openings name TB/31 again), and the distinct bill payments
 // (her two bill refunds' payments; her card-slip opening names the first again; her bill-payment
 // opening names a third).
-const MARTA_SALE_IDS = 6;
-const MARTA_BILL_PAYMENT_IDS = 3;
+const MARTHA_SALE_IDS = 6;
+const MARTHA_BILL_PAYMENT_IDS = 3;
 
 function subject(personId: string): PersonalDataSubject {
   return {
@@ -730,7 +730,7 @@ describe("actionsPersonalData", () => {
     try {
       const files = await build();
       expect(lock.mock.calls.length).toBe(
-        2 + Math.ceil(MARTA_SALE_IDS / 2) + Math.ceil(MARTA_BILL_PAYMENT_IDS / 2),
+        2 + Math.ceil(MARTHA_SALE_IDS / 2) + Math.ceil(MARTHA_BILL_PAYMENT_IDS / 2),
       );
       expect(files.map((f) => f.name)).toEqual(["actions.json"]);
       expect(files[0]!.content).toBe(expected[0]!.content);
@@ -745,7 +745,7 @@ describe("actionsPersonalData", () => {
     const lock = vi.spyOn(suite.db, "withWriteLock");
     try {
       await build();
-      expect(lock.mock.calls.length).toBe(2 + MARTA_SALE_IDS + MARTA_BILL_PAYMENT_IDS);
+      expect(lock.mock.calls.length).toBe(2 + MARTHA_SALE_IDS + MARTHA_BILL_PAYMENT_IDS);
     } finally {
       lock.mockRestore();
     }

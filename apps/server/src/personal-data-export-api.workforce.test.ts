@@ -61,7 +61,7 @@ const SESSION_OPENED_AT = "2026-06-01T10:19:19.993Z";
 const FIRST_DAY = "2026-03-03";
 /** The day after the venue's date, which is later than her last entry. */
 const BEFORE = "2026-06-02";
-const MARTA_CLAIM_TOKEN = "holder-7:3f9c2b1e-claim-token";
+const MARTHA_CLAIM_TOKEN = "holder-7:3f9c2b1e-claim-token";
 const MODULE_JSON = [
   "employment.json",
   "rota.json",
@@ -300,7 +300,7 @@ beforeEach(async () => {
       publishedAt: "2026-02-05T10:00:00.000Z",
     })
     .returning({ id: rosterVersions.id });
-  const [martaShift, colleagueShift] = await suite.db
+  const [marthaShift, colleagueShift] = await suite.db
     .insert(shifts)
     .values([
       {
@@ -348,7 +348,7 @@ beforeEach(async () => {
   await suite.db.insert(shiftSwaps).values([
     {
       requestedByPersonId: marthaId,
-      fromShiftId: martaShift!.id,
+      fromShiftId: marthaShift!.id,
       toPersonId: colleagueId,
       toShiftId: colleagueShift!.id,
       status: "approved",
@@ -365,11 +365,11 @@ beforeEach(async () => {
     },
   ]);
 
-  const martaQuestion = "00000000-0000-4000-8000-0000000000a1";
+  const marthaQuestion = "00000000-0000-4000-8000-0000000000a1";
   const colleagueQuestion = "00000000-0000-4000-8000-0000000000c1";
   await suite.db.insert(attendanceQuestions).values([
     {
-      id: martaQuestion,
+      id: marthaQuestion,
       personId: marthaId,
       businessDay: "2026-04-18",
       startAt: "2026-04-18T04:00:00.000Z",
@@ -395,10 +395,10 @@ beforeEach(async () => {
   ]);
   for (const row of [
     {
-      questionId: martaQuestion,
+      questionId: marthaQuestion,
       personId: marthaId,
       status: "sent",
-      claimToken: MARTA_CLAIM_TOKEN,
+      claimToken: MARTHA_CLAIM_TOKEN,
       claimedAt: "2026-04-19T04:01:00.000Z",
       nextAttemptAt: "2026-04-19T04:00:00.000Z",
       recipient: "marta.reminders@example.test",
@@ -434,11 +434,11 @@ beforeEach(async () => {
     id: "00000000-0000-4000-8000-0000000000b1",
     by: marthaId,
     personId: marthaId,
-    questionId: martaQuestion,
+    questionId: marthaQuestion,
     action: "request",
     input: {
       action: "request",
-      questionId: martaQuestion,
+      questionId: marthaQuestion,
       changes: [
         { target: { missingKind: "in" }, at: "2026-04-18T15:58:00.000Z", offsetMinutes: 120 },
       ],
@@ -523,7 +523,7 @@ beforeEach(async () => {
       sql`insert into person_staff_roles (person_id, staff_role_id) values (${personId}, ${roleId})`,
     );
   for (const [shiftId, departmentId, roleId] of [
-    [martaShift!.id, rooftop!.id, barback],
+    [marthaShift!.id, rooftop!.id, barback],
     [colleagueShift!.id, cellar!.id, sommelier],
   ] as const)
     await suite.db.run(
@@ -868,7 +868,7 @@ describe("a staff member's whole personal-data download", () => {
       .select({ hash: timeEntries.entryHash })
       .from(timeEntries)
       .where(eq(timeEntries.personId, marthaId));
-    const secrets = [pin!.hash!, session!.hash, MARTA_CLAIM_TOKEN, entry!.hash];
+    const secrets = [pin!.hash!, session!.hash, MARTHA_CLAIM_TOKEN, entry!.hash];
     const text = await readable(await download());
     const found = Object.entries(text).flatMap(([file, content]) =>
       secrets.filter((secret) => content.includes(secret)).map((secret) => [file, secret]),
