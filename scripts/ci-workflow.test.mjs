@@ -5756,6 +5756,9 @@ function artifactDownloadInputs(step) {
   return match ? { pattern: match[1], path: match[2], expected: Number(match[3]) } : {};
 }
 
+const failureIsFatal = (step) =>
+  step?.continueOnError === undefined || step.continueOnError === "false";
+
 function downloadAttempts(text) {
   const bounded = (step) => /^[12]$/.test(step?.timeoutMinutes ?? "");
   const sameInputs = (a, b) =>
@@ -5781,13 +5784,13 @@ function downloadAttempts(text) {
         !path.split("/").includes("..") &&
         clear?.if === failed &&
         clear.timeoutMinutes === "1" &&
-        clear.continueOnError !== "true" &&
+        failureIsFatal(clear) &&
         clear.command.trim() === `rm -rf -- "${path}"` &&
         isArtifactDownload(second) &&
         second?.uses === first.uses &&
         second.if === failed &&
         bounded(second) &&
-        second.continueOnError !== "true" &&
+        failureIsFatal(second) &&
         sameInputs(inputs, artifactDownloadInputs(second)) &&
         sameInputs(first.env, second.env);
       attempts.push({ job, bounded: Boolean(valid) });
@@ -5838,6 +5841,32 @@ describe("the workflows' artifact downloads", () => {
         / {8}with:\n(?: {10}.*\n)+/,
         "        env:\n          GH_TOKEN: ${{ github.token }}\n",
       );
+
+  for (const [kind, convert] of [
+    ["action", (step) => step],
+    ["helper", helper],
+  ]) {
+    it(`accepts literal false tolerance on ${kind} cleanup and retry`, () => {
+      const explicit = (step) =>
+        step.replace("        if:", "        continue-on-error: false\n        if:");
+      expect(
+        downloadAttempts(workflow(convert(first) + explicit(clear) + explicit(convert(second)))),
+      ).toEqual([{ job: "a", bounded: true }]);
+    });
+    it.each(["true", "${{ true }}", "${{ false }}", "unsupported"])(
+      `refuses %s tolerance on ${kind} cleanup or retry`,
+      (value) => {
+        const tolerate = (step) =>
+          step.replace("        if:", `        continue-on-error: ${value}\n        if:`);
+        for (const steps of [
+          convert(first) + tolerate(clear) + convert(second),
+          convert(first) + clear + tolerate(convert(second)),
+        ]) {
+          expect(downloadAttempts(workflow(steps))).toEqual([{ job: "a", bounded: false }]);
+        }
+      },
+    );
+  }
 
   it("accepts the authenticated coverage helper with the same bounds and cleanup", () => {
     expect(downloadAttempts(workflow(helper(first) + clear + helper(second)))).toEqual([
@@ -6043,7 +6072,6 @@ describe("the workflows' artifact downloads", () => {
 function uploadAttempts(text) {
   const isUpload = (step) => step?.uses?.startsWith("actions/upload-artifact@") ?? false;
   const bounded = (step) => /^[12]$/.test(step?.timeoutMinutes ?? "");
-  const strict = (step) => step?.continueOnError === undefined || step.continueOnError === "false";
   const inputsWithoutOverwrite = (inputs) =>
     JSON.stringify(
       Object.entries(inputs)
@@ -6070,7 +6098,7 @@ function uploadAttempts(text) {
         second?.uses === first.uses &&
         second.if === failed &&
         bounded(second) &&
-        strict(second) &&
+        failureIsFatal(second) &&
         second.with.overwrite === "true" &&
         inputsWithoutOverwrite(first.with) === inputsWithoutOverwrite(second.with);
       attempts.push({ job, bounded: Boolean(valid) });

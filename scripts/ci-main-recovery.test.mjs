@@ -80,18 +80,25 @@ git("fetch", "origin", "main");
 symlinkSync(join(root, "scripts"), join(fixture, "scripts"));
 const bin = join(temporary, "bin");
 mkdirSync(bin);
-const realTimeout = spawnSync("bash", ["-c", "command -v gtimeout || command -v timeout"], {
-  env,
-  encoding: "utf8",
-}).stdout.trim();
+const realTimeout = spawnSync(
+  "bash",
+  ["-c", "command -v gnutimeout || command -v gtimeout || command -v timeout"],
+  {
+    env,
+    encoding: "utf8",
+  },
+).stdout.trim();
 const realGit = spawnSync("bash", ["-c", "command -v git"], {
   env,
   encoding: "utf8",
 }).stdout.trim();
 for (const [name, source] of Object.entries({
-  gtimeout: '#!/usr/bin/env bash\nexec "$WT_REAL_TIMEOUT" "$@"\n',
+  gnutimeout:
+    '#!/usr/bin/env bash\nprintf "%s\\n" gnutimeout "$@" >> "${WT_TIMEOUT_ARGS:-/dev/null}"\nexec "$WT_REAL_TIMEOUT" "$@"\n',
+  gtimeout:
+    '#!/usr/bin/env bash\nprintf "%s\\n" gtimeout "$@" >> "${WT_TIMEOUT_ARGS:-/dev/null}"\nexec "$WT_REAL_TIMEOUT" "$@"\n',
   timeout:
-    '#!/usr/bin/env bash\n[ "$WT_GTIMEOUT_ONLY" != true ] || exit 127\nexec "$WT_REAL_TIMEOUT" "$@"\n',
+    '#!/usr/bin/env bash\nprintf "%s\\n" timeout "$@" >> "${WT_TIMEOUT_ARGS:-/dev/null}"\nexec "$WT_REAL_TIMEOUT" "$@"\n',
   git: '#!/usr/bin/env bash\nif [ "$WT_DIFF_FAIL" = true ] && [ "$1" = diff ]; then printf "docs/note.md\\n"; exit 1; fi\nexec "$WT_REAL_GIT" "$@"\n',
 })) {
   writeFileSync(join(bin, name), source);
@@ -106,6 +113,24 @@ printf "%s" "$WT_RUNS" | jq --arg endpoint "$2" 'if ($endpoint | contains("statu
 `,
 );
 chmodSync(join(bin, "gh"), 0o755);
+const timeoutBins = {};
+const utilities = ["bash", "node", "jq", "sed", "grep", "pnpm", "env"].map((name) => {
+  const result = spawnSync("bash", ["-c", "command -v " + name], { env, encoding: "utf8" });
+  expect(result.status).toBe(0);
+  return [name, result.stdout.trim()];
+});
+for (const [mode, names] of Object.entries({
+  gnutimeout: ["gnutimeout", "gtimeout", "timeout"],
+  gtimeout: ["gtimeout", "timeout"],
+  timeout: ["timeout"],
+  none: [],
+})) {
+  const directory = join(temporary, "tools-" + mode);
+  mkdirSync(directory);
+  for (const [name, path] of utilities) symlinkSync(path, join(directory, name));
+  for (const name of ["git", "gh", ...names]) symlinkSync(join(bin, name), join(directory, name));
+  timeoutBins[mode] = directory;
+}
 
 const workflow = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
 const classify = workflow
@@ -135,19 +160,21 @@ function classifyRun({
   before = codeHead,
   runs = [successful(baseline)],
   status = 0,
-  gtimeoutOnly = false,
+  timeoutTool = "gnutimeout",
   diffFail = false,
   expectedStatus = 0,
 } = {}) {
   const output = join(temporary, `output-${serial++}`);
   const args = `${output}.args`;
+  const timeoutArgs = `${output}.timeout`;
   writeFileSync(output, "");
   writeFileSync(args, "");
+  writeFileSync(timeoutArgs, "");
   const result = spawnSync("bash", ["-c", classify], {
     cwd: fixture,
     env: {
       ...env,
-      PATH: `${bin}:${env.PATH}`,
+      PATH: timeoutBins[timeoutTool],
       EVENT: event,
       REF: ref,
       SHA: sha,
@@ -163,7 +190,7 @@ function classifyRun({
       WT_RUNS: JSON.stringify({ workflow_runs: runs }),
       WT_REAL_TIMEOUT: realTimeout,
       WT_REAL_GIT: realGit,
-      WT_GTIMEOUT_ONLY: String(gtimeoutOnly),
+      WT_TIMEOUT_ARGS: timeoutArgs,
       WT_DIFF_FAIL: String(diffFail),
     },
     encoding: "utf8",
@@ -178,6 +205,7 @@ function classifyRun({
         .map((line) => line.split("=")),
     ),
     args: readFileSync(args, "utf8"),
+    timeoutArgs: readFileSync(timeoutArgs, "utf8").trim().split("\n"),
     stderr: result.stderr,
   };
 }
@@ -277,8 +305,22 @@ describe("main CI recovery", () => {
       });
     },
   );
+  it.each(["gnutimeout", "gtimeout", "timeout"])(
+    "uses %s with the bounded API command when available first",
+    (timeoutTool) => {
+      const result = classifyRun({ timeoutTool, runs: [successful(codeHead)] });
+      expect(result.values.code).toBe("false");
+      expect(result.timeoutArgs.slice(0, 6)).toEqual([timeoutTool, "-k", "5", "30", "gh", "api"]);
+    },
+  );
+  it("keeps global change scope when no timeout command is available", () => {
+    const result = classifyRun({ timeoutTool: "none" });
+    expect(result.values).toMatchObject({ code: "true", scope: "global", packages: "" });
+    expect(result.stderr).toContain("no timeout command");
+    expect(result.args).toBe("");
+  });
   it("can read the baseline when coreutils exposes only gtimeout", () => {
-    expect(classifyRun({ gtimeoutOnly: true, runs: [successful(codeHead)] }).values.code).toBe(
+    expect(classifyRun({ timeoutTool: "gtimeout", runs: [successful(codeHead)] }).values.code).toBe(
       "false",
     );
   });
