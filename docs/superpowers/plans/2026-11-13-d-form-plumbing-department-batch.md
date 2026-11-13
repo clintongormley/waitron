@@ -1,7 +1,7 @@
 # Lane D: department and zone form plumbing
 
 Scope proposed on 13 November 2026; Claude approach read completed (282 seconds),
-all six findings applied below; watcher clearance is pending.
+all six findings applied below; the watcher cleared the plan and build at 05:48 on13 November2026 (Lane D questions.md).
 The separate plan author inspected sources only; no runtime verification or owner approval is claimed.
 
 **Queue ask, verbatim**, `/Users/clintongormley/waitron-campaign-d/queue.md`, D-form-plumbing:
