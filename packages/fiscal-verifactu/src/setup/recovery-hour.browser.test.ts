@@ -1540,7 +1540,7 @@ it("names the box's own clock reading «Servidor» in Spanish, apart from a till
   const labels = [...el.shadowRoot!.querySelectorAll("[data-test=clock-times] dt")].map((dt) =>
     dt.textContent!.trim(),
   );
-  expect(labels).toEqual(["Hora del servidor", "Este dispositivo", "Internet"]);
+  expect(labels).toEqual(["Hora del servidor", "Este dispositivo"]);
 });
 
 const observationKey = 'waitron.invoiceEvidence.v1:["B12345674","production","A-0CNNY"]';
@@ -2302,7 +2302,6 @@ it("clocks that differ show one time per clock and ask which is correct; The ser
     expect(detailRows(el, "clock-times")).toEqual([
       ["Server time", "18 October 2026 at 14:30"],
       ["This device", "Unavailable"],
-      ["Internet", "18 October 2026 at 14:33"],
     ]);
     expect(text(el)).not.toMatch(/ask for help/);
     const sent = prepare.mock.calls.length;

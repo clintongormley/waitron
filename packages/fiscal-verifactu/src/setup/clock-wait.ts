@@ -25,7 +25,6 @@ export interface ClockWords {
   correctDevice: string;
   serverTime: string;
   thisDevice: string;
-  internetTime: string;
   unavailable: string;
   later: string;
   inUse: string;
@@ -40,7 +39,7 @@ export interface ClockWords {
   laterAfterSet: string;
 }
 
-type ClockRowWords = Pick<ClockWords, "serverTime" | "thisDevice" | "internetTime" | "unavailable">;
+type ClockRowWords = Pick<ClockWords, "serverTime" | "thisDevice" | "unavailable">;
 
 export interface ClockComparison {
   id: string;
@@ -69,7 +68,6 @@ export const clockWaitStrings = {
     correctDevice: "Please correct the time on this device and then reconnect to the server.",
     serverTime: "Server time",
     thisDevice: "This device",
-    internetTime: "Internet",
     unavailable: "Unavailable",
     later:
       "The invoice series cannot be created yet: this box's clock is earlier than a time it has already used for invoice series.",
@@ -104,7 +102,6 @@ export const clockWaitStrings = {
     correctDevice: "Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
     serverTime: "Hora del servidor",
     thisDevice: "Este dispositivo",
-    internetTime: "Internet",
     unavailable: "No disponible",
     later:
       "Todavía no se pueden crear las series de facturas: la hora de este servidor es anterior a una hora que ya usó para series de facturas.",
@@ -515,9 +512,8 @@ function onlyThisDeviceDiffers(clock: HourClockDecision | undefined): boolean {
 }
 
 /**
- * The clock step's rows: the server's time, this device's, and the internet's when it was read. The
- * box refuses clocks more than 30 seconds apart, so when another clock reads the server's minute the
- * rows show seconds too.
+ * The clock step's rows: the server's time and this device's. The box refuses clocks more than 30
+ * seconds apart, so when another clock reads the server's minute the rows show seconds too.
  */
 export function renderClockRows(
   clock: HourClockDecision,
@@ -535,11 +531,7 @@ export function renderClockRows(
     const reading = clock.usable.find((r) => r.source === source);
     return reading ? format.format(middle(reading)) : words.unavailable;
   };
-  return html`${detailRow(words.serverTime, at("box"))}${detailRow(words.thisDevice, at("browser"))}${
-    clock.usable.some((r) => r.source === "internet")
-      ? detailRow(words.internetTime, at("internet"))
-      : nothing
-  }`;
+  return html`${detailRow(words.serverTime, at("box"))}${detailRow(words.thisDevice, at("browser"))}`;
 }
 
 function renderWait(words: ClockWords, countdown: WaitCountdown, minuteTaken: boolean) {

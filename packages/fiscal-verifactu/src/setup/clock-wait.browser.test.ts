@@ -426,7 +426,7 @@ describe("the two times the clock step shows", () => {
   };
   const minuteStart = Date.parse("2026-10-18T12:30:00Z");
 
-  it("names the server's time and this device's, each one time to the minute, and no internet row without an internet reading", () => {
+  it("names the server's time and this device's, each one time to the minute", () => {
     const target = draw([reading("box", at), reading("browser", at + 5 * 60_000)]);
     expect(rows(target)).toEqual([
       ["Server time", "18 October 2026 at 14:30"],
@@ -434,7 +434,6 @@ describe("the two times the clock step shows", () => {
     ]);
     expect(text(target)).not.toContain(" – ");
     expect(text(target)).not.toContain("Z");
-    expect(text(target)).not.toContain("Internet");
   });
 
   it("clocks that differ within one minute show their seconds, so the difference is visible", () => {
@@ -448,7 +447,7 @@ describe("the two times the clock step shows", () => {
     ]);
   });
 
-  it("shows the seconds in Spanish too, with the internet's row when it has a reading", () => {
+  it("shows the seconds in Spanish too, and draws no row for an internet reading", () => {
     const target = draw(
       [reading("box", minuteStart + 400), reading("internet", minuteStart + 45_000)],
       "es",
@@ -456,7 +455,6 @@ describe("the two times the clock step shows", () => {
     expect(rows(target)).toEqual([
       ["Hora del servidor", "18 de octubre de 2026 a las 14:30:00"],
       ["Este dispositivo", "No disponible"],
-      ["Internet", "18 de octubre de 2026 a las 14:30:45"],
     ]);
   });
 
@@ -469,7 +467,6 @@ describe("the two times the clock step shows", () => {
     expect(rows(target)).toEqual([
       ["Server time", "18 October 2026 at 14:30"],
       ["This device", "18 October 2026 at 14:32"],
-      ["Internet", "18 October 2026 at 14:32"],
     ]);
   });
 

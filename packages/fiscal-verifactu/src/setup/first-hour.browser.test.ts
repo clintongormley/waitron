@@ -1918,7 +1918,7 @@ it("names the box's own clock reading «Servidor» in Spanish, apart from a till
   const labels = [...el.shadowRoot!.querySelectorAll("[data-test=clock-times] dt")].map((dt) =>
     dt.textContent!.trim(),
   );
-  expect(labels).toEqual(["Hora del servidor", "Este dispositivo", "Internet"]);
+  expect(labels).toEqual(["Hora del servidor", "Este dispositivo"]);
   expect(series).toBe(
     "Cuando pulses Continuar, Waitron creará las series de facturas de este servidor. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
   );
