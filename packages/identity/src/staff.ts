@@ -205,7 +205,7 @@ async function deleteSignInRows(tx: Transaction, personId: string): Promise<void
 /**
  * The last-admin refusal counts the active admins and then writes. The count still holds at the
  * write only because a caller inside `withTransaction` holds the venue's write lock; the same goes
- * for {@link deactivatePerson} and {@link resetPersonLogin}. The pattern is stated once, with its
+ * for {@link resetPersonLogin}. The pattern is stated once, with its
  * measurement and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
  */
 export async function updatePersonDetails(
@@ -269,7 +269,7 @@ export async function updatePersonDetails(
   if (
     personRole === "admin" &&
     person.status === "active" &&
-    (input.role !== "admin" || input.status !== "active") &&
+    input.role !== "admin" &&
     activeAdmins.length === 1
   ) {
     throw new AppError("person.last_admin", {});
@@ -312,7 +312,6 @@ export async function deactivatePerson(
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  const activeAdmins = await listAdminHolders(tx, { status: "active" });
   const [person] = await tx
     .select({ id: persons.id, status: persons.status })
     .from(persons)
@@ -323,10 +322,6 @@ export async function deactivatePerson(
   }
   requireAdminAuthority(authority);
   assertActorCovers(authority, await readPersonAuthority(tx, person.id));
-  const personRole = await heldBuiltInKey(tx, person.id);
-  if (personRole === "admin" && person.status === "active" && activeAdmins.length === 1) {
-    throw new AppError("person.last_admin", {});
-  }
   const alreadySuspended = person.status === "suspended";
   await tx
     .update(persons)

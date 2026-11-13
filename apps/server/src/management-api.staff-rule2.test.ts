@@ -78,6 +78,12 @@ async function fixture(
       .returning();
     await suite.db.insert(personRoles).values({ personId: target!.id, roleId: accountant!.id });
   }
+  if (targetKind === "admin")
+    await seedPersons(suite.db, {
+      displayName: "Other Admin",
+      role: "admin",
+      passwordHash: hashPassword("other admin password"),
+    });
   const app = new Hono();
   mountManagementApi(
     app,
