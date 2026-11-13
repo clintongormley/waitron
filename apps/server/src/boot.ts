@@ -223,6 +223,7 @@ import {
 } from "./health.js";
 import { abandonMailClaims, startMailSender } from "./mail-sender.js";
 import { emailChangedMail } from "./email-changed-mail.js";
+import { roleMembershipMail } from "./role-membership-mail.js";
 import { accountActionMail } from "./account-mail.js";
 import { runLoop } from "./loop.js";
 import { createLoopWaker } from "./loop-wake.js";
@@ -2870,6 +2871,7 @@ async function bootServer(
       const previousEpisodeMailIds = new Set<string>();
       const owners = [
         emailChangedMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
+        roleMembershipMail({ venueLocale, readTimeZone: () => readVenueTimeZone(db) }),
         boxAlertMail({
           previousEpisodeMailIds,
           venueLanguage: venueLocale === "es-ES" ? "es" : "en",
