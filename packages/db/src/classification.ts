@@ -515,5 +515,38 @@ export const CORE_CHANGE_SOURCES: readonly ChangeSource[] = CORE_OWN_CLASSIFICAT
   table,
   type: table === "settings" ? SETTINGS_CHANGE_TYPE : table,
   ...(table === "settings" ? { typeSuffixColumn: "module" } : {}),
+  ...(table === "dining_tables"
+    ? {
+        quiet: {
+          type: "dining_tables.today",
+          columns: [
+            "on_floor",
+            "today_seats",
+            "today_fixed",
+            "today_x",
+            "today_y",
+            "today_width",
+            "today_height",
+            "today_shape",
+            "today_rotation",
+            "taken_off",
+            "today_name",
+          ],
+        },
+      }
+    : table === "floor_zones"
+      ? {
+          quiet: {
+            type: "floor_zones.today",
+            columns: [
+              "today_business_day",
+              "today_revision",
+              "today_set_id",
+              "today_layout_revision",
+              "today_occurrence",
+            ],
+          },
+        }
+      : {}),
   related: table === "print_jobs" ? [{ type: "printers", column: "printer_id" }] : [],
 }));

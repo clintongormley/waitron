@@ -1124,8 +1124,9 @@ the helper's constant status is not evidence of the write.
   saved joined designs form ordinary live groups. Zones now carry their department and sale overrides;
   saved designs now carry membership, placements retain off-layout sizes, and sets carry their
   department, name and default. Today's map now lives on the live table and zone rows;
-  the remaining group storage fold stays open. The today-only live-update notifications need
-  narrowing in fk4b, the plan's measured fallback (watcher, 2026-11-12).
+  the remaining group storage fold stays open. Today-only table and room updates now use narrower
+  notifications for the floor, kitchen and their dashboard readers. Transfers and the menu's zone
+  status keep their existing 15-second polls for these updates (watcher, 2026-11-13).
   Management and device events share one loop with read-only wake checks; device events carry types
   only. The dashboard detects a silent connection, quiets audited database-only re-read timers
   while connected and receives pairing, discovery, practice-inbox and backup state changes.

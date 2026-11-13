@@ -1,3 +1,7 @@
+import { existsSync, readdirSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { QUERY_DEPENDENCIES as dashboard } from "../../../dashboard/src/api/live-queries.js";
+import { TILL_LIVE_TYPES as till } from "../../../till/src/api/live-connection.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -227,12 +231,97 @@ try {
       { path: `/api/tables/${table!.id}/today/move`, headers },
     ];
     let revision = await db.withTransaction(store.venue, (tx) => roomRevision(tx, zone!.id));
-    const moved = await answer(`/api/tables/${table!.id}/today/move`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ zoneRevision: revision, x: 10, y: 10 }),
+    await db.installChangeFeed(
+      store.venue,
+      ALL_MODULES.flatMap((module) => module.changes ?? []),
+    );
+    const types = new Set<string>();
+    const unsubscribe = db.subscribeToChanges((change) => {
+      for (const resource of change.resources) types.add(resource.type);
     });
+    const moved = await (async () => {
+      try {
+        return await answer(`/api/tables/${table!.id}/today/move`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ zoneRevision: revision, x: 10, y: 10 }),
+        });
+      } finally {
+        unsubscribe();
+      }
+    })();
     revision = Number(moved.revision);
+    const groups: Record<string, Record<string, readonly string[]>> = { dashboard, till };
+    const packages = fileURLToPath(new URL("../../../../packages/", import.meta.url));
+    for (const name of readdirSync(packages)) {
+      const file = join(packages, name, "src/dashboard/live-queries.ts");
+      if (existsSync(file))
+        groups[name] = (await import(pathToFileURL(file).href)).QUERY_DEPENDENCIES;
+    }
+    const readers = Object.entries(groups)
+      .flatMap(([group, queries]) =>
+        Object.entries(queries)
+          .filter(([, interests]) => interests.some((type) => types.has(type)))
+          .map(([name]) => `${group}:${name}`),
+      )
+      .sort();
+    const beforeFk4 = new Set([
+      "dashboard:getZoneDeleteImpact",
+      "dashboard:getDepartmentDeleteImpact",
+      "dashboard:getSalesOverview",
+      "dashboard:getOverdueOrders",
+      "dashboard:getStationDeleteImpact",
+      "venue-service:zone-delete-impact",
+      "venue-service:department-delete-impact",
+      "venue-service:station-delete-impact",
+      "bookings:tables",
+      "till:station",
+      "till:pass",
+      "till:floor",
+    ]);
+    const companions = managementRoutes.slice(15);
+    const readerRoutes: Record<string, string[]> = {
+      "dashboard:listOrderPages": [managementRoutes[0]!],
+      "dashboard:getOrder": [managementRoutes[1]!],
+      "dashboard:listMadeAt": [managementRoutes[2]!],
+      "dashboard:getFolderRouting": [managementRoutes[3]!, ...companions],
+      "dashboard:getProfileScopeChoices": [managementRoutes[4]!],
+      "dashboard:listProfileKitchenScreens": [managementRoutes[5]!],
+      "dashboard:listDevices": [managementRoutes[6]!],
+      "dashboard:listZones": [managementRoutes[7]!],
+      "dashboard:getFloorPlan": [managementRoutes[8]!],
+      "venue-service:floor-plan-sets": [managementRoutes[9]!],
+      "venue-service:period-floor-plans": [managementRoutes[10]!],
+      "venue-service:pass-coverage": [managementRoutes[11]!],
+      "venue-service:routing": [managementRoutes[3]!, ...companions],
+      "venue-service:opening-hours-month": [managementRoutes[12]!],
+      "venue-service:opening-hours": [managementRoutes[13]!],
+      "venue-service:operations": [managementRoutes[14]!, ...companions],
+      "till:billDraft": [
+        `/api/parties/${String(seated.partyId)}/drafts`,
+        `/api/parties/${String(seated.partyId)}/bills`,
+        `/api/working-orders/${String(seated.tabId)}/payments`,
+        `/api/working-orders/${String(seated.tabId)}`,
+      ],
+      "till:menu": [`/api/menu-state?zoneId=${zone!.id}`],
+      "till:transfers": [
+        "/api/department-transfers/incoming",
+        "/api/department-transfers/sent",
+        "/api/department-transfers/destinations",
+      ],
+      "till:allergy": [`/api/parties/${String(seated.partyId)}/allergy`],
+    };
+    const newlyWoken = readers.filter((reader) => !beforeFk4.has(reader));
+    const costRoutes = new Set(
+      newlyWoken.flatMap((reader) => {
+        const paths = readerRoutes[reader];
+        if (paths === undefined) throw new Error(`No timing routes for ${reader}`);
+        return paths;
+      }),
+    );
+    console.log(JSON.stringify({ kind: "wake", types: [...types].sort(), readers, newlyWoken }));
+    let summedMedianMs = 0;
+    const timed = new Set<string>();
     let x = 10;
     for (const route of routes) {
       const samples: number[] = [];
@@ -258,6 +347,8 @@ try {
         if (n >= 0) samples.push(elapsed);
       }
       samples.sort((a, b) => a - b);
+      timed.add(route.path);
+      if (costRoutes.has(route.path)) summedMedianMs += samples[100]!;
       console.log(
         JSON.stringify({
           route: route.path.replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, ":id"),
@@ -267,6 +358,8 @@ try {
         }),
       );
     }
+    for (const path of costRoutes) if (!timed.has(path)) throw new Error(`Not timed: ${path}`);
+    console.log(JSON.stringify({ kind: "wake-cost", routes: costRoutes.size, summedMedianMs }));
   } finally {
     await store.close();
   }

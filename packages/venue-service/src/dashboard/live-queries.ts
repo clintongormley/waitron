@@ -1,6 +1,8 @@
 const HIERARCHY_DELETE_READS = [
   "floor_zones",
+  "floor_zones.today",
   "dining_tables",
+  "dining_tables.today",
   "floor_plans",
   "floor_plan_tables",
   "floor_reset_tables",
@@ -64,6 +66,7 @@ export const QUERY_DEPENDENCIES = {
     "working_order_lines",
     "working_orders",
     "dining_tables",
+    "dining_tables.today",
     "party_tables",
     "parties",
     "order_drafts",

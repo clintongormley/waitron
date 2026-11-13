@@ -1,18 +1,28 @@
+import { liveResourceTypesForModules } from "./live-resources.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, devices } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  CORE_CHANGE_SOURCES,
+  installChangeFeed,
+  diningTables,
+  floorZones,
+  withTransaction,
+  subscribeToChanges,
+  devices,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTenant, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
 import { hashDeviceToken } from "@waitron/identity";
-import { LiveEvents } from "./live-api.js";
+import { LiveEvents, changeSubscriber } from "./live-api.js";
 import { mountDeviceLiveApi } from "./device-live-api.js";
 import { deviceCookieForTest } from "./testing/enrol.js";
 import { createHandoverGate } from "./handover-gate.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const path = '/api/live/events?resources=[{"type":"printers"}]';
-async function fixture() {
+async function fixture(resourceTypes: readonly string[] = ["printers"]) {
   await seedTenant(suite.db);
   await seedVenue(suite.db);
   const { deviceId } = await seedDevice(suite.db);
@@ -21,7 +31,7 @@ async function fixture() {
   const gate = createHandoverGate();
   const app = new Hono();
   app.use("*", gate.middleware);
-  mountDeviceLiveApi(app, { db: suite.db, bus, resourceTypes: ["printers"] }, () => {});
+  mountDeviceLiveApi(app, { db: suite.db, bus, resourceTypes }, () => {});
   return { app, bus, gate, deviceId, cookie };
 }
 
@@ -110,6 +120,49 @@ it.each(["revoked", "token replaced"])(
     } finally {
       await reader.cancel();
       vi.useRealTimers();
+    }
+  },
+);
+
+it.each(["dining_tables", "floor_zones"])(
+  "admits committed %s today events as device types only",
+  async (type) => {
+    const { app, bus, cookie } = await fixture(
+      liveResourceTypesForModules([{ changes: CORE_CHANGE_SOURCES }]),
+    );
+    await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
+    const { zone, table } = await withTransaction(suite.db, async (tx) => {
+      const zone = await seedZone(tx, { name: "Quiet room" });
+      const [table] = await tx
+        .insert(diningTables)
+        .values({ zoneId: zone.id, label: "Table 1", onFloor: true })
+        .returning();
+      return { zone, table: table! };
+    });
+    const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));
+    const response = await app.request(`/api/live/events?resources=[{"type":"${type}.today"}]`, {
+      headers: { cookie },
+    });
+    expect(response.status).toBe(200);
+    const reader = response.body!.getReader();
+    try {
+      await reader.read();
+      await withTransaction(suite.db, async (tx) => {
+        if (type === "dining_tables")
+          await tx
+            .update(diningTables)
+            .set({ todayName: "Window" })
+            .where(eq(diningTables.id, table.id));
+        else
+          await tx.update(floorZones).set({ todayRevision: 1 }).where(eq(floorZones.id, zone.id));
+      });
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+        `event: change\ndata: [{"type":"${type}.today"}]\n\n`,
+      );
+    } finally {
+      await reader.cancel();
+      unsubscribe();
+      bus.close();
     }
   },
 );

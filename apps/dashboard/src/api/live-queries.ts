@@ -30,7 +30,9 @@ const CURRENT_CLASSIFICATION_READS = ["products", "categories", "category_detail
 /** Dependencies describe the read model, independently of which operation changes it. */
 const HIERARCHY_DELETE_READS = [
   "floor_zones",
+  "floor_zones.today",
   "dining_tables",
+  "dining_tables.today",
   "floor_plans",
   "floor_plan_tables",
   "floor_reset_tables",
@@ -187,6 +189,7 @@ export const QUERY_DEPENDENCIES = {
     "bill_payment_refunds",
     "working_orders",
     "dining_tables",
+    "dining_tables.today",
     "floor_zones",
     "party_tables",
     "products",
@@ -201,6 +204,7 @@ export const QUERY_DEPENDENCIES = {
     "order_amendments",
     "kitchen_stations",
     "dining_tables",
+    "dining_tables.today",
     "party_tables",
     "parties",
     "floor_today_join_tables",
@@ -451,6 +455,7 @@ export const QUERY_DEPENDENCIES = {
     "working_order_lines",
     "working_orders",
     "dining_tables",
+    "dining_tables.today",
     "party_tables",
     "parties",
     "order_drafts",

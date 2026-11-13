@@ -11,6 +11,7 @@ export interface ResourceChange {
 export interface ChangeSource {
   table: string;
   type: string;
+  quiet?: { type: string; columns: readonly string[] };
   related?: readonly { type: string; column: string }[];
   /** Suffixes the type with this NOT NULL column’s value and omits the id. */
   typeSuffixColumn?: string;

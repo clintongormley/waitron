@@ -125,6 +125,8 @@ it.each([
   ["getOverdueOrders", [], "party_tables"],
   ["getOverdueOrders", [], "parties"],
   ["getOverdueOrders", [], "dining_tables"],
+  ["getOverdueOrders", [], "dining_tables.today"],
+  ["getSalesOverview", [], "dining_tables.today"],
   ["getOverdueOrders", [], "floor_today_join_tables"],
   ["getOverdueOrders", [], "floor_today_joins"],
   ["getDailyClose", ["2026-09-11"], "sale_substitutions"],
@@ -1027,6 +1029,7 @@ const stationDeleteReads = [
   "working_order_lines",
   "working_orders",
   "dining_tables",
+  "dining_tables.today",
   "party_tables",
   "parties",
   "order_drafts",
@@ -1117,7 +1120,9 @@ it.each(["Zone", "Department"] as const)(
   async (kind) => {
     const reads = [
       "floor_zones",
+      "floor_zones.today",
       "dining_tables",
+      "dining_tables.today",
       "floor_plans",
       "floor_plan_tables",
       "floor_reset_tables",

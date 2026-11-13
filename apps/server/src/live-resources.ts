@@ -10,6 +10,7 @@ export function liveResourceTypes(
     ...new Set([
       ...sources.flatMap((source) => [
         ...(source.typeSuffixColumn === undefined ? [source.type] : []),
+        ...(source.quiet === undefined ? [] : [source.quiet.type]),
         ...(source.related ?? []).map((related) => related.type),
       ]),
       ...settingsModules.map(settingsChangeType),

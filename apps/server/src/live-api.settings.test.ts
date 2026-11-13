@@ -1,8 +1,11 @@
+import { eq } from "drizzle-orm";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  diningTables,
+  floorZones,
   VENUE_SETTINGS,
   CORE_CHANGE_SOURCES,
   defineSettingsDocument,
@@ -12,7 +15,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedZone } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
@@ -128,3 +131,47 @@ it("refuses a subscription to the bare settings type", async () => {
     bus.close();
   }
 });
+
+it.each(["dining_tables", "floor_zones"])(
+  "delivers a committed %s today update only to its quiet subscriber",
+  async (type) => {
+    const { app, bus, cookie } = await fixture();
+    const zone = await withTransaction(suite.db, (tx) => seedZone(tx, { name: "Dining room" }));
+    const [table] = await withTransaction(suite.db, (tx) =>
+      tx
+        .insert(diningTables)
+        .values({ zoneId: zone.id, label: "Table 1", onFloor: true })
+        .returning(),
+    );
+    const id = type === "dining_tables" ? table!.id : zone.id;
+    const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));
+    const readers: ReadableStreamDefaultReader<Uint8Array>[] = [];
+    try {
+      for (const interest of [type, `${type}.today`]) {
+        const response = await app.request(path(interest), { headers: { cookie } });
+        expect(response.status).toBe(200);
+        const reader = response.body!.getReader();
+        readers.push(reader);
+        expect(await readWithin(reader)).toContain("event: ready");
+      }
+      await withTransaction(suite.db, async (tx) => {
+        if (type === "dining_tables")
+          await tx.update(diningTables).set({ todayName: "Window" }).where(eq(diningTables.id, id));
+        else await tx.update(floorZones).set({ todayRevision: 1 }).where(eq(floorZones.id, id));
+      });
+      expect(await readWithin(readers[1]!)).toBe(
+        `event: change\ndata: [{"type":"${type}.today","id":"${id}"}]\n\n`,
+      );
+      // The quiet event has arrived; this distinct control exposes an earlier unwanted base event.
+      bus.publish({ resources: [{ type, id: "control" }] });
+      expect(await readWithin(readers[0]!)).toBe(
+        `event: change\ndata: [{"type":"${type}","id":"control"}]\n\n`,
+      );
+    } finally {
+      for (const reader of readers) await reader.cancel();
+      unsubscribe();
+      bus.close();
+    }
+  },
+  20_000,
+);

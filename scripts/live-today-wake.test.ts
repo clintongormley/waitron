@@ -1,10 +1,13 @@
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 import { QUERY_DEPENDENCIES as dashboard } from "../apps/dashboard/src/api/live-queries.js";
 import { QUERY_DEPENDENCIES as service } from "../packages/venue-service/src/dashboard/live-queries.js";
 import { QUERY_DEPENDENCIES as bookings } from "../packages/bookings/src/dashboard/live-queries.js";
 import { TILL_LIVE_TYPES as till } from "../apps/till/src/api/live-connection.js";
 
-const alreadyWoken = [
+const todayReaders = [
   "dashboard:getZoneDeleteImpact",
   "dashboard:getDepartmentDeleteImpact",
   "dashboard:getSalesOverview",
@@ -18,8 +21,7 @@ const alreadyWoken = [
   "till:pass",
   "till:floor",
 ];
-// These readers also need saved table or zone state, so today's parent updates now wake them.
-const newlyWoken = [
+const baseOnlyReaders = [
   "dashboard:listOrderPages", // Order rows show saved table and zone names.
   "dashboard:getOrder", // Order detail resolves table names.
   "dashboard:listMadeAt", // Product makers follow zone routes.
@@ -41,7 +43,7 @@ const newlyWoken = [
   "till:transfers", // Transfers show destination table names.
   "till:allergy", // Allergy context includes party tables.
 ];
-it("inventories every reader woken by a today's table or zone update", () => {
+it("retains every base table and zone dependency", () => {
   const actual = Object.entries({ dashboard, "venue-service": service, bookings, till }).flatMap(
     ([group, queries]) =>
       Object.entries(queries)
@@ -50,5 +52,35 @@ it("inventories every reader woken by a today's table or zone update", () => {
         )
         .map(([name]) => `${group}:${name}`),
   );
-  expect(actual.sort()).toEqual([...alreadyWoken, ...newlyWoken].sort());
+  expect(actual.sort()).toEqual([...todayReaders, ...baseOnlyReaders].sort());
+});
+
+it("routes today-only events to exactly the retained readers across all modules", async () => {
+  const root = join(import.meta.dirname, "..");
+  const groups: Record<string, Record<string, readonly string[]>> = { dashboard, till };
+  for (const name of readdirSync(join(root, "packages"))) {
+    const file = join(root, "packages", name, "src/dashboard/live-queries.ts");
+    if (existsSync(file))
+      groups[name] = (await import(pathToFileURL(file).href)).QUERY_DEPENDENCIES;
+  }
+  for (const [type, expected] of [
+    ["dining_tables.today", todayReaders],
+    [
+      "floor_zones.today",
+      [
+        "dashboard:getZoneDeleteImpact",
+        "dashboard:getDepartmentDeleteImpact",
+        "venue-service:zone-delete-impact",
+        "venue-service:department-delete-impact",
+        "till:floor",
+      ],
+    ],
+  ] as const) {
+    const actual = Object.entries(groups).flatMap(([group, queries]) =>
+      Object.entries(queries)
+        .filter(([, types]) => types.includes(type))
+        .map(([name]) => `${group}:${name}`),
+    );
+    expect(actual.sort(), type).toEqual([...expected].sort());
+  }
 });
