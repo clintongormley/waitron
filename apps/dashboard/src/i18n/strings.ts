@@ -1,6 +1,8 @@
 export const en = {
   "handover_warning.unconfirmed":
     "An emergency handover is recorded. Check the handover dates before using these figures.",
+  "handover_warning.returned":
+    "Invoices returned from another main box are recorded. This notice is independent of the dates selected here. Do not add the list’s amounts to report totals.",
   "handover_warning.unavailable":
     "Handover status could not be checked. Try Refresh handover status.",
   "handover_warning.check": "Check handover intervals",
@@ -27,7 +29,7 @@ export const en = {
 
   "returned_invoices.title": "Returned invoices",
   "returned_invoices.tracking":
-    "Tracking starts with this feature. Invoices already held in a copy are not added. This list does not identify duplicates or mark invoices in reports.",
+    "Tracking starts with this feature. Invoices already held in a copy are not added. This list does not identify duplicates.",
   "returned_invoices.chain": "Generating installation and chain",
   "returned_invoices.position": "Chain position {sequence}",
   "returned_invoices.invoice": "Invoice, issue date and kind",
@@ -3940,6 +3942,8 @@ export type StringKey = keyof typeof en;
 export const es: Record<StringKey, string> = {
   "handover_warning.unconfirmed":
     "Hay un traspaso de emergencia registrado. Comprueba las fechas del traspaso antes de usar estas cifras.",
+  "handover_warning.returned":
+    "Se han registrado facturas devueltas desde otro equipo principal. Este aviso es independiente de las fechas seleccionadas aquí. No añadas los importes de la lista a los totales del informe.",
   "handover_warning.unavailable":
     "No se pudo comprobar el estado del traspaso. Pulsa Actualizar el estado del traspaso.",
   "handover_warning.check": "Comprobar los intervalos del traspaso",
@@ -3966,7 +3970,7 @@ export const es: Record<StringKey, string> = {
 
   "returned_invoices.title": "Facturas devueltas",
   "returned_invoices.tracking":
-    "El seguimiento empieza con esta función. No se añaden las facturas que ya estaban en una copia. Esta lista no identifica duplicados ni marca las facturas en los informes.",
+    "El seguimiento empieza con esta función. No se añaden las facturas que ya estaban en una copia. Esta lista no identifica duplicados.",
   "returned_invoices.chain": "Instalación y cadena de origen",
   "returned_invoices.position": "Posición en la cadena: {sequence}",
   "returned_invoices.invoice": "Factura, fecha de expedición y tipo",

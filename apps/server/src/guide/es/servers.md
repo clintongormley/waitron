@@ -148,7 +148,12 @@ vuelve a la primera página.
 
 El seguimiento empieza con esta función. No se añaden las facturas que ya estaban en una copia,
 por lo que una lista vacía no es un historial completo de devoluciones anteriores. La lista no
-identifica duplicados ni marca las facturas en otros informes.
+identifica duplicados.
+
+El aviso de los informes también indica si hay facturas devueltas registradas, independientemente
+de las fechas que selecciones. Abre **Facturas devueltas** para comprobar sus fechas de expedición
+originales. Usa las cifras que muestra cada informe; no añadas los importes de la lista a los
+totales del informe.
 
 ## Cuando un equipo espera a otro equipo {#waiting}
 

@@ -1120,7 +1120,9 @@ describe("dashboard-sales-screen accountant workbook", () => {
 it("places handover status before the sales and cash-up reports without loading full inventory", async () => {
   const fullRead = vi.fn().mockRejectedValue(new Error("A report must not load inventory receipt"));
   const api = Object.assign(stubApi(), {
-    getHandoverWarning: async () => ({ hasEmergencyHandover: true }),
+    getHandoverWarning: vi
+      .fn()
+      .mockResolvedValue({ hasEmergencyHandover: true, hasReturnedInvoices: true }),
     listHandoverIntervals: fullRead,
   });
   const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
@@ -1130,5 +1132,9 @@ it("places handover status before the sales and cash-up reports without loading 
   expect(notice).not.toBeNull();
   expect(notice!.api).toBe(api);
   await vi.waitFor(() => expect(notice!.shadowRoot!.querySelector("a")).not.toBeNull());
+  setDate(el, "from-picker", "2026-08-01");
+  setDate(el, "to-picker", "2026-08-29");
+  await flush(el);
+  expect(api.getHandoverWarning).toHaveBeenCalledTimes(1);
   expect(fullRead).not.toHaveBeenCalled();
 });

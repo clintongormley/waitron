@@ -188,14 +188,23 @@ it("answers only whether an emergency takeover exists without running the full i
   try {
     const read = () =>
       app.request("/management-api/reports/handover-warning", { headers: { cookie } });
-    expect(await (await read()).json()).toEqual({ hasEmergencyHandover: false });
+    expect(await (await read()).json()).toEqual({
+      hasEmergencyHandover: false,
+      hasReturnedInvoices: false,
+    });
     await activation("controlled", null);
-    expect(await (await read()).json()).toEqual({ hasEmergencyHandover: false });
+    expect(await (await read()).json()).toEqual({
+      hasEmergencyHandover: false,
+      hasReturnedInvoices: false,
+    });
     await activation("emergency", null);
     const response = await read();
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({ hasEmergencyHandover: true });
+    expect(await response.json()).toEqual({
+      hasEmergencyHandover: true,
+      hasReturnedInvoices: false,
+    });
     expect(full).not.toHaveBeenCalled();
   } finally {
     full.mockRestore();
@@ -203,6 +212,13 @@ it("answers only whether an emergency takeover exists without running the full i
 });
 
 it("gates the cheap warning read with report.view", async () => {
+  const returnedInvoices = vi.fn().mockResolvedValue([]);
+  app = new Hono();
+  mountReportApi(
+    app,
+    { db: suite.db, cfg: { nodeId: destination }, venueLocale: "en-GB", returnedInvoices },
+    () => {},
+  );
   const path = "/management-api/reports/handover-warning";
   const signedOut = await app.request(path);
   expect(signedOut.status).toBe(401);
@@ -210,4 +226,58 @@ it("gates the cheap warning read with report.view", async () => {
   const staff = await app.request(path, { headers: { cookie: staffCookie } });
   expect(staff.status).toBe(403);
   expect((await staff.json()).error.code).toBe("authorization.not_permitted");
+  expect(returnedInvoices).not.toHaveBeenCalled();
+});
+
+it("checks one returned invoice independently of emergency history without exposing its payload", async () => {
+  const returnedInvoices = vi.fn().mockResolvedValue([]);
+  const warning = new Hono();
+  mountReportApi(
+    warning,
+    {
+      db: suite.db,
+      cfg: { nodeId: destination },
+      venueLocale: "en-GB",
+      returnedInvoices,
+    },
+    () => {},
+  );
+  const read = () =>
+    warning.request("/management-api/reports/handover-warning", { headers: { cookie } });
+  expect(await (await read()).json()).toEqual({
+    hasEmergencyHandover: false,
+    hasReturnedInvoices: false,
+  });
+  returnedInvoices.mockResolvedValue([
+    {
+      recordId: "returned-record",
+      saleId: "returned-sale",
+      sourceNodeId: source,
+      sourceName: "Old kitchen box",
+      generationId: "generation",
+      installation: "ABCDE",
+      sequence: 1,
+      invoiceNumber: "2026/1",
+      issueDate: "2026-11-10",
+      kind: "F1",
+      category: "invoice",
+      correctsRecordId: null,
+      taxable: "10.00",
+      gross: "12.10",
+      tax: "2.10",
+      receivedAt: "2026-11-13T10:00:00.000Z",
+    },
+  ]);
+  const response = await read();
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(await response.json()).toEqual({ hasEmergencyHandover: false, hasReturnedInvoices: true });
+  await activation("emergency", null);
+  expect(await (await read()).json()).toEqual({
+    hasEmergencyHandover: true,
+    hasReturnedInvoices: true,
+  });
+  expect(returnedInvoices).toHaveBeenCalledTimes(3);
+  for (const [, page] of returnedInvoices.mock.calls) {
+    expect(page).toEqual({ offset: 0, limit: 1 });
+  }
 });

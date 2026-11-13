@@ -4538,8 +4538,8 @@ export class DashboardApi {
     });
   }
 
-  getHandoverWarning(): Promise<{ hasEmergencyHandover: boolean }> {
-    return this.#request<{ hasEmergencyHandover: boolean }>(
+  getHandoverWarning(): Promise<{ hasEmergencyHandover: boolean; hasReturnedInvoices: boolean }> {
+    return this.#request<{ hasEmergencyHandover: boolean; hasReturnedInvoices: boolean }>(
       "/management-api/reports/handover-warning",
       "GET",
       undefined,

@@ -228,15 +228,20 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
   app.get("/management-api/reports/handover-warning", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const [activation] = await gated(sessionId, REPORT_VIEW_PERMISSION, (tx) =>
-        tx
+      const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
+        const [activation] = await tx
           .select({ operationId: handoverActivations.operationId })
           .from(handoverActivations)
           .where(eq(handoverActivations.scenario, "emergency"))
-          .limit(1),
-      );
+          .limit(1);
+        const returned = (await deps.returnedInvoices?.(tx, { offset: 0, limit: 1 })) ?? [];
+        return {
+          hasEmergencyHandover: activation !== undefined,
+          hasReturnedInvoices: returned.length > 0,
+        };
+      });
       c.header("Cache-Control", "no-store");
-      return c.json({ hasEmergencyHandover: activation !== undefined });
+      return c.json(result);
     }),
   );
 
