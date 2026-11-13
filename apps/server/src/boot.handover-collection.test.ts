@@ -24,6 +24,7 @@ import { decimal, deviceOrigin, type NodeId } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { establishNodeIdentity } from "./node-identity.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -128,6 +129,11 @@ function observeStart(options: StartCase): () => Observed {
       }
     });
     if (options.chart !== undefined) {
+      // A box its chart lists holds its signing key.
+      await establishNodeIdentity(
+        { ownerDb: suite.db, node: suite.node, ring: loadKeyRing(KEY_ENV) },
+        box,
+      );
       await writeNodeMembership(
         suite.db,
         signedMembershipDoc(1, {

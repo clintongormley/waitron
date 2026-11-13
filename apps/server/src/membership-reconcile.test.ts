@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   acceptMembershipDocument,
   generateNodeKeyPair,
@@ -9,9 +9,16 @@ import {
   type TrustSet,
 } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
+import {
+  mintBoxAuthority,
+  startBoxServer,
+  startSilentServer,
+  type BoxAuthority,
+  type BoxServer,
+} from "./testing/box-authority.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
-// A box that died before it was fenced must not boot and sell beside the promoted cloud (two nodes
+// A box that died before it was fenced must not boot and sell beside the box that took over (two nodes
 // filing under one NIF — CLAUDE.md §5). The accept dep wraps the REAL `acceptMembershipDocument` over
 // real signed fixtures; the database persist is covered in `boot.reconcile.test.ts`.
 
@@ -261,35 +268,118 @@ describe("fetchPeerMembershipDocument (the best-effort HTTP peer read)", () => {
   it("returns the peer's document on a 200 { document }", async () => {
     const doc = peerChart(HELD_TERM + 1, "sell-only");
     const url = await serve((respond) => respond(200, JSON.stringify({ document: doc })));
-    expect(await fetchPeerMembershipDocument(url)).toEqual(doc);
+    expect(await fetchPeerMembershipDocument(url, { timeoutMs: 5_000 })).toEqual(doc);
   });
 
   it("returns null when the peer holds no chart yet (document: null)", async () => {
     const url = await serve((respond) => respond(200, JSON.stringify({ document: null })));
-    expect(await fetchPeerMembershipDocument(url)).toBeNull();
+    expect(await fetchPeerMembershipDocument(url, { timeoutMs: 5_000 })).toBeNull();
   });
 
   it("returns null on a non-2xx response (e.g. 401 unauthorized)", async () => {
     const url = await serve((respond) =>
       respond(401, JSON.stringify({ error: { code: "password.invalid" } })),
     );
-    expect(await fetchPeerMembershipDocument(url)).toBeNull();
+    expect(await fetchPeerMembershipDocument(url, { timeoutMs: 5_000 })).toBeNull();
   });
 
   it("returns null on a body that does not parse as JSON", async () => {
     const url = await serve((respond) => respond(200, "<html>not json</html>"));
-    expect(await fetchPeerMembershipDocument(url)).toBeNull();
+    expect(await fetchPeerMembershipDocument(url, { timeoutMs: 5_000 })).toBeNull();
   });
 
   it("returns null on a 200 whose body is JSON null", async () => {
     const url = await serve((respond) => respond(200, "null"));
-    expect(await fetchPeerMembershipDocument(url)).toBeNull();
+    expect(await fetchPeerMembershipDocument(url, { timeoutMs: 5_000 })).toBeNull();
   });
 
   it("returns null when the peer is unreachable (transport error)", async () => {
     // Port 1 is not listening.
     expect(
-      await fetchPeerMembershipDocument("http://127.0.0.1:1/management-api/membership"),
+      await fetchPeerMembershipDocument("http://127.0.0.1:1/management-api/membership", {
+        timeoutMs: 5_000,
+      }),
     ).toBeNull();
+  });
+
+  it("answers null for an address that is not a URL", async () => {
+    expect(
+      await fetchPeerMembershipDocument("https://[broken/management-api/membership", {
+        authority: "unused",
+        timeoutMs: 5_000,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("fetchPeerMembershipDocument (another box, over HTTPS)", () => {
+  let x: BoxAuthority;
+  let y: BoxAuthority;
+  const closers: (() => Promise<void>)[] = [];
+  beforeAll(async () => {
+    [x, y] = await Promise.all([mintBoxAuthority(), mintBoxAuthority()]);
+  });
+  afterEach(async () => {
+    while (closers.length > 0) await closers.pop()!();
+  });
+
+  async function boxServing(document: SignedMembershipDocument): Promise<BoxServer> {
+    const server = await startBoxServer(x, () => ({
+      status: 200,
+      body: JSON.stringify({ document }),
+    }));
+    closers.push(server.close);
+    return server;
+  }
+
+  it("fetches a peer's chart from a box under the venue authority", async () => {
+    const doc = peerChart(HELD_TERM + 1, "sell-only");
+    const box = await boxServing(doc);
+    expect(
+      await fetchPeerMembershipDocument(`${box.url}/management-api/membership`, {
+        authority: x.caPem,
+        timeoutMs: 5_000,
+      }),
+    ).toEqual(doc);
+    expect(box.requests).toEqual([
+      expect.objectContaining({ method: "GET", path: "/management-api/membership" }),
+    ]);
+  });
+
+  it("answers null for a peer under another authority, and sends it nothing", async () => {
+    const box = await boxServing(peerChart(HELD_TERM + 1, "sell-only"));
+    expect(
+      await fetchPeerMembershipDocument(`${box.url}/management-api/membership`, {
+        authority: y.caPem,
+        timeoutMs: 5_000,
+      }),
+    ).toBeNull();
+    expect(box.requests).toHaveLength(0);
+  });
+
+  it("answers null for a box when this box holds no venue authority, and sends it nothing", async () => {
+    const box = await boxServing(peerChart(HELD_TERM + 1, "sell-only"));
+    expect(
+      await fetchPeerMembershipDocument(`${box.url}/management-api/membership`, {
+        timeoutMs: 5_000,
+      }),
+    ).toBeNull();
+    expect(box.requests).toHaveLength(0);
+  });
+
+  it("answers null for a peer that does not answer within its time limit", async () => {
+    const silent = await startSilentServer(x);
+    closers.push(silent.close);
+    const started = Date.now();
+    expect(
+      await fetchPeerMembershipDocument(
+        `https://localhost:${silent.port}/management-api/membership`,
+        {
+          authority: x.caPem,
+          timeoutMs: 200,
+        },
+      ),
+    ).toBeNull();
+    expect(Date.now() - started).toBeLessThan(4_000);
   });
 });

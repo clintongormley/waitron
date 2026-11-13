@@ -30,7 +30,14 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import { AppError, isAppError, isUuid } from "@waitron/shared";
-import { askPeerStatus, boxRefusal, isRecord, originOf, postToBox } from "./boot-peer-check.js";
+import {
+  askPeerStatus,
+  boxRefusal,
+  isRecord,
+  originOf,
+  postToBox,
+  readVenueAuthority,
+} from "./boot-peer-check.js";
 import {
   imageMigrationsDigest,
   isManifestStateFile,
@@ -195,6 +202,11 @@ export function mountHandoverSourceStartApi(
   const run = createErrorBoundary(STATUS, "handover-source-start.failed");
   const timeoutMs = deps.peerTimeoutMs ?? PEER_TIMEOUT_MS;
   const exchange = { timeoutMs, ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }) };
+  // Read at each call, so a repaired authority is the one checked.
+  const checkedExchange = async () => {
+    const authority = await readVenueAuthority(deps.stateDir);
+    return { ...exchange, authorityOf: () => authority };
+  };
   // One request at a time, so one cannot record `abandoned` beneath another that goes on to step down.
   let running: string | null = null;
 
@@ -215,7 +227,7 @@ export function mountHandoverSourceStartApi(
       // Read before the offer goes, so a box that could not check the answer sends nothing.
       keyOf = await peerKeyOf(deps);
       answer = await postToBox(
-        exchange,
+        await checkedExchange(),
         destinationNodeId,
         `${contactUrl.replace(/\/+$/, "")}${OFFER_PATH}`,
         envelope,
@@ -401,7 +413,7 @@ export function mountHandoverSourceStartApi(
       throw new AppError("handover.destination_unaddressable", { destinationNodeId });
     }
     const status = await askPeerStatus({
-      ...exchange,
+      ...(await checkedExchange()),
       sign: (body) => signAsThisBox(deps, "query", body),
       publicKeyOf: await peerKeyOf(deps),
     })({ nodeId: destinationNodeId, url: contactUrl, standing: destination.standing });

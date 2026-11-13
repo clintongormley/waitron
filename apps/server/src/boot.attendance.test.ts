@@ -45,6 +45,7 @@ import * as mdns from "./mdns.js";
 import * as deviceApi from "./device-api.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { establishNodeIdentity } from "./node-identity.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -281,6 +282,11 @@ describe("attendance boot with permanent workforce", () => {
               originNodeId: f.venue.cfg.nodeId,
             });
           } else if (mode === "fenced") {
+            // A box its chart lists holds its signing key.
+            await establishNodeIdentity(
+              { ownerDb: suite.db, node: suite.node, ring },
+              f.venue.cfg.nodeId,
+            );
             await writeNodeMembership(
               suite.db,
               signedMembershipDoc(1, {

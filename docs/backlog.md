@@ -1829,10 +1829,6 @@ Not in any track until the standalone primary is done.
   A947 also owns the spare's authenticated switch screen (watcher, 2026-11-08); the spare's
   dashboard is retired. [Decision](backlog/replication-cloud.md#decisions-and-deliberate-limits).
 
-- **The boot peer reconcile cannot reach a real box's certificate.** Found by A1018 Slice 3's
-  review.
-  [Detail](backlog/replication-cloud.md#the-boot-peer-reconcile-cannot-reach-a-real-boxs-certificate)
-
 - **A captured signed peer query can be replayed later to read a box's status, or a stepped-down box's indicator and final copy.** The peer-status
   route checks the query's `atMs` but never uses it, so there is no freshness window; a strict one
   would lock out a box with a wrong clock. Owner's choice. Left open by A1018 Slice 3 (Ruling R6).
@@ -1931,18 +1927,19 @@ outstanding on code that exists.
   plan is written (eleven pull requests; Q1 is the owner's); 3b-1, 3b-2 ([#2742](https://github.com/clintongormley/waitron/pull/2742)),
   3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)), 3b-4 ([#2779](https://github.com/clintongormley/waitron/pull/2779))
   3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898); the pair link, and a spare joins with no Cloud relay)
-  and 3b-5b (a spare runs its store, which admits only its main box; nothing streams to it yet) landed, 3b-G and 3b-6a onwards are still to build. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
+  and 3b-5b (a spare runs its store, which admits only its main box; nothing streams to it yet) landed, and so did 3b-G (a box trusts only the venue's authority when it asks another box at start and sets aside a spare still joining ([3b plan](superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's decision, which the owner may overrule); its chart check at start reaches a real box under the venue's authority, which still refuses it for want of a credential; and a box that lost its own record does not start selling or filing); 3b-6a onwards are still to build. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
   venue's network), one step **Hand over the venue** needs on real boxes. It is not live yet: a spare
   still never leaves its joining start (`finish-adoption.ts`'s `PendingAdoption`), and handover also
-  needs 3b-G and 3b-6a. A second box in setup mode can be trusted by mistake in three ways, to settle before go-live. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+  needs 3b-6a. A second box in setup mode can be trusted by mistake in three ways, to settle before go-live. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
   ring only when it joins. Since 3b-5b, `waitron-credentials rotate` refuses while a pair link
   exists (decision D7); the two related risks in the detail stay open.
   [Detail](backlog/replication-cloud.md#a1273-the-shared-key-ring-has-no-rotation-path-to-the-spare)
 
-- **A1274: a lost node.db beside an intact venue.db reads as a sole primary.**
-  [Detail](backlog/replication-cloud.md#a1274-a-lost-nodedb-beside-an-intact-venuedb-reads-as-a-sole-primary)
+- **A1274: a box that handed over and then loses its node.db can start as a second main box.**
+  Could cost a filing.
+  [Detail](backlog/replication-cloud.md#a1274-a-box-that-handed-over-and-then-loses-its-nodedb-can-start-as-a-second-main-box)
 
 - **A1296: code-quality follow-ups from A947 slice 3a's finish review.** Parallel venue and node
   code paths, a second HTTPS client, a second durable-write helper.

@@ -70,6 +70,7 @@ import {
   nodes,
   venueLocationId,
   type Database,
+  type NodeDatabase,
   type SingletonRole,
   type Transaction,
 } from "@waitron/db";
@@ -77,9 +78,11 @@ import {
   readHandoverRestriction,
   readMirrorLink,
   readNodeMode,
+  readNodeModeRow,
   readPairLink,
   setSingletonRole,
 } from "@waitron/node-db";
+import { readVenueAuthority } from "./boot-peer-check.js";
 import { startSpareStore } from "./spare-store.js";
 import { startStoreListener } from "./spare-pipe.js";
 import { finishPromotedRole } from "./promoted-role.js";
@@ -93,8 +96,10 @@ import {
 import {
   credentialProvisioned,
   loadKeyRing,
+  readNodeSigningKey,
   readPairSecret,
   tenantCredentials,
+  type KeyRing,
 } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { mountDeviceLiveApi } from "./device-live-api.js";
@@ -447,7 +452,7 @@ import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import { isFenced } from "./membership-fence.js";
 import { endMirrorViewer } from "./mirror-session.js";
 import { spareReadGate } from "./spare-read-gate.js";
-import { acceptMembershipDocument } from "@waitron/membership";
+import { acceptMembershipDocument, servingPrimaryNodeId, standingOf } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { readFilingModule } from "./node-config.js";
 import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
@@ -1090,6 +1095,27 @@ function closingAlso(
   beforeClose: Array<() => Promise<void>>,
 ): StartedServer {
   return { ...server, close: () => closeAll([...beforeClose, () => server.close()]) };
+}
+
+/**
+ * Throws `node.state_missing` when node.db holds neither a mode row nor a signing key for this box,
+ * and the held chart lists it in any standing but `serving-primary`, or with another box as
+ * `serving-primary`. A key row this box's ring cannot open throws as `readNodeSigningKey` does.
+ */
+async function refuseLostNodeState(
+  db: Database,
+  node: NodeDatabase,
+  ring: KeyRing,
+  nodeId: string,
+): Promise<void> {
+  if ((await readNodeModeRow(node, nodeId)) !== null) return;
+  const held = await readNodeMembership(db);
+  if (held === null) return;
+  const standing = standingOf(held, nodeId);
+  if (standing === undefined) return;
+  if (standing === "serving-primary" && servingPrimaryNodeId(held) === nodeId) return;
+  if ((await readNodeSigningKey(node, ring, nodeId)) !== null) return;
+  throw new AppError("node.state_missing", {});
 }
 
 /**
@@ -1831,7 +1857,11 @@ async function bootServer(
   if (pendingAdoption !== null) {
     spare = true;
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
-    mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: config.node.nodeId }, log);
+    mountPeerStatusApi(
+      app,
+      { db, node: store.node, ring, nodeId: config.node.nodeId, joining: true },
+      log,
+    );
     mountNodeMembershipApi(app, { db, node: store.node, nodeId: config.node.nodeId }, log);
     const finishWorker = runFinishAdoption({
       ownerDb: db,
@@ -1887,6 +1917,9 @@ async function bootServer(
   // Not a self-promotion: it applies a promotion this box already committed and signed with its own
   // key, whose role write was lost. Before the peer reconciliation, which stays demote-only.
   await finishPromotedRole({ venue: db, node: store.node, ring, nodeId: config.node.nodeId, log });
+  // Before the start check: a spare that lost its node.db cannot sign its question, so the main box
+  // it counts reads as silent and the start would wait, answering the venue's name.
+  await refuseLostNodeState(db, store.node, ring, config.node.nodeId);
   // Restricted starts run only the return sender, which reads this venue's data.
   const restrictedStart = () => {
     const returnRecords = startReturnRecordsDuty({
@@ -1988,6 +2021,7 @@ async function bootServer(
             node: store.node,
             ring,
             nodeId: node.nodeId,
+            stateDir: config.stateDir,
             advertisedOrigin: config.managementOrigin,
             log,
           })
@@ -2105,24 +2139,29 @@ async function bootServer(
     // check handed to `saveVerifiedMembership`; once saved, the chart read below fences it (Ruling R7).
   }
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
-  // while the promoted cloud is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
-  // non-mirror node with a configured cloud peer best-effort fetches the peer's signed chart and
-  // persists it if it verifies and is strictly newer. It runs BEFORE the held-membership read below,
+  // while the box that took over is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
+  // non-mirror node holding a mirror link best-effort asks the box that link names for its signed
+  // chart, and persists it if it verifies and is strictly newer. It sends no credential, so a real
+  // box refuses it today (docs/backlog/replication-cloud.md, "Still open after A63" (ii)). It runs BEFORE the held-membership read below,
   // so a persisted superseding document flows into the `fenced` demote. An unreachable peer lets
   // boot proceed as primary: the MVP's accepted window. Demote-only: it can never self-promote.
   if (initialAxes.mode !== "mirror") {
     const peer = await readMirrorLink(store.node, config.node.nodeId);
     if (peer !== null) {
-      const [trustSet, held] = await Promise.all([
+      const [trustSet, held, authority] = await Promise.all([
         readMembershipTrustSet(db),
         readNodeMembership(db),
+        readVenueAuthority(config.stateDir),
       ]);
+      const listed = held?.body.nodes.find((n) => n.nodeId === peer.originNodeId)?.contactUrl;
+      const origin = listed === undefined || listed === "" ? peer.originUrl : listed;
       await reconcileMembershipOnBoot({
         held,
         nodeId: config.node.nodeId,
-        // The mirror link is owner-written trusted config, so no SSRF screen.
-        peerUrl: `${peer.originUrl.replace(/\/+$/, "")}/management-api/membership`,
-        fetchPeerMembership: fetchPeerMembershipDocument,
+        // The held chart and the mirror link are this box's own trusted records, so no SSRF screen.
+        peerUrl: `${origin.replace(/\/+$/, "")}/management-api/membership`,
+        fetchPeerMembership: (url) =>
+          fetchPeerMembershipDocument(url, { authority, timeoutMs: 5_000 }),
         // Persist-if-accepted, so a newer verified chart is held even when it does not fence this node.
         // Judged against the chart held BEFORE it, never the incoming one: a retirement chart is
         // signed by the node it evicts.
@@ -3799,6 +3838,7 @@ async function bootServer(
     app,
     {
       ...peerDeps,
+      stateDir: config.stateDir,
       venueDir: config.venueDir,
       modules: enabledModules(ALL_MODULES, moduleConfig),
       origin: config.managementOrigin,

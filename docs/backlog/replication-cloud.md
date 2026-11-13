@@ -201,7 +201,7 @@ controls remain open; no provider work is authorised.
   held chart and the chart carries the endorsement its signature verifies under, so a standby is
   not covered, nor a primary the receiver holds no chart signed by (after the former primary's own
   retirement chart, for one) (stated at `resolveSignerKey`); (ii) boot reconciliation's peer fetch
-  sends no credential (`boot.ts` gives `fetchPeerMembershipDocument` only the URL) and
+  sends no credential (`boot.ts` gives `fetchPeerMembershipDocument` the URL, the venue's authority and a time limit, but no credential) and
   `GET /management-api/membership` refuses a request without one, so in production that path
   accepts no chart today and the receiver checks above never run there (read, not run); (iii) a
   cleared machine is refused its own promotion only if its own held chart contains the clearing,
@@ -704,17 +704,6 @@ these for its spare, so once 3b makes a spare finish joining, the spare's answer
 silent. No box has a joined peer before 3b. Left open by A1018 Slice 3 (Ruling R13).
 
 
-## The boot peer reconcile cannot reach a real box's certificate.
-
-`fetchPeerMembershipDocument`
-(`apps/server/src/membership-reconcile.ts:66`) calls the plain global `fetch`, which refuses a
-leaf from a box's own authority, and it sets no time limit. `git blame` shows the line from
-e82588f349 (2026-09-08, "Outbox → native logical replication", #280), so it predates A1018. The
-start check's transport (`askPeerStatus`, `apps/server/src/boot-peer-check.ts`) pins the
-authority a spare holds, or skips the check behind its signed answer. Found by A1018 Slice 3's
-review.
-
-
 ## The membership route ignores a different chart at the term this box holds.
 
 The start check
@@ -1149,7 +1138,7 @@ asking the network, a spare listens on the venue's network, and what it serves t
 test) as [#2779](https://github.com/clintongormley/waitron/pull/2779); 3b-5a (the pair link: a spare joins with no Cloud relay,
 the main box refuses before reserving anything and hands out the pair's access key and its backup settings) as [#2898](https://github.com/clintongormley/waitron/pull/2898); 3b-5b (a spare runs its store behind a listener
 that admits only its main box's client certificate, a venue with a standby refuses bucket-copy settings, and key ring
-rotation is refused while a pair link exists) landed too. 3b-G, 3b-6a to 3b-F and slices 3c onwards are still open;
+rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing). 3b-6a to 3b-F and slices 3c onwards are still open;
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
@@ -1215,24 +1204,18 @@ compares key-ring version numbers, not the keys themselves (`handover-manifest.t
 ring rotated after the bucket copy's sealed state bundle was last refreshed could leave a bucket
 restore unable to read newer rows (`credentials.key_version_unknown`).
 
-## A1274: a lost node.db beside an intact venue.db reads as a sole primary
+## A1274: a box that handed over and then loses its node.db can start as a second main box
 
-Left open by A947 slice 3a. A box with no row in `node_mode` reads as a sole primary
-(`readNodeMode`, `packages/node-db/src/mode.ts`). So a spare whose `node.db` is deleted, while its
-copy of `venue.db` stays, reopens with a new `node.db` holding no row for it and reads its mode and
-singleton role as primary. Guard: the case "reads as a sole primary once its node.db is lost" in
-`apps/server/src/node-db-copy.test.ts`, which asserts the reader and the holder refresh; it starts no
-server, so what boot then does is not run. A start-up refusal for a missing `node.db` was not taken
-in slice 3a because it needs a new recovery-page code with English and Spanish title and action.
-
-- **Not closed by A947 3b-G's refusal (Task G.3, found by the 2026-11-10 Fable review, read, not
-  run): a box that handed over and then loses its `node.db`.** Its proof that it handed over lives
-  in `node.db` only, and stepping down mints no chart, so if it was off before it heard the new
-  chart, its chart still names it the main box: Task G.3 does not fire, and Carry on's check for a
-  known handover reads the lost file (`apps/server/src/carry-on.ts`). With the new main box silent,
-  an administrator who carries on gets two boxes selling and filing, which could cost a filing.
-  Closing it needs a record of the handover outside `node.db`, which changes A1018 Slice 5's
-  handover code ([plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md), Task G.3).
+Left open by A947 3b-G, which refuses a start with `node.state_missing` when a box's `node.db`
+holds neither a `node_mode` row nor a signing key for it and its held chart lists it as anything
+but the serving primary, or names another box serving primary (Task G.3 of the
+[plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md); read, not run, found by the
+2026-11-10 Fable review). A box that handed over keeps its proof of that in `node.db` only, and
+stepping down mints no chart. So if it loses `node.db` before it hears the new chart, its chart
+still names it the main box, the refusal does not fire, and Carry on's check for a known handover
+reads the lost file (`apps/server/src/carry-on.ts`). With the new main box silent, an administrator
+who carries on gets two boxes selling and filing, which could cost a filing. Closing it needs a
+record of the handover outside `node.db`, which changes A1018 Slice 5's handover code.
 
 ## A1275: a Cloud peer's chart is refused on the checked paths
 

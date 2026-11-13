@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -322,9 +322,13 @@ describe("the emergency routes through a real spare start", () => {
   async function startEmergency() {
     const copy = await fixture.placeEmergencyCopy();
     // A failure to connect counts as the main box being gone only at an address this spare
-    // reached it at under the pinned authority, so the spare first meets it running.
+    // reached it at under the venue authority, so the spare first meets it running.
     const authority = await mintBoxAuthority();
     const source = await startBoxServer(authority, () => ({ status: 503, body: "{}" }));
+    // Joining leaves the main box's authority in the spare's own `tls/`.
+    await mkdir(join(dirs().spareState, "tls"), { recursive: true });
+    await writeFile(join(dirs().spareState, "tls", "ca.crt"), authority.caPem);
+    await writeFile(join(dirs().spareState, "tls", "ca.key"), authority.caKeyPem);
     await writeMirrorLink(copy.node, standby.nodeId, {
       originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",

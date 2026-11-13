@@ -29,6 +29,7 @@ describe("the public surface", () => {
         "writeMirrorLink",
         "writeMirrorLinkTx",
         "readNodeMode",
+        "readNodeModeRow",
         "setNodeMode",
         "setNodeModeTx",
         "setPrimaryRoleTx",

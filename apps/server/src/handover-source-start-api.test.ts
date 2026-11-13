@@ -4,6 +4,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer as createHttpsServer } from "node:https";
 import { TLSSocket } from "node:tls";
 import { serve } from "@hono/node-server";
 import { eq, sql } from "drizzle-orm";
@@ -50,6 +51,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { BackgroundDuties } from "./background-duties.js";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
+import { mintBoxAuthority } from "./testing/box-authority.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { imageMigrationsDigest } from "./handover-manifest.js";
 import { promotionTurn } from "./handover-promotion-turn.js";
@@ -400,6 +402,57 @@ describe("a valid start", () => {
     await new Promise((resolve) => server.once("listening", resolve));
     closers.push(() => new Promise((resolve) => void server.close(() => resolve())));
     const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    await holdChart(chartNodes({ contactUrl: url }));
+
+    const answer = await start({}, mount({ fetch: undefined, peerTimeoutMs: 5000 }));
+
+    expect(answer).toEqual({ status: 200, body: { handoverPage: `${url}/handover/${OP}` } });
+    expect(operations(spareBox)).toHaveLength(1);
+  });
+
+  it("a handover start finds a spare whose certificate another authority signed unreachable, and offers it nothing", async () => {
+    const [venue, other] = await Promise.all([mintBoxAuthority(), mintBoxAuthority()]);
+    await mkdir(join(mainState, "tls"));
+    await writeFile(join(mainState, "tls", "ca.crt"), venue.caPem);
+    const reached: string[] = [];
+    const server = serve({
+      fetch: (request) => {
+        reached.push(new URL(request.url).pathname);
+        return spareApp.fetch(request);
+      },
+      port: 0,
+      hostname: "127.0.0.1",
+      createServer: createHttpsServer,
+      serverOptions: { key: other.keyPem, cert: other.certPem },
+    });
+    await new Promise((resolve) => server.once("listening", resolve));
+    closers.push(() => new Promise((resolve) => void server.close(() => resolve())));
+    const url = `https://localhost:${(server.address() as AddressInfo).port}`;
+    await holdChart(chartNodes({ contactUrl: url }));
+
+    const answer = await start({}, mount({ fetch: undefined, peerTimeoutMs: 5000 }));
+
+    expect(answer).toEqual(
+      refusal(409, "handover.destination_unreachable", { destinationNodeId: spare }),
+    );
+    expect(reached).toEqual([]);
+    await expectNothingRecorded();
+  });
+
+  it("control: a spare whose certificate the venue authority signed is offered the handover", async () => {
+    const venue = await mintBoxAuthority();
+    await mkdir(join(mainState, "tls"));
+    await writeFile(join(mainState, "tls", "ca.crt"), venue.caPem);
+    const server = serve({
+      fetch: spareApp.fetch,
+      port: 0,
+      hostname: "127.0.0.1",
+      createServer: createHttpsServer,
+      serverOptions: { key: venue.keyPem, cert: venue.certPem },
+    });
+    await new Promise((resolve) => server.once("listening", resolve));
+    closers.push(() => new Promise((resolve) => void server.close(() => resolve())));
+    const url = `https://localhost:${(server.address() as AddressInfo).port}`;
     await holdChart(chartNodes({ contactUrl: url }));
 
     const answer = await start({}, mount({ fetch: undefined, peerTimeoutMs: 5000 }));

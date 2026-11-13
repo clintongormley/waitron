@@ -1,5 +1,6 @@
 import type { AcceptResult, SignedMembershipDocument } from "@waitron/membership";
 import { isFenced } from "./membership-fence.js";
+import { boxExchange } from "./mirror-bundle-fetch.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
@@ -21,15 +22,14 @@ export interface ReconcileMembershipDeps {
 }
 
 /**
- * A returned box asks its cloud peer for the current signed chart. Only a chart that verifies, is
+ * A returned box asks the box its mirror link names for the current signed chart. Only a chart that verifies, is
  * strictly newer, and fences this node reports `{ superseded: true }`. A fenced boot is a state, not a
  * crash: it logs and returns rather than throwing.
  */
 export async function reconcileMembershipOnBoot(
   deps: ReconcileMembershipDeps,
 ): Promise<{ superseded: boolean }> {
-  // Unreachable → proceed (Ruling C7): a box cannot have been superseded without a reachable cloud AND a
-  // human promotion — the MVP's accepted window.
+  // Unreachable → proceed (Ruling C7).
   const peer = await deps.fetchPeerMembership(deps.peerUrl);
   if (peer === null) return { superseded: false };
 
@@ -53,24 +53,32 @@ export async function reconcileMembershipOnBoot(
 }
 
 /**
- * Answers `null` for a transport error, a non-2xx response, an unparseable body or a peer holding no
- * chart, so "unreachable → proceed" holds. The returned document is UNVERIFIED; `acceptDocument` is the
- * fence.
+ * Answers `null` for an address that is not a URL, a transport error, a refused certificate, no
+ * answer within `timeoutMs`, a non-2xx response, an unparseable body or a peer holding no chart, so
+ * "unreachable → proceed" holds. An https peer is asked only under `authority`, this box's venue authority. The returned
+ * document is UNVERIFIED; `acceptDocument` is the fence.
  */
 export async function fetchPeerMembershipDocument(
   url: string,
-  headers: Record<string, string> = {},
+  { authority, timeoutMs }: { authority?: string; timeoutMs: number },
 ): Promise<SignedMembershipDocument | null> {
-  let res: Response;
+  const target = URL.parse(url);
+  if (target === null) return null;
+  if (target.protocol === "https:" && authority === undefined) return null;
+  let res: { status: number; text: string };
   try {
-    res = await fetch(url, { headers });
+    res = await boxExchange(target, {
+      method: "GET",
+      trust: { ca: authority, rejectUnauthorized: true },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
   } catch {
     return null;
   }
-  if (!res.ok) return null;
+  if (res.status < 200 || res.status > 299) return null;
   let body: { document?: SignedMembershipDocument | null } | null;
   try {
-    body = (await res.json()) as { document?: SignedMembershipDocument | null } | null;
+    body = JSON.parse(res.text) as { document?: SignedMembershipDocument | null } | null;
   } catch {
     return null;
   }

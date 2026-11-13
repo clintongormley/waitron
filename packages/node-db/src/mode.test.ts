@@ -14,6 +14,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
 import {
   readNodeMode,
+  readNodeModeRow,
   setNodeMode,
   deleteNodeModeOtherThanTx,
   setNodeModeTx,
@@ -54,6 +55,21 @@ describe("the role in node.db", () => {
     expect(await readNodeMode(suite.node, NODE)).toEqual({
       mode: "primary",
       singletonRole: "primary",
+    });
+  });
+
+  it("the row reader answers null for a node with no row, and readNodeMode still answers primary", async () => {
+    expect(await readNodeModeRow(suite.node, NODE)).toBeNull();
+    expect(await readNodeMode(suite.node, NODE)).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
+    });
+    await stampDeployment(suite.db, "preproduction");
+    await setNodeMode(handles(), OTHER, "mirror");
+    expect(await readNodeModeRow(suite.node, NODE)).toBeNull();
+    expect(await readNodeModeRow(suite.node, OTHER)).toEqual({
+      mode: "mirror",
+      singletonRole: "secondary",
     });
   });
 

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import {
   HANDOVER_STATES,
   initialState,
@@ -24,6 +25,7 @@ import {
   type TrustSet,
 } from "@waitron/membership";
 import { firstCodeInCauseChain, hasCode, isAppError } from "@waitron/shared";
+import { caCertPath } from "./box-secrets.js";
 import { boxExchange, CheckedAddressUnreached } from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerQueryBody, PeerStatusBody } from "./peer-status-api.js";
 
@@ -56,7 +58,8 @@ export interface CheckPeersDeps {
   onAnswers?: (answers: readonly PeerAnswer[]) => void;
 }
 
-export type Answer = "F" | "N" | "=" | "S";
+/** `J`: a spare still joining, set aside — neither agreement nor silence. */
+export type Answer = "F" | "N" | "=" | "S" | "J";
 
 export interface PeerAnswer {
   nodeId: string;
@@ -116,7 +119,7 @@ function operationFences(op: PeerOperationStatus | null, nodeId: string): boolea
 /**
  * The decision a returning box makes before it sells or files: ask the boxes its held chart lists,
  * then `proceed`, `superseded` (a newer chart or a peer's operation says another box took over) or
- * `wait` (no box that finished joining answered).
+ * `wait` (no counted box answered; a box whose signed answer says it is still joining is set aside).
  */
 export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartCheckResult> {
   const { held, nodeId } = deps;
@@ -211,6 +214,7 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
     // A part this box cannot read may report a takeover, so it cannot clear a wait. Nor can no
     // chart, or one this box cannot trust: neither vouches that no handover happened.
     if (!partsReadable(status)) return silent("unreadable_part");
+    if (status.joining === true) return { ...of("J"), counted: false };
     if (verdict === undefined) return silent("no_chart");
     if (verdict.accepted) return of(chart.body.term === newest ? "N" : "=");
     return verdict.reason === "invalid" ? silent("untrusted_chart") : of("=");
@@ -249,6 +253,7 @@ export function persistingAccept(deps: {
 
 /** Why an ask has no answer to judge; logged by node id, never with the answer's contents. */
 export type SilentReason =
+  | "certificate"
   | "unreachable"
   | "unresolved"
   | "not_established"
@@ -268,7 +273,7 @@ export interface AskPeerStatusDeps {
    * neither evicts nor clears (`peerKeyOf`).
    */
   publicKeyOf: (nodeId: string) => string | undefined;
-  /** The authority certificate this box holds for a peer; pinned when there is one. */
+  /** The authority a peer's certificate must verify under; with none, no https peer is asked. */
   authorityOf?: (nodeId: string) => string | undefined;
   /** Replaces the box transport. */
   fetch?: typeof fetch;
@@ -329,7 +334,8 @@ function partsReadable(status: PeerStatusBody): boolean {
   return (
     isOperationStatus(status.openOperation) &&
     isOperationStatus(status.requestedOperation) &&
-    isRestriction(status.restriction)
+    isRestriction(status.restriction) &&
+    (status.joining === undefined || status.joining === true)
   );
 }
 
@@ -347,6 +353,31 @@ export function boxRefusal(text: string): { code: string; params: unknown } | nu
 }
 
 class PeerSilenceUnestablished extends Error {}
+
+class PeerCertificateRefused extends Error {}
+
+const CERTIFICATE_REFUSALS = new Set([
+  "CERT_HAS_EXPIRED",
+  "CERT_NOT_YET_VALID",
+  "CERT_SIGNATURE_FAILURE",
+  "CERT_UNTRUSTED",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+  "INVALID_PURPOSE",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "UNABLE_TO_GET_ISSUER_CERT",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+]);
+
+/** This box's venue authority, the box CA certificate; `undefined` when it cannot be read. */
+export async function readVenueAuthority(stateDir: string): Promise<string | undefined> {
+  try {
+    return await readFile(caCertPath(stateDir), "utf8");
+  } catch {
+    return undefined;
+  }
+}
 
 /** One signed exchange with another box, stopped at `timeoutMs`; a failure is thrown. */
 export async function postToBox(
@@ -369,13 +400,14 @@ export async function postToBox(
       return { status: res.status, text: await res.text() };
     }
     const ca = deps.authorityOf?.(nodeId);
+    const target = new URL(url);
+    if (target.protocol === "https:" && ca === undefined)
+      throw new PeerCertificateRefused("no authority to check the certificate under");
     return await boxExchange(
-      new URL(url),
+      target,
       {
         method: "POST",
-        // Unchecked without a pinned authority: only an answer whose signed envelope verifies can be
-        // taken as a yes.
-        trust: ca === undefined ? { rejectUnauthorized: false } : { ca, rejectUnauthorized: true },
+        trust: { ca, rejectUnauthorized: true },
         signal,
         body,
         onConnected: () => {
@@ -385,6 +417,12 @@ export async function postToBox(
       MAX_STATUS_BYTES,
     );
   } catch (error) {
+    if (error instanceof PeerCertificateRefused) throw error;
+    if (
+      deps.fetch === undefined &&
+      firstCodeInCauseChain(error, (code) => CERTIFICATE_REFUSALS.has(code)) !== null
+    )
+      throw new PeerCertificateRefused("certificate refused", { cause: error });
     // A connected peer may still sell. A fetch replacement exposes no connection phase.
     if (connected || (signal.aborted && deps.fetch !== undefined))
       throw new PeerSilenceUnestablished(
@@ -434,6 +472,7 @@ export function askPeerStatus(
         JSON.stringify(query),
       );
     } catch (error) {
+      if (error instanceof PeerCertificateRefused) return silent("certificate");
       if (error instanceof PeerSilenceUnestablished) return silent("not_established");
       // Only the address this box last reached the box at under its pinned authority speaks for
       // that box: any other may be another device's claim, or one this box never reached it at.

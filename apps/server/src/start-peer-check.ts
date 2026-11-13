@@ -14,7 +14,6 @@ import { servingPrimaryNodeId, type SignedMembershipDocument } from "@waitron/me
 import {
   nodeHandoverOperations,
   readHandoverRestriction,
-  readMirrorLink,
   readOpenHandoverOperation,
   recordHandoverRestrictionTx,
   type HandoverOperation,
@@ -24,6 +23,7 @@ import {
   askPeerStatus,
   checkPeersAtStart,
   persistingAccept,
+  readVenueAuthority,
   type PeerAnswer,
   type SilentReason,
   type StartCheckResult,
@@ -148,6 +148,8 @@ export interface StartPeerCheckDeps {
   node: NodeDatabase;
   ring: KeyRing;
   nodeId: string;
+  /** Holds `tls/ca.crt`, the venue authority every peer's certificate must verify under. */
+  stateDir: string;
   /** Used for this box's own address only when the held chart has no entry for it. */
   advertisedOrigin: string;
   log: Logger;
@@ -176,7 +178,7 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
   const ownEntry = held?.body.nodes.find((n) => n.nodeId === nodeId);
   let answers: readonly PeerAnswer[] = [];
   let keyOf: Promise<(id: string) => string | undefined> | undefined;
-  let link: ReturnType<typeof readMirrorLink> | undefined;
+  let authority: Promise<string | undefined> | undefined;
   const askWhy = new Map<string, SilentReason>();
   const charts = new Map<string, SignedMembershipDocument>();
   const result = await checkPeersAtStart({
@@ -188,14 +190,12 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
     ask: async (peer) => {
       // Read only when a peer is asked: a box whose chart lists no other box needs no key.
       keyOf ??= peerKeyOf({ db, node, ring, nodeId });
-      link ??= readMirrorLink(node, nodeId);
-      // A spare holds its main box's authority from adoption (`adopt.ts`, `writeMirrorLinkTx`).
-      const pinned = await link;
+      authority ??= readVenueAuthority(deps.stateDir);
+      const venueAuthority = await authority;
       const status = await askPeerStatus({
         sign: (body) => signAsThisBox({ node, ring, nodeId }, "query", body),
         publicKeyOf: await keyOf,
-        authorityOf: (id) =>
-          pinned !== null && pinned.originNodeId === id ? pinned.boxCaPem : undefined,
+        authorityOf: () => venueAuthority,
         onSilent: (id, reason) => askWhy.set(id, reason),
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
         timeoutMs,

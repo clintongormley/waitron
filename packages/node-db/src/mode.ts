@@ -27,6 +27,18 @@ export async function readNodeMode(
   return { mode: row?.mode ?? "primary", singletonRole: row?.singletonRole ?? "primary" };
 }
 
+/** Like {@link readNodeMode}, but `null` for a node with no row, for a caller that must tell the two apart. */
+export async function readNodeModeRow(
+  node: NodeDatabase | NodeTransaction,
+  nodeId: string,
+): Promise<{ mode: DeploymentMode; singletonRole: SingletonRole } | null> {
+  const [row] = await node
+    .select({ mode: nodeMode.mode, singletonRole: nodeMode.singletonRole })
+    .from(nodeMode)
+    .where(eq(nodeMode.nodeId, nodeId));
+  return row ?? null;
+}
+
 /**
  * Sets one node's mode on its own node transaction, after refusing `deployment.not_stamped` when
  * `venue.db` has no stamp: a role must not be recorded for a database nothing has claimed for an

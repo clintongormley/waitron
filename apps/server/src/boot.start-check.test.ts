@@ -575,7 +575,7 @@ describe("the start check on a real start", () => {
       expect(startChecks(booted.lines)).toEqual([
         {
           result: "wait",
-          peers: [{ nodeId: SPARE.nodeId, answer: "S", counted: true, why: "not_established" }],
+          peers: [{ nodeId: SPARE.nodeId, answer: "S", counted: true, why: "certificate" }],
         },
       ]);
       expect(tlsPeer.requests).toHaveLength(0);

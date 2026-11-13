@@ -457,6 +457,31 @@ describe("a chain recorded under another producer", () => {
   });
 });
 
+describe("a box that lost its own record", () => {
+  it("the recovery page shows the title, the action and Retry a normal boot in both languages, and no Start again", async () => {
+    const english = await pageFor("node.state_missing", undefined, "en-GB");
+    expect(english).toContain(escapeHtml("This box has lost its record of which box it is"));
+    expect(english).toContain(
+      escapeHtml(
+        "It holds a copy of the venue's data but not its own role, so it does not sell or send anything to the tax agency, in case it is the venue's spare. The main box keeps selling. “Retry a normal boot” starts this box once more, and stops here again while the record is missing. While this box is stopped, the main box waits for it each time the main box starts, until an administrator chooses “Carry on as the main box” there. In this version no screen clears this box or joins it to the venue again, so it can stay switched off. The venue's data stays on the main box.",
+      ),
+    );
+    expect(english).toContain('<button type="submit">Retry a normal boot</button>');
+    const spanish = await pageFor("node.state_missing", undefined, SPANISH);
+    expect(spanish).toContain(escapeHtml("Este equipo ha perdido el registro de qué equipo es"));
+    expect(spanish).toContain(
+      escapeHtml(
+        "Guarda una copia de los datos del local, pero no su propio papel, así que no vende ni envía nada a Hacienda, por si es el equipo de reserva del local. El equipo principal sigue vendiendo. «Reintentar un arranque normal» vuelve a arrancar este equipo y se detiene aquí de nuevo mientras falte el registro. Mientras este equipo esté parado, el equipo principal lo espera cada vez que arranca, hasta que un administrador elige allí «Seguir como equipo principal». En esta versión ninguna pantalla deja este equipo sin datos ni lo vuelve a unir al local, así que puede quedarse apagado. Los datos del local siguen en el equipo principal.",
+      ),
+    );
+    expect(spanish).toContain('<button type="submit">Reintentar un arranque normal</button>');
+    for (const page of [english, spanish]) {
+      expect(page).not.toContain("/recovery-api/start-again");
+      expect(page).not.toContain("/recovery-api/environment/start-again");
+    }
+  });
+});
+
 describe("curated operator text", () => {
   // Through `escapeHtml`: curated strings are escaped too, so an apostrophe renders as `&#39;`.
   it("renders the title and action for every code in the table, in each language", async () => {
@@ -539,7 +564,7 @@ describe("curated operator text", () => {
   // `sif.producer_changed` because a retry of the same version and settings refuses again, and the
   // generic line does not say what to change; `sif.allocation_invalid` because a restore placed
   // after the restart is refused there when the box cannot read the internet clock, and Retry
-  // places it once it can.
+  // places it once it can; `node.state_missing` because Retry refuses again while the record is missing.
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
@@ -567,6 +592,7 @@ describe("curated operator text", () => {
       "sif.producer_invalid",
       "sif.producer_changed",
       "sif.allocation_invalid",
+      "node.state_missing",
     ];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_TEXT),

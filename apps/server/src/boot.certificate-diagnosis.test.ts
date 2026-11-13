@@ -14,6 +14,8 @@ import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { establishNodeIdentity } from "./node-identity.js";
+import { loadKeyRing } from "@waitron/credentials";
 import type { StartedServer } from "./boot.js";
 
 const mode = vi.hoisted(() => ({ noDiagnosis: false, failAfterMount: false }));
@@ -94,7 +96,19 @@ async function prepared(posture: "primary" | "mirror" | "fenced" = "primary", fi
         boxCaPem: "unused",
         originNodeId: venue.cfg.nodeId,
       });
-    } else
+    } else {
+      // A box its chart lists holds its signing key.
+      await establishNodeIdentity(
+        {
+          ownerDb: suite.db,
+          node: suite.node,
+          ring: loadKeyRing({
+            WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+            WAITRON_CREDENTIALS_KEY_VERSION: "1",
+          }),
+        },
+        venue.cfg.nodeId,
+      );
       await writeNodeMembership(
         suite.db,
         signedMembershipDoc(1, {
@@ -104,6 +118,7 @@ async function prepared(posture: "primary" | "mirror" | "fenced" = "primary", fi
           ],
         }),
       );
+    }
   }
   const scratch = await mkdtemp(join(tmpdir(), "diagnosis-boot-"));
   cleanups.push(() => rm(scratch, { recursive: true, force: true }));

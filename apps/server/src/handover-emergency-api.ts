@@ -30,7 +30,6 @@ import { servingPrimaryNodeId, type CanonicalValue } from "@waitron/membership";
 import type { WaitronModule } from "@waitron/module";
 import {
   readHandoverOperation,
-  readMirrorLink,
   readNodeMode,
   readOpenHandoverOperation,
   type HandoverOperation,
@@ -43,6 +42,7 @@ import {
   isRecord,
   isRestriction,
   originOf,
+  readVenueAuthority,
   type AskPeerStatusDeps,
   type SilentReason,
 } from "./boot-peer-check.js";
@@ -72,6 +72,8 @@ interface Deps {
   node: NodeDatabase;
   nodeId: string;
   ring: KeyRing;
+  /** Holds `tls/ca.crt`, the venue authority the source's certificate must verify under. */
+  stateDir: string;
   venueDir: string;
   modules: readonly WaitronModule[];
   origin: string;
@@ -156,13 +158,13 @@ export function mountHandoverEmergencyApi(
     const own = held?.body.nodes.find((n) => n.nodeId === deps.nodeId);
     if (source !== undefined && originOf(source.contactUrl) === originOf(deps.origin))
       throw new AppError("handover.source_not_established", {});
-    const link = await readMirrorLink(deps.node, deps.nodeId);
+    const authority = await readVenueAuthority(deps.stateDir);
     let reason: SilentReason | undefined;
     const answer = await askPeerStatus({
       sign: (body) => signAsThisBox(deps, "query", body),
       publicKeyOf: await peerKeyOf(deps),
       ownOrigin: own?.contactUrl || deps.origin,
-      authorityOf: (id) => (link?.originNodeId === id ? link.boxCaPem : undefined),
+      authorityOf: () => authority,
       onSilent: (_id, why) => {
         reason = why;
       },
