@@ -28,7 +28,7 @@ import { signDocumentBody, type MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverEvent, readHandoverOperation, readNodeMode } from "@waitron/node-db";
 import { createPasswordThrottle, createFirstSetupCoordinator } from "@waitron/provisioning";
-import { recordCorrected } from "@waitron/fiscal-verifactu/src/clock-stop-incidents.js";
+import { recordCorrected } from "@waitron/fiscal-verifactu/src/clock-corrected-incident.js";
 import {
   BOX_EMAIL_CHECK_MS,
   readOpenEmailedIncidents,

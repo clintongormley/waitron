@@ -207,7 +207,7 @@ describe("setting the box's clock from the setup and restore pages", () => {
     expect(await h.setter(h.request(), async () => null)).toEqual({ status: "set" });
     expect(await h.setter(h.request(-2 * H), async () => null)).toEqual({
       status: "refused",
-      reason: "pending_disproofs",
+      reason: "pending_step",
     });
     await mkdir(h.dir);
     expect(await h.setter(h.request(-2 * H), async () => null)).toEqual({ status: "set" });

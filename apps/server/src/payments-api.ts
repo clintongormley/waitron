@@ -1316,7 +1316,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const sessionId = requireManagementSession(c);
       const paymentId = requireUuidParam(c.req.param("id"), "PaymentId");
       const read = async (tx: Transaction) => {
-        await refuseWhileClockBehind(tx);
+        await refuseUntilRecordable(tx);
         const [row] = await tx
           .select({
             payment: payments,

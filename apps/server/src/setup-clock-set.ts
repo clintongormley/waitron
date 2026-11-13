@@ -115,7 +115,7 @@ export function createSetupClockSet(deps: {
         return { confirmation: null, corrected: { id: entry.id, params: entry.params } };
       },
     },
-    store: { clear: () => {}, witnesses: () => [] },
+    store: { clear: () => {} },
     clock: deps.clock ?? systemClock(),
     wall: deps.wall,
     monotonic: deps.monotonic,

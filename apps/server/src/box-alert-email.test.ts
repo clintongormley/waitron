@@ -131,7 +131,7 @@ describe("boxEmailMessage for the box setting its clock", () => {
     expect(message("es", named).text).toBe(
       `El reloj del servidor se puso en hora con el dispositivo que mostraba la página de configuración o restauración, por Ben: adelantado ${formatDuration(STEP.stepMs, "es-ES")}, de 14/03/2025 09:12 a 18/10/2026 23:40.`,
     );
-    const nobody = { ...STEP, source: "setup", bySetup: true };
+    const nobody = { ...STEP, source: "setup", person: null, bySetup: true };
     expect(message("en", nobody).text).toBe(
       "The box's clock was set from the device showing the setup or restore page: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to 18/10/2026 23:40.",
     );
