@@ -3830,6 +3830,7 @@ async function bootServer(
         requestFromBox: seams.requestFromBox,
         devMode: config.devMode,
         correction,
+        start: { state: startClock, heads: recordHeads },
       },
     },
     log,

@@ -90,6 +90,19 @@ vi.mock("./payments-api.js", async (original) => {
   };
 });
 
+/** The start check boot last handed `mountBoxHealthApi`. */
+const boxHealth = vi.hoisted(() => ({ start: undefined as unknown }));
+vi.mock("./box-health-api.js", async (original) => {
+  const actual = await original<typeof import("./box-health-api.js")>();
+  return {
+    ...actual,
+    mountBoxHealthApi: (...args: Parameters<typeof actual.mountBoxHealthApi>) => {
+      boxHealth.start = args[1].clockSet.start?.state;
+      actual.mountBoxHealthApi(...args);
+    },
+  };
+});
+
 const { startServer, httpPort } = ephemeralServerFixture();
 const migrations = migrationOptionsFor(manifestSets(), null);
 let venue: BillVenue;
@@ -229,6 +242,14 @@ describe("the start clock gate as boot wires it", () => {
     });
 
     expect(seen).toEqual({ waiting: [true, true], confirmed: [false, false] });
+  });
+
+  it("hands the box-health routes the start check it builds", async () => {
+    boxHealth.start = undefined;
+    await serving(unsynchronisedHost().host, async () => {});
+
+    expect(boxHealth.start).toBeDefined();
+    expect(boxHealth.start).toBe(built.start);
   });
 
   it("sells and writes one record when the host's time service is synchronised", async () => {

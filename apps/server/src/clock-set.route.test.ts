@@ -19,6 +19,7 @@ import type { ClockServiceStatus } from "./box-host-client.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { clockCorrection } from "./clock-correction.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
+import { startClockState, type StartClockState } from "./start-clock-check.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { systemClock } from "./till-backend.js";
@@ -151,9 +152,15 @@ async function stoppedBox(
     stepsBehind?: number;
     /** No correction is handed to the routes. */
     noCorrection?: boolean;
+    /** The start's clock check, handed to the correction and the routes. */
+    start?: StartClockState;
   } = {},
 ): Promise<Box> {
   const backend = options.backend ?? venue.backend;
+  const startDep =
+    options.start === undefined
+      ? {}
+      : { start: { state: options.start, heads: (tx: Transaction) => backend.recordHeads!(tx) } };
   await cashSale();
   const record = latest();
   const behind = record.at.getTime() - gapMs;
@@ -199,6 +206,7 @@ async function stoppedBox(
     transaction: (fn) => withTransaction(venue.db, fn),
     nodeId: venue.cfg.nodeId,
     log: () => {},
+    ...startDep,
   });
   const stepsBehind = options.stepsBehind ?? 0;
   const app = new Hono();
@@ -215,10 +223,12 @@ async function stoppedBox(
         steady: () => steadyMs,
         requestFromBox: () => fromBox,
         devMode: false,
+        ...startDep,
         ...(options.noCorrection === true
           ? {}
           : {
               correction: {
+                inTurn: correction.inTurn,
                 set: correction.set,
                 steps: () => correction.steps() - stepsBehind,
               },
@@ -375,6 +385,23 @@ it("refuses a set with no stop", async () => {
   await expectRefused(box, useDevice(box, mario.cookie, DAY), "not_stopped");
 });
 
+it("sets a waiting start's clock two days back from an administrator's device, confirming it by a person", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(0, { start });
+  const before = boxTime(box);
+
+  const answer = await useDevice(box, mario.cookie, -2 * DAY);
+
+  expect(answer.status).toBe(200);
+  expect(box.host.sets).toEqual([
+    { targetMs: before - 2 * DAY, requester: { source: "admin", person: mario.id } },
+  ]);
+  const row = confirmationRow(answer.json.confirmationId as string);
+  expect(row).toMatchObject({ source: "admin", person_id: mario.id, reason: "start" });
+  expect(Math.abs(row.step_ms + 2 * DAY)).toBeLessThan(MINUTE);
+  expect(start.status).toBe("by_person");
+});
+
 it("refuses a device's time measured before a step the box made", async () => {
   const box = await stoppedBox(10 * MINUTE, { stepsBehind: 1 });
   await expectRefused(box, useDevice(box, mario.cookie, 10 * MINUTE), "stale");
@@ -404,6 +431,19 @@ it("sets a clock that reads a date before 28-10-2024, as that stop", async () =>
     proof: { devices: [] },
   });
   expect(boxTime(box)).toBe(trueTime);
+});
+
+it("sets a waiting start's clock that reads before 28-10-2024 as that stop", async () => {
+  const box = await stoppedBox(10 * MINUTE, { start: startClockState() });
+  const trueTime = latest().at.getTime();
+  box.setClock(Date.UTC(2020, 0, 1, 12));
+
+  const answer = await useDevice(box, mario.cookie, trueTime - boxTime(box));
+
+  expect(answer.status).toBe(200);
+  expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
+    reason: "unusable",
+  });
 });
 
 it("has no set route when the routes are handed no correction", async () => {
