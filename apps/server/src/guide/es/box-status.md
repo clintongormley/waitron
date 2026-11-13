@@ -318,6 +318,11 @@ que lo dice. El servidor también espera cuando su reloj salta más de un minuto
 atrás, mientras no se pone en hora por internet: la fila **Reloj** empieza entonces con **El reloj
 del servidor ha saltado**, y su hora se confirma de las mismas maneras.
 
+El servidor también espera cuando Hacienda rechaza una venta por tener fecha futura mientras el servidor
+no se pone en hora por internet: la fila **Reloj** empieza entonces con **Hacienda rechazó una
+venta**. Que los dispositivos coincidan con el servidor no termina esta espera: confirma o corrige la
+hora en esta página, o el personal usa **Comprobar la hora** en una caja.
+
 El servidor confirma su hora solo en cuanto llega a internet, o en cuanto dos cajas o terminales
 encendidos y conectados coinciden con su reloj, aunque estén en la pantalla de inicio de sesión.
 

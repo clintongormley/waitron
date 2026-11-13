@@ -294,6 +294,11 @@ jumps by more than a minute, forwards or back, while it is not kept in time over
 **Clock** row then starts with **The box's clock jumped**, and its time is confirmed in the same
 ways.
 
+The box also waits when the tax agency refuses a sale as dated in the future while the box is not
+kept in time over the internet: the **Clock** row then starts with **The tax agency refused a
+sale**. Devices agreeing with the box do not end this wait: confirm or correct the time on this page,
+or staff use **Check the time** on a till.
+
 The box confirms its time by itself as soon as it reaches the internet, or once two tills or
 handhelds that are switched on and connected agree with its clock, even at the sign-in screen.
 

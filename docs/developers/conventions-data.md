@@ -4377,7 +4377,8 @@ host that throws, or a host that answers `available: false`, which the state kee
 
 How it moves (A1420 plan D3; A1506 plan row 3):
 
-- **`by_internet` is left only after a clock jump** (below); nothing else moves it.
+- **`by_internet` is left only after a clock jump or a future-date refusal** (below); nothing else
+  moves it.
 - **The time service.** Until the start is `by_internet`, each clock-watch look (every 15 seconds,
   `CLOCK_WATCH_MS`, on every node) reads the time service through the same shared reading, so the
   host program, which systemd starts once per request, runs at most once a minute. A synchronised
@@ -4419,6 +4420,24 @@ How it moves (A1420 plan D3; A1506 plan row 3):
   second against its own steady clock (`performance.now()`) since it arrived. The cause reaches Box status as
   `clock.waiting.cause`, and the till's `clock.unconfirmed` notice and the dashboard bell's
   `clock.unconfirmed` alert as `params.cause`, which word a jump's wait apart from a start's.
+- **A future-date refusal** (`lookForRefusal` in `apps/server/src/clock-watch.ts`, A1420 PR 2,
+  task 10). Each look, whatever the status, asks the seat's optional
+  `latestFutureDateRefusal?(tx, nodeId, abovePosition)` for the highest sale on this box's chain
+  that AEAT refused with code `1112` (dated in the future), above the position the latest
+  confirmation's heads hold for this box; before the first confirmation in a process it asks
+  nothing, so a restart never stops on an older refusal. Such a sale, with the time service not
+  synchronised (a host that does not answer or throws counts as not synchronised), sends the box
+  back to `waiting` with cause `future_date_refused` and the sale's issue date (`refusedOn`), and
+  logs `clock_start.future_date_refused` as a warning (`backToWaitingForRefusal`,
+  `apps/server/src/start-clock-check.ts`). Synchronised, nothing changes, and
+  `clock_start.future_date_refused_synchronised` is logged once per refused sale. Two devices
+  agreeing do not end this wait, and a later jump does not replace its cause; a person, on a till
+  or on Box status, or the time service synchronising does. The refusal holds no later record:
+  the drain keeps sending (`packages/fiscal-verifactu/src/drain.future-date.test.ts`). Boot hands
+  the watch this box's chain (`boot.start-clock-gate.test.ts`), and the tests are
+  `apps/server/src/clock-watch.future-date.test.ts`. The cause and `refusedOn` reach the bell's
+  alert, and the cause the till's notice and Box status's **Clock** row, which say the tax agency
+  refused a sale and offer no device count.
 
 A confirmation that sets nothing writes a log line and no row. Each confirmation keeps the chain
 heads it was made at, read through the seat's optional `recordHeads?(tx)` (`packages/fiscal/src/backend.ts`).
