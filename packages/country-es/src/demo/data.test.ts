@@ -331,7 +331,7 @@ describe("Casa Delgado VAT classes", () => {
     expect(offenders).toEqual([]);
   });
 
-  // LIVA art. 91.Dos.1.1.º d puts cheese sold as goods at 4%; the other deli goods are food at 10% (art. 91.Uno.1.1.º).
+  // LIVA art. 91.Dos.1.1.º d puts cheese sold as goods at 4%; the deli's other food is at 10% (art. 91.Uno.1.1.º).
   // Art. 91.Uno.1.1.º excludes alcoholic drinks and sweetened soft drinks, so the takeaway drinks take the general 21% (art. 90.Uno).
   it("sells the takeaway cheeses at the super-reduced rate, the takeaway drinks at the general rate and the other deli goods at the reduced rate", () => {
     const expected = {

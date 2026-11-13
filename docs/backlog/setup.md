@@ -151,6 +151,9 @@ choices, and the Catalan "Salsitxó", "Llom embotit", "Filet al whisky", "Error 
 The demo's Drinks section labels in Catalan and Galician are drafts awaiting the
 same check, left open by A321 (the demo's included Drinks menu opens onto four sections).
 
+The deli's takeaway drinks (VAT-deli-takeaway) are drafts too; least sure: the Galician
+"Botellín" (staff and kitchen name) and the Valencian "Llanda de Coca-Cola".
+
 ## A guided tutorial for Demo and Preparation (A250, owner 2026-10-03)
 
 **OPEN, partly designed, not
