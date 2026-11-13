@@ -1083,6 +1083,13 @@ the check tries again each minute while refunds are not paused, and attempts no 
 the right to correct invoices, or while the invoice can no longer be corrected
 (decision 14 of the [reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md)).
 
+**2026-11-13, as built in PR 3 (slice 5a):** a corrective invoice prints its original at the till
+only when a person's request filed it (the last cash step or File now) and the till may print
+receipts; an automatic filing and a replayed request print nothing, and a reprint is marked a copy
+and opens no drawer. When it prints is the watcher's rule (lane L `questions.md`, 2026-11-13 01:05);
+the print-receipt condition follows the card slip's and came from this branch's review. Both are
+for the owner to confirm at landing.
+
 ### A444: a full invoice shows only the date it was created (owner, 2026-11-12)
 
 The owner, 2026-11-12, about 11:00 in the watcher's window: "I think we should use the creation
