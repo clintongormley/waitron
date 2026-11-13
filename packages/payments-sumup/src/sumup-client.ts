@@ -15,6 +15,7 @@ import {
 import type {
   CreateCheckoutOutcome,
   SumUpClient,
+  SumUpHistoryPage,
   SumUpRefundEvent,
   SumUpTransaction,
   TransactionQuery,
@@ -239,6 +240,11 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       : "refused";
 
   return {
+    async historyPage(query): Promise<SumUpHistoryPage> {
+      const r = await call("GET", `/v2.1/merchants/${mc}/transactions/history?${query}`);
+      if (r.status !== 200) throw new Error(`sumup history: HTTP ${r.status}`);
+      return r.json as SumUpHistoryPage;
+    },
     async createCheckout(p): Promise<CreateCheckoutOutcome> {
       const body = {
         total_amount: { currency: p.currency, minor_unit: 2, value: toMinorUnits(p.amount) },
@@ -292,6 +298,9 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         id: string;
         status: string;
         amount: number;
+        currency?: string;
+        timestamp?: string;
+        foreign_transaction_id?: string;
         card?: { last_4_digits?: string; type?: string };
         entry_mode?: string;
         auth_code?: string | null;
@@ -312,6 +321,11 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         id: t.id,
         status: t.status,
         amount: fromMajorUnits(t.amount),
+        ...(t.currency === undefined ? {} : { currency: t.currency }),
+        ...(t.timestamp === undefined ? {} : { timestamp: t.timestamp }),
+        ...(t.foreign_transaction_id === undefined
+          ? {}
+          : { foreignTransactionId: t.foreign_transaction_id }),
         ...(card === undefined ? {} : { card }),
         ...(t.entry_mode === undefined ? {} : { entryMode: t.entry_mode }),
         ...(t.auth_code === undefined ? {} : { authCode: t.auth_code }),

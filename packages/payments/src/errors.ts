@@ -11,6 +11,7 @@ export type OrphanRemediation =
    * "succeeded": a refused reversal still reads `claimed` and raises
    * `payment.reconcile_remediation_failed`. */
   | "claimed"
+  | "auditOnly"
   | "workingOrderNotAbandoned"
   | "stateNotCaptured"
   | "amountDrifted"

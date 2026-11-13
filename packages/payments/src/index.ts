@@ -45,6 +45,7 @@ export {
   insertInitiated,
   listAttempting,
   listReconcilable,
+  listAuditCandidates,
   markReconcileRemediated,
   recordFailedRefund,
   recordRefund,

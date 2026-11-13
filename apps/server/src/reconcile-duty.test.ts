@@ -57,6 +57,17 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
     expect(outcome.resweepAfter).toBeUndefined();
   });
 
+  it("carries an audit's pending-recovery resweep and unrelated-charge count", async () => {
+    const result = {
+      ...emptyResult(PERIOD),
+      resweepAfter: new Date("2026-07-26T04:00:00Z"),
+      unlinkedCharges: 3,
+    };
+    const outcome = await reconcilerAsDuty(reconcilerReturning(result)).run(PERIOD, NOW);
+    expect(outcome.resweepAfter).toEqual(result.resweepAfter);
+    expect(outcome.summary.unlinkedCharges).toBe(3);
+  });
+
   it("asks for a parked day to be tried again one day later", () => {
     const duty = reconcilerAsDuty(reconcilerReturning(emptyResult(PERIOD)));
     expect(duty.retryParkedAfterMs).toBe(24 * 60 * 60 * 1000);
@@ -230,6 +241,12 @@ describe("the reconciliation pass follows the payments module's switch", () => {
     let asked = 0;
     let runs = 0;
     const reconcile = reconcilePassFor({
+      duties: [
+        {
+          duty: reconcilerAsDuty(reconcilerReturning(emptyResult(PERIOD))),
+          credentialPurpose: "payments.stripe",
+        },
+      ],
       paymentsEnabled: false,
       credentialProvisioned: () => {
         asked += 1;
@@ -245,9 +262,44 @@ describe("the reconciliation pass follows the payments module's switch", () => {
     expect(runs).toBe(0);
   });
 
+  it("selects SumUp independently of Stripe and notices a newly provisioned credential", async () => {
+    const stripe = reconcilerAsDuty(reconcilerReturning(emptyResult(PERIOD)));
+    const sumup = reconcilerAsDuty({
+      ...reconcilerReturning(emptyResult(PERIOD)),
+      provider: "sumup",
+    });
+    const selected: string[][] = [];
+    let stripeReady = false;
+    const reconcile = reconcilePassFor({
+      paymentsEnabled: true,
+      duties: [
+        { duty: stripe, credentialPurpose: "payments.stripe" },
+        { duty: sumup, credentialPurpose: "payments.sumup" },
+      ],
+      credentialProvisioned: async (purpose) => purpose === "payments.sumup" || stripeReady,
+      runDue: async (_now, duties) => {
+        selected.push((duties ?? []).map((d) => d.name));
+        return ran;
+      },
+    });
+    await reconcile(NOW);
+    stripeReady = true;
+    await reconcile(NOW);
+    expect(selected).toEqual([
+      ["payments.reconcile.sumup"],
+      ["payments.reconcile.stripe", "payments.reconcile.sumup"],
+    ]);
+  });
+
   it("with payments on and the credential provisioned, runs the duty", async () => {
     let runs = 0;
     const reconcile = reconcilePassFor({
+      duties: [
+        {
+          duty: reconcilerAsDuty(reconcilerReturning(emptyResult(PERIOD))),
+          credentialPurpose: "payments.stripe",
+        },
+      ],
       paymentsEnabled: true,
       credentialProvisioned: () => Promise.resolve(true),
       runDue: () => {
@@ -262,6 +314,12 @@ describe("the reconciliation pass follows the payments module's switch", () => {
   it("with payments on but no credential, runs nothing", async () => {
     let runs = 0;
     const reconcile = reconcilePassFor({
+      duties: [
+        {
+          duty: reconcilerAsDuty(reconcilerReturning(emptyResult(PERIOD))),
+          credentialPurpose: "payments.stripe",
+        },
+      ],
       paymentsEnabled: true,
       credentialProvisioned: () => Promise.resolve(false),
       runDue: () => {

@@ -4,6 +4,7 @@ import "@waitron/shared";
  * the neutral `payment.*` codes do not cover. */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "payment.audit_incomplete": { providerId: string };
     "payment.affiliate_rejected": { paymentRef: string };
     /** The API key acts as several merchant accounts and the connect form named none, so the seat
      * cannot choose one to seal. Carries the pickable list — merchant codes and names are not

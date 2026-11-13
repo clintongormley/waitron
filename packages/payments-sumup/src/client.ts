@@ -32,6 +32,9 @@ export interface SumUpTransaction {
   id: string;
   status: SumUpStatus | (string & {});
   amount: Decimal;
+  currency?: string;
+  timestamp?: string;
+  foreignTransactionId?: string;
   /** Card facts SumUp returns on an in-person transaction; absent on some. */
   card?: { last4: string; type: string };
   entryMode?: string;
@@ -39,6 +42,19 @@ export interface SumUpTransaction {
   /** Present when SumUp's answer carried the transaction's events. */
   refundEvents?: SumUpRefundEvent[];
   refundEvidenceInvalid?: boolean;
+}
+
+export interface SumUpHistoryItem {
+  transaction_id?: string;
+  type?: string;
+  status?: string;
+  amount?: number;
+  currency?: string;
+  timestamp?: string;
+}
+export interface SumUpHistoryPage {
+  items: SumUpHistoryItem[];
+  links?: { rel: string; href: string }[];
 }
 
 /** A create call has three outcomes, not two: accepted (the reader will wake), REFUSED by SumUp
@@ -67,6 +83,7 @@ export interface SumUpReader {
  * "still pending", never as an error. */
 export interface SumUpClient {
   prepareCollect?(): Promise<void>;
+  historyPage(query: string): Promise<SumUpHistoryPage>;
   createCheckout(params: {
     readerId: string;
     amount: Decimal;

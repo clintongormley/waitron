@@ -246,6 +246,8 @@ export class FakeSumUp implements SumUpClient {
     return Promise.resolve({ status: "accepted" });
   }
 
+  historyPage: SumUpClient["historyPage"] = () => Promise.resolve({ items: [], links: [] });
+
   listReaders(): Promise<{ id: string; name: string; status: string }[]> {
     return Promise.resolve(this.readers.map((r) => ({ id: r.id, name: r.name, status: r.status })));
   }

@@ -15,6 +15,7 @@ import type {
 import type { SumUpClient } from "./client.js";
 import { sumupClient, SumUpPairingRefused } from "./sumup-client.js";
 import type { SumUpClientOptions } from "./sumup-client.js";
+import { SumUpReconciler } from "./reconciler.js";
 import { SumUpCloudProvider } from "./provider.js";
 import "./errors.js";
 
@@ -28,6 +29,7 @@ const UNKNOWN_MERCHANT = "";
 /** The `SumUpClient` methods, listed once so `deferredClient` can build a lazy wrapper without
  * repeating a per-method arrow (which would each read as a separate uncovered function). */
 const CLIENT_METHODS = [
+  "historyPage",
   "createCheckout",
   "findTransaction",
   "refund",
@@ -174,6 +176,10 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
       db: deps.db,
       incidents: deps.incidents,
     });
+  },
+
+  createReconciler(deps) {
+    return new SumUpReconciler({ ...deps, resolveClient: () => sumupClientForTenant(deps) });
   },
 
   readers: {

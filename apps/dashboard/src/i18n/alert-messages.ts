@@ -431,28 +431,28 @@ export const ALERT_MESSAGES: Readonly<
     es: `Una devolución con tarjeta de {amount:money} lleva más de una hora esperando a que el proveedor de pagos muestre qué pasó. Hasta entonces, su cuenta no admite cobros ni se puede facturar, y no se puede cambiar su importe. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme.${MORE_ES}`,
   },
   "payment.reconcile_unsettled": {
-    en: `A check found {count} card payments that the card provider had not paid out.${MORE_EN}${NOT_FIXED_EN}`,
-    es: `Una comprobación encontró {count} pagos con tarjeta que el proveedor de pagos no había liquidado.${MORE_ES}${NOT_FIXED_ES}`,
+    en: `A check found {count} card payments not confirmed in the card provider's records.${MORE_EN}${NOT_FIXED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta que no constan en los registros del proveedor.${MORE_ES}${NOT_FIXED_ES}`,
   },
   "payment.reconcile_lost_settlement": {
     en: `A check found {count} payments the card provider says were paid, but that never finished here. Check those orders.${MORE_EN}${NOT_FIXED_EN}`,
     es: `Una comprobación encontró {count} pagos que el proveedor de pagos indica como cobrados, pero que aquí no se completaron. Revisa esos pedidos.${MORE_ES}${NOT_FIXED_ES}`,
   },
   "payment.reconcile_orphan": {
-    en: `A check found {count} card payments taken for orders that were already closed or abandoned. Waitron tries to refund some of these itself; check the rest.${MORE_EN}${NOT_FIXED_EN}`,
-    es: `Una comprobación encontró {count} pagos con tarjeta de pedidos ya cerrados o abandonados. Waitron intenta devolver algunos por sí mismo; revisa el resto.${MORE_ES}${NOT_FIXED_ES}`,
+    en: `A check found {count} card payments taken for orders that were already closed or abandoned. Some may not be refunded automatically; check each payment.${MORE_EN}${NOT_FIXED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta de pedidos ya cerrados o abandonados. Algunos pueden no devolverse automáticamente; revisa cada pago.${MORE_ES}${NOT_FIXED_ES}`,
   },
   "payment.reconcile_missing_local": {
-    en: `A check found {count} payments reported by the card provider that are not recorded here.${MORE_EN}${NOT_FIXED_EN}`,
-    es: `Una comprobación encontró {count} pagos indicados por el proveedor de pagos que no están registrados aquí.${MORE_ES}${NOT_FIXED_ES}`,
+    en: `A check found {count} payments reported by the card provider with no matching completed payment here.${MORE_EN}${NOT_FIXED_EN}`,
+    es: `Una comprobación encontró {count} pagos indicados por el proveedor sin un pago completado correspondiente aquí.${MORE_ES}${NOT_FIXED_ES}`,
   },
   "payment.reconcile_drift": {
-    en: `A check found {count} card payments paid out for a different amount than was charged.${MORE_EN}${NOT_FIXED_EN}`,
-    es: `Una comprobación encontró {count} pagos con tarjeta liquidados por un importe distinto del cobrado.${MORE_ES}${NOT_FIXED_ES}`,
+    en: `A check found {count} card payments with a different amount in the card provider's records than recorded here.${MORE_EN}${NOT_FIXED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta con un importe distinto en los registros del proveedor y aquí.${MORE_ES}${NOT_FIXED_ES}`,
   },
   "payment.reconcile_held": {
-    en: "{count} card payments for closed orders were paid out at a different amount than was charged. Waitron will not refund them. Record what was done with each on Card payments.",
-    es: "{count} pagos con tarjeta de pedidos cerrados se liquidaron por un importe distinto del cobrado. Waitron no los devolverá. Registra qué se hizo con cada uno en Pagos con tarjeta.",
+    en: "{count} card payments for closed orders have a different amount in the card provider's records than recorded here. Waitron will not refund them. Record what was done with each on Card payments.",
+    es: "{count} pagos con tarjeta de pedidos cerrados tienen un importe distinto en los registros del proveedor y aquí. Waitron no los devolverá. Registra qué se hizo con cada uno en Pagos con tarjeta.",
   },
   "payment.reconcile_remediation_failed": {
     en: `Automatic refunds failed for {count} card payments. Waitron will not try them again; refund them in the card provider's own dashboard.${MORE_EN}`,
@@ -545,8 +545,8 @@ export const ALERT_WORDS: Readonly<
         es: "el envío de facturas a la Agencia Tributaria",
       },
       "payments.reconcile": {
-        en: "checking card payouts",
-        es: "la comprobación de los abonos de tarjeta",
+        en: "checking card provider records",
+        es: "la comprobación de los registros del proveedor de pagos",
       },
       "card.follow_up": {
         en: "following up card payments and refunds",
