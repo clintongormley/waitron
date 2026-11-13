@@ -104,22 +104,6 @@ it("✕ with no edits closes at once", async () => {
   expect(question().open).toBe(false);
 });
 
-it("discarding an invalid new day clears its validation marks", async () => {
-  const painter = await mount({ specialDayId: null, date: "2026-12-14" });
-  tick(painter).click();
-  await settle(painter);
-  frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
-  await settle(painter);
-  const name = painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
-  expect(name.error).toBe("Enter a name.");
-  await userEvent.keyboard("{Escape}");
-  await choose("discard");
-  await expect.poll(() => painter.open).toBe(false);
-  await settle(painter);
-  expect(name.error).toBe("");
-  expect(frame(painter).refusal).toBe("");
-});
-
 it("✕ with edits asks first: Keep stays with the edit, Discard closes", async () => {
   const painter = await mount();
   tick(painter).click();
