@@ -85,17 +85,11 @@ it("hides the first check and retains warning or failure while Refresh runs", as
 });
 
 it.each([
-  [
-    "en-GB",
-    "Invoices returned from another main box are recorded. This notice is independent of the dates selected here. Do not add the list’s amounts to report totals.",
-  ],
-  [
-    "es-ES",
-    "Se han registrado facturas devueltas desde otro equipo principal. Este aviso es independiente de las fechas seleccionadas aquí. No añadas los importes de la lista a los totales del informe.",
-  ],
+  ["en-GB", en],
+  ["es-ES", es],
 ] as const)(
   "shows returned invoices alone or alongside emergency history with shared controls (%s)",
-  async (language, text) => {
+  async (language, words) => {
     setLocale(language);
     for (const hasEmergencyHandover of [false, true]) {
       const { el } = await mountWidget<HandoverReportWarning>("dashboard-handover-report-warning", {
@@ -103,8 +97,9 @@ it.each([
           getHandoverWarning: async () => ({ hasEmergencyHandover, hasReturnedInvoices: true }),
         } as unknown as DashboardApi,
       });
-      await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(text));
-      const words = language === "en-GB" ? en : es;
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.textContent).toContain(words["handover_warning.returned"]),
+      );
       expect(el.shadowRoot!.textContent!.includes(words["handover_warning.unconfirmed"])).toBe(
         hasEmergencyHandover,
       );
