@@ -1042,10 +1042,13 @@ export async function planAdjustment(
   const stage =
     line === null
       ? null
-      : stageLines.reduce((latest, member) => {
-          const candidate = stageOf(member);
-          return STAGE_RANK[candidate] > STAGE_RANK[latest] ? candidate : latest;
-        }, stageOf(line));
+      : stageLines.reduce(
+          (latest, member) => {
+            const candidate = stageOf(member);
+            return STAGE_RANK[candidate] > STAGE_RANK[latest] ? candidate : latest;
+          },
+          stageOf(line.parentLineId === null || isDish(line) ? line : dishOf(line, view)),
+        );
   const maxBillComp =
     ask.action === "cancel" ? null : (await readAdjustmentSettings(tx)).maxBillComp;
   const verdict =

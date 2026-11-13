@@ -215,6 +215,11 @@ it("stops the lunch dishes, without treating its priced shell as kitchen work, o
       .where(inArray(lineServiceCancellations.lineId, children.ids)),
   );
   expect(cancelled.map((row) => row.lineId).sort()).toEqual(children.children.sort());
+  expect(
+    await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+    ),
+  ).toEqual([]);
 });
 
 async function depart(partyId: string, body: Record<string, unknown>, cookie = supervisorCookie) {

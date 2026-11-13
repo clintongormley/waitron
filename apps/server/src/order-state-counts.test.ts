@@ -583,7 +583,7 @@ describe("readOrderStateCounts", () => {
     const three = await statementsFor(ids);
     const none = await statementsFor([]);
 
-    expect(one.statements).toBe(2);
+    expect(one.statements).toBe(3);
     expect(three.statements).toBe(one.statements);
     expect([...three.counts.keys()]).toEqual(ids);
     expect(none).toEqual({ counts: new Map(), statements: 0 });

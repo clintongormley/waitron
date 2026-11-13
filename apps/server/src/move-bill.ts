@@ -219,7 +219,12 @@ async function moveBillOnce(
     const lines = await tx
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
-      .where(and(eq(workingOrderLines.workingOrderId, billId), serviceDishCondition()));
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, billId),
+          await serviceDishCondition(tx, eq(workingOrderLines.workingOrderId, billId)),
+        ),
+      );
     const changes = await applyPartyAllergyPatch(
       tx,
       partyId,
@@ -541,7 +546,12 @@ export async function leaveParty(
     })
     .from(workingOrderLines)
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(and(eq(workingOrderLines.workingOrderId, billId), serviceDishCondition()));
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, billId),
+        await serviceDishCondition(tx, eq(workingOrderLines.workingOrderId, billId)),
+      ),
+    );
   const staysHeld = (line: (typeof lines)[number]) => held === "keep" && line.groupState === "held";
   const waiting = new Set(
     keepWaiting

@@ -1,4 +1,4 @@
-import { lunchLineSql } from "./operations.js";
+import { readLunchLineIds } from "./operations.js";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   allergyLineTicks,
@@ -246,7 +246,17 @@ export async function setAllergyLineTicks(
         ),
       ))
       found.add(id);
-  if (workingLineIds.length > 0)
+  if (workingLineIds.length > 0) {
+    const parents = await tx
+      .select({ id: workingOrderLines.parentLineId })
+      .from(workingOrderLines)
+      .where(inArray(workingOrderLines.id, workingLineIds));
+    const lunches = [
+      ...(await readLunchLineIds(
+        tx,
+        parents.flatMap((row) => (row.id === null ? [] : [row.id])),
+      )),
+    ];
     for (const { id } of await tx
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
@@ -265,11 +275,12 @@ export async function setAllergyLineTicks(
           ),
           or(
             isNull(workingOrderLines.parentLineId),
-            lunchLineSql(sql`working_order_lines.parent_line_id`),
+            inArray(workingOrderLines.parentLineId, lunches),
           ),
         ),
       ))
       found.add(id);
+  }
   const missing = checked.find((tick) => !found.has((tick.draftLineId ?? tick.workingLineId)!));
   if (missing !== undefined) invalid(`ticks.${missing.index}.line`);
   malformed?.();

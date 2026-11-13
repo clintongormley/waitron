@@ -1,4 +1,4 @@
-import { VENUE_SERVICE } from "./modules.js";
+import { serviceDishPredicate } from "./service-dishes.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   lineServiceCancellations,
@@ -111,10 +111,6 @@ export async function readOrderStateCounts(
   const lines = await tx
     .select({
       id: workingOrderLines.id,
-      lunchShell: VENUE_SERVICE.lunchLineSql(sql`working_order_lines.id`).mapWith(Boolean),
-      lunchChild: VENUE_SERVICE.lunchLineSql(sql`working_order_lines.parent_line_id`).mapWith(
-        Boolean,
-      ),
       orderId: workingOrderLines.workingOrderId,
       parentLineId: workingOrderLines.parentLineId,
       collectedAt: workingOrders.collectedAt,
@@ -144,8 +140,7 @@ export async function readOrderStateCounts(
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
     .where(inArray(workingOrderLines.workingOrderId, [...orderIds]));
-  const isDish = (line: (typeof lines)[number]) =>
-    line.parentLineId === null ? !line.lunchShell : line.lunchChild;
+  const isDish = await serviceDishPredicate(tx, lines);
   const extras = new Map<string, KitchenPart[]>();
   for (const line of lines) {
     if (line.parentLineId === null || isDish(line)) continue;

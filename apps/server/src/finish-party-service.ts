@@ -276,7 +276,15 @@ async function readFinishState(tx: Transaction, args: FinishStateArgs) {
             .filter((bill) => bill.status === "settled" && !bill.leftUnpaid)
             .map((bill) => bill.id),
         ),
-        serviceDishCondition(),
+        await serviceDishCondition(
+          tx,
+          inArray(
+            workingOrders.id,
+            bills
+              .filter((bill) => bill.status === "settled" && !bill.leftUnpaid)
+              .map((bill) => bill.id),
+          ),
+        ),
       ),
     )
     .orderBy(workingOrders.id, workingOrderLines.lineNo);

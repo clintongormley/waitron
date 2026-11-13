@@ -570,7 +570,7 @@ export async function fireHeldLine(
         .where(
           and(
             eq(workingOrderLines.id, lineId),
-            serviceDishCondition(),
+            await serviceDishCondition(tx, eq(workingOrderLines.id, lineId)),
             eq(workingOrders.partyId, partyId),
             eq(orderGroups.partyId, partyId),
             ne(orderGroups.state, "removed"),
@@ -841,7 +841,7 @@ async function copyGroups(
     .where(
       and(
         inArray(workingOrderLines.id, [...new Set(lineIds)]),
-        serviceDishCondition(),
+        await serviceDishCondition(tx, inArray(workingOrderLines.id, [...lineIds])),
         eq(orderGroups.partyId, fromPartyId),
         eq(orderGroups.state, state),
       ),
@@ -989,7 +989,13 @@ async function activeGroupLines(tx: Transaction, groupId: string) {
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(and(eq(workingOrderLines.groupId, groupId), serviceDishCondition(), onShownBill()))
+    .where(
+      and(
+        eq(workingOrderLines.groupId, groupId),
+        await serviceDishCondition(tx, eq(workingOrderLines.groupId, groupId)),
+        onShownBill(),
+      ),
+    )
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
   const cancellations = await readLineCancellations(
     tx,
@@ -1024,7 +1030,7 @@ export async function releaseHeldWorkOf(
         eq(orderGroups.partyId, partyId),
         eq(orderGroups.state, "held"),
         inArray(workingOrderLines.workingOrderId, [...billIds]),
-        serviceDishCondition(),
+        await serviceDishCondition(tx, inArray(workingOrderLines.workingOrderId, [...billIds])),
       ),
     )
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
@@ -1056,7 +1062,7 @@ export async function releaseHeldWorkOf(
       .where(
         and(
           eq(workingOrderLines.groupId, group.id),
-          serviceDishCondition(),
+          await serviceDishCondition(tx, inArray(workingOrderLines.workingOrderId, [...billIds])),
           inArray(workingOrderLines.workingOrderId, [...billIds]),
         ),
       );
@@ -1301,7 +1307,13 @@ export async function moveLinesToGroup(
               workingOrderLines.id,
               moves.map((m) => m.lineId),
             ),
-            serviceDishCondition(),
+            await serviceDishCondition(
+              tx,
+              inArray(
+                workingOrderLines.id,
+                moves.map((move) => move.lineId),
+              ),
+            ),
             eq(orderGroups.partyId, partyId),
             ne(orderGroups.state, "removed"),
           ),
@@ -1607,7 +1619,15 @@ export async function removeEmptiedHeldGroups(
               tx
                 .select({ id: workingOrderLines.id })
                 .from(workingOrderLines)
-                .where(and(eq(workingOrderLines.groupId, orderGroups.id), serviceDishCondition())),
+                .where(
+                  and(
+                    eq(workingOrderLines.groupId, orderGroups.id),
+                    await serviceDishCondition(
+                      tx,
+                      inArray(workingOrderLines.groupId, [...groupIds]),
+                    ),
+                  ),
+                ),
             ),
           ),
         )
@@ -1678,7 +1698,13 @@ async function readGroups(
     .from(workingOrderLines)
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(and(eq(orderGroups.partyId, partyId), serviceDishCondition(), ...scope))
+    .where(
+      and(
+        eq(orderGroups.partyId, partyId),
+        await serviceDishCondition(tx, eq(orderGroups.partyId, partyId)),
+        ...scope,
+      ),
+    )
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
   const remaining = leftToServe();
   const ready = or(eq(ticketItems.madeHere, true), eq(ticketItems.state, "ready"));
@@ -1849,7 +1875,13 @@ export async function readReleaseReminders(
           workingOrderLines.groupId,
           groups.map((group) => group.id),
         ),
-        serviceDishCondition(),
+        await serviceDishCondition(
+          tx,
+          inArray(
+            workingOrderLines.groupId,
+            groups.map((group) => group.id),
+          ),
+        ),
         onShownBill(),
       ),
     );
@@ -1912,7 +1944,7 @@ export async function readHeldCounts(
         inArray(orderGroups.partyId, [...partyIds]),
         eq(orderGroups.state, "held"),
         eq(parties.state, "open"),
-        serviceDishCondition(),
+        await serviceDishCondition(tx, inArray(orderGroups.partyId, [...partyIds])),
         onShownBill(),
       ),
     );
@@ -2759,7 +2791,7 @@ export async function groupArrivingDishes(
     .where(
       and(
         eq(workingOrderLines.workingOrderId, billId),
-        serviceDishCondition(),
+        await serviceDishCondition(tx, eq(workingOrderLines.workingOrderId, billId)),
         isNull(workingOrderLines.groupId),
       ),
     )

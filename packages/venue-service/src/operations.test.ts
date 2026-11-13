@@ -96,7 +96,6 @@ import {
   productsOfferedIn,
   readLateSendMarks,
   readLunchLineIds,
-  lunchLineSql,
 } from "./operations.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 
@@ -2152,14 +2151,22 @@ it("reads lunch identity from each line's recorded version, in a base query and 
     const selected = tx
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
-      .where(lunchLineSql(sql`working_order_lines.id`));
+      .where(
+        inArray(workingOrderLines.id, [
+          ...(await readLunchLineIds(tx, [ordinary, lunch, withoutVersion])),
+        ]),
+      );
     expect(await selected).toEqual([{ id: lunch }]);
     expect(
       await tx
         .select({ id: workingOrderLines.id })
         .from(workingOrders)
         .innerJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
-        .where(lunchLineSql(sql`working_order_lines.id`)),
+        .where(
+          inArray(workingOrderLines.id, [
+            ...(await readLunchLineIds(tx, [ordinary, lunch, withoutVersion])),
+          ]),
+        ),
     ).toEqual([{ id: lunch }]);
   });
 });

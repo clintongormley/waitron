@@ -71,10 +71,11 @@ async function readAsServedAllergens(
     tx,
     lines.map((line) => line.id),
   );
+  const ownLines = new Set(parents);
   const byParent = new Map<string, (AllergenMap | null | undefined)[]>();
   for (const line of lines) {
     if (line.quantity <= (cancelled.get(line.id) ?? 0)) continue;
-    const parentId = parents.includes(line.id) ? line.id : (line.parentId ?? line.id);
+    const parentId = ownLines.has(line.id) ? line.id : (line.parentId ?? line.id);
     const entries = byParent.get(parentId) ?? [];
     entries.push(nutrition.get(line.id)?.allergens);
     byParent.set(parentId, entries);

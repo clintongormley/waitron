@@ -52,7 +52,6 @@ describe("VENUE_SERVICE", () => {
       "listStationNotices",
       "listStationsNotices",
       "listZoneOffers",
-      "lunchLineSql",
       "menuState",
       "mergePartyAllergies",
       "moveAllergyDraftTicks",

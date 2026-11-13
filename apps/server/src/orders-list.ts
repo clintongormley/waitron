@@ -768,7 +768,7 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
   const stored = await tx
     .select({
       id: workingOrderLines.id,
-      setLunch: VENUE_SERVICE.lunchLineSql(sql`working_order_lines.id`).mapWith(Boolean),
+
       parentLineId: workingOrderLines.parentLineId,
       optionSnapshots: workingOrderLines.optionSnapshots,
       note: workingOrderLines.note,
@@ -795,7 +795,15 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
     tx,
     stored.map((line) => line.id),
   );
-  const lines = stored.map((line) => ({ ...line, sentNutrition: saved.get(line.id) ?? null }));
+  const lunches = await VENUE_SERVICE.readLunchLineIds(
+    tx,
+    stored.map((line) => line.id),
+  );
+  const lines = stored.map((line) => ({
+    ...line,
+    setLunch: lunches.has(line.id),
+    sentNutrition: saved.get(line.id) ?? null,
+  }));
   return foldIdenticalPortions(lines).map((line) => ({
     sentNutrition: line.sentNutrition,
     sent: line.sentAt !== null,

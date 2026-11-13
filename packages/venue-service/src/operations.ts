@@ -1141,14 +1141,6 @@ export async function findOrderServiceZones(
   return new Map(rows.map((row) => [row.workingOrderId, row.zoneId]));
 }
 
-/** `lineId` is table-qualified so the recorded marker belongs to the outer line. */
-export function lunchLineSql(lineId: SQL): SQL<boolean> {
-  return sql<boolean>`exists (select 1 from working_line_contexts lunch_context
-    join menu_versions lunch_version on lunch_version.id = lunch_context.menu_version_id
-    where lunch_context.working_order_line_id = ${lineId}
-      and json_extract(lunch_version.document, '$.offers."' || lunch_context.menu_item_id || '".setLunch') = 1)`;
-}
-
 export async function readLunchLineIds(
   tx: Transaction,
   lineIds: readonly string[],

@@ -1,3 +1,6 @@
+import { recordAttendanceFact } from "./attendance-capture.js";
+import { attendanceOperationFacts } from "@waitron/workforce";
+import { systemClock } from "./till-backend.js";
 import { applyPartyAllergyPatch, allergyTargets, readAllergySendView } from "./party-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { randomUUID } from "node:crypto";
@@ -29,19 +32,20 @@ import { OPERATOR } from "./testing/party-venue.js";
 import { finishPartyService } from "./finish-party-service.js";
 import { readBillEditState } from "./bill-editing.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { cancelLine } from "./testing/cancel-line.js";
+import { ensureOperator, cancelLine } from "./testing/cancel-line.js";
 import { adjustments } from "@waitron/adjustments";
 import { readOrderDetail } from "./orders-list.js";
 import { readOrderPreviewItems } from "./order-preview.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { readOrderStateCounts } from "./order-state-counts.js";
-import { markServed, ordersWithUnfiredDish } from "./working-order.js";
+import { markServed, ordersWithUnfiredDish, listCounterWaiting } from "./working-order.js";
 import { partyRevision } from "./parties.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import {
   readCurrentOrders,
   fireHeldLine,
+  fireGroup,
   readHeldCounts,
   listOrderGroups,
 } from "./order-groups.js";
@@ -57,7 +61,7 @@ beforeAll(() => useSplitExtrasDb(suite.db));
 async function lunch(
   tx: Transaction,
   venue: Awaited<ReturnType<typeof setupSplitExtrasVenue>>,
-  held = false,
+  held: boolean | "round" = false,
 ) {
   await updateProduct(tx, venue.products.burger, {
     setLunch: true,
@@ -110,12 +114,13 @@ async function lunch(
     quantity: "1",
     extras: picks([venue.products.cheese, venue.products.chips]),
   };
-  if (held)
+  if (held === true)
     await placeGroups(tx, venue.cfg, venue.party.partyId, {
       operatorId: OPERATOR,
       groups: [{ lines: [request], release: "hold" }],
     });
-  else await addTabRound(tx, venue.cfg, venue.party.tabId, [request]);
+  else
+    await addTabRound(tx, venue.cfg, venue.party.tabId, [{ ...request, hold: held === "round" }]);
   return { starter, main, picks };
 }
 async function rows(tx: Transaction, id: string) {
@@ -202,7 +207,27 @@ describe("set lunch course service", () => {
       expect((await tickets(tx, id)).some((item) => item.workingOrderLineId === rings.id)).toBe(
         false,
       );
-      await sendLines(tx, venue.cfg, id, [rings.lineNo]);
+      await ensureOperator(tx, OPERATOR);
+      const [beforeSend] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+      await sendLines(tx, venue.cfg, id, [rings.lineNo], {
+        personId: OPERATOR,
+        recorder: recordAttendanceFact,
+        clock: systemClock(),
+      });
+      const [afterSend] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+      expect(afterSend!.revision).toBe(beforeSend!.revision + 1);
+      expect(
+        await tx
+          .select({
+            key: attendanceOperationFacts.key,
+            personId: attendanceOperationFacts.personId,
+            outcome: attendanceOperationFacts.outcome,
+          })
+          .from(attendanceOperationFacts)
+          .where(eq(attendanceOperationFacts.source, "order")),
+      ).toEqual([
+        { key: `${id}:${afterSend!.revision}:send`, personId: OPERATOR, outcome: "qualifying" },
+      ]);
       expect(
         (await tickets(tx, id)).find((item) => item.workingOrderLineId === rings.id),
       ).toMatchObject({
@@ -451,5 +476,187 @@ describe("set lunch course service", () => {
       });
       expect(recorded.get(earlier.id)).toEqual(frozen.get(earlier.id));
     });
+  });
+  it("keeps recalled lunch dishes in their courses when its note changes, without sending an unqueued choice", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const id = venue.party.tabId;
+    await withTransaction(suite.db, async (tx) => {
+      const { picks } = await lunch(tx, venue);
+      let [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+      await updateOrderLine(
+        tx,
+        venue.cfg,
+        id,
+        (await rows(tx, id))[0]!.lineNo,
+        { extras: picks([venue.products.cheese, venue.products.onionRings]) },
+        bill!.revision,
+        OPERATOR,
+      );
+      [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+      await updateOrderLine(
+        tx,
+        venue.cfg,
+        id,
+        (await rows(tx, id))[0]!.lineNo,
+        { note: "No salt" },
+        bill!.revision,
+        OPERATOR,
+      );
+      const lines = await rows(tx, id);
+      const items = await tickets(tx, id);
+      expect(
+        items.map((item) => ({
+          productId: lines.find((line) => line.id === item.workingOrderLineId)!.productId,
+          fired: item.firedAt !== null,
+        })),
+      ).toEqual([{ productId: venue.products.cheese, fired: true }]);
+      const jobs = await tx
+        .select()
+        .from(printJobs)
+        .where(eq(printJobs.printerId, venue.printers.kitchen));
+      expect(decodeTicket(jobs.at(-1)!.payload)).toContain("No salt");
+    });
+  });
+  it("fires a replaced choice through its held group", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const id = venue.party.tabId;
+    await withTransaction(suite.db, async (tx) => {
+      const { picks } = await lunch(tx, venue, true);
+      const initial = await rows(tx, id);
+      const starter = initial.find((line) => line.productId === venue.products.cheese)!;
+      await fireHeldLine(tx, venue.cfg, venue.party.partyId, starter.id, {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+      });
+      const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+      await updateOrderLine(
+        tx,
+        venue.cfg,
+        id,
+        initial[0]!.lineNo,
+        { extras: picks([venue.products.cheese, venue.products.onionRings]) },
+        bill!.revision,
+        OPERATOR,
+      );
+      const choice = (await rows(tx, id)).find(
+        (line) => line.productId === venue.products.onionRings,
+      )!;
+      await fireGroup(tx, venue.cfg, venue.party.partyId, choice.groupId!, {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+      });
+      expect(
+        (await tickets(tx, id)).find((item) => item.workingOrderLineId === choice.id),
+      ).toMatchObject({ firedAt: expect.any(String) });
+    });
+  });
+  it("keeps a second lunch's later course held when its quantity increases", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const id = venue.party.tabId;
+    await withTransaction(suite.db, async (tx) => {
+      await lunch(tx, venue);
+      const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+      await updateOrderLine(
+        tx,
+        venue.cfg,
+        id,
+        (await rows(tx, id))[0]!.lineNo,
+        { quantity: "2" },
+        bill!.revision,
+        OPERATOR,
+      );
+      const lines = await rows(tx, id);
+      const items = await tickets(tx, id);
+      expect(
+        lines.filter((line) => line.parentLineId === null).map((line) => line.quantity),
+      ).toEqual([1000, 1000]);
+      expect(
+        items
+          .filter(
+            (item) =>
+              lines.find((line) => line.id === item.workingOrderLineId)!.productId ===
+              venue.products.chips,
+          )
+          .map((item) => item.firedAt),
+      ).toEqual([null, null]);
+      expect(
+        items.filter(
+          (item) =>
+            lines.find((line) => line.id === item.workingOrderLineId)!.productId ===
+            venue.products.cheese,
+        ),
+      ).toHaveLength(2);
+    });
+  });
+  it("holds lunch dishes added through the round writer until asked", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(suite.db, async (tx) => {
+      await lunch(tx, venue, "round");
+      expect((await tickets(tx, venue.party.tabId)).map((item) => item.firedAt)).toEqual([
+        null,
+        null,
+      ]);
+    });
+  });
+
+  it("inherits the guest assigned to the whole lunch on each course slip", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const id = venue.party.tabId;
+    await withTransaction(suite.db, async (tx) => {
+      await lunch(tx, venue, true);
+      const lines = await rows(tx, id);
+      await VENUE_SERVICE.writePartyAllergy(
+        tx,
+        venue.party.partyId,
+        {
+          answer: "allergies",
+          guests: [{ who: "Guest B", allergens: { gluten: { kinds: ["wheat"] } }, note: null }],
+        },
+        OPERATOR,
+      );
+      const snapshot = await VENUE_SERVICE.readPartyAllergy(tx, venue.party.partyId);
+      await VENUE_SERVICE.setAllergyLineTicks(tx, venue.party.partyId, [
+        { workingLineId: lines[0]!.id, draftLineId: null, guestId: snapshot.guests[0]!.id },
+      ]);
+      const groupId = (await listOrderGroups(tx, venue.party.partyId)).groups[0]!.id;
+      await fireGroup(tx, venue.cfg, venue.party.partyId, groupId, {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+      });
+      const items = await tickets(tx, id);
+      const recorded = await VENUE_SERVICE.readTicketAllergies(
+        tx,
+        items.map((item) => item.id),
+      );
+      expect(items.map((item) => recorded.get(item.id)?.originalBlock?.who)).toEqual([
+        "Guest B",
+        "Guest B",
+      ]);
+    });
+  });
+  it("shows a settled counter lunch's dishes as waiting for collection", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const id = venue.party.tabId;
+    const children = await withTransaction(suite.db, async (tx) => {
+      await lunch(tx, venue);
+      const lines = await rows(tx, id);
+      await tx
+        .update(workingOrders)
+        .set({ partyId: null, status: "settled", settledAt: new Date().toISOString() })
+        .where(eq(workingOrders.id, id));
+      return {
+        starter: lines.find((line) => line.productId === venue.products.cheese)!.id,
+        main: lines.find((line) => line.productId === venue.products.chips)!.id,
+      };
+    });
+    expect(
+      (await listCounterWaiting({ db: suite.db })).find((order) => order.id === id)?.movableDishes,
+    ).toEqual([
+      { lineId: children.starter, stationId: venue.stations.kitchen },
+      { lineId: children.main, stationId: venue.stations.fryer },
+    ]);
   });
 });
