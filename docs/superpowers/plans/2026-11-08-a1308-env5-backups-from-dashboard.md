@@ -128,6 +128,10 @@ only when its captured running-service image map includes Mailpit. Otherwise Com
 from the installed environment. These fixes follow the watcher's
 "USB inbox and profile ... must work with the new profile" instruction; no installer or upgrade flow is added.
 
+**13 November 2026, watcher 04:06.** Restrict the production-selection claim to `waitron.sh`
+installations. USB Live updates keep the inbox profile; record that in the existing box-installation
+backlog, with no USB updater behaviour change in this slice.
+
 `deploy/waitron.sh` gains `select_practice_inbox <on|off|decide>`. It reads `.env`'s
 `COMPOSE_PROFILES` line (comma-separated), adds or removes only the entry `practice-inbox`, keeps every
 other entry an operator set (for example `staff-tunnel`), and writes the result with the script's

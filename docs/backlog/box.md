@@ -548,6 +548,8 @@ Plan one multi-platform application image with arm64 smoke, and an arm64 install
 
 ## B3. The bootable USB installer
 
+- A USB recipe’s Live updates keep the practice inbox profile: `scripts/box/upgrades/host.mjs` restarts it without `waitron.sh`’s production selector (env5 fixes-read limit; watcher, 2026-11-13 04:06).
+
 The [network display](../superpowers/plans/2026-11-12-b3-20-network-screen.md) shows the installed host’s wired and Wi-Fi observation on Settings → Box status. Network controls, scan/join/forget and Wi-Fi boot-copy reconciliation remain to be built.
 
 The development console shows Spanish and English together, names the checked venue and warns when its tag marks it Live; missing or unusable tags leave Live status unknown. It returns through a one-time EFI boot choice after 15 seconds. Keys pause it until 120 seconds without typing. The `existing-stick` rig completes Prepare, waits for the real startup counter to clear, and requires a continuous return with USB attached, unchanged disk hash before installed startup, unchanged chip unlock and `/health`. The graphical warning, reinstall controls and physical qualification remain open. [Return cut](../superpowers/plans/2026-11-11-b3-18b-firmware-return.md).

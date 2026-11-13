@@ -210,8 +210,8 @@ The practice email inbox (Mailpit) runs under the `practice-inbox` compose profi
 and updates enable it on a box that is not production, including one awaiting setup. They disable
 and remove it on a production box, or when the box's environment cannot be established. A reset
 turns it on for the new setup. Other profiles in `.env` are kept, so a manual `docker compose up -d`
-uses the same selection. Changing a Demo box to Live leaves an already-running inbox up until the
-next install, update or reset.
+uses the same selection. On boxes managed with `waitron.sh`, changing Demo to Live leaves an
+already-running inbox up until the next `waitron.sh install`, update or reset.
 
 Configure backup destinations, schedule and retention on the dashboard's **Backups** screen.
 Backups previously configured in `deploy/.env` stop until you configure them there. Keep the old recovery
