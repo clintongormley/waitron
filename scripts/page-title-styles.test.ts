@@ -13,11 +13,14 @@ const compliant =
   'static override styles = [baseStyles, pageTitleStyles, css``]; html`<h1 class="title">Orders</h1>`';
 
 function violations(path: string, source: string): string[] {
+  source = source.replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, "");
   if (excluded.has(path) || path.startsWith("packages/fiscal-verifactu/") || !/<h1\b/.test(source))
     return [];
   const failures: string[] = [];
-  if (!/static\s+(?:override\s+)?styles\s*=\s*\[[^`]*\bpageTitleStyles\s*,/.test(source))
-    failures.push("adopt pageTitleStyles");
+  const styles =
+    source.match(/static\s+(?:override\s+)?styles(?:\s*:[^=]+)?\s*=\s*\[([\s\S]*?)\]\s*;/)?.[1] ??
+    "";
+  if (!/\bpageTitleStyles\b/.test(styles)) failures.push("adopt pageTitleStyles");
   const classes = [...source.matchAll(/<h1\b[^>]*class="([^"]*)"/g)].flatMap((match) =>
     match[1]!.split(/\s+/),
   );
@@ -29,7 +32,8 @@ function violations(path: string, source: string): string[] {
         .some(
           (selector) =>
             /\bh1\b/.test(selector) ||
-            (classes.some((name) => selector.includes(`.${name}`)) && !/\bh[2-6]\b/.test(selector)),
+            ([...selector.matchAll(/\.([\w-]+)/g)].some((match) => classes.includes(match[1]!)) &&
+              !/\bh[2-6]\b/.test(selector)),
         );
       if (applies) failures.push("remove local title size");
     }
@@ -39,6 +43,26 @@ function violations(path: string, source: string): string[] {
 
 it.each([
   ["adopted title", screen, compliant, []],
+  ["typed style list", screen, compliant.replace("styles =", "styles: CSSResultGroup ="), []],
+  [
+    "style after local CSS",
+    screen,
+    compliant.replace("pageTitleStyles, css``", "css``, pageTitleStyles"),
+    [],
+  ],
+  [
+    "different class",
+    screen,
+    compliant + "css`.title-row { font-size: var(--wt-font-size-sm); }`",
+    [],
+  ],
+  ["comment-only H1", screen, "// A page uses an <h1>.\nstatic styles = [baseStyles];", []],
+  [
+    "style-only screen",
+    screen,
+    "static override styles = [baseStyles, pageTitleStyles]; html`<h1>Orders</h1>`",
+    [],
+  ],
   [
     "missing adoption",
     screen,
