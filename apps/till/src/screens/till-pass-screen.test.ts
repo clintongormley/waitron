@@ -265,7 +265,7 @@ describe("A773 pass screen", () => {
       [[], "all_stations"],
       [[chosen("pass")], "pass"],
     ] as const)(
-      "%j draws group and course Ready only when the till runs the pass",
+      "%j draws group and bill Ready only when the till runs the pass",
       async (screens, mode) => {
         const board = passBoard({
           inProgress: [

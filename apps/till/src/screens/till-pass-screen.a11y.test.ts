@@ -78,7 +78,7 @@ function expectDishDetails(root: ShadowRoot): void {
   expect(root.querySelector("[data-note]")).not.toBeNull();
 }
 
-/** To fire, a fresh In progress card with a course to mark ready, and a forgotten one. */
+/** To fire, a fresh In progress card to mark ready, and a forgotten one. */
 const populated = (): PassBoard =>
   passBoard({
     toFire: [
@@ -199,7 +199,7 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
     const board = read(populated(), { stations, zones });
     const api = {
       getDevicePassBoard: vi.fn().mockResolvedValue(board),
-      bumpDeviceCourseReady: vi.fn().mockRejectedValue({ code: "device.forbidden_action" }),
+      bumpDeviceBillReady: vi.fn().mockRejectedValue({ code: "device.forbidden_action" }),
     } as unknown as TillApi;
     const { el, host } = await mount({
       api,

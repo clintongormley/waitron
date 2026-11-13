@@ -1819,12 +1819,12 @@ describe("TillApi", () => {
     expect(fetchStub).not.toHaveBeenCalled();
   });
 
-  it("A773 retained course Ready surfaces an unknown course refusal", async () => {
+  it("A773 bill Ready surfaces an unknown bill refusal", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "course.not_found" } }, 404));
-    await expect(new TillApi("", fetchStub).bumpCourseReady("wo1", "co2")).rejects.toMatchObject({
-      code: "course.not_found",
+      .mockResolvedValue(jsonResponse({ error: { code: "working_order.not_found" } }, 404));
+    await expect(new TillApi("", fetchStub).bumpBillReady("wo1")).rejects.toMatchObject({
+      code: "working_order.not_found",
       status: 404,
     });
   });
@@ -1892,13 +1892,13 @@ describe("TillApi", () => {
     ]);
   });
 
-  it("bumpCourseReady POSTs an empty object to the order+course /ready route (empty 200 body)", async () => {
+  it("bumpBillReady POSTs an empty object to the bill /ready route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
-    await expect(new TillApi("", fetchStub).bumpCourseReady("wo1", "co2")).resolves.toBeUndefined();
+    await expect(new TillApi("", fetchStub).bumpBillReady("wo1")).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/orders/wo1/courses/co2/ready",
+      "/api/orders/wo1/ready",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
@@ -1914,14 +1914,12 @@ describe("TillApi", () => {
     expect(fetchStub).not.toHaveBeenCalled();
   });
 
-  it("A773 retained device Ready surfaces an unknown course refusal", async () => {
+  it("A773 retained device Ready surfaces an unknown bill refusal", async () => {
     const fetchStub = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "course.not_found" } }, 404));
-    await expect(
-      new TillApi("", fetchStub).bumpDeviceCourseReady("wo1", "co2"),
-    ).rejects.toMatchObject({
-      code: "course.not_found",
+      .mockResolvedValue(jsonResponse({ error: { code: "working_order.not_found" } }, 404));
+    await expect(new TillApi("", fetchStub).bumpDeviceBillReady("wo1")).rejects.toMatchObject({
+      code: "working_order.not_found",
       status: 404,
     });
   });
@@ -2411,11 +2409,11 @@ describe("TillApi", () => {
   });
 
   it("setLineCourse surfaces { code } for an unknown/retired course or an already-fired line", async () => {
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ error: { code: "course.not_found" } }), { status: 404 }),
-      );
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "course.not_found" } }), {
+        status: 404,
+      }),
+    );
 
     await expect(
       new TillApi("", fetchStub).setLineCourse("wo-1", 2, "gone", null),
@@ -4381,10 +4379,10 @@ describe("TillApi: a seated party", () => {
 
   it.each([
     ["fireDeviceCourse", "fire"],
-    ["bumpDeviceCourseReady", "ready"],
+    ["bumpDeviceBillReady", "ready"],
     ["markDeviceCourseAway", "away"],
   ] as const)(
-    "keeps retired %s absent or sends the kitchen display's course /%s request",
+    "keeps retired %s absent or sends the kitchen display's bill /%s request",
     async (method, step) => {
       const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
       if (step !== "ready") {
@@ -4393,12 +4391,9 @@ describe("TillApi: a seated party", () => {
         return;
       }
 
-      await expect(new TillApi("", fetchStub)[method]("wo1", "co2")).resolves.toBeUndefined();
+      await expect(new TillApi("", fetchStub)[method]("wo1")).resolves.toBeUndefined();
 
-      expect(fetchStub).toHaveBeenCalledWith(
-        `/api/device/orders/wo1/courses/co2/${step}`,
-        post({}),
-      );
+      expect(fetchStub).toHaveBeenCalledWith(`/api/device/orders/wo1/${step}`, post({}));
     },
   );
 

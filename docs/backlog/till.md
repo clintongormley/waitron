@@ -3836,7 +3836,7 @@ the pass use amber too? The help texts describe each as it is today.
 ## A1253. A help badge on a button in the brand colour reads as part of the button
 
 **A1253. A help badge on a button in the brand colour reads as part of the button (question for
-the owner, A582 slice 5's look check).** The pass's first Course ready / Group ready keeps its
+the owner, A582 slice 5's look check).** The pass's first Ready keeps its
 badge inside its top corner, and both are filled with the brand colour, so the badge's lower half
 disappears into the button (shots `pass-1280-*-help-on.png` in `~/waitron-campaign/a582-5-shots/`). Slice 4's
 Send all badge has the same clash, less of it because it hangs outside. One answer: a thin ring

@@ -707,9 +707,9 @@ the server checks each at the route, never trusting the till's copy:
   with nobody signed in: `profileAllows` (`packages/layouts/src/device-profile.ts`) refuses it
   every action but `prepare-orders`, `take-orders` and `hand-over-orders`, even one its stored
   list names, and with nobody signed in a till route that needs a session answers
-  `session.required`. Payment and the drawer always need a named person. Its pass screen's course
+  `session.required`. Payment and the drawer always need a named person. Its pass screen's bill
   and group Ready routes (`apps/server/src/device-levers.ts`) serve only a kitchen display, check
-  `prepare-orders` and the order's zone against its pass screen. The former device Fire and Away
+  `prepare-orders`, the `run-the-pass` screen flag and the order's zone against its pass screen. The former device Fire and Away
   routes are retired. Waiter group Fire uses the signed-in person's session.
   Its station screen's Move to station goes through
   `POST /api/device/working-orders/:id/lines/move-station` (`apps/server/src/device-api.ts`), which

@@ -621,14 +621,14 @@ describe("till-app session activity", () => {
         getDeviceIdentity,
         getDevicePassBoard: vi.fn().mockResolvedValue(board),
         getDeviceStationScreen: vi.fn().mockResolvedValue(stationBoard),
-        bumpDeviceCourseReady: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+        bumpDeviceBillReady: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
       });
       await flush(el);
       const grid = () => el.shadowRoot!;
       grid()
         .querySelector("till-pass-screen")!
         .shadowRoot!.querySelector("till-pass-board")!
-        .shadowRoot!.querySelector<HTMLElement>('[data-ready="course-1"]')!
+        .shadowRoot!.querySelector<HTMLElement>('[data-ready="order-1"]')!
         .click();
       await settle(el);
       return { el, grid, getDeviceIdentity };

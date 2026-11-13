@@ -113,9 +113,9 @@ async function mount(mode: Mode, board: PassBoard) {
     }),
     getDevicePassBoard: vi.fn().mockResolvedValue(read),
     getDevicePassMonitorBoard: vi.fn().mockResolvedValue(read),
-    bumpCourseReady: vi.fn().mockResolvedValue(undefined),
+    bumpBillReady: vi.fn().mockResolvedValue(undefined),
     bumpGroupReady: vi.fn().mockResolvedValue({ revision: 8 }),
-    bumpDeviceCourseReady: vi.fn().mockResolvedValue(undefined),
+    bumpDeviceBillReady: vi.fn().mockResolvedValue(undefined),
     bumpDeviceGroupReady: vi.fn().mockResolvedValue({ revision: 8 }),
     reprintOrder: vi.fn().mockResolvedValue(undefined),
   };
@@ -165,14 +165,14 @@ describe("A773 no dispatch presentation", () => {
     it(`${kind} on a kitchen display keeps an enabled Ready while another station's dish cooks`, async () => {
       const { api, root } = await mount("device", cookingBoard(kind));
       const ready = root().querySelector<HTMLButtonElement>(
-        kind === "course" ? '[data-ready="course-1"]' : '[data-group-ready="group-1"]',
+        kind === "course" ? '[data-ready="bill-1"]' : '[data-group-ready="group-1"]',
       );
       expect(ready).not.toBeNull();
       expect(ready!.disabled).toBe(false);
       await userEvent.click(ready!);
-      const call = kind === "course" ? api.bumpDeviceCourseReady : api.bumpDeviceGroupReady;
+      const call = kind === "course" ? api.bumpDeviceBillReady : api.bumpDeviceGroupReady;
       await vi.waitFor(() => expect(call).toHaveBeenCalledOnce());
-      if (kind === "course") expect(call).toHaveBeenCalledWith("bill-1", "course-1");
+      if (kind === "course") expect(call).toHaveBeenCalledWith("bill-1");
       else
         expect(call).toHaveBeenCalledWith("party-1", "group-1", {
           submissionId: expect.any(String),

@@ -2756,14 +2756,9 @@ async function releasedCourses(
   return candidates.filter((courseId) => !held.has(courseId));
 }
 
-/**
- * Bump every fired item of this order and course directly to ready. Held items
- * are skipped. An empty match is a no-op; this operation changes kitchen state only.
- */
-export async function bumpCourseReady(
+export async function bumpBillReady(
   tx: Transaction,
   orderId: string,
-  courseId: string,
   firer?: Firer,
   attendance?: OrderAttendance,
 ): Promise<void> {
@@ -2773,7 +2768,15 @@ export async function bumpCourseReady(
     .where(
       and(
         eq(ticketItems.workingOrderId, orderId),
-        eq(ticketItems.courseId, courseId),
+        inArray(
+          ticketItems.workingOrderLineId,
+          tx
+            .select({ id: workingOrderLines.id })
+            .from(workingOrderLines)
+            .where(
+              and(eq(workingOrderLines.workingOrderId, orderId), isNull(workingOrderLines.groupId)),
+            ),
+        ),
         ne(ticketItems.state, "ready"),
         isNotNull(ticketItems.firedAt),
       ),

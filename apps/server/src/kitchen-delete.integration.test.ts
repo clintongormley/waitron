@@ -32,7 +32,7 @@ import { republishMenus } from "./testing/publish-menu.js";
 import { mountManagementApi } from "./management-api.js";
 import { readDrafts, submitDraft } from "./order-drafts.js";
 import { fireGroup, listOrderGroups } from "./order-groups.js";
-import { bumpCourseReady, readTabLines, advanceTicketItem } from "./working-order.js";
+import { readTabLines, advanceTicketItem } from "./working-order.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { EVERY } from "./testing/pass-board-probe.js";
 import { readRestOfOrder } from "./rest-of-order.js";
@@ -193,7 +193,7 @@ it("keeps retained draft, group, course and ready station history through manage
   expect(await preparing.json()).toEqual({
     error: { code: "station.work_in_progress", params: { stationId: station.id, count: 1 } },
   });
-  await inTx(v, (tx) => bumpCourseReady(tx, submitted.tabId, course.id));
+  await inTx(v, (tx) => advanceTicketItem(tx, preparingTicket!.id, "ready"));
   const history = async () => ({
     tickets: await v.db.select().from(ticketItems),
     lines: await v.db.select().from(workingOrderLines),

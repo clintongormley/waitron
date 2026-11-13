@@ -11,7 +11,6 @@ import { type ColumnKey, type ColumnState, PASS_COLUMNS } from "../state/kitchen
 import { type OverviewRow, overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import {
   type CardView,
-  type CourseReady,
   type ItemCaption,
   type ItemView,
   type PassMode,
@@ -542,9 +541,7 @@ export class TillPassBoard extends LitElement {
       <ul class="items">
         ${this.#rowsOf(view).map((members) => this.#item(members))}
       </ul>
-      ${this.#fire(view)}${this.#groupReady(view)}${view.courseReady.map((course) =>
-        this.#courseReady(view, course),
-      )}${this.#reprints(view)}${
+      ${this.#fire(view)}${this.#groupReady(view)}${this.#billReady(view)}${this.#reprints(view)}${
         badge
           ? helpBadge("help.pass.card", helpText("help.kitchen.cards_part"), {
               guide: "kitchen-service.pass-screen",
@@ -647,15 +644,16 @@ export class TillPassBoard extends LitElement {
     );
   }
 
-  #courseReady(view: CardView, { orderId, courseId, name }: CourseReady): TemplateResult {
+  #billReady(view: CardView): TemplateResult | typeof nothing {
+    if (!view.billReady || view.card.target.kind !== "bill") return nothing;
     return this.#withLeverBadge(
       t("expo.ready"),
       html`<button
         class="lever ready"
-        data-ready=${courseId}
-        @click=${() => this.#emit("pass-course-ready", { key: view.card.key, orderId, courseId })}
+        data-ready=${view.card.target.workingOrderId}
+        @click=${() => this.#emit("pass-bill-ready", { key: view.card.key })}
       >
-        ${t("expo.ready")} ${name}
+        ${t("expo.ready")}
       </button>`,
     );
   }

@@ -496,7 +496,7 @@ const actionRoutes = [
   ["POST", "/api/working-orders/:id/place", 401],
   ["POST", "/api/kitchen-notices/:id/acknowledge", 401],
   ["POST", "/api/ticket-items/:id/advance", 401],
-  ["POST", "/api/orders/:id/courses/:courseId/ready", 401],
+  ["POST", "/api/orders/:id/ready", 401],
   ["POST", "/api/orders/:id/collect", 401],
   ["POST", "/api/orders/:id/reprint", 401],
   ["POST", "/api/working-orders/:id/cancel", 401],

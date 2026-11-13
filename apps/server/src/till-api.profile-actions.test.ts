@@ -279,7 +279,7 @@ const ROUTES: readonly Row[] = [
     forbidden("pay"),
     billPayment("card", "reader"),
   ],
-  preparing("POST", `/api/orders/${id}/courses/${id}/ready`),
+  preparing("POST", `/api/orders/${id}/ready`),
   handingOver("POST", `/api/orders/${id}/collect`),
   ordering("POST", `/api/orders/${id}/reprint`),
   preparing("POST", `/api/ticket-items/${id}/advance`),
@@ -563,11 +563,11 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
     proof: "device cookie (source)",
     actions: ["prepare-orders"],
     basis:
-      "Own \"refuses the display's\" cases; device-api.ts / device-levers.ts; display work, not a person's session",
+      "Own \"refuses the display's\" cases; device-levers.test.ts additionally owns the Runs the pass refusals; display work, not a person's session",
     routes: [
       "POST /api/device/kitchen-notices/:id/acknowledge",
       "POST /api/device/ticket-items/:id/advance",
-      "POST /api/device/orders/:id/courses/:courseId/ready",
+      "POST /api/device/orders/:id/ready",
       "POST /api/device/parties/:id/groups/:gid/ready",
     ],
   },
@@ -1131,7 +1131,7 @@ describe("a shared kitchen display", () => {
   });
 
   for (const [path, lacking] of [
-    [`/api/device/orders/${id}/courses/${id}/ready`, "prepare-orders"],
+    [`/api/device/orders/${id}/ready`, "prepare-orders"],
     [`/api/device/parties/${id}/groups/${id}/ready`, "prepare-orders"],
     [`/api/device/working-orders/${id}/lines/move-station`, "take-orders"],
     ["/api/device/pass-screen/release", "prepare-orders"],
@@ -1258,4 +1258,12 @@ it("lets admitted staff save display zones while their profile still refuses ord
   expect((await send(cookie, "PUT", "/api/device/zones", current.body)).status).toBe(200);
   const order = await send(cookie, "POST", "/api/working-orders", { id: randomUUID(), lines: [] });
   expect({ status: order.status, error: order.body.error }).toEqual(forbidden("take-orders"));
+});
+
+it("requires Runs the pass on both signed-in Ready routes", async () => {
+  const { cookie } = await signIn(allBut("run-the-pass"));
+  for (const path of [`/api/orders/${id}/ready`, `/api/parties/${id}/groups/${id}/ready`]) {
+    const answer = await send(cookie, "POST", path, {});
+    expect({ status: answer.status, error: answer.body.error }).toEqual(forbidden("run-the-pass"));
+  }
 });

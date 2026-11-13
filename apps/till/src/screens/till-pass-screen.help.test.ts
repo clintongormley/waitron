@@ -50,7 +50,6 @@ function groupCard(groupId: string, position: number, dish: string): PassCard {
   });
 }
 
-// Two cards, three course Ready levers: two on the first card, one on the second.
 const courseBoard = (): PassBoard =>
   passBoard({
     inProgress: [
@@ -124,8 +123,8 @@ function stubApi(board: PassBoard, overrides: Record<string, unknown> = {}) {
     getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity("pass"), kitchenScreens: [] }),
     getDevicePassBoard: vi.fn().mockResolvedValue(read),
     getDevicePassMonitorBoard: vi.fn().mockResolvedValue(read),
-    bumpCourseReady: vi.fn().mockResolvedValue(undefined),
-    bumpDeviceCourseReady: vi.fn().mockResolvedValue(undefined),
+    bumpBillReady: vi.fn().mockResolvedValue(undefined),
+    bumpDeviceBillReady: vi.fn().mockResolvedValue(undefined),
     bumpGroupReady: vi.fn().mockResolvedValue({ revision: 8 }),
     bumpDeviceGroupReady: vi.fn().mockResolvedValue({ revision: 8 }),
     reprintOrder: vi.fn().mockResolvedValue(undefined),
@@ -350,7 +349,7 @@ describe("A773 pass screen: help badges", () => {
   );
 
   it.each([
-    { kind: "course", board: courseBoard, label: "expo.ready", count: 3 },
+    { kind: "course", board: courseBoard, label: "expo.ready", count: 2 },
     { kind: "group", board: groupBoard, label: "expo.group_ready", count: 2 },
   ] as const)(
     "where the pass is run, the first $kind Ready has a badge and no other lever does",
@@ -433,24 +432,24 @@ describe("A773 pass screen: help badges", () => {
     const badge = badgeFor(el, t("expo.ready"))!;
     await userEvent.click(badge.shadowRoot!.querySelector("button")!);
     expect(isOpen(badge)).toBe(true);
-    expect(api.bumpDeviceCourseReady).not.toHaveBeenCalled();
-    expect(api.bumpCourseReady).not.toHaveBeenCalled();
+    expect(api.bumpDeviceBillReady).not.toHaveBeenCalled();
+    expect(api.bumpBillReady).not.toHaveBeenCalled();
   });
 
-  it("the first lever still marks its course ready with help on", async () => {
+  it("the first lever still marks its bill ready with help on", async () => {
     const { el, api } = await mountPass();
     await helpOn(el);
     await userEvent.click(levers(el)[0]!);
-    expect(api.bumpDeviceCourseReady).toHaveBeenCalledWith("wo-5", "co-1");
+    expect(api.bumpDeviceBillReady).toHaveBeenCalledWith("wo-5");
   });
 
-  it("the first lever is as wide with help on as off, and as wide as the card's next lever", async () => {
+  it("the first lever is as wide with help on as off, and as wide as the next card's lever", async () => {
     const { el } = await mountPass();
     const off = levers(el)[0]!.getBoundingClientRect().width;
     await helpOn(el);
     const [first, second] = levers(el);
     expect(first!.getBoundingClientRect().width).toBeCloseTo(off, 1);
-    expect(first!.closest("[data-card]")).toBe(second!.closest("[data-card]"));
+    expect(first!.closest("[data-card]")).not.toBe(second!.closest("[data-card]"));
     expect(first!.getBoundingClientRect().width).toBeCloseTo(
       second!.getBoundingClientRect().width,
       1,

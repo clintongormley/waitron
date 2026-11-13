@@ -17,7 +17,7 @@ import { createCourse, setProductCourse } from "./kitchen.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
-import { bumpCourseReady, markServed } from "./working-order.js";
+import { bumpBillReady, markServed } from "./working-order.js";
 import { partyRevision } from "./parties.js";
 import { fireGroup, fireHeldLine, readCurrentOrders, readHeldCounts } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -107,7 +107,7 @@ describe("releasing split-off extras", () => {
       expect(fired.items).toHaveLength(2);
       expect(fired.items.every((item) => item.firedAt !== null)).toBe(true);
       expect((await fryerTickets(tx, venue)).join("\n")).toContain("CHIPS");
-      await bumpCourseReady(tx, venue.party.tabId, courseId);
+      await bumpBillReady(tx, venue.party.tabId);
       expect((await rows(tx, venue.party.tabId)).items.map((item) => item.state)).toEqual([
         "ready",
         "ready",

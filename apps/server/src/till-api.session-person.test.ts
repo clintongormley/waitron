@@ -86,7 +86,7 @@ const BLIND: readonly { route: string; class: Class; reason: string }[] = [
     reason: "kitchen displays only, where nobody can sign in",
   },
   {
-    route: "POST /api/device/orders/:id/courses/:courseId/ready",
+    route: "POST /api/device/orders/:id/ready",
     class: "device only",
     reason: "kitchen displays only, where nobody can sign in",
   },

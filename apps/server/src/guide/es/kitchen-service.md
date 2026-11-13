@@ -302,12 +302,11 @@ tienen cada uno **Mostrar en el pase los platos de otras estaciones**, activado 
 **Dispositivos**, la ventana **Editar** de un dispositivo tiene el mismo ajuste para su pantalla de
 pase o su monitor de pase, con **Usar la configuración del perfil**, **Mostrar** y **Ocultar**.
 
-En una tarjeta en **En curso**, **Grupo listo** marca como listos todos los platos enviados del
-grupo de la mesa, en todas las estaciones, no solo los que muestra este pase, y en un pedido de
-mostrador **Curso listo**, seguido del nombre del curso, hace lo mismo con ese curso. Los platos
-que aún no se han mandado a preparar, en espera o esperando al pase, se quedan como están.
-**Marchar** y estos botones solo aparecen en un dispositivo cuyo perfil **Lleva el pase**. En un terminal, una tarjeta que no está en espera
-ofrece además **Reimprimir** por cada una de sus cuentas.
+En cada tarjeta en **En curso**, toca **Listo** para marcar como listos sus platos enviados en todas
+las estaciones, también los que oculta este pase. El botón cubre toda la tarjeta, incluidos los
+pedidos de mostrador y los platos sin curso. Los platos en espera o esperando al pase se quedan
+como están. **Marchar** y **Listo** requieren **Lleva el pase** en el perfil del dispositivo.
+En un terminal, una tarjeta que no está en espera ofrece además **Reimprimir** por cada una de sus cuentas.
 
 Un monitor de pase muestra el mismo tablero para mirarlo, sin **Marchar**, botones de listo ni
 **Reimprimir**. Un terminal cuyo dispositivo no tiene pantalla de pase ni monitor de pase abre
@@ -333,8 +332,7 @@ el mismo orden; una sección se pliega tocando su cabecera.
 Toca **?** arriba a la derecha de una pantalla de cocina, antes de los botones de tema e idioma,
 para activar la ayuda. Aparecen marcas **?** en la primera tarjeta y en **Columnas** de cada
 tablero, en **Cambios en los pedidos** mientras haya cambios por leer, y en **Todo junto** o **Por
-estación** en una pantalla con más de una estación. En el pase aparecen también en el primer **Curso
-listo** o **Grupo listo**. Toca una marca para leer una nota breve sobre esa parte; algunas notas enlazan
+estación** en una pantalla con más de una estación. En el pase aparecen también en el primer **Listo**. Toca una marca para leer una nota breve sobre esa parte; algunas notas enlazan
 con esta guía. El resto de la pantalla funciona como siempre mientras la ayuda está activa.
 
 La ayuda se desactiva sola dos minutos después de la última vez que se tocó la pantalla, y una
