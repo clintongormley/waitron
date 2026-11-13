@@ -5,7 +5,7 @@ import { installShutdownHandlers, restartProcess } from "./run-server.js";
 
 const CHILD = fileURLToPath(new URL("./testing/shutdown-signals-child.ts", import.meta.url));
 
-function runChild(how: "ask" | "signal") {
+function runChild(how: "ask" | "signal" | "early") {
   const child = spawn(process.execPath, ["--import", import.meta.resolve("tsx"), CHILD, how], {
     stdio: ["ignore", "pipe", "ignore"],
   });
@@ -39,6 +39,44 @@ describe("repeated requests to restart during a slow shutdown", () => {
     ).toEqual(["server.shutdown_complete"]);
     expect(result).toMatchObject({ code: 0, signal: null });
   }, 30_000);
+
+  it("a restart asked for before the handlers are installed shuts down through them once they are", async () => {
+    const result = await runChild("early");
+
+    expect(result.out.split("\n").filter((line) => !line.startsWith("{"))).toEqual([
+      "handlers going in",
+      "close started",
+      "close finished",
+      "",
+    ]);
+    expect(result).toMatchObject({ code: 0, signal: null });
+  }, 30_000);
+
+  it("keeps an ask made before the handlers exist, sends no signal, and starts the shutdown once they are installed", async () => {
+    vi.resetModules();
+    const fresh = await import("./run-server.js");
+    const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+    let closes = 0;
+    try {
+      fresh.restartProcess();
+      expect(kill).not.toHaveBeenCalled();
+      fresh.installShutdownHandlers(
+        { close: () => ((closes += 1), new Promise<void>(() => {})) },
+        {
+          on: () => {},
+          write: (_line, done) => done(),
+          exit: () => {},
+          now: () => new Date("2026-09-08T00:00:00Z"),
+          setTimer: () => ({ cancel: () => {} }),
+        },
+      );
+      expect(closes).toBe(1);
+      fresh.restartProcess();
+      expect(kill).not.toHaveBeenCalled();
+    } finally {
+      kill.mockRestore();
+    }
+  });
 
   it("sends this process SIGTERM until a shutdown is under way, and nothing after", () => {
     const kill = vi.spyOn(process, "kill").mockImplementation(() => true);

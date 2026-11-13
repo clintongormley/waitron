@@ -31,6 +31,8 @@ const DEFAULT_DEPS: ShutdownDeps = {
 export const SHUTDOWN_DEADLINE_MS = 8000;
 
 let shutdownUnderWay = false;
+let handlersInstalled = false;
+let restartAsked = false;
 
 /**
  * Stop the server once on the first SIGTERM/SIGINT, then exit — the routine `bin.ts` and
@@ -68,43 +70,51 @@ export function installShutdownHandlers(
   const logShutdownTimeout = createLogger((line) => deps.write(line, () => {}), deps.now);
   let shuttingDown = false;
   const setTimer = deps.setTimer ?? unrefTimer;
-  for (const signal of ["SIGTERM", "SIGINT"] as const) {
-    deps.on(signal, () => {
-      if (shuttingDown) return;
-      shuttingDown = true;
-      shutdownUnderWay = true;
-      // Left running after a rejection: it is the exit if the failure line's write never completes.
-      const deadline = setTimer(SHUTDOWN_DEADLINE_MS, () => {
-        if (exited) return;
-        if (closeFailed) return exitOnce(1);
-        logShutdownTimeout("warn", "server.shutdown_timeout", { deadlineMs: SHUTDOWN_DEADLINE_MS });
-        exitOnce(0);
-      });
-      void server.close().then(
-        () => {
-          if (exited) return;
-          createLogger(
-            (line) =>
-              deps.write(line, () => {
-                deadline.cancel();
-                exitOnce(0);
-              }),
-            deps.now,
-          )("info", "server.shutdown_complete");
-        },
-        (error: unknown) => {
-          if (exited) return;
-          closeFailed = true;
-          logShutdownFailure("error", "server.shutdown_failed", { errorCode: codeOf(error) });
-        },
-      );
+  const onSignal = (): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    shutdownUnderWay = true;
+    // Left running after a rejection: it is the exit if the failure line's write never completes.
+    const deadline = setTimer(SHUTDOWN_DEADLINE_MS, () => {
+      if (exited) return;
+      if (closeFailed) return exitOnce(1);
+      logShutdownTimeout("warn", "server.shutdown_timeout", { deadlineMs: SHUTDOWN_DEADLINE_MS });
+      exitOnce(0);
     });
+    void server.close().then(
+      () => {
+        if (exited) return;
+        createLogger(
+          (line) =>
+            deps.write(line, () => {
+              deadline.cancel();
+              exitOnce(0);
+            }),
+          deps.now,
+        )("info", "server.shutdown_complete");
+      },
+      (error: unknown) => {
+        if (exited) return;
+        closeFailed = true;
+        logShutdownFailure("error", "server.shutdown_failed", { errorCode: codeOf(error) });
+      },
+    );
+  };
+  for (const signal of ["SIGTERM", "SIGINT"] as const) deps.on(signal, onSignal);
+  handlersInstalled = true;
+  if (restartAsked) {
+    restartAsked = false;
+    onSignal();
   }
 }
 
 /**
- * A second SIGTERM would interrupt the closers already draining.
+ * A second SIGTERM would interrupt the closers already draining. An ask made before
+ * {@link installShutdownHandlers} has run is kept and acted on there: on the box Node is process 1,
+ * which ignores a SIGTERM it has no handler for, so a signal sent then would be lost.
  */
 export function restartProcess(): void {
-  if (!shutdownUnderWay) process.kill(process.pid, "SIGTERM");
+  if (shutdownUnderWay) return;
+  if (!handlersInstalled) restartAsked = true;
+  else process.kill(process.pid, "SIGTERM");
 }

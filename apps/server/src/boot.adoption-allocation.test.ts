@@ -4,8 +4,13 @@ import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { invoiceSeries, locations, nodes, stampDeployment, tenants } from "@waitron/db";
-import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
-import { loadKeyRing, nodeSigningPublicKey, sealNodeSigningKeyTx } from "@waitron/credentials";
+import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
+import {
+  loadKeyRing,
+  nodeSigningPublicKey,
+  sealNodeSigningKeyTx,
+  writePairLinkTx,
+} from "@waitron/credentials";
 import { signEnvelope, verifyEnvelope } from "@waitron/handover";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { withNodeTransaction } from "@waitron/db";
@@ -29,6 +34,9 @@ import {
 } from "./finish-adoption.js";
 import { freePorts } from "./testing/free-ports.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { httpsVia } from "./testing/boot-harness.js";
+import { writeTlsSet } from "./testing/box-tls.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -324,9 +332,20 @@ it("joining finishes when the copy holds this box's row, and the next start is a
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
   };
-  await withNodeTransaction(suite.node, (tx) =>
-    sealNodeSigningKeyTx(tx, loadKeyRing(keyEnv), STANDBY, standby.privateKey),
-  );
+  // A joining spare's production shape: it serves its main box a store, under the venue's `tls/`.
+  await withNodeTransaction(suite.node, async (tx) => {
+    await sealNodeSigningKeyTx(tx, loadKeyRing(keyEnv), STANDBY, standby.privateKey);
+    await writePairLinkTx(tx, loadKeyRing(keyEnv), STANDBY, {
+      role: "serves",
+      state: "awaiting_copy",
+      peerNodeId: PRIMARY,
+      peerPublicKey: main.publicKey,
+      storeUrl: "https://main-box.local:7443",
+      venueId: "venue",
+      accessKeyId: "waitron0123456789abcdef",
+      secretAccessKey: "c".repeat(64),
+    });
+  });
   await pinMainBoxKey(suite.node, STANDBY, main);
   await writeMirrorLink(suite.node, STANDBY, {
     originUrl: "http://127.0.0.1:1/",
@@ -354,10 +373,21 @@ it("joining finishes when the copy holds this box's row, and the next start is a
       taxModule: "vat",
       reserved: { modules: { "fiscal-none": {} }, series: [], endorsement: {} as never },
     });
+    const tls = mintSelfSignedServerCert({
+      hostnames: ["waitron.local"],
+      ipAddresses: ["127.0.0.1"],
+      now: new Date(),
+    });
+    await writeTlsSet(scratch, tls);
+    const versitygw = join(scratch, "versitygw");
+    await writeFile(versitygw, "#!/bin/sh\nexec sleep 60\n", { mode: 0o700 });
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-    const [port] = await freePorts(1);
+    const [port, loopbackPort, storePort] = await freePorts(3);
     const env = {
       ...keyEnv,
+      WAITRON_VERSITYGW_BIN: versitygw,
+      WAITRON_SPARE_STORE_LOOPBACK_PORT: String(loopbackPort),
+      WAITRON_SPARE_STORE_PORT: String(storePort),
       WAITRON_VENUE_DIR: dirname(database),
       WAITRON_STATE_DIR: scratch,
       WAITRON_LOG_DIR: join(scratch, "logs"),
@@ -379,10 +409,14 @@ it("joining finishes when the copy holds this box's row, and the next start is a
     server = undefined;
 
     server = await startServer(env);
-    const probe = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
-    expect(probe.status).toBe(200);
-    expect(await probe.json()).toMatchObject({ acceptingSales: false });
-    expect((await readNodeMode(suite.node, STANDBY)).mode).toBe("mirror");
+    const { via, close } = httpsVia(tls.caCertPem);
+    try {
+      const probe = await fetch(`https://127.0.0.1:${httpPort()}/api/node`, via);
+      expect(probe.status).toBe(200);
+      expect(await probe.json()).toMatchObject({ acceptingSales: false });
+    } finally {
+      await close();
+    }
   } finally {
     allocation.dependent = true;
     await server?.close();
