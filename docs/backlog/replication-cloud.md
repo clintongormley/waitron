@@ -395,20 +395,11 @@ that slice 3 has to restore:
 - **`rejoin --accept-loss` waives nothing today.** The flag and its `rejoin.accept_loss` warning are
   kept so the operator's acknowledgement survives the switch, but the drain confirmation it used to
   waive is gone.
-- **Adopt copies no data, and an adopted mirror can no longer leave adoption-pending.** Adopt stamps
-  the mirror's identity and config and writes the finish-adoption latch; the initial copy that used
-  to bring the venue's rows went with the subscription. `runFinishAdoption` tries to establish the
-  reserved identity on every boot and refuses with `mirror.venue_not_copied` while the database has
-  no venue row. The refusal precedes the standby node insert and does not depend on its foreign key.
-  **Operator-visible consequence:** a box that adopts stays in adoption-pending boot for good — `/api/box/status` keeps
-  answering `adoption: pending`, no mirror session or node-scoped read path is ever mounted, and each
-  boot logs `adoption.establish_failed`. The pending-file invariant is recorded in
-  `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header; whatever replaces the initial copy
-  in slice 3 has to close this.
-
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
-  wizard still offers the option. The primary accepts the join without a relay, and the joining
-  server then waits, since nothing copies the restaurant's data to it until 3b-6. Its role and connect
+  wizard still offers the option. For a venue that does not file with Veri*Factu, the primary accepts
+  the join without a relay, and the joining server takes a copy of the restaurant's data, puts it in
+  place at its next start and finishes joining there. A venue that files with Veri*Factu is refused
+  before anything is reserved (`mirror.standby_series_unsupported`) until 3b-F. The wizard's role and connect
   wording says joining is not finished and points to restore; each refusal's wording says what
   happened and either what to fix before pressing Connect again or to choose Back.
   Removing or disabling the option until slice 3

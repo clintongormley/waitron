@@ -36,8 +36,8 @@ declare module "@waitron/shared" {
     /** The row decrypted, but the plaintext is not a JSON object. Never carries the plaintext. */
     "credentials.malformed_payload": { purpose: string };
     /**
-     * Establishing the box's signing key found `nodes.public_key` naming a different key from the
-     * one this box holds in `node.db`. Only a fault in Waitron produces it, so screens show their
+     * Establishing the box's signing key, or a spare finishing its join, found `nodes.public_key`
+     * naming a different key from the one this box holds in `node.db`. Only a fault in Waitron produces it, so screens show their
      * generic text.
      */
     "node.identity_mismatch": Record<string, never>;

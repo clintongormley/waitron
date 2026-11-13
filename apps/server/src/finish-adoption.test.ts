@@ -10,6 +10,7 @@ import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readPairLink } from "@waitron/node-db";
+import { MIRROR_VIEWER_PERSON_ID } from "./mirror-session.js";
 import {
   PENDING_ADOPTION_FILE,
   readPendingAdoption,
@@ -135,7 +136,7 @@ describe("runFinishAdoption — on a migrated venue", () => {
     });
   }
 
-  it("logs the named no-venue refusal and keeps the pending record", async () => {
+  it("keeps the latch and logs the refusal when venue.db holds no row for this box", async () => {
     await seedTenant(suite.db);
     await spareNode();
     const dir = await tempDir();
@@ -172,6 +173,10 @@ describe("runFinishAdoption — on a migrated venue", () => {
     expect(restarts).toBe(1);
     const rows = await suite.db.execute<{ id: string }>(sql`select id from nodes`);
     expect(rows.rows).toEqual([{ id: STANDBY_NODE_ID }]);
+    const viewer = await suite.db.execute(
+      sql`select 1 from persons where id = ${MIRROR_VIEWER_PERSON_ID}`,
+    );
+    expect(viewer.rows).toEqual([]);
   });
 
   it("keeps the latch when the row's key is not this box's", async () => {
@@ -212,6 +217,7 @@ describe("runFinishAdoption — on a migrated venue", () => {
       { level: "error", event: "adoption.establish_failed", fields: { code: "unknown" } },
     ]);
     expect(await readPendingAdoption(dir)).toEqual(PENDING);
+    expect((await readPairLink(suite.node, STANDBY_NODE_ID))?.state).toBe("copied");
     expect(restarts).toBe(0);
   });
 });
