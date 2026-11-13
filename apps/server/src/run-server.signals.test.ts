@@ -105,3 +105,81 @@ describe("repeated requests to restart during a slow shutdown", () => {
     kill.mockRestore();
   });
 });
+
+describe("a restart the server asks for itself", () => {
+  async function freshHandlers(target: {
+    close(): Promise<void>;
+    beforeRestart?: () => Promise<void>;
+  }) {
+    vi.resetModules();
+    const fresh = await import("./run-server.js");
+    const handlers = new Map<string, () => void>();
+    const exit = vi.fn();
+    const install = () =>
+      fresh.installShutdownHandlers(target, {
+        on: (signal, handler) => void handlers.set(signal, handler),
+        write: (_line, done) => done(),
+        exit,
+        now: () => new Date("2026-09-08T00:00:00Z"),
+        setTimer: () => ({ cancel: () => {} }),
+      });
+    return { fresh, handlers, exit, install };
+  }
+
+  function recorded() {
+    const order: string[] = [];
+    return {
+      order,
+      target: {
+        beforeRestart: vi.fn(async () => void order.push("before restart")),
+        close: vi.fn(async () => void order.push("close")),
+      },
+    };
+  }
+
+  it("runs the server's own step before closing, whether the ask came before or after the handlers were installed", async () => {
+    const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+    try {
+      const early = recorded();
+      const one = await freshHandlers(early.target);
+      one.fresh.restartProcess();
+      one.install();
+      await vi.waitFor(() => expect(one.exit).toHaveBeenCalledWith(0));
+      expect(early.order).toEqual(["before restart", "close"]);
+
+      const late = recorded();
+      const two = await freshHandlers(late.target);
+      two.install();
+      two.fresh.restartProcess();
+      expect(kill).toHaveBeenCalledWith(process.pid, "SIGTERM");
+      two.handlers.get("SIGTERM")!();
+      await vi.waitFor(() => expect(two.exit).toHaveBeenCalledWith(0));
+      expect(late.order).toEqual(["before restart", "close"]);
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
+  it("does not run it for a signal from outside", async () => {
+    for (const signal of ["SIGTERM", "SIGINT"]) {
+      const outside = recorded();
+      const h = await freshHandlers(outside.target);
+      h.install();
+      h.handlers.get(signal)!();
+      await vi.waitFor(() => expect(h.exit).toHaveBeenCalledWith(0));
+      expect(outside.order).toEqual(["close"]);
+    }
+  });
+
+  it("still closes and exits cleanly when that step fails", async () => {
+    const close = vi.fn(() => Promise.resolve());
+    const h = await freshHandlers({
+      beforeRestart: () => Promise.reject(new Error("EROFS")),
+      close,
+    });
+    h.fresh.restartProcess();
+    h.install();
+    await vi.waitFor(() => expect(h.exit).toHaveBeenCalledWith(0));
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+});

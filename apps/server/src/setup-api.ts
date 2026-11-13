@@ -680,8 +680,7 @@ function directError(
 /**
  * Mount the UNAUTHENTICATED setup-mode routes — the whole surface the box exposes while no venue is
  * bound. `GET /setup-api/status`'s shape is a contract the wizard reads: `provisioned` is always
- * `false`, because a provisioned box never mounts these routes. The adopt route's restart does NOT
- * reach a working mirror — see `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header.
+ * `false`, because a provisioned box never mounts these routes.
  *
  * Must be called after `/health` is registered: the root catch-all mounted last answers only paths
  * nothing else claimed.

@@ -33,6 +33,15 @@ export const SHUTDOWN_DEADLINE_MS = 8000;
 let shutdownUnderWay = false;
 let handlersInstalled = false;
 let restartAsked = false;
+let restartRequested = false;
+
+/** What the shutdown handlers stop. */
+export interface ShutdownTarget {
+  close(): Promise<void>;
+  /** Runs before `close` only when {@link restartProcess} asked for the shutdown, never for a
+   *  signal from outside. A rejection is not logged here, and the close goes ahead anyway. */
+  beforeRestart?: () => Promise<void>;
+}
 
 /**
  * Stop the server once on the first SIGTERM/SIGINT, then exit — the routine `bin.ts` and
@@ -53,7 +62,7 @@ let restartAsked = false;
  * sending its own.
  */
 export function installShutdownHandlers(
-  server: { close(): Promise<void> },
+  server: ShutdownTarget,
   deps: ShutdownDeps = DEFAULT_DEPS,
 ): void {
   // Every path ends in exactly one exit, whichever of {clean close, failure-log write, deadline}
@@ -81,7 +90,14 @@ export function installShutdownHandlers(
       logShutdownTimeout("warn", "server.shutdown_timeout", { deadlineMs: SHUTDOWN_DEADLINE_MS });
       exitOnce(0);
     });
-    void server.close().then(
+    const closing =
+      restartRequested && server.beforeRestart !== undefined
+        ? server
+            .beforeRestart()
+            .catch(() => {})
+            .then(() => server.close())
+        : server.close();
+    void closing.then(
       () => {
         if (exited) return;
         createLogger(
@@ -115,6 +131,7 @@ export function installShutdownHandlers(
  */
 export function restartProcess(): void {
   if (shutdownUnderWay) return;
+  restartRequested = true;
   if (!handlersInstalled) restartAsked = true;
   else process.kill(process.pid, "SIGTERM");
 }

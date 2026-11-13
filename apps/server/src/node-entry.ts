@@ -49,7 +49,7 @@ import {
   type RecoveryState,
 } from "./recovery-state.js";
 import { BOOT_INCOMPLETE, HOLDER_STALLED, recoveryApp } from "./recovery-surface.js";
-import { installShutdownHandlers } from "./run-server.js";
+import { installShutdownHandlers, type ShutdownTarget } from "./run-server.js";
 import { closeListener } from "./close-listener.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
 import { runStagedReset, stagedResetEmptiesTls, type StagedResetDeps } from "./reset-request.js";
@@ -106,7 +106,7 @@ export interface EntryDeps {
   now?: () => Date;
   startServer: (env: NodeJS.ProcessEnv, base?: NodeJS.ProcessEnv) => Promise<StartedEntryServer>;
   serveRecovery: (app: Hono, opts: RecoveryServeOptions) => Promise<unknown>;
-  installShutdownHandlers: (server: { close(): Promise<void> }) => void;
+  installShutdownHandlers: (server: ShutdownTarget) => void;
   /** Runs `onStayedUp` once the process has survived `ms` — see the counter rule in `runEntry`. */
   scheduleStayedUp: (ms: number, onStayedUp: () => void) => void;
   log: Logger;
@@ -730,7 +730,12 @@ async function runAdmittedEntry(
     throw error;
   }
 
-  deps.installShutdownHandlers(server);
+  deps.installShutdownHandlers({
+    close: () => server.close(),
+    // A restart the server asked for itself is not a failed start.
+    beforeRestart: () =>
+      persistState(deps, (current) => withoutAttempt(current, attempt.before, attempt.after)),
+  });
   // A box waiting for its peers has answered, but its start has not finished: a failure after the
   // wait is a failed start, and the wait alone is not staying up.
   try {

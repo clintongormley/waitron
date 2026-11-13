@@ -1831,9 +1831,8 @@ async function bootServer(
   };
 
   // Adoption-pending boot: adopt records a latch instead of establishing the standby identity, and
-  // every boot retries that step. `finish-adoption.ts`'s `PendingAdoption` header says why none can
-  // complete it today. In this mode boot serves `/health` and a minimal `/api/box/status`, and reads
-  // no deployment axes or membership.
+  // every boot retries that step. In this mode boot serves `/health` and a minimal
+  // `/api/box/status`, and reads no deployment axes or membership.
   const ownHostname = boxHostnameFor(config.node.nodeId);
   const ownNameOnly: readonly string[] = [ownHostname];
   const ownAndVenueNames: readonly string[] = [ownHostname, BOX_HOSTNAME];

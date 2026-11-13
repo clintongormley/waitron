@@ -595,8 +595,7 @@ function runDuty(deps: DestinationDutyDeps): HandoverDestinationDuty {
     const { kind, operation } = work;
     if (kind === "place") {
       // A start that places records the event before this duty runs, and a start that refuses to
-      // place is one this asks for no longer, so this cannot loop; a restart sent before the shutdown
-      // handlers are in, on a box where Node is process 1, does nothing.
+      // place is one this asks for no longer, so this cannot loop.
       if (await placingWouldStop(operation)) {
         await recordWait(operation, "handover.source_no_longer_main");
         return true;
