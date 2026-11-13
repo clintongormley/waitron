@@ -357,9 +357,23 @@ describe("capturing a stepped-down box's final copy", () => {
     const self = await steppedDown();
     const otherState = join(stateDir, "other");
     await mkdir(otherState);
+    const bothEntered = Promise.withResolvers<void>();
+    let entered = 0;
+    const venue = new Proxy(suite.db, {
+      get: (target, key) => {
+        if (key === "archiveTo") {
+          return async (path: string) => {
+            if (++entered === 2) bothEntered.resolve();
+            await bothEntered.promise;
+            await target.archiveTo(path);
+          };
+        }
+        return Reflect.get(target, key);
+      },
+    });
     const [a, b] = await Promise.all([
-      captureFinalCopy(deps(self, { now: () => 1 }), OP),
-      captureFinalCopy(deps(self, { stateDir: otherState, now: () => 2 }), OP),
+      captureFinalCopy(deps(self, { venue, now: () => 1 }), OP),
+      captureFinalCopy(deps(self, { venue, stateDir: otherState, now: () => 2 }), OP),
     ]);
     const events = await finalStateEvents(self);
     expect(events).toHaveLength(1);
