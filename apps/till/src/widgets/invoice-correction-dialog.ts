@@ -33,6 +33,8 @@ import type { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import { reasonPicker, voidReasons } from "./reason-picker.js";
 import { lineName } from "../screens/till-ticket-view.js";
 import { REASON_MAX, refusalOf, typedMoney } from "../state/bill-payment.js";
+import { refundMethodAllowed } from "../state/tender-refund.js";
+import type { StringKey } from "../i18n/strings.js";
 
 type PayRefusal = ReturnType<typeof refusalOf>;
 
@@ -52,6 +54,7 @@ export type InvoiceCorrectionApi = Pick<
  * back, and the reason the correction was opened with when it is still offered. */
 export interface InvoiceCorrectionCardLeg {
   correctionId: string;
+  tenderId: string;
   target: string;
   startReasonId: string;
 }
@@ -68,9 +71,9 @@ const openCorrectionOf = (error: unknown): string | null => {
     : null;
 };
 
-/** What `invoice-correction-confirm` carries: the amount and dishes as previewed, and the split
- * the preview answered for them. */
-export interface InvoiceCorrectionAsk {
+/** What Correct and refund opens: the amount and dishes as previewed, and the split the preview
+ * answered for them. */
+interface InvoiceCorrectionAsk {
   gross: string;
   lineIds?: string[];
   reasonId: string;
@@ -147,6 +150,12 @@ export class TillInvoiceCorrectionDialog extends LitElement {
   @state() private pinError: string | null = null;
   #override?: Override;
   #retry?: () => Promise<void>;
+  #openedReasonId?: string;
+  #revisionMissed = false;
+  /** An Open whose answer never arrived; while it exists the window sends only it again. */
+  @state() private savedOpen: ReturnType<InvoiceCorrectionSession["savedOpen"]> = null;
+  @state() private lostKey: StringKey = "invoice_correction.unknown";
+  @property({ attribute: false }) capabilities: readonly string[] = [];
   @state() private loaded: (InvoiceCorrectionLines & { tenders: RefundableTender[] }) | null = null;
   @state() private loadRefusal: PayRefusal | null = null;
   @state() private reasons: AdjustmentReason[] | null = null;
@@ -201,11 +210,13 @@ export class TillInvoiceCorrectionDialog extends LitElement {
         this.api.readInvoiceCorrectionLines(this.saleId, {}),
         this.api.getRefundableTenders(this.saleId, {}),
       ]);
+      this.savedOpen = this.session?.savedOpen(this.saleId) ?? null;
       this.loaded = { ...lines, tenders };
     } catch (error) {
       const open = openCorrectionOf(error);
       if (open === null) this.loadRefusal = refusalOf(error);
       else {
+        this.session?.forgetOpen(this.saleId);
         this.correctionId = open;
         await this.#load();
       }
@@ -225,8 +236,15 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     this.#scope?.commit(this.draft);
   }
   override updated(changed: PropertyValues<this>): void {
-    if (changed.has("legsRevision") && this.correction?.state === "open" && !this.busy)
-      void this.#run(() => this.#loadCorrection(this.correction!.id));
+    if (!changed.has("legsRevision") || this.correction?.state !== "open") return;
+    if (this.busy) this.#revisionMissed = true;
+    else this.#reload();
+  }
+  #reload(): void {
+    void this.#run(
+      () => this.#loadCorrection(this.correction!.id),
+      "invoice_correction.read_failed",
+    );
   }
   async #loadReasons(): Promise<void> {
     this.reasonsLoading = true;
@@ -329,30 +347,53 @@ export class TillInvoiceCorrectionDialog extends LitElement {
       note: reason.noteRequired ? this.draft.note.trim() : null,
       expectedSplit: answer.vatBreakdown,
     };
-    this.dispatchEvent(
-      new CustomEvent("invoice-correction-confirm", { detail: ask, bubbles: true, composed: true }),
-    );
-    if (this.session) void this.#run(() => this.#open(ask));
+    void this.#run(() => this.#open(ask));
   }
-  /** Opens the correction, resending the saved request when an earlier answer was lost; on a bill
-   * paid all in cash, gives the whole amount back in cash with the same PIN. */
-  async #open(ask: InvoiceCorrectionAsk): Promise<void> {
+  /** Opens the correction with `ask`, or with the saved Open when `ask` is null; on a bill paid all
+   * in cash, gives the whole amount back in cash with the same PIN. A saved Open is never replaced
+   * by a different ask: its answer may still be on its way. */
+  async #open(ask: InvoiceCorrectionAsk | null): Promise<void> {
     if (this.correction === null) {
+      const session = this.session!;
+      const saved = session.savedOpen(this.saleId);
+      if (saved !== null && ask !== null) {
+        this.savedOpen = saved;
+        return;
+      }
       // The journal recognises its own saved request, submission id included, as the same ask.
-      const resend = this.session!.savedOpen(this.saleId) ?? ask;
-      const opening = await this.session!.open(this.saleId, resend, this.#override);
+      const request = saved ?? ask!;
+      let opening;
+      try {
+        opening = await session.open(this.saleId, request, this.#override);
+      } catch (error) {
+        this.savedOpen = session.savedOpen(this.saleId);
+        throw error;
+      }
+      this.savedOpen = null;
+      this.#openedReasonId = request.reasonId;
       this.tenders = this.loaded?.tenders ?? [];
       if (opening.opened === null) {
         await this.#loadCorrection(opening.correctionId);
         return;
       }
       this.#show(opening.opened.correction);
+      if (!this.isConnected || !this.active) return;
     }
     const correction = this.correction!;
     if (correction.state === "open" && this.#paying().every((row) => row.method === "cash"))
       await this.#giveCash(correction.left);
   }
-  async #giveCash(amount: string): Promise<void> {
+  /** What a lost cash answer was sent with, which the next cash press sends again. */
+  #savedCash(): string | null {
+    if (this.correction === null || !this.session) return null;
+    try {
+      return this.session.savedCash(this.correction.id)?.amount ?? null;
+    } catch {
+      return null;
+    }
+  }
+  async #giveCash(fresh: string): Promise<void> {
+    const amount = this.#savedCash() ?? fresh;
     const given = await this.session!.giveCash(this.correction!.id, { amount }, this.#override);
     this.cashGiven = amount;
     this.#show(given.correction);
@@ -376,10 +417,14 @@ export class TillInvoiceCorrectionDialog extends LitElement {
   }
   /** Runs `step`, asking for a PIN when the person signed in may not, and running it again with
    * that PIN; the PIN lasts for that one step. */
-  async #run(step: () => Promise<void>): Promise<void> {
+  async #run(
+    step: () => Promise<void>,
+    lost: StringKey = "invoice_correction.unknown",
+  ): Promise<void> {
     if (!this.isConnected || !this.active || this.busy) return;
     this.busy = true;
     this.sendRefusal = null;
+    this.lostKey = lost;
     try {
       await step();
       this.approvers = null;
@@ -413,6 +458,10 @@ export class TillInvoiceCorrectionDialog extends LitElement {
       }
     } finally {
       this.busy = false;
+    }
+    if (this.#revisionMissed && this.correction?.state === "open") {
+      this.#revisionMissed = false;
+      this.#reload();
     }
   }
   #signedIn(event: CustomEvent<OverrideConfirmDetail>): void {
@@ -614,18 +663,32 @@ export class TillInvoiceCorrectionDialog extends LitElement {
   #view(correction: InvoiceCorrectionView) {
     if (correction.state !== "open") return this.#ended(correction);
     const left = correction.left;
-    const cashLeft = sumDecimals(
+    const cashLeft: string = sumDecimals(
       this.#paying()
         .filter((row) => row.method === "cash")
         .map((row) => decimal(row.appliedRemaining)),
     );
     const cards = this.#paying().filter(
-      (row) => row.method === "card" && row.pendingRefundId === null,
+      (row) =>
+        row.method === "card" &&
+        row.pendingRefundId === null &&
+        refundMethodAllowed(row, this.capabilities),
     );
+    const cash =
+      positive(left) &&
+      positive(cashLeft) &&
+      refundMethodAllowed({ method: "cash", manual: false }, this.capabilities)
+        ? least(left, cashLeft)
+        : null;
+    const savedCash = this.#savedCash();
     const back = this.#money(correction.moneyBack);
     const fileNow = correction.fileNow;
+    // The view names the reason by its text, which is the note when one was given, so the id
+    // this window opened with comes first.
     const startReasonId =
-      voidReasons(this.reasons).find((reason) => reason.name === correction.reason)?.id ?? "";
+      this.#openedReasonId ??
+      voidReasons(this.reasons).find((reason) => reason.name === correction.reason)?.id ??
+      "";
     const nothingBack = !positive(correction.moneyBack) && !positive(correction.pending);
     return html`<p data-back>
         ${t("invoice_correction.back")
@@ -647,24 +710,22 @@ export class TillInvoiceCorrectionDialog extends LitElement {
       ${
         positive(correction.pending)
           ? html`<p data-pending>
-                ${t("invoice_correction.pending").replace("{amount}", () =>
-                  this.#money(correction.pending),
-                )}
-              </p>
-              ${this.#choice("check", t("invoice_correction.check_again"), "", () => {
-                void this.#run(() => this.#loadCorrection(correction.id));
-              })}`
+              ${t("invoice_correction.pending").replace("{amount}", () =>
+                this.#money(correction.pending),
+              )}
+            </p>`
           : nothing
       }
+      ${this.#choice("check", t("invoice_correction.check_again"), "", () => this.#reload())}
       ${
-        positive(left) && positive(cashLeft)
+        savedCash !== null || cash !== null
           ? this.#choice(
               "cash",
               t("invoice_correction.give_cash").replace("{amount}", () =>
-                this.#money(least(left, cashLeft)),
+                this.#money((savedCash ?? cash)!),
               ),
               t("invoice_correction.give_cash_hint"),
-              () => void this.#run(() => this.#giveCash(least(left, cashLeft))),
+              () => void this.#run(() => this.#giveCash((savedCash ?? cash)!)),
             )
           : nothing
       }
@@ -680,6 +741,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
                     new CustomEvent<InvoiceCorrectionCardLeg>("invoice-correction-card", {
                       detail: {
                         correctionId: correction.id,
+                        tenderId: row.tenderId,
                         target: least(left, row.appliedRemaining),
                         startReasonId,
                       },
@@ -701,7 +763,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
                   ? "invoice_correction.finish_now_hint"
                   : "invoice_correction.record_hint",
               ).replace("{amount}", () => back),
-              () => void this.#run(() => this.#end("file")),
+              () => void this.#run(() => this.#end("file"), "invoice_correction.unknown_end"),
               "primary",
             )
           : nothing
@@ -715,7 +777,8 @@ export class TillInvoiceCorrectionDialog extends LitElement {
                       "close-keeping",
                       t("invoice_correction.close_keeping"),
                       t("invoice_correction.close_keeping_hint"),
-                      () => void this.#run(() => this.#end("close")),
+                      () =>
+                        void this.#run(() => this.#end("close"), "invoice_correction.unknown_end"),
                     )
                   : nothing
               }`
@@ -727,7 +790,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
               "discard",
               t("invoice_correction.discard"),
               t("invoice_correction.discard_hint"),
-              () => void this.#run(() => this.#end("close")),
+              () => void this.#run(() => this.#end("close"), "invoice_correction.unknown_end"),
             )
           : nothing
       }
@@ -735,13 +798,30 @@ export class TillInvoiceCorrectionDialog extends LitElement {
         >${this.#cancelButton()}</wt-form-actions
       >`;
   }
+  #saved(saved: { gross: string }) {
+    return html`<p data-saved>
+        ${t("invoice_correction.saved").replace("{amount}", () => this.#money(saved.gross))}
+      </p>
+      <wt-form-actions .error=${this.sendRefusal === null ? "" : this.#sendText(this.sendRefusal)}
+        >${this.#cancelButton()}
+        <wt-button
+          variant="primary"
+          data-resend
+          .loading=${this.busy}
+          .disabled=${this.busy}
+          @click=${() => void this.#run(() => this.#open(null))}
+          >${t("invoice_correction.resend")}</wt-button
+        >
+      </wt-form-actions>`;
+  }
   #sendText(refusal: PayRefusal): string {
     return refusal.code === "network"
-      ? t("invoice_correction.unknown")
+      ? t(this.lostKey)
       : codeMessage(refusal.code, currentLocale(), refusal);
   }
   #body() {
     if (this.correction !== null) return this.#view(this.correction);
+    if (this.loaded !== null && this.savedOpen !== null) return this.#saved(this.savedOpen);
     if (this.loaded !== null) return this.#form(this.loaded);
     if (this.loadRefusal === null)
       return html`<p class="muted" data-loading role="status">

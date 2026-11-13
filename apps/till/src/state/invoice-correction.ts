@@ -152,6 +152,11 @@ export class InvoiceCorrectionSession {
     return this.#read(this.#key("open", saleId));
   }
 
+  /** Drops the saved Open of `saleId` once the correction it may have opened has been found. */
+  forgetOpen(saleId: string): void {
+    this.#forget(this.#key("open", saleId));
+  }
+
   savedCash(correctionId: string): Saved<{ amount: string }> | null {
     return this.#read(this.#key("cash", correctionId));
   }

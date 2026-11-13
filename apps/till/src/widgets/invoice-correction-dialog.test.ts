@@ -14,10 +14,7 @@ import type {
 } from "../api/invoice-correction-types.js";
 import { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import "./invoice-correction-dialog.js";
-import type {
-  InvoiceCorrectionAsk,
-  TillInvoiceCorrectionDialog,
-} from "./invoice-correction-dialog.js";
+import type { TillInvoiceCorrectionDialog } from "./invoice-correction-dialog.js";
 
 const reason = (id: string, name: string, noteRequired = false) =>
   ({
@@ -223,12 +220,9 @@ it("puts an amount the preview refuses under the money field, leaving the action
   expect(confirm(el).disabled).toBe(false);
 });
 
-it("marks the missing money and reason, then confirms the previewed split once they are fixed", async () => {
-  const { el } = await mount();
-  const asks: InvoiceCorrectionAsk[] = [];
-  el.addEventListener("invoice-correction-confirm", (event) =>
-    asks.push((event as CustomEvent<InvoiceCorrectionAsk>).detail),
-  );
+it("marks the missing money and reason, then sends the previewed split once they are fixed", async () => {
+  const { el, api } = await mountSending();
+  const asks = () => api.openInvoiceCorrection.mock.calls.map((call) => call[1]);
 
   confirm(el).click();
   await el.updateComplete;
@@ -238,7 +232,7 @@ it("marks the missing money and reason, then confirms the previewed split once t
   );
   expect(root(el).querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
   expect(confirm(el).disabled).toBe(true);
-  expect(asks).toEqual([]);
+  expect(asks()).toEqual([]);
 
   await type(el, "6.05");
   await choose(el, "other");
@@ -252,19 +246,23 @@ it("marks the missing money and reason, then confirms the previewed split once t
   await el.updateComplete;
   expect(confirm(el).disabled).toBe(false);
   confirm(el).click();
-  expect(asks).toEqual([
-    { gross: "6.05", reasonId: "other", note: "Wrong price", expectedSplit: SPLIT },
+  await vi.waitFor(() => expect(asks()).toHaveLength(1));
+  expect(asks()).toEqual([
+    {
+      gross: "6.05",
+      reasonId: "other",
+      note: "Wrong price",
+      expectedSplit: SPLIT,
+      submissionId: expect.any(String),
+    },
   ]);
 });
 
-it("asks for the preview again when pressed after one failed, and confirms once it answers", async () => {
-  const api = fakeApi();
+it("asks for the preview again when pressed after one failed, and sends once it answers", async () => {
+  const api = sendingApi();
   api.previewInvoiceCorrection.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-  const { el } = await mount(api);
-  const asks: InvoiceCorrectionAsk[] = [];
-  el.addEventListener("invoice-correction-confirm", (event) =>
-    asks.push((event as CustomEvent<InvoiceCorrectionAsk>).detail),
-  );
+  const { el } = await mountSending(api);
+  const asks = () => api.openInvoiceCorrection.mock.calls.map((call) => call[1]);
   await type(el, "6.05");
   await choose(el, "overcharged");
   await vi.waitFor(() =>
@@ -274,13 +272,14 @@ it("asks for the preview again when pressed after one failed, and confirms once 
   );
 
   confirm(el).click();
-  await vi.waitFor(() => expect(asks).toHaveLength(1));
+  await vi.waitFor(() => expect(asks()).toHaveLength(1));
   expect(api.previewInvoiceCorrection).toHaveBeenCalledTimes(2);
-  expect(asks[0]).toEqual({
+  expect(asks()[0]).toEqual({
     gross: "6.05",
     reasonId: "overcharged",
     note: null,
     expectedSplit: SPLIT,
+    submissionId: expect.any(String),
   });
 });
 
@@ -393,10 +392,13 @@ function sendingApi() {
   };
 }
 
-async function mountSending(api = sendingApi(), correctionId = "") {
+const SCOPE = { deviceId: "device-1", personId: "staff-1" };
+const EVERY_METHOD = ["take-cash", "integrated-card-payment", "hand-keyed-card-payment"];
+async function mountSending(api = sendingApi(), correctionId = "", capabilities = EVERY_METHOD) {
   const { el } = await mountWidget<TillInvoiceCorrectionDialog>("till-invoice-correction-dialog", {
     api,
-    session: new InvoiceCorrectionSession({ deviceId: "device-1", personId: "staff-1" }, api),
+    session: new InvoiceCorrectionSession(SCOPE, api),
+    capabilities,
     saleId: "sale-1",
     correctionId,
     invoiceNumber: "T/0012",
@@ -497,7 +499,12 @@ describe("sending a correction", () => {
 
     root(el).querySelector<HTMLElement>("[data-choice=card]")!.click();
     expect(cards).toEqual([
-      { correctionId: "correction-1", target: "6.05", startReasonId: "overcharged" },
+      {
+        correctionId: "correction-1",
+        tenderId: "card-1",
+        target: "6.05",
+        startReasonId: "overcharged",
+      },
     ]);
     root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
     await vi.waitFor(() => expect(api.giveInvoiceCorrectionCash).toHaveBeenCalledOnce());
@@ -533,23 +540,6 @@ describe("sending a correction", () => {
     await vi.waitFor(() => expect(root(el).querySelector("[data-back]")).not.toBeNull());
     expect(api.getInvoiceCorrection).toHaveBeenCalledWith("correction-9", {});
     expect(grossField(el)).toBeNull();
-  });
-
-  it("sends the same Open again after its answer was lost", async () => {
-    const api = sendingApi();
-    api.openInvoiceCorrection.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    const { el } = await mountSending(api);
-
-    await confirmCorrection(el);
-    await vi.waitFor(() =>
-      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
-        t("invoice_correction.unknown"),
-      ),
-    );
-    confirm(el).click();
-    await vi.waitFor(() => expect(root(el).querySelector("[data-back]")).not.toBeNull());
-    const [first, second] = api.openInvoiceCorrection.mock.calls.map((call) => call[1]);
-    expect(second!.submissionId).toBe(first!.submissionId);
   });
 });
 
@@ -645,5 +635,210 @@ describe("an open correction", () => {
     await vi.waitFor(() =>
       expect(outcome(el)).toBe(t("invoice_correction.closed").replace("{amount}", "€2.00")),
     );
+  });
+});
+
+describe("never sending what staff did not confirm (review fix round 1)", () => {
+  afterEach(() => localStorage.clear());
+  const lost = () => new TypeError("Failed to fetch");
+  const resend = (el: TillInvoiceCorrectionDialog) =>
+    root(el).querySelector<HTMLElement>("[data-resend]")!;
+
+  it("after an Open's answer is lost, offers only that same request again, never a new amount", async () => {
+    const api = sendingApi();
+    api.openInvoiceCorrection.mockRejectedValueOnce(lost());
+    const { el } = await mountSending(api);
+
+    await confirmCorrection(el);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-saved]")).not.toBeNull());
+    expect(text(root(el).querySelector("[data-saved]"))).toBe(
+      t("invoice_correction.saved").replace("{amount}", "€6.05"),
+    );
+    expect(grossField(el)).toBeNull();
+    expect(root(el).querySelector("wt-form-actions")!.error).toBe(t("invoice_correction.unknown"));
+
+    resend(el).click();
+    await vi.waitFor(() => expect(root(el).querySelector("[data-back]")).not.toBeNull());
+    const [first, second] = api.openInvoiceCorrection.mock.calls.map((call) => call[1]);
+    expect(second).toEqual(first);
+    expect(api.openInvoiceCorrection.mock.calls.map((call) => call[1].gross)).toEqual([
+      "6.05",
+      "6.05",
+    ]);
+  });
+
+  it("offers a saved Open from an earlier visit, and forgets it once the correction it may have opened is found", async () => {
+    const session = new InvoiceCorrectionSession(SCOPE, {
+      openInvoiceCorrection: () => Promise.reject(lost()),
+      giveInvoiceCorrectionCash: () => Promise.reject(lost()),
+    });
+    await session
+      .open("sale-1", { gross: "2.00", reasonId: "overcharged", note: null, expectedSplit: SPLIT })
+      .catch(() => {});
+    const first = await mountSending();
+    expect(text(root(first.el).querySelector("[data-saved]"))).toBe(
+      t("invoice_correction.saved").replace("{amount}", "€2.00"),
+    );
+    cleanupWidgets();
+
+    const api = sendingApi();
+    api.readInvoiceCorrectionLines.mockRejectedValue(
+      refused("invoice_correction.already_open", { correctionId: "correction-1" }),
+    );
+    const { el } = await mountSending(api);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-back]")).not.toBeNull());
+    expect(session.savedOpen("sale-1")).toBeNull();
+    cleanupWidgets();
+
+    const later = await mountSending();
+    expect(root(later.el).querySelector("[data-saved]")).toBeNull();
+    expect(grossField(later.el)).not.toBeNull();
+  });
+
+  it("gives no cash once the window is taken away while Open is on its way", async () => {
+    const api = sendingApi();
+    api.getRefundableTenders.mockResolvedValue([TENDERS[0]!]);
+    let answer!: (value: { correction: InvoiceCorrectionView; replayed: boolean }) => void;
+    api.openInvoiceCorrection.mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    const { el } = await mountSending(api);
+
+    await confirmCorrection(el);
+    await vi.waitFor(() => expect(api.openInvoiceCorrection).toHaveBeenCalledOnce());
+    el.remove();
+    answer({ correction: OPEN, replayed: false });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(api.giveInvoiceCorrectionCash).not.toHaveBeenCalled();
+  });
+
+  it("after a cash answer is lost, gives that same amount again even when less is left", async () => {
+    const api = sendingApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce(lost());
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
+    await vi.waitFor(() =>
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        t("invoice_correction.unknown"),
+      ),
+    );
+    api.getInvoiceCorrection.mockResolvedValue({ ...OPEN, moneyBack: "2.00", left: "4.05" });
+    el.legsRevision = 1;
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-left]"))).toBe(
+        t("invoice_correction.left_back").replace("{amount}", "€4.05"),
+      ),
+    );
+    expect(text(root(el).querySelector("[data-choice=cash]"))).toBe(
+      t("invoice_correction.give_cash").replace("{amount}", "€6.05"),
+    );
+    root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
+    await vi.waitFor(() => expect(api.giveInvoiceCorrectionCash).toHaveBeenCalledTimes(2));
+    const [first, second] = api.giveInvoiceCorrectionCash.mock.calls.map((call) => call[1]);
+    expect(second).toEqual(first);
+    expect(second!.amount).toBe("6.05");
+  });
+
+  it("asks for the PIN of someone who may refund when the cash is refused for permission", async () => {
+    const api = sendingApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.refund" }),
+    );
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
+    await pinDialog(el);
+    expect(api.listApprovers).toHaveBeenCalledExactlyOnceWith("sale.refund");
+  });
+
+  it("reads the correction again when its split changed, saying so", async () => {
+    const api = sendingApi();
+    api.getInvoiceCorrection.mockResolvedValue({
+      ...OPEN,
+      moneyBack: "2.00",
+      left: "4.05",
+      fileNow: { gross: "2.00", vatBreakdown: SPLIT },
+    });
+    api.fileInvoiceCorrection.mockRejectedValueOnce(refused("invoice_correction.split_changed"));
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=file]")!.click();
+    await vi.waitFor(() => expect(api.getInvoiceCorrection).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() =>
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        codeMessage("invoice_correction.split_changed"),
+      ),
+    );
+  });
+
+  it("says a lost filing answer needs checking, not that the same request goes again", async () => {
+    const api = sendingApi();
+    api.getInvoiceCorrection.mockResolvedValue({
+      ...OPEN,
+      moneyBack: "2.00",
+      left: "4.05",
+      fileNow: { gross: "2.00", vatBreakdown: SPLIT },
+    });
+    api.fileInvoiceCorrection.mockRejectedValueOnce(lost());
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=file]")!.click();
+    await vi.waitFor(() =>
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        t("invoice_correction.unknown_end"),
+      ),
+    );
+    expect(root(el).querySelector("[data-choice=check]")).not.toBeNull();
+  });
+
+  it("reads the correction again after a step that was under way when a card refund ended", async () => {
+    const api = sendingApi();
+    let answer!: (value: unknown) => void;
+    api.giveInvoiceCorrectionCash.mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve)) as never,
+    );
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=cash]")!.click();
+    await vi.waitFor(() => expect(api.giveInvoiceCorrectionCash).toHaveBeenCalledOnce());
+    el.legsRevision = 1;
+    await el.updateComplete;
+    answer({
+      correction: { ...OPEN, moneyBack: "1.00", left: "5.05" },
+      refunds: [],
+      replayed: false,
+    });
+    await vi.waitFor(() => expect(api.getInvoiceCorrection).toHaveBeenCalledTimes(2));
+  });
+
+  it("offers only the payments this device may refund, naming the card and the reason it was opened with", async () => {
+    const api = sendingApi();
+    api.openInvoiceCorrection.mockResolvedValue({
+      correction: { ...OPEN, reason: "Charged the steak twice" },
+      replayed: false,
+    });
+    const { el } = await mountSending(api, "", ["take-cash"]);
+    const cards: unknown[] = [];
+    el.addEventListener("invoice-correction-card", (event) =>
+      cards.push((event as CustomEvent).detail),
+    );
+
+    await confirmCorrection(el);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-choice=cash]")).not.toBeNull());
+    expect(root(el).querySelector("[data-choice=card]")).toBeNull();
+
+    el.capabilities = ["integrated-card-payment"];
+    await el.updateComplete;
+    expect(root(el).querySelector("[data-choice=cash]")).toBeNull();
+    root(el).querySelector<HTMLElement>("[data-choice=card]")!.click();
+    expect(cards).toEqual([
+      {
+        correctionId: "correction-1",
+        tenderId: "card-1",
+        target: "6.05",
+        startReasonId: "overcharged",
+      },
+    ]);
   });
 });

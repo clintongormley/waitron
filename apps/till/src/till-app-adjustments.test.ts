@@ -4493,6 +4493,7 @@ describe("till-app: service cancellation consent", () => {
 
       emit(correcting(), "invoice-correction-card", {
         correctionId: "correction-1",
+        tenderId: card.tenderId,
         target: "6.05",
         startReasonId: "r-mistake",
       });
@@ -4501,6 +4502,10 @@ describe("till-app: service cancellation consent", () => {
         "6.05",
         "r-mistake",
       ]);
+      expect(refundForm(el)!.tenders).toEqual([card]);
+      expect(correcting().capabilities).toEqual(
+        expect.arrayContaining(["take-cash", "integrated-card-payment"]),
+      );
       emit(refundForm(el)!, "tender-refund-submit", {
         tenderId: card.tenderId,
         appliedAmount: "6.05",

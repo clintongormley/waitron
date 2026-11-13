@@ -1,6 +1,10 @@
 import { MONEY_SCALE, compareDecimal, decimal, toScale } from "@waitron/shared";
 import type { TillApi } from "../api/client.js";
-import type { TenderRefundRequest, TenderRefundView } from "../api/tender-refund-types.js";
+import type {
+  RefundableTender,
+  TenderRefundRequest,
+  TenderRefundView,
+} from "../api/tender-refund-types.js";
 import { parseDecimalInput } from "@waitron/ui";
 import { REASON_MAX, moneyPlus } from "./bill-payment.js";
 
@@ -31,6 +35,23 @@ export const scopePrefix = (scope: TenderRefundScope) =>
   `${PREFIX}${JSON.stringify([scope.deviceId, scope.personId])}:`;
 const keyFor = (scope: TenderRefundScope, saleId: string) =>
   `${scopePrefix(scope)}${JSON.stringify(saleId)}`;
+
+/** Whether a device with `capabilities` may give money back to this payment's method. */
+export function refundMethodAllowed(
+  row: Pick<RefundableTender, "method" | "manual">,
+  capabilities: readonly string[],
+): boolean {
+  return (
+    (row.method === "cash" || row.method === "card") &&
+    capabilities.includes(
+      row.method === "cash"
+        ? "take-cash"
+        : row.manual
+          ? "hand-keyed-card-payment"
+          : "integrated-card-payment",
+    )
+  );
+}
 
 export function tenderRefundAmount(value: string): string | null {
   const parsed = typeof value === "string" ? parseDecimalInput(value) : null;

@@ -270,6 +270,7 @@ import type {
   TenderRefundRequest,
 } from "./api/tender-refund-types.js";
 import {
+  refundMethodAllowed,
   TenderRefundAttempts,
   TenderRefundSession,
   TenderRefundAttemptError,
@@ -1254,8 +1255,9 @@ interface RefundFill {
   cancellationIds: string[];
   /** The cancel's Void reasons, so the refund does not read them again. */
   reasons?: AdjustmentReason[];
-  /** The open correction this refund is a card leg of. */
+  /** The open correction this refund is a card leg of, and its card. */
   invoiceCorrectionId?: string;
+  tenderId?: string;
 }
 
 interface FinishingTable {
@@ -8510,16 +8512,7 @@ export class TillApp extends LitElement {
   }
 
   #refundMethodAllowed(row: RefundableTender): boolean {
-    return (
-      (row.method === "cash" || row.method === "card") &&
-      this.capabilities.includes(
-        row.method === "cash"
-          ? "take-cash"
-          : row.manual
-            ? "hand-keyed-card-payment"
-            : "integrated-card-payment",
-      )
-    );
+    return refundMethodAllowed(row, this.capabilities);
   }
 
   #hasRefundableTenders(): boolean {
@@ -8814,6 +8807,7 @@ export class TillApp extends LitElement {
       .invoiceNumber=${this.result?.invoiceNumber ?? ""}
       .namesLocale=${this.result?.namesLocale ?? this.result?.locale ?? ""}
       .session=${open.session}
+      .capabilities=${this.capabilities}
       .legsRevision=${open.legsRevision}
       @invoice-correction-card=${(event: CustomEvent<InvoiceCorrectionCardLeg>) => {
         event.stopPropagation();
@@ -8824,6 +8818,7 @@ export class TillApp extends LitElement {
             dishes: "",
             cancellationIds: [],
             invoiceCorrectionId: event.detail.correctionId,
+            tenderId: event.detail.tenderId,
           });
       }}
       @invoice-correction-close=${(event: Event) => {
@@ -8839,7 +8834,7 @@ export class TillApp extends LitElement {
     const open = this.tenderRefunding;
     if (!open) return nothing;
     return html`<till-tender-refund-dialog
-        .tenders=${this.refundableTenders.filter((row) => row.pendingRefundId !== null || this.#refundMethodAllowed(row))}
+        .tenders=${this.refundableTenders.filter((row) => (open.fill?.tenderId === undefined || row.tenderId === open.fill.tenderId) && (row.pendingRefundId !== null || this.#refundMethodAllowed(row)))}
         .invoiceNumber=${this.result?.invoiceNumber ?? ""}
         .attempt=${open.attempt}
         .result=${open.result}

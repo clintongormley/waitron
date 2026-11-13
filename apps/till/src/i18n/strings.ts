@@ -176,6 +176,11 @@ export const en = {
   "invoice_correction.unknown":
     "The server's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
   "invoice_correction.close": "Close",
+  "invoice_correction.saved":
+    "An earlier request to correct and refund {amount} got no answer. Send it again to find out what happened: it cannot happen twice.",
+  "invoice_correction.resend": "Send again",
+  "invoice_correction.unknown_end":
+    "The server's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
   "tender_refund.left": "{amount} left to refund from another payment",
 
   "kitchen_note.changed": "Kitchen note changed",
@@ -2232,6 +2237,11 @@ export const es: Record<StringKey, string> = {
   "invoice_correction.unknown":
     "No ha llegado la respuesta del servidor. Vuelve a pulsar: se envía la misma petición, así que nada ocurre dos veces.",
   "invoice_correction.close": "Cerrar",
+  "invoice_correction.saved":
+    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Vuelve a enviarla para saber qué pasó: no puede ocurrir dos veces.",
+  "invoice_correction.resend": "Enviar de nuevo",
+  "invoice_correction.unknown_end":
+    "No ha llegado la respuesta del servidor. Pulsa Volver a consultar para ver si se hizo antes de pulsar nada más.",
   "tender_refund.left": "Quedan {amount} por devolver de otro pago",
 
   "kitchen_note.changed": "Nota para cocina cambiada",

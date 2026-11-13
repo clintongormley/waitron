@@ -5,6 +5,7 @@ import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { AdjustmentReason } from "../api/client.js";
+import { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import "./invoice-correction-dialog.js";
 import type {
   InvoiceCorrectionApi,
@@ -47,19 +48,23 @@ const answered: InvoiceCorrectionApi["previewInvoiceCorrection"] = async (_saleI
   moneyRefundable: "12.10",
 });
 let preview = answered;
+const openInvoiceCorrection = vi.fn(() => new Promise<never>(() => {}));
+const session = new InvoiceCorrectionSession(
+  { deviceId: "device-1", personId: "staff-1" },
+  { openInvoiceCorrection, giveInvoiceCorrectionCash: vi.fn() },
+);
 
 class InvoiceCorrectionLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   closes = 0;
-  confirms = 0;
   override render() {
     return html`<till-invoice-correction-dialog
         .api=${api}
+        .session=${session}
         saleId="sale-1"
         invoiceNumber="T/12"
         namesLocale="en"
         @invoice-correction-close=${() => this.closes++}
-        @invoice-correction-confirm=${() => this.confirms++}
       ></till-invoice-correction-dialog
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
@@ -68,8 +73,12 @@ customElements.define("invoice-correction-leave-test-app", InvoiceCorrectionLeav
 beforeEach(() => {
   setLocale("en");
   preview = answered;
+  openInvoiceCorrection.mockClear();
 });
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  localStorage.clear();
+});
 
 async function mount() {
   const { el: app } = await mountWidget<InvoiceCorrectionLeaveApp>(
@@ -125,7 +134,7 @@ it("Escape keeps the typed money and picked dish until Discard, and never confir
   (await question(app)).shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await closed;
   expect(app.closes).toBe(1);
-  expect(app.confirms).toBe(0);
+  expect(openInvoiceCorrection).not.toHaveBeenCalled();
   expect(unload()).toBe(false);
 });
 
@@ -198,7 +207,7 @@ it("a correction discarded while its preview is asked again is never confirmed",
   calls[1]!();
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(app.closes).toBe(1);
-  expect(app.confirms).toBe(0);
+  expect(openInvoiceCorrection).not.toHaveBeenCalled();
 });
 
 it("a correction whose window is taken away while its preview is asked again is never confirmed", async () => {
@@ -209,7 +218,7 @@ it("a correction whose window is taken away while its preview is asked again is 
     await new Promise<void>((resolve) => (release = resolve));
     return answered(saleId, request);
   });
-  const { app, form } = await mount();
+  const { form } = await mount();
   await type(form, "6.05");
   form.shadowRoot!.querySelector("wt-combobox[name=reason]")!.dispatchEvent(
     new CustomEvent("wt-change", {
@@ -225,5 +234,5 @@ it("a correction whose window is taken away while its preview is asked again is 
   form.remove();
   release();
   await new Promise((resolve) => setTimeout(resolve, 50));
-  expect(app.confirms).toBe(0);
+  expect(openInvoiceCorrection).not.toHaveBeenCalled();
 });
