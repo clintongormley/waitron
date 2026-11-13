@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
-import { setHelpMode, type WtHelpTooltip } from "@waitron/ui";
+import { setHelpMode, type WtButton, type WtHelpTooltip } from "@waitron/ui";
 import {
   cleanupWidgets,
   distance,
@@ -685,6 +685,17 @@ const threeShort = (waited: number): TableState[] =>
 
 const strip = (floor: TillFloorScreen) => bar(floor)!.querySelector<HTMLElement>(".ready-tables")!;
 
+/** Once the floor and every entry have rendered, and two frames have passed so that any resize
+ * observation of the strip has been delivered. */
+async function drawn(floor: TillFloorScreen): Promise<void> {
+  await floor.updateComplete;
+  const buttons = [...strip(floor).querySelectorAll<WtButton>("[data-ready-table]")];
+  await Promise.all(buttons.map((button) => button.updateComplete));
+  for (const button of buttons) expect(button.getBoundingClientRect().width).toBeGreaterThan(0);
+  for (let frame = 0; frame < 2; frame++)
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
 describe("till-floor-screen: the Ready bar's entries on a phone", () => {
   afterEach(async () => {
     setLocale("en");
@@ -694,13 +705,16 @@ describe("till-floor-screen: the Ready bar's entries on a phone", () => {
   for (const lang of ["en", "es"])
     for (const [look, waited] of [
       ["calm", minute],
-      ["warning", 9 * minute],
+      ["warning, one digit", 9 * minute],
+      ["warning, two digits", 10 * minute],
+      ["warning, two wide digits", 88 * minute],
     ] as const)
       it(`three short-named tables fit without scrolling at 390 px (${lang}, ${look})`, async () => {
         setLocale(lang);
         await pageAt(390, 844);
         const { floor } = await inShell(threeShort(waited));
-        expect(bar(floor)!.hasAttribute("data-warning")).toBe(look === "warning");
+        expect(bar(floor)!.hasAttribute("data-warning")).toBe(look !== "calm");
+        if (look !== "calm") expect(title(floor)).toMatch(new RegExp(` ${waited / minute} min$`));
         const tables = strip(floor);
         expect(tables.querySelectorAll("[data-ready-table]")).toHaveLength(3);
         expect(tables.scrollWidth).toBeLessThanOrEqual(tables.clientWidth);
@@ -725,15 +739,44 @@ describe("till-floor-screen: the Ready bar's entries on a phone", () => {
     await vi.waitFor(() => expect(tables.dataset.overflow).toBe("end"));
     cleanupWidgets();
     const fits = await inShell(threeShort(minute));
-    await fits.floor.updateComplete;
+    await drawn(fits.floor);
     expect(strip(fits.floor).dataset.overflow).toBeUndefined();
     expect(getComputedStyle(strip(fits.floor)).maskImage).toBe("none");
+  });
+
+  it("fades only the strip's start once scrolled to the far end right to left", async () => {
+    await pageAt(390, 844);
+    const { floor, area } = await inShell(numbered(8, 8));
+    area.dir = "rtl";
+    const tables = strip(floor);
+    expect(getComputedStyle(tables).direction).toBe("rtl");
+    expect(tables.scrollWidth).toBeGreaterThan(tables.clientWidth);
+    await vi.waitFor(() => expect(tables.dataset.overflow).toBe("end"));
+    tables.scrollLeft = -tables.scrollWidth;
+    expect(tables.scrollLeft).toBeLessThan(0);
+    await vi.waitFor(() => expect(tables.dataset.overflow).toBe("start"));
+  });
+
+  it("fades the trailing edge when entries join a bar that fitted, with the strip's width unchanged", async () => {
+    await pageAt(390, 844);
+    // From one entry, so the entries the redraw reuses cannot overflow the strip on their own.
+    const { floor } = await inShell(threeShort(minute).slice(0, 1));
+    const tables = strip(floor);
+    await drawn(floor);
+    expect(tables.dataset.overflow).toBeUndefined();
+    const width = tables.clientWidth;
+    floor.tables = numbered(8, 8);
+    await drawn(floor);
+    expect(tables.querySelectorAll("[data-ready-table]")).toHaveLength(8);
+    expect(tables.clientWidth).toBe(width);
+    expect(tables.dataset.overflow).toBe("end");
   });
 
   it("fades the trailing edge once the strip narrows below its entries, with no redraw", async () => {
     await pageAt(390, 844);
     const { floor, area } = await inShell(threeShort(minute));
     const tables = strip(floor);
+    await drawn(floor);
     expect(tables.dataset.overflow).toBeUndefined();
     const redraw = vi.spyOn(floor, "requestUpdate");
     area.style.width = "320px";

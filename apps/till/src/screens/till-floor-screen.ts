@@ -12,6 +12,7 @@ import {
   unsafeCSS,
 } from "lit";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
+import { edgeFadeStyles, markOverflow, oncePerFrame } from "../widgets/edge-fade.js";
 import type { FloorView, FloorViewChoices } from "../state/floor-view-memory.js";
 import { MediaQueryController } from "../state/media-query-controller.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -321,6 +322,7 @@ export class TillFloorScreen extends LitElement {
   static override styles = [
     baseStyles,
     servicePeriodStyles,
+    edgeFadeStyles,
     floorTrayStyles,
     floorRingStyles,
     signalChipStyles,
@@ -828,10 +830,13 @@ export class TillFloorScreen extends LitElement {
         white-space: nowrap;
       }
 
-      /* Narrower than a small button's own, so three short names fit beside a warning heading on a
-         phone. */
-      .ready-tables wt-button::part(button) {
+      /* Narrower than a small button's own, so three short names fit beside a two-digit warning
+         heading on a phone. */
+      .ready-bar wt-button::part(button) {
         padding-inline: var(--wt-space-2);
+      }
+
+      .ready-tables wt-button::part(button) {
         border-radius: var(--wt-radius-full);
       }
 
@@ -891,30 +896,7 @@ export class TillFloorScreen extends LitElement {
         gap: var(--wt-space-1);
         min-width: 0;
         overflow-x: auto;
-        --fade-start: 0px;
-        --fade-end: 0px;
-        --fade-towards: to right;
-      }
-      .ready-tables:dir(rtl) {
-        --fade-towards: to left;
-      }
-      .ready-tables[data-overflow="start"],
-      .ready-tables[data-overflow="both"] {
-        --fade-start: var(--wt-space-6);
-      }
-      .ready-tables[data-overflow="end"],
-      .ready-tables[data-overflow="both"] {
-        --fade-end: var(--wt-space-6);
-      }
-      /* A mask reads only alpha, and the background token is opaque in every theme. */
-      .ready-tables[data-overflow] {
-        mask-image: linear-gradient(
-          var(--fade-towards),
-          transparent 0,
-          var(--wt-color-bg) var(--fade-start),
-          var(--wt-color-bg) calc(100% - var(--fade-end)),
-          transparent 100%
-        );
+        --fade-width: var(--wt-space-6);
       }
     `,
   ];
@@ -2965,7 +2947,7 @@ export class TillFloorScreen extends LitElement {
             : t("floor.ready_bar_waited").replace("{n}", String(waitedMinutes))
         }
       </h2>
-      <div class="ready-tables" @scroll=${this.#markReadyOverflow}>
+      <div class="ready-tables edge-fade" @scroll=${this.#readyScroll.schedule}>
         ${ready.map((entry) => this.#readyEntry(entry))}
       </div>
       <wt-button
@@ -2982,7 +2964,8 @@ export class TillFloorScreen extends LitElement {
     </section>`;
   }
 
-  /** Keeps the fade on whichever end of the Ready bar's strip hides an entry as the strip resizes. */
+  /** Keeps the fade on whichever end of the Ready bar's strip hides an entry as the strip resizes,
+   * and once a redraw's entries have drawn, since entries added to the strip do not resize it. */
   #watchReadyStrip(): void {
     const strip = this.shadowRoot!.querySelector<HTMLElement>("[data-ready-bar] .ready-tables");
     if (strip !== this.#readyStrip) {
@@ -2993,26 +2976,23 @@ export class TillFloorScreen extends LitElement {
         this.#readyResize.observe(strip);
       }
     }
-    this.#markReadyOverflow();
+    if (strip === null) return;
+    const entries = [...strip.children] as Partial<LitElement>[];
+    void Promise.all(entries.map((entry) => entry.updateComplete)).then(this.#markReadyOverflow);
   }
 
   #stopWatchingReadyStrip(): void {
     this.#readyResize?.disconnect();
     this.#readyResize = undefined;
     this.#readyStrip = undefined;
+    this.#readyScroll.cancel();
   }
 
-  /** Scroll offsets are negative right to left, so the distance from the start is their size. */
   readonly #markReadyOverflow = () => {
-    const strip = this.#readyStrip;
-    if (strip === undefined) return;
-    const fromStart = Math.abs(strip.scrollLeft);
-    const start = fromStart >= 1;
-    const end = strip.scrollWidth - strip.clientWidth - fromStart >= 1;
-    const overflow = start && end ? "both" : start ? "start" : end ? "end" : undefined;
-    if (overflow) strip.dataset.overflow = overflow;
-    else delete strip.dataset.overflow;
+    if (this.#readyStrip !== undefined) markOverflow(this.#readyStrip);
   };
+
+  readonly #readyScroll = oncePerFrame(this.#markReadyOverflow);
 
   #readyEntry(entry: ReadyBarTable): TemplateResult {
     return html`<wt-button

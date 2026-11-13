@@ -37,6 +37,7 @@ import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-venue-logo.js";
 import "@waitron/ui/src/components/wt-powered-by.js";
 import { PHONE_WIDTH, chooserStyles } from "./chooser-styles.js";
+import { edgeFadeStyles, markOverflow, oncePerFrame } from "./edge-fade.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
 import { aboutHeading, readLegalAbout } from "../legal-about.js";
@@ -180,6 +181,7 @@ export class TillShell extends LitElement {
     baseStyles,
     chooserStyles,
     themeChoicesStyles,
+    edgeFadeStyles,
     css`
       :host {
         display: flex;
@@ -242,30 +244,6 @@ export class TillShell extends LitElement {
         overflow-x: auto;
         align-items: center;
         gap: var(--wt-space-2);
-        --fade-start: 0px;
-        --fade-end: 0px;
-        --fade-towards: to right;
-      }
-      .bar-tables:dir(rtl) {
-        --fade-towards: to left;
-      }
-      .bar-tables[data-overflow="start"],
-      .bar-tables[data-overflow="both"] {
-        --fade-start: var(--fade-width);
-      }
-      .bar-tables[data-overflow="end"],
-      .bar-tables[data-overflow="both"] {
-        --fade-end: var(--fade-width);
-      }
-      /* A mask reads only alpha, and the background token is opaque in every theme. */
-      .bar-tables[data-overflow] {
-        mask-image: linear-gradient(
-          var(--fade-towards),
-          transparent 0,
-          var(--wt-color-bg) var(--fade-start),
-          var(--wt-color-bg) calc(100% - var(--fade-end)),
-          transparent 100%
-        );
       }
 
       .till-strip {
@@ -581,8 +559,7 @@ export class TillShell extends LitElement {
     this.#watchedBar = undefined;
     this.#watchedStrip = undefined;
     this.#watchedTable = undefined;
-    if (this.#overflowFrame !== undefined) cancelAnimationFrame(this.#overflowFrame);
-    this.#overflowFrame = undefined;
+    this.#overflowFrame.cancel();
     this.#counterObserver?.disconnect();
     this.#counterTargets.clear();
     this.#run += 1;
@@ -608,7 +585,7 @@ export class TillShell extends LitElement {
   #observer?: ResizeObserver;
   #stripObserver?: ResizeObserver;
   #barObserver?: ResizeObserver;
-  #overflowFrame?: number;
+  readonly #overflowFrame = oncePerFrame(() => this.#markOverflow());
   #counterObserver?: ResizeObserver;
   #counterTargets = new Set<Element>();
   #watchedBar?: Element;
@@ -748,24 +725,9 @@ export class TillShell extends LitElement {
     return fade;
   }
 
-  readonly #onBarTablesScroll = () => {
-    this.#overflowFrame ??= requestAnimationFrame(() => {
-      this.#overflowFrame = undefined;
-      this.#markOverflow();
-    });
-  };
-
-  /** Marks which ends of the table buttons' strip hide a button, which fades that end. Scroll
-   * offsets are negative right to left, so the distance from the start is their size. */
   #markOverflow(): void {
     const strip = this.renderRoot.querySelector<HTMLElement>(".head .bar-tables");
-    if (!strip) return;
-    const fromStart = Math.abs(strip.scrollLeft);
-    const start = fromStart >= 1;
-    const end = strip.scrollWidth - strip.clientWidth - fromStart >= 1;
-    const overflow = start && end ? "both" : start ? "start" : end ? "end" : undefined;
-    if (overflow) strip.dataset.overflow = overflow;
-    else delete strip.dataset.overflow;
+    if (strip) markOverflow(strip);
   }
 
   /** A failed logo's box retries only while it is on the page, so while the bar leaves the logo out
@@ -1456,7 +1418,11 @@ export class TillShell extends LitElement {
       )}
       ${
         tables.length > 0
-          ? html`<div class="bar-tables" role="none" @scroll=${this.#onBarTablesScroll}>
+          ? html`<div
+              class="bar-tables edge-fade"
+              role="none"
+              @scroll=${this.#overflowFrame.schedule}
+            >
               ${tables.map((table) => this.#barTable(table))}
             </div>`
           : nothing

@@ -107,6 +107,29 @@ describe("a handheld's bar with more table buttons than fit", () => {
     });
   });
 
+  for (const direction of ["ltr", "rtl"] as const) {
+    it(`fades only the start once scrolled to the far end, in ${direction}`, async () => {
+      setLocale("en-GB");
+      await atViewport(390, 844, async () => {
+        const { el, host } = await mountWidget<TillShell>("till-shell", {
+          formFactor: "phone-portrait",
+          activeScreen: "floor",
+          operatorName: "Ana",
+          // Eleven: right to left, Chromium reports this strip's far end a pixel short of its overflow.
+          barTables: tablesOf(11),
+        });
+        host.dir = direction;
+        const scroller = scrollerOf(el);
+        await vi.waitFor(() => expect(scroller.dataset.overflow).toBe("end"));
+        scroller.scrollLeft = direction === "rtl" ? -scroller.scrollWidth : scroller.scrollWidth;
+        await frame();
+        await frame();
+        expect(Math.abs(scroller.scrollLeft)).toBeGreaterThan(0);
+        expect(scroller.dataset.overflow).toBe("start");
+      });
+    });
+  }
+
   it("scrolls the selected table clear of the fade when a button lies beyond it", async () => {
     setLocale("en-GB");
     await atViewport(390, 844, async () => {
