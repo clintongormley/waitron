@@ -1235,7 +1235,7 @@ the helper's constant status is not evidence of the write.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
-15 entries, size M. Two kitchen-notice entries were retired by A1308 fk8 (2026-11-13).
+15 entries, size M.
 Where each lands: the A1308 slice named in the design's "Lands in" column
 ([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
 
@@ -1476,7 +1476,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Remove code nothing reaches (replaced or dead, never merely unused)
 
-20 entries, size M. The unused whole-ticket advance route was retired by A1308 fk8 (2026-11-13).
+20 entries, size M.
 
 - **The products' made-at read has no screen since A655**
   [Detail](catalogue.md#the-products-made-at-read-has-no-screen-since-a655)
