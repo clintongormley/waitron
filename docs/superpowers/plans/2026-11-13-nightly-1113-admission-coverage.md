@@ -41,4 +41,4 @@ Seek an outside opinion before 300 changed test lines. The two fixes share no im
 
 **Review:** Claude plan read, 150s, lane K receipts/nightly-1113/plan-review.md. Accepted its
 move instead of duplicate tests, omitted the extra fallback case, and removed the open-ended
-backlog work. The watcher clears this corrected approach; no owner plan approval is claimed.
+backlog work. Watcher clearance of this corrected approach is pending; no owner plan approval is claimed.
