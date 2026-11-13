@@ -2810,11 +2810,14 @@ describe("the Edit dialog", () => {
                 name: test.name,
                 available: true,
               };
-        const el = await openEdit(invoiceApi({ ...onDefault, equipment: [equipment] }));
+        const device = { ...onDefault, equipment: [equipment] };
+        const el = await openEdit(invoiceApi(device));
         const name = test.name ?? t("equipment.none");
         expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
           `${name}${test.a4 ? " · A4" : ""}${test.defaulted ? ` (${t("devices.default_mark")})` : ""}`,
         );
+        const invoice = devicesTable(el).columns.find((column) => column.key === "invoice")!;
+        expect(invoice.sortValue!(device)).toBe(deepText(el, "[data-test=device-invoice-t1]"));
       });
 
       it("adds the A4 marker when the printer list arrives after the devices", async () => {
