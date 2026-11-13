@@ -431,7 +431,7 @@ it.each([
   "flows/setup/node-key.json",
   "flows/setup/documents/manifest.json",
   "flows/setup/documents/0-0.json",
-  "first-setup-resolutions/id/000001.json",
+  "flows/setup/record.json",
   "first-setup-deleting.json",
   "records/choices/x.json",
 ])("cannot import retirement or current setup authority through %s", async (name) => {
