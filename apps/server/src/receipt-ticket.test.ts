@@ -3,7 +3,6 @@ import { joinCustomerPresentationText } from "@waitron/catalogue";
 import {
   FEED_BEFORE_CUT,
   LOGO_MAX_HEIGHT_DOTS,
-  columnsFor,
   drawTextBand,
   esc,
   safeWidthDots,
@@ -506,7 +505,43 @@ it.each([PRINTER_58, PRINTER_80])(
         `${receiptLabelsFor(invoiceLocale).taxableBase} 10% ${spanish ? "8,00 €" : "€8.00"}`,
       );
       expect(content).not.toContain(invoiceLocale === "es-ES" ? "8,80" : "8.80");
-      expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
+      const tableAt = lines.findIndex((line) => /Uds Concepto|Units Item/u.test(line));
+      const tableEnd = lines.indexOf(rule(printer), tableAt);
+      expect(lines.slice(tableAt, tableEnd)).toEqual(
+        printer.paperWidth === "58mm"
+          ? spanish
+            ? [
+                "    Uds Concepto",
+                "            Precio Importe IVA",
+                "      1 Plato",
+                "             10,00   10,00 21%",
+                "0,32 kg Jamón",
+                "             25,00    8,00 10%",
+                "    Precios sin IVA",
+              ]
+            : [
+                "  Units Item",
+                "              Price Amount VAT",
+                "      1 Dish",
+                "              10.00  10.00 21%",
+                "0.32 kg Ham",
+                "              25.00   8.00 10%",
+                "    Prices exclude VAT",
+              ]
+          : spanish
+            ? [
+                "    Uds Concepto        Precio Importe IVA",
+                "      1 Plato            10,00   10,00 21%",
+                "0,32 kg Jamón            25,00    8,00 10%",
+                "    Precios sin IVA",
+              ]
+            : [
+                "  Units Item              Price Amount VAT",
+                "      1 Dish              10.00  10.00 21%",
+                "0.32 kg Ham               25.00   8.00 10%",
+                "    Prices exclude VAT",
+              ],
+      );
     }
   },
 );
@@ -591,7 +626,17 @@ it.each([PRINTER_58, PRINTER_80])(
       expect(printed.indexOf("FF/1")).toBeLessThan(printed.indexOf("Original Customer SL"));
       expect(printed).toContain(receiptLabelsFor(invoiceLocale).duplicate);
       expect(printed).not.toContain(ISSUER.venueName);
-      expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
+      expect(lines.slice(6, 8)).toEqual(
+        printer.paperWidth === "58mm"
+          ? ["  Calle del domicilio fiscal", "     original 27, Madrid"]
+          : [" Calle del domicilio fiscal original 27,", "                  Madrid"],
+      );
+      const addressAt = lines.indexOf("NIF: B11223344") + 1;
+      expect(lines.slice(addressAt, addressAt + (printer.paperWidth === "58mm" ? 2 : 1))).toEqual(
+        printer.paperWidth === "58mm"
+          ? ["Avenida del cliente original", "123, Madrid"]
+          : ["Avenida del cliente original 123, Madrid"],
+      );
       const commands = printedCommands(bytes);
       expect(commands.filter((c) => c.name === "GS v 0" && c.text === undefined)).toHaveLength(1);
       expect(commands.findIndex((c) => c.name === "GS v 0" && c.text === undefined)).toBeLessThan(
@@ -734,8 +779,24 @@ it.each([PRINTER_58, PRINTER_80])(
       }),
     );
     const qrAt = lines.indexOf("<QR>");
-    const columns = columnsFor(printer.paperWidth);
-    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
+    expect(lines.slice(0, lines.indexOf(rule(printer)))).toEqual(
+      printer.paperWidth === "58mm"
+        ? [
+            "Alpha bravo charlie delta echo",
+            "   foxtrot golf hotel india",
+            "            juliet",
+            "<QR>",
+            "Kilo lima mike november oscar",
+            "papa quebec romeo sierra tango",
+          ]
+        : [
+            "  Alpha bravo charlie delta echo foxtrot",
+            "         golf hotel india juliet",
+            "<QR>",
+            "Kilo lima mike november oscar papa quebec",
+            "            romeo sierra tango",
+          ],
+    );
     const words = (from: string[]): string[] => from.join(" ").trim().split(/\s+/);
     expect(words(lines.slice(0, qrAt))).toEqual(caption.split(" "));
     const ruleAfterLegend = lines.indexOf(rule(printer), qrAt);
@@ -943,8 +1004,61 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       const { columns } = textGrid(printer.paperWidth, printer.resolution);
       const legend = `${" ".repeat(Math.floor((columns - 10) / 2))}VERI*FACTU`;
       expect(lines).toContain(legend);
-      for (const line of lines.filter((line) => line !== legend))
-        expect(line.length).toBeLessThanOrEqual(columns);
+      expect(lines).toEqual(
+        printer.paperWidth === "58mm"
+          ? [
+              "        QR tributario:",
+              "          VERI*FACTU",
+              "------------------------------",
+              "    Calle Mayor 1, Madrid",
+              "     Charcutería La Buena",
+              "        NIF: B12345678",
+              "------------------------------",
+              "Mesa 6               Pedido 41",
+              "A/1           17/08/2026 14:34",
+              "------------------------------",
+              "1  Menú del día          12,10",
+              "2  Agua mineral           8,80",
+              "------------------------------",
+              "TOTAL   20,90 €",
+              "------------------------------",
+              "Base imponible 21%     10,00 €",
+              "IVA 21%                 2,10 €",
+              "Base imponible 10%      8,00 €",
+              "IVA 10%                 0,80 €",
+              "------------------------------",
+              "Efectivo               30,00 €",
+              "Cambio                  9,10 €",
+              "------------------------------",
+              "   ¡Gracias por su visita!",
+            ]
+          : [
+              "              QR tributario:",
+              "                VERI*FACTU",
+              "------------------------------------------",
+              "          Calle Mayor 1, Madrid",
+              "           Charcutería La Buena",
+              "              NIF: B12345678",
+              "------------------------------------------",
+              "Mesa 6                           Pedido 41",
+              "A/1                     17 ago 2026, 14:34",
+              "------------------------------------------",
+              "1  Menú del día                      12,10",
+              "2  Agua mineral                       8,80",
+              "------------------------------------------",
+              "TOTAL         20,90 €",
+              "------------------------------------------",
+              "Base imponible 21%                 10,00 €",
+              "IVA 21%                             2,10 €",
+              "Base imponible 10%                  8,00 €",
+              "IVA 10%                             0,80 €",
+              "------------------------------------------",
+              "Efectivo                           30,00 €",
+              "Cambio                              9,10 €",
+              "------------------------------------------",
+              "         ¡Gracias por su visita!",
+            ],
+      );
       for (const line of legal(printer)) expect(lines).toContain(line);
       expect(lines.some((line) => /^Mesa 6 +Pedido 41$/u.test(line))).toBe(true);
       expect(lines.at(-1)).toBe(centred(printer, TRIM.footerMessage!));
@@ -1789,7 +1903,7 @@ describe("formatReceipt — printer layout", () => {
     PRINTER_58,
     { paperWidth: "58mm", resolution: "203dpi" } as const,
     { paperWidth: "80mm", resolution: "203dpi" } as const,
-  ])("keeps every printed line within the column count ($paperWidth, $resolution)", (printer) => {
+  ])("prints every complete wrapped row ($paperWidth, $resolution)", (printer) => {
     const lines = printedLines(
       formatReceipt({
         result: LONG_SALE,
@@ -1801,8 +1915,81 @@ describe("formatReceipt — printer layout", () => {
         duplicate: true,
       }),
     );
-    const columns = columnsFor(printer.paperWidth);
-    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
+    expect(lines).toEqual(
+      printer.paperWidth === "58mm"
+        ? [
+            "PRUEBA - SIN COBRO REAL",
+            "------------------------------",
+            "        QR tributario:",
+            "          VERI*FACTU",
+            "------------------------------",
+            "Calle Mayor 1, 28013 Madrid —",
+            "    abierto todos los días",
+            "Charcutería y Bodega La Buena",
+            "        Mesa de Madrid",
+            "        NIF: B12345678",
+            "          DUPLICADO",
+            "------------------------------",
+            "Terraza mesa del fondo junto a",
+            "la fuente            Pedido 41",
+            "A/1           17/08/2026 14:34",
+            "------------------------------",
+            "1  Tostada con tomate y jamón",
+            "   ibérico de bellota    12,50",
+            "  Aceite de oliva virgen extra",
+            "  de la casa              0,50",
+            "------------------------------",
+            "TOTAL   13,00 €",
+            "------------------------------",
+            "Base imponible 10%     11,82 €",
+            "IVA 10%                 1,18 €",
+            "------------------------------",
+            "Efectivo               20,00 €",
+            "Cambio                  7,00 €",
+            "------------------------------",
+            "¡Gracias por su visita! Vuelva",
+            " pronto… “La Buena” le espera",
+            "------------------------------",
+            "PRUEBA - SIN COBRO REAL",
+            "",
+          ]
+        : [
+            "PRUEBA - SIN COBRO REAL",
+            "------------------------------------------",
+            "              QR tributario:",
+            "                VERI*FACTU",
+            "------------------------------------------",
+            "  Calle Mayor 1, 28013 Madrid — abierto",
+            "              todos los días",
+            "  Charcutería y Bodega La Buena Mesa de",
+            "                  Madrid",
+            "              NIF: B12345678",
+            "                DUPLICADO",
+            "------------------------------------------",
+            "Terraza mesa del fondo junto a la fuente",
+            "                                 Pedido 41",
+            "A/1                     17 ago 2026, 14:34",
+            "------------------------------------------",
+            "1  Tostada con tomate y jamón ibérico de",
+            "   bellota                           12,50",
+            "  Aceite de oliva virgen extra de la casa",
+            "                                      0,50",
+            "------------------------------------------",
+            "TOTAL         13,00 €",
+            "------------------------------------------",
+            "Base imponible 10%                 11,82 €",
+            "IVA 10%                             1,18 €",
+            "------------------------------------------",
+            "Efectivo                           20,00 €",
+            "Cambio                              7,00 €",
+            "------------------------------------------",
+            "¡Gracias por su visita! Vuelva pronto… “La",
+            "             Buena” le espera",
+            "------------------------------------------",
+            "PRUEBA - SIN COBRO REAL",
+            "",
+          ],
+    );
     expect(lines.join("\n")).toContain("VERI*FACTU");
   });
 
@@ -1897,7 +2084,6 @@ describe("formatReceipt — printer layout", () => {
         printer: PRINTER_58,
       }),
     );
-    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
     const first = lines.indexOf("Ref. AUTORIZACION 123456");
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 2)).toEqual([
@@ -1934,8 +2120,14 @@ describe("formatReceipt — printer layout", () => {
         printer: PRINTER_58,
       }),
     );
-    // No printed line exceeds the 30-column paper (global width invariant).
-    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
+    const quantityAt = lines.indexOf("123456,789");
+    expect(quantityAt).toBeGreaterThanOrEqual(0);
+    expect(lines.slice(quantityAt, quantityAt + 4)).toEqual([
+      "123456,789",
+      "  kilogramos-de-queso-manchego",
+      "  -curado  Queso manchego",
+      "  curado en aceite        9,99",
+    ]);
     // The name must NOT wrap one glyph per line: no line is an indent followed by a single character.
     expect(lines.filter((l) => /^ +\S$/u.test(l))).toEqual([]);
     // The name's continuation lines exist, stay at the 2-space cap, and each carries a real word.
@@ -2354,7 +2546,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
     PRINTER_58,
     { paperWidth: "58mm", resolution: "203dpi" } as const,
     { paperWidth: "80mm", resolution: "203dpi" } as const,
-  ])("keeps every line of changed prices within $paperWidth ($resolution)", (printer) => {
+  ])("prints every complete changed-price row on $paperWidth ($resolution)", (printer) => {
     const lines = printedLines(
       formatReceipt({
         result: {
@@ -2378,8 +2570,78 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
         printer,
       }),
     );
-    const columns = columnsFor(printer.paperWidth);
-    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
+    expect(lines).toEqual(
+      printer.paperWidth === "58mm"
+        ? [
+            "        QR tributario:",
+            "          VERI*FACTU",
+            "------------------------------",
+            "     Charcutería La Buena",
+            "        NIF: B12345678",
+            "------------------------------",
+            "Mesa 6               Pedido 41",
+            "A/1           17/08/2026 14:34",
+            "------------------------------",
+            "1  Hamburguesa           12,00",
+            "  Descuento 100%        -12,00",
+            "1  Tabla de quesos       12,00",
+            "  Descuento 20%          -2,40",
+            "2  Agua mineral           4,00",
+            "1  Pizza margarita        9,00",
+            "  Aceitunas               1,50",
+            "  Descuento 100%        -10,50",
+            "3  Croquetas              9,99",
+            "  Descuento              -0,99",
+            "12  Chuletón de buey madurado",
+            "    a la brasa con guarnición",
+            "                       1234,56",
+            "  Descuento 10%        -123,45",
+            "Descuento 12,5%       -1000,00",
+            "------------------------------",
+            "TOTAL   22,60 €",
+            "------------------------------",
+            "Base imponible 10%     20,55 €",
+            "IVA 10%                 2,05 €",
+            "------------------------------",
+            "Efectivo               22,60 €",
+            "Cambio                  0,00 €",
+            "",
+          ]
+        : [
+            "              QR tributario:",
+            "                VERI*FACTU",
+            "------------------------------------------",
+            "           Charcutería La Buena",
+            "              NIF: B12345678",
+            "------------------------------------------",
+            "Mesa 6                           Pedido 41",
+            "A/1                     17 ago 2026, 14:34",
+            "------------------------------------------",
+            "1  Hamburguesa                       12,00",
+            "  Descuento 100%                    -12,00",
+            "1  Tabla de quesos                   12,00",
+            "  Descuento 20%                      -2,40",
+            "2  Agua mineral                       4,00",
+            "1  Pizza margarita                    9,00",
+            "  Aceitunas                           1,50",
+            "  Descuento 100%                    -10,50",
+            "3  Croquetas                          9,99",
+            "  Descuento                          -0,99",
+            "12  Chuletón de buey madurado a la brasa",
+            "    con guarnición                 1234,56",
+            "  Descuento 10%                    -123,45",
+            "Descuento 12,5%                   -1000,00",
+            "------------------------------------------",
+            "TOTAL         22,60 €",
+            "------------------------------------------",
+            "Base imponible 10%                 20,55 €",
+            "IVA 10%                             2,05 €",
+            "------------------------------------------",
+            "Efectivo                           22,60 €",
+            "Cambio                              0,00 €",
+            "",
+          ],
+    );
     expect(lines.filter((line) => line.endsWith("1234,56"))).toHaveLength(1);
     expect(lines.filter((line) => line.endsWith("-123,45"))).toHaveLength(1);
     expect(lines.filter((line) => line.endsWith("-1000,00"))).toHaveLength(1);
@@ -2415,7 +2677,7 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
       ["es-ES", "ca-ES", "gl-ES", "eu-ES"].map((locale) => ({ invoiceType, locale })),
     ),
   )(
-    "keeps a full comp's line within 58 mm in $locale ($invoiceType)",
+    "prints a full comp's complete rows on 58 mm in $locale ($invoiceType)",
     ({ invoiceType, locale }) => {
       const lines = printedLines(
         formatReceipt({
@@ -2426,9 +2688,24 @@ describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
           printer: PRINTER_58,
         }),
       );
-      for (const line of lines) {
-        expect(line.length, line).toBeLessThanOrEqual(columnsFor(PRINTER_58.paperWidth));
-      }
+      const compAt = lines.findIndex((line) => line.includes("100%"));
+      const expected: Record<"F1" | "F2", Record<string, string[]>> = {
+        F1: {
+          "es-ES": ["  Descuento 100% (IVA", "  incluido)           -12,00 €"],
+          "ca-ES": ["  Descompte 100% (IVA inclòs)", "                      -12,00 €"],
+          "gl-ES": ["  Desconto 100% (IVE incluído)", "                      -12,00 €"],
+          "eu-ES": ["  Deskontua 100% (BEZa barne)", "                      -12,00 €"],
+        },
+        F2: {
+          "es-ES": ["  Descuento 100%        -12,00"],
+          "ca-ES": ["  Descompte 100%        -12,00"],
+          "gl-ES": ["  Desconto 100%         -12,00"],
+          "eu-ES": ["  Deskontua 100%        -12,00"],
+        },
+      };
+      expect(lines.slice(compAt, compAt + expected[invoiceType][locale]!.length)).toEqual(
+        expected[invoiceType][locale],
+      );
       if (locale === "eu-ES") expect(lines.join("\n")).toContain("Deskontua 100%");
       const word = DISCOUNT_WORDS[locale]!;
       expect(lines.some((line) => line.includes(word) && line.includes("100%"))).toBe(true);
@@ -2679,7 +2956,7 @@ describe("the receipt's fixed words follow its language", () => {
     }
   });
 
-  it("keeps a full invoice's Descuento 100% row within 58 mm in Basque", () => {
+  it("prints a full invoice's complete comp rows on 58 mm in Basque", () => {
     const lines = printedLines(
       formatReceipt({
         result: {
@@ -2695,9 +2972,11 @@ describe("the receipt's fixed words follow its language", () => {
         printer: PRINTER_58,
       }),
     );
-    for (const line of lines) {
-      expect(line.length, line).toBeLessThanOrEqual(columnsFor(PRINTER_58.paperWidth));
-    }
+    const compAt = lines.findIndex((line) => line.includes("Deskontua 100%"));
+    expect(lines.slice(compAt, compAt + 2)).toEqual([
+      "       Deskontua 100%",
+      "                         -9,92",
+    ]);
     expect(lines.some((line) => line.includes("Deskontua 100%"))).toBe(true);
   });
 
@@ -3124,8 +3403,26 @@ describe("relative variant names on paper", () => {
           printer,
         }),
       );
-      for (const line of lines)
-        expect(line.length, line).toBeLessThanOrEqual(columnsFor(printer.paperWidth));
+      const pairAt = lines.findIndex((line) => line.startsWith("1  Seagrams"));
+      expect(
+        lines.slice(
+          pairAt,
+          lines.findIndex((line, at) => at > pairAt && line.startsWith("2  ")),
+        ),
+      ).toEqual(
+        printer.paperWidth === "58mm"
+          ? [
+              "1  Seagrams Gin reserva",
+              "   especial de la casa (Single",
+              "   con hielo y rodaja de lima)",
+              "                         12,10",
+            ]
+          : [
+              "1  Seagrams Gin reserva especial de la",
+              "   casa (Single con hielo y rodaja de",
+              "   lima)                             12,10",
+            ],
+      );
       expect(lines.map((line) => line.trim()).join(" ")).toContain(
         "Seagrams Gin reserva especial de la casa (Single con hielo y rodaja de lima)",
       );

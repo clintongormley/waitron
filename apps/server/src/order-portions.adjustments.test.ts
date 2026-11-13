@@ -1114,14 +1114,19 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
     );
   });
 
-  it("A803 portions: two croquettes from two rounds, one with a kitchen note, are refused the same way", async () => {
-    const { billId } = await portionsBill([{ name: "Croquettes" }]);
+  it("A803 portions: two croquette rows from two rounds, one with a kitchen note, are refused the same way", async () => {
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "2" }]);
     await inTx(venue, (tx) =>
-      addPortionRound(tx, venue.cfg, billId, [
-        { ...roundOf([{ name: "Croquettes" }])[0]!, note: "no salt" },
-      ]),
+      addPortionRound(
+        tx,
+        venue.cfg,
+        billId,
+        [{ ...roundOf([{ name: "Croquettes", quantity: "2" }])[0]!, note: "no salt" }],
+        { fire: true },
+      ),
     );
     const croquetteLineIds = await dishesNamed(billId, "Croquettes");
+    expect(croquetteLineIds).toHaveLength(4);
 
     await refusedWith(
       billId,
@@ -1129,17 +1134,29 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
       "management.request_invalid",
       fieldLineIds,
     );
+    for (const lineIds of [croquetteLineIds.slice(0, 2), croquetteLineIds.slice(2)]) {
+      await adjust(billId, { ...tenOff, lineId: lineIds[0]!, lineIds });
+    }
+    expect((await recordedOn(billId)).map((row) => row.action)).toEqual([
+      "discount_percent",
+      "discount_percent",
+    ]);
   });
 
-  it("A803 portions: two croquettes from two rounds, one in a course, are refused the same way", async () => {
-    const { billId } = await portionsBill([{ name: "Croquettes" }]);
+  it("A803 portions: two croquette rows from two rounds, one in a course, are refused the same way", async () => {
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "2" }]);
     await inTx(venue, async (tx) => {
       const course = await createCourse(tx, { name: "Starters", displayOrder: 90 });
-      await addPortionRound(tx, venue.cfg, billId, [
-        { ...roundOf([{ name: "Croquettes" }])[0]!, courseId: course.id },
-      ]);
+      await addPortionRound(
+        tx,
+        venue.cfg,
+        billId,
+        [{ ...roundOf([{ name: "Croquettes", quantity: "2" }])[0]!, courseId: course.id }],
+        { fire: true },
+      );
     });
     const croquetteLineIds = await dishesNamed(billId, "Croquettes");
+    expect(croquetteLineIds).toHaveLength(4);
 
     await refusedWith(
       billId,
@@ -1147,6 +1164,13 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
       "management.request_invalid",
       fieldLineIds,
     );
+    for (const lineIds of [croquetteLineIds.slice(0, 2), croquetteLineIds.slice(2)]) {
+      await adjust(billId, { ...tenOff, lineId: lineIds[0]!, lineIds });
+    }
+    expect((await recordedOn(billId)).map((row) => row.action)).toEqual([
+      "discount_percent",
+      "discount_percent",
+    ]);
   });
 
   it("A803 portions: two identical unbound one-unit lines named together are refused the same way", async () => {
@@ -3119,6 +3143,19 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineIds" } });
     }
     expect(await rowsOf(venue, bill.billId)).toEqual(before);
+    for (const [lineIds, outcome] of [
+      [burgersHere, "remove_charge"],
+      [croquetteLineIds, "keep_charge"],
+    ] as const) {
+      await cancelOn(bill, lineIds[0]!, {
+        quantity: "1",
+        outcome,
+        preparationStarted: true,
+        lineIds,
+      });
+    }
+    expect((await recordedOn(bill.billId)).map((row) => row.action)).toEqual(["cancel", "cancel"]);
+    expect(await cancelledOf(croquetteLineIds)).toEqual({ [croquetteLineIds[1]!]: 1000 });
   });
 
   /** The till's cancellation read, naming the row's portions when `lineIds` is given. */

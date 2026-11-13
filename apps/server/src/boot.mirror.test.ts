@@ -936,10 +936,8 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
   }, 60_000);
 
   it("boots adoption-pending on an EMPTY database with status and public certificate help", async () => {
-    // An adopted mirror restarts holding none of the venue's rows, and boot must serve a minimal
-    // status surface without reading any. The empty database shows only that this boot serves and
-    // never seeds the mirror viewer: the case has no negative control, and nothing names what would
-    // fail without the guard.
+    // Without the pending-adoption branch, this empty venue reaches the own-node lookup and
+    // refuses server.node_config_invalid (WAITRON_NODE_ID), before serving its status surface.
     const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-state-"));
     writeFileSync(
       join(stateDir, "modules.json"),

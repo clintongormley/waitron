@@ -1947,7 +1947,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **Add a control to each check that cannot fail** (bundle of 4, size S). [Detail](backlog/ci.md#bundle-add-a-control-to-each-check-that-cannot-fail)
 
 
 - **Replace 14 "if it happens again" entries with one table in `docs/backlog/ci** (bundle of 14, size M). Holds A891, A999, A1230, A1305, A1027, A419. [Detail](backlog/ci.md#bundle-replace-14-if-it-happens-again-entries-with-one-table-in-docsbacklogci)
