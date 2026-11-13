@@ -6427,8 +6427,8 @@ way would act as that person whatever the header says. What the till does
 with the refusal: `docs/backlog/till.md`, "One editor per bill".
 
 The guard, `apps/server/src/till-api.session-person.test.ts`, is weaker than its name. Its walk
-sends every route the till, device and schedule mount functions add with Ben's session naming Ana,
-naming nobody and naming Ben, and with the device's cookie alone. An answer naming Ana or nobody
+sends every route the till, device and schedule mount functions add with Ben's session naming Anna,
+naming nobody and naming Ben, and with the device's cookie alone. An answer naming Anna or nobody
 must be the refusal or the device-cookie-alone answer, compared by status and error code, never
 body, so
 `GET /api/device/me`'s narrowing has its own cases in `device-api.test.ts`. A route not in its
