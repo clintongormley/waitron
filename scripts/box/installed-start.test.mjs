@@ -480,3 +480,32 @@ describe("the startup-image unlock", () => {
     },
   );
 });
+
+it("the USB recipe's emitted environment selects every preloaded service", () => {
+  const root = join(scratch, "recipe-env");
+  const box = join(root, "opt/waitron");
+  mkdirSync(box, { recursive: true });
+  const write = readFileSync("deploy/box/build.sh", "utf8")
+    .split("\n")
+    .find((line) => line.startsWith("printf 'WAITRON_IMAGE="));
+  expect(write).toBeDefined();
+  const env = { ...process.env, root, app: "node:26-slim", agent: "node:26-slim" };
+  delete env.COMPOSE_PROFILES;
+  const emitted = spawnSync("bash", ["-c", write], { env, encoding: "utf8" });
+  expect(emitted.status, emitted.stderr).toBe(0);
+  const config = spawnSync(
+    "docker",
+    [
+      "compose",
+      "--env-file",
+      join(box, ".env"),
+      "-f",
+      resolve("deploy/compose.yml"),
+      "config",
+      "--services",
+    ],
+    { env, encoding: "utf8" },
+  );
+  expect(config.status, config.stderr).toBe(0);
+  expect(config.stdout.trim().split("\n").sort()).toEqual(["app", "mailpit", "print-agent"]);
+});

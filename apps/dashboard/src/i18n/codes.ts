@@ -1117,10 +1117,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the backup destination",
     es: "Revisa el destino de la copia de seguridad",
   },
-  "backup.schedule_invalid": {
-    en: "Check the backup schedule",
-    es: "Revisa la programación de la copia de seguridad",
-  },
   "backup.request_invalid": {
     en: "Check the backup settings and try again",
     es: "Revisa los ajustes de la copia de seguridad e inténtalo de nuevo",

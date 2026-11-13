@@ -131,7 +131,6 @@ export type RecordNow =
 /** The answer of `GET /api/backup/settings-evidence`. */
 export interface SettingsEvidence {
   readAt: string;
-
   failures: Readonly<LoadFailure>[];
   lastCleanLoadAt: string | null;
   latestLoadFailed: boolean;

@@ -1769,7 +1769,6 @@ export type BackupDestinationView =
 export interface BackupStatusView {
   enabled: boolean;
   isPrimary: boolean;
-
   revision: string | null;
   /** A dashboard record is stored switched off. */
   storedDisabled: boolean;
@@ -2065,7 +2064,6 @@ export type BackupEvidenceDestination =
  * (`apps/server/src/backup-settings-evidence.ts`). Never carries a secret. */
 export interface BackupSettingsEvidence {
   readAt: string;
-
   /** Newest first. */
   failures: BackupLoadFailure[];
   lastCleanLoadAt: string | null;

@@ -738,11 +738,13 @@ select_practice_inbox() {
     if is_production; then mode=off; else mode=on; fi
   fi
   if [ -f "$WAITRON_DIR/.env" ]; then
-    profiles="$(sed -n 's/^COMPOSE_PROFILES=//p' "$WAITRON_DIR/.env" | tail -n 1)"
+    profiles="$(docker compose -f "$WAITRON_DIR/compose.yml" config --environment | sed -n 's/^COMPOSE_PROFILES=//p')"
   fi
   while [ -n "$profiles" ]; do
     profile="${profiles%%,*}"
     if [ "$profile" = "$profiles" ]; then profiles=""; else profiles="${profiles#*,}"; fi
+    profile="${profile#"${profile%%[![:space:]]*}"}"
+    profile="${profile%"${profile##*[![:space:]]}"}"
     [ -n "$profile" ] && [ "$profile" != practice-inbox ] || continue
     selected="${selected:+${selected},}${profile}"
   done
@@ -973,7 +975,7 @@ prepare_upgrade_candidate() (
 )
 
 cmd_install() {
-  local ref="${1:-main}" wipe="$RESET_BEFORE_INSTALL"
+  local ref="${1:-main}" wipe="$RESET_BEFORE_INSTALL" fresh=0 state_volumes
   refuse_pending_upgrade
   if [ "$wipe" -eq 0 ] && [ -f "$WAITRON_DIR/compose.yml" ]; then
     ensure_docker
@@ -983,6 +985,11 @@ cmd_install() {
   lock_managed_box
   refresh_self "$ref"
   ensure_docker
+  if [ ! -f "$WAITRON_DIR/compose.yml" ] &&
+    state_volumes="$(docker volume ls --filter 'name=^waitron_state$' --format '{{.Name}}')" &&
+    [ -z "$state_volumes" ]; then
+    fresh=1
+  fi
   if [ "$wipe" -eq 1 ]; then
     if [ -f "$WAITRON_DIR/compose.yml" ]; then
       confirm_reset
@@ -997,8 +1004,9 @@ cmd_install() {
   disable_bluetooth_autopair
   enable_time_sync
   install_box_service "$ref"
-  if [ "$wipe" -eq 1 ]; then select_practice_inbox on; else select_practice_inbox decide; fi
+  if [ "$wipe" -eq 1 ] || [ "$fresh" -eq 1 ]; then select_practice_inbox on; fi
   select_image "$ref"
+  if [ "$wipe" -eq 0 ] && [ "$fresh" -eq 0 ]; then select_practice_inbox decide; fi
   cd "$WAITRON_DIR"
   local before
   before="$(running_images)"

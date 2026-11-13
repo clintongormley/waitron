@@ -81,7 +81,6 @@ export function destinationView(d: BackupDestination): DestinationView {
 export interface BackupRuntimeStatus {
   enabled: boolean;
   isPrimary: boolean;
-
   revision: string | null;
   /** A dashboard record is stored switched off. */
   storedDisabled: boolean;
@@ -138,8 +137,6 @@ export interface BackupSupervisorDeps {
   /** Re-reads the box-env files from DISK each reload — closing over a boot-time value would make
    * hot-reload a no-op. */
   buildConfig: () => Promise<BackupConfig | BackupConfigUnusable | undefined>;
-  /** True iff a variable `BACKUP_ENV_KEYS` (`backup-config.ts`) lists is non-empty in the RAW base env. */
-
   /** The live singleton role, read fresh each reload/status so a promotion is followed. */
   readSingletonRole: () => SingletonRole;
   /** `config.venueDir`. The supervisor opens it ITSELF rather than taking boot's handle — see this

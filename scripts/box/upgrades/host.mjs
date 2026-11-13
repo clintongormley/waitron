@@ -47,7 +47,16 @@ export async function stopUpgradeWriters({ run = command, compose }) {
       }
     }
   }
-  await run("docker", [...compose, "--profile", "staff-tunnel", "stop", "--timeout", "10"]);
+  await run("docker", [
+    ...compose,
+    "--profile",
+    "staff-tunnel",
+    "--profile",
+    "practice-inbox",
+    "stop",
+    "--timeout",
+    "10",
+  ]);
 }
 
 const COPIED_VOLUMES = ["state", "print_agent", "mailpit", "tunnel_control", "tunnel_keys"];
@@ -459,6 +468,8 @@ async function composeConfig(boxDirectory, run, input) {
           boxDirectory,
           "--profile",
           "staff-tunnel",
+          "--profile",
+          "practice-inbox",
           "-f",
           file,
           "config",
@@ -476,6 +487,7 @@ async function reopenImages(boxDirectory, images, run) {
   const up = [
     ...compose,
     ...(images.tunnel === undefined ? [] : ["--profile", "staff-tunnel"]),
+    ...(images.mailpit === undefined ? [] : ["--profile", "practice-inbox"]),
     "up",
     "-d",
     "--pull",

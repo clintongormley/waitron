@@ -64,6 +64,8 @@ it("requires a completed app shutdown before stopping every remaining writer inc
     "/box/compose.yml",
     "--profile",
     "staff-tunnel",
+    "--profile",
+    "practice-inbox",
     "stop",
     "--timeout",
     "10",
@@ -86,6 +88,7 @@ it.each([
 
 async function imageFixture({
   activeTunnel = false,
+  activeInbox,
   stoppedTunnel = false,
   noEnv = false,
   realCompose = false,
@@ -122,6 +125,7 @@ async function imageFixture({
     },
     volumes: {},
   };
+  if (activeInbox !== undefined) config.services.mailpit.profiles = ["practice-inbox"];
   for (const key of ["state", "print_agent", "mailpit", "tunnel_control", "tunnel_keys"]) {
     config.volumes[key] = { name: `waitron_${key}` };
     await fs.mkdir(join(root, key));
@@ -190,7 +194,9 @@ async function imageFixture({
     if (args.includes("ps"))
       return {
         stdout:
-          (activeTunnel || stoppedTunnel) && args.at(-1) === "tunnel"
+          activeInbox && args.at(-1) === "mailpit"
+            ? "inbox-id\n"
+            : (activeTunnel || stoppedTunnel) && args.at(-1) === "tunnel"
             ? "tunnel-id\n"
             : writers && args.at(-1) === "-q"
               ? "app-id\nagent-id\n"
@@ -302,6 +308,8 @@ it("pins all old images before pulling any candidate, and resumes only recorded 
     root,
     "-f",
     join(root, "compose.yml"),
+    "--profile",
+    "practice-inbox",
     "up",
     "-d",
     "--pull",
@@ -837,3 +845,12 @@ it.each(["restore", "keep"])(
     expect(calls.some((args) => args.includes("up") && args.includes("--wait"))).toBe(true);
   },
 );
+
+it.each([true, false])("reopens only an inbox captured as running (%s)", async (activeInbox) => {
+  const { f, images, calls } = await imageFixture({ activeInbox });
+  await f.host.stop();
+  await f.host.resume(images.old);
+  expect(calls.at(-1).includes("practice-inbox")).toBe(activeInbox);
+  const configs = calls.filter((args) => args.includes("config"));
+  expect(configs.every((args) => args.includes("practice-inbox"))).toBe(true);
+});
