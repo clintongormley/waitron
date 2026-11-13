@@ -46,20 +46,6 @@ in `apps/till/src/till-app.test.ts` logged `locator.screenshot: ENAMETOOLONG` du
 fixture checks. Bound the generated screenshot filename and keep the complete test name in
 its metadata; verify with a deliberately failing case whose generated name is long.
 
-## CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488)
-
-codeql.yml
-saves no overlay-base database, which the default setup's runs did, so its own durations may
-differ. Next: after a week of nightly runs, read their job durations and set the limit from them
-(docs/developers/ci-and-gates.md, "Every job has a time limit").
-
-## Both image jobs still run `docker/setup-buildx-action`
-
-The only stated reason was the
-cache export #1427 removed. Whether the builds still need it (for example for `load: true` or the
-print-agent build reusing the app build's layers) was not tried. Left open by A399 (#1427); no
-action queued.
-
 ## `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe
 
 The
@@ -178,20 +164,6 @@ left both paths unverified. Its existing
 a duplicate name after a complete upload. Neither that result nor the workflow text checks
 establishes recovery after a timeout, cancellation or interruption. Preserve the distinction
 when reporting the next experiment.
-
-## A1251: reject conditional error tolerance in artifact-download guards
-
-The download scanner in `scripts/ci-workflow.test.mjs` rejects literal `true` for
-`continue-on-error` on the cleanup and retry steps, but accepts other strings. An expression
-such as `${{ true }}` therefore passes that check. Refuse unsupported error-tolerance
-expressions on both steps, retaining controls for legitimate absent and literal `false` values.
-
-The #2069 retrospective found this in the older download guard, introduced by
-[PR #2017](https://github.com/clintongormley/waitron/pull/2017). On 31 October 2026, executing
-the current scanner functions over the current nightly workflow accepted an in-memory copy
-whose first download retry gained `continue-on-error: ${{ true }}`. The same copy with literal
-`true` was refused; the intact workflow passed. That experiment changed no workflow on disk.
-It demonstrates a gap in the scanner, not a failing download in the current workflow.
 
 ## What the per-push CI concurrency groups (#384) left open
 
@@ -495,8 +467,9 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
 
 ## Bundle: Finish the time limits on CI's network steps
 
-The original entries retain their text from the index (backlog review, 2026-11-06).
-A1424's live qualification was added on 7 November 2026.
+The 13 November network-limit change closes the GNU selection, artifact-download guard,
+cache/Docker/CodeQL step limits, CodeQL measurement and buildx decision. The remaining
+routing qualification and action-repository setup download stay here.
 
 - **A1424 / A1440: finish qualifying server routing and recovery on real workloads.**
   CI compares server and GitHub `(running + waiting) / slots`, with server ties
@@ -528,20 +501,9 @@ A1424's live qualification was added on 7 November 2026.
   no-avoidable-wait target. Never drain other lanes' work for a drill.
   [Procedure and limits](../developers/ci-and-gates.md#disposable-server-test-runners).
 
-- **`scripts/ci-diff-paths.sh` never looks for `gnutimeout` for its `-k` bound** (left open by
-  A1310, #2400). On ubuntu-26.04 runners it gets uutils' `timeout`, whose forced kill reaches only
-  `gh` itself ([receipt](../developers/ci-and-gates.md#every-pnpm-setup-is-bounded)); whether `gh api`
-  starts a child is not checked. A fix also needs a `gnutimeout` stub in `ci-main-recovery.test.mjs`.
-- **A1251: reject conditional error tolerance in artifact-download guards.**
-  The scanner accepts a retry with `continue-on-error: ${{ true }}` while rejecting literal
-  `true`. Add refusal cases and retain legitimate absent/false controls. [Detail](ci.md#a1251-reject-conditional-error-tolerance-in-artifact-download-guards).
-- **Other `uses:` steps that fetch over the network have no step time limit, and the runner's own action download at job set-up is bounded only by long limits of its own (left open by A935).**
-  Artifact uploads (A1100) and Node setup (A1254) now have bounded retries; the remaining sites are cache, Docker and CodeQL.
-  [Detail](ci.md#other-uses-steps-that-fetch-over-the-network-have-no-step-time-limit-and-the-runners-own-action-download-at-job-set-up-is-bounded-only-by-long-limits-of-its-own-left-open-by-a935).
-- **CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488).**
-  [Detail](ci.md#codeqls-timeout-minutes-50-rests-on-the-default-setups-durations-a488).
-- **Both image jobs still run `docker/setup-buildx-action`**. No action queued.
-  [Detail](ci.md#both-image-jobs-still-run-dockersetup-buildx-action).
+- **The runner's action-repository download at job setup remains unqualified (A935).**
+  Cache, Docker and CodeQL action limits do not reach that phase.
+  [Detail](#the-runners-action-repository-download-at-job-setup-remains-unqualified-a935).
 
 ## Bundle: One small pull request for rule lines
 
@@ -1048,30 +1010,14 @@ Checked 2026-10-16 (A774): the guard's list now also names
 and `live-queries.ts`, both exported by `packages/venue-service/package.json`, are still not named,
 and no file the guard names imports `season-tint`.
 
-## Other `uses:` steps that fetch over the network have no step time limit, and the runner's own action download at job set-up is bounded only by long limits of its own (left open by A935)
+## The runner's action-repository download at job setup remains unqualified (A935)
 
-2026-10-25 (A1100): artifact uploads now have
-[two bounded attempts](../developers/ci-and-gates.md#every-artifact-upload-is-bounded).
-2026-10-31 (A1254): Node setup now has
-[two bounded attempts](../developers/ci-and-gates.md#every-node-setup-is-bounded).
-The remaining cache, Docker and CodeQL steps still wait on their job limits, except the `lint` job's two cache steps, which have one-minute limits and may fail without failing the job (A1447).
-
-List them with
-
-```sh
-grep -n -E '^\s*-?\s*uses: (actions/cache|docker/|github/codeql-action)' .github/workflows/*.yml
-```
-
-On 2026-10-20 none of the `setup-node`, `cache`, `upload-artifact`,
-`docker/*` and `codeql-action` steps carried a step `timeout-minutes`; they rely on their job's
-limit alone, as checkout did. The set-up download ("Download action repository …") is retried by
-the runner, three attempts, each under a 20-minute limit (runner v2.337.0
-`src/Runner.Worker/ActionManager.cs` L1647–1658: `retryCount < 3`,
-`int timeoutSeconds = 20 * 60;`) — longer than most of our jobs' limits, which run from 5 to 50
-minutes (`grep -h -E '^    timeout-minutes:' .github/workflows/*.yml`) — and a step
-`timeout-minutes` cannot reach it. Whether the job's own limit covers set-up was not measured.
-Receipt for the checkout half:
-[ci-and-gates.md](../developers/ci-and-gates.md#every-checkout-is-bounded).
+The 13 November 2026 [action limits](../developers/ci-and-gates.md#cache-docker-and-codeql-steps-have-measured-limits)
+cover cache, Docker and CodeQL steps. They do not reach the earlier “Download action
+repository …” phase. On runner v2.337.0, ActionManager.cs L1647–1658 allows three attempts,
+each under 20 minutes (`retryCount < 3`, `int timeoutSeconds = 20 * 60;`). Whether the job's
+own limit bounds that setup phase has not been measured. Retain a setup stall's own log
+and runner version before changing this path.
 
 ## Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)
 

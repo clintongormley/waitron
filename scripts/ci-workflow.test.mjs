@@ -5214,6 +5214,11 @@ describe("CodeQL's workflow", () => {
 
   const codeql = () => readFileSync(join(workflowsDir, "codeql.yml"), "utf8");
 
+  it("keeps CodeQL inside its measured 60-minute job ceiling", () => {
+    const analyze = jobBlocks(codeql()).find((job) => job.id === "analyze");
+    expect(analyze.lines).toContain("    timeout-minutes: 60");
+  });
+
   it("runs only on its nightly schedule and by hand", () => {
     expect(workflowTriggers(codeql()).sort()).toEqual(["schedule", "workflow_dispatch"]);
     expect(codeql()).toMatch(/^ {4}- cron: "\d+ \d+ \* \* \*"/m);
@@ -5799,6 +5804,76 @@ function downloadAttempts(text) {
   }
   return attempts;
 }
+
+function networkTransfers(text) {
+  return jobBlocks(text).flatMap(({ id, lines }) => {
+    const jobMinutes = Number(/^ {4}timeout-minutes: ([1-9]\d*)$/m.exec(lines.join("\n"))?.[1]);
+    return workflowSteps(lines.join("\n"))
+      .filter((step) =>
+        /^(?:actions\/cache(?:\/(?:restore|save))?|docker\/[^@]+|github\/codeql-action\/[^@]+)@/.test(
+          step.uses ?? "",
+        ),
+      )
+      .map((step) => {
+        const cache = step.uses.startsWith("actions/cache");
+        const outerOnly = step.uses.startsWith("github/codeql-action/analyze@");
+        const bounded =
+          Number.isFinite(jobMinutes) &&
+          (outerOnly ||
+            (/^[1-9]\d*$/.test(step.timeoutMinutes ?? "") &&
+              Number(step.timeoutMinutes) <= jobMinutes));
+        return { job: id, action: step.uses, bounded: bounded && (cache || failureIsFatal(step)) };
+      });
+  });
+}
+
+describe("remaining network transfers", () => {
+  const action = "actions/cache@v6";
+  const fixture = (limit = "", extra = "", uses = action) =>
+    `on: push\njobs:\n  a:\n    runs-on: x\n    timeout-minutes: 5\n    steps:\n      - uses: ${uses}\n${limit === "" ? "" : `        timeout-minutes: ${limit}\n`}${extra}`;
+  it("accepts a bounded transfer and the analyze job's outer bound", () => {
+    expect(networkTransfers(fixture("1"))).toEqual([{ job: "a", action, bounded: true }]);
+    expect(networkTransfers(fixture("", "", "github/codeql-action/analyze@v4"))).toEqual([
+      { job: "a", action: "github/codeql-action/analyze@v4", bounded: true },
+    ]);
+  });
+  it.each(["", "0", "-1", "1.5", "6", "${{ inputs.minutes }}"])(
+    "refuses an unbounded or excessive step limit %s",
+    (limit) => {
+      expect(networkTransfers(fixture(limit))).toEqual([{ job: "a", action, bounded: false }]);
+    },
+  );
+  it("keeps Docker and CodeQL failures fatal while preserving optional caches", () => {
+    const optional = "        continue-on-error: true\n";
+    expect(networkTransfers(fixture("1", optional))[0].bounded).toBe(true);
+    for (const uses of [
+      "docker/build-push-action@v7",
+      "github/codeql-action/init@v4",
+      "github/codeql-action/analyze@v4",
+    ])
+      expect(networkTransfers(fixture("1", optional, uses))[0].bounded).toBe(false);
+    expect(
+      networkTransfers(
+        fixture("1", "        continue-on-error: false\n", "docker/login-action@v4"),
+      )[0].bounded,
+    ).toBe(true);
+  });
+  it("ignores commented transfer sites", () => {
+    expect(networkTransfers(fixture("1").replace("      - uses:", "      # - uses:"))).toEqual([]);
+  });
+  it("bounds every cache, Docker and CodeQL transfer, with analyze using its job limit", () => {
+    const found = workflowFiles.flatMap((name) =>
+      networkTransfers(readFileSync(join(workflowsDir, name), "utf8")).map((entry) => ({
+        workflow: name,
+        ...entry,
+      })),
+    );
+    expect(found.some((entry) => entry.action.startsWith("actions/cache"))).toBe(true);
+    expect(found.some((entry) => entry.action.startsWith("docker/"))).toBe(true);
+    expect(found.some((entry) => entry.action.startsWith("github/codeql-action"))).toBe(true);
+    expect(found.filter((entry) => !entry.bounded)).toEqual([]);
+  });
+});
 
 describe("the workflows' artifact downloads", () => {
   const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;

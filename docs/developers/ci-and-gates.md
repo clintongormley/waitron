@@ -2744,8 +2744,8 @@ by estimated cost").
 codeql.yml's figure is from GitHub's default setup, before A488 replaced it: the 55 successful
 `main` runs from 2026-10-10 09:16 to 2026-10-11 10:33 UTC, where the `javascript-typescript` job
 took at most 24.0 minutes (run `38065526655`) and the other three at most 1.3. Those runs saved an
-overlay-base database and codeql.yml does not, so its own durations may differ; re-measuring them is
-the backlog entry "CodeQL's `timeout-minutes: 50` rests on the default setup's durations".
+overlay-base database and codeql.yml does not, so its own durations may differ. The 13 November
+measurement below replaces this historical limit for the current workflow.
 
 The `smoke` figure was measured while the remote layer cache was still in place; its limit is
 checked again without it: the whole `smoke` job took 2.4 and 2.3 minutes in image-nightly runs
@@ -3661,6 +3661,51 @@ of inputs. That run and a second with nothing changed measured the benefit on th
 
 Guard: the "reuse lint results only on runs that are not full" case in
 `scripts/ci-workflow.test.mjs`, weaker than its name: it reads the workflow as text.
+
+### Cache, Docker and CodeQL steps have measured limits
+
+A stalled action should end within its own limit rather than consume the rest of a job.
+The 13 November 2026 change gives cache restores and combined Playwright caches one minute,
+Docker setup and login one minute, and CodeQL initialization one minute. Image smoke allows
+three minutes for the app build and one for print-agent; publication allows two minutes for
+its checking build and one for each push. Existing optional-cache behavior stays in place;
+Docker and CodeQL failures still fail the job. CodeQL analysis uses its 60-minute job limit.
+
+The limits use completed action records, doubled and rounded up to whole minutes. These
+are observations of successful runs, not tests of a stalled transfer:
+
+| Record | Longest observed step | Limit |
+| --- | --- | --- |
+| Full CI [43359800227](https://github.com/clintongormley/waitron/actions/runs/43359800227), 27 combined browser caches and 25 restores | cache 12 s, restore 9 s, post-cache 1 s | 1 min |
+| Same run, publication job 131681802754 | buildx 11 s (post 13 s), login 1 s, checking build 58 s, print-agent push 16 s, app push 15 s | 1 / 1 / 2 / 1 / 1 min |
+| Image nightly [43067644301](https://github.com/clintongormley/waitron/actions/runs/43067644301), smoke job 130686770204 | buildx 7 s (post 13 s), app 65 s, print-agent 14 s | 1 / 3 / 1 min |
+| Seven nightly CodeQL runs, 7–13 November, ending at [43346782629](https://github.com/clintongormley/waitron/actions/runs/43346782629) | init 22 s; JS/TS job 1792 s | init 1 min; job 60 min |
+
+For the CodeQL job, use the job rule above: 1792 seconds doubled and rounded up to five
+minutes gives 60. Only three of the seven runs satisfy the checkout-health screen used for
+timing comparisons; their longest job is 1651 seconds. That comparison screen does not
+exclude completed runs from a time ceiling (watcher, 13 November 10:18).
+
+Keep the combined caches. Runner v2.338.2 source assigns the original action to its post
+runner and reads both its timeout and error tolerance there; StepsRunner dequeues post steps
+and applies those values. This supports the inference that the same limit covers the post-save
+step. No hosted forced-timeout experiment has proved post-save cancellation.
+
+| Source | Own words | What this establishes |
+| --- | --- | --- |
+| [ActionRunner.cs, v2.338.2](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/ActionRunner.cs#L38-L59), also L118 | `Timeout => Action?.Timeout`; `ContinueOnError => Action?.ContinueOnError`; `postRunner.Action = Action` | The post runner receives the same action and reads these properties from it. |
+| [StepsRunner.cs, v2.338.2](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/StepsRunner.cs#L64-L66), also L276–288 and L325 | `jobContext.JobSteps.Enqueue(jobContext.PostJobSteps.Pop())`; `SetTimeout(timeout)`; `ApplyContinueOnError` | Post steps pass through the timeout and failure-tolerance handling. |
+
+Keep buildx for image smoke and publication. The publication workflow already rebuilds from
+its local checking-build cache with an SBOM and provenance attestation; smoke uses the same
+builder for its loaded images. No builder-removal experiment is claimed. This decision
+replaces the old backlog question about an unused remote-cache exporter.
+
+Guard: the remaining-network-transfers cases in `scripts/ci-workflow.test.mjs`, weaker than
+the behavior: they read workflow text, enforce literal positive step limits within each job
+(and the analysis job limit), and retain fatal Docker/CodeQL failures. They do not run the
+actions, prove network cancellation, or reach the runner's earlier action-repository download.
+That setup-download residual stays open.
 
 ### CodeQL scans `main` nightly, and nothing waits for it
 
@@ -5172,7 +5217,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners when the ignored-stop
   case hit its 30 s limit, main's own CI among them. Guards: the "prefers gnutimeout" and "kills an
   attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
-  rule: that script only; `scripts/ci-diff-paths.sh` never looks for `gnutimeout` (backlog).
+  rule: pnpm setup's process only; `scripts/ci-main-recovery.test.mjs` also checks ci-diff-paths'
+  GNU preference and deadline arguments, but not whether `gh` starts children or how they end.
   [Receipt](ci-and-gates.md#every-pnpm-setup-is-bounded).
 
 ## Root receipts moved on 2026-11-09
