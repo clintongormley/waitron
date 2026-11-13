@@ -47,7 +47,7 @@ import { seedSessionDevice } from "./testing/session-device.js";
 // The HTTP surface of seating and finishing a table: the session guard, the body and id screens and
 // the status each refusal answers. The verbs themselves are pinned in `parties.test.ts`.
 let cfg: TradingContext;
-let ana: { id: string };
+let anna: { id: string };
 
 // `resetPerTest: false`: the venue, till, node and person are seeded once; each case seats its own
 // table.
@@ -67,7 +67,7 @@ const suite = useVenueDb({
       pinHash: hashPin("5555"),
       role: "staff",
     });
-    ana = { id: person!.id };
+    anna = { id: person!.id };
     cfg = {
       nodeId: brandNodeId(nodeId),
       locale: "es-ES",
@@ -113,7 +113,7 @@ function app(db: Database, log: Logger = () => {}): Hono {
 async function cookie(): Promise<string> {
   const deviceId = await seedSessionDevice(suite.db);
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { deviceId, personId: ana.id, pin: "5555" }),
+    loginWithPin(tx, { deviceId, personId: anna.id, pin: "5555" }),
   );
   return sessionCookieForTest(suite.db, session.token);
 }
@@ -184,7 +184,7 @@ describe("POST /api/tables/:id/seat", () => {
   it("seats a free table for the signed-in operator", async () => {
     const seated = await seat(3);
     expect(seated.revision).toBe(0);
-    expect(await partyRow(seated.partyId)).toMatchObject({ guestCount: 3, openedBy: ana.id });
+    expect(await partyRow(seated.partyId)).toMatchObject({ guestCount: 3, openedBy: anna.id });
     const [tab] = await withTransaction(suite.db, (tx) =>
       tx.select().from(workingOrders).where(eq(workingOrders.id, seated.tabId)),
     );
@@ -194,7 +194,7 @@ describe("POST /api/tables/:id/seat", () => {
   it("opens the tab as the device that seated it", async () => {
     const deviceId = await seedSessionDevice(suite.db);
     const session = await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { deviceId, personId: ana.id, pin: "5555" }),
+      loginWithPin(tx, { deviceId, personId: anna.id, pin: "5555" }),
     );
     const res = await app(suite.db).request(`/api/tables/${await table()}/seat`, {
       method: "POST",
@@ -294,7 +294,7 @@ describe("POST /api/parties/:id/finish", () => {
     const res = await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision: 0 });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ state: "closed" });
-    expect(await partyRow(partyId)).toMatchObject({ state: "closed", closedBy: ana.id });
+    expect(await partyRow(partyId)).toMatchObject({ state: "closed", closedBy: anna.id });
   });
 
   it("answers 409 party.bill_outstanding while a bill is unpaid", async () => {

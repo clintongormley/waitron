@@ -4350,7 +4350,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const managersOnly = await seedProfile("till");
       await approve(app, venue, t.deviceId, [managersOnly]);
       await admitOnly(managersOnly, "manager");
-      const ana = await signIn(t, "staff");
+      const anna = await signIn(t, "staff");
       const ben = await signIn(t, "staff");
       const offered = async (cookie: string, person?: string) => {
         const res = await app.request("/api/device/me", {
@@ -4364,7 +4364,7 @@ describe("a device's approved profiles and switching its active one", () => {
 
       expect(await offered(t.jar)).toEqual([t.profileId, managersOnly]);
       expect(await offered(`${t.jar}; ${ben.cookie}`, ben.personId)).toEqual([t.profileId]);
-      expect(await offered(`${t.jar}; ${ben.cookie}`, ana.personId)).toEqual([
+      expect(await offered(`${t.jar}; ${ben.cookie}`, anna.personId)).toEqual([
         t.profileId,
         managersOnly,
       ]);

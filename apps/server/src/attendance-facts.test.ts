@@ -40,7 +40,7 @@ const suite = useVenueDb({
 });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const backend = new WorkforceBackend();
-let ana: string, bea: string, caro: string, diego: string;
+let anna: string, beth: string, carol: string, david: string;
 let nodeId: string, deviceId: string, orderId: string, partyId: string;
 const day = (): AttendanceDay => ({
   businessDay: "2026-01-05",
@@ -67,7 +67,7 @@ async function amendment(at: string, kind: "order_placed" | "order_cancelled" = 
     appendOrderAmendment(tx, {
       workingOrderId: orderId,
       kind,
-      actorId: bea,
+      actorId: beth,
       reason: kind === "order_cancelled" ? "Changed mind" : null,
       origin: jobOrigin("dashboard"),
       capturedByNodeId: nodeId,
@@ -77,7 +77,7 @@ async function amendment(at: string, kind: "order_placed" | "order_cancelled" = 
   );
 }
 const event = (at: string) => ({
-  personId: ana,
+  personId: anna,
   nodeId,
   at,
   offsetMinutes: 0,
@@ -101,10 +101,10 @@ beforeEach(async () => {
       role: "admin" as const,
     })),
   );
-  [ana, bea, caro, diego] = people.map((r) => r.id) as [string, string, string, string];
+  [anna, beth, carol, david] = people.map((r) => r.id) as [string, string, string, string];
   partyId = newId();
   orderId = newId();
-  await suite.db.insert(parties).values({ id: partyId, openedBy: diego });
+  await suite.db.insert(parties).values({ id: partyId, openedBy: david });
   await seedWorkingOrder(suite.db, {
     id: orderId,
     source: "dashboard",
@@ -123,16 +123,16 @@ describe("attendance source facts", () => {
         startAt: "2026-01-05T03:00:00.000Z",
         endAt: "2026-01-06T03:00:00.000Z",
       }),
-    ).toMatchObject([{ source: "order", key: placed.id, personId: bea }]);
+    ).toMatchObject([{ source: "order", key: placed.id, personId: beth }]);
   });
   it("attributes sign-in, unpaid orders and collection to their own actors and original instants", async () => {
-    const session = await signIn(ana, "2026-01-05T08:00:00.987Z");
+    const session = await signIn(anna, "2026-01-05T08:00:00.987Z");
     const placed = await amendment("2026-01-05T12:00:00Z");
     await run((tx) =>
       recordAttendanceFact(tx, {
         source: "whole-payment",
         key: "collection",
-        personId: caro,
+        personId: carol,
         kind: "payment",
         at: "2026-01-05T16:40:00Z",
         offsetMinutes: 0,
@@ -143,7 +143,7 @@ describe("attendance source facts", () => {
       recordAttendanceFact(tx, {
         source: "whole-payment",
         key: "collection",
-        personId: diego,
+        personId: david,
         kind: "payment",
         at: "2026-01-06T18:00:00Z",
         offsetMinutes: 0,
@@ -158,7 +158,7 @@ describe("attendance source facts", () => {
       {
         source: "session",
         key: session,
-        personId: ana,
+        personId: anna,
         kind: "sign-in",
         at: "2026-01-05T08:00:00.000Z",
         offsetMinutes: 60,
@@ -166,7 +166,7 @@ describe("attendance source facts", () => {
       {
         source: "order",
         key: placed.id,
-        personId: bea,
+        personId: beth,
         kind: "order",
         at: "2026-01-05T12:00:00.000Z",
         offsetMinutes: 60,
@@ -174,7 +174,7 @@ describe("attendance source facts", () => {
       {
         source: "whole-payment",
         key: "collection",
-        personId: caro,
+        personId: carol,
         kind: "payment",
         at: "2026-01-05T16:40:00.000Z",
         offsetMinutes: 60,
@@ -191,7 +191,7 @@ describe("attendance source facts", () => {
     await suite.db.insert(orderDrafts).values({
       id: draftId,
       partyId,
-      ownerId: diego,
+      ownerId: david,
       state: "discarded",
       updatedAt: "2026-01-05T20:00:00Z",
     });
@@ -199,9 +199,9 @@ describe("attendance source facts", () => {
       id: draftEvent,
       draftId,
       kind: "discarded",
-      actorId: caro,
-      fromPerson: ana,
-      toPerson: ana,
+      actorId: carol,
+      fromPerson: anna,
+      toPerson: anna,
       detail: {},
       createdAt: "2026-01-05T14:00:00Z",
     });
@@ -210,7 +210,7 @@ describe("attendance source facts", () => {
         id: groupEvent,
         partyId,
         kind: "reordered",
-        actorId: ana,
+        actorId: anna,
         detail: {},
         createdAt: "2026-01-05T15:00:00Z",
       },
@@ -223,16 +223,16 @@ describe("attendance source facts", () => {
       },
     ]);
     expect((await facts()).map((f) => [f.key, f.personId, f.at])).toEqual([
-      [placed.id, bea, "2026-01-05T12:00:00.000Z"],
-      [cancelled.id, bea, "2026-01-05T13:00:00.000Z"],
-      [`event:${draftEvent}`, caro, "2026-01-05T14:00:00.000Z"],
-      [`group:${groupEvent}`, ana, "2026-01-05T15:00:00.000Z"],
+      [placed.id, beth, "2026-01-05T12:00:00.000Z"],
+      [cancelled.id, beth, "2026-01-05T13:00:00.000Z"],
+      [`event:${draftEvent}`, carol, "2026-01-05T14:00:00.000Z"],
+      [`group:${groupEvent}`, anna, "2026-01-05T15:00:00.000Z"],
     ]);
   });
   it("includes the lower day boundary and excludes the upper boundary", async () => {
-    const included = await signIn(ana, "2026-01-05T04:00:00+01:00");
-    await signIn(ana, "2026-01-06T03:00:00Z");
-    await signIn(ana, "2026-01-05T02:59:59Z");
+    const included = await signIn(anna, "2026-01-05T04:00:00+01:00");
+    await signIn(anna, "2026-01-06T03:00:00Z");
+    await signIn(anna, "2026-01-05T02:59:59Z");
     expect((await facts()).map((f) => f.key)).toEqual([included]);
   });
   it("ignores pending and refused actions and retains a qualifying payment after decline", async () => {
@@ -246,12 +246,12 @@ describe("attendance source facts", () => {
       method: "card",
       applied: 100,
       state: "declined",
-      requestedBy: caro,
+      requestedBy: carol,
       source: "device",
       deviceId,
       createdAt: "2026-01-05T10:00:00Z",
       receivedAt: "2026-01-06T19:00:00Z",
-      attestedBy: diego,
+      attestedBy: david,
       attestationNote: "Provider confirmation",
     });
     for (const outcome of ["pending", "refused"] as const) {
@@ -259,7 +259,7 @@ describe("attendance source facts", () => {
         recordAttendanceFact(tx, {
           source: "whole-payment",
           key: outcome,
-          personId: ana,
+          personId: anna,
           kind: "payment",
           at: "2026-01-05T20:00:00Z",
           offsetMinutes: 0,
@@ -271,7 +271,7 @@ describe("attendance source facts", () => {
       {
         source: "bill-payment",
         key: id,
-        personId: caro,
+        personId: carol,
         kind: "payment",
         at: "2026-01-05T10:00:00.000Z",
         offsetMinutes: 60,
@@ -289,7 +289,7 @@ describe("attendance source facts", () => {
       method: "card",
       applied: 100,
       state: "received",
-      requestedBy: diego,
+      requestedBy: david,
       source: "device",
       deviceId,
       createdAt: "2026-01-05T12:00:00Z",
@@ -299,7 +299,7 @@ describe("attendance source facts", () => {
       recordAttendanceFact(tx, {
         source: "bill-payment",
         key: id,
-        personId: caro,
+        personId: carol,
         kind: "payment",
         at: "2026-01-05T11:00:00Z",
         offsetMinutes: 0,
@@ -307,7 +307,7 @@ describe("attendance source facts", () => {
       }),
     );
     expect((await facts()).map((f) => [f.key, f.personId, f.at])).toEqual([
-      [id, caro, "2026-01-05T11:00:00.000Z"],
+      [id, carol, "2026-01-05T11:00:00.000Z"],
     ]);
   });
   it("break instants count, targeted retimes and acknowledgments do not create activity", async () => {
@@ -322,12 +322,12 @@ describe("attendance source facts", () => {
         at: "2026-01-05T12:10:00Z",
         offsetMinutes: 0,
         reason: "Corrected break",
-        actorPersonId: ana,
+        actorPersonId: anna,
         origin: jobOrigin("dashboard"),
       }),
     );
     await run((tx) =>
-      backend.approveCorrection(tx, { nodeId, correctionId: request, approverPersonId: bea }),
+      backend.approveCorrection(tx, { nodeId, correctionId: request, approverPersonId: beth }),
     );
     const out = await run((tx) =>
       backend.recordAutomaticClose(tx, {
@@ -339,7 +339,7 @@ describe("attendance source facts", () => {
       backend.confirmAutomaticEntry(tx, {
         nodeId,
         entryId: out,
-        workerPersonId: ana,
+        workerPersonId: anna,
         origin: jobOrigin("dashboard"),
       }),
     );
@@ -362,22 +362,22 @@ describe("attendance source facts", () => {
       const correctionId = await run((tx) =>
         backend.requestCorrection(tx, {
           nodeId,
-          personId: ana,
+          personId: anna,
           missingEntryKind,
           at,
           offsetMinutes: 0,
           reason: "Forgot break",
-          actorPersonId: ana,
+          actorPersonId: anna,
           origin: jobOrigin("dashboard"),
         }),
       );
       await run((tx) =>
-        backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: bea }),
+        backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: beth }),
       );
     }
     expect((await facts()).map((f) => [f.kind, f.personId, f.at])).toEqual([
-      ["break", ana, "2026-01-05T12:00:00.000Z"],
-      ["break", ana, "2026-01-05T12:30:00.000Z"],
+      ["break", anna, "2026-01-05T12:00:00.000Z"],
+      ["break", anna, "2026-01-05T12:30:00.000Z"],
     ]);
   });
   it.each([
@@ -398,12 +398,12 @@ describe("attendance source facts", () => {
   ])(
     "uses the venue offset at %s across DST",
     async (at, businessDay, startAt, endAt, offsetMinutes) => {
-      const id = await signIn(ana, at);
+      const id = await signIn(anna, at);
       expect(await facts({ businessDay, startAt, endAt })).toEqual([
         {
           source: "session",
           key: id,
-          personId: ana,
+          personId: anna,
           kind: "sign-in",
           at,
           offsetMinutes,
@@ -429,7 +429,7 @@ describe("planned attendance shifts", () => {
     const id = newId();
     await suite.db.insert(shifts).values({
       id,
-      personId: ana,
+      personId: anna,
       startsAt,
       endsAt,
       startsOffsetMinutes: 60,
@@ -454,14 +454,14 @@ describe("planned attendance shifts", () => {
     expect(await planned()).toEqual([
       {
         id: first,
-        personId: ana,
+        personId: anna,
         startsAt: "2026-01-05T03:00:00.000Z",
         endsAt: "2026-01-05T11:00:00.000Z",
         rosterVersionId: published,
       },
       {
         id: second,
-        personId: ana,
+        personId: anna,
         startsAt: "2026-01-05T17:00:00.000Z",
         endsAt: "2026-01-06T04:00:00.000Z",
         rosterVersionId: published,
@@ -473,16 +473,16 @@ describe("planned attendance shifts", () => {
     const id = await shift(published, "2026-01-05T09:00:00.000Z", "2026-01-05T17:00:00.000Z");
     const swap = await run((tx) =>
       requestSwap(tx, {
-        requestedByPersonId: ana,
+        requestedByPersonId: anna,
         fromShiftId: id,
-        toPersonId: bea,
+        toPersonId: beth,
         toShiftId: null,
       }),
     );
-    await run((tx) => acceptSwap(tx, { swapId: swap, acceptingPersonId: bea }));
+    await run((tx) => acceptSwap(tx, { swapId: swap, acceptingPersonId: beth }));
     await run((tx) =>
-      decideSwap(tx, { swapId: swap, decision: "approved", decidedByPersonId: caro }),
+      decideSwap(tx, { swapId: swap, decision: "approved", decidedByPersonId: carol }),
     );
-    expect((await planned()).map((s) => [s.id, s.personId])).toEqual([[id, ana]]);
+    expect((await planned()).map((s) => [s.id, s.personId])).toEqual([[id, anna]]);
   });
 });
