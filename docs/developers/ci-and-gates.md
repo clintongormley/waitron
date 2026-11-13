@@ -3664,21 +3664,29 @@ Guard: the "reuse lint results only on runs that are not full" case in
 
 ### Cache, Docker and CodeQL steps have measured limits
 
-A stalled action should end within its own limit rather than consume the rest of a job.
-The 13 November 2026 change gives cache restores and combined Playwright caches one minute,
-Docker setup and login one minute, and CodeQL initialization one minute. Image smoke allows
-three minutes for the app build and one for print-agent; publication allows two minutes for
-its checking build and one for each push. Existing optional-cache behavior stays in place;
-Docker and CodeQL failures still fail the job. CodeQL analysis uses its 60-minute job limit.
+A stalled cache or initialization action should end within its own limit rather than consume
+its job. Browser caches get two minutes and `continue-on-error: true`: if a restore or save
+reaches its limit, tests can continue through the existing browser-install step. Lint's existing
+one-minute optional caches stay as they are. Docker setup and login, and CodeQL initialization,
+get one minute. Docker and CodeQL failures still fail the job; analysis uses CodeQL's 60-minute
+job limit.
 
-The limits use completed action records, doubled and rounded up to whole minutes. These
-are observations of successful runs, not tests of a stalled transfer:
+Docker build actions keep limits equal to their enclosing jobs: 15 minutes in image smoke
+and 10 in publication. A shorter measured-build limit would cut off the Dockerfile's existing
+300-second install attempts before they can retry. These equal limits introduce no earlier
+stop than the job already imposed; they do not promise that every internal retry can finish.
+
+The cache and initialization limits use completed action records, doubled and rounded up to
+whole minutes. The build limits retain the existing job budgets. These are observations of
+completed steps, not tests of a stalled transfer:
 
 | Record | Longest observed step | Limit |
 | --- | --- | --- |
-| Full CI [43359800227](https://github.com/clintongormley/waitron/actions/runs/43359800227), 27 combined browser caches and 25 restores | cache 12 s, restore 9 s, post-cache 1 s | 1 min |
-| Same run, publication job 131681802754 | buildx 11 s (post 13 s), login 1 s, checking build 58 s, print-agent push 16 s, app push 15 s | 1 / 1 / 2 / 1 / 1 min |
-| Image nightly [43067644301](https://github.com/clintongormley/waitron/actions/runs/43067644301), smoke job 130686770204 | buildx 7 s (post 13 s), app 65 s, print-agent 14 s | 1 / 3 / 1 min |
+| Hosted full CI [43359800227](https://github.com/clintongormley/waitron/actions/runs/43359800227), 27 combined browser caches and 25 restores | cache 12 s, restore 9 s; post-cache 1 s on hits | browser cache 2 min from server records below |
+| Server [43393490764](https://github.com/clintongormley/waitron/actions/runs/43393490764), job 131779198469, and [43400749839](https://github.com/clintongormley/waitron/actions/runs/43400749839), job 131807089476 | restore and combined cache each 46 s | 2 min, optional |
+| Hosted [42676716419](https://github.com/clintongormley/waitron/actions/runs/42676716419), job 129360366601 | post-cache 5 s; log says cache saved with `playwright-Linux-1.65.0` after a miss | same 2 min, optional; server saves not measured |
+| Full CI 43359800227, publication job 131681802754 | buildx 11 s (post 13 s), login 1 s, checking build 58 s, print-agent push 16 s, app push 15 s | setup/login 1 min; builds retain 10 min |
+| Image nightly [43067644301](https://github.com/clintongormley/waitron/actions/runs/43067644301), smoke job 130686770204 | buildx 7 s (post 13 s), app 65 s, print-agent 14 s | setup 1 min; builds retain 15 min |
 | Seven nightly CodeQL runs, 7–13 November, ending at [43346782629](https://github.com/clintongormley/waitron/actions/runs/43346782629) | init 22 s; JS/TS job 1792 s | init 1 min; job 60 min |
 
 The retained logs include actual bundle downloads: run 42325293985's JS/TS initialization
@@ -3707,7 +3715,8 @@ replaces the old backlog question about an unused remote-cache exporter.
 
 Guard: the remaining-network-transfers cases in `scripts/ci-workflow.test.mjs`, weaker than
 the behavior: they read workflow text, enforce literal positive step limits within each job
-(and the analysis job limit), and retain fatal Docker/CodeQL failures. They do not run the
+(and the analysis job limit), two-minute optional browser caches at the declared browser path,
+build limits equal to their jobs, and fatal Docker/CodeQL failures. They do not run the
 actions, prove network cancellation, or reach the runner's earlier action-repository download.
 That setup-download residual stays open.
 

@@ -188,7 +188,7 @@ jobs:
 
       - name: Build the image
         uses: docker/build-push-action@v7
-        timeout-minutes: 3
+        timeout-minutes: 15
         with:
           context: .
           file: deploy/Dockerfile
@@ -203,7 +203,7 @@ jobs:
 
       - name: Build the print-agent image
         uses: docker/build-push-action@v7
-        timeout-minutes: 1
+        timeout-minutes: 15
         with:
           context: .
           file: deploy/Dockerfile

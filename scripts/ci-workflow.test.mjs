@@ -5822,7 +5822,16 @@ function networkTransfers(text) {
           (outerOnly ||
             (/^[1-9]\d*$/.test(step.timeoutMinutes ?? "") &&
               Number(step.timeoutMinutes) <= jobMinutes));
-        return { job: id, action: step.uses, bounded: bounded && (cache || failureIsFatal(step)) };
+        const browserCache = cache && step.with.path === "~/.cache/ms-playwright";
+        const build = step.uses.startsWith("docker/build-push-action@");
+        const browserBudget =
+          !browserCache || (Number(step.timeoutMinutes) >= 2 && step.continueOnError === "true");
+        const buildBudget = !build || Number(step.timeoutMinutes) === jobMinutes;
+        return {
+          job: id,
+          action: step.uses,
+          bounded: bounded && browserBudget && buildBudget && (cache || failureIsFatal(step)),
+        };
       });
   });
 }
@@ -5843,6 +5852,18 @@ describe("remaining network transfers", () => {
       expect(networkTransfers(fixture(limit))).toEqual([{ job: "a", action, bounded: false }]);
     },
   );
+  it("keeps browser caches optional with two minutes for server transfers", () => {
+    const browser = "        with:\n          path: ~/.cache/ms-playwright\n";
+    const optional = "        continue-on-error: true\n";
+    expect(networkTransfers(fixture("2", optional + browser))[0].bounded).toBe(true);
+    expect(networkTransfers(fixture("2", browser))[0].bounded).toBe(false);
+    expect(networkTransfers(fixture("1", optional + browser))[0].bounded).toBe(false);
+  });
+  it("leaves Docker builds the enclosing job's existing retry opportunity", () => {
+    const build = "docker/build-push-action@v7";
+    expect(networkTransfers(fixture("5", "", build))[0].bounded).toBe(true);
+    expect(networkTransfers(fixture("2", "", build))[0].bounded).toBe(false);
+  });
   it("keeps Docker and CodeQL failures fatal while preserving optional caches", () => {
     const optional = "        continue-on-error: true\n";
     expect(networkTransfers(fixture("1", optional))[0].bounded).toBe(true);
@@ -5851,7 +5872,11 @@ describe("remaining network transfers", () => {
       "github/codeql-action/init@v4",
       "github/codeql-action/analyze@v4",
     ])
-      expect(networkTransfers(fixture("1", optional, uses))[0].bounded).toBe(false);
+      expect(
+        networkTransfers(
+          fixture(uses.startsWith("docker/build-push") ? "5" : "1", optional, uses),
+        )[0].bounded,
+      ).toBe(false);
     expect(
       networkTransfers(
         fixture("1", "        continue-on-error: false\n", "docker/login-action@v4"),
