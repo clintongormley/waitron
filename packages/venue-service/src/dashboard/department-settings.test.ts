@@ -497,8 +497,12 @@ it("keeps newer edits when a save finishes and ignores completions from a discon
   expect(save(el).disabled).toBe(false);
 });
 
-it("a late transfer load keeps a name edit dirty and does not resurrect a departed department's settings", async () => {
+it("a department switch clears validation and a late transfer load preserves current drafts and settings", async () => {
   const { el } = await mount();
+  await change(el, "name", " ");
+  save(el).click();
+  await el.updateComplete;
+  expect(field(el, "name").error).toBe("This field is required.");
   el.remove();
   const reads: { path: string; finish: (value: unknown) => void }[] = [];
   el.api = new VenueServiceApi(
@@ -508,6 +512,8 @@ it("a late transfer load keeps a name edit dirty and does not resurrect a depart
   el.departmentId = "d2";
   hosts[0]!.append(el);
   await el.updateComplete;
+  await change(el, "name", " ");
+  expect(field(el, "name").error).toBe("");
   await change(el, "name", "Deli draft");
   el.departmentId = "d1";
   await el.updateComplete;
@@ -1144,6 +1150,9 @@ it("a blank native trading name is refused without writing and Cancel restores i
   expect(box.value).toBe("Casa");
   expect(box.error).toBe("");
   expect(save(el).disabled).toBe(true);
+  await userEvent.fill(page.elementLocator(native), "   ");
+  await el.updateComplete;
+  expect(box.error).toBe("");
 });
 
 it.each([

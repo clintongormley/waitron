@@ -3,6 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
+  FormFeedback,
+  bottomMessage,
   draftScopeFor,
   focusFirstInvalid,
   saveActionState,
@@ -48,7 +50,7 @@ export class ZoneEditDialog extends LitElement {
   @property({ type: Boolean }) refreshing = false;
   @state() private draft?: ZoneEditInput;
   @state() private busy = false;
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   @state() private dismissed = false;
   @state() private refused: Partial<Record<Field, string>> = {};
   @state() private failure = "";
@@ -123,7 +125,7 @@ export class ZoneEditDialog extends LitElement {
       this.opened = row.id;
       this.generation = {};
       this.busy = false;
-      this.attempted = false;
+      this.feedback.reset();
       this.dismissed = false;
       this.refused = {};
       this.failure = "";
@@ -139,7 +141,7 @@ export class ZoneEditDialog extends LitElement {
         equal,
         restore: (value) => {
           this.draft = copy(value);
-          this.attempted = false;
+          this.feedback.reset();
           this.refused = {};
           this.failure = "";
         },
@@ -195,11 +197,11 @@ export class ZoneEditDialog extends LitElement {
       return;
     const id = this.zoneId,
       generation = this.generation;
-    this.attempted = true;
+    this.feedback.press();
     this.refused = {};
     this.failure = "";
     if (Object.keys(this.errors).length) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     const submitted = { ...this.draft!, name: this.draft!.name.trim() };
@@ -254,7 +256,7 @@ export class ZoneEditDialog extends LitElement {
       paidWhen: department?.paidWhen ?? "prepay",
       collectionNumber: department?.collectionNumber ?? "none",
     };
-    const errors = { ...(this.attempted ? this.errors : {}), ...this.refused },
+    const errors = { ...(this.feedback.attempted ? this.errors : {}), ...this.refused },
       action = saveActionState(this.scope);
     return keyed(
       zone.id,
@@ -308,7 +310,7 @@ export class ZoneEditDialog extends LitElement {
             }}
           ></dashboard-service-settings-fields>
           <wt-form-actions
-            .error=${[this.failure, Object.keys(errors).length ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}
+            .error=${bottomMessage(this.failure, Object.keys(errors).length ? t("venue.fix_fields") : "")}
           >
             <wt-button
               slot="cancel"
@@ -324,7 +326,7 @@ export class ZoneEditDialog extends LitElement {
               data-test="save-editor"
               .loading=${this.busy}
               variant=${this.refreshing ? "secondary" : action.variant}
-              ?disabled=${this.busy || this.refreshing || action.unchanged || (this.attempted && Object.keys(this.errors).length > 0)}
+              ?disabled=${this.busy || this.refreshing || action.unchanged || (this.feedback.attempted && Object.keys(this.errors).length > 0)}
               @click=${() => {
                 if (current()) void this.save();
               }}

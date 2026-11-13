@@ -92,7 +92,7 @@ printer keys.
 
 Move repeated bottom-message assembly, attempt, refusal-dismissal and render-before-focus
 plumbing in the remaining dashboard editors, Voids and comps (`packages/adjustments`),
-Departments and zones, routing cells, stations, venue-service special-day painting and ranges, and the till's forms onto
+routing cells, stations, venue-service special-day painting and ranges, and the till's forms onto
 `FormFeedback` in `@waitron/ui`. Inventory each
 later batch before migrating it; leave single-job forms local. Preserve each form's field mapping
 and message behavior; keep domain-specific refusal clearing local. See the

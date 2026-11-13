@@ -3,6 +3,8 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  FormFeedback,
+  bottomMessage,
   draftScopeFor,
   focusFirstInvalid,
   saveActionState,
@@ -190,7 +192,7 @@ export class DepartmentSettings extends LitElement {
   @property({ attribute: false }) receiptEditor: ReceiptEditorPanel;
   @state() private draft?: DepartmentDraft;
   @state() private busy = false;
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   @state() private refused: Partial<Record<Field, string>> = {};
   @state() private refusedSteps: ServiceStepErrors = {};
   @state() private failure = "";
@@ -242,7 +244,7 @@ export class DepartmentSettings extends LitElement {
     return this.busy || this.refreshing || !!this.receipt?.saving;
   }
   private get shownErrors(): Partial<Record<Field, string>> {
-    return { ...(this.attempted ? this.errors : {}), ...this.refused };
+    return { ...(this.feedback.attempted ? this.errors : {}), ...this.refused };
   }
   private selectTab(tab: DepartmentTab, replace: boolean) {
     this.tab = tab;
@@ -311,7 +313,7 @@ export class DepartmentSettings extends LitElement {
       this.generation = {};
       this.transferGeneration = {};
       this.busy = false;
-      this.attempted = false;
+      this.feedback.reset();
       this.refused = {};
       this.refusedSteps = {};
       this.failure = "";
@@ -363,7 +365,7 @@ export class DepartmentSettings extends LitElement {
         equal,
         restore: (value) => {
           this.draft = copy(value);
-          this.attempted = false;
+          this.feedback.reset();
           this.refused = {};
           this.refusedSteps = {};
           this.failure = "";
@@ -585,7 +587,7 @@ export class DepartmentSettings extends LitElement {
     return found;
   }
   private get shownStepErrors(): ServiceStepErrors {
-    const shown: ServiceStepErrors = this.attempted ? { ...this.stepErrors } : {};
+    const shown: ServiceStepErrors = this.feedback.attempted ? { ...this.stepErrors } : {};
     for (const [key, row] of Object.entries(this.refusedSteps))
       shown[key] = { ...shown[key], ...row };
     return shown;
@@ -680,7 +682,7 @@ export class DepartmentSettings extends LitElement {
       saveActionState(this.scope).unchanged
     )
       return;
-    this.attempted = true;
+    this.feedback.press();
     this.refused = {};
     this.refusedSteps = {};
     this.failure = "";
@@ -725,7 +727,7 @@ export class DepartmentSettings extends LitElement {
     const proceed = () => {
       if (this.current(id, generation)) {
         this.draft = copy(this.baseline!);
-        this.attempted = false;
+        this.feedback.reset();
         this.refused = {};
         this.refusedSteps = {};
         this.failure = "";
@@ -1004,7 +1006,7 @@ export class DepartmentSettings extends LitElement {
             : nothing
         }
       </wt-tabs>
-      ${row.active && this.tab !== "receipt" ? html`<wt-form-actions .error=${[this.failure, highlighted ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
+      ${row.active && this.tab !== "receipt" ? html`<wt-form-actions .error=${bottomMessage(this.failure, highlighted ? t("venue.fix_fields") : "")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.feedback.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
     </div>`;
   }
 }
