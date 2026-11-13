@@ -126,11 +126,11 @@ function selfDoc(standing: "sell-only" | "serving-primary"): SignedMembershipDoc
 }
 
 /** Includes a node identity, so a promote has a key to sign with. */
-async function seedTillIdentity(db: Database, node: NodeDatabase): Promise<void> {
+async function seedIdentity(db: Database, node: NodeDatabase): Promise<void> {
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
     .insert(tenants)
-    .values({ id: 1, country: "ES", taxId: "90111111H", legalName: "Promote Endpoint Till SL" })
+    .values({ id: 1, country: "ES", taxId: "90111111H", legalName: "Promote Endpoint Venue SL" })
     .onConflictDoNothing();
   await db
     .insert(locations)
@@ -257,7 +257,7 @@ beforeAll(async () => {
 
   [appVenueDir, appDb, appNode] = await migratedVenue();
   [mirrorVenueDir, mirrorDb, mirrorNode] = await migratedVenue();
-  await seedTillIdentity(appDb, appNode);
+  await seedIdentity(appDb, appNode);
   // No `node_mode` row: `readNodeMode` reads it as ('primary', 'primary').
   await stampDeployment(appDb, "production");
 }, 180_000);

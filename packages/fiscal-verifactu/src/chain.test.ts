@@ -443,7 +443,7 @@ describe("appendToChain — pre-fetched SIF", () => {
 
 describe("readChainHead", () => {
   it("creates the chain head row from scratch when a node has none yet", async () => {
-    // seedTill's registerSif already wrote a cadenas row, so every other test skips readChainHead's
+    // seedNode's registerSif already wrote a cadenas row, so every other test skips readChainHead's
     // create-the-head branch. Deleting that row reproduces the cold start.
     await suite.db.execute(sql`delete from cadenas where node_id = ${node.nodeId}`);
 

@@ -482,6 +482,15 @@ type Drill = { kind: "table-order" | "ticket" | TillDestination };
 /** A till draws no table buttons; one shared list, so the shell never sees a new one. */
 const NO_BAR_TABLES: readonly BarTable[] = Object.freeze([]);
 const NO_PARTY_DRAFTS: readonly PartyDraft[] = Object.freeze([]);
+// One object each, so a boot's reset of state still at rest schedules no update.
+const NO_REFRESH_RETRIES: Partial<Record<RefreshList, RefreshRetry>> = Object.freeze({});
+const IDLE_CLOCK: ClockingSnapshot = Object.freeze({
+  state: null,
+  reading: false,
+  busy: false,
+  error: null,
+  refusal: null,
+});
 
 const billsSeen = (bills: readonly PartyBill[]): string =>
   JSON.stringify(
@@ -3102,13 +3111,7 @@ export class TillApp extends LitElement {
   #clockAccessLost = false;
   @state() private clockPage = false;
   @state() private clockedOut = false;
-  @state() private clockSnapshot: ClockingSnapshot = {
-    state: null,
-    reading: false,
-    busy: false,
-    error: null,
-    refusal: null,
-  };
+  @state() private clockSnapshot: ClockingSnapshot = IDLE_CLOCK;
   #clockIntent?: {
     action: TillClockAction;
     signIn: number;
@@ -3906,7 +3909,7 @@ export class TillApp extends LitElement {
   /** Re-entry guard for {@link TillApp.#onPlaceOrder}; also disables Place while in flight. */
   @state() private placing = false;
   /** A list whose refresh failed after a successful write, with its automatic retry's countdown. */
-  @state() private refreshRetries: Partial<Record<RefreshList, RefreshRetry>> = {};
+  @state() private refreshRetries: Partial<Record<RefreshList, RefreshRetry>> = NO_REFRESH_RETRIES;
   #refreshTimers = new Map<RefreshList, ReturnType<typeof setTimeout>>();
   #refreshGeneration: Record<RefreshList, number> = {
     held: 0,
@@ -4967,7 +4970,7 @@ export class TillApp extends LitElement {
     this.#clockNeedsInitialRead = false;
     this.clockPage = false;
     controller?.stop();
-    this.clockSnapshot = { state: null, reading: false, busy: false, error: null, refusal: null };
+    this.clockSnapshot = IDLE_CLOCK;
   }
 
   #startClocking(personId: string, signIn: number, session: number, prompt: boolean): void {
@@ -6113,7 +6116,7 @@ export class TillApp extends LitElement {
     this.#refreshGeneration.waiting++;
     for (const timer of this.#refreshTimers.values()) clearTimeout(timer);
     this.#refreshTimers.clear();
-    this.refreshRetries = {};
+    this.refreshRetries = NO_REFRESH_RETRIES;
   }
 
   #renderRefreshNotice(list: RefreshList): TemplateResult {

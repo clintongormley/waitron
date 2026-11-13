@@ -54,7 +54,7 @@ export async function seedSharedVenue(db: Database): Promise<void> {
   // A distinctive NIF (90M base) stays clear of every other seed generator.
   await db
     .insert(tenants)
-    .values({ id: 1, country: "ES", taxId: "90000000K", legalName: "Boot Till SL" });
+    .values({ id: 1, country: "ES", taxId: "90000000K", legalName: "Boot Venue SL" });
   await db.insert(locations).values({
     id: TILL_LOCATION_ID,
   });
@@ -68,7 +68,7 @@ export async function seedSharedVenue(db: Database): Promise<void> {
   // against the enabled fiscal module.
   await db.insert(nodes).values({
     id: TILL_ENV.WAITRON_NODE_ID,
-    name: "Boot Till",
+    name: "Boot Node",
     filingModule: "verifactu",
   });
 }
@@ -340,7 +340,7 @@ export async function seedTradingVenue(db: Database): Promise<void> {
   await seedBusinessDay(db, {});
   await db.insert(nodes).values({
     id: TILL_ENV.WAITRON_NODE_ID,
-    name: "Route Wiring Till",
+    name: "Route Wiring Node",
     filingModule: "verifactu",
   });
 }

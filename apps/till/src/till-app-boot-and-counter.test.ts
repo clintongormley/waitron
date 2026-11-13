@@ -1,3 +1,4 @@
+import { openOrderAddress } from "../test/order-address.js";
 import { idleLiveReadFor } from "./widgets/test-helpers.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { passBoard, passCard, passItem } from "../test/pass-board-fixtures.js";
@@ -1514,6 +1515,24 @@ describe("till-app session activity", () => {
     expect(sa.configure.mock.calls.at(-1)![0]).toMatchObject({ loggedIn: false, kind: "till" });
     expect(lock(el)).not.toBeNull();
     expect(lock(el)!.deviceName).toBe("Future device");
+  });
+});
+
+describe("till-app first update", () => {
+  it("schedules no further update from inside its first one", async () => {
+    const message = "Element till-app scheduled an update";
+    // Lit's development build prints each warning once per page.
+    const issued = (globalThis as { litIssuedWarnings?: Set<string> }).litIssuedWarnings;
+    for (const warning of [...(issued ?? [])])
+      if (warning.includes(message)) issued!.delete(warning);
+    const warn = vi.spyOn(console, "warn");
+    try {
+      const { el } = await mountApp();
+      await flush(el);
+      expect(warn.mock.calls.flat().map(String).join("\n")).not.toContain(message);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
@@ -6031,8 +6050,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     await toCounter(el);
     const fixedShell = el.shadowRoot!.querySelector("till-shell")!;
     expect(fixedShell.shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab")).toHaveLength(1);
-    history.pushState(null, "", "/tabs/order");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    openOrderAddress();
     await flush(el);
     const screen = el.shadowRoot!.querySelector("till-table-order-screen") as HTMLElement & {
       embedded: boolean;
@@ -6209,7 +6227,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
       orderParty: party,
       activeTabId: "wo-1",
     });
-    emit(shell(el)!, "screen-select", { screen: "order" });
+    openOrderAddress();
     await flush(el);
     const order = el.shadowRoot!.querySelector<
       HTMLElement & {
@@ -6405,7 +6423,8 @@ for (const locale of ["en-GB", "es-ES"] as const)
                 permissions: ["payment.take"],
               });
               await flush(el);
-              emit(shell(el)!, "screen-select", { screen: view.screen });
+              if (view.screen === "order") openOrderAddress();
+              else emit(shell(el)!, "screen-select", { screen: view.screen });
               await flush(el);
             }
             Object.assign(el, {

@@ -112,11 +112,11 @@ const PROMOTE_RING = loadKeyRing({
 });
 
 /** Includes a node identity, so the promote's membership-document mint has a key to sign with. */
-async function seedTillIdentity(db: Database, node: NodeDatabase): Promise<void> {
+async function seedIdentity(db: Database, node: NodeDatabase): Promise<void> {
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
     .insert(tenants)
-    .values({ id: 1, country: "ES", taxId: "90111111H", legalName: "Promote Till SL" })
+    .values({ id: 1, country: "ES", taxId: "90111111H", legalName: "Promote Venue SL" })
     .onConflictDoNothing();
   await db
     .insert(locations)
@@ -160,7 +160,7 @@ beforeAll(async () => {
 
   [appVenueDir, appDb, appNode] = await migratedVenue();
   [mirrorVenueDir, mirrorDb, mirrorNode] = await migratedVenue();
-  await seedTillIdentity(appDb, appNode);
+  await seedIdentity(appDb, appNode);
 
   await stampDeployment(appDb, "production");
   await setSingletonRole({ venue: appDb, node: appNode }, TILL_ENV.WAITRON_NODE_ID, "secondary");

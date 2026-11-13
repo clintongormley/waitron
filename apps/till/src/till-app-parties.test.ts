@@ -1,3 +1,4 @@
+import { openOrderAddress } from "../test/order-address.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import type { TillSentOrders } from "./widgets/sent-orders.js";
 import type { FinishTableResolution } from "./api/finish-table-types.js";
@@ -1638,7 +1639,7 @@ describe("till-app: the party on a handheld", () => {
       reads.other.acted = true;
       emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
-      emit(shell(el), "screen-select", { screen: "order" });
+      openOrderAddress();
       await flush(el);
       expect(api.getTabLines).toHaveBeenCalledTimes(lineReads);
       emit(orderCard(el)!, type, detail);
@@ -1666,8 +1667,12 @@ describe("till-app: the party on a handheld", () => {
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
     });
-    async function selectTab(el: TillApp, key: string): Promise<void> {
-      emit(shell(el), "screen-select", { screen: key });
+    async function toFloorTab(el: TillApp): Promise<void> {
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+    }
+    async function backToOrder(el: TillApp): Promise<void> {
+      openOrderAddress();
       await flush(el);
     }
     async function openOnPhone(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
@@ -1684,11 +1689,11 @@ describe("till-app: the party on a handheld", () => {
       const { el } = await mountApp({ ...onPhone(), finishTable: call });
       emit(await openOnPhone(el), "finish-table", {});
       await flush(el);
-      await selectTab(el, "floor");
+      await toFloorTab(el);
 
       answer.settle({ state: "closed" });
       await flush(el);
-      await selectTab(el, "order");
+      await backToOrder(el);
 
       expect(call).toHaveBeenCalledWith("v1", 3, closingEdits);
       expect(orderCard(el)!.party).toBeNull();
@@ -1705,7 +1710,7 @@ describe("till-app: the party on a handheld", () => {
       });
       emit(await openOnPhone(el), "finish-table", {});
       await flush(el);
-      await selectTab(el, "floor");
+      await toFloorTab(el);
       vi.mocked(api.listZoneOffers).mockImplementation(offersRead.call as never);
       emit(shell(el), "open-table", { tableId: "t7", seated: true });
       await flush(el);
@@ -1714,7 +1719,7 @@ describe("till-app: the party on a handheld", () => {
       await flush(el);
       offersRead.answer.refuse(new TypeError("Failed to fetch"));
       await flush(el);
-      await selectTab(el, "order");
+      await backToOrder(el);
 
       expect(offersRead.call).toHaveBeenCalledOnce();
       expect(orderCard(el)!.party).toBeNull();
@@ -1734,7 +1739,7 @@ describe("till-app: the party on a handheld", () => {
       });
       emit(await openOnPhone(el), "finish-table", {});
       await flush(el);
-      await selectTab(el, "floor");
+      await toFloorTab(el);
       emit(shell(el), "show-station");
       await flush(el);
       expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
@@ -1744,7 +1749,7 @@ describe("till-app: the party on a handheld", () => {
 
       expect(call).toHaveBeenCalledOnce();
       expect(el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
-      await selectTab(el, "order");
+      await backToOrder(el);
       expect(orderCard(el)!.party).toBeNull();
       expect(orderCard(el)!.orderId).toBeUndefined();
     });
@@ -1767,13 +1772,13 @@ describe("till-app: the party on a handheld", () => {
       });
       emit(await openOnPhone(el), "move-guests", { toTableId: "t9" });
       await flush(el);
-      await selectTab(el, "floor");
+      await toFloorTab(el);
 
       moved = true;
       answer.settle({ partyId: "v9", billIds: ["wo-9", "wo-4", "wo-check"] });
       await flush(el);
       expect(banner(el)).toBeNull();
-      await selectTab(el, "order");
+      await backToOrder(el);
 
       expect(call).toHaveBeenCalledOnce();
       expect(orderCard(el)!.party?.id).toBe("v9");
@@ -1802,7 +1807,7 @@ describe("till-app: the party on a handheld", () => {
       });
       emit(await openOnPhone(el), "join-tables", { tableId: "t9" });
       await flush(el);
-      await selectTab(el, "floor");
+      await toFloorTab(el);
       const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
 
       joined = true;
@@ -1820,11 +1825,11 @@ describe("till-app: the party on a handheld", () => {
       const { el } = await mountApp({ ...onPhone(), moveDishes: call });
       emit(await openOnPhone(el), "move-dishes", { lineIds: ["line-1"], toBillId: null });
       await flush(el);
-      await selectTab(el, "floor");
+      await toFloorTab(el);
 
       answer.settle({ billId: "wo-check" });
       await flush(el);
-      await selectTab(el, "order");
+      await backToOrder(el);
 
       expect(call).toHaveBeenCalledOnce();
       expect(orderCard(el)!.orderId).toBe("wo-check");
@@ -1864,11 +1869,11 @@ describe("till-app: the party on a handheld", () => {
       });
       await flush(el);
       expect(heldRead).toBe(true);
-      await selectTab(el, "floor");
+      await toFloorTab(el);
 
       release();
       await flush(el);
-      await selectTab(el, "order");
+      await backToOrder(el);
 
       expect(api.splitTable).toHaveBeenCalledOnce();
       expect(orderCard(el)!.orderId).toBe("remaining-a");
@@ -1935,7 +1940,7 @@ describe("till-app: the party on a handheld", () => {
       emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
       expect(card()).toBeNull();
-      emit(shell(el), "screen-select", { screen: "order" });
+      openOrderAddress();
       await flush(el);
 
       expect(card()).not.toBeNull();
@@ -6471,7 +6476,7 @@ describe("till-app: leaving a finished party", () => {
     answerBills([tabBill, checkBill]);
     await flush(el);
 
-    emit(shell(el), "screen-select", { screen: "order" });
+    openOrderAddress();
     await flush(el);
     expect(api.finishTable).toHaveBeenCalledOnce();
     expect(tabletOrderCard(el)!.lines).toEqual([]);
