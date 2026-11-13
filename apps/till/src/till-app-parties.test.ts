@@ -14648,4 +14648,23 @@ describe("till-app: moving every dish off a bill set for a full invoice", () => 
     );
     expect(api.moveDishes).toHaveBeenCalledOnce();
   });
+
+  it("a refusal for a changed invoice after another dish joined the bill asks nothing and says the details changed", async () => {
+    let lines: TabLine[] = [tabLine];
+    const el = await moveEveryDish([acmeTab, checkBill], "wo-check", {
+      getTabLines: vi.fn(async () => ({ lines, revision: 0 })),
+      moveDishes: vi.fn(async () => {
+        lines = [tabLine, { ...tabLine, id: "line-2", lineNo: 2 }];
+        throw { code: "bill.merge_invoice_choice_required" };
+      }),
+    });
+
+    await press(el, '[data-merge-keep="from"]');
+
+    expect(question(el)).toBeNull();
+    expect(banner(el)!.textContent).toContain(
+      "The bills' invoice details have changed. Check them and move the dishes again.",
+    );
+    expect(api.moveDishes).toHaveBeenCalledOnce();
+  });
 });

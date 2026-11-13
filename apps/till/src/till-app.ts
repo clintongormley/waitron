@@ -17373,9 +17373,15 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
       if ((error as { code?: string } | undefined)?.code === "bill.merge_invoice_choice_required") {
-        const read = await this.#loadPartyBills();
+        // The server also refuses a choice sent with a move that no longer takes every dish, so the
+        // question is asked again only if the fresh lines still empty the bill.
+        const [, read] = await this.#loadLinesAndBills();
         if (!this.#billCompositionCurrent(asked)) return;
-        if (read.bills === null || !this.#askMoveInvoice(event, asked, read.bills))
+        if (
+          read.bills === null ||
+          !this.#movesEveryDish(lineIds) ||
+          !this.#askMoveInvoice(event, asked, read.bills)
+        )
           this.errorKey = "table.move_invoice_changed";
         if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
         return;
