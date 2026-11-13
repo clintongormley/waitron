@@ -302,9 +302,9 @@ someone who may enters their PIN.
 
 When the bill was paid only in cash, the cash drawer opens and the corrective invoice is filed at
 once: give the customer the amount the window shows. Otherwise the window shows what is left to
-give back, with a cash step, and a **Refund to card** step for each card. **Give back €6.05 in
-cash** opens the cash drawer. **Refund to card** opens **Refund a payment** filled in for that
-card; refund the cards one at a time. While a card refund waits for the card company, choose
+give back, with a cash step when part was paid in cash, and a **Refund to card** step for each
+card. **Give back €6.05 in cash** opens the cash drawer. **Refund to card** opens **Refund a
+payment** filled in for that card; refund the cards one at a time. While a card refund waits for the card company, choose
 **Check again** to see its answer.
 
 When a card refund finishes a correction later, its corrective receipt does not print by itself.
@@ -314,7 +314,8 @@ is **Correction**, and print it there.
 If you close the window before the money is all back, the correction stays open. **Find a bill**
 lists it under **Corrections under way**; choose it to carry on, then choose one of these:
 
-- **Record correction**, once everything is back, files the corrective invoice.
+- **Record correction** appears when everything is back but the corrective invoice was not filed
+  by itself; it files it.
 - **Finish now** files a corrective invoice for what has been given back so far, and gives no more
   back.
 - **Discard** ends a correction that has given nothing back.

@@ -1052,10 +1052,10 @@ describe("a correction whose automatic filing was refused", () => {
       refusal: "authorization.not_permitted",
     };
     expect(alertMessage("invoice_correction.filing_refused", params, "en")).toBe(
-      "€24.20 went back to a customer for an invoice correction, but its corrective invoice could not be filed. Do not give the money back again. On a till, open the receipt in Find bill and press Record correction; if it says the invoice can no longer be corrected, press Close keeping the refunds. Later checks do not add to this alert while it is open, so there may be more.",
+      "€24.20 went back to a customer for an invoice correction, but its corrective invoice could not be filed. Do not give the money back again. On a till, open Find a bill, choose the correction under Corrections under way and press Record correction; if it says the invoice can no longer be corrected, press Close keeping the refunds. Later checks do not add to this alert while it is open, so there may be more.",
     );
     expect(alertMessage("invoice_correction.filing_refused", params, "es")).toBe(
-      "Se devolvieron 24,20 € a un cliente por una rectificación de factura, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre el recibo en Buscar cuenta y pulsa Registrar rectificación; si indica que la factura ya no se puede rectificar, pulsa Cerrar conservando las devoluciones. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
+      "Se devolvieron 24,20 € a un cliente por una rectificación de factura, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta, elige la rectificación en Rectificaciones en curso y pulsa Registrar la rectificación; si indica que la factura ya no se puede rectificar, pulsa Cerrar y conservar las devoluciones. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
     );
   });
 });
