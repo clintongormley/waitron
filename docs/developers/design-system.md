@@ -3248,7 +3248,7 @@ for each provider call path.
 
 Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
 station and routing cell editors): Add station, the station editor and the routing cell editor.
-Rest-of-order, MOVED slips, identical dishes, held printing, waiting for the pass, a station's three late-flag minutes and its ready warning time, its bump mode and its changes after sending are edited in the station editor. Routing
+Rest-of-order, MOVED slips, identical dishes, held printing, waiting for the pass, a station's three late-flag minutes and its ready warning time, its bump mode, its changes after sending and where Close for today starts are edited in the station editor. Routing
 Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
@@ -5037,7 +5037,7 @@ show it, and a link to Devices), Waits for the pass (Yes or No) and Actions, the
 A closure note beside its name reads Closed for today and its destination;
 open and default stations need no closure note (`packages/venue-service/src/dashboard/station-table.ts`).
 Use the till's Station screen or the kitchen display for Close for today and Open for today.
-Closing asks where new work goes and offers the default station first. With unfinished dishes,
+Closing asks where new work goes; it starts with the station's "When closed, send to" choice selected when that station is open, otherwise the default station. With unfinished dishes,
 the same dialog asks whether waiting dishes move there or stay to finish; started dishes stay.
 A manager PIN step keeps the draft after a refused PIN. Delete on Prep stations uses the shared
 deletion dialog and refuses unfinished dishes. Reopening moves no dishes back.
@@ -5132,7 +5132,7 @@ product, an extra once per sentence — and the full list under a closed "Show p
 variant reads "Product (Variant)" beside its product. A product's own choice, and a choice that
 moves nothing, saves at once. A cell with a saved choice of its own, other than the default cell, offers
 Clear setting, red, at the left of the bottom row after Cancel; Save stands alone on the right. Edit, in a
-Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, Printers, "Waits for the pass"
+Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, "When closed, send to" (not on the default station), Printers, "Waits for the pass"
 with its note, the four minutes fields, two to a row, under "Late flags (minutes)" (Waiting, Overdue, Forgotten, then Ready
 warning), "Done on the screen" (One item at
 a time or Whole ticket at once), "Also list the order's dishes from other
