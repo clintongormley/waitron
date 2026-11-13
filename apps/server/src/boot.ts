@@ -82,8 +82,16 @@ import {
   setSingletonRole,
 } from "@waitron/node-db";
 import { readVenueAuthority } from "./boot-peer-check.js";
-import { startSpareStore } from "./spare-store.js";
+import { startSpareStore, type SpareStore } from "./spare-store.js";
+import {
+  copyNeededLink,
+  mountLatchBoxStatus,
+  takeFirstCopy,
+  type FirstCopyStatus,
+} from "./spare-copy.js";
+import { placeFirstCopy } from "./spare-copy-placement.js";
 import { startStoreListener } from "./spare-pipe.js";
+import { startSpareJoin } from "./spare-join.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import {
   recordSupersededAtStart,
@@ -1229,10 +1237,12 @@ async function bootServer(
   } catch (error) {
     log("error", "cloud.refresh_failed", { errorCode: codeOf(error) });
   }
-  // Here and not in entry so that `startServer`-based starts and the dev entry place too. It follows
-  // entry's ahead check, whose close drains the old file's -wal before placing removes it (pinned in
-  // `boot.place-copy.test.ts`). A box with no identity has no node id to read an operation by, and
-  // nothing is placed.
+  // Both placements run here and not in entry so that `startServer`-based starts and the dev entry
+  // place too. It follows entry's ahead check, whose close drains the old file's -wal before placing
+  // removes it (pinned in `boot.place-copy.test.ts`). A box with no identity has no node id to read
+  // an operation by, and nothing is placed.
+  if (config.node !== undefined)
+    await placeFirstCopy({ stateDir: config.stateDir, venueDir: config.venueDir, log });
   const placement =
     config.node === undefined
       ? null
@@ -1819,10 +1829,9 @@ async function bootServer(
     current: { version: 1, key: accountPurposeKey(accountKey, "totp") },
   };
 
-  // Adoption-pending boot: adopt records a latch instead of establishing the standby identity, and
-  // every boot retries that step. `finish-adoption.ts`'s `PendingAdoption` header says why none can
-  // complete it today. In this mode boot serves `/health` and a minimal `/api/box/status`, and reads
-  // no deployment axes or membership.
+  // Joining start: while the adoption latch exists, each start tries to finish joining
+  // (`runFinishAdoption`). In this mode boot serves `/health` and a minimal
+  // `/api/box/status`, and reads no deployment axes or membership.
   const ownHostname = boxHostnameFor(config.node.nodeId);
   const ownNameOnly: readonly string[] = [ownHostname];
   const ownAndVenueNames: readonly string[] = [ownHostname, BOX_HOSTNAME];
@@ -1851,7 +1860,7 @@ async function bootServer(
   // `undoOnFailure` here, so the caller registers neither. Called after `checkLeaf` where the start
   // runs it: the listener reads the leaf once, when it starts.
   const ownNodeId = config.node.nodeId;
-  const startServedStore = async (): Promise<{ stop(): Promise<void> } | undefined> => {
+  const startServedStore = async (): Promise<SpareStore | undefined> => {
     const link = await readPairLink(store.node, ownNodeId);
     if (link?.role !== "serves") return undefined;
     const spareStore = await startSpareStore({
@@ -1876,6 +1885,7 @@ async function bootServer(
     });
     undoOnFailure.push(() => listener.close());
     return {
+      loopbackUrl: spareStore.loopbackUrl,
       async stop() {
         await listener.close();
         await spareStore.stop();
@@ -1885,7 +1895,8 @@ async function bootServer(
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     spare = true;
-    app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
+    let copyStatus: FirstCopyStatus | undefined;
+    mountLatchBoxStatus(app, () => copyStatus);
     mountPeerStatusApi(
       app,
       { db, node: store.node, ring, nodeId: config.node.nodeId, joining: true },
@@ -1894,8 +1905,12 @@ async function bootServer(
     mountNodeMembershipApi(app, { db, node: store.node, nodeId: config.node.nodeId }, log);
     const finishWorker = runFinishAdoption({
       ownerDb: db,
+      node: store.node,
+      ring,
+      nodeId: ownNodeId,
       stateDir: config.stateDir,
       modules: setsToMigrate,
+      restart,
       log,
     });
     // A rejection before close() must not become a process-level unhandled rejection.
@@ -1905,6 +1920,36 @@ async function bootServer(
     undoOnFailure.push(() => finishWorker.catch(() => {}));
     await checkLeaf();
     const latchStore = await startServedStore();
+    const copyAbort = new AbortController();
+    const copyLink =
+      latchStore && (await copyNeededLink({ db, node: store.node, nodeId: ownNodeId }));
+    const firstCopy =
+      latchStore &&
+      copyLink &&
+      takeFirstCopy({
+        stateDir: config.stateDir,
+        node: store.node,
+        ring,
+        nodeId: ownNodeId,
+        litestreamBin: config.litestreamBin,
+        store: latchStore,
+        link: copyLink,
+        now,
+        log,
+        signal: copyAbort.signal,
+        readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv(base, config.stateDir)),
+        migrationsRoot: config.migrationsRoot,
+        restart,
+        report: (status) => (copyStatus = status),
+      }).catch((error: unknown) => {
+        if (!copyAbort.signal.aborted)
+          log("error", "spare.first_copy_failed", { errorCode: codeOf(error) });
+      });
+    const stopFirstCopy = async () => {
+      copyAbort.abort();
+      await firstCopy;
+    };
+    undoOnFailure.push(stopFirstCopy);
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
@@ -1923,6 +1968,7 @@ async function bootServer(
       {
         stopWork: async () => {
           await finishWorker.catch(() => {});
+          await stopFirstCopy();
           await latchStore?.stop();
         },
         settleRequests: () => Promise.resolve(),
@@ -3327,6 +3373,21 @@ async function bootServer(
     streamService(streamHost, () => holders.singletonRole.current === "primary"),
   );
   health.readStream = () => streamHost.status();
+  const backupTurns = createTurns();
+  // Only the one main box records its spare.
+  const spareJoin = acceptingSales
+    ? startSpareJoin({
+        db,
+        node: store.node,
+        ring,
+        nodeId: tradingContext.nodeId,
+        stateDir: config.stateDir,
+        stream: streamHost,
+        turns: backupTurns,
+        log,
+      })
+    : undefined;
+  undoOnFailure.push(async () => spareJoin?.stop());
 
   // Dashboard alerts, mounted after the backup supervisor exists because the backups source reads
   // it. The claims come from every module; the checks run only for the enabled set, whose tables are
@@ -3637,7 +3698,6 @@ async function bootServer(
   mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
   // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
   // node that is not the chart's serving primary refuses it itself.
-  const backupTurns = createTurns();
   mountMembershipRemovalApi(
     app,
     {
@@ -3797,6 +3857,7 @@ async function bootServer(
         designated: config.node,
         accountKey: accountKey.toString("base64"),
         credentialKeyRing: totpKeyRing,
+        wakeSpareJoin: () => spareJoin?.wake(),
       },
       log,
     );
@@ -4320,6 +4381,7 @@ async function bootServer(
     handoverDestinationDuty,
     chartPost,
     spareStore,
+    spareJoin,
   });
   const started = makeStartedServer(
     server,

@@ -82,8 +82,8 @@ On "Join or recover an existing restaurant", choose **Restore from backup** for 
 **Restore from my bucket** for the continuous copy in your own storage bucket. For a Waitron Cloud
 copy, choose **Restore from backup** and then **Restore from Waitron Cloud**.
 
-**Add a mirror node** is not finished in this version: the new server does not receive the
-restaurant's data. Choose a restore option to recover an existing restaurant.
+**Add a mirror node**: this server joins the primary and keeps a copy of the restaurant's data. A
+mirror cannot take over yet, so to recover an existing restaurant, choose a restore option.
 
 For a backup file, choose it in **Backup file**, enter the key that unlocks it in **Recovery key**,
 and choose its **Backup environment**. For your bucket, choose your recovery pack or kit file in

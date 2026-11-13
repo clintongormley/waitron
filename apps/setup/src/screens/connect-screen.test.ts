@@ -147,6 +147,21 @@ describe("setup-connect-screen", () => {
     },
   );
 
+  it.each([
+    [
+      "en-GB",
+      "This server joins the primary and keeps a copy of the restaurant's data. It cannot take over yet. To restore a backup instead, choose Back.",
+    ],
+    [
+      "es-ES",
+      "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo. Para restaurar una copia de seguridad, elige Volver.",
+    ],
+  ] as const)("says a mirror keeps a copy but cannot take over yet (%s)", async (locale, intro) => {
+    setLocale(locale);
+    const { el } = await mount();
+    expect(q(el, "[data-test=connect-intro]")!.textContent!.trim()).toBe(intro);
+  });
+
   it("assembles the adopt body as a STRUCTURED credential object and emits adopt-requested", async () => {
     const { el, host } = await mount();
     const events = collect(host);

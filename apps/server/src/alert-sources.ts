@@ -26,7 +26,6 @@ import {
   cardReaders,
   type ReaderStatus,
 } from "@waitron/payments";
-import type { StreamView } from "@waitron/stream";
 import type { JobView } from "./job-runner.js";
 import type { BackupStatus } from "./backup-status.js";
 import type { DiskFullState } from "./disk-full-state.js";
@@ -43,7 +42,7 @@ import {
   stationScreensDark,
   stationsWithWaitingDishes,
 } from "./station-outputs-down.js";
-import { FIRST_START_PENDING } from "./stream-host.js";
+import { FIRST_START_PENDING, type HostStreamView } from "./stream-host.js";
 import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
 
@@ -66,14 +65,21 @@ function streamAlert(alert: Pick<OngoingAlert, "code" | "params" | "since">): On
   return { key: code, code, params, severity: "error", since, screen: BACKUP_SCREEN };
 }
 
-function streamAlerts(stream: StreamView, now: Date): OngoingAlert[] {
+/** The standby's store is not the owner's bucket and is reached over the venue's network, so the
+ * dashboard words these alerts for it. */
+function spareParam(stream: HostStreamView): { toSpare?: true } {
+  return "toSpare" in stream ? { toSpare: true } : {};
+}
+
+function streamAlerts(stream: HostStreamView, now: Date): OngoingAlert[] {
   if (!("reason" in stream)) return [];
+  const spare = spareParam(stream);
   // A failed first start raises its own alert ({@link firstStartAlertSource}); a deferred one raises
   // none.
   if (stream.reason === FIRST_START_PENDING) return [];
   const stopped = streamAlert({
     code: "backup.stream_stopped",
-    params: { reason: stream.reason },
+    params: { reason: stream.reason, ...spare },
     since: stream.stateSince,
   });
   if (!("lagMs" in stream)) return [stopped];
@@ -82,13 +88,13 @@ function streamAlerts(stream: StreamView, now: Date): OngoingAlert[] {
   if (refused && (stream.reason === "pointer_changed" || stream.reason === "pointer_newer_term")) {
     explained = streamAlert({
       code: "backup.stream_refused",
-      params: {},
+      params: spare,
       since: stream.stateSince,
     });
   } else if (refused && stream.reason === "config_unsafe") {
     explained = streamAlert({
       code: "backup.stream_settings_unusable",
-      params: {},
+      params: spare,
       since: stream.stateSince,
     });
   } else if (refused || (stream.state === "off" && STOPPED_BY_ITSELF.has(stream.reason))) {
@@ -99,14 +105,14 @@ function streamAlerts(stream: StreamView, now: Date): OngoingAlert[] {
     alerts.push(
       streamAlert({
         code: "backup.stream_behind",
-        params: { minutes: Math.floor(stream.lagMs / 60_000) },
+        params: { minutes: Math.floor(stream.lagMs / 60_000), ...spare },
         since: new Date(now.getTime() - stream.lagMs).toISOString(),
       }),
     );
   }
   if (stream.state === "paused") {
     alerts.push(
-      streamAlert({ code: "backup.stream_paused", params: {}, since: stream.stateSince }),
+      streamAlert({ code: "backup.stream_paused", params: spare, since: stream.stateSince }),
     );
   }
   if (explained !== undefined) alerts.push(explained);
@@ -114,7 +120,7 @@ function streamAlerts(stream: StreamView, now: Date): OngoingAlert[] {
     alerts.push(
       streamAlert({
         code: "backup.stream_bucket_unusable",
-        params: {},
+        params: spare,
         since: stream.bucketProblem.since,
       }),
     );
@@ -157,7 +163,7 @@ export function backupAlertSource(deps: {
   listStatus: () => Promise<BackupStatus>;
   outcomes: BackupOutcomeHolder;
   now: () => Date;
-  readStream: () => StreamView;
+  readStream: () => HostStreamView;
 }): AlertSource {
   return {
     area: "backup",
@@ -182,7 +188,7 @@ export function backupAlertSource(deps: {
           alerts.push({
             key: "backup.disabled",
             code: "backup.disabled",
-            params: {},
+            params: spareParam(stream),
             severity: "warning",
             since: null,
             screen: BACKUP_SCREEN,

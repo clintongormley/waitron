@@ -1,12 +1,20 @@
 import { readFile } from "node:fs/promises";
-import { connect, type AddressInfo, type Socket } from "node:net";
-import { createServer, type TLSSocket } from "node:tls";
-import { AppError } from "@waitron/shared";
+import {
+  connect,
+  createServer as createTcpServer,
+  isIP,
+  type AddressInfo,
+  type Socket,
+} from "node:net";
+import { connect as connectTls, createServer, type TLSSocket } from "node:tls";
+import { AppError, isAppError } from "@waitron/shared";
+import { lookupBoxName, RememberedAnswers, type BoxAddresses } from "./box-lookup.js";
 import "./errors.js";
 import type { Logger } from "./logger.js";
 
 const LISTENER = "spare_store";
 const REFUSAL_LOG_INTERVAL_MS = 60_000;
+const CONNECT_TIMEOUT_MS = 5_000;
 
 export interface StoreListenerDeps {
   port: number;
@@ -118,6 +126,193 @@ export async function startStoreListener(deps: StoreListenerDeps): Promise<Store
     port,
     close: () =>
       new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        for (const socket of open) socket.destroy();
+      }),
+  };
+}
+
+export interface StorePipeDeps {
+  /** The spare's store, `https://<its name>:<port>`, as its pair link holds it. */
+  storeUrl: string;
+  /** The venue authority, the only one whose certificate the spare's store may present. */
+  authorityPem: string;
+  clientCertFile: string;
+  clientKeyFile: string;
+  /** The addresses a host name answers to; the venue network's answer, kept while it lives, when absent. */
+  lookup?: (hostname: string) => Promise<BoxAddresses>;
+  log: Logger;
+  /** How long one address has to complete the handshake before the next is tried. */
+  connectTimeoutMs?: number;
+}
+
+export interface StorePipe {
+  /** Where Litestream and the object store speak plain HTTP, on this box's loopback. */
+  loopbackUrl: string;
+  /** Why the last connection got no answer from the spare's store; null once one does. */
+  problem(): { reason: string; since: string } | null;
+  close(): Promise<void>;
+}
+
+/**
+ * The main box's end of the link to its spare's store: a loopback port whose every connection is
+ * carried over TLS pinned to the venue authority, under this box's client certificate, to the first
+ * of the store host's addresses that completes the handshake. The client files are read for each
+ * connection, so a reissued pair is picked up without a restart.
+ *
+ * The spare judges the client certificate only after the handshake completes, so a connection is
+ * counted as answered at the store's first byte; one the store ends before then is a refusal.
+ */
+export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
+  const store = new URL(deps.storeUrl);
+  const host = store.hostname.replace(/^\[(.*)\]$/, "$1");
+  const port = Number(store.port || 443);
+  const remembered = new RememberedAnswers();
+  const lookup = deps.lookup ?? ((name: string) => lookupBoxName(name, { remembered }));
+  const connectTimeoutMs = deps.connectTimeoutMs ?? CONNECT_TIMEOUT_MS;
+  let problem: { reason: string; since: string } | null = null;
+  // Each failure reason is logged once while connections keep meeting it.
+  let warned = new Set<string>();
+  const failedWith = (reasons: Set<string>, reason: string) => {
+    reasons.add(reason);
+    if (warned.has(reason)) return;
+    warned.add(reason);
+    deps.log("warn", "stream.spare_store_refused", { reason });
+  };
+  const refused = (reasons: Set<string>, reason: string) => {
+    failedWith(reasons, reason);
+    if (problem?.reason !== reason) problem = { reason, since: new Date().toISOString() };
+  };
+  const answered = (reasons: Set<string>) => {
+    problem = null;
+    warned = new Set([...warned].filter((reason) => reasons.has(reason)));
+  };
+  const reasonOf = (error: unknown) =>
+    isAppError(error) ? error.code : ((error as NodeJS.ErrnoException).code ?? "unknown");
+
+  const open = new Set<Socket>();
+  const track = (socket: Socket) => {
+    open.add(socket);
+    socket.on("close", () => open.delete(socket));
+  };
+  // Once set, no pending connection may dial the spare: `close` only destroys what is tracked.
+  let closed = false;
+  let lastReached: string | undefined;
+
+  const reach = async (reasons: Set<string>): Promise<TLSSocket | undefined> => {
+    let addresses: string[];
+    try {
+      ({ addresses } = await lookup(host));
+    } catch (error) {
+      if (!closed) refused(reasons, reasonOf(error));
+      return undefined;
+    }
+    if (closed) return undefined;
+    const [cert, key] = await Promise.all([
+      readFile(deps.clientCertFile, "utf8"),
+      readFile(deps.clientKeyFile, "utf8"),
+    ]);
+    const first = lastReached;
+    if (first !== undefined && addresses.includes(first)) {
+      addresses = [first, ...addresses.filter((address) => address !== first)];
+    }
+    let last: string | undefined;
+    for (const address of addresses) {
+      if (closed) return undefined;
+      const reached = await new Promise<TLSSocket | string>((resolve) => {
+        const socket = connectTls({
+          host: address,
+          port,
+          ...(isIP(host) === 0 ? { servername: host } : {}),
+          ca: deps.authorityPem,
+          cert,
+          key,
+          rejectUnauthorized: true,
+        });
+        track(socket);
+        const timer = setTimeout(() => failed({ code: "ETIMEDOUT" }), connectTimeoutMs);
+        const failed = (error: { code?: string }) => {
+          clearTimeout(timer);
+          socket.destroy();
+          resolve(error.code ?? "unknown");
+        };
+        // `close` destroys a socket mid-handshake without an error.
+        const ended = () => failed({ code: "ECONNRESET" });
+        socket.once("error", failed);
+        socket.once("close", ended);
+        socket.once("secureConnect", () => {
+          clearTimeout(timer);
+          socket.off("error", failed);
+          socket.off("close", ended);
+          resolve(socket);
+        });
+      });
+      if (closed) {
+        if (typeof reached !== "string") reached.destroy();
+        return undefined;
+      }
+      if (typeof reached !== "string") {
+        lastReached = address;
+        return reached;
+      }
+      failedWith(reasons, reached);
+      last = reached;
+    }
+    if (last !== undefined) refused(reasons, last);
+    return undefined;
+  };
+
+  const server = createTcpServer({ pauseOnConnect: true }, (local) => {
+    track(local);
+    local.on("error", () => local.destroy());
+    const reasons = new Set<string>();
+    void reach(reasons).then(
+      (remote) => {
+        if (remote === undefined || local.destroyed) {
+          remote?.destroy();
+          local.destroy();
+          return;
+        }
+        let replied = false;
+        let localLeft = false;
+        let remoteError: string | undefined;
+        remote.once("data", () => {
+          replied = true;
+          answered(reasons);
+        });
+        local.once("close", () => (localLeft = true));
+        remote.on(
+          "error",
+          (error: NodeJS.ErrnoException) => (remoteError = error.code ?? "unknown"),
+        );
+        remote.once("close", () => {
+          if (!replied && !localLeft) refused(reasons, remoteError ?? "store_closed_before_answer");
+          local.destroy();
+        });
+        local.on("error", () => remote.destroy());
+        local.pipe(remote).pipe(local);
+        local.resume();
+      },
+      (error: unknown) => {
+        if (!closed) refused(reasons, reasonOf(error));
+        local.destroy();
+      },
+    );
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const loopbackPort = (server.address() as AddressInfo).port;
+  return {
+    loopbackUrl: `http://127.0.0.1:${loopbackPort}`,
+    problem: () => problem,
+    close: () =>
+      new Promise<void>((resolve) => {
+        closed = true;
         server.close(() => resolve());
         for (const socket of open) socket.destroy();
       }),

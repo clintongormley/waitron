@@ -31,6 +31,7 @@ import { readPendingAdoption } from "./finish-adoption.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { boxExchange, CheckedAddresses } from "./mirror-bundle-fetch.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
@@ -168,6 +169,7 @@ async function joinedPair() {
   });
   await writeFile(join(mainState, "tls", "ca.crt"), authority.caCertPem);
   await writeFile(join(mainState, "tls", "ca.key"), authority.caKeyPem);
+  await holdRecoveryKey(mainState);
   const mainId: string = venue.nodeId;
   await establishNodeIdentity({ ownerDb: mainBox.db, node: mainBox.node, ring: RING }, mainId);
   const mainKey = await readNodeIdentityKey(mainBox.node, RING, mainId);
@@ -192,6 +194,7 @@ async function joinedPair() {
     designated: { nodeId: mainId },
     accountKey: Buffer.alloc(32, 9).toString("base64"),
     credentialKeyRing: TOTP_KEY_RING,
+    wakeSpareJoin: () => {},
   });
 
   // The spare's chart entry names its own box name at a fixed port; its leaf covers that name,
@@ -302,7 +305,7 @@ async function joinedPair() {
         checked,
         lookup: async () => ({ addresses: ["127.0.0.1"], remembered: false }),
       });
-      expect(JSON.parse(status.text)).toEqual({ adoption: "pending" });
+      expect(JSON.parse(status.text)).toEqual({ adoption: "pending", copy: "waiting" });
     } finally {
       await letGo();
     }

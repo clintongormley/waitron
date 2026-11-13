@@ -84,9 +84,9 @@ export class SetupDoneScreen extends LitElement {
   @property({ attribute: false }) breakGlassKeyName?: string;
 
   /**
-   * True after a successful adopt, where the box does not come back trading (why:
-   * `PendingAdoption` in `apps/server/src/finish-adoption.ts`). A separate flag rather than a
-   * `breakGlassSecret` test: the secret is a value to display, not a statement of which path ran.
+   * True after a successful adopt, where the box restarts as a joining spare, not a trading
+   * server. A separate flag rather than a `breakGlassSecret` test: the secret is a value to
+   * display, not a statement of which path ran.
    */
   @property({ type: Boolean }) mirrorJoin = false;
 
@@ -112,6 +112,7 @@ export class SetupDoneScreen extends LitElement {
   }
 
   override firstUpdated(): void {
+    if (this.mirrorJoin) return;
     this.#timer = setTimeout(() => void this.#tick(), this.startDelayMs);
   }
 
@@ -146,7 +147,7 @@ export class SetupDoneScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    return this.mirrorJoin ? this.#renderJoinStalled() : this.#renderTrading();
+    return this.mirrorJoin ? this.#renderJoining() : this.#renderTrading();
   }
 
   #keyName(name: string): string {
@@ -172,7 +173,7 @@ export class SetupDoneScreen extends LitElement {
       <h2>${t("done.break_glass.heading")}</h2>
       <p class="break-glass-warning" data-test="break-glass-warning">
         ${t("done.break_glass.warning")}
-        ${t(this.mirrorJoin ? "done.break_glass.join_stalled" : "done.break_glass.promote")}
+        ${t(this.mirrorJoin ? "done.break_glass.take_over" : "done.break_glass.promote")}
       </p>
       ${this.breakGlassKeyName === undefined ? nothing : html`<p data-test="break-glass-key-name">${this.#keyName(this.breakGlassKeyName)}</p>`}
       <code class="break-glass-secret" data-test="break-glass-secret"
@@ -242,16 +243,11 @@ export class SetupDoneScreen extends LitElement {
     </wt-card>`;
   }
 
-  #renderJoinStalled(): TemplateResult {
+  #renderJoining(): TemplateResult {
     return html`
-      <h1>${t("done.stalled.heading")}</h1>
-      <p>${t("done.stalled.body")}</p>
+      <h1>${t("done.joining.heading")}</h1>
+      <p data-test="joining-body">${t("done.joining.body")}</p>
       ${this.#breakGlass()}
-      ${
-        this.ready
-          ? html`<p class="status" data-test="status">${t("done.stalled.restarted")}</p>`
-          : html`<p class="status" data-test="status">${t("done.stalled.waiting")}</p>`
-      }
     `;
   }
 }

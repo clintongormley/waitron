@@ -1,12 +1,16 @@
-import { mkdir, mkdtemp, rm, stat, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { type Database } from "@waitron/db";
+import { loadKeyRing, sealNodeSigningKeyTx, writePairLinkTx } from "@waitron/credentials";
+import { nodes, withNodeTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { readPairLink } from "@waitron/node-db";
+import { MIRROR_VIEWER_PERSON_ID } from "./mirror-session.js";
 import {
   PENDING_ADOPTION_FILE,
   readPendingAdoption,
@@ -14,7 +18,6 @@ import {
   writePendingAdoption,
   type PendingAdoption,
 } from "./finish-adoption.js";
-import { MIRROR_VIEWER_PERSON_ID } from "./mirror-session.js";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -37,7 +40,11 @@ const PENDING: PendingAdoption = {
 };
 
 const dummyDb = {} as Database;
-const noop = (): void => {};
+const dummyNode = {} as NodeDatabase;
+const RING = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
 
 describe("writePendingAdoption / readPendingAdoption", () => {
   it("round-trips the pending record and writes it 0600", async () => {
@@ -55,108 +62,22 @@ describe("writePendingAdoption / readPendingAdoption", () => {
 });
 
 describe("runFinishAdoption", () => {
-  it("finishes a pending record written before this change without forwarding its obsolete location", async () => {
-    const dir = await tempDir();
-    await writeFile(
-      join(dir, PENDING_ADOPTION_FILE),
-      JSON.stringify({ ...PENDING, locationId: "55555555-5555-4555-8555-555555555555" }),
-      { mode: 0o600 },
-    );
-    let established: unknown;
-    let establishCalls = 0;
-    const logged: unknown[] = [];
-    await runFinishAdoption({
-      ownerDb: dummyDb,
-      stateDir: dir,
-      modules: [],
-      establish: (args) => {
-        establishCalls += 1;
-        established = args;
-        return Promise.resolve();
-      },
-      log: ((level: string, event: string, fields: unknown) =>
-        logged.push({ level, event, fields })) as never,
-    });
-    expect(establishCalls).toBe(1);
-    expect(established).toEqual({
-      standby: PENDING.standby,
-      nodeName: "standby",
-      filingModule: "fiscal-verifactu",
-      taxModule: null,
-      modules: [],
-      reserved: PENDING.reserved,
-    });
-    expect(logged).toEqual([
-      { level: "info", event: "adoption.established", fields: { nodeId: STANDBY_NODE_ID } },
-    ]);
-    expect(await readPendingAdoption(dir)).toBeNull();
-  });
-
-  it("establishes the reserved identity and unlinks the file", async () => {
-    const dir = await tempDir();
-    await writePendingAdoption(dir, PENDING);
-    let established: unknown;
-    await runFinishAdoption({
-      ownerDb: dummyDb,
-      stateDir: dir,
-      modules: [],
-      establish: (args) => {
-        established = args;
-        return Promise.resolve();
-      },
-      log: noop as never,
-    });
-    expect(established).toMatchObject({ standby: PENDING.standby });
-    expect(await readPendingAdoption(dir)).toBeNull(); // file unlinked
-  });
-
   it("returns immediately when there is no pending file (nothing to finish)", async () => {
     const dir = await tempDir();
-    let establishCalls = 0;
-    await runFinishAdoption({
-      ownerDb: dummyDb,
-      stateDir: dir,
-      modules: [],
-      establish: () => {
-        establishCalls += 1;
-        return Promise.resolve();
-      },
-      log: noop as never,
-    });
-    expect(establishCalls).toBe(0);
-  });
-
-  it("logs establish_failed and KEEPS the file when establish throws, so the next boot retries", async () => {
-    const dir = await tempDir();
-    await writePendingAdoption(dir, PENDING);
+    let restarts = 0;
     const events: string[] = [];
     await runFinishAdoption({
       ownerDb: dummyDb,
+      node: dummyNode,
+      ring: RING,
+      nodeId: STANDBY_NODE_ID,
       stateDir: dir,
       modules: [],
-      establish: () => Promise.reject(new Error("no tenant row yet")),
+      restart: () => (restarts += 1),
       log: ((_l: string, event: string) => events.push(event)) as never,
     });
-    expect(events).toContain("adoption.establish_failed");
-    expect(await readFile(join(dir, PENDING_ADOPTION_FILE), "utf8")).not.toBe("");
-  });
-
-  it("keeps the latch when removing it fails after establishment", async () => {
-    const dir = await tempDir();
-    await writePendingAdoption(dir, PENDING);
-    const events: string[] = [];
-    await runFinishAdoption({
-      ownerDb: dummyDb,
-      stateDir: dir,
-      modules: [],
-      establish: async () => {
-        await rm(join(dir, PENDING_ADOPTION_FILE));
-        await mkdir(join(dir, PENDING_ADOPTION_FILE));
-      },
-      log: ((_l: string, event: string) => events.push(event)) as never,
-    });
-    expect(events).toContain("adoption.establish_failed");
-    expect((await stat(join(dir, PENDING_ADOPTION_FILE))).isDirectory()).toBe(true);
+    expect(restarts).toBe(0);
+    expect(events).toEqual([]);
   });
 });
 
@@ -168,24 +89,61 @@ describe("readPendingAdoption — unreadable record", () => {
   });
 });
 
-describe("runFinishAdoption — default steps on a migrated venue", () => {
+describe("runFinishAdoption — on a migrated venue", () => {
   const suite = useVenueDb({
     migrations: migrationOptionsFor(manifestSets(), null),
     timeoutMs: 60_000,
   });
+  const own = generateNodeKeyPair();
+  const main = generateNodeKeyPair();
 
-  it("logs the named no-venue refusal and keeps the pending record", async () => {
-    await seedTenant(suite.db);
-    const dir = await tempDir();
-    await writePendingAdoption(dir, PENDING);
-    const logged: unknown[] = [];
-    await runFinishAdoption({
+  async function spareNode(): Promise<void> {
+    await withNodeTransaction(suite.node, async (tx) => {
+      await sealNodeSigningKeyTx(tx, RING, STANDBY_NODE_ID, own.privateKey);
+      await writePairLinkTx(tx, RING, STANDBY_NODE_ID, {
+        role: "serves",
+        state: "awaiting_copy",
+        peerNodeId: PENDING.originNodeId,
+        peerPublicKey: main.publicKey,
+        storeUrl: "https://main:7443",
+        venueId: "venue-1",
+        accessKeyId: "waitron0123456789abcdef",
+        secretAccessKey: "ab".repeat(32),
+      });
+    });
+  }
+
+  async function copyHoldsRow(publicKey: string): Promise<void> {
+    await seedVenue(suite.db, {
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    await suite.db.insert(nodes).values({ id: STANDBY_NODE_ID, name: "standby", publicKey });
+  }
+
+  function finish(dir: string, logged: unknown[], restart: () => void) {
+    return runFinishAdoption({
       ownerDb: suite.db,
+      node: suite.node,
+      ring: RING,
+      nodeId: STANDBY_NODE_ID,
       stateDir: dir,
       modules: [],
+      restart,
       log: ((level: string, event: string, fields: unknown) =>
         logged.push({ level, event, fields })) as never,
     });
+  }
+
+  it("keeps the latch and logs the refusal when venue.db holds no row for this box", async () => {
+    await seedTenant(suite.db);
+    await spareNode();
+    const dir = await tempDir();
+    await writePendingAdoption(dir, PENDING);
+    const logged: unknown[] = [];
+    let restarts = 0;
+    await finish(dir, logged, () => (restarts += 1));
     expect(logged).toEqual([
       {
         level: "error",
@@ -196,45 +154,70 @@ describe("runFinishAdoption — default steps on a migrated venue", () => {
     expect(await readPendingAdoption(dir)).toEqual(PENDING);
     expect((await suite.db.execute(sql`select 1 from nodes`)).rows).toEqual([]);
     expect((await suite.db.execute(sql`select 1 from persons`)).rows).toEqual([]);
+    expect(restarts).toBe(0);
   });
 
-  it("establishes the standby's node without a viewer, then clears the record", async () => {
-    await seedVenue(suite.db, {
-      name: "Barra",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-    });
+  it("finishes joining when venue.db holds this box's row with its own key", async () => {
+    await spareNode();
+    await copyHoldsRow(own.publicKey);
     const dir = await tempDir();
-    await writePendingAdoption(dir, {
-      ...PENDING,
-      filingModule: null,
-      reserved: {
-        modules: {},
-        series: [],
-        endorsement: { nodeId: STANDBY_NODE_ID, publicKey: "pub", endorsedBy: "e", signature: "s" },
-      },
-    });
+    await writePendingAdoption(dir, PENDING);
     const logged: unknown[] = [];
-
-    await runFinishAdoption({
-      ownerDb: suite.db,
-      stateDir: dir,
-      modules: [],
-      log: ((level: string, event: string, fields: unknown) =>
-        logged.push({ level, event, fields })) as never,
-    });
-
+    let restarts = 0;
+    await finish(dir, logged, () => (restarts += 1));
     expect(logged).toEqual([
       { level: "info", event: "adoption.established", fields: { nodeId: STANDBY_NODE_ID } },
     ]);
-    const node = await suite.db.execute<{ name: string }>(
-      sql`select name from nodes where id = ${STANDBY_NODE_ID}`,
-    );
-    expect(node.rows).toEqual([{ name: "standby" }]);
-    const viewer = await suite.db.execute<{ role: string }>(
-      sql`select (select built_in_key from person_roles join roles on roles.id = person_roles.role_id where person_roles.person_id = persons.id and built_in_key is not null) as role from persons where id = ${MIRROR_VIEWER_PERSON_ID}`,
+    expect(await readPendingAdoption(dir)).toBeNull();
+    expect((await readPairLink(suite.node, STANDBY_NODE_ID))?.state).toBe("copied");
+    expect(restarts).toBe(1);
+    const rows = await suite.db.execute<{ id: string }>(sql`select id from nodes`);
+    expect(rows.rows).toEqual([{ id: STANDBY_NODE_ID }]);
+    const viewer = await suite.db.execute(
+      sql`select 1 from persons where id = ${MIRROR_VIEWER_PERSON_ID}`,
     );
     expect(viewer.rows).toEqual([]);
-    expect(await readPendingAdoption(dir)).toBeNull();
+  });
+
+  it("keeps the latch when the row's key is not this box's", async () => {
+    await spareNode();
+    await copyHoldsRow(generateNodeKeyPair().publicKey);
+    const dir = await tempDir();
+    await writePendingAdoption(dir, PENDING);
+    const logged: unknown[] = [];
+    let restarts = 0;
+    await finish(dir, logged, () => (restarts += 1));
+    expect(logged).toEqual([
+      {
+        level: "error",
+        event: "adoption.establish_failed",
+        fields: { code: "node.identity_mismatch" },
+      },
+    ]);
+    expect(await readPendingAdoption(dir)).toEqual(PENDING);
+    expect((await readPairLink(suite.node, STANDBY_NODE_ID))?.state).toBe("awaiting_copy");
+    expect(restarts).toBe(0);
+  });
+
+  it("keeps the latch when removing it fails, and asks for no restart", async () => {
+    await spareNode();
+    await copyHoldsRow(own.publicKey);
+    const dir = await tempDir();
+    await writePendingAdoption(dir, PENDING);
+    const logged: unknown[] = [];
+    let restarts = 0;
+    // A folder that cannot be written keeps its files readable but refuses their removal.
+    await chmod(dir, 0o500);
+    try {
+      await finish(dir, logged, () => (restarts += 1));
+    } finally {
+      await chmod(dir, 0o700);
+    }
+    expect(logged).toEqual([
+      { level: "error", event: "adoption.establish_failed", fields: { code: "unknown" } },
+    ]);
+    expect(await readPendingAdoption(dir)).toEqual(PENDING);
+    expect((await readPairLink(suite.node, STANDBY_NODE_ID))?.state).toBe("copied");
+    expect(restarts).toBe(0);
   });
 });

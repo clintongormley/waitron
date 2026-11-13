@@ -335,6 +335,7 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   "mirror.standby_name_taken": "shell.adopt.standby_name_taken",
   "mirror.spare_already_joined": "shell.adopt.spare_already_joined",
   "mirror.standby_series_unsupported": "shell.adopt.standby_series_unsupported",
+  "backup.recovery_key_missing": "shell.adopt.recovery_key_missing",
 };
 
 /** A join's refusal in words; the clocks refusal shows both servers' times in the wizard's language. */
@@ -1772,10 +1773,6 @@ export class SetupApp extends LitElement {
     }
   }
 
-  /**
-   * A successful adopt leaves the box adoption-pending, not a working mirror: the `PendingAdoption`
-   * header in `apps/server/src/finish-adoption.ts` says why.
-   */
   async #onAdoptRequested(event: CustomEvent<{ body: AdoptBody }>): Promise<void> {
     event.stopPropagation();
     this.connectError = undefined;

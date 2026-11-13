@@ -534,6 +534,105 @@ describe("runEntry", () => {
     expect(volume.current()).toStrictEqual(refused);
   });
 
+  describe("a start that ends before it has stayed up", () => {
+    type Handed = { close(): Promise<void>; beforeRestart?: () => Promise<void> };
+
+    /** One start that never reaches the stayed-up callback, ended the way `end` says. */
+    async function shortStart(
+      volume: ReturnType<typeof recoveryVolume>,
+      end: (handed: Handed) => Promise<void>,
+      over: Partial<Parameters<typeof runEntry>[0]> = {},
+    ) {
+      let handed: Handed | undefined;
+      const d = deps({
+        ...volume.deps,
+        installShutdownHandlers: (server: Handed) => void (handed = server),
+        ...over,
+      });
+      await runEntry(d);
+      if (handed !== undefined) await end(handed);
+      return d;
+    }
+
+    // What `installShutdownHandlers` does for a restart `restartProcess` asked for, and for a
+    // signal from outside (`run-server.signals.test.ts`).
+    const askedRestart = async (handed: Handed) => {
+      await handed.beforeRestart?.();
+      await handed.close();
+    };
+    const outsideStop = (handed: Handed) => handed.close();
+
+    it("takes its own attempt back off the count when the server asked for the restart, so three in a row still start", async () => {
+      const volume = recoveryVolume(FRESH);
+      const counts: number[] = [];
+      for (let start = 1; start <= 3; start += 1) {
+        await shortStart(volume, askedRestart);
+        counts.push(volume.current().failures);
+      }
+      // Failing case, an asked-for restart that still counts: counts 1, 2, 3 and level `recovery`.
+      expect({ counts, level: volume.current().level }).toEqual({
+        counts: [0, 0, 0],
+        level: "normal",
+      });
+      const fourth = await shortStart(volume, async () => {});
+      expect(fourth.startServer).toHaveBeenCalled();
+      expect(fourth.serveRecovery).not.toHaveBeenCalled();
+    });
+
+    it("still counts a start stopped from outside before it stayed up, three of them reaching the page", async () => {
+      const volume = recoveryVolume(FRESH);
+      for (let start = 1; start <= 3; start += 1) {
+        await shortStart(volume, outsideStop);
+        expect(volume.current().failures).toBe(start);
+      }
+      expect(volume.current().level).toBe("recovery");
+      const fourth = await shortStart(volume, async () => {});
+      expect(fourth.startServer).not.toHaveBeenCalled();
+      expect(fourth.serveRecovery).toHaveBeenCalled();
+    });
+
+    it("keeps another start's failure counted meanwhile when it takes its own attempt back", async () => {
+      const volume = recoveryVolume({ ...FRESH, failures: 1, lastErrorCode: "unknown" });
+      await shortStart(volume, async (handed) => {
+        await volume.deps.writeRecoveryState("/state", {
+          ...volume.current(),
+          failures: volume.current().failures + 1,
+          lastErrorCode: "migrations.set_missing",
+        });
+        await askedRestart(handed);
+      });
+      expect(volume.current()).toMatchObject({
+        failures: 2,
+        lastErrorCode: "migrations.set_missing",
+      });
+    });
+
+    it("logs a failed take-back and still lets the restart go ahead", async () => {
+      const volume = recoveryVolume(FRESH);
+      const log = vi.fn();
+      const close = vi.fn(() => Promise.resolve());
+      await shortStart(
+        volume,
+        async (handed) => {
+          volume.deps.writeRecoveryState.mockRejectedValueOnce(new Error("EROFS"));
+          await expect(handed.beforeRestart?.()).resolves.toBeUndefined();
+          await handed.close();
+        },
+        {
+          log,
+          startServer: vi.fn<StartServer>(() => Promise.resolve({ close })),
+        },
+      );
+      expect(log).toHaveBeenCalledWith(
+        "warn",
+        "recovery.state_write_failed",
+        expect.objectContaining({ errorCode: "unknown" }),
+      );
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(volume.current().failures).toBe(1);
+    });
+  });
+
   it("serves the page at once for a start that reads a refusal, with that refusal's wording", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-refused-"));
     await writeRecoveryState(
@@ -1417,6 +1516,22 @@ describe("every change to recovery.json happens inside the recovery lock", () =>
     await runEntry(deps({ ...volume.deps, scheduleStayedUp }));
     scheduleStayedUp.mock.calls[0]![1]();
     await vi.waitFor(() => expect(volume.current()).toStrictEqual({ ...FRESH, clears: 1 }));
+    expect(volume.outside).toEqual([]);
+  });
+
+  it("the take-back of a restart the server asked for", async () => {
+    const volume = lockedVolume(FRESH);
+    let handed: { beforeRestart?: () => Promise<void> } | undefined;
+    await runEntry(
+      deps({
+        ...volume.deps,
+        installShutdownHandlers: (server: { beforeRestart?: () => Promise<void> }) =>
+          void (handed = server),
+      }),
+    );
+    await handed!.beforeRestart!();
+    expect(volume.current()).toStrictEqual(FRESH);
+    expect(volume.deps.writeRecoveryState).toHaveBeenCalledTimes(2);
     expect(volume.outside).toEqual([]);
   });
 

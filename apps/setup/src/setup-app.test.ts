@@ -2043,6 +2043,35 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
+        "The primary server has no backup key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
+      ],
+      [
+        "es-ES",
+        "El servidor principal aún no tiene clave de copia de seguridad. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
+      ],
+    ] as const)(
+      "shows the no-key refusal and leaves Connect working (%s)",
+      async (locale, sentence) => {
+        try {
+          const { el, adopt, connect, control } = await refusedJoin(
+            "backup.recovery_key_missing",
+            locale,
+          );
+          expect(await bottomOf(connect)).toBe(sentence);
+          expect(control("connect")!.disabled).toBe(false);
+          adopt.mockResolvedValue({ adopted: true, restarting: true });
+          control("connect")!.click();
+          await flush(el);
+          expect(adopt).toHaveBeenCalledTimes(2);
+        } finally {
+          setLocale("en-GB");
+        }
+      },
+    );
+
+    it.each([
+      [
+        "en-GB",
         "The restaurant files its invoices with Veri*Factu, and this version of Waitron cannot yet add a standby server to a restaurant that does. Nothing was changed on either server, and the primary keeps working as before. Choose Back to set this server up another way, or leave it switched off and join it after an update that adds this.",
       ],
       [
@@ -2077,11 +2106,11 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
-        "The primary server already has a standby server that finished joining, and this version of Waitron keeps one standby per restaurant. A standby that finished joining cannot be removed in this version. Nothing was changed on either server. Choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant. You can also leave it switched off.",
+        "The primary server already has a standby server set up to receive the restaurant's data, and this version of Waitron keeps one standby per restaurant. A standby set up this way cannot be removed in this version. Nothing was changed on either server. Choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant. You can also leave it switched off.",
       ],
       [
         "es-ES",
-        "El servidor principal ya tiene un servidor en espera que terminó de unirse, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera que terminó de unirse no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo. También puedes dejarlo apagado.",
+        "El servidor principal ya tiene un servidor en espera preparado para recibir los datos del restaurante, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera preparado así no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo. También puedes dejarlo apagado.",
       ],
     ] as const)("shows the second-standby refusal and Back (%s)", async (locale, sentence) => {
       try {

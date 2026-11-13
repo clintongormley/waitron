@@ -233,8 +233,17 @@ it("a pending allocated adoption refuses without creating a selling identity and
   for (let retry = 0; retry < 2; retry += 1) {
     await runFinishAdoption({
       ownerDb: suite.db,
+      node: suite.node,
+      ring: loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      }),
+      nodeId: STANDBY,
       stateDir,
       modules,
+      restart: () => {
+        throw new Error("a refused latch asks for no restart");
+      },
       log: (level, event, fields) => {
         events.push({ level, event, fields });
       },
@@ -262,6 +271,7 @@ const JOIN_REFUSAL_CASES: Record<(typeof JOIN_REFUSALS)[number], Record<string, 
   "mirror.bucket_stream_active": {},
   "mirror.standby_name_taken": {},
   "mirror.spare_already_joined": {},
+  "backup.recovery_key_missing": {},
   "mirror.standby_series_unsupported": { module: "fiscal-verifactu" },
   "mirror.clocks_apart": {
     primaryAt: "2026-11-10T12:00:00.000Z",

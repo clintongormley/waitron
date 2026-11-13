@@ -134,8 +134,7 @@ export interface AdoptDeps {
   persistModuleConfig: (config: ModuleConfig) => Promise<void>;
   /** Replaces `backup.env` with the main box's settings, or removes it for `null`. */
   persistBackupSettings: (settings: Record<string, string> | null) => Promise<void>;
-  /** Where the finish-adoption latch is written. `PendingAdoption` in `finish-adoption.ts` says why
-   * that step cannot complete today. */
+  /** Where the adoption latch, the joined marker and the venue's TLS authority are written. */
   stateDir: string;
   /** The mirror's database NAME, echoed by `provisioning.foreign_tenant`. */
   database: string;
@@ -243,8 +242,8 @@ export async function adoptFromPrimary(
     now: deps.now,
   });
   // One transaction, so node.db never holds a mirror with no link, key or pin. The key is sealed
-  // here, before finishing adoption puts its public half in venue.db, as everywhere a signing key
-  // is first made: a public key with no private half could never sign as this box.
+  // here, before the main box records its public half in venue.db (`spare-join.ts`), as everywhere
+  // a signing key is first made: a public key with no private half could never sign as this box.
   const recoveryKeyName = await withNodeTransaction(deps.ownerNode, async (tx) => {
     for (const { table } of NODE_CLASSIFICATION) {
       await ABANDONED_ROW_SWEEPS[table]?.(tx, standby.nodeId);

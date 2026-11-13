@@ -1951,7 +1951,7 @@ export const en = {
     "The request has been sent. Closing this window does not cancel it. Check progress before starting another handover.",
   "servers.fingerprint": "This server's public certificate fingerprint",
   "servers.intro":
-    "Every machine on this venue's list of servers. A standby that never finished joining can be removed, so tills stop trying to reach it. To use that machine again, it has to join from scratch. A removed machine can be cleared from the list to free its place.",
+    "Every machine on this venue's list of servers. A standby that is not yet set up to receive the venue's data can be removed, so tills stop trying to reach it. To use that machine again, it has to join from scratch. A removed machine can be cleared from the list to free its place.",
   "servers.server": "Server",
   "servers.actions": "Actions",
   "servers.loading": "Loading servers…",
@@ -5929,7 +5929,7 @@ export const es: Record<StringKey, string> = {
     "La solicitud se ha enviado. Cerrar esta ventana no la cancela. Consulta el progreso antes de iniciar otro traspaso.",
   "servers.fingerprint": "Huella del certificado público de este servidor",
   "servers.intro":
-    "Todas las máquinas de la lista de servidores del local. Un servidor en espera que no terminó de unirse se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, tiene que unirse de nuevo desde el principio. Una máquina retirada se puede quitar de la lista para liberar su sitio.",
+    "Todas las máquinas de la lista de servidores del local. Un servidor en espera que aún no está preparado para recibir los datos del local se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, tiene que unirse de nuevo desde el principio. Una máquina retirada se puede quitar de la lista para liberar su sitio.",
   "servers.server": "Servidor",
   "servers.actions": "Acciones",
   "servers.loading": "Cargando servidores…",

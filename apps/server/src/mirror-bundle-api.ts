@@ -60,6 +60,8 @@ import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 import { ownContactUrl, sameBoxName } from "./box-name.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
+import { checkedRecoveryKey, readHeldKey } from "./backup-config.js";
+import { readBackupSettings } from "./backup-env-writer.js";
 
 export interface MirrorBundleApiDeps {
   appDb: Database;
@@ -72,6 +74,8 @@ export interface MirrorBundleApiDeps {
   designated: AdoptResult;
   accountKey: string;
   credentialKeyRing: TotpKeyRing;
+  /** Called once a join's pending pair link has committed. */
+  wakeSpareJoin: () => void;
   now?: () => Date;
 }
 
@@ -91,6 +95,7 @@ export const JOIN_REFUSALS = [
   "mirror.standby_name_taken",
   "mirror.clocks_apart",
   "mirror.standby_series_unsupported",
+  "backup.recovery_key_missing",
 ] as const satisfies readonly ErrorCode[];
 
 export const JOIN_REFUSAL_STATUS = Object.fromEntries(
@@ -222,6 +227,7 @@ export function mountMirrorBundleApi(
           });
           return assembled;
         });
+        deps.wakeSpareJoin();
 
         return c.json(bundle);
       };
@@ -256,7 +262,7 @@ export function mountMirrorBundleApi(
           managementSessionId: session.token,
           permission: "node.manage",
         });
-        // The session only authorised this request; ending it leaves no dead row behind.
+        // The session only authorised this request.
         await endManagementSession(tx, session.token);
       });
 
@@ -296,6 +302,11 @@ async function refuseBeforeReserving(
     });
   }
   await refuseWhileBucketStream(deps);
+  // From the file, not the box env: `backup.env` is what travels to the spare in its bundle.
+  const { key } = await readHeldKey(async () =>
+    checkedRecoveryKey((await readBackupSettings(deps.stateDir))?.WAITRON_BACKUP_RECOVERY_KEY),
+  );
+  if (key === undefined) throw new AppError("backup.recovery_key_missing", {});
   if (
     sameBoxName(deps.designated.nodeId, standbyNodeId) ||
     held?.body.nodes.some((n) => n.nodeId !== standbyNodeId && sameBoxName(n.nodeId, standbyNodeId))

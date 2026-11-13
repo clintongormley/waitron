@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import {
@@ -54,6 +54,17 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { startServer, httpPort } = ephemeralServerFixture();
+
+// An in-process boot installs no shutdown handlers, so the real `restartProcess` only keeps the
+// ask; these cases observe the ask itself.
+const restartAsked = vi.hoisted(() => vi.fn<() => void>());
+vi.mock("./run-server.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./run-server.js")>()),
+  restartProcess: restartAsked,
+}));
+beforeEach(() => {
+  restartAsked.mockReset();
+});
 
 // A booted local secondary (mode='primary', singleton_role='secondary') files nothing; an
 // in-process promote flips singleton_role live, and the running fiscal pass starts draining on its
@@ -444,8 +455,6 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       throw err;
     });
 
-    // The promote schedules a SIGTERM at this process; the spy must be in place before it runs.
-    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
     try {
       expect(server.promoteMirrorToPrimary).toBeDefined();
       expect(server.promoteLocalSecondaryToPrimary).toBeUndefined();
@@ -493,7 +502,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       expect(pageClaim.status).toBe(404);
 
       await delay(50);
-      expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
+      expect(restartAsked).toHaveBeenCalled();
 
       const persisted = parseEnvFile(readFileSync(join(stateDir, "trading.env"), "utf8"));
       expect(persisted).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
@@ -534,7 +543,6 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       }
     } finally {
       await server.close();
-      killSpy.mockRestore();
       vi.unstubAllEnvs();
       await rm(stateDir, { recursive: true, force: true });
     }
@@ -586,7 +594,6 @@ describe("a mirror's promotion whose role write is lost", () => {
       sql`create trigger refuse_role_insert before insert on node_mode begin select raise(abort, 'role refused'); end`,
     );
 
-    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
     try {
       const first = await bootMirror(venueDir, stateDir, seed.nodeId, allocationEnv);
       try {
@@ -603,7 +610,7 @@ describe("a mirror's promotion whose role write is lost", () => {
         expect(response.status, await response.clone().text()).toBe(200);
         expect(((await response.json()) as { alreadyPrimary: boolean }).alreadyPrimary).toBe(false);
         await delay(50);
-        expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
+        expect(restartAsked).toHaveBeenCalled();
       } finally {
         await first.close();
       }
@@ -630,7 +637,6 @@ describe("a mirror's promotion whose role write is lost", () => {
       expect(live.rows).toHaveLength(1);
     } finally {
       await delay(50);
-      killSpy.mockRestore();
       vi.unstubAllEnvs();
       await rm(stateDir, { recursive: true, force: true });
       await rm(venueDir, { recursive: true, force: true });
@@ -709,9 +715,8 @@ describe("a mirror's promote and the backup room note", () => {
     });
 
     const noteAtRestart: boolean[] = [];
-    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => {
+    restartAsked.mockImplementation(() => {
       noteAtRestart.push(existsSync(note));
-      return true;
     });
     try {
       const request = seed.fixture.request("promote");
@@ -747,13 +752,12 @@ describe("a mirror's promote and the backup room note", () => {
       expect((await promote()).alreadyPrimary).toBe(false);
       expect(noteDuringPromotion).toBe(false);
       await delay(50);
-      expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
+      expect(restartAsked).toHaveBeenCalled();
       expect(noteAtRestart).toEqual([false]);
     } finally {
       await server.close();
-      // A promotion that went through schedules its restart signal on a later tick.
+      // A promotion that went through asks for its restart on a later tick.
       await delay(50);
-      killSpy.mockRestore();
       vi.unstubAllEnvs();
       await rm(stateDir, { recursive: true, force: true });
       await rm(venueDir, { recursive: true, force: true });
@@ -814,6 +818,7 @@ describe("a mirror's promote and the backup room note", () => {
       });
       await delay(50);
       expect(steps).toEqual(["before restart, note gone", "recorded", "restart"]);
+      expect(restartAsked).not.toHaveBeenCalled();
       expect(killSpy).not.toHaveBeenCalled();
     } finally {
       await server.close();
@@ -910,7 +915,6 @@ describe("a mirror's promote and the backup room note", () => {
         throw err;
       });
 
-      const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
       try {
         const request = seed.fixture.request("promote");
         const promote = () =>
@@ -934,7 +938,7 @@ describe("a mirror's promote and the backup room note", () => {
         expect((await promote()).alreadyPrimary).toBe(false);
         expect((await readNodeMode(node, seed.nodeId)).mode).toBe("primary");
         await delay(50);
-        expect(killSpy.mock.calls).toEqual([[process.pid, "SIGTERM"]]);
+        expect(restartAsked).toHaveBeenCalledTimes(1);
         const failures = lines
           .filter((line) => line.startsWith("{"))
           .map((line) => JSON.parse(line) as { event: string; errno?: unknown })
@@ -944,9 +948,8 @@ describe("a mirror's promote and the backup room note", () => {
         ]);
       } finally {
         await server.close();
-        // A promotion that went through schedules its restart signal on a later tick.
+        // A promotion that went through asks for its restart on a later tick.
         await delay(50);
-        killSpy.mockRestore();
         vi.unstubAllEnvs();
         await rm(stateDir, { recursive: true, force: true });
         await rm(venueDir, { recursive: true, force: true });

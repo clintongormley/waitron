@@ -345,6 +345,80 @@ it("points the disk warning at the Box status page, in three sentences, in both 
   expect(es).toContain(t("nav.box_status", "es-ES"));
 });
 
+describe("the copy when it goes to the standby server, not the owner's bucket", () => {
+  const CHECK_EN =
+    "Check that the standby server is switched on and connected to the restaurant's network.";
+  const CHECK_ES =
+    "Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.";
+
+  it.each([
+    [
+      "backup.stream_behind",
+      { minutes: 20 },
+      `The standby server is not receiving the restaurant's data: its copy is 20 minutes behind, so your most recent sales are not on it yet. Sales continue. ${CHECK_EN}`,
+      `El servidor en espera no está recibiendo los datos del restaurante: su copia lleva 20 minutos de retraso, así que tus ventas más recientes aún no están en ella. Las ventas continúan. ${CHECK_ES}`,
+    ],
+    [
+      "backup.stream_paused",
+      {},
+      `The copy to the standby server is paused: this box could not reach the standby for so long that it stopped copying to protect its disk. Sales continue. ${CHECK_EN}`,
+      `La copia en el servidor en espera está en pausa: este equipo no ha podido contactar con él durante tanto tiempo que ha dejado de copiar para proteger su disco. Las ventas continúan. ${CHECK_ES}`,
+    ],
+    [
+      "backup.stream_bucket_unusable",
+      {},
+      `The standby server is not receiving the restaurant's data: this box cannot reach it, or the standby is refusing this box. Sales continue. ${CHECK_EN}`,
+      `El servidor en espera no está recibiendo los datos del restaurante: este equipo no consigue contactar con él, o el servidor en espera está rechazando este equipo. Las ventas continúan. ${CHECK_ES}`,
+    ],
+    [
+      "backup.disabled",
+      {},
+      "No up-to-date copy of your data is being kept: there are no scheduled backups, and the standby server is not receiving the restaurant's data. Check that the standby server is switched on and connected to the restaurant's network, or set up scheduled backups on the Backups page.",
+      "No se está guardando ninguna copia al día de tus datos: no hay copias de seguridad programadas, y el servidor en espera no está recibiendo los datos del restaurante. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante, o configura copias programadas en la página de Copias.",
+    ],
+    [
+      "backup.stream_stopped",
+      { reason: "start_failed" },
+      "The copy to the standby server is not running, so new changes are not reaching the standby server. Sales continue. This box tries again each time it starts: when the restaurant is not serving, open Box status and press Restart the box.",
+      "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este equipo lo vuelve a intentar cada vez que arranca: cuando no haya servicio, abre Estado del equipo y pulsa Reiniciar el equipo.",
+    ],
+    [
+      "backup.stream_refused",
+      {},
+      "The copy to the standby server has stopped because another box is writing this venue's copy to the standby server. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
+      "La copia en el servidor en espera se ha detenido porque otro equipo está escribiendo la copia de este local en el servidor en espera. Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
+    ],
+    [
+      "backup.stream_settings_unusable",
+      {},
+      "The copy to the standby server has not started because this box's own configuration could not be used safely. Sales continue. This is a fault in Waitron or this box's installation, and restarting the box does not change it. Scheduled backups on the Backups page can still keep copies of your data.",
+      "La copia en el servidor en espera no se ha iniciado porque no se ha podido usar de forma segura la configuración del propio equipo. Las ventas continúan. Es un fallo de Waitron o de la instalación de este equipo, y reiniciar el equipo no lo cambia. Las copias programadas de la página de Copias de seguridad pueden seguir guardando copias de tus datos.",
+    ],
+  ])("words %s for the standby, never naming a bucket or the internet", (code, params, en, es) => {
+    expect(alertMessage(code, { ...params, toSpare: true }, "en")).toBe(en);
+    expect(alertMessage(code, { ...params, toSpare: true }, "es")).toBe(es);
+    for (const text of [en, es]) expect(text).not.toMatch(/bucket|internet/i);
+  });
+
+  it("keeps the bucket wording when the copy goes to a bucket", () => {
+    expect(alertMessage("backup.stream_behind", { minutes: 20 }, "en")).toBe(
+      "The bucket copy is 20 minutes behind: your most recent sales are not in it yet. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",
+    );
+    for (const code of [
+      "backup.stream_paused",
+      "backup.stream_bucket_unusable",
+      "backup.disabled",
+      "backup.stream_stopped",
+      "backup.stream_refused",
+      "backup.stream_settings_unusable",
+    ]) {
+      expect(alertMessage(code, {}, "en")).toBe(ALERT_MESSAGES[code]!.en);
+      expect(alertMessage(code, {}, "es")).toBe(ALERT_MESSAGES[code]!.es);
+      expect(ALERT_MESSAGES[code]!.en).toMatch(/bucket/);
+    }
+  });
+});
+
 describe("a backup that stopped before reaching any destination", () => {
   const LEAD_EN =
     "The last backup stopped before reaching any destination, so no new copy was saved. Sales continue.";

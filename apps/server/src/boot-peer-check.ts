@@ -39,7 +39,8 @@ export interface CheckPeersDeps {
   held: SignedMembershipDocument | null;
   nodeId: string;
   ownOrigin: string;
-  /** Whether this box's venue.db holds a `nodes` row with that id: the box finished joining. */
+  /** Whether this box's venue.db holds a `nodes` row with that id (a standby's row is written once
+   * its store answers its main box, `spare-join.ts`). */
   joined: (nodeId: string) => Promise<boolean>;
   /** The source of every operation this box activated as destination, open or closed. */
   activatedFrom: ReadonlySet<string>;

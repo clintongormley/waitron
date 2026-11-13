@@ -57,6 +57,52 @@ vi.mock("@hono/node-server", async () => {
 const { beforeServerStarts, startServer, startConfiguredServer, httpPort } =
   ephemeralServerFixture();
 
+// Pass-through wrappers that record the mirror-bundle route's wake, the spare join's wakes, and
+// the backup queue the spare join and the copy settings routes were given.
+const joinWiring = vi.hoisted(() => ({
+  wakes: 0,
+  wakeSpareJoin: undefined as (() => void) | undefined,
+  turns: undefined as unknown,
+  streamApiTurns: undefined as unknown,
+}));
+vi.mock("./spare-join.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./spare-join.js")>();
+  return {
+    ...actual,
+    startSpareJoin: (deps: Parameters<typeof actual.startSpareJoin>[0]) => {
+      joinWiring.turns = deps.turns;
+      const join = actual.startSpareJoin(deps);
+      return {
+        stop: () => join.stop(),
+        wake: () => {
+          joinWiring.wakes += 1;
+          join.wake();
+        },
+      };
+    },
+  };
+});
+vi.mock("./stream-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./stream-api.js")>();
+  return {
+    ...actual,
+    mountStreamApi: (...args: Parameters<typeof actual.mountStreamApi>) => {
+      joinWiring.streamApiTurns = args[1].turns;
+      return actual.mountStreamApi(...args);
+    },
+  };
+});
+vi.mock("./mirror-bundle-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./mirror-bundle-api.js")>();
+  return {
+    ...actual,
+    mountMirrorBundleApi: (...args: Parameters<typeof actual.mountMirrorBundleApi>) => {
+      joinWiring.wakeSpareJoin = args[1].wakeSpareJoin;
+      return actual.mountMirrorBundleApi(...args);
+    },
+  };
+});
+
 // Mirror-mode server boot. A mirror reads its origin, relay and CA from node.db's
 // `node_mirror_link`. Four venue directories: `mirror` (read-only, refuses writes); `primary`, the
 // same identity booted as primary — the control that the mirror's absences are real; `noConfig`,
@@ -581,6 +627,27 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     }
   }, 60_000);
 
+  it("the start hands the mirror-bundle route a wake that reaches the running spare join, and gives the join the copy routes' backup queue", async () => {
+    joinWiring.wakes = 0;
+    joinWiring.wakeSpareJoin = undefined;
+    joinWiring.turns = undefined;
+    joinWiring.streamApiTurns = undefined;
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: venueDir.primary,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
+    try {
+      joinWiring.wakeSpareJoin!();
+      expect(joinWiring.wakes).toBe(1);
+      expect(joinWiring.turns).toBeDefined();
+      expect(joinWiring.turns).toBe(joinWiring.streamApiTurns);
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
   it("a mirror runs no check (control: the same identity booted as primary runs it once)", async () => {
     for (const [venue, calls] of [
       ["mirror", 0],
@@ -878,8 +945,8 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       join(stateDir, "modules.json"),
       JSON.stringify({ modules: { "fiscal-none": false } }),
     );
-    // Inert: establishing the standby needs a `locations` row this database does not hold, and
-    // `runFinishAdoption` logs `adoption.establish_failed` rather than failing the boot.
+    // Inert: this database holds no row for this box, so `runFinishAdoption` logs
+    // `adoption.establish_failed` and keeps the latch rather than failing the boot.
     writeFileSync(
       join(stateDir, "pending-adoption.json"),
       JSON.stringify({

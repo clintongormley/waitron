@@ -28,11 +28,6 @@ interface RestoreForm {
 
 export type RestoreField = "artifact" | "recoveryKey" | "environment" | RecoveryEntryField;
 
-/**
- * The warning asks about any server still RUNNING, never "a primary or a mirror": an adopted mirror
- * does not finish joining (`PendingAdoption`, `apps/server/src/finish-adoption.ts`), so naming one as
- * a place newer data might live would send the operator looking in the wrong place.
- */
 @customElement("setup-restore-screen")
 export class SetupRestoreScreen extends LitElement {
   static override styles = [

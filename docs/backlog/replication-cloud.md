@@ -192,9 +192,7 @@ controls remain open; no provider work is authorised.
   The standby's reset page does not show this server's machine id, so an operator cannot tell
   which row on the primary's Servers screen is this server's (left for the owner from A70's
   review). Removing a standby that "never finished joining" (A61, #708) reads that as
-  `serving-secondary` with no `nodes` row in the primary's database, and a remote standby writes
-  that row in its own database, so the check cannot see a remote standby that finished — none can
-  today (`finish-adoption.ts`).
+  `serving-secondary` with no `nodes` row in the primary's database.
   **Still open after A63 (#712):** (i) a removed trust anchor (a machine whose key sits in the
   receiver's own `nodes` table) can still make up a key for a machine in good standing that is not
   an anchor, vouch for it, and sign as that machine — unless that machine signed the receiver's
@@ -281,23 +279,18 @@ initial copy ([design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-
 question**: `tenant_credentials` is `local` and a blob sealed under one node's ring cannot be opened
 under another's. Since A947 slice 3a a spare receives the main box's ring when it joins
 (`credentialsRing` in `apps/server/src/mirror-bundle.ts`, written by `apps/server/src/adopt.ts`), so
-rows a copy of `venue.db` brings open there; nothing yet delivers that copy, nor a ring the main box
-changes after the join (A1273).
+rows a copy of `venue.db` brings open there. Since 3b-6a a spare of a venue that does not file with
+Veri*Factu receives that copy; nothing yet delivers a ring the main box changes after the join
+(A1273).
 
 ## Adding a mirror while the internet is down
 
-Owner, 2026-10-02. Today the only way a second
-machine gets a copy of `venue.db` is from the owner's bucket — the rebuild
+Owner, 2026-10-02. A second machine can rebuild from the owner's bucket
 (`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket").
-Adoption (`apps/server/src/adopt.ts`) fetches its identity bundle from the primary by URL but
-carries no data, and nothing in the tree follows a stream yet. So with the internet down there is
-no way to add a mirror, which is the very case an on-prem mirror exists for. Wanted: a new mirror
-takes its first copy straight from the primary over the LAN. The topology design's §4.4 already
-has the primary stream to the mirror box over the LAN once that box is enrolled, and a stream to a
-new place should begin with a full copy of the database (to be checked on the pinned Litestream),
-so the design may cover it — but it never says so, and it does not list what else enrolling needs
-from the internet. Slice 5 should name this as the way a mirror is added and prove it with the
-internet unplugged. A cloud mirror needs the internet anyway and is outside this item.
+For a venue that does not file with Veri*Factu, a joining spare now receives a copy from the
+primary over the venue's network, puts it in place at its next start and finishes joining as a
+standby (it cannot take over yet); a Veri*Factu venue is still refused until 3b-F. Wanted: adding
+a mirror works with the internet down, which is the very case an on-prem mirror exists for. Left: the owner measures it on two boxes with the internet unplugged (3b plan Task 6.11). A cloud mirror needs the internet anyway and is outside this item.
 
 ## A stop made while `cloud/replacement.json` is unreadable is not recorded in it
 
@@ -395,24 +388,15 @@ that slice 3 has to restore:
 - **`rejoin --accept-loss` waives nothing today.** The flag and its `rejoin.accept_loss` warning are
   kept so the operator's acknowledgement survives the switch, but the drain confirmation it used to
   waive is gone.
-- **Adopt copies no data, and an adopted mirror can no longer leave adoption-pending.** Adopt stamps
-  the mirror's identity and config and writes the finish-adoption latch; the initial copy that used
-  to bring the venue's rows went with the subscription. `runFinishAdoption` tries to establish the
-  reserved identity on every boot and refuses with `mirror.venue_not_copied` while the database has
-  no venue row. The refusal precedes the standby node insert and does not depend on its foreign key.
-  **Operator-visible consequence:** a box that adopts stays in adoption-pending boot for good — `/api/box/status` keeps
-  answering `adoption: pending`, no mirror session or node-scoped read path is ever mounted, and each
-  boot logs `adoption.establish_failed`. The pending-file invariant is recorded in
-  `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header; whatever replaces the initial copy
-  in slice 3 has to close this.
-
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
-  wizard still offers the option. The primary accepts the join without a relay, and the joining
-  server then waits, since nothing copies the restaurant's data to it until 3b-6. Its role and connect
-  wording says joining is not finished and points to restore; each refusal's wording says what
+  wizard still offers the option. For a venue that does not file with Veri*Factu, the primary accepts
+  the join without a relay, and the joining server takes a copy of the restaurant's data, puts it in
+  place at its next start and finishes joining there. A venue that files with Veri*Factu is refused
+  before anything is reserved (`mirror.standby_series_unsupported`) until 3b-F. The wizard's role and connect
+  wording says a mirror keeps a copy of the restaurant's data but cannot take over yet, and points
+  to restore to recover a restaurant; each refusal's wording says what
   happened and either what to fix before pressing Connect again or to choose Back.
-  Removing or disabling the option until slice 3
-  lands the replacement is a product call, not a wording one. Whoever takes it should decide for
+  Removing or disabling the option while a mirror cannot take over is a product call, not a wording one. Whoever takes it should decide for
   `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` row together.
 
 - **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
@@ -423,13 +407,9 @@ that slice 3 has to restore:
   (`mirror.membership_full`), and an admin can clear a REMOVED (`evicted`) machine to free its place,
   from the Servers screen (A63). What stays open: only an `evicted` entry can be cleared, and A61's
   Remove refuses a standby only when the primary's own database holds a `nodes` row for it
-  (`judgeRemoval`, `apps/server/src/membership-removal.ts`). The only writers of a `nodes` row
-  found are provisioning (`packages/provisioning/src/venue-apply.ts`, the row of the box being set
-  up) and `insertReservedNodeTx`, which a standby runs on its OWN database
-  (`apps/server/src/reserved-identity.ts`). So today a remote standby's old entry (a
-  wiped-and-re-adopted box's previous id, for one) reads as never-joined even if it finished, and
-  can be removed and then cleared. Once adoption can finish (`finish-adoption.ts`) and that check
-  can see a finished standby, nothing will free such an entry. A `sell-only` former primary keeps
+  (`judgeRemoval`, `apps/server/src/membership-removal.ts`). Since 3b-6a the main box writes a
+  spare's `nodes` row once the spare's store answers (`apps/server/src/spare-join.ts`), so Remove
+  refuses every spare whose store answered, and nothing frees its entry. A `sell-only` former primary keeps
   its place until that box retires itself (`apps/server/src/retire.ts` marks it `evicted`).
   Re-admission must retire, not add.
 - **Chart hygiene:** a post-setup change to `WAITRON_MANAGEMENT_ORIGIN` is never re-published, and a
@@ -776,13 +756,12 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 - **A spare needs the main box's backup settings, and nothing carries them yet.** The owner's answer
   (2026-11-04): joining gives `backup.env`, later changes follow, and a spare that was off catches
   up. Until then a venue with a recovery key is refused `handover.backup_settings_differ` at the
-  offer, the main box still selling. Planned, not built: A947 3b's plan, Decision D18 (2026-11-08,
-  revised 2026-11-10) — in 3b-5, Tasks 5.5b-1 and 5.5b-2 (the join carries it); in 3b-6, Task 6.3
-  (the joining spare's first copy reads its stream key from it), Tasks 6.5b and 6.5c (the main box
-  sends it every change from the spare's first full start on, and until a spare that was off
-  answers), Tasks 6.3b and 6.3c (a main box with no recovery key refuses a join; 3b-6 waits for the
-  owner's question Q2),
-  Task 6.5d (words for the refusal that say what to do) and Task 6.9b (two boxes). The offer's
+  offer, the main box still selling. A947 3b's plan, Decision D18 (2026-11-08, revised
+  2026-11-10): built in 3b-6a, Task 6.3 (the joining spare's first copy reads its stream key from
+  it) and Tasks 6.3b and 6.3c (a main box with no recovery key refuses a join, and the setup app
+  says what to do); planned, not built, in 3b-6c, Tasks 6.5b and 6.5c (the main box sends it every
+  change from the spare's first full start on, and until a spare that was off answers), Task 6.5d
+  (words for the refusal that say what to do) and Task 6.9b (two boxes). The offer's
   comparison stays the check before the main box stops selling. A1273's key ring stays under D7.
   Ruling O3. [Plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)
 - **A different key under the same version passes the handover's comparison.** It compares ring
@@ -1080,7 +1059,7 @@ password sign-in on the box; staff-host passkeys enrol separately. Venue devices
 
 Remote dashboard access, Settings on/off and retirement of the old TCP relay are implemented in
 [PR #2543](https://github.com/clintongormley/waitron/pull/2543). Trial details and limits stay in its
-thread. A standby can join the main box, but it does not yet receive the restaurant's data.
+thread.
 
 Translate all returned one editable menu suggestion on the test box. Address completion still
 needs its trial Cloud provider. Provider keys stay on the gateway host and come from the owner.
@@ -1137,7 +1116,7 @@ asking the network, a spare listens on the venue's network, and what it serves t
 test) as [#2779](https://github.com/clintongormley/waitron/pull/2779); 3b-5a (the pair link: a spare joins with no Cloud relay,
 the main box refuses before reserving anything and hands out the pair's access key and its backup settings) as [#2898](https://github.com/clintongormley/waitron/pull/2898); 3b-5b (a spare runs its store behind a listener
 that admits only its main box's client certificate, a venue with a standby refuses bucket-copy settings, and key ring
-rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing). 3b-6a to 3b-F and slices 3c onwards are still open;
+rotation is refused while a pair link exists) landed too, and so did 3b-G (the start check trusts only the venue's authority and sets aside a spare still joining, the start's chart check reaches a real box, and a box that lost its own record does not start selling or filing), and so did 3b-6a (a spare of a venue that does not file with Veri*Factu takes its first copy over the venue's network and finishes joining). 3b-6b to 3b-F and slices 3c onwards are still open;
 A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).

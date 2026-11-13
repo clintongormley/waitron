@@ -26,6 +26,7 @@ const server = Object.fromEntries(
     ["restore-request", "database and secret swaps; fl5 owns it"],
     ["restore-secrets", "database and secret swaps"],
     ["restore", "database and secret swaps"],
+    ["spare-copy-placement", "a spare's first copy swapped in; reachDisk"],
   ].map(([name, reason]) => [`apps/server/src/${name}.ts`, reason]),
 );
 const allowed = {

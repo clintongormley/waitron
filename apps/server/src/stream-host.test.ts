@@ -1,12 +1,15 @@
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer, request as httpRequest, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadKeyRing,
   putCredential,
   sealNodeSigningKeyTx,
+  writePairLinkTx,
   type KeyRing,
 } from "@waitron/credentials";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
@@ -42,6 +45,16 @@ import {
   type StreamHostDeps,
 } from "./stream-host.js";
 import { LiveEvents } from "./live-api.js";
+import { STREAM_DIR, TLS_CLIENT_CERT_FILE, TLS_CLIENT_KEY_FILE, TLS_DIR } from "@waitron/store";
+import { caCertPath } from "./box-secrets.js";
+import {
+  issueClientCert,
+  mintSelfSignedServerCert,
+  reissueServerLeaf,
+  type SelfSignedMaterial,
+} from "./self-signed-cert.js";
+import * as sparePipe from "./spare-pipe.js";
+import { startStoreListener, type StoreListener } from "./spare-pipe.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 import { pauseListingPrefix } from "./testing/stream-pause-scenario.js";
 
@@ -1151,6 +1164,305 @@ describe("the live copy's wiring", () => {
           await rt.stop();
         }
       });
+    });
+  });
+
+  describe("paired with a spare", () => {
+    const MAIN_NAME = "box-7f3a.waitron.local";
+    const SPARE_NAME = "box-5c21.waitron.local";
+    const PAIR = { accessKeyId: "pair-access-key", secretAccessKey: "pair-secret-key" };
+    let venue: SelfSignedMaterial;
+    let certDir: string;
+    let upstream: Server;
+    const reached: string[] = [];
+    let spare: StoreListener | undefined;
+
+    beforeAll(async () => {
+      const at = new Date();
+      venue = mintSelfSignedServerCert({ hostnames: ["waitron.local"], ipAddresses: [], now: at });
+      const other = mintSelfSignedServerCert({
+        hostnames: ["waitron.local"],
+        ipAddresses: [],
+        now: at,
+      });
+      certDir = await mkdtemp(join(tmpdir(), "waitron-stream-host-spare-"));
+      for (const [file, authority] of [
+        ["spare.pem", venue],
+        ["stranger.pem", other],
+      ] as const) {
+        const leaf = reissueServerLeaf({
+          caCertPem: authority.caCertPem,
+          caKeyPem: authority.caKeyPem,
+          hostnames: [SPARE_NAME],
+          ipAddresses: [],
+          now: at,
+        });
+        await writeFile(join(certDir, file), leaf.serverCertPem + leaf.serverKeyPem);
+      }
+      await writeFile(join(certDir, "ca.crt"), venue.caCertPem);
+      const client = issueClientCert({
+        caCertPem: venue.caCertPem,
+        caKeyPem: venue.caKeyPem,
+        hostname: MAIN_NAME,
+        now: at,
+      });
+      await mkdir(join(stateDir!, TLS_DIR), { recursive: true });
+      await writeFile(caCertPath(stateDir!), venue.caCertPem);
+      await writeFile(join(stateDir!, TLS_CLIENT_CERT_FILE), client.clientCertPem);
+      await writeFile(join(stateDir!, TLS_CLIENT_KEY_FILE), client.clientKeyPem);
+      upstream = createHttpServer((req, res) => {
+        reached.push(req.url ?? "");
+        res.end("stored");
+      });
+      await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    });
+
+    beforeEach(async () => {
+      reached.length = 0;
+      await writeNodeMembership(
+        db,
+        buildNextMembershipDocument({
+          heldDocument: null,
+          nodes: [{ nodeId: NODE_ID, contactUrl: "https://a", standing: "serving-primary" }],
+          signerNodeId: NODE_ID,
+          signerPrivateKey: keys.privateKey,
+        }),
+      );
+    });
+
+    afterEach(async () => {
+      await spare?.close();
+      spare = undefined;
+    });
+
+    afterAll(async () => {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+      await rm(certDir, { recursive: true, force: true });
+    });
+
+    async function startSpare(leafFile: string, peerHostname = MAIN_NAME): Promise<string> {
+      spare = await startStoreListener({
+        port: 0,
+        host: "127.0.0.1",
+        certFile: join(certDir, leafFile),
+        keyFile: join(certDir, leafFile),
+        caFile: join(certDir, "ca.crt"),
+        peerHostname,
+        upstreamPort: (upstream.address() as AddressInfo).port,
+        log: () => {},
+      });
+      return `https://${SPARE_NAME}:${spare.port}`;
+    }
+
+    async function pair(storeUrl: string) {
+      await withNodeTransaction(suite.node, (tx) =>
+        writePairLinkTx(tx, RING, NODE_ID, {
+          role: "streams",
+          state: "streaming",
+          peerNodeId: "node-b",
+          peerPublicKey: "spare-public-key",
+          storeUrl,
+          venueId: "venue-7",
+          ...PAIR,
+        }),
+      );
+    }
+
+    const pairedRuntime = (litestream: FakeLitestream) =>
+      runtime({
+        spawn: litestream.spawn,
+        store: new SwitchableStore(() => new Date()),
+        storeLookup: async (hostname) => {
+          expect(hostname).toBe(SPARE_NAME);
+          return { addresses: ["127.0.0.1"], remembered: false };
+        },
+      });
+
+    const replicaUrl = async () =>
+      (await readFile(join(stateDir!, STREAM_DIR, "litestream.yml"), "utf8")).match(
+        /url: "([^"]+)"/,
+      )![1]!;
+
+    /** A request through the address Litestream is given, as Litestream sends one. */
+    function getThrough(endpoint: string): Promise<string> {
+      return new Promise((resolve) => {
+        const req = httpRequest(`${endpoint}/waitron/probe`, { agent: false }, (res) => {
+          let body = "";
+          res.on("data", (chunk: Buffer) => (body += chunk.toString()));
+          res.on("end", () => resolve(`${res.statusCode} ${body}`));
+        });
+        req.on("error", (error: NodeJS.ErrnoException) => resolve(error.code ?? error.message));
+        req.end();
+      });
+    }
+
+    it("streams to the spare's store when the pair link says streaming", async () => {
+      await withTransaction(db, (tx) =>
+        putCredential(tx, RING, { purpose: STREAM_PURPOSE, value: SETTINGS }),
+      );
+      await pair(await startSpare("spare.pem"));
+      const litestream = new FakeLitestream();
+      const rt = pairedRuntime(litestream);
+      try {
+        await rt.start();
+        await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+
+        const url = new URL(await replicaUrl());
+        expect(url.host).toBe("waitron");
+        expect(url.pathname.startsWith(`/${venuePrefix("venue-7")}`)).toBe(true);
+        expect(url.searchParams.get("region")).toBe("us-east-1");
+        const endpoint = url.searchParams.get("endpoint")!;
+        expect(endpoint).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+        expect(litestream.running()!.env).toMatchObject({
+          WAITRON_STREAM_ACCESS_KEY_ID: PAIR.accessKeyId,
+          WAITRON_STREAM_SECRET_ACCESS_KEY: PAIR.secretAccessKey,
+        });
+        expect(await getThrough(endpoint)).toBe("200 stored");
+        expect(reached).toEqual(["/waitron/probe"]);
+        expect(rt.status()).toMatchObject({ bucketProblem: null, toSpare: true });
+      } finally {
+        await rt.stop();
+      }
+    });
+
+    it("a copy to the spare that could not start says it was going to the spare", async () => {
+      await pair(await startSpare("spare.pem"));
+      const notSealed = runtime({ refreshSealedState: async () => "failed" });
+      try {
+        await notSealed.start();
+        expect(notSealed.status()).toEqual({
+          state: "off",
+          reason: "reseal_required",
+          stateSince: expect.any(String),
+          toSpare: true,
+        });
+      } finally {
+        await notSealed.stop();
+      }
+      // An address the pipe cannot parse: its start throws, after the target was read.
+      await pair("not a store address");
+      const broken = pairedRuntime(new FakeLitestream());
+      try {
+        await broken.start();
+        expect(broken.status()).toEqual({
+          state: "off",
+          reason: "start_failed",
+          stateSince: expect.any(String),
+          toSpare: true,
+        });
+      } finally {
+        await broken.stop();
+      }
+    });
+
+    it("streams to the bucket when there is no pair link", async () => {
+      await withTransaction(db, (tx) =>
+        putCredential(tx, RING, {
+          purpose: STREAM_PURPOSE,
+          value: { ...SETTINGS, endpoint: "https://s3.example.test" },
+        }),
+      );
+      const litestream = new FakeLitestream();
+      const rt = pairedRuntime(litestream);
+      try {
+        await rt.start();
+        await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+
+        const url = new URL(await replicaUrl());
+        expect(url.host).toBe("venue-copies");
+        expect(url.pathname.startsWith(`/${venuePrefix("venue-1")}`)).toBe(true);
+        expect(url.searchParams.get("endpoint")).toBe("https://s3.example.test");
+        expect(litestream.running()!.env).toMatchObject({
+          WAITRON_STREAM_ACCESS_KEY_ID: SETTINGS.accessKeyId,
+          WAITRON_STREAM_SECRET_ACCESS_KEY: SETTINGS.secretAccessKey,
+        });
+        expect(rt.status()).not.toHaveProperty("toSpare");
+      } finally {
+        await rt.stop();
+      }
+    });
+
+    it("a pipe refused by the spare's certificate puts the stream's bucket problem in its status", async () => {
+      await pair(await startSpare("stranger.pem"));
+      const litestream = new FakeLitestream();
+      const rt = pairedRuntime(litestream);
+      try {
+        await rt.start();
+        await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+        expect(rt.status()).toMatchObject({ bucketProblem: null });
+
+        const endpoint = new URL(await replicaUrl()).searchParams.get("endpoint")!;
+        expect(await getThrough(endpoint)).not.toBe("200 stored");
+
+        expect(rt.status()).toMatchObject({
+          bucketProblem: { reason: "CERT_SIGNATURE_FAILURE", since: expect.any(String) },
+        });
+        expect(reached).toEqual([]);
+      } finally {
+        await rt.stop();
+      }
+    });
+
+    it("a pipe refused by the spare's store (wrong client certificate) puts the stream's bucket problem in its status", async () => {
+      await pair(await startSpare("spare.pem", "box-9e0d.waitron.local"));
+      const litestream = new FakeLitestream();
+      const rt = pairedRuntime(litestream);
+      try {
+        await rt.start();
+        await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+        expect(rt.status()).toMatchObject({ bucketProblem: null });
+
+        const endpoint = new URL(await replicaUrl()).searchParams.get("endpoint")!;
+        expect(await getThrough(endpoint)).not.toBe("200 stored");
+
+        await vi.waitFor(() =>
+          expect((rt.status() as StreamStatus).bucketProblem?.reason).toMatch(
+            /^(ECONNRESET|store_closed_before_answer)$/,
+          ),
+        );
+        expect(reached).toEqual([]);
+      } finally {
+        await rt.stop();
+      }
+    });
+
+    it("keeps the supervisor's own bucket problem over the pipe's", async () => {
+      await pair(await startSpare("stranger.pem"));
+      const opened = vi.spyOn(sparePipe, "startStorePipe");
+      const store = new SwitchableStore(() => new Date());
+      store.denied = true;
+      const rt = runtime({
+        spawn: new FakeLitestream().spawn,
+        store,
+        storeLookup: async () => ({ addresses: ["127.0.0.1"], remembered: false }),
+      });
+      try {
+        await rt.start();
+        await vi.waitFor(() => expect((rt.status() as StreamStatus).bucketProblem).not.toBeNull(), {
+          timeout: 10_000,
+        });
+        const pipe = await opened.mock.results[0]!.value;
+        expect(await getThrough(pipe.loopbackUrl)).not.toBe("200 stored");
+        expect(pipe.problem()).toMatchObject({ reason: "CERT_SIGNATURE_FAILURE" });
+
+        expect(rt.status()).toMatchObject({ bucketProblem: { reason: "access_denied" } });
+      } finally {
+        opened.mockRestore();
+        await rt.stop();
+      }
+    });
+
+    it("closes the pipe when the stream stops", async () => {
+      await pair(await startSpare("spare.pem"));
+      const litestream = new FakeLitestream();
+      const rt = pairedRuntime(litestream);
+      await rt.start();
+      await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+      const endpoint = new URL(await replicaUrl()).searchParams.get("endpoint")!;
+
+      await rt.stop();
+
+      expect(await getThrough(endpoint)).toBe("ECONNREFUSED");
     });
   });
 });

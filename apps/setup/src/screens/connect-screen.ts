@@ -436,7 +436,7 @@ export class SetupConnectScreen extends LitElement {
     ].join(" ");
     return html`
       <h1>${t("connect.heading")}</h1>
-      ${this.step === "address" ? html`<p>${t("connect.intro")}</p>` : nothing}
+      ${this.step === "address" ? html`<p data-test="connect-intro">${t("connect.intro")}</p>` : nothing}
       ${field("primaryUrl", "url")} ${this.#body(field)}
       <wt-form-actions .error=${bottom}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}

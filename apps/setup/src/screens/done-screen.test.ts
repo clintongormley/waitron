@@ -28,6 +28,16 @@ async function mountDone(
 
 const RESTART_EN = "The server is restarting to finish setup. Once it is back, open it here:";
 const READY_EN = "The server is ready. Open it here:";
+const JOINING_BODY_EN =
+  "The sign-in to the restaurant's primary worked. This server now takes its first copy of the restaurant's data from the primary, over the restaurant's network; no internet is needed. This can take a few minutes. It restarts by itself when it has the copy, and then waits as the standby. The primary keeps selling throughout.";
+const JOINING_BODY_ES =
+  "El inicio de sesión en el servidor principal del restaurante ha funcionado. Este servidor recibe ahora su primera copia de los datos del restaurante desde el principal, por la red del restaurante; no hace falta internet. Puede tardar unos minutos. Se reinicia solo cuando tiene la copia y después espera como servidor en espera. El principal sigue vendiendo todo el tiempo.";
+
+/** Waits past the first poll a trading server would make (`startDelayMs: 0`) and redraws. */
+async function afterATimerTurn(el: SetupDoneScreen): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await el.updateComplete;
+}
 
 afterEach(() => {
   setLocale("en-GB");
@@ -407,8 +417,34 @@ describe("setup-done-screen", () => {
     const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
     const text = el.shadowRoot!.textContent!;
     expect(text).not.toContain(RESTART_EN);
-    expect(text.replace(/\s+/g, " ")).toContain("no till and no dashboard");
+    expect(text.replace(/\s+/g, " ")).toContain(JOINING_BODY_EN);
   });
+
+  it.each([
+    ["en-GB", "This server is joining", JOINING_BODY_EN],
+    ["es-ES", "Este servidor se está uniendo", JOINING_BODY_ES],
+  ] as const)(
+    "says the joining server is taking its first copy (%s)",
+    async (locale, heading, body) => {
+      setLocale(locale);
+      const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
+      expect(q(el, "h1")!.textContent!.trim()).toBe(heading);
+      expect(q(el, "[data-test=joining-body]")!.textContent!.trim()).toBe(body);
+    },
+  );
+
+  it.each(["en-GB", "es-ES"] as const)(
+    "sends the person to nobody on the mirror path (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const getStatus = vi.fn().mockRejectedValue(new Error("404"));
+      const el = await mountDone(getStatus, { mirrorJoin: true, breakGlassSecret: "bg-9f3a" });
+      await afterATimerTurn(el);
+      expect(getStatus).not.toHaveBeenCalled();
+      const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
+      expect(text).not.toMatch(/whoever|installed|support|avisa|instaló|soporte/i);
+    },
+  );
 
   it("offers no till/dashboard links and no backup nudge on the mirror path", async () => {
     const el = await mountDone(() => new Promise(() => {}), { mirrorJoin: true });
@@ -416,12 +452,12 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=backup-nudge]")).toBeNull();
   });
 
-  it("reports the restart instead of offering a reload on the mirror path", async () => {
+  it("shows no restart status and no reload on the mirror path", async () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
     const el = await mountDone(getStatus, { mirrorJoin: true });
-    await vi.waitFor(() =>
-      expect(q(el, "[data-test=status]")?.textContent).toContain("has restarted"),
-    );
+    await afterATimerTurn(el);
+    expect(getStatus).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=status]")).toBeNull();
     expect(q(el, "[data-test=reload]")).toBeNull();
   });
 
@@ -463,7 +499,7 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("You need it to promote this server if the primary is unreachable.");
-    expect(warning).not.toContain("cannot do that in this version");
+    expect(warning).not.toContain("take over from the primary");
   });
 
   it("shows the break-glass secret on the mirror path without promising a promote", async () => {
@@ -474,7 +510,10 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("will not be shown again");
-    expect(warning).toContain("cannot do that in this version");
+    expect(warning).toContain(
+      "You will need it if this server ever has to take over from the primary.",
+    );
+    expect(warning).not.toContain("promote");
   });
 
   it("shows the finished setup in Spanish", async () => {
@@ -520,23 +559,24 @@ describe("setup-done-screen", () => {
     expect(steps).toContain("puerto 9110");
   });
 
-  it("shows the stalled join and its break-glass code in Spanish", async () => {
+  it("shows the joining screen and its break-glass code in Spanish", async () => {
     setLocale("es-ES");
     const el = await mountDone(() => new Promise(() => {}), {
       mirrorJoin: true,
       breakGlassSecret: "bg-9f3a",
     });
-    expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor no se ha unido");
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor se está uniendo");
     expect(q(el, "[data-test=break-glass] h2")!.textContent!.trim()).toBe(
       "Guarda ahora tu código de emergencia",
     );
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("Se muestra una sola vez y no se volverá a mostrar.");
-    expect(warning).toContain("En esta versión no puede hacerlo");
-    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("bg-9f3a");
-    expect(q(el, "[data-test=status]")!.textContent!.trim()).toBe(
-      "Esperando a que el servidor se reinicie…",
+    expect(warning).toContain(
+      "Lo necesitarás si algún día este servidor tiene que sustituir al principal.",
     );
+    expect(warning).not.toContain("pase a ser el principal");
+    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("bg-9f3a");
+    expect(q(el, "[data-test=status]")).toBeNull();
   });
 
   it("tells a trading server's operator in Spanish what the break-glass code is for", async () => {
@@ -546,14 +586,7 @@ describe("setup-done-screen", () => {
     expect(warning).toContain(
       "Lo necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
     );
-  });
-
-  it("reports the stalled server's restart in Spanish", async () => {
-    setLocale("es-ES");
-    const el = await mountDone(() => Promise.reject(new Error("404")), { mirrorJoin: true });
-    await vi.waitFor(() =>
-      expect(q(el, "[data-test=status]")!.textContent).toContain("El servidor se ha reiniciado"),
-    );
+    expect(warning).not.toContain("sustituir al principal");
   });
 
   it("redraws in Spanish on a live language switch", async () => {

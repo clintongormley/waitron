@@ -26,6 +26,14 @@ vi.mock("@hono/node-server", async () => {
 
 const { startServer, httpPort } = ephemeralServerFixture();
 
+// An in-process boot installs no shutdown handlers, so the real `restartProcess` only keeps the
+// ask; these cases observe the ask itself.
+const restartAsked = vi.hoisted(() => vi.fn<() => void>());
+vi.mock("./run-server.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./run-server.js")>()),
+  restartProcess: restartAsked,
+}));
+
 const observed = vi.hoisted(() => ({
   operator: undefined as unknown,
   action: undefined as unknown,
@@ -136,7 +144,7 @@ it.each(["account", "key"])(
         : { breakGlass: await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE) };
     const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-promotion-operation-"));
     let server: StartedServer | undefined;
-    const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+    restartAsked.mockReset();
     try {
       for (const [index, set] of manifestSets().entries())
         await cp(migrations[index]!.migrationsFolder, join(scratch, "migrations", set.name), {
@@ -194,10 +202,9 @@ it.each(["account", "key"])(
         "R-P000042",
       ]);
       expect((await readNodeMode(suite.node, NODE)).singletonRole).toBe("primary");
-      await vi.waitFor(() => expect(kill).toHaveBeenCalledWith(process.pid, "SIGTERM"));
+      await vi.waitFor(() => expect(restartAsked).toHaveBeenCalled());
     } finally {
       await server?.close();
-      kill.mockRestore();
       await rm(scratch, { recursive: true, force: true });
     }
   },

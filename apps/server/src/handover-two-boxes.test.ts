@@ -40,6 +40,8 @@ import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
 import { advanceHandover } from "./handover-store.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { holdRecoveryKey } from "./testing/recovery-key.js";
+import { replaceBackupSettings } from "./backup-env-writer.js";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
@@ -125,6 +127,7 @@ async function joined() {
   });
   await writeFile(join(mainState, "tls", "ca.crt"), authority.caCertPem);
   await writeFile(join(mainState, "tls", "ca.key"), authority.caKeyPem);
+  await holdRecoveryKey(mainState);
   const designated = { nodeId: venue.nodeId };
   const mainId: string = venue.nodeId;
   await establishNodeIdentity({ ownerDb: mainBox.db, node: mainBox.node, ring: RING }, mainId);
@@ -151,6 +154,7 @@ async function joined() {
     designated,
     accountKey: Buffer.alloc(32, 9).toString("base64"),
     credentialKeyRing: TOTP_KEY_RING,
+    wakeSpareJoin: () => {},
   });
 
   let standby!: { nodeId: string; publicKey: string };
@@ -186,7 +190,7 @@ async function joined() {
       persistTrading: async (args) => {
         spareId = args.nodeId;
       },
-      persistBackupSettings: async () => {},
+      persistBackupSettings: (settings) => replaceBackupSettings(spareState, settings),
       persistModuleConfig: async (config) => {
         await writeModuleConfig(spareState, config);
       },

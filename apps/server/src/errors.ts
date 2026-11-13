@@ -1310,8 +1310,8 @@ declare module "@waitron/shared" {
      */
     "mirror.not_provisioned": Record<string, never>;
     /**
-     * An adopted mirror's standby identity was not established because this database holds no venue
-     * row; nothing copies the main box's rows to a mirror yet.
+     * This `venue.db` holds no venue row, or a joining spare's holds no `nodes` row for it: the main
+     * box's copy is not in place yet.
      */
     "mirror.venue_not_copied": Record<string, never>;
     /**
@@ -1374,7 +1374,10 @@ declare module "@waitron/shared" {
     "membership.node_is_primary": Record<string, never>;
     /** The machine asked to be removed is a former primary (`sell-only`), so it has served. */
     "membership.node_has_served": Record<string, never>;
-    /** The standby asked to be removed has a `nodes` row in this database, so it finished joining. */
+    /**
+     * The standby asked to be removed has a `nodes` row in this database: its store answered
+     * (`spare-join.ts`).
+     */
     "membership.standby_joined": Record<string, never>;
     /**
      * The machine asked to be cleared is not removed (`evicted`): only a removed machine's place in
@@ -1429,10 +1432,13 @@ declare module "@waitron/shared" {
     /** Saving bucket settings was asked while this box holds a pair link: the venue copies to its
      * standby. */
     "backup.spare_stream_active": Record<string, never>;
-    /** WAITRON_BACKUP_RECOVERY_KEY is unset where one is needed: a backup destination is configured
-     * (refused at load so an unattended backup can never write an unencrypted or box-key-encrypted
-     * artifact), or a recovery pack's bucket or archives page is drawn
-     * (`backup-recovery-pack-parts.ts`), where it fails that page alone. */
+    /** WAITRON_BACKUP_RECOVERY_KEY is unset (or, for a join, too short to use) where one is
+     * needed: a backup destination is configured (refused at load so an unattended backup can
+     * never write an unencrypted or box-key-encrypted artifact), or a recovery pack's bucket or
+     * archives page is drawn (`backup-recovery-pack-parts.ts`), where it fails that page alone;
+     * or a spare asks this box to join while its `backup.env` holds no usable key
+     * (`mirror-bundle-api.ts`), refused before anything is reserved and passed on by the spare's
+     * adopt route. */
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };
@@ -1441,6 +1447,12 @@ declare module "@waitron/shared" {
      * `WAITRON_BACKUP_`, a value that is not text, or one the file would not keep. `reason` names
      * the check and never a value, which may be the backup recovery key. */
     "spare.settings_invalid": { reason: string };
+    /**
+     * This box's `nodes` row for its spare holds another public key than the pair link names: a
+     * fault in Waitron, logged only. The link stays `pending` and is not asked again until the
+     * server next starts or the link is replaced.
+     */
+    "spare.join_key_mismatch": { peerNodeId: string };
     /**
      * A module declared a `backup.nonDbState` `source` the resolver map carries no entry for. Fails
      * the backup loudly rather than skip that state. `source` is the module's own identifier.
@@ -1599,36 +1611,38 @@ declare module "@waitron/shared" {
     /** A destination's work was stopped because the backup duty stopped or reloaded. A
      * cancellation, never recorded as the destination failing. */
     "backup.destination_cancelled": Record<string, never>;
-    /** Neither an archive destination nor a bucket copy that is on and current: no copy of the data
-     * is being kept. Built as data by the backups alert source, never thrown. */
-    "backup.disabled": Record<string, never>;
+    /** Neither an archive destination nor a live copy that is on and current: no copy of the data
+     * is being kept. Built as data by the backups alert source, never thrown. `toSpare`: the copy
+     * goes to the standby's store, not the owner's bucket. */
+    "backup.disabled": { toSpare?: true };
     /** The dashboard's stored archive settings could not be read or used, so archives are off.
      * Built as data by the backups alert source, never thrown. */
     "backup.archive_settings_unusable": Record<string, never>;
-    /** The bucket copy's oldest change not yet in the bucket has waited `STREAM_BEHIND_AFTER_MS`
+    /** The live copy's oldest change not yet in its store has waited `STREAM_BEHIND_AFTER_MS`
      * (`alert-sources.ts`) or more. `minutes` is that wait, whole. Built as data by the backups
      * alert source, never thrown. */
-    "backup.stream_behind": { minutes: number };
-    /** The bucket copy stopped Litestream at the side-file limit. Built as data by the backups alert
+    "backup.stream_behind": { minutes: number; toSpare?: true };
+    /** The live copy stopped Litestream at the side-file limit. Built as data by the backups alert
      * source, never thrown. */
-    "backup.stream_paused": Record<string, never>;
-    /** The bucket copy stopped because the pointer changed under it, or names a newer term: usually
+    "backup.stream_paused": { toSpare?: true };
+    /** The live copy stopped because the pointer changed under it, or names a newer term: usually
      * another box writing this venue; it can also be a late pointer write by this box from before a
      * restart, or, on a bucket that refuses a conditional write to a missing object with 412, a
      * pointer that was deleted. Built as data by the backups alert source, never
      * thrown. */
-    "backup.stream_refused": Record<string, never>;
-    /** The bucket copy refused to start because a value bound for Litestream could not be written
+    "backup.stream_refused": { toSpare?: true };
+    /** The live copy refused to start because a value bound for Litestream could not be written
      * into its configuration safely. Built as data by the backups alert source, never thrown. */
-    "backup.stream_settings_unusable": Record<string, never>;
-    /** The bucket refuses this box's key, or fails the bucket check. Built as data by the backups
-     * alert source, never thrown. */
-    "backup.stream_bucket_unusable": Record<string, never>;
-    /** The bucket copy is set up but not running, and nobody stopped it: its supervisor failed, the
+    "backup.stream_settings_unusable": { toSpare?: true };
+    /** The copy's bucket refuses this box's key or fails the bucket check; or, when the copy goes to
+     * the standby (`toSpare`), its store cannot be reached or refuses this box. Built as data by the
+     * backups alert source, never thrown. */
+    "backup.stream_bucket_unusable": { toSpare?: true };
+    /** The live copy is set up but not running, and nobody stopped it: its supervisor failed, the
      * pinned Litestream cannot run, it could not start, or it refused for a reason with no wording
      * of its own. `reason` is the status's short tag. Built as data by the backups alert source,
      * never thrown. */
-    "backup.stream_stopped": { reason: string | null };
+    "backup.stream_stopped": { reason: string | null; toSpare?: true };
     /** This node's last attempt to rewrite its sealed state row failed, so the row a rebuild reads
      * is out of date or missing. `errorCode` is the failure's cause, `unknown` when unnamed. Built
      * as data by the sealed-state alert source, never thrown. */

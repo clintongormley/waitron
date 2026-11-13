@@ -67,6 +67,9 @@ import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 import { writerBesideRequest } from "./testing/watched-scrypt.js";
 import { boxHostnameFor } from "./box-name.js";
+import { holdRecoveryKey } from "./testing/recovery-key.js";
+import { replaceBackupSettings } from "./backup-env-writer.js";
+import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -227,6 +230,7 @@ function mountApp(
   log?: Logger,
   advertisedOrigin = "https://box.deli.test",
   now?: () => Date,
+  wakeSpareJoin: () => void = () => {},
 ): Hono {
   const app = new Hono();
   mountMirrorBundleApi(
@@ -241,6 +245,7 @@ function mountApp(
       designated,
       accountKey: Buffer.alloc(32, 9).toString("base64"),
       credentialKeyRing: TOTP_KEY_RING,
+      wakeSpareJoin,
       now,
     },
     log,
@@ -382,6 +387,7 @@ beforeAll(async () => {
   });
   await writeFile(join(stateDir, "tls", "ca.crt"), ca.caCertPem);
   await writeFile(join(stateDir, "tls", "ca.key"), ca.caKeyPem);
+  await holdRecoveryKey(stateDir);
 
   db = suite.db;
 }, 180_000);
@@ -909,6 +915,31 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       });
     });
 
+    it("wakes the spare join once its pending link has committed, and not for a refused join", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const seen: Promise<string | undefined>[] = [];
+      const app = mountApp(designated, undefined, undefined, undefined, () =>
+        seen.push(readPairLink(suite.node, designated.nodeId).then((link) => link?.state)),
+      );
+
+      const refused = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyStoreUrl: "http://cloud.deli.test:7443",
+      });
+      expect(refused.status).toBe(400);
+      expect(seen).toHaveLength(0);
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+      expect(res.status).toBe(200);
+      expect(await Promise.all(seen)).toEqual(["pending"]);
+    });
+
     it.each([
       ["at another host than the spare's contact address", "https://other.deli.test:7443"],
       ["over plain http", "http://cloud.deli.test:7443"],
@@ -1303,6 +1334,104 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         if (state !== "pending") await setPairLinkStateTx(tx, designated.nodeId, state);
       });
     }
+
+    // Every table's row count, how many sign-ins are live, the chart, the reservations and the
+    // `nodes` rows.
+    async function venueState() {
+      const tables = await db.execute<{ name: string }>(
+        sql`select name from sqlite_master where type = 'table' and name not like '__drizzle%' order by name`,
+      );
+      const counts: Record<string, unknown> = {};
+      for (const { name } of tables.rows) {
+        counts[name] = (
+          await db.execute<{ n: number }>(
+            sql.raw(`select count(*) as n from "${name.replaceAll('"', '""')}"`),
+          )
+        ).rows[0]!.n;
+      }
+      const liveSessions = (
+        await db.execute<{ n: number }>(
+          sql`select count(*) as n from management_sessions where ended_at is null`,
+        )
+      ).rows[0]!.n;
+      return {
+        counts,
+        liveSessions,
+        ...(await reservedAndListed()),
+        nodes: await db.select().from(nodes),
+      };
+    }
+
+    // The credential is checked before these refusals: its sign-in adds one session row, ended,
+    // so the live count stays as it was. Nothing else changes.
+    async function expectOnlyAnEndedSignIn(before: Awaited<ReturnType<typeof venueState>>) {
+      expect(await venueState()).toEqual({
+        ...before,
+        counts: {
+          ...before.counts,
+          management_sessions: Number(before.counts["management_sessions"]) + 1,
+        },
+      });
+    }
+
+    describe("this box's recovery key", () => {
+      afterEach(async () => {
+        await holdRecoveryKey(stateDir);
+      });
+
+      it("refuses a join while this box holds no recovery key, reserving nothing and listing nobody", async () => {
+        const { designated, adminPersonId } = await setupVenue();
+        const app = mountApp(designated);
+        await replaceBackupSettings(stateDir, null);
+        const before = await venueState();
+
+        const res = await post(app, {
+          personId: adminPersonId,
+          password: ADMIN_PASSWORD,
+          ...validStandby(),
+        });
+
+        expect(res.status).toBe(409);
+        expect(await res.json()).toEqual({
+          error: { code: "backup.recovery_key_missing", params: {} },
+        });
+        await expectOnlyAnEndedSignIn(before);
+        expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
+      });
+
+      it("a key under the length floor is refused the same way", async () => {
+        const { designated, adminPersonId } = await setupVenue();
+        const app = mountApp(designated);
+        await holdRecoveryKey(stateDir, "k".repeat(MIN_RECOVERY_KEY_LENGTH - 1));
+        const before = await venueState();
+
+        const res = await post(app, {
+          personId: adminPersonId,
+          password: ADMIN_PASSWORD,
+          ...validStandby(),
+        });
+
+        expect(res.status).toBe(409);
+        expect(await res.json()).toEqual({
+          error: { code: "backup.recovery_key_missing", params: {} },
+        });
+        await expectOnlyAnEndedSignIn(before);
+      });
+
+      it("a key in backup.env lets the join through", async () => {
+        const { designated, adminPersonId } = await setupVenue();
+        const app = mountApp(designated);
+        await holdRecoveryKey(stateDir, "k".repeat(MIN_RECOVERY_KEY_LENGTH));
+
+        const res = await post(app, {
+          personId: adminPersonId,
+          password: ADMIN_PASSWORD,
+          ...validStandby(),
+        });
+
+        expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+      });
+    });
 
     it("refuses a second spare while one is joined, reserving nothing", async () => {
       const { designated, adminPersonId } = await setupVenue();

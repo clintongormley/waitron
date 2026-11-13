@@ -1027,8 +1027,8 @@ makes the distinction for us any more.
 it refuses with `credentials.rotation_spare_joined`, because the spare holds the same key ring and
 nothing sends it a new one (decision D7 in
 [the 3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)). Removing a spare that
-never finished joining deletes the link, and rotation then runs. A spare that finished joining
-cannot be removed in this version, so while it is joined the ring is not rotated. On the spare,
+is not yet set up to receive the venue's data (no `nodes` row yet) deletes the link, and rotation
+then runs. A spare that is set up cannot be removed in this version, so while it is paired the ring is not rotated. On the spare,
 whose own link names its main box, `rotate` refuses too. A ring changed by hand in `secrets.env` is
 not stopped by this.
 
@@ -3371,7 +3371,8 @@ dies leaves its file behind; the next holder overwrites it.
 that lock fails for another reason.** `freeSpaceAtStart` in the box's entry and `emptyScratch` in
 `bootServer` delete every entry in `<state>/scratch/`, keeping the root. Backup staging is
 `scratch/backup`; restore staging is `scratch/restore`. Stream restores, staged-restore entries,
-setup holdings copies and node copies also live below scratch. The root is never followed when
+setup holdings copies and node copies also live below scratch, except a spare's first copy, which
+waits in `<state>/pair-copy/` across the restart that places it (`spare-copy.ts`). The root is never followed when
 it is a symbolic link. Both sweeps run before this process starts its backup supervisor.
 The staged-recovery
 folder is where the setup wizard's recovery step (`stage` in `createSetupRecoveryPreparation`,
@@ -3480,7 +3481,7 @@ lock, not that every writer of the file takes it.
 
 | Caller | Runs | Decision |
 | --- | --- | --- |
-| `apps/server/src/boot.ts` | the server | locks up to five times in turn: placing a handover's accepted copy (`placeAcceptedCopyForStart`, `apps/server/src/handover-place-copy.ts`, with a node identity and an existing `node.db`), the stamp probe, the pre-migration trigger read (`missingBeforeMigration`, `apps/server/src/append-only-watch.ts`), the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
+| `apps/server/src/boot.ts` | the server | locks up to six times in turn: placing a spare's first copy (`placeFirstCopy`, `apps/server/src/spare-copy-placement.ts`, with a node identity and a first copy waiting), placing a handover's accepted copy (`placeAcceptedCopyForStart`, `apps/server/src/handover-place-copy.ts`, with a node identity and an existing `node.db`), the stamp probe, the pre-migration trigger read (`missingBeforeMigration`, `apps/server/src/append-only-watch.ts`), the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
 | `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore and staged reset it runs | the container entrypoint, the same process as the server | the staged restore, then the staged reset, each locks on its own and releases before `runEntry` takes `lockVenueDatabase`; the staged restore takes `lockRestoreTarget` just after its start-again check, before it makes a working folder or changes anything, and its placement (`writeValidated`) shares that hold. `runEntry` then takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws (on a box that waits for its peers, `startServer` returns as soon as the waiting start is listening, before the wait ends; see the backlog's _The waiting start's loose ends_). The ahead check's opens and the server's opens during its start share that hold |
 | `apps/server/src/upgrade-checks.ts` and the shared `upgrade-schema-check.ts` | one contained candidate check per process; not wired to an installed upgrade command yet | after the read-only first-setup checks, holds `lockVenueDatabase` across the ahead/deployment checks, migrations and data readers; every temporary database open shares it and closes before the outer hold is released. The shared ahead helper is also the ordinary entry's preflight |
@@ -5343,8 +5344,9 @@ So a comparison of two venue databases leaves the two tables out, as the stream 
 `tableContents` does (`apps/server/src/testing/stream-loop-scenario.ts`), and a check that lists a live or
 restored database's tables has to leave them out explicitly. The directory goes with the database it
 describes: `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`), `restoreDatabase`
-(`apps/server/src/restore.ts`) and placing a handover's accepted copy (`swapIn`,
-`apps/server/src/handover-place-copy.ts`) remove it with `venue.db`, and the stream supervisor removes it before
+(`apps/server/src/restore.ts`), placing a handover's accepted copy (`swapIn`,
+`apps/server/src/handover-place-copy.ts`) and placing a spare's first copy (`placeFirstCopy`,
+`apps/server/src/spare-copy-placement.ts`) remove it with `venue.db`, and the stream supervisor removes it before
 it starts Litestream on a new generation (`packages/stream/src/supervisor.ts`). What Litestream itself
 does with a stale directory beside a replaced `venue.db` was not measured. Nothing finds a new piece
 of code that lists tables or empties the folder and forgets either.
@@ -5723,6 +5725,7 @@ from the reset:
   deletion refuses the promotion, and again after stopping the backup supervisor and before the
   restart, where a failed deletion is logged and the restart goes ahead;
 - placing a handover's accepted copy (`placeAcceptedCopyAtStart`, `apps/server/src/handover-place-copy.ts`);
+- placing a spare's first copy (`placeFirstCopy`, `apps/server/src/spare-copy-placement.ts`);
 - `waitron.sh reset`, which empties the state folder apart from `tls/` and the Start-again files in
   one removal, taking the note and `venue/` in no set order.
 

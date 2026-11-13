@@ -31,6 +31,16 @@ const DEFAULT_DEPS: ShutdownDeps = {
 export const SHUTDOWN_DEADLINE_MS = 8000;
 
 let shutdownUnderWay = false;
+let handlersInstalled = false;
+let restartRequested = false;
+
+/** What the shutdown handlers stop. */
+export interface ShutdownTarget {
+  close(): Promise<void>;
+  /** Runs before `close` only when {@link restartProcess} asked for the shutdown, never for a
+   *  signal from outside. A rejection is not logged here, and the close goes ahead anyway. */
+  beforeRestart?: () => Promise<void>;
+}
 
 /**
  * Stop the server once on the first SIGTERM/SIGINT, then exit — the routine `bin.ts` and
@@ -51,7 +61,7 @@ let shutdownUnderWay = false;
  * sending its own.
  */
 export function installShutdownHandlers(
-  server: { close(): Promise<void> },
+  server: ShutdownTarget,
   deps: ShutdownDeps = DEFAULT_DEPS,
 ): void {
   // Every path ends in exactly one exit, whichever of {clean close, failure-log write, deadline}
@@ -68,43 +78,56 @@ export function installShutdownHandlers(
   const logShutdownTimeout = createLogger((line) => deps.write(line, () => {}), deps.now);
   let shuttingDown = false;
   const setTimer = deps.setTimer ?? unrefTimer;
-  for (const signal of ["SIGTERM", "SIGINT"] as const) {
-    deps.on(signal, () => {
-      if (shuttingDown) return;
-      shuttingDown = true;
-      shutdownUnderWay = true;
-      // Left running after a rejection: it is the exit if the failure line's write never completes.
-      const deadline = setTimer(SHUTDOWN_DEADLINE_MS, () => {
-        if (exited) return;
-        if (closeFailed) return exitOnce(1);
-        logShutdownTimeout("warn", "server.shutdown_timeout", { deadlineMs: SHUTDOWN_DEADLINE_MS });
-        exitOnce(0);
-      });
-      void server.close().then(
-        () => {
-          if (exited) return;
-          createLogger(
-            (line) =>
-              deps.write(line, () => {
-                deadline.cancel();
-                exitOnce(0);
-              }),
-            deps.now,
-          )("info", "server.shutdown_complete");
-        },
-        (error: unknown) => {
-          if (exited) return;
-          closeFailed = true;
-          logShutdownFailure("error", "server.shutdown_failed", { errorCode: codeOf(error) });
-        },
-      );
+  const onSignal = (): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    shutdownUnderWay = true;
+    // Left running after a rejection: it is the exit if the failure line's write never completes.
+    const deadline = setTimer(SHUTDOWN_DEADLINE_MS, () => {
+      if (exited) return;
+      if (closeFailed) return exitOnce(1);
+      logShutdownTimeout("warn", "server.shutdown_timeout", { deadlineMs: SHUTDOWN_DEADLINE_MS });
+      exitOnce(0);
     });
-  }
+    const closing =
+      restartRequested && server.beforeRestart !== undefined
+        ? server
+            .beforeRestart()
+            .catch(() => {})
+            .then(() => server.close())
+        : server.close();
+    void closing.then(
+      () => {
+        if (exited) return;
+        createLogger(
+          (line) =>
+            deps.write(line, () => {
+              deadline.cancel();
+              exitOnce(0);
+            }),
+          deps.now,
+        )("info", "server.shutdown_complete");
+      },
+      (error: unknown) => {
+        if (exited) return;
+        closeFailed = true;
+        logShutdownFailure("error", "server.shutdown_failed", { errorCode: codeOf(error) });
+      },
+    );
+  };
+  for (const signal of ["SIGTERM", "SIGINT"] as const) deps.on(signal, onSignal);
+  const askedBeforeAnyHandler = restartRequested && !handlersInstalled;
+  handlersInstalled = true;
+  if (askedBeforeAnyHandler) onSignal();
 }
 
 /**
- * A second SIGTERM would interrupt the closers already draining.
+ * A second SIGTERM would interrupt the closers already draining. An ask made before
+ * {@link installShutdownHandlers} has run is kept and acted on there: on the box Node is process 1,
+ * which ignores a SIGTERM it has no handler for, so a signal sent then would be lost.
  */
 export function restartProcess(): void {
-  if (!shutdownUnderWay) process.kill(process.pid, "SIGTERM");
+  if (shutdownUnderWay) return;
+  restartRequested = true;
+  if (handlersInstalled) process.kill(process.pid, "SIGTERM");
 }

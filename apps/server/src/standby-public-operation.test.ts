@@ -33,6 +33,7 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { TOTP_KEY_RING, enrolAuthenticator, wrongTotpCode } from "./testing/authenticator.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
@@ -67,6 +68,7 @@ beforeAll(async () => {
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "public-test-ca");
   await writeFile(join(stateDir, "tls", "ca.key"), "public-test-ca-key");
+  await holdRecoveryKey(stateDir);
 });
 afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
@@ -194,6 +196,7 @@ async function bundleApp() {
     designated: { nodeId: PRIMARY },
     accountKey: "test-account",
     credentialKeyRing: TOTP_KEY_RING,
+    wakeSpareJoin: () => {},
   });
   return app;
 }
