@@ -1047,7 +1047,7 @@ it("opens an unclaimed venue through the real store opener", async () => {
   }
 });
 
-it("leaves the venue folder untouched when refusing an interrupted setup record", async () => {
+it("leaves the venue folder untouched when refusing a damaged setup record", async () => {
   const root = await mkdtemp(join(tmpdir(), "cli-interrupted-setup-"));
   const venueDir = join(root, "venue");
   const stateDir = join(root, "state");

@@ -406,7 +406,7 @@ function logChoiceFailed(error: unknown, deps: StartAgainDeps, log?: Logger): vo
   });
 }
 
-export function movedFolder(setAside: { state: string; venue: string }): string {
+export function movedFolder(setAside: { state: string }): string {
   const parent = setAside.state.slice(0, setAside.state.lastIndexOf("/"));
   return `state/${parent}`;
 }
