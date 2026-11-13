@@ -3237,3 +3237,41 @@ describe("A790 recorded document then printer", () => {
     ]);
   });
 });
+
+it("keeps lunch diners separate and shows included choices without prices", async () => {
+  const supplement = receiptLabelsFor("es-ES").supplement.split("{item}").join("Hake $& chips $$");
+  const lunch = {
+    descriptions: { "es-ES": "House lunch" },
+    quantity: "1",
+    gross: "18.00",
+    setLunch: true as const,
+  };
+  const hake = { descriptions: { "es-ES": "Hake $& chips $$" }, quantity: "1", gross: "3.00" };
+  const coffee = { descriptions: { "es-ES": "Coffee" }, quantity: "2", gross: "0.00" };
+  const { el } = await mount({
+    total: "42.00",
+    vatBreakdown: [{ rate: "10", base: "38.18", tax: "3.82" }],
+    lines: [
+      lunch,
+      { ...hake, parentLineNo: 1 },
+      { ...coffee, parentLineNo: 1 },
+      lunch,
+      { ...hake, parentLineNo: 4 },
+      { ...coffee, parentLineNo: 4 },
+    ],
+  });
+  const rows = [...el.shadowRoot!.querySelectorAll("li.line")].map((row) => [
+    row.querySelector(".line-name")?.textContent?.trim(),
+    norm(row.querySelector(".line-gross")?.textContent ?? ""),
+  ]);
+  expect(rows).toEqual([
+    ["House lunch", "18,00 €"],
+    [supplement, "3,00 €"],
+    ["Hake $& chips $$", ""],
+    ["Coffee x2", ""],
+    ["House lunch", "18,00 €"],
+    [supplement, "3,00 €"],
+    ["Hake $& chips $$", ""],
+    ["Coffee x2", ""],
+  ]);
+});

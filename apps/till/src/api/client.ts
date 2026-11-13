@@ -949,6 +949,8 @@ export type Tender = CashTender | CardTender;
  * never the client basket, so the printed line list cannot diverge from the invoice.
  */
 export interface TillSaleLine {
+  /** Presentation only, derived from the line's recorded menu version. */
+  setLunch?: true;
   /** F1 figures read from the filed sale line; unitPrice is per priceQuantity, base is the line total. */
   net?: { unitPrice: string; priceQuantity: string; base: string; rate: string; tax?: string };
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on

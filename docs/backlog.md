@@ -462,16 +462,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
-- **A1515. Set lunch menus, the _menú del día_ (owner, 2026-11-11): go-live.** One fixed price for a
-  menu of courses, where the guest picks a dish for each course (say one of three starters), with
-  bread, a drink or coffee included and an extra charge for a premium choice. The receipt shows one
-  line. The catalogue switch, course-service API and till choice controls are built;
-  lunch bill/receipt presentation remains. The
-  [proposal](superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md) records the owner’s extras,
-  later-choice, course-send and table-service 10% decisions. Claude reviewed the build plan; the watcher
-  cleared it at 22:04 on 12 November; takeaway/delivery VAT remain with S10/Lane L.
-  [Detail](backlog/catalogue.md#a1515-set-lunch-menus-the-menú-del-día)
-
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
   the recommendations; still to build: design A670's guest menu.
   The [cleared new-selection plan](superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.

@@ -18,6 +18,9 @@ it, then send that course. You can change a choice until it is sent; dishes alre
 If the diner skips coffee, use **Pay** as usual. Leaving that choice open keeps the lunch price
 and sends nothing for it. Set lunches here are for service at the table.
 
+The receipt keeps each diner’s lunch separate, with its base price and any premium supplement
+priced beneath it. The chosen dishes are listed without separate prices.
+
 ## Give a comp or discount {#comps-and-discounts}
 
 Choose a reason when you make an item free or give a discount. With **Apply comps**, you can
