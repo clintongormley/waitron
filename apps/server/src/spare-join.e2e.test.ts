@@ -65,7 +65,7 @@ describe("a spare joins a main box that does not file with Veri*Factu", () => {
   });
 
   it(
-    "the main box sells, and a spare in setup mode reads the main box's authority at its own name",
+    "the main box starts trading, and a spare in setup mode reads the main box's authority at its own name",
     async (ctx) => {
       if (!litestream.ok || !versitygw.ok) {
         if (REQUIRED) {

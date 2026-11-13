@@ -2,10 +2,9 @@
 // provisions its box, and S starts from an empty state folder, so it boots in setup mode.
 // `spare-join.e2e.test.ts` runs it against versitygw.
 import { X509Certificate } from "node:crypto";
-import { cp, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import type { BucketConfig } from "@waitron/stream";
 import { BOX_HOSTNAME, ownContactUrl } from "../box-name.js";
@@ -16,7 +15,7 @@ import { ALL_MODULES } from "../modules.js";
 import { POLL_INTERVAL_MS, POLL_TRIES, fetchHealthOk, httpsVia } from "./boot-harness.js";
 import { freePorts } from "./free-ports.js";
 import { stageClock, type StageEvent } from "./scenario-stages.js";
-import { boxDirs, provisionStreamBox, type BoxDirs } from "./stream-box.js";
+import { boxDirs, copyMigrations, provisionStreamBox, type BoxDirs } from "./stream-box.js";
 
 const RECOVERY_KEY = "spare-join-e2e-recovery-key";
 const MODULES_M = { modules: { "fiscal-verifactu": false } };
@@ -72,6 +71,7 @@ class TestBox {
   server: StartedServer | undefined;
   private restarting: Promise<void> | undefined;
   private restartFailure: unknown;
+  private closed = false;
 
   constructor(
     readonly dirs: BoxDirs,
@@ -85,7 +85,7 @@ class TestBox {
   }
 
   async start(): Promise<void> {
-    this.server = await startServer(
+    const server = await startServer(
       await loadBoxEnv(this.env, this.dirs.state),
       {},
       {
@@ -94,9 +94,17 @@ class TestBox {
         restart: () => this.restart(),
       },
     );
+    // A close that began while this start ran found no server to close.
+    if (this.closed) {
+      await server.close();
+      throw new Error(`the box on port ${this.port} was closed while it started`);
+    }
+    this.server = server;
   }
 
   private restart(): void {
+    // As production's restart does nothing once shutdown is under way.
+    if (this.closed) return;
     const previous = this.restarting ?? Promise.resolve();
     this.restarting = previous.then(async () => {
       const server = this.server;
@@ -112,6 +120,7 @@ class TestBox {
 
   /** Settles a pending restart, then closes; returns what failed, the restart's failure first. */
   async close(): Promise<unknown[]> {
+    this.closed = true;
     const failures: unknown[] = [];
     await this.restarting;
     if (this.restartFailure !== undefined) failures.push(this.restartFailure);
@@ -143,13 +152,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
   const failures: unknown[] = [];
   try {
     clock.begin("probe");
-    const migrationsRoot = join(scratch, "migrations");
-    const fromSource = migrationOptionsFor(manifestSets(), null);
-    for (const [index, set] of manifestSets().entries()) {
-      await cp(fromSource[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-        recursive: true,
-      });
-    }
+    const { migrationsRoot, fromSource } = await copyMigrations(scratch);
     // One draw: M's and S's HTTPS ports, then S's store and its versitygw's loopback port.
     const [portM, portS, storeS, storeLoopbackS] = (await freePorts(4)) as [
       number,

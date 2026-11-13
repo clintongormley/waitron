@@ -1,7 +1,7 @@
 // A box provisioned the way a setup boot leaves one, for the in-process scenarios that start a real
 // server on it: the stream loop (`stream-loop-scenario.ts`) and the spare join
 // (`spare-join-scenario.ts`).
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -12,7 +12,7 @@ import {
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
-import { applyMigrations, type migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyAllocatedTestVenue } from "@waitron/provisioning/testing/allocated-venue";
 import {
   planVenue,
@@ -30,7 +30,7 @@ import { establishNodeIdentity } from "../node-identity.js";
 import { streamSettingsPayload } from "../stream-host.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
-export const STREAM_BOX_LOCALE = "es-ES";
+const LOCALE = "es-ES";
 
 export interface BoxDirs {
   root: string;
@@ -43,6 +43,20 @@ export async function boxDirs(parent: string, name: string): Promise<BoxDirs> {
   const dirs = { root, state: join(root, "state"), venue: join(root, "state", "venue") };
   await mkdir(dirs.venue, { recursive: true });
   return dirs;
+}
+
+/** Every migration set copied under `<scratch>/migrations`, as a box's `WAITRON_MIGRATIONS_DIR`. */
+export async function copyMigrations(
+  scratch: string,
+): Promise<{ migrationsRoot: string; fromSource: ReturnType<typeof migrationOptionsFor> }> {
+  const migrationsRoot = join(scratch, "migrations");
+  const fromSource = migrationOptionsFor(manifestSets(), null);
+  for (const [index, set] of manifestSets().entries()) {
+    await cp(fromSource[index]!.migrationsFolder, join(migrationsRoot, set.name), {
+      recursive: true,
+    });
+  }
+  return { migrationsRoot, fromSource };
 }
 
 export interface StreamBox {
@@ -92,8 +106,8 @@ export async function provisionStreamBox(options: {
           legalName: "Stream Loop SL",
           name: "Sala principal",
           fiscalTerritory: "ES-common",
-          invoiceLocales: [STREAM_BOX_LOCALE],
-          operationDescription: "Venta en establecimiento",
+          invoiceLocales: [LOCALE],
+          operationDescription: "Sale on premises",
           addressLine1: "Calle Mayor 1",
           addressLine2: null,
           postalCode: "28013",

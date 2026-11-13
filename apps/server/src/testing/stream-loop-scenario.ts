@@ -4,7 +4,7 @@
 // restore of B's generation holds exactly what B's database holds. `stream-loop.e2e.test.ts` runs it
 // against versitygw; `aws-stream-loop.aws-rehearsal.test.ts` against Amazon S3, by opt-in only.
 import { randomBytes, randomUUID, X509Certificate } from "node:crypto";
-import { copyFile, cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
@@ -20,7 +20,6 @@ import {
 } from "@waitron/fiscal-verifactu";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack";
 import { verifySecretAsync } from "@waitron/identity";
-import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { nodeId } from "@waitron/shared";
@@ -62,7 +61,7 @@ import type { StreamHostDeps } from "../stream-host.js";
 import { httpsVia } from "./boot-harness.js";
 import { freePort } from "./free-ports.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
-import { boxDirs, provisionStreamBox, type BoxDirs } from "./stream-box.js";
+import { boxDirs, copyMigrations, provisionStreamBox, type BoxDirs } from "./stream-box.js";
 
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 
@@ -297,13 +296,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
   const failures: unknown[] = [];
   try {
     clock.begin("probe");
-    const migrationsRoot = join(scratch, "migrations");
-    const fromSource = migrationOptionsFor(manifestSets(), null);
-    for (const [index, set] of manifestSets().entries()) {
-      await cp(fromSource[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-        recursive: true,
-      });
-    }
+    const { migrationsRoot, fromSource } = await copyMigrations(scratch);
 
     // 1. The bucket, and the conditional write every pointer move depends on. A server that does not
     //    refuse a stale write fails HERE, with the probe's reason, before anything streams.
@@ -326,6 +319,10 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       bucket,
       recoveryKey: RECOVERY_KEY,
       modulesJson: { modules: { "fiscal-none": false } },
+      venue: {
+        request: { operationDescription: "Venta en establecimiento" },
+        modules: ALL_MODULES,
+      },
       ...(fixture.useRecoveryPack ? { apply: applyWithFirstSetup(dirsA.state) } : {}),
     });
     let nodeSecret = mintedSecret;

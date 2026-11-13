@@ -12,7 +12,7 @@
 //     and a sale made while the bucket was frozen is in it.
 // `stream-pause.e2e.test.ts` runs it against versitygw; `aws-stream-pause.aws-rehearsal.test.ts`
 // against Amazon S3, by opt-in only.
-import { cp, mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -36,7 +36,7 @@ import {
 } from "@waitron/db";
 import { hashDeviceToken, persons } from "@waitron/identity";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyMigrations } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import {
@@ -64,6 +64,7 @@ import { establishNodeIdentity } from "../node-identity.js";
 import { streamSettingsPayload, type StreamHostDeps } from "../stream-host.js";
 import { freePort } from "./free-ports.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
+import { copyMigrations } from "./stream-box.js";
 import {
   framesUnderHeader,
   holdProven,
@@ -259,13 +260,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
   const failures: unknown[] = [];
   try {
     clock.begin("probe");
-    const migrationsRoot = join(scratch, "migrations");
-    const fromSource = migrationOptionsFor(manifestSets(), null);
-    for (const [index, set] of manifestSets().entries()) {
-      await cp(fromSource[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-        recursive: true,
-      });
-    }
+    const { migrationsRoot, fromSource } = await copyMigrations(scratch);
 
     // 1. The bucket.
     const store = fixture.store ?? createS3ObjectStore(bucket);
