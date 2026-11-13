@@ -1,4 +1,4 @@
-import { copyFile, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -13,7 +13,7 @@ import {
 import { CORE_MIGRATIONS, nodes, withNodeTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { generateNodeKeyPair } from "@waitron/membership";
-import { NODE_MIGRATIONS, readPairLink } from "@waitron/node-db";
+import { NODE_MIGRATIONS, pinPrimaryKeyTx, readPairLink, type PairLink } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import {
   generationName,
@@ -27,17 +27,17 @@ import {
   createMemoryObjectStore,
   type MemoryObjectStore,
 } from "@waitron/stream/testing/memory-store.js";
-import { BACKUP_ENV_FILE } from "@waitron/store";
 import { loadBoxEnv } from "./box-env.js";
 import { loadRecoveryKey } from "./backup-config.js";
 import { deriveStreamKey } from "./stream-key.js";
 import {
+  copyNeededLink,
   mountLatchBoxStatus,
   takeFirstCopy,
-  whenCopyNeeded,
   type FirstCopyDeps,
   type FirstCopyStatus,
 } from "./spare-copy.js";
+import { holdRecoveryKey } from "./testing/recovery-key.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xd).toString("base64"),
@@ -60,6 +60,7 @@ describe("takeFirstCopy", () => {
   const spareKeys = generateNodeKeyPair();
   const otherKeys = generateNodeKeyPair();
   let logs: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
+  let link: PairLink;
   let running: { controller: AbortController; done: Promise<unknown> } | undefined;
 
   beforeAll(async () => {
@@ -85,7 +86,9 @@ describe("takeFirstCopy", () => {
         venueId: VENUE,
         ...PAIR,
       });
+      await pinPrimaryKeyTx(tx, SPARE, { primaryNodeId: MAIN, publicKey: mainKeys.publicKey });
     });
+    link = (await readPairLink(suite.node, SPARE))!;
   });
 
   afterEach(async () => {
@@ -146,9 +149,7 @@ describe("takeFirstCopy", () => {
     }
   }
 
-  async function writeKey(key = RECOVERY_KEY) {
-    await writeFile(join(stateDir, BACKUP_ENV_FILE), `WAITRON_BACKUP_RECOVERY_KEY=${key}\n`);
-  }
+  const writeKey = (key = RECOVERY_KEY) => holdRecoveryKey(stateDir, key);
 
   function run(overrides: Partial<FirstCopyDeps> & { objectStore: MemoryObjectStore }) {
     const controller = new AbortController();
@@ -163,8 +164,7 @@ describe("takeFirstCopy", () => {
       nodeId: SPARE,
       litestreamBin: "/unused/litestream",
       store: { loopbackUrl: LOOPBACK, stop: async () => {} },
-      pinnedPrimaryKey: mainKeys.publicKey,
-      venueId: VENUE,
+      link,
       now: () => new Date(),
       log: (level, event, fields) => logs.push({ level, event, fields }),
       signal: controller.signal,
@@ -300,8 +300,7 @@ describe("takeFirstCopy", () => {
   it("reports waiting, restoring and ready, with bytes and ms, on the box status", async () => {
     const good = await fixture("good-status", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
     const objectStore = await storeWithPointer(generation(1));
-    const link = await readPairLink(suite.node, SPARE);
-    const readyAt = new Date(link!.createdAt.getTime() + 93_000);
+    const readyAt = new Date(link.createdAt.getTime() + 93_000);
     let release!: () => void;
     const released = new Promise<void>((resolve) => (release = resolve));
     const restore = vi.fn(async (args: RestoreGenerationArgs) => {
@@ -391,8 +390,6 @@ describe("takeFirstCopy", () => {
   });
 
   it("starts no copy when venue.db already holds this box's row", async () => {
-    const job = vi.fn(async () => "ready" as const);
-
     await db.insert(nodes).values({
       id: SPARE,
       name: "Spare",
@@ -400,14 +397,14 @@ describe("takeFirstCopy", () => {
       taxModule: "tax-es",
       publicKey: spareKeys.publicKey,
     });
-    expect(await whenCopyNeeded({ db, node: suite.node, nodeId: SPARE }, job)).toBeUndefined();
-    expect(job).not.toHaveBeenCalled();
+    expect(await copyNeededLink({ db, node: suite.node, nodeId: SPARE })).toBeUndefined();
 
-    // Control: with no row, the copy job is called with the link.
+    // Control: with no row, the link is handed back for the copy.
     await db.delete(nodes);
-    await whenCopyNeeded({ db, node: suite.node, nodeId: SPARE }, job);
-    expect(job).toHaveBeenCalledOnce();
-    expect(job.mock.calls[0]).toMatchObject([{ venueId: VENUE, state: "awaiting_copy" }]);
+    expect(await copyNeededLink({ db, node: suite.node, nodeId: SPARE })).toMatchObject({
+      venueId: VENUE,
+      state: "awaiting_copy",
+    });
   });
 
   it("tries again after a restore the store refuses", async () => {
@@ -433,9 +430,9 @@ describe("takeFirstCopy", () => {
     expect(events("spare.first_copy_waiting").map((e) => e.fields)).toEqual([
       { reason: "backup.stream_request_failed", status: 503 },
     ]);
-    expect(JSON.parse(await readFile(join(stateDir, "pair-copy", "ready.json"), "utf8"))).toEqual({
-      generation: generation(1),
-    });
+    expect(JSON.parse(await readFile(join(stateDir, "pair-copy", "ready.json"), "utf8"))).toEqual(
+      {},
+    );
   });
 
   it("refuses a copy made by newer software", async () => {

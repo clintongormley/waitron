@@ -8,6 +8,7 @@ import {
   HEALTHY_RUN_MS,
   RESTART_BACKOFF_MS,
   spawnLitestream,
+  type BucketConfig,
   type ChildHandle,
   type SpawnFn,
 } from "@waitron/stream";
@@ -17,6 +18,22 @@ import type { Logger } from "./logger.js";
 export const VERSITYGW_VERSION = "1.8.0";
 export const SPARE_STORE_BUCKET = "waitron";
 export const SPARE_STORE_REGION = "us-east-1";
+
+/** The spare's store, reached at `endpoint` under the pair's key. */
+export function spareStoreBucket(
+  endpoint: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+): BucketConfig {
+  return {
+    endpoint,
+    region: SPARE_STORE_REGION,
+    bucket: SPARE_STORE_BUCKET,
+    prefix: "",
+    accessKeyId,
+    secretAccessKey,
+  };
+}
 
 export interface SpareStoreDeps {
   bin: string;

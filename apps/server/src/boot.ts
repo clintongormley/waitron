@@ -79,15 +79,14 @@ import {
   readNodeMode,
   readNodeModeRow,
   readPairLink,
-  readPinnedPrimaryKey,
   setSingletonRole,
 } from "@waitron/node-db";
 import { readVenueAuthority } from "./boot-peer-check.js";
 import { startSpareStore, type SpareStore } from "./spare-store.js";
 import {
+  copyNeededLink,
   mountLatchBoxStatus,
   takeFirstCopy,
-  whenCopyNeeded,
   type FirstCopyStatus,
 } from "./spare-copy.js";
 import { placeFirstCopy } from "./spare-copy-placement.js";
@@ -1922,38 +1921,33 @@ async function bootServer(
     await checkLeaf();
     const latchStore = await startServedStore();
     const copyAbort = new AbortController();
+    const copyLink =
+      latchStore && (await copyNeededLink({ db, node: store.node, nodeId: ownNodeId }));
     const firstCopy =
       latchStore &&
-      (await whenCopyNeeded({ db, node: store.node, nodeId: ownNodeId }, (link) => ({
-        done: (async () => {
-          const pin = await readPinnedPrimaryKey(store.node, ownNodeId);
-          // Adopt pins the main box's key in the transaction that writes the link.
-          if (pin === null) throw new Error("a joining spare holds no pinned main-box key");
-          return takeFirstCopy({
-            stateDir: config.stateDir,
-            node: store.node,
-            ring,
-            nodeId: ownNodeId,
-            litestreamBin: config.litestreamBin,
-            store: latchStore,
-            pinnedPrimaryKey: pin.publicKey,
-            venueId: link.venueId,
-            now,
-            log,
-            signal: copyAbort.signal,
-            readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv(base, config.stateDir)),
-            migrationsRoot: config.migrationsRoot,
-            restart,
-            report: (status) => (copyStatus = status),
-          });
-        })().catch((error: unknown) => {
-          if (!copyAbort.signal.aborted)
-            log("error", "spare.first_copy_failed", { errorCode: codeOf(error) });
-        }),
-      })));
+      copyLink &&
+      takeFirstCopy({
+        stateDir: config.stateDir,
+        node: store.node,
+        ring,
+        nodeId: ownNodeId,
+        litestreamBin: config.litestreamBin,
+        store: latchStore,
+        link: copyLink,
+        now,
+        log,
+        signal: copyAbort.signal,
+        readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv(base, config.stateDir)),
+        migrationsRoot: config.migrationsRoot,
+        restart,
+        report: (status) => (copyStatus = status),
+      }).catch((error: unknown) => {
+        if (!copyAbort.signal.aborted)
+          log("error", "spare.first_copy_failed", { errorCode: codeOf(error) });
+      });
     const stopFirstCopy = async () => {
       copyAbort.abort();
-      await firstCopy?.done;
+      await firstCopy;
     };
     undoOnFailure.push(stopFirstCopy);
     const server = startTradingListener(config, app, now, log);

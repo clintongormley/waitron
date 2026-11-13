@@ -22,7 +22,7 @@ import "./errors.js";
 import type { Logger } from "./logger.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { startStorePipe, type StorePipe } from "./spare-pipe.js";
-import { SPARE_STORE_BUCKET, SPARE_STORE_REGION } from "./spare-store.js";
+import { spareStoreBucket } from "./spare-store.js";
 import type { StreamHost } from "./stream-host.js";
 
 const INTERVAL_MS = 5_000;
@@ -44,6 +44,7 @@ export interface SpareJoinDeps {
   signal: AbortSignal;
 }
 
+/** On `setTimeout`, not `abortableSleep`: Vitest's fake timers do not reach `node:timers/promises`. */
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) return resolve();
@@ -170,14 +171,13 @@ function storeProbe(deps: SpareJoinDeps): Probe {
         log: deps.log,
       }),
     };
-    const store = createS3ObjectStore({
-      endpoint: open.pipe.loopbackUrl,
-      region: SPARE_STORE_REGION,
-      bucket: SPARE_STORE_BUCKET,
-      prefix: "",
-      accessKeyId: link.accessKeyId,
-      secretAccessKey: await readPairSecret(deps.node, deps.ring, deps.nodeId),
-    });
+    const store = createS3ObjectStore(
+      spareStoreBucket(
+        open.pipe.loopbackUrl,
+        link.accessKeyId,
+        await readPairSecret(deps.node, deps.ring, deps.nodeId),
+      ),
+    );
     const result = await probeBucket(store, undefined, { signal }).catch(
       (error: unknown) => ({ ok: false, reason: codeOf(error) }) as const,
     );
