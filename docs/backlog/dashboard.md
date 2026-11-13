@@ -91,7 +91,7 @@ printer keys.
 
 Move repeated bottom-message assembly, attempt, refusal-dismissal and render-before-focus
 plumbing in the remaining dashboard editors and the till's forms onto `FormFeedback` in
-`@waitron/ui`. The product editor, Department receipt and Venue privacy already use it;
+`@waitron/ui`. The product editor, Department receipt and Venue privacy also use it;
 keep their field-specific or guarded refusal focus local. Station refusal-dismissal remains
 open. Inventory each later batch before migrating it; leave single-job forms local.
 Preserve each form's field mapping and message behavior; keep domain-specific refusal clearing local. See the
