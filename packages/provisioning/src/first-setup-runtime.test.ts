@@ -33,6 +33,7 @@ async function fixture(
     environment?: "production" | "preproduction";
     imported?: boolean;
     standardBase?: string;
+    setBoxClock?: Parameters<typeof createFirstSetupModuleHost>[0]["setBoxClock"];
   } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "first-hour-facts-"));
@@ -62,6 +63,7 @@ async function fixture(
     environment: {},
     modules,
     database,
+    setBoxClock: options.setBoxClock,
     freezeConfiguration: async () => ({ digest: "b".repeat(64), newTaxpayer: false }),
   };
   const host = createFirstSetupModuleHost(args);
@@ -78,6 +80,33 @@ async function fixture(
     );
   return { host, bound, context, read, args, database, claim };
 }
+
+it("attributes a setup clock request to the administrator reserved for that attempt", async () => {
+  const received: unknown[] = [];
+  const f = await fixture({
+    setBoxClock: async (input, person) => {
+      received.push({ input, person: await person() });
+      return { status: "refused", reason: "synchronised" };
+    },
+  });
+  const input = {
+    offsetMs: 60_000,
+    agreesWithinMs: 30_000,
+    measuredAt: { wallMs: 1_794_571_200_000, monoMs: 1_000 },
+    reading: {
+      boxAt: "2026-11-13T12:00:00.000Z",
+      witnessAt: "2026-11-13T12:01:00.000Z",
+      uncertaintyMs: 40,
+    },
+  };
+  expect(await f.bound.setBoxClock!(f.context.binding, input)).toEqual({
+    status: "refused",
+    reason: "synchronised",
+  });
+  expect(received).toEqual([
+    { input, person: { id: (await f.host.store.read())!.frozen.administratorId, name: "Elena" } },
+  ]);
+});
 
 it("reads the frozen setup scope and real module history under the preparation hold", async () => {
   const f = await fixture();
