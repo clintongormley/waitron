@@ -1407,7 +1407,7 @@ describe("dish extras on kitchen tickets", () => {
       return (await readCancelledExtra(tx, child.rows[0]!.id, cfg.locale)).label;
     });
 
-    expect(label).toBe("Ham 0.150 kg");
+    expect(label).toBe("HAM 0.150 kg");
   });
 
   it("prints the physical amount of a weighted extra from its saved unit", async () => {
@@ -1456,8 +1456,8 @@ describe("dish extras on kitchen tickets", () => {
   });
 
   it.each([
-    ["es", "+ HAM 0,150 kg", "Ham 0,150 kg"],
-    ["en", "+ HAM 0.150 kg", "Ham 0.150 kg"],
+    ["es", "+ HAM 0,150 kg", "HAM 0,150 kg"],
+    ["en", "+ HAM 0.150 kg", "HAM 0.150 kg"],
   ])(
     "writes a weighted extra with the decimal mark of a %s kitchen",
     async (kitchenLanguage, printed, cancelled) => {
