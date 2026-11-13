@@ -40,7 +40,7 @@ import {
 import { boundObjectStore } from "./bounded-store.js";
 import { caCertPath } from "./box-secrets.js";
 import { startStorePipe, type StorePipe, type StorePipeDeps } from "./spare-pipe.js";
-import { SPARE_STORE_BUCKET, SPARE_STORE_REGION } from "./spare-store.js";
+import { spareStoreBucket } from "./spare-store.js";
 import type { Logger } from "./logger.js";
 import { credentialField } from "./credentials.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -328,14 +328,7 @@ export class StreamHost {
           return;
         }
         this.#pipe = pipe;
-        bucket = {
-          endpoint: pipe.loopbackUrl,
-          region: SPARE_STORE_REGION,
-          bucket: SPARE_STORE_BUCKET,
-          prefix: "",
-          accessKeyId: pair.accessKeyId,
-          secretAccessKey: pair.secretAccessKey,
-        };
+        bucket = spareStoreBucket(pipe.loopbackUrl, pair.accessKeyId, pair.secretAccessKey);
       }
       const venueDbPath = join(this.#deps.venueDir, VENUE_FILE);
       const supervisor = new StreamSupervisor({

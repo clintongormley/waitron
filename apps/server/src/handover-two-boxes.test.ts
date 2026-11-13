@@ -154,6 +154,7 @@ async function joined() {
     designated,
     accountKey: Buffer.alloc(32, 9).toString("base64"),
     credentialKeyRing: TOTP_KEY_RING,
+    wakeSpareJoin: () => {},
   });
 
   let standby!: { nodeId: string; publicKey: string };

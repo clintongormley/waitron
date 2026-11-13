@@ -196,6 +196,7 @@ async function bundleApp() {
     designated: { nodeId: PRIMARY },
     accountKey: "test-account",
     credentialKeyRing: TOTP_KEY_RING,
+    wakeSpareJoin: () => {},
   });
   return app;
 }

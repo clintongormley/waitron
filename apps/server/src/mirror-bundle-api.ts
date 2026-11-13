@@ -74,6 +74,8 @@ export interface MirrorBundleApiDeps {
   designated: AdoptResult;
   accountKey: string;
   credentialKeyRing: TotpKeyRing;
+  /** Called once a join's pending pair link has committed. */
+  wakeSpareJoin: () => void;
   now?: () => Date;
 }
 
@@ -225,6 +227,7 @@ export function mountMirrorBundleApi(
           });
           return assembled;
         });
+        deps.wakeSpareJoin();
 
         return c.json(bundle);
       };

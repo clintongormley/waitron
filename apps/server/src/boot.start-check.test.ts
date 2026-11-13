@@ -264,6 +264,7 @@ async function boot(
       designated: { nodeId },
       accountKey: Buffer.alloc(32, 9).toString("base64"),
       credentialKeyRing: TOTP_KEY_RING,
+      wakeSpareJoin: () => {},
     });
     const original = [...ALL_MODULES];
     (ALL_MODULES as WaitronModule[]).splice(

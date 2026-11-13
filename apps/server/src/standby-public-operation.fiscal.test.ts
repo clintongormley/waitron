@@ -216,6 +216,7 @@ async function reserve(standby = generateStandbyIdentity()) {
     accountKey: "test-account-key",
     designated: { nodeId: PRIMARY },
     credentialKeyRing: TOTP_KEY_RING,
+    wakeSpareJoin: () => {},
   });
   const response = await app.request("/management-api/mirror-bundle", {
     method: "POST",

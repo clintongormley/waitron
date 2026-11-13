@@ -194,6 +194,7 @@ async function joinedPair() {
     designated: { nodeId: mainId },
     accountKey: Buffer.alloc(32, 9).toString("base64"),
     credentialKeyRing: TOTP_KEY_RING,
+    wakeSpareJoin: () => {},
   });
 
   // The spare's chart entry names its own box name at a fixed port; its leaf covers that name,

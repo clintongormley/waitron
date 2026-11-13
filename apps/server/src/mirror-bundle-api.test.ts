@@ -230,6 +230,7 @@ function mountApp(
   log?: Logger,
   advertisedOrigin = "https://box.deli.test",
   now?: () => Date,
+  wakeSpareJoin: () => void = () => {},
 ): Hono {
   const app = new Hono();
   mountMirrorBundleApi(
@@ -244,6 +245,7 @@ function mountApp(
       designated,
       accountKey: Buffer.alloc(32, 9).toString("base64"),
       credentialKeyRing: TOTP_KEY_RING,
+      wakeSpareJoin,
       now,
     },
     log,
@@ -911,6 +913,31 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         peerPublicKey: standby.standbyPublicKey,
         storeUrl: "https://cloud.deli.test:7443",
       });
+    });
+
+    it("wakes the spare join once its pending link has committed, and not for a refused join", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const seen: Promise<string | undefined>[] = [];
+      const app = mountApp(designated, undefined, undefined, undefined, () =>
+        seen.push(readPairLink(suite.node, designated.nodeId).then((link) => link?.state)),
+      );
+
+      const refused = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyStoreUrl: "http://cloud.deli.test:7443",
+      });
+      expect(refused.status).toBe(400);
+      expect(seen).toHaveLength(0);
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+      expect(res.status).toBe(200);
+      expect(await Promise.all(seen)).toEqual(["pending"]);
     });
 
     it.each([

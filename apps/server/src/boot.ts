@@ -91,7 +91,7 @@ import {
 } from "./spare-copy.js";
 import { placeFirstCopy } from "./spare-copy-placement.js";
 import { startStoreListener } from "./spare-pipe.js";
-import { runSpareJoin } from "./spare-join.js";
+import { startSpareJoin } from "./spare-join.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import {
   recordSupersededAtStart,
@@ -3373,9 +3373,8 @@ async function bootServer(
   );
   health.readStream = () => streamHost.status();
   // Only the one main box records its spare.
-  const spareJoinController = new AbortController();
-  const spareJoinRun = acceptingSales
-    ? runSpareJoin({
+  const spareJoin = acceptingSales
+    ? startSpareJoin({
         db,
         node: store.node,
         ring,
@@ -3383,18 +3382,8 @@ async function bootServer(
         stateDir: config.stateDir,
         stream: streamHost,
         log,
-        signal: spareJoinController.signal,
       })
     : undefined;
-  const spareJoin =
-    spareJoinRun === undefined
-      ? undefined
-      : {
-          stop: () => {
-            spareJoinController.abort();
-            return spareJoinRun;
-          },
-        };
   undoOnFailure.push(async () => spareJoin?.stop());
 
   // Dashboard alerts, mounted after the backup supervisor exists because the backups source reads
@@ -3866,6 +3855,7 @@ async function bootServer(
         designated: config.node,
         accountKey: accountKey.toString("base64"),
         credentialKeyRing: totpKeyRing,
+        wakeSpareJoin: () => spareJoin?.wake(),
       },
       log,
     );

@@ -37,7 +37,7 @@ import {
   mintSelfSignedServerCert,
   reissueServerLeaf,
 } from "./self-signed-cert.js";
-import { runSpareJoin, type SpareJoinDeps } from "./spare-join.js";
+import { startSpareJoin, type SpareJoin, type SpareJoinDeps } from "./spare-join.js";
 import { startStoreListener, type StoreListener } from "./spare-pipe.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -49,7 +49,7 @@ const SPARE = "node-spare";
 const OTHER_SPARE = "node-spare-2";
 const PAIR = { accessKeyId: "waitron0123456789abcdef", secretAccessKey: "ab".repeat(32) };
 
-describe("runSpareJoin", () => {
+describe("startSpareJoin", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS], timeoutMs: 60_000 });
   let db: Database;
   let stateDir: string;
@@ -57,7 +57,7 @@ describe("runSpareJoin", () => {
   const spareKeys = generateNodeKeyPair();
   const otherKeys = generateNodeKeyPair();
   let logs: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
-  let running: { controller: AbortController; done: Promise<void> } | undefined;
+  let running: SpareJoin | undefined;
 
   beforeAll(async () => {
     db = suite.db;
@@ -84,8 +84,7 @@ describe("runSpareJoin", () => {
 
   afterEach(async () => {
     vi.useRealTimers();
-    running?.controller.abort();
-    await running?.done;
+    await running?.stop();
     running = undefined;
   });
 
@@ -107,9 +106,8 @@ describe("runSpareJoin", () => {
     (await db.select().from(nodes).where(eq(nodes.id, id)))[0] ?? null;
 
   function run(overrides: Partial<SpareJoinDeps> = {}) {
-    const controller = new AbortController();
     const reload = vi.fn(async () => {});
-    const done = runSpareJoin({
+    const join = startSpareJoin({
       db,
       node: suite.node,
       ring: RING,
@@ -118,11 +116,10 @@ describe("runSpareJoin", () => {
       stream: { reload },
       intervalMs: 5_000,
       log: (level, event, fields) => logs.push({ level, event, fields }),
-      signal: controller.signal,
       ...overrides,
     });
-    running = { controller, done };
-    return { reload, stop: async () => (controller.abort(), done) };
+    running = join;
+    return { reload, wake: () => join.wake(), stop: () => join.stop() };
   }
 
   it("writes the spare's row and starts streaming once its store answers", async () => {
@@ -286,6 +283,74 @@ describe("runSpareJoin", () => {
       state: "pending",
     });
     expect(r.reload).not.toHaveBeenCalled();
+  });
+
+  it("with no pending link, reads it once and asks nothing until a join wakes it", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const probe = vi.fn(async () => false);
+    const r = run({ probe });
+    await vi.advanceTimersByTimeAsync(10_000);
+    // A link written without a wake: a loop still polling would find it.
+    await link(SPARE, spareKeys.publicKey);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(probe).not.toHaveBeenCalled();
+
+    r.wake();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(probe).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(probe).toHaveBeenCalledTimes(2);
+  });
+
+  it("a join's wake asks its new link at once, not at the next interval", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await link(SPARE, spareKeys.publicKey);
+    const probed: string[] = [];
+    const probe = vi.fn(async (target: PairLink) => (probed.push(target.peerNodeId), false));
+    const r = run({ probe, intervalMs: 60_000 });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(probed).toEqual([SPARE]);
+
+    await link(OTHER_SPARE, otherKeys.publicKey, "https://spare-2:7443");
+    r.wake();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(probed).toEqual([SPARE, OTHER_SPARE]);
+  });
+
+  it("a wake given after a pass found no link, before it ended, is not lost", async () => {
+    let announced = false;
+    // `close` runs once the pass has read no link and before the loop decides to end: the
+    // joining route writes its link and wakes the loop there.
+    const probe = Object.assign(
+      vi.fn(async () => false),
+      {
+        close: async () => {
+          if (announced) return;
+          announced = true;
+          await link(SPARE, spareKeys.publicKey);
+          r.wake();
+        },
+      },
+    );
+    const r = run({ probe, intervalMs: 60_000 });
+    await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(1));
+    expect(announced).toBe(true);
+  });
+
+  it("ends once its link is streaming, and asks no link written after without a wake", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await link(SPARE, spareKeys.publicKey);
+    const probe = vi.fn(async () => true);
+    const r = run({ probe });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(r.reload).toHaveBeenCalledTimes(1);
+    expect((await readPairLink(suite.node, MAIN))?.state).toBe("streaming");
+
+    await withNodeTransaction(suite.node, (tx) => deletePairLinkTx(tx, MAIN));
+    await link(OTHER_SPARE, otherKeys.publicKey, "https://spare-2:7443");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(probe).toHaveBeenCalledTimes(1);
+    expect(await nodeRow(OTHER_SPARE)).toBeNull();
   });
 
   it("keeps asking after a pass that fails", async () => {
