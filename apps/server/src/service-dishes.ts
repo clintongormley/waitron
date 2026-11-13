@@ -1,5 +1,5 @@
 import { workingOrderLines, workingOrders, orderGroups, type Transaction } from "@waitron/db";
-import { and, eq, inArray, isNull, notInArray, or, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { VENUE_SERVICE } from "./modules.js";
 
 type Line = { id: string; parentLineId: string | null };
@@ -25,10 +25,12 @@ export async function serviceDishCondition(tx: Transaction, scope: SQL): Promise
       ...new Set(lines.map((line) => line.parentLineId ?? line.id)),
     ])),
   ];
+  // The NULL-parent index range includes historical top-level dishes.
+  const topLevel = isNull(sql`+${workingOrderLines.parentLineId}`);
   return lunches.length === 0
-    ? isNull(workingOrderLines.parentLineId)
+    ? topLevel
     : or(
-        and(isNull(workingOrderLines.parentLineId), notInArray(workingOrderLines.id, lunches)),
+        and(topLevel, notInArray(workingOrderLines.id, lunches)),
         inArray(workingOrderLines.parentLineId, lunches),
       )!;
 }
