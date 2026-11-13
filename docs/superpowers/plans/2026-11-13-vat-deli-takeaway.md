@@ -95,8 +95,8 @@ fingerprint, and raise the per-table row counts in `phases` (checked at line ~11
 2. Apply it in `seed.madrid-baseline.test.ts` beside `madridWithVatClassChanges` (line ~357), for
    both locales the test runs.
    _As built (2026-11-13): applied inside the per-phase loop for the seeded phase, after the column
-   renames, drops and folds, immediately before the row-count check, because it compares against
-   the seeded capture in the current schema._
+   renames, drops and folds, immediately before the row-count check, because it reads the live
+   seeded output, whose rows are in the current schema._
 3. Run every suite under `apps/server/scripts/demo-seed/` (`pnpm --filter @waitron/server exec
    vitest run scripts/demo-seed`) and the server typecheck. (The golden sales file
    `testing/spanish-practice-sales.golden.json` uses its own fixed product list,
