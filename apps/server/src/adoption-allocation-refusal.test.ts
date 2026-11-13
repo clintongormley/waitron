@@ -262,6 +262,7 @@ const JOIN_REFUSAL_CASES: Record<(typeof JOIN_REFUSALS)[number], Record<string, 
   "mirror.bucket_stream_active": {},
   "mirror.standby_name_taken": {},
   "mirror.spare_already_joined": {},
+  "backup.recovery_key_missing": {},
   "mirror.standby_series_unsupported": { module: "fiscal-verifactu" },
   "mirror.clocks_apart": {
     primaryAt: "2026-11-10T12:00:00.000Z",

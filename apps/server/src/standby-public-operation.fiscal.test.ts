@@ -4,6 +4,7 @@ import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/si
 import { Hono } from "hono";
 import { hashPassword } from "@waitron/identity";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { generateKeyPairSync } from "node:crypto";
@@ -98,6 +99,7 @@ beforeAll(async () => {
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "public-test-ca");
   await writeFile(join(stateDir, "tls", "ca.key"), "public-test-ca-key");
+  await holdRecoveryKey(stateDir);
 });
 afterAll(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });

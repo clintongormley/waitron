@@ -29,6 +29,7 @@ import { createTurns } from "./backup-turns.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { StreamHost, STREAM_PURPOSE } from "./stream-host.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ALL_MODULES } from "./modules.js";
@@ -235,6 +236,7 @@ async function boot(
     });
     await writeFile(join(dir, "tls", "ca.crt"), ca.caCertPem);
     await writeFile(join(dir, "tls", "ca.key"), ca.caKeyPem);
+    await holdRecoveryKey(dir);
     const [admin] = await suite.db
       .select({ id: persons.id })
       .from(persons)

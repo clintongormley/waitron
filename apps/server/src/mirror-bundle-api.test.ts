@@ -67,6 +67,9 @@ import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 import { writerBesideRequest } from "./testing/watched-scrypt.js";
 import { boxHostnameFor } from "./box-name.js";
+import { holdRecoveryKey } from "./testing/recovery-key.js";
+import { replaceBackupSettings } from "./backup-env-writer.js";
+import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -382,6 +385,7 @@ beforeAll(async () => {
   });
   await writeFile(join(stateDir, "tls", "ca.crt"), ca.caCertPem);
   await writeFile(join(stateDir, "tls", "ca.key"), ca.caKeyPem);
+  await holdRecoveryKey(stateDir);
 
   db = suite.db;
 }, 180_000);
@@ -1303,6 +1307,82 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         if (state !== "pending") await setPairLinkStateTx(tx, designated.nodeId, state);
       });
     }
+
+    // Every table's row count, the chart, the reservations and the `nodes` rows. The credential is
+    // checked before these refusals, and its sign-in leaves an ended `management_sessions` row.
+    async function venueState() {
+      const tables = await db.execute<{ name: string }>(
+        sql`select name from sqlite_master where type = 'table' and name not like '__drizzle%' and name != 'management_sessions' order by name`,
+      );
+      const counts: Record<string, unknown> = {};
+      for (const { name } of tables.rows) {
+        counts[name] = (
+          await db.execute<{ n: number }>(
+            sql.raw(`select count(*) as n from "${name.replaceAll('"', '""')}"`),
+          )
+        ).rows[0]!.n;
+      }
+      return { counts, ...(await reservedAndListed()), nodes: await db.select().from(nodes) };
+    }
+
+    describe("this box's recovery key", () => {
+      afterEach(async () => {
+        await holdRecoveryKey(stateDir);
+      });
+
+      it("refuses a join while this box holds no recovery key, reserving nothing and listing nobody", async () => {
+        const { designated, adminPersonId } = await setupVenue();
+        const app = mountApp(designated);
+        await replaceBackupSettings(stateDir, null);
+        const before = await venueState();
+
+        const res = await post(app, {
+          personId: adminPersonId,
+          password: ADMIN_PASSWORD,
+          ...validStandby(),
+        });
+
+        expect(res.status).toBe(409);
+        expect(await res.json()).toEqual({
+          error: { code: "backup.recovery_key_missing", params: {} },
+        });
+        expect(await venueState()).toEqual(before);
+        expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
+      });
+
+      it("a key under the length floor is refused the same way", async () => {
+        const { designated, adminPersonId } = await setupVenue();
+        const app = mountApp(designated);
+        await holdRecoveryKey(stateDir, "k".repeat(MIN_RECOVERY_KEY_LENGTH - 1));
+        const before = await venueState();
+
+        const res = await post(app, {
+          personId: adminPersonId,
+          password: ADMIN_PASSWORD,
+          ...validStandby(),
+        });
+
+        expect(res.status).toBe(409);
+        expect(await res.json()).toEqual({
+          error: { code: "backup.recovery_key_missing", params: {} },
+        });
+        expect(await venueState()).toEqual(before);
+      });
+
+      it("a key in backup.env lets the join through", async () => {
+        const { designated, adminPersonId } = await setupVenue();
+        const app = mountApp(designated);
+        await holdRecoveryKey(stateDir, "k".repeat(MIN_RECOVERY_KEY_LENGTH));
+
+        const res = await post(app, {
+          personId: adminPersonId,
+          password: ADMIN_PASSWORD,
+          ...validStandby(),
+        });
+
+        expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+      });
+    });
 
     it("refuses a second spare while one is joined, reserving nothing", async () => {
       const { designated, adminPersonId } = await setupVenue();

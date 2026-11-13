@@ -298,6 +298,17 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(isAppError(error) && error.params).toEqual({});
   });
 
+  it("passes on backup.recovery_key_missing, carrying no parameters", async () => {
+    const error = await refusalFor({
+      error: {
+        code: "backup.recovery_key_missing",
+        params: { detail: "https://primary.internal" },
+      },
+    });
+    expect(isAppError(error) && error.code).toBe("backup.recovery_key_missing");
+    expect(isAppError(error) && error.params).toEqual({});
+  });
+
   it("passes on mirror.standby_series_unsupported with a known module's name, and nothing else", async () => {
     const error = await refusalFor({
       error: {
