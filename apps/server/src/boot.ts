@@ -2246,15 +2246,6 @@ async function bootServer(
   // Resolved through the generic slot so `boot.ts` names no regime package
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
-  if (acceptingSales) {
-    await keepRunningDeclaration({
-      root: releaseDeclaration,
-      seat: enabledFiscal.declarations,
-      db,
-      now,
-      log,
-    });
-  }
   const startClock = startClockState();
   // Bound once the clock correction is built below; until then no set can be with the host.
   let clockSetting = () => false;
@@ -2428,6 +2419,15 @@ async function bootServer(
       { stop: () => Promise.resolve() },
       startLandingListener(landingHostFor(config, isMirror), log),
     );
+  }
+  if (acceptingSales) {
+    await keepRunningDeclaration({
+      root: releaseDeclaration,
+      seat: enabledFiscal.declarations,
+      db,
+      now,
+      log,
+    });
   }
   tradingAdmission.admit();
   const jobRunner = createJobRunner({ now, log });

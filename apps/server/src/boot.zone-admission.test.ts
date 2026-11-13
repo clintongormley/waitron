@@ -53,6 +53,7 @@ import { menuActivationJob } from "./menu-activation.js";
 import { readVenueDetails } from "./venue-details.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
+import { writeDeclarationFolder } from "./testing/declaration-folder.js";
 import {
   copyMigrationsRoot,
   withMockedKill,
@@ -60,7 +61,7 @@ import {
   withCapturedStdout,
   TRADING_STATE_DIR,
 } from "./testing/boot-harness.js";
-import type { StartedServer } from "./boot.js";
+import type { StartedServer, StartServerSeams } from "./boot.js";
 
 const listener = vi.hoisted(() => ({
   current: undefined as ReturnType<typeof import("@hono/node-server").serve> | undefined,
@@ -219,8 +220,8 @@ afterAll(async () => {
   if (TRADING_STATE_DIR !== undefined)
     await rm(TRADING_STATE_DIR, { recursive: true, force: true });
 });
-async function boot() {
-  server = await fixture.startServer(env);
+async function boot(seams?: StartServerSeams) {
+  server = await fixture.startServer(env, {}, seams);
   if (!listener.current!.listening) await once(listener.current!, "listening");
   url = `http://127.0.0.1:${(listener.current!.address() as AddressInfo).port}`;
   return server;
@@ -433,6 +434,14 @@ describe("startup zone admission", () => {
       401,
       "management_session.required",
     );
+  });
+  it("keeps no declaration on a primary that starts in repair", async () => {
+    await rawZone("Invalid/Zone");
+    const declaration = join(scratch, "declaration");
+    await writeDeclarationFolder(declaration);
+    await boot({ declarationRoot: declaration });
+    expect((await (await request("/api/node")).json()).acceptingSales).toBe(false);
+    expect(suite.db.all(sql`select version from declaraciones_responsables`)).toEqual([]);
   });
   it("keeps password login generic, and permits real login/session/logout in repair mode", async () => {
     await rawZone("Invalid/Zone");
