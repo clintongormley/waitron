@@ -13,7 +13,7 @@ const compliant =
   'static override styles = [baseStyles, pageTitleStyles, css``]; html`<h1 class="title">Orders</h1>`';
 
 function violations(path: string, source: string): string[] {
-  source = source.replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, "");
+  source = source.replace(/(^|\s)\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, "$1");
   if (excluded.has(path) || path.startsWith("packages/fiscal-verifactu/") || !/<h1\b/.test(source))
     return [];
   const failures: string[] = [];
@@ -43,6 +43,12 @@ function violations(path: string, source: string): string[] {
 
 it.each([
   ["adopted title", screen, compliant, []],
+  [
+    "image MIME text is not a comment",
+    screen,
+    'static styles = [baseStyles]; html`<input accept="image/*"><h1>Images</h1>`; css`h1 { font-size: var(--wt-font-size-lg); }`; /** Image settings. */',
+    ["adopt pageTitleStyles", "remove local title size"],
+  ],
   ["typed style list", screen, compliant.replace("styles =", "styles: CSSResultGroup ="), []],
   [
     "style after local CSS",
@@ -56,7 +62,12 @@ it.each([
     compliant + "css`.title-row { font-size: var(--wt-font-size-sm); }`",
     [],
   ],
-  ["comment-only H1", screen, "// A page uses an <h1>.\nstatic styles = [baseStyles];", []],
+  [
+    "comment-only H1",
+    screen,
+    "/** A page uses an <h1>. */\n// A page uses an <h1>.\nstatic styles = [baseStyles];",
+    [],
+  ],
   [
     "style-only screen",
     screen,
