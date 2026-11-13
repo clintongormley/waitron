@@ -537,7 +537,7 @@ Status changes:
   answers a new code, `ticket_item.not_found` 404; a body `to` outside the transition table
   (`queued`, garbage, missing, a non-string) answers `management.request_invalid` on `to`, 400,
   screened once, in `advanceTicketItem`; a skip, repeat or backwards move on an existing item
-  stays `ticket.invalid_transition` 409. (2026-11-13, R2 proposal 5: Ready back to Preparing is now accepted until the dish is served.) `device.pairing_hold_lapsed` keeps its code and answers
+  stays `ticket.invalid_transition` 409. (2026-11-13, R2 proposal 5: Ready back to Preparing is now accepted while the dish is still on its station's screen; once it is fully served, or its order is collected or cancelled, it stays `ticket.invalid_transition` 409.) `device.pairing_hold_lapsed` keeps its code and answers
   404 on `/pairing-mode/holds/:holdId/renew` (path) and 400 on `/device-join-requests/:id/check`
   (body `holdId`), each under its own boundary. The till and dashboard read these codes, not the
   status; the till's station screen shows no message for any refusal but a full disk, and the

@@ -489,7 +489,7 @@ Preparing → Ready as today. Their new **Coming up** column holds held and requ
 The pass's Fire is the only route that moves requested lines to Waiting. It is checked on the
 server: the device must have a pass screen that sees each line it releases, station and zone; today
 the device fire route (`apps/server/src/device-levers.ts`) checks the zone only.
-_2026-11-13: a station move to a station that does not wait also moves a requested line to Waiting (R2 proposal 2, which the owner answered "yes" on 2026-11-11)._
+_2026-11-13: a station move to a station that does not wait also moves a requested line to Waiting (R2 proposal 2, which the owner answered "yes" on 2026-11-11 in the watcher window, desk question 20261111-1715-M-r2-proposals)._
 
 **Safety net on the dashboard.** When a station waits for the pass and, in some zone, no pass screen
 sees that station's dishes, the stations page warns. Example: "Grill and Cold wait for the pass, but no pass screen
