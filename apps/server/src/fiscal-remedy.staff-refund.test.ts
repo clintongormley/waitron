@@ -578,3 +578,33 @@ it.each(["production", "preproduction"] as const)(
     expect(await fiscalFacts()).toEqual(before);
   },
 );
+
+it("writes a correction record under the default policy for a refused invoice whose description alone changes", async () => {
+  const originalCase = await rejectOriginal();
+  const before = await fiscalFacts();
+  const response = await remedy({
+    kind: "record-correction",
+    registroId: originalId,
+    caseId: originalCase.id,
+    actionKey: "default-policy-correction",
+    reason: "Correct the description AEAT refused",
+    facts: { description: "Corrected restaurant service" },
+  });
+  expect(response).toMatchObject({ status: 200 });
+  const after = await fiscalFacts();
+  expect(after.records.slice(0, before.records.length)).toEqual(before.records);
+  expect(after.records).toHaveLength(before.records.length + 1);
+  const original = before.records.find((row) => row.id === originalId)!;
+  expect(after.records.at(-1)).toMatchObject({
+    id: response.json.registroId,
+    correctsRegistroId: originalId,
+    numSerieFactura: original.numSerieFactura,
+    descripcionOperacion: "Corrected restaurant service",
+    importeTotal: original.importeTotal,
+    subsanacion: "S",
+    rechazoPrevio: "X",
+  });
+  expect(after.cases.find((row) => row.id === originalCase.id)).toMatchObject({
+    status: "resolved",
+  });
+});

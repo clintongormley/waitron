@@ -442,13 +442,50 @@ it("appends a description correction through HTTP with the server's clock, insta
 });
 
 it("names the case by its record when the body sends no caseId", async () => {
+  const saleId = await seedSale(suite.db, node, 2);
+  const other = await withTransaction(suite.db, async (tx) => {
+    const record = await appendToChain(
+      tx,
+      node.nodeId,
+      altaFor(node, saleId, 2, 2, "preproduction"),
+    );
+    await tx
+      .insert(envios)
+      .values({ registroId: record.id, estado: "rechazado", codigoError: "1161" });
+    return openFilingCase(tx, {
+      registroId: record.id,
+      cause: "fiscal.registro_rechazado",
+      evidence: { codigo: 1161, mensaje: null, csv: null },
+      now: NOW,
+    });
+  });
   const { caseId, ...withoutCase } = body;
-  const res = await send(withoutCase);
-  expect(res.status).toBe(200);
-  const result = (await res.json()) as { registroId: string; eventId: string };
-  expect(await suite.db.select().from(filingCaseEvents)).toEqual([
-    expect.objectContaining({ id: result.eventId, caseId, remedyRegistroId: result.registroId }),
-  ]);
+  // Both records have an open case, so a lookup that ignored the record names the wrong one for one of them.
+  const first = await send(withoutCase);
+  expect(first.status).toBe(200);
+  const firstResult = (await first.json()) as { registroId: string; eventId: string };
+  const second = await send({
+    ...withoutCase,
+    registroId: other.registroId,
+    actionKey: "http-other-record",
+  });
+  expect(second.status).toBe(200);
+  const secondResult = (await second.json()) as { registroId: string; eventId: string };
+  expect(await suite.db.select().from(filingCaseEvents)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: firstResult.eventId,
+        caseId,
+        remedyRegistroId: firstResult.registroId,
+      }),
+      expect.objectContaining({
+        id: secondResult.eventId,
+        caseId: other.id,
+        remedyRegistroId: secondResult.registroId,
+      }),
+    ]),
+  );
+  expect(await suite.db.select().from(filingCaseEvents)).toHaveLength(2);
 });
 
 it("refuses a body with no caseId whose record has no case, writing nothing", async () => {

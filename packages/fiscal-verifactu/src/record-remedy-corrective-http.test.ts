@@ -296,12 +296,34 @@ it("creates one R5 through HTTP with host generation and operator origin, keepin
 
 it("names the case by its record when the body sends no caseId", async () => {
   const { caseId, ...withoutCase } = body;
-  const res = await send(withoutCase);
-  expect(res.status).toBe(200);
-  const result = (await res.json()) as { registroId: string; eventId: string };
-  expect(await suite.db.select().from(filingCaseEvents)).toEqual([
-    expect.objectContaining({ id: result.eventId, caseId, remedyRegistroId: result.registroId }),
-  ]);
+  await anotherOriginal("preproduction");
+  const other = { registroId: body.registroId, caseId: body.caseId };
+  // Both records have an open case, so a lookup that ignored the record names the wrong one for one of them.
+  const first = await send(withoutCase);
+  expect(first.status).toBe(200);
+  const firstResult = (await first.json()) as { registroId: string; eventId: string };
+  const second = await send({
+    ...withoutCase,
+    registroId: other.registroId,
+    actionKey: "http-corrective-other-record",
+  });
+  expect(second.status).toBe(200);
+  const secondResult = (await second.json()) as { registroId: string; eventId: string };
+  expect(await suite.db.select().from(filingCaseEvents)).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: firstResult.eventId,
+        caseId,
+        remedyRegistroId: firstResult.registroId,
+      }),
+      expect.objectContaining({
+        id: secondResult.eventId,
+        caseId: other.caseId,
+        remedyRegistroId: secondResult.registroId,
+      }),
+    ]),
+  );
+  expect(await suite.db.select().from(filingCaseEvents)).toHaveLength(2);
 });
 
 it("replays the saved HTTP decision after clock, outcome and JSON key order change", async () => {
@@ -528,12 +550,13 @@ it("replays omitted wholeInvoice as false without another number", async () => {
 it.each(["seriesId", "operationDescription"])("requires a nonblank correction %s", async (key) => {
   await refuses({ ...body, correction: { ...correction, [key]: " " } });
 });
-async function productionOriginal() {
+/** Records another sale in `environment`, refused, with a case of its own, and points `body` at it. */
+async function anotherOriginal(environment: "production" | "preproduction") {
   const backend = new VerifactuBackend({
     db: suite.db,
     clock: steadyClock,
-    environment: "production",
-    deploymentEnvironment: "production",
+    environment,
+    deploymentEnvironment: environment,
     resolveClient: () => {
       throw new Error("This test must not contact AEAT");
     },
@@ -583,7 +606,7 @@ it("binds a production-host synthetic correction to production records", async (
   vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");
   vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "00000000T");
   vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "1 Example Street, 00000 Nowhere (Province), Spain");
-  await productionOriginal();
+  await anotherOriginal("production");
   generation.environment = "production";
   const res = await send();
   expect(res.status).toBe(200);
@@ -619,7 +642,7 @@ it("refuses a production corrective invoice while no producer is set, writing no
   vi.stubEnv("WAITRON_PRODUCER_NAME", "");
   vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "");
   vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "");
-  await productionOriginal();
+  await anotherOriginal("production");
   generation.environment = "production";
   const before = await snapshot();
   const res = await send();
