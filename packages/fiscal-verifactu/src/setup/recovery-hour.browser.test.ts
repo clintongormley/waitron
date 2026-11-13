@@ -153,12 +153,12 @@ const fakeClock = () =>
 const WHY_WAIT = "Waiting to confirm the time, so no invoice series is ever repeated.";
 const NOTHING_TO_DO = "Nothing to do; keep this page open.";
 const WHY_SECOND =
-  "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.";
+  "So no invoice series is ever repeated, the server checks its time over the internet, or you confirm it against this device's time.";
 const ON_BOX = "This screen is on the box itself, so it does not count.";
 const RESTORE_DO =
-  "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup.";
+  "Let the box keep its time over the internet, or open this page on a phone or laptop on the venue's network that has the backup.";
 const RESTORE_ENDS =
-  "It carries on by itself once the box reaches the internet, or on the other device if you carry on there.";
+  "It carries on by itself once the box keeps its time over the internet, or on the other device if you carry on there.";
 const WHY_REFUSED = "No invoice series is created without a confirmed time";
 const DIFFER = "It is very important that the server time is set correctly. Which time is correct:";
 const noSecondClock = {
@@ -1301,15 +1301,15 @@ it("explains each wait in Spanish with the restore page's words", async () => {
     await ready(el);
     await vi.waitFor(() =>
       expect(text(el)).toContain(
-        "Conecta el servidor a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
+        "Deja que el servidor se ponga en hora por internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
       ),
     );
     expect(text(el)).toContain(
-      "Para que ninguna serie de facturas se repita, la hora del servidor se compara con la de otro aparato o con internet.",
+      "Para que ninguna serie de facturas se repita, el servidor comprueba su hora por internet, o tú la confirmas con la hora de este dispositivo.",
     );
     expect(text(el)).toContain("Esta pantalla está en el propio servidor y no cuenta.");
     expect(text(el)).toContain(
-      "Sigue sola cuando el servidor tenga internet, o en el otro aparato si sigues allí.",
+      "Sigue sola cuando el servidor se ponga en hora por internet, o en el otro aparato si sigues allí.",
     );
     state.decision = {
       ...clock,
@@ -1656,9 +1656,9 @@ async function mountPromotion(prepare: Mock<(proposal: unknown) => Promise<unkno
 const promotionActions = (prepare: Mock<(proposal: unknown) => Promise<unknown>>) =>
   prepare.mock.calls.map(([proposal]) => (proposal as { action: string }).action);
 const SWITCH_PAGE_DO =
-  "Switch from a till or phone on the venue's network, or connect the box to the internet.";
+  "Switch from a till or phone on the venue's network, or let the box keep its time over the internet.";
 const SWITCH_PAGE_ENDS =
-  "It carries on by itself once the box reaches the internet, while this page stays open.";
+  "It carries on by itself once the box keeps its time over the internet, while this page stays open.";
 
 it("a handover start shows the details tick and Proceed, sends nothing before Proceed, then carries on by itself to the series", async () => {
   let decision = noSecondClock;
@@ -1884,11 +1884,11 @@ it("a Spanish switch page calls the box «servidor», never «equipo»", async (
   await proceed(el);
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "Cambia desde una caja o un móvil del local, o conecta el servidor a internet.",
+      "Cambia desde una caja o un móvil del local, o deja que el servidor se ponga en hora por internet.",
     ),
   );
   expect(text(el)).toContain(
-    "Sigue sola cuando el servidor tenga internet, mientras esta página siga abierta.",
+    "Sigue sola cuando el servidor se ponga en hora por internet, mientras esta página siga abierta.",
   );
   expect(text(el)).not.toMatch(/equipo/i);
   expect(el.refusalMessage({ code: "authorization.not_permitted", params: {} })).toContain(
@@ -1899,12 +1899,12 @@ it("a Spanish switch page calls the box «servidor», never «equipo»", async (
 it.each([
   [
     "en",
-    "Connect the box to the internet, or open this handover page on another phone or laptop.",
+    "Let the box keep its time over the internet, or open this handover page on another phone or laptop.",
     "Keep this page open, or continue on the other device.",
   ],
   [
     "es",
-    "Conecta el servidor a internet o abre esta página de traspaso en otro móvil o portátil.",
+    "Deja que el servidor se ponga en hora por internet o abre esta página de traspaso en otro móvil o portátil.",
     "Mantén esta página abierta o continúa en el otro dispositivo.",
   ],
 ] as const)(

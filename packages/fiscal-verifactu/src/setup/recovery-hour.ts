@@ -39,26 +39,26 @@ const promotionWords = {
   emergency: {
     en: {
       secondClockDo:
-        "Switch from a till or phone on the venue's network, or connect the box to the internet.",
+        "Switch from a till or phone on the venue's network, or let the box keep its time over the internet.",
       secondClockEnds:
-        "It carries on by itself once the box reaches the internet, while this page stays open.",
+        "It carries on by itself once the box keeps its time over the internet, while this page stays open.",
     },
     es: {
       secondClockDo:
-        "Cambia desde una caja o un móvil del local, o conecta el servidor a internet.",
+        "Cambia desde una caja o un móvil del local, o deja que el servidor se ponga en hora por internet.",
       secondClockEnds:
-        "Sigue sola cuando el servidor tenga internet, mientras esta página siga abierta.",
+        "Sigue sola cuando el servidor se ponga en hora por internet, mientras esta página siga abierta.",
     },
   },
   controlled: {
     en: {
       secondClockDo:
-        "Connect the box to the internet, or open this handover page on another phone or laptop.",
+        "Let the box keep its time over the internet, or open this handover page on another phone or laptop.",
       secondClockEnds: "Keep this page open, or continue on the other device.",
     },
     es: {
       secondClockDo:
-        "Conecta el servidor a internet o abre esta página de traspaso en otro móvil o portátil.",
+        "Deja que el servidor se ponga en hora por internet o abre esta página de traspaso en otro móvil o portátil.",
       secondClockEnds: "Mantén esta página abierta o continúa en el otro dispositivo.",
     },
   },
@@ -97,9 +97,9 @@ const strings = {
     missing: "Complete recovery before continuing.",
     key: "Check the key for this backup.",
     secondClockDo:
-      "Connect the box to the internet, or open this page on a phone or laptop on the venue's network that has the backup.",
+      "Let the box keep its time over the internet, or open this page on a phone or laptop on the venue's network that has the backup.",
     secondClockEnds:
-      "It carries on by itself once the box reaches the internet, or on the other device if you carry on there.",
+      "It carries on by itself once the box keeps its time over the internet, or on the other device if you carry on there.",
     clear: "Clear",
   },
   es: {
@@ -125,9 +125,9 @@ const strings = {
     missing: "Completa la recuperación antes de continuar.",
     key: "Revisa la clave de esta copia.",
     secondClockDo:
-      "Conecta el servidor a internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
+      "Deja que el servidor se ponga en hora por internet, o abre esta página desde un móvil o un portátil del local que tenga la copia.",
     secondClockEnds:
-      "Sigue sola cuando el servidor tenga internet, o en el otro aparato si sigues allí.",
+      "Sigue sola cuando el servidor se ponga en hora por internet, o en el otro aparato si sigues allí.",
     clear: "Borrar",
   },
 };

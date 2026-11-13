@@ -183,12 +183,12 @@ const actionsOf = (calls: { action: string; value?: unknown }[]) =>
 const WHY_WAIT = "Waiting to confirm the time, so no invoice series is ever repeated.";
 const NOTHING_TO_DO = "Nothing to do; keep this page open.";
 const WHY_SECOND =
-  "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.";
+  "So no invoice series is ever repeated, the server checks its time over the internet, or you confirm it against this device's time.";
 const ON_BOX = "This screen is on the box itself, so it does not count.";
 const SETUP_DO =
-  "Connect the box to the internet, or open this page on a phone or till on the venue's network and enter the setup password.";
+  "Let the box keep its time over the internet, or open this page on a phone or till on the venue's network and enter the setup password.";
 const SETUP_ENDS =
-  "It carries on by itself once the box reaches the internet, or on the phone if you carry on there.";
+  "It carries on by itself once the box keeps its time over the internet, or on the phone if you carry on there.";
 const WHY_REFUSED = "No invoice series is created without a confirmed time";
 const DIFFER = "It is very important that the server time is set correctly. Which time is correct:";
 const fakeClock = () =>

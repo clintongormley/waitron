@@ -747,7 +747,7 @@ it("a command whose internet time is gone by activation stops before activating"
   expect(f.output.slice(-3)).toEqual([
     "internet: unavailable",
     "No series is made without a confirmed time, so none is ever repeated.",
-    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
   ]);
   expect(f.calls).toEqual([]);
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");

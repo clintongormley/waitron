@@ -380,6 +380,46 @@ describe("waitron-restore restore", () => {
     ]);
   });
 
+  it.each(["second_clock_missing", "clock_disagreement", "clock_unconfirmed"])(
+    "says the box could not confirm its time when the series check refuses for %s",
+    async (reason) => {
+      const dir = mkdtempSync(join(tmpdir(), "restore-command-clock-"));
+      const artifactPath = await makeArtifact(dir);
+      const out: string[] = [];
+      const code = await runRestore({
+        argv: ["restore", artifactPath],
+        env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+        lockVenue: unlockedVenue,
+        out: (line) => out.push(line),
+        restore: async () => {
+          throw new AppError("sif.allocation_invalid", { reason });
+        },
+      });
+      expect(code).toBe(1);
+      expect(out).toEqual([
+        COLD_RESTORE_NOTICE,
+        "The box could not confirm its time, so it made no invoice series. Let the box keep its time over the internet, or restore from the restore page on a phone or laptop on the venue's network.",
+      ]);
+    },
+  );
+
+  it("keeps the fixed line for a series refusal that is not about the clock", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-allocation-"));
+    const artifactPath = await makeArtifact(dir);
+    const out: string[] = [];
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+      lockVenue: unlockedVenue,
+      out: (line) => out.push(line),
+      restore: async () => {
+        throw new AppError("sif.allocation_invalid", { reason: "clock_stale" });
+      },
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([COLD_RESTORE_NOTICE, "restore failed"]);
+  });
+
   it("reports an AppError outside restore/recovery/backup namespaces generically, never rethrown", async () => {
     const dir = mkdtempSync(join(tmpdir(), "restore-command-other-apperror-"));
     const artifactPath = await makeArtifact(dir);

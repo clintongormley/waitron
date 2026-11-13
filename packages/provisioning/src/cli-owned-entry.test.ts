@@ -167,7 +167,7 @@ syncBuiltinESMExports();\n`,
   expect({ code, errors }).toEqual({ code: 1, errors: "" });
   expect(output).toContain("No series is made without a confirmed time, so none is ever repeated.");
   expect(output).toContain(
-    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
   );
   expect(output).not.toContain("[no/yes/unknown]");
   expect(answered.size).toBe(0);

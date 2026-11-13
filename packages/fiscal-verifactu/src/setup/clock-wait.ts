@@ -60,7 +60,7 @@ export const clockWaitStrings = {
     nothingToDo: "Nothing to do; keep this page open.",
     continuesIn: "Continues in",
     whySecondClock:
-      "So no invoice series is ever repeated, the box's time is compared with another device's or the internet's.",
+      "So no invoice series is ever repeated, the server checks its time over the internet, or you confirm it against this device's time.",
     onBox: "This screen is on the box itself, so it does not count.",
     whichCorrect:
       "It is very important that the server time is set correctly. Which time is correct:",
@@ -96,7 +96,7 @@ export const clockWaitStrings = {
     nothingToDo: "No hace falta hacer nada; deja esta página abierta.",
     continuesIn: "Sigue en",
     whySecondClock:
-      "Para que ninguna serie de facturas se repita, la hora del servidor se compara con la de otro aparato o con internet.",
+      "Para que ninguna serie de facturas se repita, el servidor comprueba su hora por internet, o tú la confirmas con la hora de este dispositivo.",
     onBox: "Esta pantalla está en el propio servidor y no cuenta.",
     whichCorrect: "Es muy importante que la hora del servidor sea correcta. ¿Cuál es la correcta?",
     theServer: "El servidor",

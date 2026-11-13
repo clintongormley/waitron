@@ -107,7 +107,7 @@ async function reviewCommandClock(
     actions.output("No series is made without a confirmed time, so none is ever repeated.");
     if (!comparison.clock.secondClock)
       actions.output(
-        "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+        "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
       );
     return { status: "cancelled" };
   }

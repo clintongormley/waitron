@@ -200,7 +200,7 @@ it("with only the box's clock the terminal explains and cancels without a questi
     "No series is made without a confirmed time, so none is ever repeated.",
   );
   expect(f.output).toContain(
-    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
   );
   expect(f.prompts).toEqual([]);
   await expect(
@@ -275,7 +275,7 @@ it("when the internet's clock disagrees the terminal explains and cancels withou
     "No series is made without a confirmed time, so none is ever repeated.",
   );
   expect(f.output).not.toContain(
-    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+    "Let the box keep its time over the internet, or set up from a phone or laptop on the venue's network.",
   );
   expect(f.prompts).toEqual([]);
   await expect(
