@@ -57,13 +57,15 @@ export class GuestMenuPreview extends LitElement {
   async #load(language?: string) {
     const generation = ++this.#generation;
     this.#language = language;
-    this.#clear();
+    URL.revokeObjectURL(this.source);
+    this.source = "";
     this.loading = true;
     this.error = "";
     try {
       const answer = await this.api.getGuestMenuPreview(this.menuId, language);
       if (generation !== this.#generation) return;
       this.answer = answer;
+      this.#language = answer?.language;
       this.source = answer
         ? URL.createObjectURL(new Blob([answer.html], { type: "text/html" }))
         : "";
@@ -101,19 +103,14 @@ export class GuestMenuPreview extends LitElement {
             ? html`<wt-combobox
                   name="guest-language"
                   label=${t("menus.guest_language")}
-                  .value=${this.answer.language}
-                  .disabled=${this.loading}
+                  .value=${this.#language ?? this.answer.language}
                   .options=${this.answer.languages.map((value) => ({ value, label: languageDisplayName(value, currentLocale()) }))}
                   @wt-change=${(event: CustomEvent<{ value: string }>) => {
                     event.stopPropagation();
                     void this.#load(event.detail.value);
                   }}
                 ></wt-combobox>
-                <iframe
-                  title=${t("menus.guest_preview")}
-                  sandbox="allow-same-origin"
-                  .src=${this.source}
-                ></iframe>`
+                ${this.source ? html`<iframe title=${t("menus.guest_preview")} sandbox="allow-same-origin" .src=${this.source}></iframe>` : nothing}`
             : !this.loading && !this.error
               ? html`<p>${t("menus.guest_unpublished")}</p>`
               : nothing

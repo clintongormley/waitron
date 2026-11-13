@@ -44,6 +44,10 @@ export function renderGuestMenuPage(
             .join("");
     return `<div class="declarations" lang="${language}">${allergens}${value.dietary.map((code) => mark(`diet-${code}`, label(code))).join("")}</div>`;
   };
+  const portion = (amount: string) => {
+    const places = (amount.split(".")[1] ?? "").replace(/0+$/, "").length;
+    return formatDecimalInput(toScale(decimal(amount), places), menu.language);
+  };
   const price = (amount: string, unit: string) => `${esc(amount)} <small>/ ${esc(unit)}</small>`;
   const walk = (members: GuestMember[]): string =>
     members
@@ -59,7 +63,7 @@ export function renderGuestMenuPage(
             : `${formatMoney(member.price.min, menu.language)}–${formatMoney(member.price.max, menu.language)}`;
         return `<article><div class="line"><h3>${esc(member.name)}</h3><span>${price(range, member.unit)}</span></div>${member.description ? `<p>${esc(member.description)}</p>` : ""}${declarations(member)}
       ${member.variants.map((v) => `<div class="choice"><div class="line"><span>${esc(v.name)}</span><span>${price(formatMoney(v.price, menu.language), v.unit)}</span></div>${declarations(v)}</div>`).join("")}
-      ${member.modifiers.map((m) => `<div class="choice"><h4>${esc(m.name)}</h4>${m.kind === "options" ? `<p>${m.labels.map(esc).join(" · ")}</p>` : m.items.map((extra) => `<div class="line"><span>${esc(extra.name)} <small>${esc(formatDecimalInput(toScale(decimal(extra.portion), (extra.portion.split(".")[1] ?? "").replace(/0+$/, "").length), menu.language))} ${esc(extra.unit)}</small></span><span>${esc(formatMoney(extra.price, menu.language))}</span></div>${declarations(extra)}`).join("")}</div>`).join("")}</article>`;
+      ${member.modifiers.map((m) => `<div class="choice"><h4>${esc(m.name)}</h4>${m.kind === "options" ? `<p>${m.labels.map(esc).join(" · ")}</p>` : m.items.map((extra) => `<div class="line"><span>${esc(extra.name)} <small>${esc(portion(extra.portion))} ${esc(extra.unit)}</small></span><span>${esc(formatMoney(extra.price, menu.language))}</span></div>${declarations(extra)}`).join("")}</div>`).join("")}</article>`;
       })
       .join("");
   const body = walk(menu.members);
@@ -68,6 +72,7 @@ export function renderGuestMenuPage(
       .filter((code) => code.startsWith("diet-") === diet)
       .map((code) => `<li>${glyph(code)} ${esc(label(code.replace(/^diet-/, "")))}</li>`)
       .join("");
+  const dietKey = key(true);
   const tokens = Object.entries(GUIDE_PAGE_TOKENS)
     .map(([name, value]) => `${name}:${typeof value === "string" ? value : value[0]}`)
     .join(";");
@@ -92,5 +97,5 @@ svg{width:var(--wt-space-4);height:var(--wt-space-4);fill:currentColor;vertical-
 small{color:var(--wt-color-text-muted)}
 [popover]{color:var(--wt-color-text);background:var(--wt-color-bg);padding:var(--wt-space-5);border:1px solid var(--wt-color-border);border-radius:var(--wt-radius-md);max-width:calc(100% - var(--wt-space-6))}
 footer{margin-top:var(--wt-space-6)}footer li{margin-bottom:var(--wt-space-2)}
-</style></head><body><main><header><p>${esc(venueName)}</p><h1>${esc(menu.name)}</h1></header><nav aria-label="${esc(menu.name)}">${sections.map((s) => `<a href="#${s.id}">${esc(s.name)}</a>`).join("")}</nav>${body}<footer lang="${language}"><h2>${esc(words.key!)}</h2><p>${esc(words.keyLanguage!)}</p><p>${esc(words.note!)}</p><ul>${key(false)}</ul><h2>${esc(words.diet!)}</h2><ul>${key(true)}</ul></footer></main></body></html>`;
+</style></head><body><main><header><p>${esc(venueName)}</p><h1>${esc(menu.name)}</h1></header><nav aria-label="${esc(menu.name)}">${sections.map((s) => `<a href="#${s.id}">${esc(s.name)}</a>`).join("")}</nav>${body}<footer lang="${language}"><h2>${esc(words.key!)}</h2><p>${esc(words.keyLanguage!)}</p><p>${esc(words.note!)}</p><ul>${key(false)}</ul>${dietKey ? `<h2>${esc(words.diet!)}</h2><ul>${dietKey}</ul>` : ""}</footer></main></body></html>`;
 }
