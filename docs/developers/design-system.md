@@ -6554,7 +6554,8 @@ Counter bills use the same window for their first and remaining payments.
 
 On an open table bill and a Counter bill, Whole bill also offers Close as deferred payment as a
 secondary action; a presented bill's Pay window offers it under its whole-amount line. It is
-hidden when the device profile lacks the action, the bill has payments or owes nothing, and
+hidden when the device profile lacks the action, the bill still holds money (a payment pending, or
+received and not all given back) or owes nothing, and
 disabled with its reason shown until it can be used. It opens a confirmation window
 (`till-deferred-close-dialog`) listing the bill, the invoice and the total above the final-close
 sentence, with Cancel, which returns to the Pay window it came from (after a send that got no

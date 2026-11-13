@@ -709,7 +709,7 @@ la cuenta**). Comprueba la cuenta, la factura y el total, y confirma. Waitron em
 definitivamente. No registra ningún pago de la cuenta, ni ahora ni después, y la cuenta muestra
 **Pago aplazado** desde entonces.
 
-El botón solo aparece en una cuenta sin ningún pago. En la cuenta de una mesa, todos los platos
+El botón solo aparece en una cuenta sin nada cobrado. En la cuenta de una mesa, todos los platos
 tienen que estar servidos o cancelados antes; en el mostrador, la cuenta tiene que llevar factura
 simplificada. Un responsable lo permite en un dispositivo activando **Cierra cuentas
 como pago aplazado** en el perfil del dispositivo, en **Perfiles de dispositivo** del panel.

@@ -1,7 +1,7 @@
 # A275 Task 7: staff close a whole bill as a deferred payment from the till's Pay window
 
 **Status: proposed 2026-11-11; revised 2026-11-12 after one fresh-context review (no critical, four
-important findings, all folded in). PR A and B1 built as one pull request (2026-11-12); B2 built (feat/a275-deferred-presented, 2026-11-13); the 7.7 screenshots were taken 2026-11-12, kept outside the repository; owner acceptance remains.** Builds after the code-name rename PR and after #2797 (Task 4)
+important findings, all folded in). PR A and B1 built as one pull request (2026-11-12); B2 built (feat/a275-deferred-presented) 2026-11-12, review fixes 2026-11-13; the 7.7 screenshots were taken 2026-11-12 by lane L and are kept outside the repository; owner acceptance remains.** Builds after the code-name rename PR and after #2797 (Task 4)
 lands. Every `file:line` was read at main `8c530d8a65`; the files cited are unchanged at main
 `4261c97fd4` (`git diff --stat`). Task 4 was read at `origin/feat/a275-transfer-labels` `85fe91b29e`.
 Only files and git history were read; no test, app or screen was run for this plan.
