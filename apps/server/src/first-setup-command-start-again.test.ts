@@ -424,7 +424,7 @@ async function keptBeforeActivation(stateDir: string) {
     migrationOptionsFor(manifestSets(), null),
   );
   const bundle = {
-    version: 25 as const,
+    version: 26 as const,
     contentLanguages: null,
     holidayArea: null,
     settings: {},
