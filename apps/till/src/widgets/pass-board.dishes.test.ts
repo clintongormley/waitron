@@ -71,10 +71,7 @@ describe("A773 pass board widget: dishes", () => {
             labelKitchenName: "Kitchen large",
           },
         ],
-        modifiers: [
-          { descriptions: { "es-ES": "Leche avena" } },
-          { descriptions: { "es-ES": "Sirope" }, perDish: 2 },
-        ],
+        modifiers: [{ name: "Leche avena" }, { name: "Sirope", perDish: 2 }],
       }),
     ]);
     const item = itemOf(el, "ti-9");
@@ -93,11 +90,11 @@ describe("A773 pass board widget: dishes", () => {
         id: "toast",
         modifiers: [
           {
-            descriptions: { "es-ES": "Jamón" },
+            name: "Jamón",
             amount: "150.000",
             unitName: { "en-GB": "gr", "es-ES": "g" },
           },
-          { descriptions: { "es-ES": "Queso" }, amount: "0.250", unitName: { "es-ES": "kg" } },
+          { name: "Queso", amount: "0.250", unitName: { "es-ES": "kg" } },
         ],
       }),
     ]);
@@ -241,7 +238,7 @@ describe("A773 pass board widget: dishes", () => {
           id: "toast",
           modifiers: [
             {
-              descriptions: { "es-ES": "Jamón" },
+              name: "Jamón",
               amount: "150.000",
               unitName: { "en-GB": "gr", "es-ES": "g" },
             },
@@ -257,9 +254,7 @@ describe("A773 pass board widget: dishes", () => {
       const el = await inProgress([
         passItem({
           id: "toast",
-          modifiers: [
-            { descriptions: { "es-ES": "Queso" }, amount: "0.250", unitName: { "es-ES": "kg" } },
-          ],
+          modifiers: [{ name: "Queso", amount: "0.250", unitName: { "es-ES": "kg" } }],
         }),
       ]);
       expect(itemOf(el, "toast").querySelector(".modifier")!.textContent!.trim()).toBe(
@@ -564,7 +559,7 @@ describe("A773 pass board widget: dishes", () => {
         asServed: { allergens: { gluten: { kinds: ["wheat"] } }, pending: false },
         modifiers: [
           {
-            descriptions: { "es-ES": "Bacon" },
+            name: "Bacon",
             addAllergens: { milk: {} },
             suitableFor: ["halal"],
           },
@@ -624,12 +619,12 @@ describe("A773 pass board widget: dishes", () => {
           id: "bread",
           name: "Pan",
           qty: "1.000",
-          modifiers: [{ descriptions: { "es-ES": "Mantequilla" } }],
+          modifiers: [{ name: "BUTTER" }],
         }),
       ]);
       expect(names(el)).toEqual(["1× Pan"]);
       expect(itemOf(el, "bread").querySelector(".item-modifiers")!.textContent).toContain(
-        "+ Mantequilla",
+        "+ BUTTER",
       );
     } finally {
       setLocale(previous);

@@ -179,7 +179,7 @@ describe("cancelling and recalling split-off extras", () => {
       expect(output.fryer[0]).toContain("CHIPS");
       expect(output.grill).toHaveLength(1);
       expect(output.grill[0]).toContain(kitchenTicketWords("en").changed);
-      expect(output.grill[0]).toContain(`${kitchenTicketWords("en").cancel} Chips`);
+      expect(output.grill[0]).toContain(`${kitchenTicketWords("en").cancel} CHIPS`);
     });
   });
 

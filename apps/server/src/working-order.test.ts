@@ -5396,16 +5396,16 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       ]);
 
       // The station queue: ONE item (the parent dish), carrying both options as modifier sub-items, in
-      // selection (line_no) order — localised client-side via each modifier's descriptions map.
+      // selection (line_no) order, each by its kitchen name.
       const [group] = await listStationQueue(tx, kitchenStation.id);
       expect(group!.orderId).toBe(orderId);
       expect(group!.items).toHaveLength(1);
       // Each option declared no allergens/diet, so its own list is empty (`addAllergens: null`,
       // `suitableFor: []`) — the shape the KDS renders per extra beside the dish's own.
       expect(group!.items[0]!.modifiers).toEqual([
-        { descriptions: { [LOCALE]: "ES large" }, perDish: 1, addAllergens: null, suitableFor: [] },
+        { name: "ES large", perDish: 1, addAllergens: null, suitableFor: [] },
         {
-          descriptions: { [LOCALE]: "Oat milk" },
+          name: "Oat milk",
           perDish: 1,
           addAllergens: null,
           suitableFor: [],
@@ -5414,9 +5414,9 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
 
       const expoItem = (await passItems(tx))[0]!;
       expect(expoItem.modifiers).toEqual([
-        { descriptions: { [LOCALE]: "ES large" }, perDish: 1, addAllergens: null, suitableFor: [] },
+        { name: "ES large", perDish: 1, addAllergens: null, suitableFor: [] },
         {
-          descriptions: { [LOCALE]: "Oat milk" },
+          name: "Oat milk",
           perDish: 1,
           addAllergens: null,
           suitableFor: [],

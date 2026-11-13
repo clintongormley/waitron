@@ -78,14 +78,6 @@ Left open:
   designed: what the flag looks like on the kitchen screen, the pass and a printed ticket, and who
   may set it. A773 assigns requests to cook held work to the waiter.
 
-## A following extra has different names on paper and on screen
-
-Its `+` line prints the frozen
-staff name (`buildTicketItems`, `apps/server/src/kitchen-print.ts`), while the kitchen screen and
-pass read its frozen customer `descriptions` (`readQueueSubItems`,
-`apps/server/src/working-order.ts`). A split-off extra's cross-reference reads kitchen names on
-both surfaces. Decide which name the following extra should show, then make the surfaces agree.
-
 ## The dark-screen alert can be wrong
 
 - **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
@@ -228,16 +220,10 @@ in A1308's orders and sales slice, which rebuilds the table anyway.
 
 ## Bundle: What a kitchen card draws
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
 - **The kitchen screens and the pass still show allergens as text chips.** A668 brings icons to the
   editor, the till's buttons and its order list, not to these screens.
-- **A1220. The kitchen screen names an extra by its Spanish name in English mode** («Pimientos de
-  Padrón» beside the kitchen name "CHICKEN + CHIPS", where the paper ticket says "+ Peppers"). Seen
-  in A1208's LOOK on the demo venue; check which of the extra's three names the screen reads.
-- **A following extra has different names on paper and on screen.** — left open by the product
-  folders work.
-  [Detail](kitchen.md#a-following-extra-has-different-names-on-paper-and-on-screen)
 
 ## Bundle: Held paper followups
 

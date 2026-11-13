@@ -297,7 +297,7 @@ export function addExtras(
   dishId: string,
   items: NamedExtraItem[],
 ): Promise<{ listId: string; productIds: string[] }>;
-/** Use only when a kitchen-print case asserts the fixture's exact staff name on paper. */
+/** Use only when a case never reads an extra's name, or asserts that an extra with no kitchen name shows its staff name. */
 export function addExtras(
   tx: Transaction,
   cfg: TradingContext,

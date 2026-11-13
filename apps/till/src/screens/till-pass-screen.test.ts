@@ -2324,7 +2324,7 @@ describe("A773 pass screen: a till's All stations, its extras and portions", () 
   it.each<[string, Partial<PassCardItem>]>([
     ["another state", { state: "ready", phase: "ready" }],
     ["another station", { stationName: "Parrilla" }],
-    ["another extra", { modifiers: [{ descriptions: { "en-GB": "Cheese" } }] }],
+    ["another extra", { modifiers: [{ name: "Cheese" }] }],
     ["another note", { note: "no salt" }],
     ["a measure", { qty: "200.000", unitName: { "en-GB": "ml" }, soldInEach: false }],
   ])("draws a portion with %s apart", async (_, overrides) => {
@@ -2333,7 +2333,7 @@ describe("A773 pass screen: a till's All stations, its extras and portions", () 
   });
 
   it("draws a portion whose extra has another count apart, each row with its own count", async () => {
-    const cheese = (perDish: number) => [{ descriptions: { "en-GB": "Cheese" }, perDish }];
+    const cheese = (perDish: number) => [{ name: "Cheese", perDish }];
     const el = await mountAll(
       onCard([
         portion("p1", { modifiers: cheese(1) }),

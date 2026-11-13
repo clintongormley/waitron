@@ -246,7 +246,7 @@ describe("A1517-3 a dish's own allergens on English station paper", () => {
       },
     ]);
     const [paper] = await papersOn(s.printers.grill);
-    expect(paper).toContain("+ Cheese - contains Milk");
+    expect(paper).toContain("+ CHED - contains Milk");
     // A wrapped line continues on the next, so the dish's line is read joined.
     const text = paper!.join(" ");
     expect(text.match(/Contains:/g)).toHaveLength(1);

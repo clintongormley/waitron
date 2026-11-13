@@ -4992,7 +4992,7 @@ describe("advance HOLD tickets (Task 6)", () => {
           ...header,
           "GROUP 1 · MAINS",
           `+1 x ${DISHES.steak.kitchen}`,
-          `  + ${DISHES.sauce.staff}`,
+          `  + ${DISHES.sauce.kitchen}`,
           "  * rare",
         ],
       ]);

@@ -270,7 +270,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
       const added = (await jobs()).filter((job) => job.printerId === printerId).slice(before);
       expect(added).toHaveLength(1);
       expect(printedLines(added[0]!.payload).join(" ")).toContain("FULL BURG");
-      expect(printedLines(added[0]!.payload).join(" ")).toContain("Gherkins");
+      expect(printedLines(added[0]!.payload).join(" ")).toContain("PICK");
       expect(printedLines(added[0]!.payload).join(" ")).toContain(kitchenTicketWords("es").changed);
     } finally {
       await inTx(venue, (tx) =>
@@ -289,11 +289,13 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     expect(slip!.kind).toBe("document");
     expect(slip!.lines[0]).toBe(`*** ${kitchenTicketWords("es").changed} ***`);
     expect(slip!.lines).toContain("1 x FULL BURG");
-    expect(slip!.lines).toContain("  + Fries");
-    expect(slip!.lines).toContain("  + Salad");
-    expect(slip!.lines).toContain(`  ${kitchenTicketWords("es").cancel} Gherkins`);
-    expect(slip!.lines).not.toContain("  + Gherkins");
+    expect(slip!.lines).toContain("  + CHIPS");
+    expect(slip!.lines).toContain("  + GREENS");
+    expect(slip!.lines).toContain(`  ${kitchenTicketWords("es").cancel} PICK`);
+    expect(slip!.lines).not.toContain("  + PICK");
     const text = slip!.lines.join("\n");
+    expect(text).not.toContain("Gherkins");
+    expect(text).not.toContain("Pickles");
     expect(text).not.toContain("Hamburger");
     expect(text).not.toContain("Full burger");
     expect(text).not.toContain("GROUP");
@@ -312,7 +314,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
         quantity: "1.000",
         wasStarted: false,
         direction: null,
-        cancelledExtra: "Gherkins",
+        cancelledExtra: "PICK",
       }),
     ]);
   });
@@ -329,7 +331,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     const recorded = await noticesDuring(() => cancelGherkins(billId));
 
     expect(recorded).toEqual([
-      expect.objectContaining({ wasStarted: true, cancelledExtra: "Gherkins" }),
+      expect.objectContaining({ wasStarted: true, cancelledExtra: "PICK" }),
     ]);
   });
 
@@ -341,7 +343,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     );
 
     expect(printed.map((job) => [job.lines[0], job.lines.at(-1)])).toEqual([
-      ["*** CAMBIADO ***", "  QUITAR: Gherkins"],
+      ["*** CAMBIADO ***", "  QUITAR: PICK"],
     ]);
   });
 
@@ -358,7 +360,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
 
       expect(printed).toEqual([]);
       expect(recorded).toEqual([
-        expect.objectContaining({ kind: "changed", cancelledExtra: "Gherkins" }),
+        expect.objectContaining({ kind: "changed", cancelledExtra: "PICK" }),
       ]);
     } finally {
       await inTx(venue, (tx) =>
@@ -373,13 +375,13 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     const dishRow = async () => {
       const queue = await inTx(venue, (tx) => listStationQueue(tx, venue.stationId));
       const order = queue.find((group) => group.orderId === billId)!;
-      return order.items[0]!.modifiers.map((modifier) => modifier.descriptions[venue.cfg.locale]);
+      return order.items[0]!.modifiers.map((modifier) => modifier.name);
     };
-    expect(await dishRow()).toEqual(["Chips", "House salad", "Pickles"]);
+    expect(await dishRow()).toEqual(["CHIPS", "GREENS", "PICK"]);
 
     await cancelGherkins(billId);
 
-    expect(await dishRow()).toEqual(["Chips", "House salad"]);
+    expect(await dishRow()).toEqual(["CHIPS", "GREENS"]);
   });
 
   it("prints one slip and records one notice when the same cancel arrives twice", async () => {
@@ -409,9 +411,9 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
 
     expect(printed).toHaveLength(1);
     expect(printed[0]!.lines).toContain("2 x FULL BURG");
-    expect(printed[0]!.lines).toContain(`  ${kitchenTicketWords("es").cancel} Gherkins x2`);
+    expect(printed[0]!.lines).toContain(`  ${kitchenTicketWords("es").cancel} PICK x2`);
     expect(recorded).toEqual([
-      expect.objectContaining({ quantity: "2.000", cancelledExtra: "Gherkins x2" }),
+      expect.objectContaining({ quantity: "2.000", cancelledExtra: "PICK x2" }),
     ]);
   });
 
@@ -432,9 +434,9 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
 
     expect(printed).toHaveLength(1);
     expect(printed[0]!.lines).toContain("1 x FULL BURG");
-    expect(printed[0]!.lines).toContain(`  ${kitchenTicketWords("es").cancel} Gherkins x2`);
+    expect(printed[0]!.lines).toContain(`  ${kitchenTicketWords("es").cancel} PICK x2`);
     expect(recorded).toEqual([
-      expect.objectContaining({ quantity: "1.000", cancelledExtra: "Gherkins x2" }),
+      expect.objectContaining({ quantity: "1.000", cancelledExtra: "PICK x2" }),
     ]);
   });
 
@@ -459,10 +461,10 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
             ).slice(jobsBefore);
             expect(written).toHaveLength(1);
             expect(printedLines(written[0]!.payload)).toContain(
-              `  ${kitchenTicketWords("es").cancel} Gherkins`,
+              `  ${kitchenTicketWords("es").cancel} PICK`,
             );
             expect((await listStationNotices(tx, venue.stationId)).slice(noticesBefore)).toEqual([
-              expect.objectContaining({ cancelledExtra: "Gherkins" }),
+              expect.objectContaining({ cancelledExtra: "PICK" }),
             ]);
             throw new Error("a later step of the request fails");
           }),
@@ -552,9 +554,9 @@ describe("cancelling an extra of a held dish (B11g)", () => {
       expect(lines).toContain(`${kitchenTicketWords("es").group} 1`);
       expect(lines.slice(lines.indexOf("1 x FULL BURG"))).toEqual([
         "1 x FULL BURG",
-        "  + Fries",
-        "  + Salad",
-        `  ${kitchenTicketWords("es").cancel} Gherkins`,
+        "  + CHIPS",
+        "  + GREENS",
+        `  ${kitchenTicketWords("es").cancel} PICK`,
       ]);
       expect(recorded).toEqual([
         expect.objectContaining({
@@ -562,7 +564,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
           lineName: "FULL BURG",
           quantity: "1.000",
           direction: null,
-          cancelledExtra: "Gherkins",
+          cancelledExtra: "PICK",
         }),
       ]);
     } finally {
@@ -677,10 +679,10 @@ describe("cancelling an extra of a held dish (B11g)", () => {
       expect(printed[0]!.lines).toContain("1 x FULL BURG");
       expect(printed.some((job) => job.printerId === barPrinterId)).toBe(false);
       expect(await noticesOf(barId)).toEqual([
-        { kind: "changed", lineName: "BARB", cancelledExtra: "Gherkins" },
+        { kind: "changed", lineName: "BARB", cancelledExtra: "PICK" },
       ]);
       expect(await noticesOf(screenId)).toEqual([
-        { kind: "changed", lineName: "SCRB", cancelledExtra: "Gherkins" },
+        { kind: "changed", lineName: "SCRB", cancelledExtra: "PICK" },
       ]);
     } finally {
       await inTx(venue, async (tx) => {

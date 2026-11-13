@@ -272,7 +272,7 @@ describe("A773 hold paper: cancel", () => {
         ...header,
         groupLine,
         "2 x PIZZA",
-        "  + Olives x2",
+        "  + OLIV x2",
         "",
       ]);
       expect(await notices(order)).toMatchObject([{ kind: "void", quantity: "2.000" }]);
@@ -404,7 +404,7 @@ describe("A773 hold paper: extras off and moves", () => {
         LATER_CLOCK,
         "GROUP 1",
         "1 x BURG",
-        "  CANCEL: Chips",
+        "  CANCEL: CHIPS",
         "",
       ];
       const fryer = [

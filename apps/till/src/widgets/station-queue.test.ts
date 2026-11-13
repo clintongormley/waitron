@@ -212,15 +212,13 @@ describe("till-station-queue", () => {
         groups: [
           {
             ...groupA,
-            items: [
-              { ...groupA.items[0]!, modifiers: [{ descriptions: { "es-ES": "Mantequilla" } }] },
-            ],
+            items: [{ ...groupA.items[0]!, modifiers: [{ name: "BUTTER" }] }],
           },
         ],
         stationId: "st-1",
       });
       expect(el.shadowRoot!.textContent).toContain("2× Paella");
-      expect(el.shadowRoot!.textContent).toContain("Mantequilla");
+      expect(el.shadowRoot!.textContent).toContain("+ BUTTER");
     } finally {
       setLocale(previousLocale);
     }
@@ -460,10 +458,7 @@ describe("till-station-queue", () => {
           readyAt: null,
           passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
-          modifiers: [
-            { descriptions: { "es-ES": "Grande" } },
-            { descriptions: { "es-ES": "Leche avena" } },
-          ],
+          modifiers: [{ name: "Grande" }, { name: "Leche avena" }],
         },
       ],
     };
@@ -500,7 +495,7 @@ describe("till-station-queue", () => {
             asServed: { allergens: { gluten: { kinds: ["wheat" as const] } }, pending: false },
             modifiers: [
               {
-                descriptions: { "es-ES": "Bacon" },
+                name: "Bacon",
                 addAllergens: { milk: {} },
                 suitableFor: ["halal"],
               },
@@ -530,8 +525,8 @@ describe("till-station-queue", () => {
       const item = {
         ...groupA.items[0]!,
         modifiers: [
-          { descriptions: { "es-ES": "Jamón" }, amount: "150.000", unitName: { "es-ES": "g" } },
-          { descriptions: { "es-ES": "Queso" }, amount: "0.250", unitName: { "es-ES": "kg" } },
+          { name: "Jamón", amount: "150.000", unitName: { "es-ES": "g" } },
+          { name: "Queso", amount: "0.250", unitName: { "es-ES": "kg" } },
         ],
       };
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
@@ -2035,7 +2030,7 @@ describe("cross-station extra references", () => {
   it("renders the extra beside its dish without a second modifier line", async () => {
     const item = {
       ...groupA.items[0]!,
-      modifiers: [{ descriptions: { "es-ES": "Queso" } }],
+      modifiers: [{ name: "Queso" }],
       crossRefs: [
         {
           kind: "with" as const,
@@ -4991,7 +4986,7 @@ describe("A803 portion grouping: the station queue", () => {
   });
 
   it("A803 portion grouping: a portion whose extra has another count shows apart, each row with its own count", async () => {
-    const cheese = (perDish: number) => [{ descriptions: { "es-ES": "Queso" }, perDish }];
+    const cheese = (perDish: number) => [{ name: "Queso", perDish }];
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [
         order([

@@ -1407,7 +1407,7 @@ describe("dish extras on kitchen tickets", () => {
       return (await readCancelledExtra(tx, child.rows[0]!.id, cfg.locale)).label;
     });
 
-    expect(label).toBe("Ham 0.150 kg");
+    expect(label).toBe("HAM 0.150 kg");
   });
 
   it("prints the physical amount of a weighted extra from its saved unit", async () => {
@@ -1452,12 +1452,12 @@ describe("dish extras on kitchen tickets", () => {
     });
 
     const ticket = decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
-    expect(ticket).toContain("+ Ham 0.150 kg");
+    expect(ticket).toContain("+ HAM 0.150 kg");
   });
 
   it.each([
-    ["es", "+ Ham 0,150 kg", "Ham 0,150 kg"],
-    ["en", "+ Ham 0.150 kg", "Ham 0.150 kg"],
+    ["es", "+ HAM 0,150 kg", "HAM 0,150 kg"],
+    ["en", "+ HAM 0.150 kg", "HAM 0.150 kg"],
   ])(
     "writes a weighted extra with the decimal mark of a %s kitchen",
     async (kitchenLanguage, printed, cancelled) => {
@@ -1539,7 +1539,7 @@ describe("dish extras on kitchen tickets", () => {
     });
 
     const ticket = decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
-    expect(ticket).toContain("+ Ham 150 ES-g");
+    expect(ticket).toContain("+ HAM 150 ES-g");
     expect(ticket).not.toContain("CA-g");
   });
 
@@ -1582,7 +1582,7 @@ describe("dish extras on kitchen tickets", () => {
     ]);
   });
 
-  it("gives the station queue and the pass a measured extra's unit, and an Each extra none", async () => {
+  it("gives the station queue and the pass an extra's kitchen name, a measured extra's unit, and an Each extra none", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { queue, pass } = await asApp(cfg, async (tx) => {
       const station = await createStation(tx, { name: "Kitchen", isDefault: true });
@@ -1628,10 +1628,10 @@ describe("dish extras on kitchen tickets", () => {
     });
 
     const shape = (modifiers: QueueModifier[]) =>
-      modifiers.map(({ perDish, amount, unitName }) => ({ perDish, amount, unitName }));
+      modifiers.map(({ name, perDish, amount, unitName }) => ({ name, perDish, amount, unitName }));
     const expected = [
-      { perDish: 2, amount: undefined, unitName: undefined },
-      { perDish: undefined, amount: "150.000", unitName: { es: "g" } },
+      { name: "CHEESE", perDish: 2, amount: undefined, unitName: undefined },
+      { name: "HAM", perDish: undefined, amount: "150.000", unitName: { es: "g" } },
     ];
     expect(queue.map((item) => shape(item.modifiers))).toEqual([expected]);
     expect(pass.map((row) => shape(row.item.modifiers))).toEqual([expected]);
@@ -1813,7 +1813,7 @@ describe("dish extras on kitchen tickets", () => {
       expect.arrayContaining([printers.grill, printers.fryer, printers.pass]),
     );
     expect(paper(printers.grill)).toContain("1 x BURG");
-    expect(paper(printers.grill)).toContain("+ Cheese");
+    expect(paper(printers.grill)).toContain("+ CHED");
     expect(paper(printers.grill)).toContain("> with CHIPS from Fryer");
     expect(paper(printers.grill)).not.toContain("+ Chips");
     expect(paper(printers.fryer)).toContain("1 x CHIPS");
@@ -1875,7 +1875,7 @@ describe("dish extras on kitchen tickets", () => {
     });
     expect(jobs.some((job) => job.printerId === printers.fryer)).toBe(false);
     const paper = decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload);
-    expect(paper).toContain("+ Cheese");
+    expect(paper).toContain("+ CHED");
     expect(paper).not.toContain("  > ");
   });
 
@@ -2060,8 +2060,8 @@ describe("dish extras on kitchen tickets", () => {
       const espressoProduct = await makeProduct(tx, catalogueId, "Flat white", {
         stationId: kitchenStation.id,
       });
-      // Each extra carries three DIFFERENT names, so a sub-line that read the customer-facing text
-      // instead of the staff name the child line froze reads differently (CLAUDE.md §3).
+      // Each extra carries three DIFFERENT names, so a sub-line that read the staff or customer-facing
+      // text instead of the kitchen name the child line froze reads differently (CLAUDE.md §3).
       const { listId, productIds } = await addExtras(tx, cfg, catalogueId, espressoProduct, [
         { name: "Cream", customerName: "Whipped cream", kitchenName: "CRM" },
         { name: "Oat milk", customerName: "Oat drink", kitchenName: "OAT" },
@@ -2081,12 +2081,51 @@ describe("dish extras on kitchen tickets", () => {
     expect(stationJobs).toHaveLength(1);
     const ticket = decodeTicket(stationJobs[0]!.payload);
     expect(ticket).toContain("Flat white");
-    expect(ticket).toContain("+ Cream");
-    expect(ticket).toContain("+ Oat milk");
+    expect(ticket).toContain("+ CRM");
+    expect(ticket).toContain("+ OAT");
+    expect(ticket).not.toContain("Cream");
+    expect(ticket).not.toContain("Oat milk");
     expect(ticket).not.toContain("Whipped cream");
     expect(ticket).not.toContain("Oat drink");
-    expect(ticket.indexOf("Flat white")).toBeLessThan(ticket.indexOf("+ Cream"));
-    expect(ticket.indexOf("Flat white")).toBeLessThan(ticket.indexOf("+ Oat milk"));
+    expect(ticket.indexOf("Flat white")).toBeLessThan(ticket.indexOf("+ CRM"));
+    expect(ticket.indexOf("Flat white")).toBeLessThan(ticket.indexOf("+ OAT"));
+  });
+
+  it("names an extra with no kitchen name by its staff name, never its customer-facing one, on paper, the station queue and the pass", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { printerId, jobs, queue, pass } = await asApp(cfg, async (tx) => {
+      const station = await createStation(tx, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, "Kitchen printer");
+      await attachPrinterToStation(tx, { stationId: station.id, printerId });
+      const dish = await makeProduct(tx, catalogueId, "Flat white", { stationId: station.id });
+      const { listId, productIds } = await addExtras(
+        tx,
+        cfg,
+        catalogueId,
+        dish,
+        [{ name: "Cream", customerName: "Whipped cream" }],
+        { staffNameOnly: true },
+      );
+      const orderId = await fireNewOrder(tx, cfg, [
+        {
+          productId: dish,
+          quantity: "1",
+          extras: [{ listId, picks: [{ productId: productIds[0]!, quantity: 1 }] }],
+        },
+      ]);
+      return {
+        printerId,
+        jobs: await printJobsFor(tx),
+        queue: (await listStationQueue(tx, station.id)).flatMap((group) => group.items),
+        pass: await readPassRows(tx, sql`${workingOrders.id} = ${orderId}`, Date.now()),
+      };
+    });
+
+    const ticket = decodeTicket(jobs.filter((j) => j.printerId === printerId)[0]!.payload);
+    expect(ticket).toContain("+ Cream");
+    expect(ticket).not.toContain("Whipped cream");
+    expect(queue.map((item) => item.modifiers.map(({ name }) => name))).toEqual([["Cream"]]);
+    expect(pass.map((row) => row.item.modifiers.map(({ name }) => name))).toEqual([["Cream"]]);
   });
 
   it("prints the line's note as a sub-line on the kitchen ticket (order-line customisation)", async () => {
@@ -2126,17 +2165,11 @@ describe("dish extras on kitchen tickets", () => {
       const espressoProduct = await makeProduct(tx, catalogueId, "Flat white", {
         stationId: kitchenStation.id,
       });
-      const { listId, productIds } = await addExtras(
-        tx,
-        cfg,
-        catalogueId,
-        espressoProduct,
-        [
-          { name: "Cream", maxQuantity: 3 }, // a per-dish cap of 3 admits a ×2
-          { name: "Oat milk" }, // single pick (cap 1)
-        ],
-        { staffNameOnly: true },
-      );
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, espressoProduct, [
+        // a per-dish cap of 3 admits a ×2
+        { name: "Cream", customerName: "Whipped cream", kitchenName: "CRM", maxQuantity: 3 },
+        { name: "Oat milk", customerName: "Oat drink", kitchenName: "OAT" }, // single pick (cap 1)
+      ]);
       const [creamExtra, oatMilkExtra] = productIds;
 
       await fireNewOrder(tx, cfg, [
@@ -2161,10 +2194,10 @@ describe("dish extras on kitchen tickets", () => {
     expect(stationJobs).toHaveLength(1);
     const ticket = decodeTicket(stationJobs[0]!.payload);
     expect(ticket).toContain("Flat white");
-    expect(ticket).toContain("+ Cream x2");
-    expect(ticket).toContain("+ Oat milk");
-    expect(ticket).not.toContain("Oat milk x");
-    expect(ticket).not.toMatch(/\+ Cream(?! x)/u);
+    expect(ticket).toContain("+ CRM x2");
+    expect(ticket).toContain("+ OAT");
+    expect(ticket).not.toContain("OAT x");
+    expect(ticket).not.toMatch(/\+ CRM(?! x)/u);
   });
 
   it("lets an unclaimed extra follow its dish when no default station is on", async () => {
@@ -2936,14 +2969,9 @@ describe("A803 portion grouping", () => {
       vatClass: "general",
     });
     await routeProductTo(tx, octopus, fryer.id);
-    const { listId, productIds } = await addExtras(
-      tx,
-      cfg,
-      catalogueId,
-      burger,
-      [{ name: "Cheese", maxQuantity: 2 }],
-      { staffNameOnly: true },
-    );
+    const { listId, productIds } = await addExtras(tx, cfg, catalogueId, burger, [
+      { name: "Cheese", customerName: "Mature cheddar", kitchenName: "CHED", maxQuantity: 2 },
+    ]);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const [table] = await tx
       .insert(diningTables)
@@ -3054,8 +3082,8 @@ describe("A803 portion grouping", () => {
     const one = `1 x Burger`;
     expect(count(lines, two)).toBe(1);
     expect(count(lines, one)).toBe(3);
-    expect(lines[lines.indexOf(two) + 1]).toMatch(/^\s*\+ Cheese x2$/u);
-    expect(lines.filter((line) => /\+ Cheese$/u.test(line))).toHaveLength(1);
+    expect(lines[lines.indexOf(two) + 1]).toMatch(/^\s*\+ CHED x2$/u);
+    expect(lines.filter((line) => /\+ CHED$/u.test(line))).toHaveLength(1);
     expect(lines.filter((line) => /\* No onion$/u.test(line))).toHaveLength(1);
   });
 

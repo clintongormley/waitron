@@ -530,7 +530,7 @@ describe("editing split-off extras", () => {
       expect((await state(tx, id)).items.map((item) => item.stationId)).toEqual([
         venue.stations.grill,
       ]);
-      expect((await slips(tx, venue.printers.grill)).at(-1)).toContain("+ Chips");
+      expect((await slips(tx, venue.printers.grill)).at(-1)).toContain("+ CHIPS");
     });
   });
 

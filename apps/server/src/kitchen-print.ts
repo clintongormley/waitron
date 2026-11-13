@@ -334,7 +334,13 @@ async function buildTicketItems(
       continue;
     }
     const names = modifiersByParent.get(child.parentLineId!) ?? [];
-    const label = extraLabel(child.name, child.quantity, parent.quantity, language, extraUnit);
+    const label = extraLabel(
+      kitchenPresentationName(child),
+      child.quantity,
+      parent.quantity,
+      language,
+      extraUnit,
+    );
     const labels = allergenLabels(child.id);
     names.push(labels.length === 0 ? label : extraWithAllergens(label, labels, language));
     modifiersByParent.set(child.parentLineId!, names);
@@ -1386,7 +1392,7 @@ export interface CancelledExtra {
   } | null;
 }
 
-/** Read before the extra's line is deleted: it names the extra from the line. */
+/** Read before the extra's line is deleted: it names the extra by the line's frozen kitchen name. */
 export async function readCancelledExtra(
   tx: Transaction,
   extraLineId: string,
@@ -1396,6 +1402,9 @@ export async function readCancelledExtra(
   const [row] = await tx
     .select({
       name: extra.name,
+      kitchenName: extra.kitchenName,
+      variantName: extra.variantName,
+      variantKitchenName: extra.variantKitchenName,
       quantity: extra.quantity,
       unitName: extra.unitName,
       dishLineId: workingOrderLines.id,
@@ -1416,7 +1425,7 @@ export async function readCancelledExtra(
   const soldInEach = (await VENUE_SERVICE.readLinesSoldInEach(tx, [extraLineId])).has(extraLineId);
   return {
     label: extraLabel(
-      found.name,
+      kitchenPresentationName(found),
       thousandthsToDecimal(found.quantity),
       thousandthsToDecimal(found.dishQuantity),
       await readKitchenLanguage(tx),

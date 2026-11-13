@@ -7868,7 +7868,8 @@ export interface StationQueueCourse {
 
 /** A child without its own ticket item, shown beneath its dish. */
 export interface QueueModifier {
-  descriptions: Record<string, string>;
+  /** The KITCHEN name, the same one the printed kitchen ticket carries. */
+  name: string;
   /** How many of a counted extra each dish has, as `QueueCrossRef.perDish` counts it. */
   perDish?: number;
   /** A measured extra's amount on each dish, in its unit. */
@@ -8039,7 +8040,6 @@ async function readQueueSubItems(
       id: workingOrderLines.id,
       parentLineId: workingOrderLines.parentLineId,
       unitName: workingOrderLines.unitName,
-      descriptions: workingOrderLines.descriptions,
       name: workingOrderLines.name,
       kitchenName: workingOrderLines.kitchenName,
       variantName: workingOrderLines.variantName,
@@ -8083,7 +8083,7 @@ async function readQueueSubItems(
     }
     const mods = modifiersByParent.get(child.parentLineId!) ?? [];
     mods.push({
-      descriptions: child.descriptions,
+      name: kitchenPresentationName(child),
       ...amountPerDish,
       addAllergens: (child.addAllergens as ProductAllergens | null) ?? null,
       suitableFor: expandDietaryDeclarations(child.dietaryDeclarations as DietaryLabel[]),
