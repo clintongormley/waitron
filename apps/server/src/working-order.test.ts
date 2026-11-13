@@ -6948,6 +6948,28 @@ describe("bumpBillReady — pass card preparation without dispatch", () => {
     });
   });
 
+  it("bill Ready preserves an already-served no-course line", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const soup = await makeProduct(tx, catalogueId, {});
+      const water = await makeProduct(tx, catalogueId, {});
+      const orderId = await fireTableKitchenOrder(tx, cfg, [line(soup), line(water)]);
+      await serveLine(tx, cfg, orderId, 2);
+      const before = byLine(await courseItemsFor(tx, orderId), water);
+      expect(before.state).toBe("queued");
+      expect(before.courseId).toBeNull();
+      const board = await readScopedPassBoard(tx, { stationIds: null, zoneIds: null });
+      expect(board.inProgress.flatMap((card) => card.items.map((item) => item.id))).toEqual([
+        byLine(await courseItemsFor(tx, orderId), soup).id,
+      ]);
+      await bumpBillReady(tx, orderId);
+      const after = await courseItemsFor(tx, orderId);
+      expect(byLine(after, soup).state).toBe("ready");
+      expect(byLine(after, water)).toEqual(before);
+    });
+  });
+
   it("keeps original ready timestamps and item facts on a repeated bump", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {

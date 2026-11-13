@@ -335,7 +335,7 @@ describe("A773 pass view", () => {
     },
   );
 
-  it("counts a dish Hide hides for the card's lateness, the overdue count and bill Ready, drawing none", () => {
+  it("counts hidden dishes for lateness and keeps Ready on the emptied card", () => {
     const cooking = passItem({
       id: "cold-late",
       stationName: "Cold",

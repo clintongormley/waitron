@@ -2769,12 +2769,18 @@ export async function bumpBillReady(
       and(
         eq(ticketItems.workingOrderId, orderId),
         inArray(
-          ticketItems.workingOrderLineId,
+          ticketItems.id,
           tx
-            .select({ id: workingOrderLines.id })
-            .from(workingOrderLines)
+            .select({ id: ticketItems.id })
+            .from(ticketItems)
+            .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+            .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
             .where(
-              and(eq(workingOrderLines.workingOrderId, orderId), isNull(workingOrderLines.groupId)),
+              and(
+                eq(ticketItems.workingOrderId, orderId),
+                isNull(workingOrderLines.groupId),
+                liveKitchenDish(),
+              ),
             ),
         ),
         ne(ticketItems.state, "ready"),
