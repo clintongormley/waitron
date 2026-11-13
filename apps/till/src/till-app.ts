@@ -231,6 +231,7 @@ import type { CloseDeferredRequest, CloseDeferredResult } from "./api/deferred-c
 import {
   deferredCloseRequest,
   deferredGoneReason,
+  paymentsHoldMoney,
   deferredOffered,
   type DeferredBill,
   type DeferredOffer,
@@ -11229,10 +11230,7 @@ export class TillApp extends LitElement {
         workingOrderId: billId,
         status: balance.status,
         outstanding: balance.outstanding,
-        // As a table bill's `hasPayments`: a declined or failed card holds nothing.
-        hasPayments: balance.payments.some(
-          (payment) => payment.state === "pending" || payment.state === "received",
-        ),
+        ...(paymentsHoldMoney(balance.payments) ? { holdsMoney: true as const } : {}),
       },
       paymentUnconfirmed:
         this.#billPaymentHeld(billId) ||

@@ -806,6 +806,46 @@ it.each(["declined", "failed"] as const)(
   },
 );
 
+it.each([
+  ["offers", "given back in full", "10.00", "0.00", "30.00", false],
+  ["switches off", "given back in part", "5.00", "5.00", "25.00", true],
+] as const)(
+  "%s the Counter close on a bill whose only payment was %s",
+  async (_offers, _case, given, received, outstanding, hidden) => {
+    const { el } = await counterPay({
+      getBillBalance: vi.fn(async (billId: string) =>
+        balanceOf({
+          workingOrderId: billId,
+          total: "30.00",
+          received,
+          outstanding,
+          payments: [
+            paymentOf({
+              applied: "10.00",
+              state: "received",
+              refunds: [
+                {
+                  id: "refund-1",
+                  paymentId: "pay-1",
+                  submissionId: "refund-sub-1",
+                  appliedAmount: given,
+                  tipAmount: "0.00",
+                  reason: "error",
+                  state: "completed",
+                  createdAt: "2026-09-30T20:05:00.000Z",
+                  completedAt: "2026-09-30T20:05:00.000Z",
+                },
+              ],
+            }),
+          ],
+        }),
+      ),
+    });
+    if (hidden) expect(deferredButton(el)).toBeNull();
+    else expect(deferredButton(el)!.disabled).toBe(false);
+  },
+);
+
 /** The Counter Pay window on held order `wo-9`, retrieved from the held list with the invoice type
  * the server stored on it, which this till never chose. */
 async function heldCounterPay(invoiceType: "F1" | "F2") {
@@ -1039,3 +1079,21 @@ it("Cancel after an unanswered Counter close that went through opens the documen
   expect(documents(el)).not.toBeNull();
   expect(text(el.shadowRoot!.querySelector(".error"))).not.toContain(t("held.stale"));
 });
+
+it.each([
+  ["offers", "all given back in full", {}, false],
+  ["does not offer", "still holding money", { holdsMoney: true as const }, true],
+] as const)(
+  "%s a table bill's close when its payments are %s",
+  async (_offers, _case, holds, hidden) => {
+    const api = deferredApi({
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ hasPayments: true, ...holds })]),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await openTable(el);
+    await openDialog(el, "rest");
+    const button = payDialog(el)!.shadowRoot!.querySelector("[data-pay-deferred]");
+    if (hidden) expect(button).toBeNull();
+    else expect(button).not.toBeNull();
+  },
+);

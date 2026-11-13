@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { billOf } from "../../test/bill-pay-app.js";
+import { billOf, paymentOf } from "../../test/bill-pay-app.js";
+import type { BillRefundView } from "../api/client.js";
 import {
   type DeferredDishRow,
   type DeferredOfferInput,
   deferredCloseRequest,
   deferredGoneReason,
   deferredOffered,
+  paymentsHoldMoney,
 } from "./deferred-close.js";
 
 const dish = (over: Partial<DeferredDishRow> = {}): DeferredDishRow => ({
@@ -55,7 +57,16 @@ describe("deferredOffered", () => {
         { state: "offered" },
       ],
       ["the profile lacks close-deferred", { capabilities: ["take-orders"] }, { state: "hidden" }],
-      ["the bill has payments", { bill: billOf({ hasPayments: true }) }, { state: "hidden" }],
+      [
+        "the bill holds money",
+        { bill: billOf({ hasPayments: true, holdsMoney: true }) },
+        { state: "hidden" },
+      ],
+      [
+        "the bill's payments were all given back in full",
+        { bill: billOf({ hasPayments: true }) },
+        { state: "offered" },
+      ],
       ["the bill owes nothing", { bill: billOf({ outstanding: "0.00" }) }, { state: "hidden" }],
       ["the bill is settled", { bill: billOf({ status: "settled" }) }, { state: "hidden" }],
       ["the bill is abandoned", { bill: billOf({ status: "abandoned" }) }, { state: "hidden" }],
@@ -110,8 +121,8 @@ describe("deferredOffered", () => {
         { state: "off", reason: "deferred_close.payment_unconfirmed" },
       ],
       [
-        "a Counter bill with payments",
-        { counter: { fullInvoice: true }, bill: billOf({ hasPayments: true }) },
+        "a Counter bill holding money",
+        { counter: { fullInvoice: true }, bill: billOf({ hasPayments: true, holdsMoney: true }) },
         { state: "hidden" },
       ],
     ];
@@ -126,9 +137,10 @@ describe("deferredGoneReason", () => {
       ["the bill is gone", undefined, undefined],
       [
         "a payment settled it",
-        billOf({ hasPayments: true, status: "settled", outstanding: "0.00" }),
+        billOf({ hasPayments: true, holdsMoney: true, status: "settled", outstanding: "0.00" }),
         "prior_payment",
       ],
+      ["a payment given back in full", billOf({ hasPayments: true }), undefined],
       ["settled with no payment", billOf({ status: "settled" }), "final_without_deferral"],
       ["abandoned", billOf({ status: "abandoned" }), "void"],
       ["owes nothing", billOf({ outstanding: "0.00" }), "non_positive"],
@@ -209,5 +221,61 @@ describe("deferredCloseRequest", () => {
     expect(deferredCloseRequest(args).submissionId).not.toBe(
       deferredCloseRequest(args).submissionId,
     );
+  });
+});
+
+describe("paymentsHoldMoney", () => {
+  const refund = (over: Partial<BillRefundView>): BillRefundView => ({
+    id: "refund-1",
+    paymentId: "pay-1",
+    submissionId: "refund-sub-1",
+    appliedAmount: "10.00",
+    tipAmount: "0.00",
+    reason: "error",
+    state: "completed",
+    createdAt: "2026-09-30T20:05:00.000Z",
+    completedAt: "2026-09-30T20:05:00.000Z",
+    ...over,
+  });
+  const received = (refunds: BillRefundView[], tip = "0.00") =>
+    paymentOf({ applied: "10.00", tip, state: "received", refunds });
+
+  it("holds money as the server's close reads it: pending, or received and not all given back", () => {
+    const cases: [string, Parameters<typeof paymentsHoldMoney>[0], boolean][] = [
+      ["no payment", [], false],
+      ["a pending card", [paymentOf({ method: "card", state: "pending" })], true],
+      ["a received payment", [received([])], true],
+      ["a declined card", [paymentOf({ method: "card", state: "declined" })], false],
+      ["a failed card", [paymentOf({ method: "card", state: "failed" })], false],
+      ["given back in full", [received([refund({})])], false],
+      [
+        "given back in full over two refunds, tip included",
+        [
+          received(
+            [
+              refund({ appliedAmount: "6.00" }),
+              refund({ id: "refund-2", appliedAmount: "4.00", tipAmount: "1.00" }),
+            ],
+            "1.00",
+          ),
+        ],
+        false,
+      ],
+      ["given back in part", [received([refund({ appliedAmount: "5.00" })])], true],
+      ["its money given back but not its tip", [received([refund({})], "1.00")], true],
+      [
+        "a refund still pending",
+        [received([refund({ state: "pending", completedAt: null })])],
+        true,
+      ],
+      ["a refund that failed", [received([refund({ state: "failed", completedAt: null })])], true],
+      [
+        "one given back in full beside one still held",
+        [received([refund({})]), received([])],
+        true,
+      ],
+    ];
+    for (const [name, payments, expected] of cases)
+      expect([name, paymentsHoldMoney(payments)]).toEqual([name, expected]);
   });
 });

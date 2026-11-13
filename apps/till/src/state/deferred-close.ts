@@ -1,5 +1,10 @@
-import { compareDecimal, decimal, addDecimal } from "@waitron/shared";
-import type { BillEditExpected, CurrentOrderRow, PartyBill } from "../api/client.js";
+import { compareDecimal, decimal, addDecimal, subtractDecimal, sumDecimals } from "@waitron/shared";
+import type {
+  BillEditExpected,
+  BillPaymentView,
+  CurrentOrderRow,
+  PartyBill,
+} from "../api/client.js";
 import type { CloseDeferredRequest } from "../api/deferred-close-types.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { CapabilityFlag } from "../layout.js";
@@ -16,7 +21,7 @@ export type DeferredDishRow = Pick<
 
 export interface DeferredOfferInput {
   capabilities: readonly CapabilityFlag[];
-  bill: Pick<PartyBill, "workingOrderId" | "status" | "outstanding" | "hasPayments">;
+  bill: Pick<PartyBill, "workingOrderId" | "status" | "outstanding" | "holdsMoney">;
   /** A bill payment held or out, a card answer still unknown, or an unanswered whole payment. */
   paymentUnconfirmed: boolean;
   /** The party's Current orders; null while they are being read, or when they could not be. */
@@ -34,11 +39,31 @@ function servedOrCancelled(row: DeferredDishRow): boolean {
   return compareDecimal(done, decimal(row.quantity)) >= 0;
 }
 
+/** Whether these payments hold money as the server's close reads them (`billsHoldingMoney` in
+ * apps/server/src/bill-payments.ts): a pending payment, or a received one whose money and tip its
+ * completed refunds have not all given back. */
+export function paymentsHoldMoney(
+  payments: readonly Pick<BillPaymentView, "state" | "applied" | "tip" | "refunds">[],
+): boolean {
+  return payments.some((payment) => {
+    if (payment.state === "pending") return true;
+    if (payment.state !== "received") return false;
+    const given = payment.refunds
+      .filter((refund) => refund.state === "completed")
+      .flatMap((refund) => [decimal(refund.appliedAmount), decimal(refund.tipAmount)]);
+    const kept = subtractDecimal(
+      addDecimal(decimal(payment.applied), decimal(payment.tip)),
+      sumDecimals(given),
+    );
+    return compareDecimal(kept, decimal("0")) > 0;
+  });
+}
+
 export function deferredOffered(input: DeferredOfferInput): DeferredOffer {
   const { bill, currentOrders } = input;
   if (
     !input.capabilities.includes("close-deferred") ||
-    bill.hasPayments ||
+    bill.holdsMoney === true ||
     (bill.status !== "open" && bill.status !== "placed") ||
     compareDecimal(decimal(bill.outstanding), decimal("0")) <= 0
   )
@@ -68,10 +93,10 @@ export function deferredOffered(input: DeferredOfferInput): DeferredOffer {
  * the till words (`codeMessage`); undefined when none of them fits.
  */
 export function deferredGoneReason(
-  bill: Pick<PartyBill, "status" | "outstanding" | "hasPayments"> | undefined,
+  bill: Pick<PartyBill, "status" | "outstanding" | "holdsMoney"> | undefined,
 ): string | undefined {
   if (bill === undefined) return undefined;
-  if (bill.hasPayments) return "prior_payment";
+  if (bill.holdsMoney === true) return "prior_payment";
   if (bill.status === "settled") return "final_without_deferral";
   if (bill.status === "abandoned") return "void";
   if (compareDecimal(decimal(bill.outstanding), decimal("0")) <= 0) return "non_positive";

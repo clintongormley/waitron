@@ -52,6 +52,10 @@ CLEARED with three changes"), and the owner's two answers. These win over the te
 - **#2907 (A275-declined, waiting for the owner):** a declined card no longer refuses the close on
   the server; whether `hasPayments` counts a declined card decides whether PR B hides the button for
   such a bill. Check it when building B1.
+- **B2 review 2026-11-13 (not an owner decision):** "has payments" now means "holds money", as the
+  server's close reads it since R6-2 (#2968): a pending payment, or received money not all given
+  back. The party bill read carries `holdsMoney`; the Counter works it out from the balance's
+  payments and refunds. `hasPayments` keeps its meaning for every other use.
 
 ## Authority
 

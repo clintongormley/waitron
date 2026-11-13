@@ -2155,6 +2155,9 @@ export interface PartyBill {
   outstanding: string;
   /** A payment is pending or received on the bill, which the single payment refuses. */
   hasPayments: boolean;
+  /** The bill holds money: a pending payment, or received money not all given back. A close as a
+   * deferred payment refuses such a bill. */
+  holdsMoney?: true;
   receiptAvailable: boolean;
   /** The language the bill's sale was filed in, else the one staff chose for it; absent when
    * neither is set. */

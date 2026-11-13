@@ -90,6 +90,9 @@ export interface PartyBill {
   outstanding: string;
   /** A payment is pending or received on the bill, one given back in full included. */
   hasPayments: boolean;
+  /** The bill holds money: a pending payment, or received money not all given back. A close as a
+   * deferred payment refuses such a bill. */
+  holdsMoney?: true;
   /** A sale has been filed for the bill, so its receipt can be printed again. */
   receiptAvailable: boolean;
   /** The language the bill's sale was filed in, else the one staff chose for it; absent when
@@ -624,6 +627,7 @@ export async function readPartyBills(
       total: bill.total,
       outstanding: bill.outstanding,
       hasPayments: bill.hasPayments,
+      ...(bill.holdsMoney === undefined ? {} : { holdsMoney: bill.holdsMoney }),
       receiptAvailable: sale !== undefined,
       ...(receiptLanguage === null ? {} : { receiptLanguage }),
       ...(sale === undefined
@@ -693,7 +697,7 @@ export async function readBillsOfParties(
     .where(inArray(workingOrders.partyId, members))
     .groupBy(workingOrders.id)
     .orderBy(workingOrders.openedAt, workingOrders.orderNumber, workingOrders.id);
-  const { received, holding } = await readPaymentsByBill(
+  const { received, holding, holdingMoney } = await readPaymentsByBill(
     tx,
     rows.map((row) => row.workingOrderId),
   );
@@ -732,6 +736,7 @@ export async function readBillsOfParties(
         ? outstandingOf(total, received.get(row.workingOrderId))
         : centsToDecimal(0),
       hasPayments: holding.has(row.workingOrderId),
+      ...(holdingMoney.has(row.workingOrderId) ? { holdsMoney: true as const } : {}),
       ...(deferred.has(row.workingOrderId) ? { deferred: true as const } : {}),
       lines: row.lines,
     };
