@@ -1,7 +1,7 @@
 // A box provisioned the way a setup boot leaves one, for the in-process scenarios that start a real
 // server on it: the stream loop (`stream-loop-scenario.ts`) and the spare join
 // (`spare-join-scenario.ts`).
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -28,6 +28,7 @@ import { seedTermZeroMembership } from "../membership-seed.js";
 import { ALL_MODULES } from "../modules.js";
 import { establishNodeIdentity } from "../node-identity.js";
 import { streamSettingsPayload } from "../stream-host.js";
+import { copyMigrationsRoot } from "./boot-harness.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 
 const LOCALE = "es-ES";
@@ -50,13 +51,8 @@ export async function copyMigrations(
   scratch: string,
 ): Promise<{ migrationsRoot: string; fromSource: ReturnType<typeof migrationOptionsFor> }> {
   const migrationsRoot = join(scratch, "migrations");
-  const fromSource = migrationOptionsFor(manifestSets(), null);
-  for (const [index, set] of manifestSets().entries()) {
-    await cp(fromSource[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-      recursive: true,
-    });
-  }
-  return { migrationsRoot, fromSource };
+  await copyMigrationsRoot(migrationsRoot);
+  return { migrationsRoot, fromSource: migrationOptionsFor(manifestSets(), null) };
 }
 
 export interface StreamBox {
@@ -104,7 +100,7 @@ export async function provisionStreamBox(options: {
           country: "ES",
           taxId: "74000001P",
           legalName: "Stream Loop SL",
-          name: "Sala principal",
+          name: "Main room",
           fiscalTerritory: "ES-common",
           invoiceLocales: [LOCALE],
           operationDescription: "Sale on premises",
@@ -118,7 +114,7 @@ export async function provisionStreamBox(options: {
           seriesCode: "A",
           rectificativeSeriesCode: "R",
           admin: {
-            displayName: "Administradora",
+            displayName: "Administrator",
             firstNames: "Test",
             lastNames: "Operator",
             pinHash: fixturePinHash("1234"),

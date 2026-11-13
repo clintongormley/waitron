@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -34,7 +34,7 @@ import {
 } from "./finish-adoption.js";
 import { freePorts } from "./testing/free-ports.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
-import { httpsVia } from "./testing/boot-harness.js";
+import { copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
 import { writeTlsSet } from "./testing/box-tls.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
@@ -118,10 +118,7 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
   const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-allocation-"));
   let server: StartedServer | undefined;
   try {
-    for (const [index, set] of manifestSets().entries())
-      await cp(migrations[index]!.migrationsFolder, join(scratch, "migrations", set.name), {
-        recursive: true,
-      });
+    await copyMigrationsRoot(join(scratch, "migrations"));
     await writeFile(
       join(scratch, "modules.json"),
       JSON.stringify({ modules: { "fiscal-verifactu": false } }),
@@ -203,10 +200,7 @@ it("the pending-adoption start answers the main box's signed query", async () =>
   const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-peer-status-"));
   let server: StartedServer | undefined;
   try {
-    for (const [index, set] of manifestSets().entries())
-      await cp(migrations[index]!.migrationsFolder, join(scratch, "migrations", set.name), {
-        recursive: true,
-      });
+    await copyMigrationsRoot(join(scratch, "migrations"));
     await writeFile(
       join(scratch, "modules.json"),
       JSON.stringify({ modules: { "fiscal-verifactu": false } }),
@@ -268,10 +262,7 @@ it("the pending-adoption start is handed a chart through its own route", async (
   const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-membership-"));
   let server: StartedServer | undefined;
   try {
-    for (const [index, set] of manifestSets().entries())
-      await cp(migrations[index]!.migrationsFolder, join(scratch, "migrations", set.name), {
-        recursive: true,
-      });
+    await copyMigrationsRoot(join(scratch, "migrations"));
     await writeFile(
       join(scratch, "modules.json"),
       JSON.stringify({ modules: { "fiscal-verifactu": false } }),
@@ -362,10 +353,7 @@ async function joiningStartEnv(
   scratch: string,
   { standby, keyEnv }: Awaited<ReturnType<typeof seedJoiningSpare>>,
 ) {
-  for (const [index, set] of manifestSets().entries())
-    await cp(migrations[index]!.migrationsFolder, join(scratch, "migrations", set.name), {
-      recursive: true,
-    });
+  await copyMigrationsRoot(join(scratch, "migrations"));
   await writeFile(
     join(scratch, "modules.json"),
     JSON.stringify({ modules: { "fiscal-verifactu": false } }),

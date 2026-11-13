@@ -1881,7 +1881,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           JSON.stringify({
             designated: { nodeId: primaryId },
             tenant: { country: "ES", taxId: "80000001K" },
-            primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
+            primaryNode: { name: "Till 1", filingModule: "fiscal-verifactu", taxModule: null },
             environment: "preproduction",
             boxHostname: "waitron.local",
             boxCaPem: MAIN_AUTHORITY.caCertPem,
