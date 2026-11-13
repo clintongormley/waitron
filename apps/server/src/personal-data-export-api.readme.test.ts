@@ -24,7 +24,7 @@ const NOW = new Date("2026-10-04T22:30:00Z");
 const PRIVACY = "https://venue.example/privacy";
 
 const identityModules = ALL_MODULES.filter((m) => m.name === "identity");
-let martaId: string, martaToken: string;
+let marthaId: string, marthaToken: string;
 
 const extraPart: PersonalDataPart = {
   owner: "server",
@@ -58,7 +58,7 @@ function mounted(patch: Partial<PersonalDataExportDeps> = {}) {
 async function download(app: Hono, acceptLanguage?: string) {
   const response = await app.request(PATH, {
     headers: {
-      cookie: `${MANAGEMENT_COOKIE}=${martaToken}`,
+      cookie: `${MANAGEMENT_COOKIE}=${marthaToken}`,
       ...(acceptLanguage === undefined ? {} : { "accept-language": acceptLanguage }),
     },
   });
@@ -81,15 +81,15 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
   });
   await seedNode(suite.db);
-  const [marta] = await seedPersons(suite.db, {
+  const [martha] = await seedPersons(suite.db, {
     displayName: "Martha Lewis",
     email: "marta@example.test",
     role: "staff",
   });
-  martaId = marta!.id;
-  martaToken = await withTransaction(
+  marthaId = martha!.id;
+  marthaToken = await withTransaction(
     suite.db,
-    async (tx) => (await startManagementSession(tx, { personId: martaId })).token,
+    async (tx) => (await startManagementSession(tx, { personId: marthaId })).token,
   );
 });
 
@@ -139,7 +139,7 @@ describe("the README in a person's own personal-data download", () => {
   ] as const)(
     "row $row: saved $saved, browser $accept, venue $venue gives $expected",
     async ({ saved, accept, venue, expected }) => {
-      suite.db.run(sql`update persons set locale = ${saved} where id = ${martaId}`);
+      suite.db.run(sql`update persons set locale = ${saved} where id = ${marthaId}`);
       const text = await readme(mounted({ venueLocale: venue }), accept);
       expect(lines(text)[0]).toBe(title(expected));
     },

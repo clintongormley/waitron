@@ -32,7 +32,7 @@ const START = "2026-01-01";
 const END = "2026-03-21";
 const COLLEAGUE_NAME = "Colleague Canary";
 const logger = vi.fn();
-let martaId: string, colleagueId: string, cookie: string;
+let marthaId: string, colleagueId: string, cookie: string;
 
 beforeEach(async () => {
   await seedVenue(suite.db, {
@@ -42,11 +42,11 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
   });
   const nodeId = await seedNode(suite.db);
-  const [marta, colleague] = await seedPersons(suite.db, [
+  const [martha, colleague] = await seedPersons(suite.db, [
     { displayName: "Martha Lewis", email: "marta@example.test", role: "staff" },
     { displayName: COLLEAGUE_NAME, email: "colleague@example.test", role: "staff" },
   ]);
-  martaId = marta!.id;
+  marthaId = martha!.id;
   colleagueId = colleague!.id;
   const backend = new WorkforceBackend();
   const origin = jobOrigin("dashboard");
@@ -64,23 +64,23 @@ beforeEach(async () => {
   // The files print each entry's recording time, so it must never spell a colleague probe below.
   vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-04-01T12:00:00Z") });
   try {
-    await shift(martaId, "2026-01-02T00:30:00.000Z", "2026-01-02T06:00:00.000Z", -120);
+    await shift(marthaId, "2026-01-02T00:30:00.000Z", "2026-01-02T06:00:00.000Z", -120);
     await shift(colleagueId, "2026-01-03T10:07:00.000Z", "2026-01-03T18:43:00.000Z", 60);
-    await shift(martaId, "2026-02-10T09:00:00.000Z", "2026-02-10T17:00:00.000Z", 60);
-    await shift(martaId, "2026-03-20T09:00:00.000Z", "2026-03-20T17:00:00.000Z", 60);
+    await shift(marthaId, "2026-02-10T09:00:00.000Z", "2026-02-10T17:00:00.000Z", 60);
+    await shift(marthaId, "2026-03-20T09:00:00.000Z", "2026-03-20T17:00:00.000Z", 60);
   } finally {
     vi.useRealTimers();
   }
   cookie = await withTransaction(
     suite.db,
     async (tx) =>
-      `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: martaId })).token}`,
+      `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: marthaId })).token}`,
   );
 });
 
 function subject(patch: Partial<PersonalDataSubject> = {}): PersonalDataSubject {
   return {
-    personId: martaId,
+    personId: marthaId,
     language: "en",
     at: AT,
     timeZone: "Europe/Madrid",
