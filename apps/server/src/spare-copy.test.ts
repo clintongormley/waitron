@@ -1,6 +1,7 @@
 import { copyFile, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -435,5 +436,80 @@ describe("takeFirstCopy", () => {
     expect(JSON.parse(await readFile(join(stateDir, "pair-copy", "ready.json"), "utf8"))).toEqual({
       generation: generation(1),
     });
+  });
+
+  it("refuses a copy made by newer software", async () => {
+    await writeKey();
+    await db.run(
+      sql`insert into __drizzle_migrations_db (hash, created_at) values ('from-later', 1)`,
+    );
+    let ahead: string;
+    try {
+      ahead = await fixture("ahead", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
+    } finally {
+      await db.run(sql`delete from __drizzle_migrations_db where hash = 'from-later'`);
+    }
+    const objectStore = await storeWithPointer(generation(1));
+    const restore = copyOf(ahead);
+    const r = run({ objectStore, restoreGeneration: restore });
+
+    await vi.waitFor(() =>
+      expect(events("spare.first_copy_waiting").map((e) => e.fields?.reason)).toContain(
+        "provisioning.database_ahead",
+      ),
+    );
+    r.controller.abort();
+    await r.done.catch(() => {});
+    expect(restore).toHaveBeenCalled();
+    expect(r.restart).not.toHaveBeenCalled();
+    expect(r.statuses.some((s) => s.copy === "ready")).toBe(false);
+    await expect(stat(join(stateDir, "pair-copy", "ready.json"))).rejects.toThrow();
+  });
+
+  it("discards a copy that fails the integrity check", async () => {
+    await writeKey();
+    const good = await fixture("good-damaged", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
+    const objectStore = await storeWithPointer(generation(1));
+    const restore = copyOf(good);
+    const checkIntegrity = vi.fn(async () => false);
+    const r = run({ objectStore, restoreGeneration: restore, checkIntegrity });
+
+    await vi.waitFor(() => expect(checkIntegrity.mock.calls.length).toBeGreaterThanOrEqual(2));
+    r.controller.abort();
+    await r.done.catch(() => {});
+    expect(checkIntegrity).toHaveBeenCalledWith(join(stateDir, "pair-copy", "venue.db"));
+    expect(events("spare.first_copy_waiting").map((e) => e.fields?.reason)).toEqual([
+      "integrity_failed",
+    ]);
+    expect(r.restart).not.toHaveBeenCalled();
+    expect(r.statuses.some((s) => s.copy === "ready")).toBe(false);
+    await expect(stat(join(stateDir, "pair-copy", "ready.json"))).rejects.toThrow();
+  });
+
+  it("never logs the recovery key it holds", async () => {
+    await writeKey();
+    const good = await fixture("good-no-leak", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
+    const objectStore = await storeWithPointer(generation(1));
+    let calls = 0;
+    const restore = vi.fn(async (args: RestoreGenerationArgs) => {
+      calls += 1;
+      if (calls === 1)
+        throw new AppError("backup.stream_restore_failed", { exitCode: 1, diskFull: false });
+      await copyFile(good, args.outPath);
+    });
+    const r = run({ objectStore, restoreGeneration: restore });
+    await expect(r.done).resolves.toBe("ready");
+    expect(events("spare.first_copy_waiting")).toHaveLength(1);
+    expect(JSON.stringify(logs)).not.toContain(RECOVERY_KEY);
+
+    // A key under the length floor; its text appears in no reason this module logs.
+    const shortKey = "Qx7-Wv3";
+    logs = [];
+    await writeKey(shortKey);
+    const short = run({ objectStore, restoreGeneration: restore, intervalMs: 5 });
+    await vi.waitFor(() => expect(events("spare.first_copy_waiting")).toHaveLength(1));
+    short.controller.abort();
+    await short.done.catch(() => {});
+    expect(JSON.stringify(logs)).not.toContain(shortKey);
   });
 });

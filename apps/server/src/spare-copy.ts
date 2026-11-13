@@ -140,8 +140,8 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
     deps.signal.throwIfAborted();
     if (!(await (deps.checkIntegrity ?? checkIntegrity)(copyPath)))
       throw new NotYet("integrity_failed");
-    // Task 6.5's finish and the latch start's copy condition both rely on the placed copy holding
-    // this row; the main box writes it before it streams, so a copy without it is only a late one.
+    // `whenCopyNeeded` relies on the placed copy holding this row; the main box writes it before it
+    // streams, so a copy without it is only a late one.
     if (!(await checkCopy(copyPath, deps.nodeId, ownPublicKey, deps.migrationsRoot)))
       throw new NotYet("own_row_missing");
     const ms = deps.now().getTime() - link!.createdAt.getTime();
@@ -226,7 +226,7 @@ export async function whenCopyNeeded<T>(
   return job(link);
 }
 
-/** The status a box still joining answers; `copy` only while a first copy runs. */
+/** The status a box still joining answers. */
 export function mountLatchBoxStatus(app: Hono, read: () => FirstCopyStatus | undefined): void {
   app.get("/api/box/status", (c) => c.json({ adoption: "pending", ...read() }, 200));
 }
