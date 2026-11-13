@@ -38,6 +38,11 @@ it.each([true, false])(
       getDiskStop: async () => ({ stopped: false, deleted: null }),
       getSalesOverview: () => new Promise(() => {}),
       listHandoverIntervals: list,
+      listReturnedInvoices: async () => ({
+        records: [],
+        nextOffset: null,
+        timeZone: "Europe/Madrid",
+      }),
     } as unknown as DashboardApi;
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await vi.waitFor(() => expect(el.shadowRoot?.querySelector(".shell")).not.toBeNull());

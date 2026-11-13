@@ -59,6 +59,7 @@ import {
 import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import { readHandoverIntervals } from "./handover-intervals.js";
+import type { FiscalBackend } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
 
 /**
@@ -66,6 +67,7 @@ import type { Logger } from "./logger.js";
  * mirror's own id. Per-node reports use it; venue-wide reports read every node.
  */
 export interface ReportApiDeps {
+  returnedInvoices?: FiscalBackend["returnedInvoices"];
   db: Database;
   cfg: { nodeId: string };
   /** The printed page's language when neither the person nor the browser names one, and always the
@@ -235,6 +237,26 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       );
       c.header("Cache-Control", "no-store");
       return c.json({ hasEmergencyHandover: activation !== undefined });
+    }),
+  );
+
+  app.get("/management-api/reports/returned-invoices", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
+        const raw = c.req.query("offset") ?? "0";
+        const offset = Number(raw);
+        if (!/^\d+$/.test(raw) || !Number.isSafeInteger(offset))
+          throw new AppError("management.request_invalid", { field: "offset" });
+        const rows = (await deps.returnedInvoices?.(tx, { offset, limit: 101 })) ?? [];
+        return {
+          records: rows.slice(0, 100),
+          nextOffset: rows.length > 100 ? offset + 100 : null,
+          timeZone: (await resolveVenueClock(tx, deps.cfg.nodeId)).timeZone,
+        };
+      });
+      c.header("Cache-Control", "no-store");
+      return c.json(result);
     }),
   );
 

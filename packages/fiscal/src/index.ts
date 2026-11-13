@@ -52,6 +52,7 @@ export type {
   Counterparty,
   DrainResult,
   FiscalBackend,
+  ReturnedInvoiceRecord,
   FiledFigures,
   FiledReceipt,
   FiledInvoiceEvidence,

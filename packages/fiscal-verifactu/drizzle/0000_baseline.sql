@@ -330,4 +330,9 @@ CREATE UNIQUE INDEX `registros_corrects_registro_uq` ON `registros_facturacion` 
 CREATE UNIQUE INDEX `registros_identidad_uq` ON `registros_facturacion` (`id_emisor_factura`,`num_serie_factura`,`fecha_expedicion_factura`,`tipo_registro`) WHERE "registros_facturacion"."corrects_registro_id" is null;--> statement-breakpoint
 CREATE INDEX `registros_sale_idx` ON `registros_facturacion` (`sale_id`);--> statement-breakpoint
 CREATE INDEX `registros_node_secuencia_idx` ON `registros_facturacion` (`node_id`,`secuencia`);--> statement-breakpoint
-CREATE INDEX `registros_generado_idx` ON `registros_facturacion` (`fecha_hora_huso_gen_registro`);
+CREATE INDEX `registros_generado_idx` ON `registros_facturacion` (`fecha_hora_huso_gen_registro`);--> statement-breakpoint
+CREATE TABLE `returned_invoice_records` (
+	`record_id` text PRIMARY KEY NOT NULL,
+	`received_at` text NOT NULL,
+	FOREIGN KEY (`record_id`) REFERENCES `registros_facturacion`(`id`) ON UPDATE no action ON DELETE no action
+);

@@ -67,6 +67,7 @@
     "from": "../fiscal-verifactu/drizzle",
     "appendOnlyTables": [
       "registros_facturacion",
+      "returned_invoice_records",
       "filing_cases",
       "filing_case_events",
       "fiscal_conflict_evidence",

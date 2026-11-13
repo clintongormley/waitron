@@ -1,3 +1,4 @@
+import { returnedInvoices } from "@waitron/fiscal-verifactu/src/returned-invoices.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -153,6 +154,11 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   expect(current.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
     originals.records,
   );
+  expect(
+    (
+      await withTransaction(current.db, (tx) => returnedInvoices(tx, { offset: 0, limit: 101 }))
+    ).map((row) => ({ id: row.recordId, invoice: row.invoiceNumber, receivedAt: row.receivedAt })),
+  ).toEqual([{ id: originals.records[0]!.id, invoice: "Source/1", receivedAt: now.toISOString() }]);
   expect(wakes).toBe(1);
   await old.db.insert(tenders).values({
     id: "late-payment",

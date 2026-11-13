@@ -125,6 +125,16 @@ complete return; if the old box already stopped sending, restart it while it rem
 to resend. If the old box returns, check the return status on its page before deciding whether
 to reset it.
 
+Below the intervals, **Returned invoices** shows each newly received invoice with its source
+box, generating installation, original issue date and recorded amounts. Invoice rows show a
+readable kind beside their original type code. Corrections and cancellations appear separately.
+**Not recorded** means that amount is absent from the record. Use **Next** and **Previous** to
+read more; **Refresh invoices** returns to the first page.
+
+Tracking starts with this feature. Invoices already held in a copy are not added, so an empty
+list is not a complete history of earlier returns. The list does not identify duplicates or
+mark invoices in other reports.
+
 ## When a box is waiting for another box {#waiting}
 
 When a box starts and cannot reach the other box the venue runs on, it waits instead of selling,

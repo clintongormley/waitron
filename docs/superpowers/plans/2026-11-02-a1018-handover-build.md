@@ -3795,6 +3795,12 @@ guide (`box-status.md` `{#returned-invoices}`, both languages). Tests in their s
 
 ---
 
+**2026-11-13:** The watcher-cleared [returned-invoice detail cut](2026-11-12-a1018-returned-invoice-detail.md)
+adds only a receipt marker beside originals and a read-only paged list. It supersedes the
+per-invoice reconciliation record below for this cut; acknowledgement, assignment and resolution
+remain unbuilt. Existing returned originals stay in their original tables, as A1342’s later
+returned-fact decision requires.
+
 ### Slice 12a — The reconciliation list, and lines beside the reports
 
 Not fiscal: it reads fiscal facts through the seat, writes only the `handover` set's tables, and

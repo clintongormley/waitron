@@ -4,6 +4,11 @@ const LEDGER = "what happened, keyed by the writing node; drained back from a re
 
 export const FISCAL_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("registros_facturacion", "ledger", LEDGER),
+  appendOnly(
+    "returned_invoice_records",
+    "ledger",
+    "first receipt of an original returned from another box, retained with that original",
+  ),
   appendOnly("filing_cases", "ledger", LEDGER),
   appendOnly("filing_case_events", "ledger", LEDGER),
   appendOnly("fiscal_conflict_evidence", "ledger", LEDGER),

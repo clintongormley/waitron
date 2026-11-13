@@ -103,6 +103,7 @@ const DROPPED_COLUMNS: MadridColumnDrops = {
 const RENAMED_COLUMNS: MadridColumnRenames = { sale_receipt_guests: { guests: "guest_count" } };
 /** Tables added after the capture; the seed writes no row to them. */
 const ADDED_TABLES = [
+  "returned_invoice_records",
   "outgoing_mail",
   "adjustment_lines",
   "bill_identities",

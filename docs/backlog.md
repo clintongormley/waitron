@@ -1776,7 +1776,7 @@ Not in any track until the standalone primary is done.
   existing clock check, with one entered password/code retained until completion or leaving and a
   replacement code only if it expires. Its [page plan](superpowers/plans/2026-11-12-a1018-8-emergency-page.md)
   was cleared by the watcher on 12 November; real-box and Cloud qualification remain open. Reporting → Handover intervals shows committed emergency takeovers from signed
-  declarations, including unknown sale/order times and venue-zone dates. The [12a PR 1](superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md) warning beside sales/cash-up/category reports and VAT links report viewers to the handover dates; it does not identify which report periods are affected. The [receiver completion work](superpowers/plans/2026-11-12-a1018-return-completion.md) persists accounted batch digests with the venue and shows whether one advertised inventory was fully received. Report warnings remain as date reminders; missing activity, amounts and cash-ups stay unconfirmed.
+  declarations, including unknown sale/order times and venue-zone dates. The [12a PR 1](superpowers/plans/2026-11-12-a1018-12a-warnings-return-completion.md) warning beside sales/cash-up/category reports and VAT links report viewers to the handover dates; it does not identify which report periods are affected. The [receiver completion work](superpowers/plans/2026-11-12-a1018-return-completion.md) persists accounted batch digests with the venue and shows whether one advertised inventory was fully received. Report warnings remain as date reminders; missing activity, amounts and cash-ups stay unconfirmed. A1342’s marker is now stored and returned invoices are listed; reports still do not mark them; duplicates are not identified.
   The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
   minute wait) on 2026-11-02: Slice 12b is built on that answer, landed by the owner and marked
   pending the venue's tax adviser, and Task 7.4b is not built. On 2026-11-03 the owner read
@@ -1807,8 +1807,9 @@ Not in any track until the standalone primary is done.
   expects Slice 5 to reach these venues. Left open by A1018 Slice 5 (Ruling P9).
 
 - **A1342: remaining returned-record facts and qualification.** Payment-clash acceptance is an
-  internal API without a screen. Sale lines, reprints, the returned-invoices reporting marker and
-  real-box qualification remain open. A filing result held only by the old box is not applied to a record
+  internal API without a screen. Sale lines, reprints and real-box qualification remain open.
+  A1342’s marker is now stored and returned invoices are listed; reports still do not mark them;
+  duplicates are not identified. A filing result held only by the old box is not applied to a record
   already on the new main; a late payment on an older box's chain is not included in this return.
   An A802 correction's row and refund links do not travel (`invoice_corrections` and
   `invoice_correction_refunds` are not in the return), so cash an unfinished correction gave back

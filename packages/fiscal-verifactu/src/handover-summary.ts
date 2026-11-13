@@ -1,3 +1,4 @@
+import { absentInvoiceIds, markReturnedInvoices } from "./returned-invoices.js";
 import { FISCAL_REMEDY } from "./permissions.js";
 import { createHash } from "node:crypto";
 import type { CanonicalValue } from "@waitron/membership";
@@ -130,13 +131,13 @@ export const VERIFACTU_HANDOVER: ModuleHandoverContribution = {
     inspect: async (tx, source, batch) =>
       inspectReturnedPayments(tx, source, readReturnedBatch(batch)),
     receive: async (tx, source, batch, now, accepted) => {
-      const result = await receiveReturnedOriginals(
+      const originals = readReturnedBatch(batch);
+      const absent = absentInvoiceIds(
         tx,
-        source,
-        readReturnedBatch(batch),
-        now,
-        accepted,
+        originals.records.map((row) => String(row.id)),
       );
+      const result = await receiveReturnedOriginals(tx, source, originals, now, accepted);
+      await markReturnedInvoices(tx, absent, now);
       return result.refusal ? { refusal: result.refusal } : result.complete;
     },
   },

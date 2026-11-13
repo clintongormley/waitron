@@ -24,6 +24,31 @@ export interface HandoverInterval {
   activatedAt: string;
   reason: string;
 }
+export interface ReturnedInvoiceRecord {
+  recordId: string;
+  saleId: string;
+  sourceNodeId: string;
+  sourceName: string;
+  generationId: string;
+  installation: string;
+  sequence: number;
+  invoiceNumber: string;
+  issueDate: string;
+  kind: string;
+  category: "invoice" | "simplified" | "replacement" | "correction" | "cancellation";
+  correctsRecordId: string | null;
+  taxable: string | null;
+  gross: string | null;
+  tax: string | null;
+  receivedAt: string;
+}
+
+export interface ReturnedInvoices {
+  records: ReturnedInvoiceRecord[];
+  nextOffset: number | null;
+  timeZone: string;
+}
+
 export interface HandoverIntervals {
   intervals: HandoverInterval[];
   timeZone: string;
@@ -4508,6 +4533,15 @@ export class DashboardApi {
   getHandoverWarning(): Promise<{ hasEmergencyHandover: boolean }> {
     return this.#request<{ hasEmergencyHandover: boolean }>(
       "/management-api/reports/handover-warning",
+      "GET",
+      undefined,
+      { passive: true },
+    );
+  }
+
+  listReturnedInvoices(offset = 0): Promise<ReturnedInvoices> {
+    return this.#request<ReturnedInvoices>(
+      `/management-api/reports/returned-invoices?offset=${encodeURIComponent(offset)}`,
       "GET",
       undefined,
       { passive: true },
