@@ -2709,6 +2709,8 @@ Test jobs and shard legs (10 minutes), `-merge` jobs (5), and `lint` and `root-g
 from the owner's four-minute bound (2026-10-09), not the doubling rule; the
 "bounds every test job" case in `scripts/ci-workflow.test.mjs` pins those numbers.
 
+**2026-11-13:** CodeQL now uses its [own nightly measurement and a 60-minute limit](#cache-docker-and-codeql-steps-have-measured-limits). Its row above records the earlier default setup.
+
 **2026-10-16, A674:** `ci` is another exception to the doubling rule. Its limit rose from five
 to fifteen minutes, with twelve minutes for its jobs API step, to accommodate a ten-minute retry
 window. The observed API status lag and chosen margins are recorded under "How the second step
@@ -3665,8 +3667,8 @@ Guard: the "reuse lint results only on runs that are not full" case in
 ### Cache, Docker and CodeQL steps have measured limits
 
 A stalled cache or initialization action should end within its own limit rather than consume
-its job. Browser caches get two minutes and `continue-on-error: true`: if a restore or save
-reaches its limit, tests can continue through the existing browser-install step. Lint's existing
+its job. Browser caches get two minutes and `continue-on-error: true`: a restore or save timeout
+does not itself fail the job, and the following browser-install step still runs. Lint's existing
 one-minute optional caches stay as they are. Docker setup and login, and CodeQL initialization,
 get one minute. Docker and CodeQL failures still fail the job; analysis uses CodeQL's 60-minute
 job limit.

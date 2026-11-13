@@ -465,7 +465,7 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
 - **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.**
   [Detail](ci.md#a-sixth-a-ci-shard-exited-1-with-every-test-passing-pr-414).
 
-## Qualify CI's server routing and action setup
+## Bundle: Qualify CI's server routing and action setup
 
 The remaining work concerns live routing qualification and the action-repository download at setup.
 
