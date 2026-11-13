@@ -2383,7 +2383,8 @@ handle. The only trigger whose SQL names `dining_tables` is `parties_clear_table
 **2026-11-13:** fk5 removes the membership and dormant split keys. The fully migrated
 `table-removal.test.ts` inventory checks the four surviving keys: `bookings.table_id`,
 `floor_reset_tables.table_id`, `party_tables.table_id` and `working_orders.delivery_table_id`,
-all `NO ACTION`.
+all `NO ACTION`. Merge membership alone no longer blocks a direct table deletion;
+`removeLiveTables` leaves the merge before deleting its live row.
 
 > Added 2026-10-13 by A503 part 3: two more incoming keys, `floor_today_split_parts.joined_table_id`
 > and `.part_table_id`, both `no action`.

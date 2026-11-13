@@ -1,3 +1,4 @@
+import { writeMerge } from "./floor-today-merges.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -254,6 +255,48 @@ describe("removing a live table the master no longer has", () => {
       deliveryTableLabel: "T4",
     });
     expect((await partyRow(v, partyId)).tableNames).toEqual(["T4"]);
+  });
+
+  it("a reset hides a removed merged table while an unpaid delivery still names it", async () => {
+    const {
+      zoneId,
+      ids: [first, second],
+    } = await plannedZone("Hidden merge 1", "Hidden merge 2");
+    await inTx(v, async (tx) => {
+      for (const [tableId, x] of [
+        [first!, 0],
+        [second!, 20],
+      ] as const)
+        await tx
+          .update(diningTables)
+          .set(todaySet({ x, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 }))
+          .where(eq(diningTables.id, tableId));
+      await writeMerge(tx, v.cfg, {
+        movingId: second!,
+        targetId: first!,
+        side: "right",
+        seats: 8,
+        free: true,
+      });
+    });
+    await delivery(first!, "Water");
+    await deleteFromMaster(first!);
+
+    await reset(zoneId);
+
+    expect(await todayRow(first!)).toBeUndefined();
+    expect(await tableRow(v, first!)).toMatchObject({
+      id: first,
+      mergeId: null,
+      mergeBeforeX: null,
+      mergeBeforeY: null,
+      mergeBeforeRotation: null,
+    });
+    expect(await tableRow(v, second!)).toMatchObject({ id: second, mergeId: null });
+    expect(
+      await inTx(v, (tx) => tx.select().from(tableMerges).where(eq(tableMerges.zoneId, zoneId))),
+    ).toEqual([]);
+    expect(await resetRowOf(first!)).toMatchObject({ remove: true, pending: true });
   });
 
   it("frees the name for a table created in the same catch-up", async () => {

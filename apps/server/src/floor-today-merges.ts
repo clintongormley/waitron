@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { partyTables, tableMerges, mergeOf, LEFT_MERGE, todaySet, diningTables } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { Transaction, MergeMember } from "@waitron/db";
 import { AppError, freeSide, touchingPlace, type JoinPlace, type JoinSide } from "@waitron/shared";
 import {
   refuseNeedsMoving,
@@ -47,12 +47,7 @@ export async function leaveMerges(tx: Transaction, tableIds: readonly string[]):
 
 async function putBack(
   tx: Transaction,
-  member: {
-    tableId: string;
-    beforeX: number | null;
-    beforeY: number | null;
-    beforeRotation: number | null;
-  },
+  member: Pick<MergeMember, "tableId" | "beforeX" | "beforeY" | "beforeRotation">,
 ): Promise<void> {
   await tx
     .update(diningTables)
