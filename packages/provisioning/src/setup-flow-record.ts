@@ -1,6 +1,16 @@
-import { FIRST_SETUP_FILE } from "@waitron/store";
+import {
+  FIRST_SETUP_FILE,
+  FISCAL_READINESS_FILE,
+  SETUP_OPERATION_FILE,
+  START_AGAIN_GUESSES_FILE,
+  SETUP_FLOW_DIR,
+  FIRST_FISCAL_DOCUMENTS_DIR,
+  CONFIGURATION_IMPORT_FILE,
+} from "@waitron/store";
+import { lstat, readdir, rmdir, unlink } from "node:fs/promises";
 import { AppError } from "@waitron/shared";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { errnoOf } from "./errno.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-directories.js";
 import { inTurn } from "./attempt-turns.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
@@ -72,4 +82,38 @@ export async function updateSetupFlowSection<K extends SetupFlowSection>(
     if (!object(next.attempt)) invalid();
     await writeDurableHostJson(join(root, FIRST_SETUP_FILE), next, limit);
   });
+}
+
+export async function endFinishedSetup(stateDir: string): Promise<void> {
+  const record = await readSetupFlowRecord(stateDir);
+  if (record === null || record.attempt.status !== "complete") return;
+  const ifPresent = async <T>(operation: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      return await operation();
+    } catch (error) {
+      if (errnoOf(error) === "ENOENT") return undefined;
+      throw error;
+    }
+  };
+  for (const relative of [
+    FIRST_SETUP_FILE,
+    FISCAL_READINESS_FILE,
+    SETUP_OPERATION_FILE,
+    START_AGAIN_GUESSES_FILE,
+  ])
+    await ifPresent(() => unlink(join(stateDir, relative)));
+  for (const relative of [FIRST_FISCAL_DOCUMENTS_DIR, dirname(CONFIGURATION_IMPORT_FILE)]) {
+    const folder = join(stateDir, relative);
+    const info = await ifPresent(() => lstat(folder));
+    if (!info?.isDirectory()) continue;
+    const entries = await readdir(folder, { withFileTypes: true });
+    for (const entry of entries)
+      if (entry.isFile()) await ifPresent(() => unlink(join(folder, entry.name)));
+    try {
+      await rmdir(folder);
+    } catch (error) {
+      if (!["ENOTEMPTY", "EEXIST"].includes(errnoOf(error) ?? "")) throw error;
+    }
+  }
+  await rmdir(join(stateDir, SETUP_FLOW_DIR));
 }
