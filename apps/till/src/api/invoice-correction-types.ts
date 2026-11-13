@@ -52,3 +52,30 @@ export interface InvoiceCorrectionCashGiven {
   refunds: TenderRefundView[];
   replayed: boolean;
 }
+
+/** A line of the invoice with what earlier corrections left of it, `left`. */
+export interface InvoiceCorrectionLine {
+  id: string;
+  lineNo: number;
+  descriptions: Record<string, string>;
+  rate: string;
+  gross: string;
+  left: string;
+}
+
+export interface InvoiceCorrectionLines {
+  lines: InvoiceCorrectionLine[];
+  /** The money still refundable over every payment on the invoice. */
+  moneyRefundable: string;
+}
+
+export interface InvoiceCorrectionPreviewRequest {
+  gross: string;
+  lineIds?: string[];
+}
+
+export interface InvoiceCorrectionPreview {
+  gross: string;
+  vatBreakdown: CorrectionSplitLine[];
+  moneyRefundable: string;
+}

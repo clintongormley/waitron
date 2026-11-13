@@ -4437,6 +4437,29 @@ describe("till-app: service cancellation consent", () => {
       expect(methods.cancelItem).toHaveBeenCalledOnce();
     });
 
+    it("offers Correct invoice beside Refund a payment on the paid receipt, closing it on leaving", async () => {
+      const readInvoiceCorrectionLines = vi.fn(() => new Promise(() => {}));
+      const methods = paidMethods({ readInvoiceCorrectionLines });
+      const { el } = await mountApp(methods);
+      await openTable4(el);
+      await chooseRefund(el);
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      emit(refundForm(el)!, "tender-refund-close");
+      await flush(el);
+      const button = ticket(el)!.shadowRoot!.querySelector<HTMLElement>(
+        "[data-invoice-correction]",
+      )!;
+      expect(button.textContent!.trim()).toBe(t("invoice_correction.title"));
+      await userEvent.click(page.elementLocator(button));
+      await flush(el);
+      const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
+      expect(correcting()!.saleId).toBe("own-sale");
+      expect(readInvoiceCorrectionLines).toHaveBeenCalledWith("own-sale", {});
+      emit(ticket(el)!, "back-to-find-bill");
+      await flush(el);
+      expect(correcting()).toBeNull();
+    });
+
     it("reports a transaction load failure after the kitchen write without reopening a cancellation", async () => {
       const methods = paidMethods({
         getTransactionReceipt: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),

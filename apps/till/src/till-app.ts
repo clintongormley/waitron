@@ -259,6 +259,7 @@ import type {
 } from "./widgets/bill-pay-dialog.js";
 import "./widgets/bill-refund-dialog.js";
 import "./widgets/tender-refund-dialog.js";
+import "./widgets/invoice-correction-dialog.js";
 import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
 import type {
   RefundableTender,
@@ -2662,6 +2663,7 @@ export class TillApp extends LitElement {
     this.#closeDeviceZones();
     this.deviceSettingsOpen = false;
     this.#closeTenderRefund();
+    this.invoiceCorrecting = null;
     this.#tenderRefundRead++;
     this.#stopClocking();
     this.#cancelFindBillRead();
@@ -3446,6 +3448,7 @@ export class TillApp extends LitElement {
   #tenderRefundSession?: TenderRefundSession;
   #tenderRefundRead = 0;
   @state() private refundableTenders: RefundableTender[] = [];
+  @state() private invoiceCorrecting: { saleId: string } | null = null;
   @state() private tenderRefunding: {
     visit: object;
     saleId: string;
@@ -4705,6 +4708,7 @@ export class TillApp extends LitElement {
       this.refundPrintBusy = false;
       if (this.historicalReceipt?.kind === "refund") this.#backToFindBill();
       this.#closeTenderRefund();
+      this.invoiceCorrecting = null;
       if (this.#tenderRefundScope !== undefined)
         this.#tenderRefundSession = new TenderRefundSession(
           this.#tenderRefundScope,
@@ -4714,7 +4718,10 @@ export class TillApp extends LitElement {
     }
     if (changed.has("api")) this.#stopHours();
     if (changed.has("drill")) {
-      if (this.drill?.kind !== "ticket") this.#closeTenderRefund();
+      if (this.drill?.kind !== "ticket") {
+        this.#closeTenderRefund();
+        this.invoiceCorrecting = null;
+      }
       if (this.drill?.kind !== "find-bill") this.#cancelFindBillRead();
       if (this.drill?.kind !== "find-bill" && this.drill?.kind !== "ticket")
         this.historicalReceipt = null;
@@ -8763,6 +8770,34 @@ export class TillApp extends LitElement {
         else this.tenderRefunding = { ...this.tenderRefunding, approvers: undefined };
       }
     });
+  }
+
+  #openInvoiceCorrection(): void {
+    const receipt = this.historicalReceipt;
+    if (
+      !this.isConnected ||
+      this.drill?.kind !== "ticket" ||
+      receipt?.kind !== "invoice" ||
+      this.invoiceCorrecting ||
+      !this.#hasRefundableTenders()
+    )
+      return;
+    this.invoiceCorrecting = { saleId: receipt.saleId };
+  }
+
+  #renderInvoiceCorrection(): TemplateResult | typeof nothing {
+    const open = this.invoiceCorrecting;
+    if (!open) return nothing;
+    return html`<till-invoice-correction-dialog
+      .api=${this.api}
+      .saleId=${open.saleId}
+      .invoiceNumber=${this.result?.invoiceNumber ?? ""}
+      .namesLocale=${this.result?.namesLocale ?? this.result?.locale ?? ""}
+      @invoice-correction-close=${(event: Event) => {
+        event.stopPropagation();
+        if (this.invoiceCorrecting === open) this.invoiceCorrecting = null;
+      }}
+    ></till-invoice-correction-dialog>`;
   }
 
   #renderTenderRefund(): TemplateResult | typeof nothing {
@@ -21697,6 +21732,7 @@ export class TillApp extends LitElement {
         return html`<till-ticket-view
           .refundable=${this.#hasRefundableTenders()}
           @tender-refund-open=${() => this.#openTenderRefund()}
+          @invoice-correction-open=${() => this.#openInvoiceCorrection()}
           .historical=${this.historicalReceipt !== null}
           .receiptCopiesOnly=${this.#ticketDeliveryTarget()?.transaction === true}
           .historicalDelivery=${this.historicalReceipt?.kind === "invoice" && this.#ticketDeliveryTarget() !== undefined}
@@ -22302,7 +22338,7 @@ export class TillApp extends LitElement {
         ${this.#renderCancelItem()} ${this.#renderFinishTable()} ${this.#renderAdjusting()}
         ${this.#renderBillPaying()} ${this.#renderDeferredClosing()}
         ${this.#renderPresentedPaying()} ${this.#renderDeparting()} ${this.#renderTenderRefund()}
-        ${this.#renderCancelCrediting()}
+        ${this.#renderInvoiceCorrection()} ${this.#renderCancelCrediting()}
         ${
           this.settlementDocument === null
             ? nothing

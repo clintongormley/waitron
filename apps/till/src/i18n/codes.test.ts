@@ -897,3 +897,52 @@ it.each([
   expect(codeMessage("deferred_close.ineligible", "en", params)).toBe(english);
   expect(codeMessage("deferred_close.ineligible", "es", params)).toBe(spanish);
 });
+
+it.each([
+  "invoice_correction.not_settled",
+  "invoice_correction.already_open",
+  "invoice_correction.refund_pending",
+  "invoice_correction.money_short",
+  "invoice_correction.chain_unsound",
+  "sale.correction_amount_invalid",
+  "sale.correction_scope_invalid",
+  "sale.correction_history_unusable",
+  "sale.correction_not_admitted",
+])("explains the correction preview's refusal %s in English and Spanish", (code) => {
+  for (const locale of ["en", "es"]) {
+    expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown", locale));
+    expect(codeMessage(code, locale)).not.toContain(code);
+  }
+});
+
+it("words each reason a correction is not admitted, and any other reason as the general one", () => {
+  const reasons = [
+    "replaced",
+    "unsupported",
+    "missing",
+    "wrong_node",
+    "voided",
+    "not_simplified",
+    "filing_refused",
+    "filing_versions_unusable",
+    "filed_figures_unreadable",
+    "filed_figures_changed",
+  ];
+  for (const locale of ["en", "es"]) {
+    const general = codeMessage("sale.correction_not_admitted", locale);
+    const worded = reasons.map((reason) =>
+      codeMessage("sale.correction_not_admitted", locale, { reason }),
+    );
+    expect(new Set(worded).size, locale).toBe(8);
+    expect(worded).not.toContain(general);
+    expect(codeMessage("sale.correction_not_admitted", locale, { reason: "constructor" })).toBe(
+      general,
+    );
+  }
+  expect(codeMessage("sale.correction_not_admitted", "en", { reason: "voided" })).toBe(
+    "This invoice was cancelled, so there is nothing left to correct.",
+  );
+  expect(codeMessage("sale.correction_not_admitted", "es", { reason: "voided" })).toBe(
+    "Esta factura se anuló, así que no queda nada por rectificar.",
+  );
+});

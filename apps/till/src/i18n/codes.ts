@@ -413,6 +413,42 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill has received a payment. Its full invoice choice cannot be removed",
     es: "Esta cuenta ya ha recibido un pago. No se puede quitar la elección de factura completa",
   },
+  "invoice_correction.not_settled": {
+    en: "This bill is not fully paid, so its invoice cannot be corrected yet.",
+    es: "Esta cuenta no está pagada del todo, así que su factura aún no se puede rectificar.",
+  },
+  "invoice_correction.already_open": {
+    en: "A correction of this invoice is already under way. Finish it before starting another.",
+    es: "Ya hay una rectificación de esta factura en curso. Termínala antes de empezar otra.",
+  },
+  "invoice_correction.refund_pending": {
+    en: "A refund of this bill is still waiting for its result. Check it under Refund a payment, then try again.",
+    es: "Una devolución de esta cuenta aún espera su resultado. Consúltala en Devolver un pago y vuelve a intentarlo.",
+  },
+  "invoice_correction.money_short": {
+    en: "That is more than is left to give back from this bill's payments. Enter a smaller amount.",
+    es: "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor.",
+  },
+  "invoice_correction.chain_unsound": {
+    en: "The server's invoice records need checking, so no invoice can be corrected now.",
+    es: "Hay que revisar los registros de facturas del servidor, así que ahora no se puede rectificar ninguna factura.",
+  },
+  "sale.correction_amount_invalid": {
+    en: "Enter an amount above zero and no more than is left to correct of the dishes chosen.",
+    es: "Escribe un importe mayor que cero y no superior a lo que queda por rectificar de los platos elegidos.",
+  },
+  "sale.correction_scope_invalid": {
+    en: "This bill has dishes at more than one VAT rate. Pick the dishes to correct, all at one rate.",
+    es: "Esta cuenta tiene platos con más de un tipo de IVA. Elige los platos que se rectifican, todos del mismo tipo.",
+  },
+  "sale.correction_history_unusable": {
+    en: "This invoice's earlier corrections cannot be read, so it cannot be corrected. Refund a payment still gives money back.",
+    es: "No se pueden leer las rectificaciones anteriores de esta factura, así que no se puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+  },
+  "sale.correction_not_admitted": {
+    en: "This invoice cannot be corrected. Refund a payment still gives money back.",
+    es: "Esta factura no se puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+  },
   "sale.correction_exceeds_total": {
     en: "That correction is more than is left of the invoice after its earlier corrections",
     es: "Esa rectificación supera lo que queda de la factura tras sus rectificaciones anteriores",
@@ -847,6 +883,46 @@ const DEFERRED_INELIGIBLE: Record<string, { en: string; es: string }> = {
 };
 
 /** Always a readable sentence, never the raw code. `locale` may be a full BCP-47 tag ("es-ES"). */
+const FIGURES_UNCHECKED = {
+  en: "This invoice's filed figures cannot be checked, so it cannot be corrected. Refund a payment still gives money back.",
+  es: "No se pueden comprobar las cifras presentadas de esta factura, así que no se puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+};
+
+/** Why `sale.correction_not_admitted` refused, by its `reason`. */
+const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
+  replaced: {
+    en: "This receipt was replaced by a full invoice, so it cannot be corrected. Refund a payment still gives money back.",
+    es: "Este tique se sustituyó por una factura completa, así que no se puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+  },
+  unsupported: {
+    en: "Invoices cannot be corrected at this venue. Refund a payment still gives money back.",
+    es: "En este local no se pueden rectificar facturas. Devolver un pago sigue permitiendo devolver dinero.",
+  },
+  missing: {
+    en: "This invoice has no filing record, so it cannot be corrected. Refund a payment still gives money back.",
+    es: "Esta factura no tiene registro presentado, así que no se puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+  },
+  wrong_node: {
+    en: "This invoice was filed by another server, so this one cannot correct it. Refund a payment still gives money back.",
+    es: "Otro servidor presentó esta factura, así que este no la puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+  },
+  voided: {
+    en: "This invoice was cancelled, so there is nothing left to correct.",
+    es: "Esta factura se anuló, así que no queda nada por rectificar.",
+  },
+  not_simplified: {
+    en: "Only a simplified invoice can be corrected here. Refund a payment still gives money back.",
+    es: "Aquí solo se puede rectificar una factura simplificada. Devolver un pago sigue permitiendo devolver dinero.",
+  },
+  filing_refused: {
+    en: "The tax agency has not accepted this invoice's filing. Try again once it has been sent again.",
+    es: "La Agencia Tributaria no ha aceptado la presentación de esta factura. Vuelve a intentarlo cuando se haya enviado de nuevo.",
+  },
+  filing_versions_unusable: FIGURES_UNCHECKED,
+  filed_figures_unreadable: FIGURES_UNCHECKED,
+  filed_figures_changed: FIGURES_UNCHECKED,
+};
+
 export function codeMessage(
   code: string,
   locale: string = currentLocale(),
@@ -858,6 +934,12 @@ export function codeMessage(
     if (Object.hasOwn(DEFERRED_INELIGIBLE, reason))
       return pickLocale(DEFERRED_INELIGIBLE[reason]!, locale);
   }
+  if (
+    code === "sale.correction_not_admitted" &&
+    typeof params?.reason === "string" &&
+    Object.hasOwn(CORRECTION_NOT_ADMITTED, params.reason)
+  )
+    return pickLocale(CORRECTION_NOT_ADMITTED[params.reason]!, locale);
   // Own-key check, not `?? GENERIC`: a code such as `constructor` would resolve an inherited
   // Object.prototype member under a bare lookup.
   const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code]! : GENERIC;

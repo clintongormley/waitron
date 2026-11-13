@@ -32,7 +32,10 @@ import type {
 import type {
   InvoiceCorrectionCashGiven,
   InvoiceCorrectionCashRequest,
+  InvoiceCorrectionLines,
   InvoiceCorrectionOpened,
+  InvoiceCorrectionPreview,
+  InvoiceCorrectionPreviewRequest,
   InvoiceCorrectionRequest,
 } from "./invoice-correction-types.js";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
@@ -3992,6 +3995,29 @@ export class TillApi {
   refundTransaction(saleId: string, request: TenderRefundRequest): Promise<TenderRefundView> {
     return this.#request(
       `/api/transactions/${encodeURIComponent(saleId)}/refunds`,
+      "POST",
+      request,
+    );
+  }
+
+  readInvoiceCorrectionLines(
+    saleId: string,
+    options: ReadOptions = {},
+  ): Promise<InvoiceCorrectionLines> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/corrections/lines`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  previewInvoiceCorrection(
+    saleId: string,
+    request: InvoiceCorrectionPreviewRequest,
+  ): Promise<InvoiceCorrectionPreview> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/corrections/preview`,
       "POST",
       request,
     );

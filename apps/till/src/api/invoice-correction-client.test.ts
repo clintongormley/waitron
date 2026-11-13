@@ -68,3 +68,46 @@ it("hands back the open correction an already-open refusal names", async () => {
     correctionId: "correction-1",
   });
 });
+
+it("reads a correction's lines on the encoded invoice, passing the signal", async () => {
+  const answer = {
+    lines: [
+      {
+        id: "line-1",
+        lineNo: 1,
+        descriptions: { en: "Steak" },
+        rate: "21.00",
+        gross: "12.10",
+        left: "6.05",
+      },
+    ],
+    moneyRefundable: "12.10",
+  };
+  const fetcher = vi.fn().mockResolvedValue(response(answer));
+  const signal = new AbortController().signal;
+  expect(await new TillApi("", fetcher).readInvoiceCorrectionLines("sale/1", { signal })).toEqual(
+    answer,
+  );
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/transactions/sale%2F1/corrections/lines", {
+    method: "GET",
+    credentials: "include",
+    signal,
+  });
+});
+
+it("previews a correction on the encoded invoice with the amount and lines", async () => {
+  const request = { gross: "6.05", lineIds: ["line-1"] };
+  const answer = {
+    gross: "6.05",
+    vatBreakdown: [{ rate: "21.00", base: "5.00", tax: "1.05" }],
+    moneyRefundable: "12.10",
+  };
+  const fetcher = vi.fn().mockResolvedValue(response(answer));
+  expect(await new TillApi("", fetcher).previewInvoiceCorrection("sale/1", request)).toEqual(
+    answer,
+  );
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+    "/api/transactions/sale%2F1/corrections/preview",
+    post(request),
+  );
+});
