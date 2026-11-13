@@ -1804,10 +1804,6 @@ export class ProductEditor extends LitElement {
     </tr>`;
   }
 
-  /**
-   * One ordered list mixing both kinds, added to from a SINGLE combobox rather than one per kind:
-   * every option's label and every attached row's Type cell name the kind already.
-   */
   private renderModifiers() {
     const attached = this.draft.modifiers;
     const held = new Set(attached.map(modifierKey));
@@ -1818,14 +1814,14 @@ export class ProductEditor extends LitElement {
           ? { value: CREATE_EXTRA_LIST, fixed: true, label: t("editor.create_extra_list") }
           : { value: CREATE_OPTION_LIST, fixed: true, label: t("editor.create_option_list") };
       return [
+        { ...create, group, icon: "plus", primary: true },
         ...(kind === "extras" ? this.extraLists : this.optionLists)
           .filter((list) => !held.has(modifierKey({ kind, id: list.id })))
           .map((list) => ({
             value: modifierKey({ kind, id: list.id }),
-            label: kindLabel(list.name, kind),
+            label: list.name,
             group,
           })),
-        { ...create, group, icon: "plus", primary: true },
       ];
     };
     const options = [...offered("extras"), ...offered("options")];

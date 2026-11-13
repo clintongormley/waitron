@@ -1,5 +1,5 @@
 import { allergensFromChoices } from "./allergen-choices.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import {
   registerIcons,
@@ -1595,6 +1595,9 @@ it("lists both kinds of attached modifier list in one order, by staff name and k
 });
 
 it("offers every unattached list of both kinds, and attaches the one chosen", async () => {
+  const locale = currentLocale();
+  setLocale("es");
+  onTestFinished(() => setLocale(locale));
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
@@ -1608,25 +1611,23 @@ it("offers every unattached list of both kinds, and attaches the one chosen", as
     "[data-test=add-modifier]",
   )!;
   expect(combobox.options.map((option) => option.value)).toEqual([
-    "extras:shared",
     "create-extras",
+    "extras:shared",
+    "create-options",
     "options:cooked",
     "options:shared",
-    "create-options",
   ]);
   expect(combobox.options.map((option) => option.label)).toEqual([
-    `Extra bread · ${t("extras.title")}`,
     t("editor.create_extra_list"),
-    `Cooked · ${t("options.title")}`,
-    `Cut · ${t("options.title")}`,
+    "Extra bread",
     t("editor.create_option_list"),
+    "Cooked",
+    "Cut",
   ]);
   expect([t("editor.create_extra_list"), t("editor.create_option_list")]).toEqual([
     "Añadir lista de extras…",
     "Añadir lista de opciones…",
   ]);
-  // Each make-new choice ends its own group, drawn in the primary colour so it does not read as
-  // one more list.
   expect(combobox.options.map((option) => option.group)).toEqual([
     t("extras.title"),
     t("extras.title"),
@@ -1635,18 +1636,18 @@ it("offers every unattached list of both kinds, and attaches the one chosen", as
     t("options.title"),
   ]);
   expect(combobox.options.map((option) => Boolean(option.primary))).toEqual([
+    true,
     false,
     true,
     false,
     false,
-    true,
   ]);
   expect(combobox.options.map((option) => option.icon)).toEqual([
+    "plus",
     undefined,
     "plus",
     undefined,
     undefined,
-    "plus",
   ]);
   combobox.dispatchEvent(
     new CustomEvent("wt-change", {
@@ -2273,7 +2274,7 @@ it("returns the add-a-list control to its placeholder after a choice, keeping fo
   expect(combobox.value).toBe("");
   expect(triggerText(combobox)).toBe(t("editor.choose"));
 
-  await chooseModifier(el, `Cooked · ${t("options.title")}`);
+  await chooseModifier(el, "Cooked");
   expect(el.currentValue.modifiers).toEqual([{ kind: "options", id: "cooked" }]);
   expect(combobox.value).toBe("");
   expect(triggerText(combobox)).toBe(t("editor.choose"));
@@ -2283,7 +2284,7 @@ it("returns the add-a-list control to its placeholder after a choice, keeping fo
   expect(el.shadowRoot!.activeElement).toBe(combobox);
 });
 
-it("draws each make-new row last under its kind's heading, and clicking it asks for that kind", async () => {
+it("draws each make-new row first under its kind's heading, and clicking it asks for that kind", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, modifiers: [] },
@@ -2305,7 +2306,7 @@ it("draws each make-new row last under its kind's heading, and clicking it asks 
       combobox
         .shadowRoot!.getElementById(group.getAttribute("aria-labelledby")!)!
         .textContent!.trim(),
-      [...group.querySelectorAll('[role="option"]')].at(-1)!.textContent!.trim(),
+      [...group.querySelectorAll('[role="option"]')][0]!.textContent!.trim(),
     ]),
   ).toEqual([
     [t("extras.title"), t("editor.create_extra_list")],
@@ -2321,6 +2322,45 @@ it("draws each make-new row last under its kind's heading, and clicking it asks 
   ]);
   expect(el.currentValue.modifiers).toEqual([]);
 });
+
+it.each([1280, 390])(
+  "shows both create choices without scrolling the small-list picker at %ipx",
+  async (frame) => {
+    const width = window.innerWidth,
+      height = window.innerHeight,
+      locale = currentLocale();
+    await page.viewport(frame, 900);
+    try {
+      const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+        open: true,
+        value: { ...product, modifiers: [] },
+        locales: ["en"],
+        units: [unit],
+        taxChoices: reduced,
+        extraLists,
+        optionLists,
+      });
+      await openSection(el, "modifiers");
+      const combobox = addModifier(el);
+      await combobox.updateComplete;
+      combobox.scrollIntoView({ block: "center" });
+      await userEvent.click(combobox.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+      const list = combobox.shadowRoot!.querySelector<HTMLElement>(".list")!;
+      await expect.poll(() => list.getBoundingClientRect().height).toBeGreaterThan(0);
+      const bounds = list.getBoundingClientRect();
+      for (const label of [t("editor.create_extra_list"), t("editor.create_option_list")]) {
+        const row = [...list.querySelectorAll<HTMLElement>('[role="option"]')]
+          .find((option) => option.textContent!.trim() === label)!
+          .getBoundingClientRect();
+        expect(row.top, label).toBeGreaterThanOrEqual(bounds.top);
+        expect(row.bottom, label).toBeLessThanOrEqual(bounds.bottom);
+      }
+    } finally {
+      setLocale(locale);
+      await page.viewport(width, height);
+    }
+  },
+);
 
 it("shows a refusal naming an attached list beside the Modifiers control", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {

@@ -777,16 +777,6 @@ Spanish accessible names. Found in A820's run-it review; the label and inherited
 together in `apps/dashboard/src/widgets/product-list.test.ts` ("puts a colour square showing the
 box's colour").
 
-## At 390px the items table is wider than its scrolling box with or without the mark
-
-**At 390px the items table is wider than its scrolling box with or without the mark** — left open
-by A223 (#1098, an extras list's product dropdown greys a product with variants), seen, not
-changed (scroll width 496 in a 356 box), and the mark wraps in the narrow product column, so a
-marked row is about twice as tall as its neighbours. Also left open by A178g (#1021): at 390px the
-extras list form's item table runs past the dialog's edge, its headings cut ("Preselecc…"), seen
-in its LOOK, not changed and not checked against `main` before it (screenshots kept outside the
-repository).
-
 ## Loose ends left by A663 Part 2d (#1779)
 
 - The dashboard lets a manager attach an extras list to a product sold in a unit with decimals,
@@ -983,7 +973,7 @@ tests. Media still validates required image names and translates its refusal to
 
 ## Bundle: Extras list forms
 
-6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size M. The remaining deliberate limits, wording and variant-warning wrapping.
 
 - **Extras and Options — deliberate limits, and what is left open.**
   [integration contract](../developers/modifiers.md).
@@ -992,14 +982,9 @@ tests. Media still validates required image names and translates its refusal to
   its review: neither screen counts a stored unit seeded as `each` as Each, which `isEachUnit`
   (`packages/catalogue/src/units.ts`) does; no code outside tests seeds one. Left open by W75 (the
   Extras editor shows Portion beside Price, #1194).
-- **Each list still reads "Extra bread · Extras", and under its heading the " · Extras" is now
-  said twice** — left open by A218 (#1082).
-- **With three lists the dropdown already scrolls, so "+ Add options list…" sits at or just below
-  its bottom edge when it opens** — left open by A218 (#1082).
-- **In the wide Extras editor at 1280px wide, the items table scrolls sideways by 4px** — left open
-  by W70 (#1222): (978px of content in a 974px box), with or without the size attribute.
-- **At 390px the items table is wider than its scrolling box with or without the mark**
-  [Detail](catalogue.md#at-390px-the-items-table-is-wider-than-its-scrolling-box-with-or-without-the-mark)
+- **At 390px the variant warning wraps in an extras list's narrow product column**, so a marked
+  row is about twice as tall as its neighbours. Left open by A223 (#1098, an extras list's product
+  dropdown greys a product with variants).
 
 ## Bundle: Menu home tab
 

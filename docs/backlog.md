@@ -533,7 +533,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   costs.**
   [Detail](backlog/catalogue.md#category-authoring-serialises-across-the-whole-database-and-nobody-has-measured-what-that-costs)
 
-- **Extras list forms** (bundle of 6, size M). [Detail](backlog/catalogue.md#bundle-extras-list-forms)
+- **Extras list forms** (bundle of 3, size M). [Detail](backlog/catalogue.md#bundle-extras-list-forms)
 
 - **Loose ends left by A343 (a menu's Price overrides tab tidied, #1368).** The Price overrides
   tab's save message comes after the whole table in tab order, so a keyboard user cannot reach Undo

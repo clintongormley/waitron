@@ -80,7 +80,7 @@ already has lists attached; while it is folded, it shows the names of the attach
 One control adds either kind, and the section holds both kinds in a single ordered list; each row
 shows the list's staff name and which kind it is. Drag a row by the handle at its start to move it,
 or focus the handle and use the up and down arrow keys. That same control lists extras lists under
-an **Extras** heading and options lists under **Options**, and each group ends with its own choice
+an **Extras** heading and options lists under **Options**, and each group starts with its own choice
 to make a new one, **Add extras list…** or **Add options list…**, so you can build a list without
 abandoning the product you are editing.
 
