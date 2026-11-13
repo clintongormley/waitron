@@ -2175,7 +2175,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   local Mailpit start refused the absent Docker socket. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.**
-  Remaining private bill/party bindings include the later A803 groups in party-table-actions.
+  Private bill/party bindings remain in other server suites.
   Split-suite comments and file names also remain.
   Remaining server drink bindings include the sale-source receipt, issuance-identity, list-price
   identity and served-at-huella fixtures. Keep accented search fixtures unchanged.
