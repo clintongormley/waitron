@@ -55,17 +55,37 @@ export function inspectSource(path, source) {
   )
     return [];
   const failures = [];
-  for (const pattern of [
-    /\b(?:register|provision)(?:-|)till\b/gi,
-    /\bre(?:-)register\b/g,
-    /\bWAITRON_TILL_(?:SERIES|TILL|NODE|LOCATION)_ID\b/g,
-    /\bWAITRON_(?:LOCATION)_ID\b/g,
-  ]) {
-    for (const match of `${path}\n${source}`.matchAll(pattern)) {
-      if (/^WAITRON_TILL_(?:SERIES|TILL)_ID$/.test(match[0]) && negativeSettingFiles.has(path))
-        continue;
-      failures.push(`${path}: retired ${match[0]}`);
+  const checkSpellings = (text) => {
+    for (const pattern of [
+      /\b(?:register|provision)(?:-|)till\b/gi,
+      /\bre(?:-)register\b/g,
+      /\bWAITRON_TILL_(?:SERIES|TILL|NODE|LOCATION)_ID\b/g,
+      /\bWAITRON_(?:LOCATION)_ID\b/g,
+    ]) {
+      for (const match of text.matchAll(pattern)) {
+        if (/^WAITRON_TILL_(?:SERIES|TILL)_ID$/.test(match[0]) && negativeSettingFiles.has(path))
+          continue;
+        failures.push(`${path}: retired ${match[0]}`);
+      }
     }
+  };
+  checkSpellings(`${path}\n${source}`);
+  if (
+    /\.[cm]?[jt]sx?$/.test(path) &&
+    /(?:register|provision)-?till|re(?:-)register|WAITRON_(?:TILL_\w+|LOCATION)_ID/i.test(source)
+  ) {
+    const visit = (node) => {
+      if (
+        ts.isStringLiteral(node) ||
+        ts.isNoSubstitutionTemplateLiteral(node) ||
+        ts.isTemplateHead(node) ||
+        ts.isTemplateMiddle(node) ||
+        ts.isTemplateTail(node)
+      )
+        checkSpellings(node.text);
+      ts.forEachChild(node, visit);
+    };
+    visit(ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true));
   }
   if (/^packages\/fiscal(?:-[^/]+)?\/.*\.[cm]?[jt]sx?$/.test(path)) {
     const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);

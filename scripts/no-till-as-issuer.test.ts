@@ -203,3 +203,37 @@ it.each(["NODE", "LOCATION"])(
       ]);
   },
 );
+
+it.each(oldSettings.flatMap((setting) => ["n", "t"].map((escape) => [setting, escape])))(
+  "rejects the retired %s written straight after a \\%s escape, once",
+  (setting, escape) => {
+    const path = "apps/server/src/example.ts";
+    expect(inspectSource(path, `const env = \`A=1\\${escape}${setting}=2\`;`)).toEqual([
+      `${path}: retired ${setting}`,
+    ]);
+    expect(inspectSource(path, `const env = "A=1\\${escape}${setting}=2";`)).toEqual([
+      `${path}: retired ${setting}`,
+    ]);
+    expect(inspectSource(path, `const env = \`A=\${1}\\${escape}${setting}=2\`;`)).toEqual([
+      `${path}: retired ${setting}`,
+    ]);
+  },
+);
+
+it("accepts escaped current settings, negative-setting files and historical records", () => {
+  expect(
+    inspectSource(
+      "apps/server/src/till-config.test.ts",
+      `const env = \`A=1\\n${oldSettings[0]}=2\`;`,
+    ),
+  ).toEqual([]);
+  expect(
+    inspectSource(
+      "docs/superpowers/plans/example.ts",
+      `const env = \`A=1\\n${oldSettings[4]}=2\`;`,
+    ),
+  ).toEqual([]);
+  expect(
+    inspectSource("apps/server/src/example.ts", 'const env = "A=1\\nWAITRON_NODE_ID=2";'),
+  ).toEqual([]);
+});
