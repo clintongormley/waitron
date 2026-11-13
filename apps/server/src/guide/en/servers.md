@@ -136,7 +136,8 @@ list is not a complete history of earlier returns. The list does not identify du
 
 The report notice also tells you when returned invoices are recorded, independently of the dates
 you select. Follow the notice’s **Check handover intervals** link; **Returned invoices** is below
-the intervals. Check the invoices’ original issue dates. Use the figures displayed in each report; do not add the list’s amounts to report totals.
+the intervals. Check the invoices’ original issue dates. Use the figures displayed in each report;
+do not add the list’s amounts to report totals.
 
 ## When a box is waiting for another box {#waiting}
 
