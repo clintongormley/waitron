@@ -676,12 +676,9 @@ it("the unfinished-deletion message is the owner's words, in English and Spanish
     "Borrado interrumpido. Recarga la página para continuar.",
   );
 });
-
 it.each([
   ["setup.start_again_incomplete", "shell.first_setup.start_again_incomplete", "en-GB"],
   ["setup.start_again_incomplete", "shell.first_setup.start_again_incomplete", "es-ES"],
-  ["setup.workspace_unsupported", "shell.first_setup.workspace_unsupported", "en-GB"],
-  ["setup.workspace_unsupported", "shell.first_setup.workspace_unsupported", "es-ES"],
 ] as const)(
   "explains a refused Start again's %s (%s) on the repair page in %s",
   async (code, key, locale) => {
@@ -1252,20 +1249,6 @@ it("a connection check refused storage.disk_full keeps the connection-failure wo
   const screen = () => q<HTMLElement & { errorMessage?: string }>(app, "screen-connection");
   await expect.poll(() => screen()?.errorMessage).toBe(shellEn["shell.connection.server_problem"]);
   expect(q(app, "screen-first-owner")).toBeNull();
-});
-
-it("a record whose claim mark needs repair offers Start again and Recover from backup", async () => {
-  const { app, requests } = await presentDatabase({ inspection: { pair: "repairable" } });
-  expect(q<WtButton>(app, "start-again").disabled).toBe(false);
-  expect(q<WtButton>(app, "recover-backup").disabled).toBe(false);
-  expect(app.shadowRoot!.querySelector("[data-test=start-again-refused]")).toBeNull();
-  await openStartAgain(app);
-  expect(summaryRequests(requests)).toHaveLength(1);
-  await click(app, "cancel-start-again");
-  await expect.poll(() => q<WtButton>(app, "recover-backup")?.disabled).toBe(false);
-  await click(app, "recover-backup");
-  await expect.poll(() => q(app, "confirm-recover")).not.toBeNull();
-  expect(startAgainRequests(requests)).toEqual([]);
 });
 
 it("a record that cannot be read offers neither, and says why", async () => {

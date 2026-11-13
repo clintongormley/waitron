@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -1031,68 +1031,6 @@ describe("the error codes this CLI raises", () => {
   });
 });
 
-it.each([undefined, "/an/unrelated/state/root"])(
-  "does not ignore the fixed venue claim when WAITRON_STATE_DIR is %s",
-  async (stateDir) => {
-    const root = await mkdtemp(join(tmpdir(), "cli-first-claim-"));
-    const venueDir = join(root, "venue");
-    await mkdir(venueDir);
-    await writeFile(
-      join(venueDir, "first-setup-claim.json"),
-      JSON.stringify({
-        version: 1,
-        attemptId: "11111111-1111-4111-8111-111111111111",
-        venueDir,
-        stateDir: join(root, "real-state"),
-        status: "claiming",
-      }),
-    );
-    const h = harness({ env: { ...VENUE_ENV, WAITRON_STATE_DIR: stateDir } });
-    const args = VENUE_ARGS.map((value) => (value === VENUE_DIR ? venueDir : value));
-    try {
-      expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
-      expect(h.lines).toContain("setup.attempt_invalid {}");
-      expect(h.stampEnvironment).not.toHaveBeenCalled();
-      expect(h.applyVenue).not.toHaveBeenCalled();
-      expect(h.openVenue).not.toHaveBeenCalled();
-      expect(h.closes()).toBe(0);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  },
-);
-
-it.each(["claiming", "active"])(
-  "preserves the venue directory before refusing an interrupted %s claim",
-  async (status) => {
-    const root = await mkdtemp(join(tmpdir(), "cli-before-open-"));
-    const venueDir = join(root, "venue");
-    try {
-      await mkdir(venueDir);
-      const markerPath = join(venueDir, "first-setup-claim.json");
-      const marker = JSON.stringify({
-        version: 1,
-        attemptId: "11111111-1111-4111-8111-111111111111",
-        venueDir,
-        stateDir: join(root, "state"),
-        status,
-      });
-      await writeFile(markerPath, marker);
-      const h = harness({ env: VENUE_ENV, openVenue: openVenueDatabase });
-      const args = VENUE_ARGS.map((value) => (value === VENUE_DIR ? venueDir : value));
-
-      expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
-      expect(h.lines).toContain("setup.attempt_invalid {}");
-      expect(await readdir(venueDir)).toEqual(["first-setup-claim.json"]);
-      expect(await readFile(markerPath, "utf8")).toBe(marker);
-      expect(h.stampEnvironment).not.toHaveBeenCalled();
-      expect(h.applyVenue).not.toHaveBeenCalled();
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  },
-);
-
 it("opens an unclaimed venue through the real store opener", async () => {
   const root = await mkdtemp(join(tmpdir(), "cli-unclaimed-open-"));
   const venueDir = join(root, "venue");
@@ -1109,16 +1047,40 @@ it("opens an unclaimed venue through the real store opener", async () => {
   }
 });
 
+it("leaves the venue folder untouched when refusing a damaged setup record", async () => {
+  const root = await mkdtemp(join(tmpdir(), "cli-interrupted-setup-"));
+  const venueDir = join(root, "venue");
+  const stateDir = join(root, "state");
+  try {
+    await mkdir(venueDir);
+    await mkdir(stateDir);
+    await writeFile(join(stateDir, "first-setup.json"), "{}");
+    const h = harness({
+      env: { ...VENUE_ENV, WAITRON_STATE_DIR: stateDir },
+      openVenue: openVenueDatabase,
+    });
+    const args = VENUE_ARGS.map((value) => (value === VENUE_DIR ? venueDir : value));
+    expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
+    expect(h.lines).toContain("setup.attempt_invalid {}");
+    expect(await readdir(venueDir)).toEqual([]);
+    expect(h.applyVenue).not.toHaveBeenCalled();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it("rechecks a claim that appears while the store is opening", async () => {
   const root = await mkdtemp(join(tmpdir(), "cli-claim-during-open-"));
   const venueDir = join(root, "venue");
+  const stateDir = join(root, "state");
   let closed = 0;
   try {
     await mkdir(venueDir);
+    await mkdir(stateDir);
     const h = harness({
-      env: VENUE_ENV,
+      env: { ...VENUE_ENV, WAITRON_STATE_DIR: stateDir },
       openVenue: async () => {
-        await writeFile(join(venueDir, "first-setup-claim.json"), "{}");
+        await writeFile(join(stateDir, "first-setup.json"), "{}");
         return {
           venue: {},
           node: {},

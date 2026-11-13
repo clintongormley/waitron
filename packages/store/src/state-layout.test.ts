@@ -1,3 +1,4 @@
+import { join, resolve } from "node:path";
 import { expect, it } from "vitest";
 import * as layout from "./state-layout.js";
 
@@ -24,4 +25,14 @@ it("every constant is in the table", () => {
     ).toBe(true);
   }
   expect(names).toContain(`trading.env${layout.TRADING_ENV_REPLACED_SUFFIX}`);
+});
+
+it("venueDirOf defaults unset and empty values and resolves a development override", () => {
+  const state = resolve("state");
+  expect(layout.venueDirOf({}, state)).toBe(join(state, "venue"));
+  expect(layout.venueDirOf({ WAITRON_VENUE_DIR: "" }, state)).toBe(join(state, "venue"));
+  expect(layout.venueDirOf({ WAITRON_VENUE_DIR: "dev-venue" }, state)).toBe(resolve("dev-venue"));
+  expect(layout.venueDirOf({ WAITRON_VENUE_DIR: "/separate/venue" }, state)).toBe(
+    "/separate/venue",
+  );
 });

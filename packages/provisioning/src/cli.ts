@@ -1,3 +1,4 @@
+import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import { assertVenueFirstSetupAllowed } from "./first-setup-state.js";
 import { parseArgs } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
@@ -457,12 +458,10 @@ async function refuseRetainedSetup(
   runtime: ReturnType<typeof createFirstSetupRuntime>,
   io: ProvisioningIo,
 ): Promise<void> {
-  const retained = await runtime.store.readForRepair();
+  const retained = await runtime.store.readResumable();
   if (retained === null) return;
   const { status } = retained.state;
-  // A record saved complete beside a claim mark still active is a completion cut off between its
-  // two saves, which Start again deletes.
-  if (status === "complete" && retained.marker.status === "complete") {
+  if (status === "complete" && retained.publicationComplete) {
     io.stderr(
       "This box's setup already finished, so the command sets nothing up. Nothing was changed.",
     );
@@ -493,7 +492,9 @@ async function withVenueState(
   deps: CliDeps,
   body: (target: Database, node: NodeDatabase) => Promise<number>,
 ): Promise<number> {
-  await assertVenueFirstSetupAllowed(venueDir);
+  if (deps.env.WAITRON_STATE_DIR !== undefined && deps.env.WAITRON_STATE_DIR !== "")
+    await assertVenueFirstSetupAllowed(venueDir, deps.env.WAITRON_STATE_DIR);
+  else await assertNoStartAgainDeletion(venueDir);
   let store: VenueDatabase;
   try {
     store = await deps.openVenue(venueDir);
@@ -501,7 +502,9 @@ async function withVenueState(
     throw asUnreadable(error, venueDir);
   }
   try {
-    await assertVenueFirstSetupAllowed(venueDir);
+    if (deps.env.WAITRON_STATE_DIR !== undefined && deps.env.WAITRON_STATE_DIR !== "")
+      await assertVenueFirstSetupAllowed(venueDir, deps.env.WAITRON_STATE_DIR);
+    else await assertNoStartAgainDeletion(venueDir);
     return await body(store.venue, store.node);
   } finally {
     await store.close();

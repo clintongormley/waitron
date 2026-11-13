@@ -114,7 +114,7 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-it.each(["trading", "completion-state", "completion-marker"])(
+it.each(["trading", "completion-state"])(
   "real HTTPS claim readiness stays preproduction and %s interruption restarts a separate process in owner setup",
   async (point) => {
     const root = await mkdtemp(join(tmpdir(), "first-fiscal-boot-"));
@@ -291,11 +291,7 @@ it.each(["trading", "completion-state", "completion-marker"])(
       const fileIo = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
       vi.spyOn(filesystem, "rename").mockImplementation(async (from, to) => {
         const target = String(to);
-        if (
-          !injected &&
-          ((point === "completion-state" && target.endsWith("/first-setup.json")) ||
-            (point === "completion-marker" && target.endsWith("/first-setup-claim.json")))
-        ) {
+        if (!injected && point === "completion-state" && target.endsWith("/first-setup.json")) {
           const value = JSON.parse(await fileIo.readFile(from, "utf8"));
           if (value.status === "complete") {
             injected = true;
@@ -404,21 +400,14 @@ it.each(["trading", "completion-state", "completion-marker"])(
         dispatcher: agent,
         headers: headers(),
       } as RequestInit);
-      if (point === "completion-marker") {
-        // The store refuses to read a complete record whose claim mark was never written.
-        expect(ownerStatus.status).toBe(409);
-        expect((await ownerStatus.json()).error.code).toBe("setup.attempt_invalid");
-      } else {
-        expect(ownerStatus.status).toBe(200);
-        expect((await ownerStatus.json()).state.attemptId).toBe(claim.body.state.attemptId);
-      }
+      expect(ownerStatus.status).toBe(200);
+      expect((await ownerStatus.json()).state.attemptId).toBe(claim.body.state.attemptId);
       expect(
         JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8")).frozen.attemptId,
       ).toBe(claim.body.state.attemptId);
       await server.close();
       server = undefined;
       await rm(join(stateDir, "first-setup.json"));
-      await rm(join(venueDir, "first-setup-claim.json"));
       ({ server, port } = await startRetainedServer(env, { testClock }));
       const lost = await post("/setup-api/first-setup/claim", {
         venue: request,

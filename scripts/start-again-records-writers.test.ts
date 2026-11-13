@@ -25,7 +25,7 @@ const ALLOWED = [
 ];
 
 const NAMES =
-  /\bSTART_AGAIN_CHOICES_DIR\b|\bSTART_AGAIN_SET_ASIDE_DIR\b|\bVENUE_SET_ASIDE_DIR\b|["'`]records\/|first-setup-set-aside/;
+  /\bSTART_AGAIN_CHOICES_DIR\b|\bSTART_AGAIN_SET_ASIDE_DIR\b|["'`]records\/|first-setup-set-aside/;
 
 function isolatedGitEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };

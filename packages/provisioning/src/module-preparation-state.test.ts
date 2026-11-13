@@ -233,7 +233,6 @@ it("a successor preparation state keeps spent module history in the attempt's ow
   const f = await fixture();
   await f.store.withState(binding, async (state) => state.replace({ identities: ["06RB"] }));
   await fs.writeFile(join(f.stateDir, "first-setup.json"), "original state");
-  await fs.writeFile(join(f.venueDir, "first-setup-claim.json"), "original claim");
   const successor = createModulePreparationState({ ...f.options });
   await successor.withState({ ...binding, eventId: "successor" }, async (state) => {
     expect(state.value).toEqual({ identities: ["06RB"] });

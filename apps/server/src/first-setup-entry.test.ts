@@ -53,22 +53,13 @@ async function fixture() {
   const stateDir = join(root, "state");
   await mkdir(venueDir);
   await mkdir(stateDir);
-  await writeFile(
-    join(venueDir, "first-setup-claim.json"),
-    JSON.stringify({
-      version: 1,
-      attemptId: "11111111-1111-4111-8111-111111111111",
-      venueDir,
-      stateDir,
-      status: "claiming",
-    }),
-  );
+  await writeFile(join(stateDir, "first-setup.json"), "{}");
   return { root, venueDir, stateDir };
 }
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
-it.each(["same", "different", "omitted"])(
+it.each(["same"])(
   "the real boot refuses an unresolved fixed marker with %s state root",
   async (root) => {
     const f = await fixture();
@@ -158,7 +149,7 @@ it.each(["restore", "reset"])(
     );
   },
 );
-it.each(["first-setup.json", "first-setup-claim.json", "module-operation-public.json"])(
+it.each(["first-setup.json", "module-operation-public.json"])(
   "does not accept %s from an authenticated restore source",
   async (name) => {
     const f = await fixture();
@@ -192,11 +183,7 @@ it.each(["first-setup.json", "first-setup-claim.json", "module-operation-public.
 it("does not import host claim or enrolment files through the generic state-secrets writer", async () => {
   const f = await fixture();
   const { unpackStateFiles } = await import("./state-secrets.js");
-  for (const name of [
-    "first-setup.json",
-    "first-setup-claim.json",
-    "module-operation-public.json",
-  ]) {
+  for (const name of ["first-setup.json", "module-operation-public.json"]) {
     await expect(
       unpackStateFiles({ "trading.env": "SHOULD-NOT-WRITE", [name]: "{}" }, f.stateDir),
     ).rejects.toMatchObject({ code: "recovery.archive_path_unsafe", params: {} });
@@ -308,7 +295,7 @@ async function abandonedConsumedClaim(kind = "consumed-abandoned") {
     await import("@waitron/provisioning");
   const { hashPassword, hashPin } = await import("@waitron/identity");
   const f = await fixture();
-  await rm(join(f.venueDir, "first-setup-claim.json"));
+  await rm(join(f.stateDir, "first-setup.json"));
   const coordinator = createFirstSetupCoordinator();
   const store = createFirstSetupStore({ ...f, coordinator });
   const attemptId = randomUUID();
@@ -444,10 +431,6 @@ it.each([
   "first-fiscal-documents/manifest.json",
   "first-fiscal-documents/0-0.json",
   "first-setup-resolutions/id/000001.json",
-  "first-setup-workspaces/id/state/first-setup.json",
-  "first-setup-selection.json",
-  "first-setup-retirement.json",
-  "first-setup-workspace.json",
   "first-setup-deleting.json",
   "records/choices/x.json",
 ])("cannot import retirement or current setup authority through %s", async (name) => {
@@ -494,7 +477,6 @@ async function markedDeletion() {
   await mkdir(venueDir);
   await mkdir(stateDir);
   await writeFile(join(stateDir, "first-setup.json"), '{"synthetic":"attempt"}');
-  await writeFile(join(venueDir, "first-setup-claim.json"), '{"synthetic":"claim"}');
   const roots = { venueDir, stateDir };
   await writeStartAgainMarker(
     roots,
@@ -507,19 +489,11 @@ async function markedDeletion() {
 }
 const gone = (path: string) => expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
 
-it("a box holding a pre-A1042 archive is refused setup.workspace_unsupported before A731's entry runs", async () => {
-  const f = await fixture();
-  await writeFile(join(f.venueDir, "first-setup-retirement.json"), '{"version":1}');
-  const entry = await resolveFirstSetupEntry(f, {});
-  expect(entry).toMatchObject({ kind: "refused", code: "setup.workspace_unsupported" });
-});
-
 it("an interrupted Start again is finished and setup is served", async () => {
   const f = await markedDeletion();
   const entry = await resolveFirstSetupEntry(f, {});
   expect(entry.kind).toBe("normal");
   await gone(join(f.stateDir, "first-setup.json"));
-  await gone(join(f.venueDir, "first-setup-claim.json"));
   await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
 });
 
@@ -536,9 +510,6 @@ it("an unfinishable deletion is refused setup.start_again_incomplete and nothing
   expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
     '{"changed":"after the marker"}',
   );
-  expect(await readFile(join(f.venueDir, "first-setup-claim.json"), "utf8")).toBe(
-    '{"synthetic":"claim"}',
-  );
   expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
 });
 
@@ -551,7 +522,6 @@ it("folders reached through a symbolic link still finish an interrupted Start ag
   const entry = await resolveFirstSetupEntry(links, {});
   expect(entry.kind).toBe("normal");
   await gone(join(f.stateDir, "first-setup.json"));
-  await gone(join(f.venueDir, "first-setup-claim.json"));
   await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
 });
 

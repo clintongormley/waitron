@@ -394,8 +394,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence. A1158, A1159 and A1161 list what still refuses.
   [Audit](backlog/self-service-refusals.md#setup-state).
 
-- **A1158: a damaged setup record or claim marker still dead-ends Start again.** Left open by A1099.
-  [Audit](backlog/self-service-refusals.md#a1158-a-damaged-setup-record-or-claim-marker-still-dead-ends-start-again).
+- **A1158: a damaged setup record still dead-ends Start again.** Left open by A1099.
+  [Audit](backlog/self-service-refusals.md#a1158-a-damaged-setup-record-still-dead-ends-start-again).
 
 - **A1159: some setup databases the box cannot read still refuse Start again.** A damaged one is
   deleted since A1131bc slice 2; one it may not open, one beside a journal, and a damaged `node.db`

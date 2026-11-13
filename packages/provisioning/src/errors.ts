@@ -37,7 +37,6 @@ declare module "@waitron/shared" {
     "setup.start_again_move_unfinished": Record<string, never>;
     "setup.start_again_files_changed": Record<string, never>;
     "setup.start_again_set_aside_unavailable": Record<string, never>;
-    "setup.workspace_unsupported": Record<string, never>;
     "provisioning.initial_input_invalid": Record<string, never>;
     "provisioning.initial_operator_required": Record<string, never>;
     /** Nothing supplied the venue directory: no `--venue-dir`, `WAITRON_VENUE_DIR` unset or empty,

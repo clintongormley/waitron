@@ -259,7 +259,6 @@ const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.attempt_uncertain": "shell.first_setup.attempt_uncertain",
   "setup.attempt_invalid": "shell.first_setup.attempt_invalid",
   "setup.start_again_incomplete": "shell.first_setup.start_again_incomplete",
-  "setup.workspace_unsupported": "shell.first_setup.workspace_unsupported",
 };
 /** An attempt in one of these cannot be carried on from the page: only Start again or Recover remain. */
 const pastActivation = (state: FirstSetupState | undefined) =>
@@ -293,7 +292,7 @@ const stopNotAccepted = (code: unknown) =>
   code === "setup.owner_required" || code === "setup.connection_insecure";
 /** Whether the page may ask the box what Start again would delete; the box decides the rest. */
 const wipeOffered = (inspection: FirstSetupInspection) =>
-  (inspection.pair === "valid" || inspection.pair === "repairable") &&
+  inspection.pair === "valid" &&
   inspection.revision !== null &&
   inspection.ownerGeneration !== null;
 /** Words for a setup request the box refused over a first setup this page does not hold. */

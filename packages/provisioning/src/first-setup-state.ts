@@ -4,7 +4,6 @@ import {
   MODULE_OPERATION_PUBLIC_FILE,
 } from "@waitron/store";
 import { FIRST_SETUP_FILE } from "@waitron/store";
-import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { lstat, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
@@ -111,7 +110,6 @@ export interface FirstSetupMarker {
 export interface FirstSetupStore {
   read(): Promise<FirstSetupState | null>;
   readResumable(): Promise<{ state: FirstSetupState; publicationComplete: boolean } | null>;
-  readForRepair(): Promise<FirstSetupRepair | null>;
   claim(
     frozen: FirstSetupFrozen,
     ownerVerifier: string,
@@ -125,22 +123,13 @@ export interface FirstSetupStore {
     hold?: FirstSetupHold,
   ): Promise<FirstSetupState>;
 }
-export interface FirstSetupRepair {
-  state: FirstSetupState;
-  marker: FirstSetupMarker;
-  repairMarker: "active" | "abandoned" | null;
-}
 export const FIRST_SETUP_HOST_FILES = [
   FIRST_SETUP_FILE,
-  "first-setup-claim.json",
   MODULE_OPERATION_PUBLIC_FILE,
   FIRST_SETUP_NODE_KEY_FILE,
   FIRST_FISCAL_DOCUMENTS_DIR,
   "first-setup-resolutions",
-  "first-setup-workspaces",
-  "first-setup-selection.json",
-  "first-setup-retirement.json",
-  "first-setup-workspace.json",
+
   "first-setup-deleting.json",
   RECORDS_DIR,
   START_AGAIN_GUESSES_FILE,
@@ -149,7 +138,6 @@ export function isFirstSetupHostPath(path: string): boolean {
   return FIRST_SETUP_HOST_FILES.some((name) => path === name || path.startsWith(`${name}/`));
 }
 const STATE_LIMIT = 1024 * 1024;
-const MARKER_LIMIT = 16 * 1024;
 const HASH = /^[a-f0-9]{64}$/;
 const VERIFIER = /^scrypt\$[a-f0-9]{32}\$[a-f0-9]{64}$/;
 function invalid(): never {
@@ -439,81 +427,33 @@ async function canonicalDirectory(path: string): Promise<string> {
     return join(await canonicalDirectory(dirname(absolute)), basename(absolute));
   }
 }
-async function readPair(
-  venueDir: string,
-  expectedStateDir?: string,
-  allowInterruptedCompletion = false,
-): Promise<{ marker: FirstSetupMarker; state: FirstSetupState } | null> {
-  let venueExists: boolean;
-  try {
-    const directory = await lstat(venueDir);
-    if (directory.isSymbolicLink()) invalid();
-    venueExists = directory.isDirectory();
-  } catch (error) {
-    if (!(
-      error !== null &&
-      typeof error === "object" &&
-      "code" in error &&
-      ["ENOENT", "ENOTDIR"].includes(String(error.code))
-    ))
-      throw error;
-    venueExists = false;
-  }
-  const value = venueExists
-    ? await readDurableHostJson(join(venueDir, "first-setup-claim.json"), MARKER_LIMIT)
-    : null;
-  if (value === null) {
-    if (
-      expectedStateDir !== undefined &&
-      (await readDurableHostJson(join(expectedStateDir, FIRST_SETUP_FILE), STATE_LIMIT)) !== null
-    )
-      invalid();
-    return null;
-  }
-  if (
-    !keys(value, ["version", "attemptId", "venueDir", "stateDir", "status"]) ||
-    value.version !== 1 ||
-    value.venueDir !== venueDir ||
-    typeof value.stateDir !== "string" ||
-    resolve(value.stateDir) !== value.stateDir ||
-    !["active", "complete", "abandoned"].includes(String(value.status)) ||
-    typeof value.attemptId !== "string" ||
-    !isUuid(value.attemptId)
-  )
-    invalid();
-  if (expectedStateDir !== undefined && value.stateDir !== expectedStateDir) conflict();
-  const state = parseState(
-    await readDurableHostJson(join(value.stateDir, FIRST_SETUP_FILE), STATE_LIMIT),
-    venueDir,
-    value.stateDir,
-  );
-  if (
-    state.frozen.attemptId !== value.attemptId ||
-    (markerStatus(state) !== value.status &&
-      !(allowInterruptedCompletion && state.status === "complete" && value.status === "active"))
-  )
-    invalid();
-  return { marker: value as unknown as FirstSetupMarker, state };
-}
 export async function inspectFirstSetupMarker(
   venueDir: string,
-  stateDir?: string,
+  stateDir: string,
 ): Promise<FirstSetupMarker | null> {
-  await assertNoLegacyFirstSetupWorkspace({ venueDir, stateDir: stateDir ?? venueDir });
-  return (
-    (
-      await readPair(
-        await canonicalDirectory(venueDir),
-        stateDir === undefined ? undefined : await canonicalDirectory(stateDir),
-      )
-    )?.marker ?? null
-  );
+  const venue = await canonicalDirectory(venueDir);
+  const stateRoot = await canonicalDirectory(stateDir);
+  const state = await readFirstSetupRecord(venue, stateRoot);
+  return state === null
+    ? null
+    : {
+        version: 1,
+        attemptId: state.frozen.attemptId,
+        venueDir: venue,
+        stateDir: stateRoot,
+        status: markerStatus(state),
+      };
 }
-export async function assertVenueFirstSetupAllowed(venueDir: string): Promise<void> {
+export async function assertVenueFirstSetupAllowed(
+  venueDir: string,
+  stateDir: string,
+): Promise<void> {
   await assertNoStartAgainDeletion(venueDir);
-  await assertNoLegacyFirstSetupWorkspace({ venueDir, stateDir: venueDir });
-  const pair = await readPair(await canonicalDirectory(venueDir));
-  assertOtherSetupAllowed(pair?.state ?? null);
+  const state = await readFirstSetupRecord(
+    await canonicalDirectory(venueDir),
+    await canonicalDirectory(stateDir),
+  );
+  assertOtherSetupAllowed(state);
 }
 /** The guard adopt and provision take before they write into the venue folder. */
 export async function assertOtherFirstSetupAllowed(
@@ -541,91 +481,38 @@ export function createFirstSetupStore(options: {
   let venueDir = resolve(options.venueDir);
   let stateDir = resolve(options.stateDir);
   let statePath = join(stateDir, FIRST_SETUP_FILE);
-  let markerPath = join(venueDir, "first-setup-claim.json");
   let roots: Promise<void> | undefined;
   const bindRoots = async () => {
     await (roots ??= (async () => {
       venueDir = await canonicalDirectory(options.venueDir);
       stateDir = await canonicalDirectory(options.stateDir);
       statePath = join(stateDir, FIRST_SETUP_FILE);
-      markerPath = join(venueDir, "first-setup-claim.json");
     })());
   };
-  const readPairAtRoots = async (resumable = false) => {
+  const read = async () => {
     await bindRoots();
-    return readPair(venueDir, stateDir, resumable);
+    return readFirstSetupRecord(
+      await canonicalDirectory(venueDir),
+      await canonicalDirectory(stateDir),
+    );
   };
-  const read = async () => (await readPairAtRoots())?.state ?? null;
   const readResumable = async () => {
-    const pair = await readPairAtRoots(true);
-    return pair === null
+    const state = await read();
+    return state === null
       ? null
-      : { state: pair.state, publicationComplete: pair.marker.status === "complete" };
+      : { state, publicationComplete: markerStatus(state) === "complete" };
   };
   const inside = <T>(hold: FirstSetupHold | undefined, body: () => Promise<T>) =>
     hold === undefined ? options.coordinator.run(body) : options.coordinator.held(hold, body);
-  const marker = (state: FirstSetupState, status = markerStatus(state)): FirstSetupMarker => ({
-    version: 1,
-    attemptId: state.frozen.attemptId,
-    venueDir,
-    stateDir,
-    status,
-  });
   const persist = async (state: FirstSetupState) => {
     await assertNoStartAgainDeletion(venueDir);
     parseState(state, venueDir, stateDir);
     await writeDurableHostJson(statePath, state, STATE_LIMIT);
-    await writeDurableHostJson(markerPath, marker(state), MARKER_LIMIT);
     return structuredClone(state);
-  };
-  const readForRepair = async (): Promise<FirstSetupRepair | null> => {
-    await bindRoots();
-    const value = await readDurableHostJson(markerPath, MARKER_LIMIT);
-    if (value === null) {
-      await readPairAtRoots();
-      return null;
-    }
-    if (
-      !keys(value, ["version", "attemptId", "venueDir", "stateDir", "status"]) ||
-      value.version !== 1 ||
-      value.venueDir !== venueDir ||
-      typeof value.stateDir !== "string" ||
-      resolve(value.stateDir) !== value.stateDir ||
-      typeof value.attemptId !== "string" ||
-      !isUuid(value.attemptId) ||
-      !["claiming", "active", "complete", "abandoned"].includes(String(value.status))
-    )
-      invalid();
-    if (value.stateDir !== stateDir) conflict();
-    const state = parseState(await readDurableHostJson(statePath, STATE_LIMIT), venueDir, stateDir);
-    if (state.frozen.attemptId !== value.attemptId) invalid();
-    const currentMarker = value as unknown as FirstSetupMarker;
-    if (
-      markerStatus(state) === currentMarker.status ||
-      (state.status === "complete" && currentMarker.status === "active")
-    )
-      return { state, marker: currentMarker, repairMarker: null };
-    const unused = (attempt: Attempt) =>
-      !attempt.consumptionIntent &&
-      Object.keys(attempt.inputs).length === 0 &&
-      attempt.result === null &&
-      attempt.history.every((event) =>
-        ["claim", "candidates", "checked", "abandoned"].includes(event.kind),
-      );
-    const eligible =
-      (state.status === "claimed" && currentMarker.status === "claiming") ||
-      (state.status === "abandoned" && currentMarker.status === "active");
-    if (!eligible || !unused(state) || !state.previous.every(unused)) invalid();
-    return {
-      state,
-      marker: currentMarker,
-      repairMarker: state.status === "abandoned" ? "abandoned" : "active",
-    };
   };
   return {
     read,
     readResumable,
-    readForRepair,
     claim(frozen, ownerVerifier, capabilityHash, hold) {
       return inside(hold, async () => {
         await bindRoots();
@@ -634,7 +521,6 @@ export function createFirstSetupStore(options: {
         if (ownerVerifier !== frozen.request.admin.passwordHash || !HASH.test(capabilityHash))
           invalid();
         const old = await read();
-        await assertNoLegacyFirstSetupWorkspace({ venueDir, stateDir });
         assertOtherSetupAllowed(old);
         if (old?.status === "complete") conflict();
         const previous =
@@ -681,16 +567,12 @@ export function createFirstSetupStore(options: {
           previous,
         };
         if (Buffer.byteLength(JSON.stringify(state)) > STATE_LIMIT) invalid();
-        // A surviving venue marker refuses competitors even if the state-root write never completes.
-        await writeDurableHostJson(markerPath, marker(state, "claiming"), MARKER_LIMIT);
         return persist(state);
       });
     },
     update(attemptId, revision, change, hold) {
       return inside(hold, async () => {
-        // Resumable, so an interrupted completion reaches the status check below as a conflict.
         const state = (await readResumable())?.state ?? null;
-        await assertNoLegacyFirstSetupWorkspace({ venueDir, stateDir });
         if (state === null || state.frozen.attemptId !== attemptId || state.revision !== revision)
           conflict();
         const allowed =

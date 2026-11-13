@@ -1,7 +1,7 @@
-import { SETUP_OPERATION_FILE, SETUP_OPERATION_LOCK_FILE } from "@waitron/store";
+import { SETUP_OPERATION_FILE } from "@waitron/store";
 import type { FirstSetupCoordinator, FirstSetupHold } from "./first-setup-state.js";
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, unlink } from "node:fs/promises";
+import { mkdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { failedAtFolderSync, writeFileDurable } from "./fs-atomic.js";
@@ -82,11 +82,9 @@ function parseState(raw: string): SetupOperationState | null {
 /** Persist and serialize first-boot work so a supervised restart can resume a known request. */
 export function createSetupOperationStore(
   stateDir: string,
-  ownerId: string = randomUUID(),
   options: { coordinator?: FirstSetupCoordinator; guard?: () => Promise<void> } = {},
 ): SetupOperationStore {
   const statePath = join(stateDir, SETUP_OPERATION_FILE);
-  const lockPath = join(stateDir, SETUP_OPERATION_LOCK_FILE);
   let active = false;
 
   const read = async (): Promise<SetupOperationState | null> => {
@@ -100,62 +98,6 @@ export function createSetupOperationStore(
     }
   };
 
-  const acquire = async (): Promise<string> => {
-    await mkdir(stateDir, { recursive: true });
-    const token = randomUUID();
-    const writeLock = async (): Promise<void> => {
-      const handle = await open(lockPath, "wx", 0o600);
-      try {
-        await handle.writeFile(JSON.stringify({ ownerId, token }));
-      } finally {
-        await handle.close();
-      }
-    };
-    try {
-      await writeLock();
-      return token;
-    } catch (error) {
-      if (!hasCode(error, "EEXIST")) throw error;
-    }
-    let owner: { ownerId?: unknown; pid?: unknown };
-    try {
-      owner = JSON.parse(await readFile(lockPath, "utf8")) as {
-        ownerId?: unknown;
-        pid?: unknown;
-      };
-    } catch {
-      throw new AppError("setup.already_provisioning", {});
-    }
-    if (owner.ownerId === ownerId) {
-      throw new AppError("setup.already_provisioning", {});
-    }
-    const belongsToPreviousBoot =
-      typeof owner.ownerId === "string" ||
-      (Number.isSafeInteger(owner.pid) && Number(owner.pid) > 0);
-    if (!belongsToPreviousBoot) {
-      throw new AppError("setup.already_provisioning", {});
-    }
-    await unlink(lockPath).catch((error: unknown) => {
-      if (!hasCode(error, "ENOENT")) throw error;
-    });
-    try {
-      await writeLock();
-      return token;
-    } catch (error) {
-      if (hasCode(error, "EEXIST")) throw new AppError("setup.already_provisioning", {});
-      throw error;
-    }
-  };
-
-  const release = async (token: string): Promise<void> => {
-    try {
-      const lock = JSON.parse(await readFile(lockPath, "utf8")) as { token?: unknown };
-      if (lock.token === token) await unlink(lockPath);
-    } catch (error) {
-      if (!hasCode(error, "ENOENT")) throw error;
-    }
-  };
-
   return {
     read,
     run(kind, requestHash, fn, hold) {
@@ -163,9 +105,8 @@ export function createSetupOperationStore(
         await options.guard?.();
         if (active) throw new AppError("setup.already_provisioning", {});
         active = true;
-        let token: string | undefined;
         try {
-          token = await acquire();
+          await mkdir(stateDir, { recursive: true });
           const existing = await read();
           if (
             existing !== null &&
@@ -217,11 +158,7 @@ export function createSetupOperationStore(
             throw error;
           }
         } finally {
-          try {
-            if (token !== undefined) await release(token);
-          } finally {
-            active = false;
-          }
+          active = false;
         }
       };
       return options.coordinator === undefined

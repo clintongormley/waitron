@@ -5,7 +5,6 @@ import { Hono } from "hono";
 import { deploymentEnvironmentFor, lockVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import {
-  assertNoLegacyFirstSetupWorkspace,
   assertStartAgainNotKept,
   canonicalFirstSetupDirectory,
   classifyStartAgainRefusal,
@@ -76,7 +75,6 @@ async function restartDeletesLogs(spare: SpareOption): Promise<true | undefined>
 }
 
 const START_REFUSALS = [
-  "setup.workspace_unsupported",
   "setup.start_again_incomplete",
   "setup.start_again_files_found",
   "setup.start_again_kept",
@@ -108,7 +106,6 @@ async function refusedAtStart(roots: FirstSetupRoots): Promise<StartRefused | un
     return code === undefined ? undefined : { kind: "refused", code, roots: canonical, error };
   };
   try {
-    await assertNoLegacyFirstSetupWorkspace(canonical);
     await assertStartAgainNotKept(canonical);
   } catch (error) {
     return refused(error);
@@ -205,11 +202,6 @@ async function resolveLegacyFirstSetupEntry(
     ...(await resolutionApp(canonical, environment, requestRestart, log, spare)),
     roots: canonical,
   });
-  try {
-    await assertNoLegacyFirstSetupWorkspace(roots);
-  } catch {
-    return resolution();
-  }
   const host = createFirstSetupModuleHost({ ...roots, environment, modules: ALL_MODULES });
   let claimed = false;
   try {
@@ -227,7 +219,6 @@ async function resolveLegacyFirstSetupEntry(
       if (!claimed) return body(false);
       const hold = await lockVenueDatabase(roots.venueDir);
       try {
-        await assertNoLegacyFirstSetupWorkspace(roots);
         if ((await needsResolution(host)).unresolved)
           throw new AppError("setup.attempt_uncertain", {});
         return await body(true);

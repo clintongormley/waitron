@@ -1,5 +1,5 @@
-import { VENUE_DIR_NAME } from "@waitron/store";
-import { join, resolve } from "node:path";
+import { venueDirOf } from "@waitron/store";
+import { resolve } from "node:path";
 import { deploymentEnvironmentFor, resolveLogDir } from "@waitron/db";
 import type { DeploymentEnvironment } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -421,7 +421,7 @@ export function loadConfig(
   const stateDir = env.WAITRON_STATE_DIR;
   // Computed once so `venueDir` and `logDir` default under the returned `stateDir`.
   const resolvedStateDir = resolveConfigDir(stateDir, defaultStateRoot);
-  const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(resolvedStateDir, VENUE_DIR_NAME));
+  const venueDir = venueDirOf(env, resolvedStateDir);
   const logDir = resolveLogDir(env, resolvedStateDir);
   assertOutsideScratch(resolvedStateDir, venueDir, "WAITRON_VENUE_DIR");
   assertOutsideScratch(resolvedStateDir, logDir, "WAITRON_LOG_DIR");

@@ -321,7 +321,7 @@ it.each([
   ["secrets/unclaimed.json", "restore.unexpected_entry"],
   ["secrets/cloud/connection.json", "restore.unexpected_entry"],
   ["secrets/cloud/staff.key", "restore.unexpected_entry"],
-  ["secrets/first-setup-claim.json", "restore.unexpected_entry"],
+  ["secrets/not-exported.json", "restore.unexpected_entry"],
   ["secrets/records/choices/1-earlier.json", "restore.unexpected_entry"],
 ])("refuses %s before placement", async (name, code) => {
   const f = await fixture();

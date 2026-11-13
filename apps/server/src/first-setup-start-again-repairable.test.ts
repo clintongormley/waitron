@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -33,19 +33,15 @@ async function repairable(phase: "claimed" | "abandoned") {
     await host.store.update(state.frozen.attemptId, state.revision, { kind: "abandoned" });
   }
   await suite.db.archiveTo(join(folders.venueDir, "venue.db"));
-  const markerPath = join(folders.venueDir, "first-setup-claim.json");
-  const marker = JSON.parse(await readFile(markerPath, "utf8"));
-  marker.status = phase === "claimed" ? "claiming" : "active";
-  await writeFile(markerPath, JSON.stringify(marker));
   return { folders, host };
 }
 
 it.each(["claimed", "abandoned"] as const)(
-  "a %s attempt whose claim mark needs repair is summarised and started again",
+  "a %s attempt without a venue claim is summarised and started again",
   async (phase) => {
     const { folders, host } = await repairable(phase);
     const inspected = await host.resolution.inspectFirstSetupResolution();
-    expect(inspected.pair).toBe("repairable");
+    expect(inspected.pair).toBe("valid");
     const ids = {
       inspectionId: inspected.inspectionId,
       revision: inspected.revision!,

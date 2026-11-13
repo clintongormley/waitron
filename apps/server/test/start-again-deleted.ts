@@ -19,7 +19,6 @@ const DELETED = {
     "node.db-shm",
     "venue.db-journal",
     "node.db-journal",
-    "first-setup-claim.json",
   ],
   state: [
     "module-preparation-state.json",

@@ -145,11 +145,6 @@ it("where the setup record cannot be read, Start again is not offered and no sum
   expect(summaryReads(requests)).toEqual([]);
 });
 
-it("where the setup record pair is repairable, Start again is offered", async () => {
-  const { app } = await wipeFixture({ inspection: { pair: "repairable" } });
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
-});
-
 it("pressing Start again reads the setup again before reading the summary", async () => {
   const { app, requests } = await wipeFixture();
   const before = requests.filter((r) => r.path.endsWith("/resolution")).length;

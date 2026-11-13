@@ -355,11 +355,9 @@ async function postSummary(
 
 async function attemptFiles(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
   return Promise.all(
-    [
-      join(f.stateDir, "first-setup.json"),
-      join(f.venueDir, "first-setup-claim.json"),
-      join(f.stateDir, "module-preparation-state.json"),
-    ].map((path) => readFile(path)),
+    [join(f.stateDir, "first-setup.json"), join(f.stateDir, "module-preparation-state.json")].map(
+      (path) => readFile(path),
+    ),
   );
 }
 
@@ -953,7 +951,6 @@ async function stampAfterName(f: Awaited<ReturnType<typeof abandonedAttempt>>["f
   const nameMs = EPOCH_MS + decodeMinuteIdentity(name) * MINUTE_MS;
   const listed = new Date(nameMs + MINUTE_MS);
   await stampTree(f.stateDir, listed);
-  await stampTree(join(f.venueDir, "first-setup-claim.json"), listed);
   const picks = new Date(nameMs + PICKS_AFTER_NAME_MS);
   await utimes(picksFile(f), picks, picks);
 }
@@ -975,7 +972,7 @@ async function expectRefusedUnchanged(
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 }
 
-it.each(["first-setup.json", "first-setup-claim.json"])(
+it.each(["first-setup.json"])(
   "with the database present, a damaged %s beside a damaged picks file leaves the box reading no revision, so Start again is refused setup.attempt_conflict for the revision it sends, and nothing changes",
   async (file) => {
     const { f, actions, startRequest } = await abandonedAttempt();
@@ -1727,10 +1724,10 @@ it.each([
   ["restore staging", restoreStaging],
   ["the restore command", restoreCommand],
 ])(
-  "once the deletion has removed the claim file, %s is still refused and the remaining files are unchanged",
+  "once the deletion has removed the setup record, %s is still refused and the remaining files are unchanged",
   async (_name, act) => {
     const pending = await pendingDeletion();
-    await rm(join(pending.f.venueDir, "first-setup-claim.json"));
+    await rm(join(pending.f.stateDir, "first-setup.json"));
     const before = await folderTrees(pending.f);
     await act(pending);
     expect(await folderTrees(pending.f)).toEqual(before);

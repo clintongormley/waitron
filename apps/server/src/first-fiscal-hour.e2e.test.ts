@@ -143,9 +143,6 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       await expect(stat(join(f.stateDir, "first-setup.json"))).rejects.toMatchObject({
         code: "ENOENT",
       });
-      await expect(stat(join(f.venueDir, "first-setup-claim.json"))).rejects.toMatchObject({
-        code: "ENOENT",
-      });
     } finally {
       await child.stop();
       await closeAgent();

@@ -63,14 +63,12 @@ export type {
   FirstSetupFrozen,
   FirstSetupChange,
   FirstSetupMarker,
-  FirstSetupRepair,
 } from "./first-setup-state.js";
 export {
   canonicalFirstSetupDirectory,
   canonicalFirstSetupRoots,
 } from "./first-setup-directories.js";
 export type { RegisterAnswer, FirstSetupOriginal } from "./first-setup-directories.js";
-export { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 export { createSetupPreparationHost } from "./setup-preparation-host.js";
 export { publicFirstSetupState, createFirstSetupOwner } from "./first-setup-owner.js";
 export type {

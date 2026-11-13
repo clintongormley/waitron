@@ -1,5 +1,5 @@
 import { endFinishedTlsRepair } from "./box-tls-repair.js";
-import { LOGS_DIR, VENUE_DIR_NAME } from "@waitron/store";
+import { LOGS_DIR, venueDirOf } from "@waitron/store";
 import {
   httpPortFrom,
   landingConfigFrom,
@@ -786,7 +786,7 @@ function bootThisProcess(): Promise<void> {
   setVenueHolderIdentity("server", env, stateDir);
   // `loadConfig`'s own expressions for `venueDir` and `migrationsRoot`, repeated rather than read
   // through `loadConfig`, because a broken config is what lands a box here.
-  const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(stateDir, VENUE_DIR_NAME));
+  const venueDir = venueDirOf(env, stateDir);
   const migrationsRoot = isUnset(env.WAITRON_MIGRATIONS_DIR)
     ? DEFAULT_MIGRATIONS_ROOT
     : env.WAITRON_MIGRATIONS_DIR;

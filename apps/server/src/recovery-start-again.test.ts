@@ -536,6 +536,7 @@ describe("mountStartAgainChoice", () => {
     status: number;
     message: StartAgainMessage;
     statfs?: StartAgainDeps["statfs"];
+    reason?: string;
   }> = [
     {
       name: "setup.request_invalid password",
@@ -613,6 +614,29 @@ describe("mountStartAgainChoice", () => {
       statfs: () => Promise.reject(new Error("statfs refused")),
     },
     {
+      name: "a venue lock that cannot open on a full disk",
+      error: Object.assign(new Error("unable to open database file"), {
+        code: "ERR_SQLITE_ERROR",
+        errcode: 14,
+        errstr: "unable to open database file",
+      }),
+      status: 409,
+      message: { kind: "diskFull" },
+      statfs: low,
+    },
+    {
+      name: "a venue lock that cannot open with room",
+      error: Object.assign(new Error("unable to open database file"), {
+        code: "ERR_SQLITE_ERROR",
+        errcode: 14,
+        errstr: "unable to open database file",
+      }),
+      status: 409,
+      message: { kind: "notFinished" },
+      statfs: roomy,
+      reason: "ERR_SQLITE_ERROR",
+    },
+    {
       name: "another code",
       error: new AppError("setup.start_again_incomplete", {}),
       status: 409,
@@ -648,6 +672,7 @@ describe("mountStartAgainChoice", () => {
     if (row.message.kind === "notFinished") {
       expect(log).toHaveBeenCalledWith("warn", "recovery.start_again_choice_failed", {
         errorCode: row.error instanceof AppError ? row.error.code : null,
+        ...(row.reason === undefined ? {} : { reason: row.reason }),
       });
     } else {
       expect(log).not.toHaveBeenCalled();
@@ -782,25 +807,6 @@ describe("mountStartAgainChoice", () => {
       secure: true,
       message: { kind: "moved", folder: "state/records/set-aside/s1" },
     });
-  });
-
-  it("Move across two disks names both set-aside folders", async () => {
-    const { app, render } = mounted({
-      choose: () =>
-        Promise.resolve({
-          choice: "move" as const,
-          setAside: { state: "records/set-aside/s1/state", venue: "first-setup-set-aside/s1" },
-        }),
-    });
-    await post(app, { ...FORM, choice: "move" });
-    expect(render).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        message: {
-          kind: "moved",
-          folder: "state/records/set-aside/s1/state, venue/first-setup-set-aside/s1",
-        },
-      }),
-    );
   });
 
   it("Move restarts only after the answer is written", async () => {

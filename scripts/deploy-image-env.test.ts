@@ -1524,3 +1524,13 @@ describe("the invoice raster encoder's CUPS attribution", () => {
     expect(DOCKERFILE).toContain("/src/deploy/third-party/ /app/third-party/");
   });
 });
+
+it("the box's deploy files never name WAITRON_VENUE_DIR", () => {
+  for (const path of [
+    "deploy/Dockerfile",
+    "deploy/compose.yml",
+    "deploy/waitron.sh",
+    "deploy/.env.example",
+  ])
+    expect(read(path), path).not.toContain("WAITRON_VENUE_DIR");
+});

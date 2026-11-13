@@ -373,20 +373,11 @@ it.each([
       "setup.already_provisioned {}",
     ],
   ],
-  // Saved complete, its claim mark cut off before saying so: Start again deletes it.
-  ["complete, claim mark active", STOPPED],
 ] as const)(
   "a retained setup (%s) is refused before any question, and nothing on disk changes",
   async (status, words) => {
     const f = await activationFixture();
-    const markActive = status === "complete, claim mark active";
-    await retainAt(f, markActive ? "complete" : status);
-    if (markActive) {
-      const claim = join(f.root, "venue", "first-setup-claim.json");
-      const marker = JSON.parse(await readFile(claim, "utf8")) as { status: string };
-      expect(marker.status).toBe("complete");
-      await writeFile(claim, JSON.stringify({ ...marker, status: "active" }), { mode: 0o600 });
-    }
+    await retainAt(f, status);
     const before = {
       state: await folderSnapshot(join(f.root, "state")),
       venue: await folderSnapshot(join(f.root, "venue")),

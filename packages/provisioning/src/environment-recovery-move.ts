@@ -8,7 +8,6 @@ import {
   SPARE_SPACE_FILE,
   SPARE_SPACE_RELEASED_FILE,
   RECOVERY_LOCK_FILE,
-  SETUP_OPERATION_LOCK_FILE,
   START_AGAIN_GUESSES_FILE,
   RECOVERY_STATE_FILE,
   LOGS_DIR,
@@ -49,7 +48,6 @@ const KEEP = new Set([
   SPARE_SPACE_FILE,
   SPARE_SPACE_RELEASED_FILE,
   RECOVERY_LOCK_FILE,
-  SETUP_OPERATION_LOCK_FILE,
   START_AGAIN_GUESSES_FILE,
   RECOVERY_STATE_FILE,
   LOGS_DIR,
@@ -68,7 +66,6 @@ const VENUE = [
   "node.db-journal",
   "node.db",
   ".venue.db-litestream",
-  "first-setup-claim.json",
   "first-setup-workspaces",
   "first-setup-selection.json",
   "first-setup-retirement.json",
@@ -154,7 +151,7 @@ export async function beginEnvironmentMove(given: Roots, io: SetAsideIo = realIo
   if (await present(join(roots.stateDir, ENVIRONMENT_RECOVERY_MOVE_FILE), realIo))
     throw unfinished();
   const pieces = await inventory(roots);
-  const setAside = await setAsideDestinations(roots, `${Date.now()}-${randomUUID()}`, io);
+  const setAside = setAsideDestinations(`${Date.now()}-${randomUUID()}`);
   await prepareSetAside(roots, pieces.map(unit), setAside, io);
   const record: Move = { version: 1, roots, pieces, setAside };
   await writeFileDurable(
@@ -208,11 +205,7 @@ export async function resumeEnvironmentMove(given: Roots, io: SetAsideIo = realI
     canonical.stateDir !== (await canonicalFirstSetupRoots(given)).stateDir
   )
     throw unfinished();
-  const expected = await setAsideDestinations(
-    canonical,
-    record.setAside.state.split("/").at(-2)!,
-    io,
-  );
+  const expected = setAsideDestinations(record.setAside.state.split("/").at(-2)!);
   if (expected.state !== record.setAside.state || expected.venue !== record.setAside.venue)
     throw unfinished();
   const hold = await lockVenueDatabase(canonical.venueDir);

@@ -1,3 +1,4 @@
+import * as guesses from "./first-setup-start-again-guesses.js";
 import * as folderSync from "./folder-sync.js";
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -76,6 +77,7 @@ vi.mock("./first-setup-start-again-deletion.js", async (original) => {
 });
 
 vi.mock("./folder-sync.js", { spy: true });
+vi.mock("./first-setup-start-again-guesses.js", { spy: true });
 
 const children: ChildProcess[] = [];
 const dirs: string[] = [];
@@ -632,7 +634,6 @@ it("Move then finishes Start again: the marker and the marked files are gone, th
   const [record] = await recordsOf(f);
   expect(result).toEqual({ choice: "move", setAside: record!.setAside });
   await absent(join(f.roots.venueDir, "first-setup-deleting.json"));
-  await absent(join(f.roots.venueDir, "first-setup-claim.json"));
   await absent(join(f.roots.stateDir, "first-setup.json"));
   await absent(join(f.roots.venueDir, "venue.db"));
   const at = join(f.roots.stateDir, record!.setAside!.venue, "venue.db");
@@ -974,3 +975,39 @@ it.each([
     expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe("found database");
   },
 );
+
+it("counts a wrong password while the venue folder is held and releases it on refusal", async () => {
+  const f = await found();
+  const { beginStartAgainGuess: begin } = await vi.importActual<typeof guesses>(
+    "./first-setup-start-again-guesses.js",
+  );
+  let heldWhenCounted = false;
+  const spy = vi.spyOn(guesses, "beginStartAgainGuess").mockImplementation(async (...args) => {
+    heldWhenCounted = await lstat(join(f.roots.venueDir, "venue.holder.json")).then(
+      () => true,
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return false;
+        throw error;
+      },
+    );
+    return begin(...args);
+  });
+  try {
+    await expect(
+      chooseStartAgainLeftovers({
+        roots: f.roots,
+        password: WRONG,
+        choice: "keep",
+        listed: f.listed,
+        now: () => new Date(T0),
+      }),
+    ).rejects.toMatchObject({ code: "setup.owner_required" });
+    expect(heldWhenCounted).toBe(true);
+    expect(await counter(f.roots.stateDir)).toMatchObject({ failures: 1 });
+    await expect(lstat(join(f.roots.venueDir, "venue.holder.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  } finally {
+    spy.mockRestore();
+  }
+});

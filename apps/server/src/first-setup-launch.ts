@@ -1,7 +1,6 @@
-import { VENUE_DIR_NAME } from "@waitron/store";
+import { venueDirOf } from "@waitron/store";
 import { Hono } from "hono";
 import { resolveLogDir } from "@waitron/db";
-import { join } from "node:path";
 import { DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
 import { loadBoxEnv } from "./box-env.js";
@@ -43,7 +42,7 @@ export async function startServerOrFirstSetupResolution(
   failedLater: Promise<never>;
 }> {
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
-  const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(stateDir, VENUE_DIR_NAME));
+  const venueDir = venueDirOf(env, stateDir);
   const log = createLogger(
     (line) => process.stdout.write(line),
     () => new Date(),

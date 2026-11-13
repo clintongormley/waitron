@@ -1,3 +1,5 @@
+import { join, resolve } from "node:path";
+
 export type ResetFate = "kept" | "deleted";
 export interface StateEntry {
   readonly name: string;
@@ -37,7 +39,6 @@ export const FIRST_SETUP_NODE_KEY_FILE = "first-setup-node-key.json";
 export const FISCAL_READINESS_FILE = "fiscal-readiness.json";
 export const SETUP_OPERATION_FILE = "setup-operation.json";
 export const SETUP_CLOCK_STEP_FILE = "setup-clock-step.json";
-export const SETUP_OPERATION_LOCK_FILE = "setup-operation.lock";
 export const CONFIGURATION_IMPORT_FILE = "configuration-import.json";
 export const CONFIGURATION_IMPORT_ARTIFACT = "configuration-import.artifact";
 export const CONFIGURATION_IMPORT_KEY = "configuration-import.key";
@@ -220,12 +221,6 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     why: "Setup ownership must survive a restart.",
   },
   {
-    name: SETUP_OPERATION_LOCK_FILE,
-    kind: "file",
-    reset: "deleted",
-    why: "Serialises setup operations.",
-  },
-  {
     name: CONFIGURATION_IMPORT_FILE,
     kind: "file",
     reset: "deleted",
@@ -291,3 +286,11 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
 export const RESET_KEPT: readonly string[] = STATE_LAYOUT.filter(
   (entry) => entry.reset === "kept",
 ).map((entry) => entry.name);
+
+export function venueDirOf(
+  env: Readonly<Record<string, string | undefined>>,
+  stateDir: string,
+): string {
+  const value = env.WAITRON_VENUE_DIR;
+  return value === undefined || value === "" ? join(stateDir, VENUE_DIR_NAME) : resolve(value);
+}

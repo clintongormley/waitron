@@ -25,6 +25,7 @@ export async function loadBoxEnv(
       continue;
     }
   }
+  delete fromFiles.WAITRON_VENUE_DIR;
   const merged: Record<string, string | undefined> = { ...fromFiles };
   for (const [k, v] of Object.entries(base)) {
     // An empty value is unset (`env-value.ts`), so it never masks a file value: compose passes

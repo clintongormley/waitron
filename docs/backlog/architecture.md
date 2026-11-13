@@ -1157,7 +1157,9 @@ the helper's constant status is not evidence of the write.
   jr13's SIGSTOP probe is a stand-in only. 111 product
   environment variables become 51. Duplicate address names are merged, the print agent uses its host name,
   and host-script and full-disk tests use shared roots. The remaining environment slices stay open.
-  There is one state-folder layout; the box certificate and key
+  There is one state-folder layout, and a box keeps its venue under that state folder.
+  A first setup has no venue claim or separate setup lock; Start again sets files aside
+  under the state folder. The box certificate and key
   share one PEM file, and a completed certificate repair ends after a start stays healthy. It keeps
   the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror
   link, the pinned main-box key, the handover tables) and removes only the standby's reserved identity

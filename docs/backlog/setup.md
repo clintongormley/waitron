@@ -608,6 +608,8 @@ longer reads, shows, renews or discards an old recovery from backup, and
 `first-setup-backup-session.ts` is deleted.) (2026-11-04, A1131bc slice 4: that page, its session
 and `first-setup-backup-lease.test.ts` are deleted; nothing renews a recovery session any more.)
 
+(2026-11-13, A1308 fl7: the older-layout start refusal is removed; the dated decision below describes the former layout.)
+
 (2026-11-09, A1308 fl1: confirmation records are no longer written. Keep and Move choices
 and set-aside files live under `records/choices/` and `records/set-aside/`; a plain reset keeps
 `records/` and `tls/`. The older decision below records the previous layout.)

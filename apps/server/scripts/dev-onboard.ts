@@ -1,3 +1,4 @@
+import { venueDirOf } from "@waitron/store";
 // Local-dev bootstrap for setup mode: migrate a local venue directory and write a venue-less
 // `apps/server/.env`, so `pnpm dev` boots the server unprovisioned. Run from the repo root via
 // `pnpm dev:onboard`.
@@ -8,12 +9,7 @@ import { realpathSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { deploymentEnvironment, resolveConfigDir } from "../src/config.js";
-import {
-  defaultDevVenueDir,
-  inspectVenues,
-  renderEnvFileLines,
-  resetVenueDir,
-} from "./dev-setup.js";
+import { inspectVenues, renderEnvFileLines, resetVenueDir } from "./dev-setup.js";
 import type { DevSetupOptions } from "./dev-setup.js";
 
 export interface SetupEnv {
@@ -89,7 +85,7 @@ async function main(): Promise<void> {
   // Resolved exactly as `config.ts` does, so this migrates the directory `pnpm dev` opens.
   const { DEFAULT_STATE_ROOT } = await import("../src/boot.js");
   const stateDir = resolveConfigDir(process.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
-  const venueDir = resolveConfigDir(process.env.WAITRON_VENUE_DIR, defaultDevVenueDir(stateDir));
+  const venueDir = venueDirOf(process.env, stateDir);
 
   if (process.argv.includes("--reset")) {
     resetVenueDir(venueDir);

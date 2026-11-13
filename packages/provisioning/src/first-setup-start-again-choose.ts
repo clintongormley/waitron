@@ -102,14 +102,14 @@ export async function chooseStartAgainLeftovers(input: {
     await assertNotKept(roots.stateDir, survey);
     if (survey.digest !== input.listed) throw new AppError("setup.start_again_files_changed", {});
     const state = await setupRecord(roots, survey);
-    const finish = await beginStartAgainGuess(roots.stateDir, survey.attemptId, input.now());
-    if (!(await verify(input.password, state.ownerVerifier))) {
-      await finish("invalid");
-      throw new AppError("setup.owner_required", {});
-    }
-    await finish("success");
     const hold = await lockVenueDatabase(roots.venueDir);
     try {
+      const finish = await beginStartAgainGuess(roots.stateDir, survey.attemptId, input.now());
+      if (!(await verify(input.password, state.ownerVerifier))) {
+        await finish("invalid");
+        throw new AppError("setup.owner_required", {});
+      }
+      await finish("success");
       const locked = await surveyStartAgainLeftovers(roots);
       if (locked === null || locked.kind !== "choice" || locked.digest !== input.listed)
         throw new AppError("setup.start_again_files_changed", {});
@@ -134,7 +134,7 @@ export async function chooseStartAgainLeftovers(input: {
         return { choice: "keep" };
       }
       const stem = startAgainChoiceStem(record);
-      const setAside = await setAsideDestinations(roots, stem, input.io);
+      const setAside = setAsideDestinations(stem);
       const made = await prepareSetAside(roots, locked.units, setAside, input.io);
       const move = { ...record, choice: "move", setAside } as const;
       try {

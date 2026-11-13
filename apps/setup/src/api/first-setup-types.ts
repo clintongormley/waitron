@@ -50,7 +50,7 @@ export interface FirstSetupStatus {
 export interface FirstSetupInspection {
   version: 2;
   inspectionId: string;
-  pair: "missing" | "partial" | "invalid" | "valid" | "repairable";
+  pair: "missing" | "partial" | "invalid" | "valid";
   database:
     "missing" | "unreadable" | "corrupt" | "partial" | "unknown" | "no-venue-rows" | "occupied";
   revision: number | null;

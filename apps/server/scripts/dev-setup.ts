@@ -1,4 +1,4 @@
-import { VENUE_DIR_NAME } from "@waitron/store";
+import { venueDirOf } from "@waitron/store";
 import { DEMO_DEVELOPER_PRESETS, DEFAULT_DEMO_DEVELOPER_PRESET } from "@waitron/country-packs/demo";
 // Idempotent local-dev bootstrap: provision ONE preproduction venue into a local venue directory and
 // write its identity to `apps/server/.env`. Run from the repo root via `pnpm dev:setup`; never
@@ -14,7 +14,6 @@ import {
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -47,7 +46,7 @@ export { parseEnvFile };
  * venue is stood up somewhere the server never opens.
  */
 export function defaultDevVenueDir(stateDir: string): string {
-  return join(stateDir, VENUE_DIR_NAME);
+  return venueDirOf({}, stateDir);
 }
 
 /** Named once so the venue plan and the fiscal-slot `modules.json` select the same regime, and boot
@@ -414,7 +413,7 @@ async function main(): Promise<void> {
   // pull the whole `boot.ts` graph.
   const { DEFAULT_STATE_ROOT } = await import("../src/boot.js");
   const stateDir = resolveConfigDir(process.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
-  const venueDir = resolveConfigDir(process.env.WAITRON_VENUE_DIR, defaultDevVenueDir(stateDir));
+  const venueDir = venueDirOf(process.env, stateDir);
 
   if (process.argv.includes("--reset")) {
     resetVenueDir(venueDir);

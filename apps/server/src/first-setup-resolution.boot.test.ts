@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { IncomingHttpHeaders } from "node:http";
 import { request as httpsRequest } from "node:https";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import type { Hono } from "hono";
 import * as entry from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
@@ -46,7 +46,7 @@ async function torn() {
     venueDir = join(root, "venue");
   await mkdir(stateDir);
   await mkdir(venueDir);
-  await writeFile(join(venueDir, "first-setup-claim.json"), "{}");
+  await writeFile(join(stateDir, "first-setup.json"), "{}");
   await mkdir(join(stateDir, "flows/restore"), { recursive: true });
   await writeFile(join(stateDir, "flows/restore/record.json"), "retained restore");
   await writeFile(join(stateDir, "reset-request.json"), "retained reset");
@@ -160,7 +160,7 @@ it("a strictly paired attempt with a missing database reaches resolution without
 
 it("direct entry still boots a normal unclaimed workspace", async () => {
   const f = await torn();
-  await rm(join(f.venueDir, "first-setup-claim.json"));
+  await rm(join(f.stateDir, "first-setup.json"));
   const boot = vi.fn(stopped);
   await entry.startServerOrFirstSetupResolution(
     { WAITRON_STATE_DIR: f.stateDir, WAITRON_VENUE_DIR: f.venueDir },
@@ -172,7 +172,7 @@ it("direct entry still boots a normal unclaimed workspace", async () => {
 
 it("a normal start's failure after waiting for its peers reaches the returned handle", async () => {
   const f = await torn();
-  await rm(join(f.venueDir, "first-setup-claim.json"));
+  await rm(join(f.stateDir, "first-setup.json"));
   const failure = new Error("failed after the wait");
   let fail: (error: unknown) => void = () => {};
   const fullyStarted = new Promise<void>((_, reject) => (fail = reject));
@@ -395,7 +395,6 @@ async function startingBox(box: Box) {
     return { root, ...roots };
   }
   await writeFile(join(stateDir, "first-setup.json"), '{"synthetic":"attempt"}');
-  await writeFile(join(venueDir, "first-setup-claim.json"), '{"synthetic":"claim"}');
   if (box === "old-recovery") {
     await mkdir(oldRecovery, { recursive: true });
     await writeFile(join(oldRecovery, "current.json"), "{}");
@@ -499,10 +498,6 @@ const STATUS_EN = "Level: recovery. This start was refused before it began, and 
 // The Spanish status line has no exported table to read it from; the titles and actions do.
 const STATUS_ES = "Nivel: recovery. Este arranque se rechazó antes de empezar y no se ha contado.";
 const REFUSED_TEXT = {
-  "setup.workspace_unsupported": {
-    title: "This box holds a setup from an older version of Waitron that this version cannot use.",
-    action: "Reinstall Waitron on this box to start fresh.",
-  },
   "setup.start_again_incomplete": {
     title:
       "Start again did not finish: the box found files it did not expect, or could not read or delete one.",
@@ -535,39 +530,12 @@ async function expectRefusedPage(port: number, code: keyof typeof REFUSED_TEXT) 
 const gone = (path: string) => expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
 
 it.each(MODES)(
-  "a box holding a pre-A1042 archive serves the recovery page naming it, in every entry mode (%s)",
-  async (mode) => {
-    const f = await startingBox("archive");
-    const started = await startIn(mode, f);
-    await expectRefusedPage(started.port, "setup.workspace_unsupported");
-    expect(started.startServer).not.toHaveBeenCalled();
-    expect(started.writes).not.toHaveBeenCalled();
-    await gone(join(f.stateDir, "recovery.json"));
-  },
-);
-
-describe.each(["old-recovery", "old-tombstone"] as const)("%s", (box) => {
-  it.each(MODES)(
-    "a box holding the repair page's old recovery folder serves the reinstall page, in every entry mode (%s)",
-    async (mode) => {
-      const f = await startingBox(box);
-      const started = await startIn(mode, f);
-      await expectRefusedPage(started.port, "setup.workspace_unsupported");
-      expect(started.startServer).not.toHaveBeenCalled();
-      expect(started.writes).not.toHaveBeenCalled();
-      await gone(join(f.stateDir, "recovery.json"));
-    },
-  );
-});
-
-it.each(MODES)(
   "the start finishes an interrupted Start again before serving setup (%s)",
   async (mode) => {
     const f = await startingBox("interrupted");
     const started = await startIn(mode, f);
     expect(started.startServer).toHaveBeenCalledOnce();
     await gone(join(f.stateDir, "first-setup.json"));
-    await gone(join(f.venueDir, "first-setup-claim.json"));
     await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
   },
 );
@@ -582,9 +550,6 @@ it.each(MODES)(
     expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
       '{"changed":"after the marker"}',
     );
-    expect(await readFile(join(f.venueDir, "first-setup-claim.json"), "utf8")).toBe(
-      '{"synthetic":"claim"}',
-    );
     expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
     expect(started.restart).not.toHaveBeenCalled();
     const retry = await overHttps(started.port, "/recovery-api/retry", "en-GB", "POST");
@@ -595,9 +560,8 @@ it.each(MODES)(
     await gone(join(f.stateDir, "recovery.json"));
   },
 );
-
 it("a refused start after an earlier failed start shows the new code under 'Why the last start failed'", async () => {
-  const f = await startingBox("archive");
+  const f = await startingBox("unfinishable");
   await mkdir(join(f.stateDir, "logs"));
   await writeFile(
     join(f.stateDir, "logs", LOG_FILE_NAME),
@@ -619,7 +583,7 @@ it("a refused start after an earlier failed start shows the new code under 'Why 
   const heading = page.indexOf("Why the last start failed (");
   expect(heading).toBeGreaterThan(-1);
   const section = page.slice(heading, page.indexOf("</pre>", heading));
-  expect(section).toContain("setup.workspace_unsupported");
+  expect(section).toContain("setup.start_again_incomplete");
   expect(section).not.toContain("the detail of an older start");
   expect(section).not.toContain("2026-10-20T10:00:01.000Z");
 });
@@ -637,7 +601,6 @@ it.each(MODES)(
     });
     expect(started.startServer).toHaveBeenCalledOnce();
     await gone(join(f.stateDir, "first-setup.json"));
-    await gone(join(f.venueDir, "first-setup-claim.json"));
     await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
   },
 );

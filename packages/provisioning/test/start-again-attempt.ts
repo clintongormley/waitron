@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -93,6 +94,7 @@ export async function startAgainAttempt(
     venueDir: join(base, "venue"),
     stateDir: join(base, "state"),
   });
+  await mkdir(roots.venueDir, { recursive: true });
   await options.before?.(roots);
   await writeStartAgainMarker(
     roots,
