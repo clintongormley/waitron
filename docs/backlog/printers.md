@@ -107,8 +107,7 @@ the cause was not found.
 
 ## A790: document and printer routing plan
 
-A790 remains open for dashboard routing and its separate browser preference, and subsequent
-integration checks. The [order-linked till slice](../superpowers/plans/2026-11-09-a790-till-document-printer.md)
+A790 remains open for the payment-time mixed-printer choice and subsequent integration checks. The [order-linked till slice](../superpowers/plans/2026-11-09-a790-till-document-printer.md)
 releases A739’s prerequisite for sales with an order (watcher approval, 9 November 2026 at23:14).
 A739 owns its payment window and final-entry changes, including the separate handheld paid view;
 A840/A842/A848 follow as one change.
@@ -120,7 +119,7 @@ F2 A4 remains unavailable; A739 supplies order-linked Receipt Email. F2-to-F1 re
 The payment-time mixed-printer choice remains in A790: a printed full invoice should offer the
 profile's Invoice list, including receipt-paper printers, using the device's saved choice and then
 the profile default. Do not mistake #2640's ticket-view chooser for that payment change. Also retain
-the queued Devices-table A4 marker follow-up for its Invoice printer value. Keep the Printers tab's A4
+the Devices-table A4 marker for its Invoice printer value. Keep the Printers tab's A4
 printers wording and A661's separate print-queue Resend policy question.
 
 G4, the recovery-origin file, browser operation journal and two-stage prepare/accept exchange are

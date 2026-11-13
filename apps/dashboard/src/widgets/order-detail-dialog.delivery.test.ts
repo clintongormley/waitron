@@ -376,7 +376,7 @@ describe("the full invoice's delivery status", () => {
     const el = await open(stubApi(simplified));
     expect(find(el, "delivery-status")).toBeNull();
     expect(find(el, "delivery-history")).toBeNull();
-    expect(footerButtons(el)).toEqual(["Reprint receipt"]);
+    expect(footerButtons(el)).toEqual(["Print / Reprint"]);
   });
 });
 
@@ -395,19 +395,19 @@ describe("Print invoice and Download PDF", () => {
 
   it("offers Print invoice and Download PDF", async () => {
     setLocale("en-GB");
-    const el = await open(stubApi(offered()), { mayReprint: () => false });
+    const el = await open(stubApi(offered()), { mayReprint: () => true });
     expect(footerButtons(el)).toEqual(["print-invoice", "download-pdf"]);
-    expect(text(el, "print-invoice")).toBe("Print invoice");
+    expect(text(el, "print-invoice")).toBe("Print / Reprint");
     expect(text(el, "download-pdf")).toBe("Download PDF");
   });
 
   it.each([
-    ["en-GB", "original", null, "Print invoice"],
-    ["en-GB", "duplicate", null, "Print a copy"],
-    ["en-GB", "original", "a4", "Print invoice"],
-    ["es-ES", "original", null, "Imprimir factura"],
-    ["es-ES", "duplicate", null, "Imprimir una copia"],
-    ["es-ES", "original", "a4", "Imprimir factura"],
+    ["en-GB", "original", null, "Print / Reprint"],
+    ["en-GB", "duplicate", null, "Print / Reprint"],
+    ["en-GB", "original", "a4", "Print / Reprint"],
+    ["es-ES", "original", null, "Imprimir / Reimprimir"],
+    ["es-ES", "duplicate", null, "Imprimir / Reimprimir"],
+    ["es-ES", "original", "a4", "Imprimir / Reimprimir"],
   ] as const)(
     "labels the print action in %s for an %s (retry %s)",
     async (locale, designation, retry, label) => {
@@ -440,7 +440,7 @@ describe("Print invoice and Download PDF", () => {
           .shadowRoot!.querySelector("dialog")!
           .getBoundingClientRect();
         const buttons = [...el.shadowRoot!.querySelectorAll("wt-button")];
-        expect(buttons).toHaveLength(3);
+        expect(buttons).toHaveLength(2);
         for (const button of buttons) {
           const { left, right } = button.getBoundingClientRect();
           expect.soft(left, button.textContent!.trim()).toBeGreaterThanOrEqual(box.left);
@@ -678,12 +678,7 @@ describe("sending the invoice by email", () => {
   it("offers Send by email beside the other actions", async () => {
     setLocale("en-GB");
     const el = await open(stubApi(emailOffered()));
-    expect(footerButtons(el)).toEqual([
-      "print-invoice",
-      "email-invoice",
-      "download-pdf",
-      "Reprint receipt",
-    ]);
+    expect(footerButtons(el)).toEqual(["print-invoice", "email-invoice", "download-pdf"]);
   });
 
   it.each([
@@ -712,7 +707,6 @@ describe("sending the invoice by email", () => {
       "email-again",
       "email-invoice",
       "download-pdf",
-      "Reprint receipt",
     ]);
   });
 
@@ -793,7 +787,7 @@ describe("sending the invoice by email", () => {
   });
 
   it.each(["en-GB", "es-ES"])(
-    "keeps all five buttons inside the dialog at phone width (%s)",
+    "keeps every offered action inside the dialog at phone width (%s)",
     async (locale) => {
       setLocale(locale);
       await page.viewport(390, 844);
@@ -804,7 +798,7 @@ describe("sending the invoice by email", () => {
           .shadowRoot!.querySelector("dialog")!
           .getBoundingClientRect();
         const buttons = [...el.shadowRoot!.querySelectorAll("wt-form-actions wt-button")];
-        expect(buttons).toHaveLength(5);
+        expect(buttons).toHaveLength(4);
         for (const button of buttons) {
           const { left, right } = button.getBoundingClientRect();
           expect.soft(left, button.textContent!.trim()).toBeGreaterThanOrEqual(box.left);

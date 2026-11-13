@@ -1,7 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi, OrderRowDto } from "../api/client.js";
+import { setLocale } from "../i18n/t.js";
 import "./orders-screen.js";
 import type { OrdersScreen } from "./orders-screen.js";
 
@@ -44,7 +46,11 @@ const api = {
   liveData: new LiveData(),
 } as unknown as DashboardApi;
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("es-ES");
+  vi.mocked(fullApi.getOrder).mockReset().mockResolvedValue(fullDetail);
+});
 
 for (const theme of ["light", "dark"] as const) {
   it(`has an accessible Orders table and dialogs in ${theme} theme`, async () => {
@@ -108,8 +114,11 @@ const fullApi = {
   }),
 } as unknown as DashboardApi;
 
+const fullDetail = await fullApi.getOrder(fullRow.id);
+
 for (const theme of ["light", "dark"] as const) {
   it(`has an accessible full invoice's printer list in ${theme} theme`, async () => {
+    setLocale("en-GB");
     history.replaceState(null, "", "/manage/orders");
     const { el, host } = await mountWidget<OrdersScreen>(
       "dashboard-orders-screen",
@@ -130,8 +139,48 @@ for (const theme of ["light", "dark"] as const) {
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=print-invoice]")!.click();
     const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;
     await vi.waitFor(() =>
-      expect(picker.shadowRoot!.querySelector("wt-combobox")?.value).toBe("page-1"),
+      expect(picker.shadowRoot!.querySelector("wt-combobox")?.name).toBe("document"),
     );
+    const document = picker.shadowRoot!.querySelector("wt-combobox")!;
+    await expectNoA11yViolations(host);
+    document.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await vi.waitFor(() =>
+      expect(document.shadowRoot!.querySelector(".trigger")?.getAttribute("aria-expanded")).toBe(
+        "true",
+      ),
+    );
+    await userEvent.keyboard("{Home}{Enter}");
+    await vi.waitFor(() => expect(picker.mode).toBe("invoice"));
+    await vi.waitFor(() =>
+      expect(picker.shadowRoot!.querySelector("wt-combobox")?.options).toHaveLength(2),
+    );
+    await expectNoA11yViolations(host);
+    const printer = picker.shadowRoot!.querySelector("wt-combobox")!;
+    printer.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await vi.waitFor(() =>
+      expect(printer.shadowRoot!.querySelector(".trigger")?.getAttribute("aria-expanded")).toBe(
+        "true",
+      ),
+    );
+    await userEvent.keyboard("{End}{Enter}");
+    await vi.waitFor(() => expect(printer.value).toBe("page-1"));
+    await expectNoA11yViolations(host);
+    vi.mocked(fullApi.getOrder).mockRejectedValueOnce({ code: "connection.failed" });
+    fullApi.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(picker.shadowRoot!.querySelector("[data-test=printers-retry]")).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+    vi.mocked(fullApi.getOrder).mockResolvedValueOnce({
+      ...detail,
+      row: fullRow,
+      deliveries: null,
+      invoicePdfDownloads: [],
+    });
+    picker.shadowRoot!.querySelector<HTMLElement>("[data-test=printers-retry]")!.click();
+    await vi.waitFor(() => expect(picker.shadowRoot!.querySelector("wt-combobox")).toBeNull());
     await expectNoA11yViolations(host);
   });
 }

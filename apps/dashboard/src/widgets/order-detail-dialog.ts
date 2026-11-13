@@ -316,11 +316,7 @@ export class OrderDetailDialog extends LitElement {
             variant="secondary"
             data-test="print-invoice"
             @click=${() => this.#ask("order-invoice-print", detail.row)}
-            >${t(
-              status.actions.print.designation === "duplicate"
-                ? "orders.print_invoice_copy"
-                : "orders.print_invoice",
-            )}</wt-button
+            >${t("orders.print_document.title")}</wt-button
           >`
         : null,
       delivery && this.mayExport && retryId
@@ -353,9 +349,9 @@ export class OrderDetailDialog extends LitElement {
             >${t("orders.download_pdf")}</wt-button
           >`
         : null,
-      this.mayReprint(detail.row)
+      this.mayReprint(detail.row) && detail.row.invoiceType !== "F1"
         ? html`<wt-button variant="secondary" @click=${() => this.#ask("order-reprint", detail.row)}
-            >${t("orders.reprint")}</wt-button
+            >${t("orders.print_document.title")}</wt-button
           >`
         : null,
     ].filter((button) => button !== null);

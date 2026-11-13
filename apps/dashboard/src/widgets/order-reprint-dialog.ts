@@ -3,8 +3,10 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-spinner.js";
+import { readDocumentPrinter, rememberDocumentPrinter } from "../document-printer-preference.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { DashboardApi, OfferedPrinter, OrderDetailDto, OrderRowDto } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -23,21 +25,17 @@ export class OrderReprintDialog extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) row: OrderRowDto | null = null;
-  /** `invoice` prints a full invoice on any printer the bill's status offers; `receipt` reprints the
-   * receipt on a receipt printer. */
-  @property({ attribute: false }) mode: "receipt" | "invoice" = "receipt";
+  @property({ attribute: false }) mode: "choose" | "receipt" | "invoice" = "receipt";
   @state() private printers: { id: string; name: string; kind?: OfferedPrinter["kind"] }[] | null =
     null;
-  /** In invoice mode, which copy the server last offered to print. */
   @state() private designation: "original" | "duplicate" = "original";
-  /** In invoice mode, the server offers no print because a delivery is on its way. */
   @state() private deliveryBusy = false;
-  /** In invoice mode, the next answer chooses the original's printer: true until one has offered
-   * a print since the bill was opened. */
-  #preselect = true;
+  #firstOffer = true;
+  @state() private unavailablePrinter = false;
   @state() private printersFailed = false;
   @state() private printerId = "";
   @state() private printing = false;
+  #sending: { printer: string; original: boolean } | null = null;
   @state() private sentTo: string | null = null;
   #sentKey: "orders.reprint.sent" | "orders.print_invoice.sent" = "orders.reprint.sent";
   @state() private printerError: string | null = null;
@@ -70,10 +68,35 @@ export class OrderReprintDialog extends LitElement {
       this.#showError(codeMessage(codeOf(error)), true);
   }
 
+  #setPrinters(printers: { id: string; name: string; kind?: OfferedPrinter["kind"] }[]): void {
+    this.printers = printers;
+    const offered = (id: string) => printers.some((printer) => printer.id === id);
+    if (this.#firstOffer) {
+      const remembered = readDocumentPrinter(this.mode === "invoice" ? "invoice" : "receipt");
+      this.printerId =
+        remembered && offered(remembered)
+          ? remembered
+          : printers.length === 1
+            ? printers[0]!.id
+            : "";
+      this.unavailablePrinter = remembered !== null && !offered(remembered);
+      this.#firstOffer = false;
+    } else if (this.printerId !== "" && !offered(this.printerId)) {
+      this.printerId = "";
+      this.unavailablePrinter = true;
+    }
+  }
+
   override willUpdate(changed: PropertyValues<this>): void {
     if (!changed.has("row") && !changed.has("mode")) return;
+    if (changed.has("row") && this.row?.invoiceType === "F1" && !changed.has("mode"))
+      this.mode = "choose";
     this.#opening += 1;
+    this.#firstOffer = true;
+    this.printerId = "";
+    this.unavailablePrinter = false;
     this.printing = false;
+    this.#sending = null;
     this.sentTo = null;
     this.printerError = null;
     this.#showError(null);
@@ -81,11 +104,12 @@ export class OrderReprintDialog extends LitElement {
     if (changed.has("mode") || this.mode === "invoice") {
       this.printers = null;
       this.deliveryBusy = false;
-      this.#preselect = true;
     }
-    if (this.row === null || this.mode === "invoice") this.#queries.release("getOrderPrinters");
-    if (this.row === null || this.mode === "receipt") this.#queries.release("getOrder");
-    if (this.row !== null) this.#watchPrinters();
+    if (this.row === null || this.mode === "choose" || this.row.invoiceType === "F1")
+      this.#queries.release("getOrderPrinters");
+    if (this.row === null || this.mode === "choose" || this.row.invoiceType !== "F1")
+      this.#queries.release("getOrder");
+    if (this.row !== null && this.mode !== "choose") this.#watchPrinters();
   }
 
   /** An empty list is dropped so a fresh read says it is loading rather than that there is no
@@ -94,22 +118,18 @@ export class OrderReprintDialog extends LitElement {
     if (this.printers?.length === 0) this.printers = null;
     this.printersFailed = false;
     if (this.#readErrorShown) this.#showError(null);
-    if (this.mode === "invoice") {
+    if (this.row?.invoiceType === "F1") {
       this.#watchInvoice(this.row!.id);
       return;
     }
     void this.#queries
       .watch("getOrderPrinters", [], (printers) => {
-        this.printers = printers;
+        this.#setPrinters(printers);
         this.printersFailed = false;
-        if (!printers.some((printer) => printer.id === this.printerId))
-          this.printerId = printers[0]?.id ?? "";
       })
       .catch(() => undefined);
   }
 
-  /** The first answer chooses the printer the original went to when it is listed; a later one, a
-   * Try again's included, keeps the person's choice while it is still listed. */
   #watchInvoice(id: string): void {
     void this.#queries
       .watch("getOrder", [id], (detail: OrderDetailDto) => {
@@ -123,18 +143,15 @@ export class OrderReprintDialog extends LitElement {
             (attempt) => attempt.status === "queued" || attempt.status === "sending",
           );
         if (print === null) {
-          this.printers = [];
+          this.#setPrinters([]);
           return;
         }
         this.designation = print.designation;
-        this.printers = print.printers;
-        const listed = (printerId: string | null | undefined) =>
-          print.printers.some((printer) => printer.id === printerId);
-        if (this.#preselect || !listed(this.printerId))
-          this.printerId = listed(status?.originalPrinterId)
-            ? status!.originalPrinterId!
-            : (print.printers[0]?.id ?? "");
-        this.#preselect = false;
+        this.#setPrinters(
+          this.mode === "receipt"
+            ? print.printers.filter((printer) => printer.kind === "receipt")
+            : print.printers,
+        );
       })
       .catch(() => undefined);
   }
@@ -143,7 +160,7 @@ export class OrderReprintDialog extends LitElement {
    * is refused by the print itself, under the chooser. */
   #renderPrinters() {
     const printers = this.printers;
-    if (this.mode === "invoice" && this.deliveryBusy)
+    if (this.row?.invoiceType === "F1" && this.deliveryBusy)
       return this.sentTo !== null
         ? nothing
         : html`<p role="status" data-test="print-busy">
@@ -159,6 +176,7 @@ export class OrderReprintDialog extends LitElement {
     }
     return html`<wt-combobox
       name="printerId"
+      required
       search="auto"
       label=${t("orders.reprint.printer")}
       .options=${printers.map((printer) => ({
@@ -169,23 +187,30 @@ export class OrderReprintDialog extends LitElement {
       .error=${this.printerError ?? ""}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         this.printerId = event.detail.value;
+        this.unavailablePrinter = false;
         this.printerError = null;
       }}
     ></wt-combobox>`;
   }
 
   async #print(): Promise<void> {
-    if (this.row === null || this.printerId === "" || this.printing) return;
+    if (this.row === null || this.mode === "choose" || this.printerId === "" || this.printing)
+      return;
+    const document = this.mode;
     const opening = this.#opening;
     const billId = this.row.id;
     const printerId = this.printerId;
     const printerName = this.printers?.find((printer) => printer.id === printerId)?.name ?? "";
+    this.#sending = {
+      printer: printerName,
+      original: this.row.invoiceType === "F1" && this.designation === "original",
+    };
     this.printing = true;
     this.printerError = null;
     this.#showError(null);
     try {
       let sentKey: "orders.reprint.sent" | "orders.print_invoice.sent" = "orders.reprint.sent";
-      if (this.mode === "invoice") {
+      if (this.row.invoiceType === "F1") {
         const attempt = await this.api.requestOrderPrintDelivery(
           billId,
           printerId,
@@ -194,6 +219,7 @@ export class OrderReprintDialog extends LitElement {
         this.api.liveData.invalidate([{ type: "invoice_deliveries" }]);
         if (attempt.designation === "original") sentKey = "orders.print_invoice.sent";
       } else await this.api.reprintOrder(billId, printerId);
+      rememberDocumentPrinter(document, printerId);
       if (opening !== this.#opening) return;
       this.#sentKey = sentKey;
       this.sentTo = printerName;
@@ -205,11 +231,15 @@ export class OrderReprintDialog extends LitElement {
         this.printerError = message;
       else this.#showError(message);
     } finally {
-      if (opening === this.#opening) this.printing = false;
+      if (opening === this.#opening) {
+        this.printing = false;
+        this.#sending = null;
+      }
     }
   }
 
   #heading(): string {
+    if (this.mode === "choose") return t("orders.print_document.title");
     if (this.mode === "receipt") return t("orders.reprint.title");
     return t(
       this.designation === "original"
@@ -219,8 +249,18 @@ export class OrderReprintDialog extends LitElement {
   }
 
   override render() {
-    const invoice = this.mode === "invoice";
+    const invoice = this.row?.invoiceType === "F1";
     const printers = invoice && this.deliveryBusy ? [] : (this.printers ?? []);
+    const selected = printers.find((printer) => printer.id === this.printerId);
+    const sending = this.printing ? this.#sending : null;
+    const printerName = sending?.printer ?? selected?.name;
+    const original = sending?.original ?? (invoice && this.designation === "original");
+    const action =
+      printerName === undefined
+        ? t(original ? "orders.print_invoice.print" : "orders.reprint.print")
+        : fill(original ? "orders.print_document.print_on" : "orders.print_document.copy_on", {
+            printer: printerName,
+          });
     const bill =
       this.row?.orderNumber === null
         ? (this.row.label ?? "")
@@ -233,34 +273,71 @@ export class OrderReprintDialog extends LitElement {
             </p>`
           : nothing
       }
-      ${this.#renderPrinters()}
-      ${this.sentTo === null ? nothing : html`<p role="status">${fill(this.#sentKey, { printer: this.sentTo })}</p>`}
-      ${this.error === null ? nothing : html`<p role="alert">${this.error}</p>`}
       ${
-        this.printersFailed
+        this.mode === "choose"
+          ? html`<wt-combobox
+              name="document"
+              required
+              label=${t("orders.print_document.document")}
+              .value=${""}
+              .options=${[
+                { value: "receipt", label: t("orders.print_document.receipt") },
+                { value: "invoice", label: t("orders.print_document.invoice") },
+              ]}
+              @wt-change=${(event: CustomEvent<{ value: "receipt" | "invoice" }>) => {
+                this.mode = event.detail.value;
+              }}
+            ></wt-combobox>`
+          : this.#renderPrinters()
+      }
+      ${this.unavailablePrinter ? html`<p role="status">${t("orders.print_document.unavailable")}</p>` : nothing}
+      ${this.sentTo === null ? nothing : html`<p role="status">${fill(this.#sentKey, { printer: this.sentTo })}</p>`}
+      ${
+        this.printersFailed ||
+        (this.mode !== "choose" && this.printers?.length === 0 && !this.deliveryBusy)
           ? html`<wt-button
               variant="secondary"
               data-test="printers-retry"
-              @click=${() => this.#watchPrinters()}
-              >${t("content_languages.retry")}</wt-button
+              @click=${() => {
+                this.api.liveData.invalidate([{ type: "printers" }]);
+                this.#watchPrinters();
+              }}
+              >${t(this.printersFailed ? "content_languages.retry" : "orders.reprint.refresh")}</wt-button
             >`
           : nothing
       }
-      <wt-button
+      <wt-form-actions
         slot="footer"
-        variant="secondary"
-        @click=${() => this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }))}
-        >${t("action.cancel")}</wt-button
+        .error=${this.printerError ? t("form.fix_fields") : (this.error ?? "")}
       >
-      <wt-button
-        slot="footer"
-        variant=${this.printing || printers.length > 0 ? "primary" : "secondary"}
-        data-test="print"
-        ?disabled=${printers.length === 0}
-        ?loading=${this.printing}
-        @click=${() => void this.#print()}
-        >${t(invoice && this.designation === "original" ? "orders.print_invoice.print" : "orders.reprint.print")}</wt-button
-      >
+        ${
+          invoice && this.mode !== "choose"
+            ? html`<wt-button
+                slot="cancel"
+                variant="secondary"
+                data-test="document-back"
+                @click=${() => {
+                  this.mode = "choose";
+                }}
+                >${t("hours.back")}</wt-button
+              >`
+            : nothing
+        }
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          @click=${() => this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }))}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          variant=${this.printing || printers.some((printer) => printer.id === this.printerId) ? "primary" : "secondary"}
+          data-test="print"
+          ?disabled=${!printers.some((printer) => printer.id === this.printerId)}
+          ?loading=${this.printing}
+          @click=${() => void this.#print()}
+          >${action}</wt-button
+        >
+      </wt-form-actions>
     </wt-dialog>`;
   }
 }

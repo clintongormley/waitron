@@ -31,3 +31,5 @@ pnpm exec vitest run scripts/guide-links.test.ts
 Watcher04:49: if the slice grows beyond about705changed lines, move step3’s Devices marker and guides to their own PR. Keep the routing screen’s required EN/ES guide update with its screen change.
 
 Estimate: production +220/−70, tests +260/−80, support +10/−5, guides/backlog +50/−10 =705 changed lines; three hours through PR, no generated files. A documentation-only plan runs no tests. Watcher clearance is recorded above; finish-branch supplies Claude branch reviews, normal hook and current-head CI without a whole-workspace local test run.
+
+**13 November build split:** The formatted slice reached711changed lines. Following the watcher’s04:49 instruction, Devices’ A4 marker and its printer guides move to a separate PR. Dashboard routing and its EN/ES table-service guide stay together.

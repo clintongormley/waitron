@@ -105,6 +105,20 @@ Para una factura completa antigua sin cuenta, ábrela en **Transacciones** y eli
 Usa **Recibo** para una copia compacta cuando se haya completado un original. Si falla la impresión,
 comprueba el destino de **Reintentar original** o elige la impresora de recibos indicada en su lugar.
 
+## Imprimir desde Pedidos del panel {#dashboard-documents}
+
+Para obtener un documento más tarde, abre **Pedidos** en el panel y elige **Imprimir / Reimprimir**
+en la cuenta. Para una factura completa, elige **Ticket** para papel de tickets o **Factura** para
+la lista mixta de impresoras; ambos conservan la factura y el cliente registrados. Una factura
+simplificada abre directamente sus impresoras de tickets. Espera a que termine cualquier original
+en cola en A4 o por correo antes de elegir Ticket para una factura completa.
+
+Elige la impresora y pulsa **Imprimir en {printer}** o **Imprimir una copia en {printer}**. **A4**
+identifica una impresora de oficina. Este navegador recuerda por separado la última impresora que
+aceptó un envío para Ticket y Factura. Si ya no está disponible, vuelve a elegir; si solo hay una
+impresora disponible, aparece seleccionada. Usa **Actualizar impresoras** si no aparece ninguna,
+o **Cancelar** para salir sin imprimir.
+
 ## Evitar justificantes de tarjeta duplicados {#reader-slips}
 
 Activa **Imprimir justificante de tarjeta** antes de cobrar si el cliente lo quiere. Empieza desactivado para cada pago e imprime cuando se confirma la tarjeta. Si la respuesta del lector no está clara o el servidor se reinicia antes de imprimir, usa una copia.

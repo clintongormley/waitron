@@ -356,8 +356,8 @@ describe("dashboard Orders", () => {
   });
 
   it.each([
-    ["a simplified invoice", "F2", ["View details", "Reprint receipt"]],
-    ["a full invoice", "F1", ["View details", "Print invoice"]],
+    ["a simplified invoice", "F2", ["View details", "Print / Reprint"]],
+    ["a full invoice", "F1", ["View details", "Print / Reprint"]],
   ] as const)("offers the row menu's own print action for %s", async (_name, type, labels) => {
     const row = { ...ROW, invoiceType: type };
     const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [row] }) });
@@ -417,13 +417,13 @@ describe("dashboard Orders", () => {
       [...opened.shadowRoot!.querySelectorAll("wt-form-actions wt-button")].map((button) =>
         button.textContent?.trim(),
       ),
-    ).toEqual(["Print a copy"]);
+    ).toEqual(["Print / Reprint"]);
     opened.shadowRoot!.querySelector<HTMLElement>("[data-test=print-invoice]")!.click();
     const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;
     await vi.waitFor(() => expect(picker.row?.id).toBe(ROW.id));
-    expect(picker.mode).toBe("invoice");
+    expect(picker.mode).toBe("choose");
     await vi.waitFor(() =>
-      expect(picker.shadowRoot!.querySelector("wt-combobox")?.value).toBe("page-1"),
+      expect(picker.shadowRoot!.querySelector("[name=document]")).not.toBeNull(),
     );
     expect(api.getOrderPrinters).not.toHaveBeenCalled();
   });
@@ -444,21 +444,21 @@ describe("dashboard Orders", () => {
         .shadowRoot!.querySelector("wt-row-actions")!
         .querySelectorAll("wt-button")[1]!;
       expect(print.textContent?.trim()).toBe(
-        locale === "en-GB" ? "Print invoice" : "Imprimir factura",
+        locale === "en-GB" ? "Print / Reprint" : "Imprimir / Reimprimir",
       );
       print.click();
       const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;
       await vi.waitFor(() => expect(picker.row?.id).toBe(ROW.id));
-      expect(picker.mode).toBe("invoice");
+      expect(picker.mode).toBe("choose");
       await vi.waitFor(() =>
-        expect(picker.shadowRoot!.querySelector("wt-combobox")?.value).toBe("page-1"),
+        expect(picker.shadowRoot!.querySelector("[name=document]")).not.toBeNull(),
       );
       expect(api.getOrderPrinters).not.toHaveBeenCalled();
     },
   );
 
   it.each([
-    ["a full invoice's Print a copy", "F1", "[data-test=print-invoice]", "invoice"],
+    ["a full invoice's Print a copy", "F1", "[data-test=print-invoice]", "choose"],
     ["a simplified invoice's Reprint receipt", "F2", "wt-form-actions wt-button", "receipt"],
   ] as const)(
     "opens %s from the detail after a refresh took the bill off the list",
