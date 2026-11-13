@@ -14,7 +14,8 @@ import {
   formatDecimalInput,
   ContentLanguageController,
   currentContentLanguages,
-  focusFirstInvalid,
+  FormFeedback,
+  bottomMessage,
   draftScopeFor,
   saveActionState,
   type DraftScope,
@@ -309,8 +310,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   @state() private actionError?: string;
   @state() private editor?: Editor;
   @state() private draft?: Draft;
-  /** Save has been pressed since the editor opened, so the fields are checked on every change. */
-  @state() private attempted = false;
+  readonly #reasonFeedback = new FormFeedback(this);
   /** The server's refusal of a field, until the operator changes that field or saves again. */
   @state() private refusedFields: FieldErrors = {};
   /** A refusal that names no field the form shows, until the operator saves again. */
@@ -321,7 +321,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   /** What the operator chose; undefined until they change a field, so a refresh shows the saved
    * limit without replacing a value being typed. */
   @state() private limitDraft?: LimitDraft;
-  @state() private limitAttempted = false;
+  readonly #limitFeedback = new FormFeedback(this);
   /** The field the server refused, until the operator changes it or saves again. */
   @state() private limitRefused?: LimitField;
   /** A refusal that names no field, until the operator saves again. */
@@ -462,7 +462,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     this.limitDraft = undefined;
     this.#limitRevision = undefined;
     this.limitSaving = false;
-    this.limitAttempted = false;
+    this.#limitFeedback.reset();
     this.limitRefused = undefined;
     this.limitError = undefined;
     this.limitSaved = false;
@@ -511,7 +511,7 @@ export class AdjustmentReasonsScreen extends LitElement {
               equal: (a, b) => this.#sameLimit(a, b),
               restore: (value) => {
                 this.limitDraft = { amount: value.amount };
-                this.limitAttempted = false;
+                this.#limitFeedback.reset();
                 this.limitRefused = undefined;
                 this.limitError = undefined;
                 this.limitSaved = false;
@@ -657,7 +657,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #restart(): void {
-    this.attempted = false;
+    this.#reasonFeedback.reset();
     this.refusedFields = {};
     this.editorError = undefined;
   }
@@ -756,8 +756,7 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   /** The screen's shadow root also holds the list, so only the editor is searched. */
   async #focusInvalid(): Promise<void> {
-    await this.updateComplete;
-    await focusFirstInvalid(this.renderRoot.querySelector("wt-modal")!);
+    await this.#reasonFeedback.focus(this.renderRoot.querySelector("wt-modal")!);
   }
 
   async #write(action: () => Promise<unknown>): Promise<void> {
@@ -790,7 +789,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #save(editor: Editor): void {
     if (this.editor !== editor || !this.isConnected || this.busy) return;
     if (saveActionState(this.#reasonScope).unchanged) return;
-    this.attempted = true;
+    this.#reasonFeedback.press();
     this.refusedFields = {};
     this.editorError = undefined;
     if (Object.keys(this.#check()).length > 0) {
@@ -954,14 +953,13 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   async #focusLimit(): Promise<void> {
-    await this.updateComplete;
-    await focusFirstInvalid(this.renderRoot.querySelector('[data-test="limit"]')!);
+    await this.#limitFeedback.focus(this.renderRoot.querySelector('[data-test="limit"]')!);
   }
 
   /** A refresh that fails after the save succeeded is a load failure, shown as one. */
   async #saveLimit(): Promise<void> {
     if (this.limitSaving || saveActionState(this.#limitScope).unchanged) return;
-    this.limitAttempted = true;
+    this.#limitFeedback.press();
     this.limitRefused = undefined;
     this.limitError = undefined;
     this.limitSaved = false;
@@ -1009,7 +1007,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       this.#limitRevision = settings.revision;
     }
     this.#limitScope?.commit(submitted);
-    this.limitAttempted = false;
+    this.#limitFeedback.reset();
     this.limitSaved = true;
     await this.#loadSettings();
   }
@@ -1027,16 +1025,16 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #limitForm() {
-    const own = this.limitAttempted ? this.#limitCheck() : {};
+    const own = this.#limitFeedback.attempted ? this.#limitCheck() : {};
     const errors: LimitErrors = { ...own };
     if (this.limitRefused && !errors[this.limitRefused]) {
       errors[this.limitRefused] = t(LIMIT_MESSAGES[this.limitRefused]);
     }
     const value = this.#limitValue();
-    const bottom = [
-      ...(this.limitError ? [this.limitError] : []),
-      ...(Object.keys(errors).length > 0 ? [t("adjustments.fix_fields")] : []),
-    ].join(" ");
+    const bottom = bottomMessage(
+      this.limitError ?? null,
+      Object.keys(errors).length > 0 ? t("adjustments.fix_fields") : null,
+    );
     return html`<div class="limit-fields">
         <wt-price-input
           name="maxBillComp"
@@ -1374,13 +1372,13 @@ export class AdjustmentReasonsScreen extends LitElement {
     const editor = this.editor;
     if (editor === undefined) return nothing;
     const heading = t(editor.reason ? "adjustments.edit_heading" : "adjustments.new");
-    const checked = this.attempted ? this.#check() : {};
+    const checked = this.#reasonFeedback.attempted ? this.#check() : {};
     const errors = { ...this.refusedFields, ...checked };
     const invalid = Object.keys(checked).length > 0;
-    const bottom = [
-      ...(this.editorError ? [this.editorError] : []),
-      ...(Object.keys(errors).length > 0 ? [t("adjustments.fix_fields")] : []),
-    ].join(" ");
+    const bottom = bottomMessage(
+      this.editorError ?? null,
+      Object.keys(errors).length > 0 ? t("adjustments.fix_fields") : null,
+    );
     return keyed(
       editor,
       html`<wt-modal
