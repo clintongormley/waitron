@@ -111,8 +111,15 @@ export async function takeFirstCopy(deps: FirstCopyDeps): Promise<"ready"> {
       deps.signal.throwIfAborted();
       const reason = error instanceof NotYet ? error.reason : codeOf(error);
       deps.report({ copy: "waiting" });
+      const status =
+        isAppError(error) && hasCode(error, "backup.stream_request_failed")
+          ? error.params.status
+          : null;
       if (reason !== lastReason)
-        deps.log("info", "spare.first_copy_waiting", { reason, status: "waiting" });
+        deps.log("info", "spare.first_copy_waiting", {
+          reason,
+          ...(status === null ? {} : { status }),
+        });
       lastReason = reason;
       await rm(folder, { recursive: true, force: true }).catch(() => {});
     }

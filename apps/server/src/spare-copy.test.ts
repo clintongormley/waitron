@@ -352,7 +352,7 @@ describe("takeFirstCopy", () => {
       {
         level: "info",
         event: "spare.first_copy_waiting",
-        fields: { reason: "no_key", status: "waiting" },
+        fields: { reason: "no_key" },
       },
     ]);
     const logged = JSON.stringify(logs);
@@ -431,7 +431,7 @@ describe("takeFirstCopy", () => {
     await expect(r.done).resolves.toBe("ready");
     expect(restore).toHaveBeenCalledTimes(2);
     expect(events("spare.first_copy_waiting").map((e) => e.fields)).toEqual([
-      { reason: "backup.stream_request_failed", status: "waiting" },
+      { reason: "backup.stream_request_failed", status: 503 },
     ]);
     expect(JSON.parse(await readFile(join(stateDir, "pair-copy", "ready.json"), "utf8"))).toEqual({
       generation: generation(1),
@@ -511,5 +511,29 @@ describe("takeFirstCopy", () => {
     short.controller.abort();
     await short.done.catch(() => {});
     expect(JSON.stringify(logs)).not.toContain(shortKey);
+  });
+
+  it("leaves the status out of the waiting line when the refused request got no answer", async () => {
+    await writeKey();
+    const good = await fixture("good-no-answer", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
+    const objectStore = await storeWithPointer(generation(1));
+    let calls = 0;
+    const restore = vi.fn(async (args: RestoreGenerationArgs) => {
+      calls += 1;
+      if (calls === 1)
+        throw new AppError("backup.stream_request_failed", {
+          operation: "get",
+          key: "x",
+          status: null,
+          name: "other",
+        });
+      await copyFile(good, args.outPath);
+    });
+    const r = run({ objectStore, restoreGeneration: restore });
+
+    await expect(r.done).resolves.toBe("ready");
+    expect(events("spare.first_copy_waiting").map((e) => e.fields)).toStrictEqual([
+      { reason: "backup.stream_request_failed" },
+    ]);
   });
 });
