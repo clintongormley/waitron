@@ -204,21 +204,22 @@ it.each(["NODE", "LOCATION"])(
   },
 );
 
-it.each(oldSettings.flatMap((setting) => ["n", "t"].map((escape) => [setting, escape])))(
-  "rejects the retired %s written straight after a \\%s escape, once",
-  (setting, escape) => {
-    const path = "apps/server/src/example.ts";
-    expect(inspectSource(path, `const env = \`A=1\\${escape}${setting}=2\`;`)).toEqual([
-      `${path}: retired ${setting}`,
-    ]);
-    expect(inspectSource(path, `const env = "A=1\\${escape}${setting}=2";`)).toEqual([
-      `${path}: retired ${setting}`,
-    ]);
-    expect(inspectSource(path, `const env = \`A=\${1}\\${escape}${setting}=2\`;`)).toEqual([
-      `${path}: retired ${setting}`,
-    ]);
-  },
-);
+it.each(
+  [...retiredNames, action, ...oldSettings].flatMap((setting) =>
+    ["n", "t"].map((escape) => [setting, escape]),
+  ),
+)("rejects the retired %s written straight after a \\%s escape, once", (setting, escape) => {
+  const path = "apps/server/src/example.ts";
+  expect(inspectSource(path, `const env = \`A=1\\${escape}${setting}=2\`;`)).toEqual([
+    `${path}: retired ${setting}`,
+  ]);
+  expect(inspectSource(path, `const env = "A=1\\${escape}${setting}=2";`)).toEqual([
+    `${path}: retired ${setting}`,
+  ]);
+  expect(inspectSource(path, `const env = \`A=\${1}\\${escape}${setting}=2\`;`)).toEqual([
+    `${path}: retired ${setting}`,
+  ]);
+});
 
 it("accepts escaped current settings, negative-setting files and historical records", () => {
   expect(
@@ -237,3 +238,55 @@ it("accepts escaped current settings, negative-setting files and historical reco
     inspectSource("apps/server/src/example.ts", 'const env = "A=1\\nWAITRON_NODE_ID=2";'),
   ).toEqual([]);
 });
+
+const hyphenated = [command, ["provision", "till"].join("-"), action];
+it.each(
+  hyphenated.flatMap((value) =>
+    ["\\-", "\\x2d", "\\u002d", "\\u{2d}", "\\55"].map((separator) => [value, separator]),
+  ),
+)("rejects the retired %s with its separator written as %s, once", (value, separator) => {
+  const path = "apps/server/src/example.ts";
+  const escaped = value.replace("-", separator);
+  for (const source of [`const value = "${escaped}";`, `const value = \`x\\n${escaped}\`;`])
+    expect(inspectSource(path, source)).toEqual([`${path}: retired ${value}`]);
+});
+
+it.each([
+  [command, `\\x72${command.slice(1)}`],
+  [command, command.replace("t", "\\\nt")],
+  [oldSettings[2]!, oldSettings[2]!.replace("_", "\\x5f")],
+  [oldSettings[4]!, oldSettings[4]!.replace("L", "\\u004C")],
+])("rejects the retired %s with an escaped letter, underscore or line break", (value, escaped) => {
+  const path = "apps/server/src/example.ts";
+  expect(inspectSource(path, `const value = "${escaped}";`)).toEqual([`${path}: retired ${value}`]);
+});
+
+it("rejects a retired spelling beside an escape a tagged template leaves undecoded", () => {
+  const path = "apps/server/src/example.ts";
+  const escaped = action.replace("-", "\\x2d");
+  for (const source of [
+    `tag\`${escaped}\\x\`;`,
+    `tag\`${escaped}\\u\`;`,
+    `tag\`${escaped}\\8\`;`,
+    `tag\`x\\u{110000}${escaped}\`;`,
+  ])
+    expect(inspectSource(path, source)).toEqual([`${path}: retired ${action}`]);
+});
+
+it("accepts an escaped backslash that leaves a retired spelling undecoded", () => {
+  const path = "apps/server/src/example.ts";
+  expect(inspectSource(path, `const value = "${action.replace("-", "\\\\x2d")}";`)).toEqual([]);
+  expect(inspectSource(path, `const value = "${command.replace("-", "\\\\u002d")}";`)).toEqual([]);
+});
+
+it.each(["deploy/example.json", "deploy/example.yml", "deploy/example.sh", "docs/example.md"])(
+  "rejects a retired spelling straight after an escape in %s, once",
+  (path) => {
+    for (const value of [command, action, oldSettings[2]!])
+      for (const escape of ["n", "t"])
+        expect(inspectSource(path, `"A=1\\${escape}${value}=2"`)).toEqual([
+          `${path}: retired ${value}`,
+        ]);
+    expect(inspectSource(path, '"A=1\\nWAITRON_NODE_ID=2"')).toEqual([]);
+  },
+);

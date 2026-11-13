@@ -47,6 +47,31 @@ export function sourceFilesIn(root, directory = "") {
     .sort();
 }
 
+// `\b` sees no word start after the letter of an escape such as `\n`, so the lookbehind accepts one.
+const retiredSpellings = [
+  /(?:\b|(?<=\\[bfnrtv0]))(?:register|provision)(?:-|)till\b/gi,
+  /(?:\b|(?<=\\[bfnrtv0]))re(?:-)register\b/g,
+  /(?:\b|(?<=\\[bfnrtv0]))WAITRON_TILL_(?:SERIES|TILL|NODE|LOCATION)_ID\b/g,
+  /(?:\b|(?<=\\[bfnrtv0]))WAITRON_(?:LOCATION)_ID\b/g,
+];
+const retiredIn = (text) => retiredSpellings.flatMap((pattern) => text.match(pattern) ?? []);
+
+// Decodes escapes as TypeScript does, keeping the backslash where TypeScript may keep one (a
+// malformed \x, \u or \u{}, \8, \9), so a file whose decoded text holds no retired spelling has no
+// string value that does.
+const escapeSequence =
+  /\\(?:x([\dA-Fa-f]{2})|u\{([\dA-Fa-f]+)\}|u([\dA-Fa-f]{4})|([0-3][0-7]{0,2}|[4-7][0-7]?)|(\r\n|[\n\r\u2028\u2029])|([^]))/g;
+const singleEscapes = { b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v" };
+function decodeEscapes(source) {
+  return source.replace(escapeSequence, (_, hex, braced, unicode, octal, lineBreak, other) => {
+    if (lineBreak) return "";
+    if (other) return singleEscapes[other] ?? (/[xu89]/.test(other) ? `\\${other}` : other);
+    if (octal) return String.fromCharCode(parseInt(octal, 8));
+    const code = parseInt(hex ?? braced ?? unicode, 16);
+    return code <= 0x10ffff ? String.fromCodePoint(code) : _;
+  });
+}
+
 export function inspectSource(path, source) {
   if (
     path.startsWith("docs/superpowers/") ||
@@ -56,45 +81,30 @@ export function inspectSource(path, source) {
     return [];
   const failures = [];
   const checkSpellings = (text) => {
-    for (const pattern of [
-      /\b(?:register|provision)(?:-|)till\b/gi,
-      /\bre(?:-)register\b/g,
-      /\bWAITRON_TILL_(?:SERIES|TILL|NODE|LOCATION)_ID\b/g,
-      /\bWAITRON_(?:LOCATION)_ID\b/g,
-    ]) {
-      for (const match of text.matchAll(pattern)) {
-        if (/^WAITRON_TILL_(?:SERIES|TILL)_ID$/.test(match[0]) && negativeSettingFiles.has(path))
-          continue;
-        failures.push(`${path}: retired ${match[0]}`);
-      }
+    for (const spelling of retiredIn(text)) {
+      if (/^WAITRON_TILL_(?:SERIES|TILL)_ID$/.test(spelling) && negativeSettingFiles.has(path))
+        continue;
+      failures.push(`${path}: retired ${spelling}`);
     }
   };
   checkSpellings(`${path}\n${source}`);
-  if (
-    /\.[cm]?[jt]sx?$/.test(path) &&
-    /(?:register|provision)-?till|re(?:-)register|WAITRON_(?:TILL_\w+|LOCATION)_ID/i.test(source)
-  ) {
+  let parsed;
+  const tree = () => (parsed ??= ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true));
+  if (/\.[cm]?[jt]sx?$/.test(path) && retiredIn(decodeEscapes(source)).length > 0) {
     const visit = (node) => {
-      if (
-        ts.isStringLiteral(node) ||
-        ts.isNoSubstitutionTemplateLiteral(node) ||
-        ts.isTemplateHead(node) ||
-        ts.isTemplateMiddle(node) ||
-        ts.isTemplateTail(node)
-      )
+      if (ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node))
         checkSpellings(node.text);
       ts.forEachChild(node, visit);
     };
-    visit(ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true));
+    visit(tree());
   }
   if (/^packages\/fiscal(?:-[^/]+)?\/.*\.[cm]?[jt]sx?$/.test(path)) {
-    const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
     const visit = (node) => {
       if ((ts.isIdentifier(node) || ts.isPrivateIdentifier(node)) && /till/i.test(node.text))
         failures.push(`${path}: fiscal identifier ${node.text}`);
       ts.forEachChild(node, visit);
     };
-    visit(tree);
+    visit(tree());
   }
   return [...new Set(failures)];
 }
