@@ -104,11 +104,11 @@ describe("createLogger personal data", () => {
 
   it.each([
     ["email", "marta.soler@example.test", "m***r@e***e.test"],
-    ["displayName", "Marta Soler", "M***a S***r"],
-    ["ownerName", "Marta Soler", "M***a S***r"],
-    ["editorName", "Marta Soler", "M***a S***r"],
-    ["holderPersonName", "Marta Soler", "M***a S***r"],
-    ["person", "Marta Soler", "M***a S***r"],
+    ["displayName", "Martha Spencer", "M***a S***r"],
+    ["ownerName", "Martha Spencer", "M***a S***r"],
+    ["editorName", "Martha Spencer", "M***a S***r"],
+    ["holderPersonName", "Martha Spencer", "M***a S***r"],
+    ["person", "Martha Spencer", "M***a S***r"],
     ["supplierTaxId", "12345678Z", "1***Z"],
     ["legalName", "Jordi Puig Ferrer", "J***i P***g F***r"],
     ["taxId", "12345678Z", "1***Z"],
@@ -122,7 +122,7 @@ describe("createLogger personal data", () => {
 
   it("masks a listed key nested in objects and arrays", () => {
     const line = writeLine({
-      edit: { editorName: "Marta Soler", editorVersion: 3 },
+      edit: { editorName: "Martha Spencer", editorVersion: 3 },
       conflicts: [{ editorName: "Jordi Puig" }],
     });
     expect(JSON.parse(line)).toEqual({
@@ -132,7 +132,7 @@ describe("createLogger personal data", () => {
       level: "warn",
       event: "x",
     });
-    expect(line).not.toContain("Marta Soler");
+    expect(line).not.toContain("Martha Spencer");
     expect(line).not.toContain("Jordi Puig");
   });
 
