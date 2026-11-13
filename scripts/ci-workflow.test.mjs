@@ -5214,6 +5214,11 @@ describe("CodeQL's workflow", () => {
 
   const codeql = () => readFileSync(join(workflowsDir, "codeql.yml"), "utf8");
 
+  it("keeps CodeQL inside its measured 60-minute job ceiling", () => {
+    const analyze = jobBlocks(codeql()).find((job) => job.id === "analyze");
+    expect(analyze.lines).toContain("    timeout-minutes: 60");
+  });
+
   it("runs only on its nightly schedule and by hand", () => {
     expect(workflowTriggers(codeql()).sort()).toEqual(["schedule", "workflow_dispatch"]);
     expect(codeql()).toMatch(/^ {4}- cron: "\d+ \d+ \* \* \*"/m);
@@ -5756,6 +5761,9 @@ function artifactDownloadInputs(step) {
   return match ? { pattern: match[1], path: match[2], expected: Number(match[3]) } : {};
 }
 
+const failureIsFatal = (step) =>
+  step?.continueOnError === undefined || step.continueOnError === "false";
+
 function downloadAttempts(text) {
   const bounded = (step) => /^[12]$/.test(step?.timeoutMinutes ?? "");
   const sameInputs = (a, b) =>
@@ -5781,13 +5789,13 @@ function downloadAttempts(text) {
         !path.split("/").includes("..") &&
         clear?.if === failed &&
         clear.timeoutMinutes === "1" &&
-        clear.continueOnError !== "true" &&
+        failureIsFatal(clear) &&
         clear.command.trim() === `rm -rf -- "${path}"` &&
         isArtifactDownload(second) &&
         second?.uses === first.uses &&
         second.if === failed &&
         bounded(second) &&
-        second.continueOnError !== "true" &&
+        failureIsFatal(second) &&
         sameInputs(inputs, artifactDownloadInputs(second)) &&
         sameInputs(first.env, second.env);
       attempts.push({ job, bounded: Boolean(valid) });
@@ -5796,6 +5804,129 @@ function downloadAttempts(text) {
   }
   return attempts;
 }
+
+function networkTransfers(text) {
+  return jobBlocks(text).flatMap(({ id, lines }) => {
+    const jobMinutes = Number(/^ {4}timeout-minutes: ([1-9]\d*)$/m.exec(lines.join("\n"))?.[1]);
+    const steps = workflowSteps(lines.join("\n"));
+    return steps
+      .filter((step) =>
+        /^(?:actions\/cache(?:\/(?:restore|save))?|docker\/[^@]+|github\/codeql-action\/[^@]+)@/.test(
+          step.uses ?? "",
+        ),
+      )
+      .map((step) => {
+        const cache = step.uses.startsWith("actions/cache");
+        const outerOnly = step.uses.startsWith("github/codeql-action/analyze@");
+        const bounded =
+          Number.isFinite(jobMinutes) &&
+          (outerOnly ||
+            (/^[1-9]\d*$/.test(step.timeoutMinutes ?? "") &&
+              Number(step.timeoutMinutes) <= jobMinutes));
+        const browserCache = cache && step.with.path === "~/.cache/ms-playwright";
+        const build = step.uses.startsWith("docker/build-push-action@");
+        const browserBudget =
+          !browserCache || (Number(step.timeoutMinutes) >= 2 && step.continueOnError === "true");
+        const buildBudget = !build || Number(step.timeoutMinutes) === jobMinutes;
+        const cleanup = steps[steps.indexOf(step) + 1];
+        const browserCleanup =
+          !browserCache ||
+          (typeof step.id === "string" &&
+            cleanup?.if === `steps.${step.id}.outcome == 'failure'` &&
+            cleanup.timeoutMinutes === "1" &&
+            failureIsFatal(cleanup) &&
+            cleanup.command.trim() === 'rm -rf -- "$HOME/.cache/ms-playwright"');
+        return {
+          job: id,
+          action: step.uses,
+          bounded:
+            bounded &&
+            browserBudget &&
+            buildBudget &&
+            browserCleanup &&
+            (cache || failureIsFatal(step)),
+        };
+      });
+  });
+}
+
+describe("remaining network transfers", () => {
+  const action = "actions/cache@v6";
+  const fixture = (limit = "", extra = "", uses = action) =>
+    `on: push\njobs:\n  a:\n    runs-on: x\n    timeout-minutes: 5\n    steps:\n      - uses: ${uses}\n${limit === "" ? "" : `        timeout-minutes: ${limit}\n`}${extra}`;
+  it("accepts a bounded transfer and the analyze job's outer bound", () => {
+    expect(networkTransfers(fixture("1"))).toEqual([{ job: "a", action, bounded: true }]);
+    expect(networkTransfers(fixture("", "", "github/codeql-action/analyze@v4"))).toEqual([
+      { job: "a", action: "github/codeql-action/analyze@v4", bounded: true },
+    ]);
+  });
+  it.each(["", "0", "-1", "1.5", "6", "${{ inputs.minutes }}"])(
+    "refuses an unbounded or excessive step limit %s",
+    (limit) => {
+      expect(networkTransfers(fixture(limit))).toEqual([{ job: "a", action, bounded: false }]);
+    },
+  );
+  it("keeps browser caches optional with two minutes for server transfers", () => {
+    const browser =
+      "        id: browser-cache\n        with:\n          path: ~/.cache/ms-playwright\n";
+    const optional = "        continue-on-error: true\n";
+    const cleanup = `      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
+`;
+    const restore = (limit, extra) => fixture(limit, extra + browser) + cleanup;
+    const valid = restore("2", optional);
+    expect(networkTransfers(valid)[0].bounded).toBe(true);
+    expect(networkTransfers(restore("2", ""))[0].bounded).toBe(false);
+    expect(networkTransfers(restore("1", optional))[0].bounded).toBe(false);
+    expect(networkTransfers(valid.replace(cleanup, ""))[0].bounded).toBe(false);
+    expect(
+      networkTransfers(valid.replace("outcome == 'failure'", "outcome == 'success'"))[0].bounded,
+    ).toBe(false);
+  });
+  it("leaves Docker builds the enclosing job's existing retry opportunity", () => {
+    const build = "docker/build-push-action@v7";
+    expect(networkTransfers(fixture("5", "", build))[0].bounded).toBe(true);
+    expect(networkTransfers(fixture("2", "", build))[0].bounded).toBe(false);
+  });
+  it("keeps Docker and CodeQL failures fatal while preserving optional caches", () => {
+    const optional = "        continue-on-error: true\n";
+    expect(networkTransfers(fixture("1", optional))[0].bounded).toBe(true);
+    for (const uses of [
+      "docker/build-push-action@v7",
+      "github/codeql-action/init@v4",
+      "github/codeql-action/analyze@v4",
+    ])
+      expect(
+        networkTransfers(
+          fixture(uses.startsWith("docker/build-push") ? "5" : "1", optional, uses),
+        )[0].bounded,
+      ).toBe(false);
+    expect(
+      networkTransfers(
+        fixture("1", "        continue-on-error: false\n", "docker/login-action@v4"),
+      )[0].bounded,
+    ).toBe(true);
+  });
+  it("ignores commented transfer sites", () => {
+    expect(networkTransfers(fixture("1").replace("      - uses:", "      # - uses:"))).toEqual([]);
+  });
+  it("bounds every cache, Docker and CodeQL transfer, with analyze using its job limit", () => {
+    const found = workflowFiles.flatMap((name) =>
+      workflowTexts(name).flatMap((text) =>
+        networkTransfers(text).map((entry) => ({
+          workflow: name,
+          ...entry,
+        })),
+      ),
+    );
+    expect(found.some((entry) => entry.action.startsWith("actions/cache"))).toBe(true);
+    expect(found.some((entry) => entry.action.startsWith("docker/"))).toBe(true);
+    expect(found.some((entry) => entry.action.startsWith("github/codeql-action"))).toBe(true);
+    expect(found.filter((entry) => !entry.bounded)).toEqual([]);
+  });
+});
 
 describe("the workflows' artifact downloads", () => {
   const workflow = (steps) => `on: push\njobs:\n  a:\n    runs-on: x\n    steps:\n${steps}`;
@@ -5838,6 +5969,32 @@ describe("the workflows' artifact downloads", () => {
         / {8}with:\n(?: {10}.*\n)+/,
         "        env:\n          GH_TOKEN: ${{ github.token }}\n",
       );
+
+  for (const [kind, convert] of [
+    ["action", (step) => step],
+    ["helper", helper],
+  ]) {
+    it(`accepts literal false tolerance on ${kind} cleanup and retry`, () => {
+      const explicit = (step) =>
+        step.replace("        if:", "        continue-on-error: false\n        if:");
+      expect(
+        downloadAttempts(workflow(convert(first) + explicit(clear) + explicit(convert(second)))),
+      ).toEqual([{ job: "a", bounded: true }]);
+    });
+    it.each(["true", "${{ true }}", "${{ false }}", "unsupported"])(
+      `refuses %s tolerance on ${kind} cleanup or retry`,
+      (value) => {
+        const tolerate = (step) =>
+          step.replace("        if:", `        continue-on-error: ${value}\n        if:`);
+        for (const steps of [
+          convert(first) + tolerate(clear) + convert(second),
+          convert(first) + clear + tolerate(convert(second)),
+        ]) {
+          expect(downloadAttempts(workflow(steps))).toEqual([{ job: "a", bounded: false }]);
+        }
+      },
+    );
+  }
 
   it("accepts the authenticated coverage helper with the same bounds and cleanup", () => {
     expect(downloadAttempts(workflow(helper(first) + clear + helper(second)))).toEqual([
@@ -6043,7 +6200,6 @@ describe("the workflows' artifact downloads", () => {
 function uploadAttempts(text) {
   const isUpload = (step) => step?.uses?.startsWith("actions/upload-artifact@") ?? false;
   const bounded = (step) => /^[12]$/.test(step?.timeoutMinutes ?? "");
-  const strict = (step) => step?.continueOnError === undefined || step.continueOnError === "false";
   const inputsWithoutOverwrite = (inputs) =>
     JSON.stringify(
       Object.entries(inputs)
@@ -6070,7 +6226,7 @@ function uploadAttempts(text) {
         second?.uses === first.uses &&
         second.if === failed &&
         bounded(second) &&
-        strict(second) &&
+        failureIsFatal(second) &&
         second.with.overwrite === "true" &&
         inputsWithoutOverwrite(first.with) === inputsWithoutOverwrite(second.with);
       attempts.push({ job, bounded: Boolean(valid) });

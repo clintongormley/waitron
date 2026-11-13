@@ -2709,6 +2709,8 @@ Test jobs and shard legs (10 minutes), `-merge` jobs (5), and `lint` and `root-g
 from the owner's four-minute bound (2026-10-09), not the doubling rule; the
 "bounds every test job" case in `scripts/ci-workflow.test.mjs` pins those numbers.
 
+**2026-11-13:** CodeQL now uses its [own nightly measurement and a 60-minute limit](#cache-docker-and-codeql-steps-have-measured-limits). Its row above records the earlier default setup.
+
 **2026-10-16, A674:** `ci` is another exception to the doubling rule. Its limit rose from five
 to fifteen minutes, with twelve minutes for its jobs API step, to accommodate a ten-minute retry
 window. The observed API status lag and chosen margins are recorded under "How the second step
@@ -2744,8 +2746,8 @@ by estimated cost").
 codeql.yml's figure is from GitHub's default setup, before A488 replaced it: the 55 successful
 `main` runs from 2026-10-10 09:16 to 2026-10-11 10:33 UTC, where the `javascript-typescript` job
 took at most 24.0 minutes (run `38065526655`) and the other three at most 1.3. Those runs saved an
-overlay-base database and codeql.yml does not, so its own durations may differ; re-measuring them is
-the backlog entry "CodeQL's `timeout-minutes: 50` rests on the default setup's durations".
+overlay-base database and codeql.yml does not, so its own durations may differ. The 13 November
+measurement below replaces this historical limit for the current workflow.
 
 The `smoke` figure was measured while the remote layer cache was still in place; its limit is
 checked again without it: the whole `smoke` job took 2.4 and 2.3 minutes in image-nightly runs
@@ -3661,6 +3663,67 @@ of inputs. That run and a second with nothing changed measured the benefit on th
 
 Guard: the "reuse lint results only on runs that are not full" case in
 `scripts/ci-workflow.test.mjs`, weaker than its name: it reads the workflow as text.
+
+### Cache, Docker and CodeQL steps have measured limits
+
+A stalled cache or initialization action should end within its own limit rather than consume
+its job. Browser caches get two minutes and `continue-on-error: true`: a restore or save timeout
+does not itself fail the job. After a failed restore, the next step removes the browser cache
+folder before the browser install runs. The normal install step skips a browser folder with
+its completion marker even when its executable is missing. The cleanup
+runs only for the restore's failure; a successful restore stays in place. Lint's existing
+one-minute optional caches stay as they are. Docker setup and login, and CodeQL initialization,
+get one minute. Docker and CodeQL failures still fail the job; analysis uses CodeQL's 60-minute
+job limit.
+
+Docker build actions keep limits equal to their enclosing jobs: 15 minutes in image smoke
+and 10 in publication. A shorter measured-build limit would cut off the Dockerfile's existing
+300-second install attempts before they can retry. These equal limits introduce no earlier
+stop than the job already imposed; they do not promise that every internal retry can finish.
+
+The cache and initialization limits use completed action records, doubled and rounded up to
+whole minutes. The build limits retain the existing job budgets. These are observations of
+completed steps, not tests of a stalled transfer:
+
+| Record | Longest observed step | Limit |
+| --- | --- | --- |
+| Hosted full CI [43359800227](https://github.com/clintongormley/waitron/actions/runs/43359800227), 27 combined browser caches and 25 restores | cache 12 s, restore 9 s; post-cache 1 s on hits | browser cache 2 min from server records below |
+| Server [43393490764](https://github.com/clintongormley/waitron/actions/runs/43393490764), job 131779198469, and [43400749839](https://github.com/clintongormley/waitron/actions/runs/43400749839), job 131807089476 | restore and combined cache each 46 s | 2 min, optional |
+| Hosted [42676716419](https://github.com/clintongormley/waitron/actions/runs/42676716419), job 129360366601 | post-cache 5 s; log says cache saved with `playwright-Linux-1.65.0` after a miss | same 2 min, optional; server saves not measured |
+| Full CI 43359800227, publication job 131681802754 | buildx 11 s (post 13 s), login 1 s, checking build 58 s, print-agent push 16 s, app push 15 s | setup/login 1 min; builds retain 10 min |
+| Image nightly [43067644301](https://github.com/clintongormley/waitron/actions/runs/43067644301), smoke job 130686770204 | buildx 7 s (post 13 s), app 65 s, print-agent 14 s | setup 1 min; builds retain 15 min |
+| Seven nightly CodeQL runs, 7–13 November, ending at [43346782629](https://github.com/clintongormley/waitron/actions/runs/43346782629) | init 22 s; JS/TS job 1792 s | init 1 min; job 60 min |
+
+The retained logs include actual bundle downloads: run 42325293985's JS/TS initialization
+finished downloading and extracting its CodeQL bundle in 1.3 seconds. The one-minute init
+limit therefore includes a measured download, though no stalled-transfer cancellation was tried.
+
+For the CodeQL job, use the job rule above: 1792 seconds doubled and rounded up to five
+minutes gives 60. Only three of the seven runs satisfy the checkout-health screen used for
+timing comparisons; their longest job is 1651 seconds. That comparison screen does not
+exclude completed runs from a time ceiling (watcher, 13 November 10:18).
+
+Keep the combined caches. Runner v2.338.2 source assigns the original action to its post
+runner and reads both its timeout and error tolerance there; StepsRunner dequeues post steps
+and applies those values. This supports the inference that the same limit covers the post-save
+step. No hosted forced-timeout experiment has proved post-save cancellation.
+
+| Source | Own words | What this establishes |
+| --- | --- | --- |
+| [ActionRunner.cs, v2.338.2](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/ActionRunner.cs#L64), also L41 and L131 | `Timeout => Action?.TimeoutInMinutes`; `ContinueOnError => Action?.ContinueOnError`; `actionRunner.Action = Action` | The post runner receives the same action and reads these properties from it. |
+| [StepsRunner.cs, v2.338.2](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/StepsRunner.cs#L71), also L313 and L353 | `PostJobSteps.TryPop(out var postStep)`; `SetTimeout(timeout)`; `ApplyContinueOnError(step.ContinueOnError)` | Post steps pass through the timeout and failure-tolerance handling. |
+
+Keep buildx for image smoke and publication. The publication workflow already rebuilds from
+its local checking-build cache with an SBOM and provenance attestation; smoke uses the same
+builder for its loaded images. No builder-removal experiment is claimed. This decision
+replaces the old backlog question about an unused remote-cache exporter.
+
+Guard: the remaining-network-transfers cases in `scripts/ci-workflow.test.mjs`, weaker than
+the behavior: they read workflow text, enforce literal positive step limits within each job
+(and the analysis job limit), two-minute optional browser caches at the declared browser path,
+build limits equal to their jobs, immediate failure-only browser cleanup, and fatal Docker/CodeQL failures. They do not run the
+actions, prove network cancellation, or reach the runner's earlier action-repository download.
+That setup-download residual stays open.
 
 ### CodeQL scans `main` nightly, and nothing waits for it
 
@@ -5172,7 +5235,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners when the ignored-stop
   case hit its 30 s limit, main's own CI among them. Guards: the "prefers gnutimeout" and "kills an
   attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
-  rule: that script only; `scripts/ci-diff-paths.sh` never looks for `gnutimeout` (backlog).
+  rule: the process-tree probe covers pnpm setup only; `scripts/ci-main-recovery.test.mjs` also checks ci-diff-paths'
+  GNU preference and deadline arguments, but not whether `gh` starts children or how they end.
   [Receipt](ci-and-gates.md#every-pnpm-setup-is-bounded).
 
 ## Root receipts moved on 2026-11-09

@@ -27,7 +27,7 @@ jobs:
       matrix:
         language: [actions, c-cpp, javascript-typescript, python]
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     steps:
       # Each checkout is three steps: docs/developers/ci-and-gates.md, "Every checkout is bounded".
       - id: checkout
@@ -50,6 +50,7 @@ jobs:
           GIT_HTTP_LOW_SPEED_TIME: 20
 
       - uses: github/codeql-action/init@v4
+        timeout-minutes: 1
         with:
           languages: ${{ matrix.language }}
           build-mode: none

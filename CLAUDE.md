@@ -168,7 +168,8 @@ hook, or how tests are scheduled. What named guards miss:
   reaches the command alone, never its children; a script that relies on `-k` to stop a process tree
   looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners. Guards: the "prefers
   gnutimeout" and "kills an attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
-  rule: that script only; `scripts/ci-diff-paths.sh` never looks for `gnutimeout` (backlog).
+  rule: the process-tree probe covers pnpm setup only; `scripts/ci-main-recovery.test.mjs` also checks ci-diff-paths'
+  GNU preference and deadline arguments, but not whether `gh` starts children or how they end.
   [Receipt](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **Every `actions/setup-node` has two bounded attempts; only a failed first attempt runs the retry,
   and a second failure fails the job.** Guard: `scripts/ci-workflow.test.mjs`, weaker than its name:

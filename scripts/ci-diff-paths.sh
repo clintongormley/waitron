@@ -29,7 +29,7 @@ if [[ "$EVENT" != push || "$REF" != refs/heads/main ]]; then
   exit
 fi
 
-deadline=$(command -v gtimeout || command -v timeout || true)
+deadline=$(command -v gnutimeout || command -v gtimeout || command -v timeout || true)
 if [[ -z "$deadline" ]]; then
   echo "no timeout command: using global change scope" >&2
   exit
