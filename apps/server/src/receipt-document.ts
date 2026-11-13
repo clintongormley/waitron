@@ -238,12 +238,24 @@ export function buildReceiptDocument({
   if (result.orderLabel !== null || result.orderNumber !== 0)
     row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
   if (simplified) {
-    const date =
-      paperWidth === "58mm"
-        ? receiptDateTimeNumeric(result.issuedAt, locale, result.issuedOffsetMinutes)
-        : receiptDateTime(result.issuedAt, locale, result.issuedOffsetMinutes);
-    // Two spaces at least, or the invoice number running into the date reads as one figure.
-    row(result.invoiceNumber, date, 0, undefined, 2);
+    const dated = (invoice: {
+      invoiceNumber: string;
+      issuedAt: string;
+      issuedOffsetMinutes?: number;
+    }) => {
+      const date =
+        paperWidth === "58mm"
+          ? receiptDateTimeNumeric(invoice.issuedAt, locale, invoice.issuedOffsetMinutes)
+          : receiptDateTime(invoice.issuedAt, locale, invoice.issuedOffsetMinutes);
+      // Two spaces at least, or the invoice number running into the date reads as one figure.
+      row(invoice.invoiceNumber, date, 0, undefined, 2);
+    };
+    if (result.corrects) text(label.correctiveInvoice, 0, { bold: true });
+    dated(result);
+    if (result.corrects) {
+      text(label.correctsInvoice);
+      dated(result.corrects);
+    }
   } else {
     row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
     row(label.date, receiptDateTime(result.issuedAt, locale, result.issuedOffsetMinutes));

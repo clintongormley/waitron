@@ -489,6 +489,16 @@ export class TillTicketView extends LitElement {
         padding: var(--wt-space-1) 0;
       }
 
+      .corrective,
+      .corrects {
+        margin: 0;
+        padding: var(--wt-space-1) 0;
+      }
+
+      .corrective {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
       .meta-label,
       .vat-label,
       .line-qty,
@@ -1233,6 +1243,13 @@ export class TillTicketView extends LitElement {
         </header>
 
         <div class="meta">
+          ${
+            r.corrects
+              ? html`<p class="corrective" data-test="corrective-invoice">
+                  ${labels.correctiveInvoice}
+                </p>`
+              : nothing
+          }
           <div class="meta-row">
             <span class="meta-label">${labels.invoice}</span>
             <span class="invoice-number">${r.invoiceNumber}</span>
@@ -1241,6 +1258,23 @@ export class TillTicketView extends LitElement {
             <span class="meta-label">${labels.date}</span>
             <span>${issueDate(r.issuedAt, format, r.issuedOffsetMinutes)}</span>
           </div>
+          ${
+            r.corrects
+              ? html`<p class="corrects meta-label" data-test="corrects-invoice">
+                    ${labels.correctsInvoice}
+                  </p>
+                  <div class="meta-row">
+                    <span class="meta-label">${labels.invoice}</span>
+                    <span>${r.corrects.invoiceNumber}</span>
+                  </div>
+                  <div class="meta-row">
+                    <span class="meta-label">${labels.date}</span>
+                    <span
+                      >${issueDate(r.corrects.issuedAt, format, r.corrects.issuedOffsetMinutes)}</span
+                    >
+                  </div>`
+              : nothing
+          }
           <div class="meta-row order-group">
             <span>${orderGroup}</span>
           </div>

@@ -3275,3 +3275,51 @@ it("keeps lunch diners separate and shows included choices without prices", asyn
     ["Coffee x2", ""],
   ]);
 });
+
+describe("a corrective invoice", () => {
+  it.each(["en-GB", "es-ES"])(
+    "in %s, marks itself above its number and names the invoice it corrects below its date",
+    async (locale) => {
+      const labels = receiptLabelsFor(locale);
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        result: {
+          ...result,
+          locale,
+          invoiceType: "R5",
+          invoiceNumber: "R/3",
+          total: "-1.21",
+          corrects: {
+            invoiceNumber: "A/1",
+            issuedAt: "2026-08-04T10:05:00.000Z",
+            issuedOffsetMinutes: 120,
+          },
+        },
+        issuer,
+      });
+      const meta = norm(el.shadowRoot!.querySelector(".meta")!.textContent ?? "").replace(
+        /\s+/g,
+        " ",
+      );
+      const corrected = new Intl.DateTimeFormat(locale, {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "UTC",
+      }).format(new Date("2026-08-04T12:05:00.000Z"));
+      const order = [
+        labels.correctiveInvoice,
+        "R/3",
+        labels.correctsInvoice,
+        "A/1",
+        norm(corrected).replace(/\s+/g, " "),
+      ].map((part) => meta.indexOf(part));
+      expect(order.every((at) => at >= 0)).toBe(true);
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+    },
+  );
+
+  it("marks nothing on an invoice that corrects none", async () => {
+    const { el } = await mount();
+    expect(text(el)).not.toContain(receiptLabelsFor("es-ES").correctiveInvoice);
+    expect(text(el)).not.toContain(receiptLabelsFor("es-ES").correctsInvoice);
+  });
+});

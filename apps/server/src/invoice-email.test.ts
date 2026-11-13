@@ -229,6 +229,28 @@ describe("invoice SMTP transport", () => {
     },
   );
 
+  it.each(["en-GB", "es-ES"])(
+    "captions an emailed corrective invoice as one in %s",
+    async (locale) => {
+      const rig = await smtpRig("accepted");
+      try {
+        const document = structuredClone(fixture);
+        document.invoiceLocale = locale;
+        document.result.invoiceType = "R5";
+        document.result.invoiceNumber = "R/7";
+        delete document.result.recipient;
+        const caption = `${receiptLabelsFor(locale).correctiveInvoice} R/7`;
+        expect(
+          await createInvoiceEmailSender(rig.config)({ recipient: "guest@example.test", document }),
+        ).toEqual({ status: "sent" });
+        expect(rig.messages[0]).toContain(`Subject: ${caption}`);
+        expect(textPart(rig.messages[0]!)).toBe(caption);
+      } finally {
+        await rig.close();
+      }
+    },
+  );
+
   it("A965 labels sends English subject, body and PDF from the document language", async () => {
     const rig = await smtpRig("accepted");
     try {

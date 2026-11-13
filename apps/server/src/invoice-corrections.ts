@@ -7,6 +7,8 @@ import {
   type RecordCorrectionInput,
 } from "@waitron/core";
 import {
+  deviceProfiles,
+  devices,
   invoiceCorrections,
   readLiveSeriesIdTx,
   saleSettlements,
@@ -14,6 +16,7 @@ import {
 } from "@waitron/db";
 import { prepareIssueClock, type FiscalBackend, type TrustedReading } from "@waitron/fiscal";
 import type { Authorization, AuthzInput } from "@waitron/identity";
+import { profileAllows } from "@waitron/layouts";
 import {
   AppError,
   centsToDecimal,
@@ -30,6 +33,7 @@ import {
   type SaleId,
 } from "@waitron/shared";
 import { invalid, MONEY } from "./bill-allocation.js";
+import { deviceProfileJoin } from "./device-session.js";
 import {
   readCorrectionLegs,
   readCorrectionMoney,
@@ -37,12 +41,15 @@ import {
   refuseWhileCorrectionOpen,
   type InvoiceCorrectionRow,
 } from "./invoice-correction-legs.js";
+import { optionalDocument } from "./optional-document.js";
 import { fingerprint } from "./parties.js";
+import { enqueueOriginalReceipt } from "./receipt-print.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import type { TenderRefundView } from "./tender-refund-types.js";
 import { canonicaliseUuid } from "./till-session.js";
+import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
@@ -276,7 +283,9 @@ export async function listOpenInvoiceCorrections(
 /**
  * Files the R5 of the open correction `correctionId` for the money its refunds have given back,
  * after the filing checks run again, and marks the correction filed. The one place a correction's
- * R5 is filed.
+ * R5 is filed. When a person asked (`asked`) and `cfg`'s device may print receipts, queues the
+ * R5's original on that device's receipt printer when one resolves; an automatic filing passes
+ * none and queues nothing.
  */
 export async function fileCorrectionIn(
   tx: Transaction,
@@ -286,7 +295,7 @@ export async function fileCorrectionIn(
   authz: RecordCorrectionInput["authz"],
   /** Null when filed automatically, with nobody asking. */
   endedBy: string | null,
-  expectedSplit?: readonly SplitLine[],
+  asked?: { expectedSplit?: readonly SplitLine[]; print: true },
 ): Promise<SaleId> {
   const correction = await openCorrection(tx, correctionId);
   const { completed } = await readSettledMoney(tx, correction);
@@ -296,7 +305,8 @@ export async function fileCorrectionIn(
     gross: centsToDecimal(completed),
     ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
   });
-  if (expectedSplit !== undefined) await refuseChangedSplit(tx, saleId, preview, expectedSplit);
+  if (asked?.expectedSplit !== undefined)
+    await refuseChangedSplit(tx, saleId, preview, asked.expectedSplit);
   if ((await deps.backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
 
@@ -331,7 +341,29 @@ export async function fileCorrectionIn(
     .returning({ id: invoiceCorrections.id });
   if (filed.length !== 1)
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
+  if (asked?.print)
+    await optionalDocument(tx, "enqueueCorrectiveReceipt", correctiveSaleId, async () => {
+      if (!(await printsReceipts(tx, cfg.origin.deviceId))) return;
+      await enqueueOriginalReceipt(
+        tx,
+        cfg,
+        await readTransactionReceipt(deps.backend, tx, cfg, correctiveSaleId),
+        correctiveSaleId,
+      );
+    });
   return correctiveSaleId;
+}
+
+async function printsReceipts(tx: Transaction, deviceId: string): Promise<boolean> {
+  const [device] = await tx
+    .select({ formFactor: deviceProfiles.formFactor, capabilities: deviceProfiles.capabilities })
+    .from(devices)
+    .innerJoin(deviceProfiles, deviceProfileJoin)
+    .where(eq(devices.id, deviceId));
+  return (
+    device !== undefined &&
+    profileAllows({ ...device, capabilities: device.capabilities as string[] }, "print-receipt")
+  );
 }
 
 /**
@@ -346,15 +378,10 @@ export async function fileInvoiceCorrectionNow(
   request: { expectedSplit: readonly SplitLine[] },
   actor: { personId: string; authz: AuthzInput },
 ): Promise<InvoiceCorrectionView> {
-  await fileCorrectionIn(
-    tx,
-    deps,
-    cfg,
-    correctionId,
-    actor.authz,
-    actor.personId,
-    request.expectedSplit,
-  );
+  await fileCorrectionIn(tx, deps, cfg, correctionId, actor.authz, actor.personId, {
+    expectedSplit: request.expectedSplit,
+    print: true,
+  });
   return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
 }
 

@@ -12,6 +12,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { listAdjustmentReasons, type AdjustmentReason } from "@waitron/adjustments";
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -22,6 +23,7 @@ import {
   setProfileServiceAccess,
 } from "@waitron/venue-service";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { printedLines } from "./testing/decode-ticket.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
@@ -792,4 +794,134 @@ describe("POST /api/invoice-corrections/:id/file and /close", () => {
     });
     expect(counts()).toEqual(before);
   });
+});
+
+describe("the corrective invoice's paper", () => {
+  /** The print jobs of the sale `saleId`, oldest first. */
+  const papers = (saleId: string) =>
+    venue.db
+      .all<{ kind: string; copy: number | null; payload: Uint8Array }>(
+        sql`select kind, receipt_copy as copy, payload from print_jobs
+            where sale_id = ${saleId} order by rowid`,
+      )
+      .map(({ kind, copy, payload }) => ({
+        kind,
+        copy: copy === 1,
+        text: printedLines(payload).join("\n"),
+      }));
+  const numberOf = (saleId: string) =>
+    venue.db.all<{ number: string }>(
+      sql`select s.code || '/' || sales.invoice_number as number from sales
+          join invoice_series s on s.id = sales.series_id where sales.id = ${saleId}`,
+    )[0]!.number;
+
+  /** Runs `body` while the main till's profile also allows `print-receipt`, which it lacks. */
+  async function printingReceipts<T>(body: () => Promise<T>): Promise<T> {
+    const [till] = await venue.db
+      .select({ profileId: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
+      .from(devices)
+      .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+      .where(eq(devices.id, venue.deviceId));
+    const capabilities = till!.capabilities as string[];
+    expect(capabilities).not.toContain("print-receipt");
+    const setCapabilities = (to: string[]) =>
+      venue.db
+        .update(deviceProfiles)
+        .set({ capabilities: to })
+        .where(eq(deviceProfiles.id, till!.profileId));
+    await setCapabilities([...capabilities, "print-receipt"]);
+    try {
+      return await body();
+    } finally {
+      await setCapabilities(capabilities);
+    }
+  }
+
+  it("prints the corrective once when the last cash leg files it, and nothing on a replay", () =>
+    printingReceipts(async () => {
+      const saleId = await sold(["10.00"]);
+      const id = await opened(saleId);
+      const ask = cashBody();
+      const first = await giveCash(id, ask);
+      const correctiveSaleId = (first.json as { correction: { correctiveSaleId: string } })
+        .correction.correctiveSaleId;
+      const [paper, ...more] = papers(correctiveSaleId);
+      expect(more).toEqual([]);
+      expect(paper).toMatchObject({ kind: "document", copy: false });
+      const lines = paper!.text.split("\n").map((line) => line.trim().split(/\s{2,}/u)[0]);
+      const { correctiveInvoice, correctsInvoice } = receiptLabelsFor("es-ES");
+      const title = lines.indexOf(correctiveInvoice);
+      expect(lines.slice(title, title + 4), paper!.text).toEqual([
+        correctiveInvoice,
+        numberOf(correctiveSaleId),
+        correctsInvoice,
+        numberOf(saleId),
+      ]);
+
+      expect(await giveCash(id, ask)).toMatchObject({ status: 200, json: { replayed: true } });
+      expect(papers(correctiveSaleId)).toHaveLength(1);
+    }));
+
+  it("prints the corrective File now files", () =>
+    printingReceipts(async () => {
+      const id = await threeBack();
+      const filed = await fileNow(id, fileBody());
+      const correctiveSaleId = (filed.json as { correctiveSaleId: string }).correctiveSaleId;
+      expect(papers(correctiveSaleId)).toMatchObject([{ kind: "document", copy: false }]);
+    }));
+
+  it("files the corrective on the last cash leg but prints nothing on a till that cannot print receipts", async () => {
+    const id = await opened(await sold(["10.00"]));
+    const before = counts();
+    const first = await giveCash(id, cashBody());
+    expect(first).toMatchObject({
+      status: 200,
+      json: {
+        refunds: [{ state: "completed", appliedAmount: "5.00" }],
+        correction: { state: "filed" },
+      },
+    });
+    expect(counts()).toEqual({
+      ...before,
+      invoices: before.invoices + 1,
+      refunds: before.refunds + 1,
+      drawers: before.drawers + 1,
+    });
+    const correctiveSaleId = (first.json as { correction: { correctiveSaleId: string } }).correction
+      .correctiveSaleId;
+    expect(papers(correctiveSaleId)).toEqual([]);
+  });
+
+  it("File now files the corrective but prints nothing on a till that cannot print receipts", async () => {
+    const id = await threeBack();
+    const before = counts();
+    const filed = await fileNow(id, fileBody());
+    expect(filed).toMatchObject({ status: 200, json: { state: "filed" } });
+    expect(counts()).toEqual({ ...before, invoices: before.invoices + 1 });
+    expect(papers((filed.json as { correctiveSaleId: string }).correctiveSaleId)).toEqual([]);
+  });
+
+  it("reprints the corrective as a copy that opens no drawer", () =>
+    printingReceipts(async () => {
+      const id = await opened(await sold(["10.00"]));
+      const correctiveSaleId = (
+        (await giveCash(id, cashBody())).json as { correction: { correctiveSaleId: string } }
+      ).correction.correctiveSaleId;
+      const before = counts();
+      expect(
+        await send(
+          venue.app,
+          venue.cookie,
+          "POST",
+          `/api/transactions/${correctiveSaleId}/reprint`,
+          {},
+        ),
+      ).toMatchObject({ status: 200 });
+      const [original, copy] = papers(correctiveSaleId);
+      expect(copy).toMatchObject({ kind: "document", copy: true });
+      const { duplicate } = receiptLabelsFor("es-ES");
+      expect(original!.text).not.toContain(duplicate);
+      expect(copy!.text).toContain(duplicate);
+      expect(counts()).toEqual(before);
+    }));
 });

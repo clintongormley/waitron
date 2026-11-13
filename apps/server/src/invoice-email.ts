@@ -75,7 +75,13 @@ export function createInvoiceEmailSender(config: SmtpConnection): InvoiceEmailSe
     const pdf = await renderInvoicePdf(document);
     const labels = receiptLabelsFor(document.invoiceLocale);
     const simplified = document.result.invoiceType !== "F1";
-    const caption = `${simplified ? labels.simplifiedInvoice : labels.invoice} ${document.result.invoiceNumber}`;
+    const title =
+      document.result.invoiceType === "R5"
+        ? labels.correctiveInvoice
+        : simplified
+          ? labels.simplifiedInvoice
+          : labels.invoice;
+    const caption = `${title} ${document.result.invoiceNumber}`;
     const notice = privacyNotice(document, privacy);
     const marked = document.duplicate === true ? `${caption} — ${labels.duplicate}` : caption;
     const text = notice === undefined ? marked : `${marked}\n\n${notice}`;

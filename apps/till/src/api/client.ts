@@ -29,6 +29,12 @@ import type {
   TenderRefundView,
   TenderRefundAcknowledgment,
 } from "./tender-refund-types.js";
+import type {
+  InvoiceCorrectionCashGiven,
+  InvoiceCorrectionCashRequest,
+  InvoiceCorrectionOpened,
+  InvoiceCorrectionRequest,
+} from "./invoice-correction-types.js";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 import type {
   ProductAllergens,
@@ -1004,7 +1010,9 @@ export type TenderBlock =
 export interface TillSaleResult extends ReceiptPresentation {
   invoiceEvidence?: InvoiceEvidence;
   issuedOffsetMinutes?: number;
-  invoiceType?: "F1" | "F2";
+  invoiceType?: "F1" | "F2" | "R5";
+  /** On a corrective invoice (R5), the invoice it corrects. */
+  corrects?: { invoiceNumber: string; issuedAt: string; issuedOffsetMinutes?: number };
   recipient?: {
     taxId: string;
     legalName: string;
@@ -3994,6 +4002,30 @@ export class TillApi {
   refundTransaction(saleId: string, request: TenderRefundRequest): Promise<TenderRefundView> {
     return this.#request(
       `/api/transactions/${encodeURIComponent(saleId)}/refunds`,
+      "POST",
+      request,
+    );
+  }
+
+  /** `POST /api/transactions/:saleId/corrections`; refused `invoice_correction.already_open`
+   * with the open correction's `correctionId`. */
+  openInvoiceCorrection(
+    saleId: string,
+    request: InvoiceCorrectionRequest,
+  ): Promise<InvoiceCorrectionOpened> {
+    return this.#request(
+      `/api/transactions/${encodeURIComponent(saleId)}/corrections`,
+      "POST",
+      request,
+    );
+  }
+
+  giveInvoiceCorrectionCash(
+    correctionId: string,
+    request: InvoiceCorrectionCashRequest,
+  ): Promise<InvoiceCorrectionCashGiven> {
+    return this.#request(
+      `/api/invoice-corrections/${encodeURIComponent(correctionId)}/cash`,
       "POST",
       request,
     );

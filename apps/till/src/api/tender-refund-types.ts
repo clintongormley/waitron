@@ -9,6 +9,8 @@ export interface TenderRefundRequest {
   reason: string;
   manualConfirmed?: boolean;
   cancellationIds?: string[];
+  /** Makes this refund a card leg of that open invoice correction. */
+  invoiceCorrectionId?: string;
   override?: { personId: string; pin: string };
 }
 
