@@ -247,9 +247,15 @@ describe("GET /api/transactions/:saleId/corrections/lines", () => {
       ],
       moneyRefundable: "10.00",
     });
-    expect(
-      Object.values((answer.json as { lines: [{ descriptions: object }] }).lines[0].descriptions),
-    ).toContain("Croquetas de jamón");
+    const receipt = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/transactions/${saleId}/receipt`,
+    );
+    expect((answer.json as { lines: [{ descriptions: object }] }).lines[0].descriptions).toEqual(
+      (receipt.json as { lines: [{ descriptions: object }] }).lines[0].descriptions,
+    );
   });
 
   it("refuses with the preview's code an invoice the preview refuses", async () => {
