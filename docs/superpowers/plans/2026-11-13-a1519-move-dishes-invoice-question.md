@@ -45,7 +45,8 @@ After `resolveMoveLines`, it decides whether the move **empties** the bill: ever
   merge, so the dishes are checked against the simplified-invoice limit as the destination will be
   invoiced (`refuseOrderOverSimplifiedLimit`, `working-order.ts:1309`).
 
-When the move does **not** empty the bill and `invoiceChoice` was sent, it is refused with the same
+When the move does **not** empty the bill, a malformed `invoiceChoice` is refused by `parseChoice`
+as `management.request_invalid`, as on a move that empties it, and a well-formed one with the same
 `bill.merge_invoice_choice_required`: the till sends a choice only when its read showed every dish
 leaving, so the two disagree only if the bill changed (every writer that adds a dish moves the
 party revision `guardPathParty` checks, so this should not happen, but an answer of "invoice Acme"
@@ -93,9 +94,9 @@ move (a `kind: "merge" | "move"` on `mergeInvoiceAsk`). Titles are merge's
   again.** / **Los datos de factura de las cuentas han cambiado. Revísalos y vuelve a mover los
   platos.**
 
-On `bill.merge_invoice_choice_required` from a move, the till re-reads the party's bills; if the
-question applies to the fresh read it opens it at once, otherwise it shows
-`table.move_invoice_changed`, as `#onMergeBills` does (`till-app.ts:17186-17191`). Look at the
+On `bill.merge_invoice_choice_required` from a move, the till re-reads the bill's dishes and the
+party's bills; if the move still takes every dish and the question applies to the fresh read it
+opens it at once, otherwise it shows `table.move_invoice_changed`, as `#onMergeBills` does (`till-app.ts:17186-17191`). Look at the
 three move forms in both themes and at phone width; screenshots are shown to the owner, never
 committed.
 
