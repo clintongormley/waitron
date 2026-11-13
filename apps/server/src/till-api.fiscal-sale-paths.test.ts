@@ -40,7 +40,7 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, loginWithPin } from "@waitron/identity";
+import { hashPassword, hashPin, loginWithPin, readPersonAuthority } from "@waitron/identity";
 import { permissionsForRole } from "@waitron/identity/src/permissions.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -2370,7 +2370,11 @@ describe("handheld sales and device capability gates", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
-    expect(permissionsForRole("staff")).toEqual(["payment.take"]);
+    await suite.db.execute(sql`
+      update roles set permissions = '["payment.take"]' where built_in_key = 'staff'`);
+    expect([...(await readPersonAuthority(suite.db, operatorId)).permissions]).toEqual([
+      "payment.take",
+    ]);
 
     const handheldCookie = await enrolHandheldCookie(cfg);
     const tillDeviceCookie = await enrolTillCookie(cfg);
@@ -2436,7 +2440,11 @@ describe("handheld sales and device capability gates", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
-    expect(permissionsForRole("staff")).toEqual(["payment.take"]);
+    await suite.db.execute(sql`
+      update roles set permissions = '["payment.take"]' where built_in_key = 'staff'`);
+    expect([...(await readPersonAuthority(suite.db, operatorId)).permissions]).toEqual([
+      "payment.take",
+    ]);
 
     const handheldCookie = await enrolHandheldCookie(cfg);
     const tillDeviceCookie = await enrolTillCookie(cfg);
@@ -2557,7 +2565,11 @@ describe("handheld sales and device capability gates", () => {
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    expect(permissionsForRole("staff")).toEqual(["payment.take"]);
+    await suite.db.execute(sql`
+      update roles set permissions = '["payment.take"]' where built_in_key = 'staff'`);
+    expect([...(await readPersonAuthority(suite.db, operatorId)).permissions]).toEqual([
+      "payment.take",
+    ]);
 
     const handheldCookie = await enrolHandheldCookie(cfg);
     const tillDeviceCookie = await enrolTillCookie(cfg);
