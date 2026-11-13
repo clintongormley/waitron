@@ -244,6 +244,14 @@ async function finalStateEvents(self: string) {
 
 const copyPath = () => join(stateDir, "handover", OP, "venue.db");
 
+function gate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe("capturing a stepped-down box's final copy", () => {
   it("the indicator's digest is the SHA-256 of the file it names", async () => {
     const self = await steppedDown();
@@ -308,9 +316,9 @@ describe("capturing a stepped-down box's final copy", () => {
 
   it("two captures through separate node handles on one connection record one event and both answer it", async () => {
     const self = await steppedDown();
-    const firstEntered = Promise.withResolvers<void>();
-    const secondEntered = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
+    const firstEntered = gate();
+    const secondEntered = gate();
+    const release = gate();
     const counted = countingVenue();
     let entered = 0;
     const venue = new Proxy(counted.venue, {
@@ -357,7 +365,7 @@ describe("capturing a stepped-down box's final copy", () => {
     const self = await steppedDown();
     const otherState = join(stateDir, "other");
     await mkdir(otherState);
-    const bothEntered = Promise.withResolvers<void>();
+    const bothEntered = gate();
     let entered = 0;
     const venue = new Proxy(suite.db, {
       get: (target, key) => {
