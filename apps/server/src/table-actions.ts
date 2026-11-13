@@ -235,10 +235,17 @@ export async function combineParties(
 ): Promise<void> {
   const { from, into } = args;
   const guests = await tx
-    .select({ id: parties.id, guestCount: parties.guestCount })
+    .select({
+      id: parties.id,
+      guestCount: parties.guestCount,
+      billRequestedAt: parties.billRequestedAt,
+      name: parties.name,
+    })
     .from(parties)
     .where(inArray(parties.id, [from, into]));
   const partyOf = (partyId: string) => guests.find((party) => party.id === partyId)!;
+  const fromParty = partyOf(from);
+  const intoParty = partyOf(into);
   await requireRelocatableBillEditors(
     tx,
     await readPartyBillIds(tx, [from, into]),
@@ -276,7 +283,16 @@ export async function combineParties(
   }
   await tx
     .update(parties)
-    .set({ guestCount: combinedGuests(partyOf(from).guestCount, partyOf(into).guestCount) })
+    .set({
+      guestCount: combinedGuests(fromParty.guestCount, intoParty.guestCount),
+      billRequestedAt:
+        fromParty.billRequestedAt === null ||
+        (intoParty.billRequestedAt !== null &&
+          intoParty.billRequestedAt < fromParty.billRequestedAt)
+          ? intoParty.billRequestedAt
+          : fromParty.billRequestedAt,
+      name: intoParty.name ?? fromParty.name,
+    })
     .where(eq(parties.id, into));
   await tx
     .update(parties)
