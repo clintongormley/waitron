@@ -187,6 +187,12 @@ it("navigation asks, Keep retains and Discard restores the whole form", async ()
     await el.updateComplete;
   };
   expect(unload()).toBe(false);
+  await change(" ");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+  ).not.toBe("");
   await change("Draft");
   expect(unload()).toBe(true);
   void leave();
@@ -202,6 +208,10 @@ it("navigation asks, Keep retains and Discard restores the whole form", async ()
     (el.shadowRoot!.querySelector("[name=name]")! as HTMLElementTagNameMap["wt-input"]).value,
   ).toBe("Restaurant");
   expect(unload()).toBe(false);
+  await change(" ");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+  ).toBe("");
 });
 it("reconnect retains the draft against its original baseline", async () => {
   const el = await mount();

@@ -1144,6 +1144,9 @@ it("a blank native trading name is refused without writing and Cancel restores i
   expect(box.value).toBe("Casa");
   expect(box.error).toBe("");
   expect(save(el).disabled).toBe(true);
+  await userEvent.fill(page.elementLocator(native), "   ");
+  await el.updateComplete;
+  expect(box.error).toBe("");
 });
 
 it.each([

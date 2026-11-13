@@ -3,6 +3,8 @@ import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  FormFeedback,
+  bottomMessage,
   draftScopeFor,
   focusFirstInvalid,
   saveActionState,
@@ -65,7 +67,7 @@ export class DepartmentDialogs extends LitElement {
   @property({ attribute: false }) refreshing = false;
   @state() private draft: Draft = { name: "", departmentId: "" };
   @state() private busy = false;
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   @state() private refused: Partial<Record<keyof Draft, string>> = {};
   @state() private failure = "";
   @state() private impactFailure = "";
@@ -105,7 +107,7 @@ export class DepartmentDialogs extends LitElement {
       this.opened = this.dialog;
       this.generation = {};
       this.busy = false;
-      this.attempted = false;
+      this.feedback.reset();
       this.refused = {};
       this.failure = "";
       this.impactFailure = "";
@@ -338,11 +340,11 @@ export class DepartmentDialogs extends LitElement {
       saveActionState(this.scope).unchanged
     )
       return;
-    this.attempted = true;
+    this.feedback.press();
     this.refused = {};
     this.failure = "";
     if (Object.keys(this.errors).length) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     this.busy = true;
@@ -445,7 +447,7 @@ export class DepartmentDialogs extends LitElement {
           }}
         ></wt-delete-dialog>`,
       );
-    const errors = { ...(this.attempted ? this.errors : {}), ...this.refused };
+    const errors = { ...(this.feedback.attempted ? this.errors : {}), ...this.refused };
     const marked = Object.keys(errors).length > 0;
     const state = saveActionState(this.scope);
     return keyed(
@@ -503,7 +505,7 @@ export class DepartmentDialogs extends LitElement {
         </div>
         <wt-form-actions
           slot="footer"
-          .error=${[this.failure || this.impactFailure, marked ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}
+          .error=${bottomMessage(this.failure || this.impactFailure, marked ? t("venue.fix_fields") : "")}
           ><wt-button
             slot="cancel"
             variant="secondary"
@@ -517,7 +519,7 @@ export class DepartmentDialogs extends LitElement {
           ><wt-button
             data-test="save-editor"
             variant=${state.variant}
-            ?disabled=${this.busy || this.refreshing || (this.confirming ? !this.impact : state.unchanged || (this.attempted && Object.keys(this.errors).length > 0))}
+            ?disabled=${this.busy || this.refreshing || (this.confirming ? !this.impact : state.unchanged || (this.feedback.attempted && Object.keys(this.errors).length > 0))}
             @click=${() => {
               if (current()) void this.save();
             }}

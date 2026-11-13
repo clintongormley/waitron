@@ -303,6 +303,9 @@ it("refuses an invalid move destination and frees Save once it is corrected", as
   save(el).click();
   await el.updateComplete;
   expect(field(el, "departmentId").error).toBe("This field is required.");
+  await expect
+    .poll(() => field(el, "departmentId").shadowRoot!.activeElement)
+    .toBe(field(el, "departmentId").shadowRoot!.querySelector("button"));
   expect(save(el).disabled).toBe(true);
   expect(request).not.toHaveBeenCalled();
   await chooseOption(field(el, "departmentId"), "d2");

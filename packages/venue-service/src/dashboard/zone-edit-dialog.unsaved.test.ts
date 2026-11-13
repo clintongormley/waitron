@@ -14,6 +14,12 @@ afterEach(() => {
 });
 it("Escape keeps the raw zone draft or discards it without a save", async () => {
   const { el, modal, app, writes } = await mountZoneEditor();
+  await editZoneName(el, " ");
+  zoneSave(el).click();
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+  ).not.toBe("");
   await editZoneName(el, "Draft");
   const closing = modal.requestClose("escape");
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
@@ -31,6 +37,13 @@ it("Escape keeps the raw zone draft or discards it without a save", async () => 
   question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   expect(await discard).toBe(true);
   expect(modal.open).toBe(false);
+  el.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: " " }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+  ).toBe("");
   expect(writes).toEqual([]);
 });
 it("pending Save blocks closing and retains a newer name after the submitted draft commits", async () => {

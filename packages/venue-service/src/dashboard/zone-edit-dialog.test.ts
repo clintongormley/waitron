@@ -92,6 +92,7 @@ it("saves trimmed name and nullable policies in one request and closes before no
 it("blank name explains the field and bottom summary, disables Save until corrected and never writes", async () => {
   const { el, modal, writes } = await mountZoneEditor();
   await editZoneName(el, " ");
+  zoneSave(el).shadowRoot!.querySelector<HTMLButtonElement>("button")!.focus();
   zoneSave(el).click();
   await el.updateComplete;
   expect(
@@ -100,6 +101,10 @@ it("blank name explains the field and bottom summary, disables Save until correc
   expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
     "Correct the highlighted fields to continue.",
   );
+  const name = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+  await expect
+    .poll(() => name.shadowRoot!.activeElement)
+    .toBe(name.shadowRoot!.querySelector("input"));
   expect(zoneSave(el).disabled).toBe(true);
   expect(modal.open).toBe(true);
   expect(writes).toEqual([]);
@@ -340,3 +345,19 @@ it.each(["en", "es"])(
     expect((writes[0]![2] as { name: string }).name).toBe("Reserved");
   },
 );
+
+it("opening another zone resets a previous validation attempt", async () => {
+  const { el } = await mountZoneEditor();
+  await editZoneName(el, " ");
+  zoneSave(el).click();
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+  ).not.toBe("");
+  el.zoneId = "z2";
+  await el.updateComplete;
+  await editZoneName(el, " ");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+  ).toBe("");
+});
