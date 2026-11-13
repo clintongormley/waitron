@@ -11,6 +11,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { hashDeviceToken } from "@waitron/identity";
+import { cardReaders } from "@waitron/payments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
@@ -256,6 +257,31 @@ describe("the running server's dark pass screen alert", () => {
           kind: "ongoing",
           area: "kitchen",
         },
+      ]);
+    });
+  });
+});
+
+describe("the running server's card-reader alert with card payments on", () => {
+  it("reports a reader whose provider could not read its status", async () => {
+    const venue = await setupVenue(suite.db);
+    beforeServerStarts();
+    const [reader] = await suite.db
+      .insert(cardReaders)
+      .values({ provider: "stripe", providerRef: "tmr_synthetic", name: "Terrace" })
+      .returning({ id: cardReaders.id });
+
+    await withServer(venue, async (base) => {
+      expect(await alertsIn(base, venue, "card_reader")).toEqual([
+        expect.objectContaining({
+          key: "alert.source_unavailable:card_reader",
+          code: "alert.source_unavailable",
+        }),
+        expect.objectContaining({
+          key: `reader.status_unavailable:${reader!.id}`,
+          code: "reader.status_unavailable",
+          params: { reader: "Terrace" },
+        }),
       ]);
     });
   });

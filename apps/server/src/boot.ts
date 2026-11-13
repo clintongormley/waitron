@@ -3461,6 +3461,7 @@ async function bootServer(
   });
   jobRunner.add(clockWatchJob(clockWatch, CLOCK_WATCH_MS));
   correction.addAnchor(clockWatch);
+  const paymentsEnabled = setsToMigrate.some((module) => module.name === "payments");
   const serverAlertSources: AlertSource[] = [
     jobFailingAlertSource({ views: () => jobRunner.views(), now }),
     clockSyncAlertSource({
@@ -3489,12 +3490,15 @@ async function bootServer(
       stationStates: (tx, at) => VENUE_SERVICE.stationStates(tx, at),
     }),
     passScreenAlertSource(),
-    batteryAlertSource({
-      providers: CARD_PROVIDERS,
-      runtimeDeps: cardRuntimeDeps,
-      cache: batteryCache,
-    }),
   ];
+  if (paymentsEnabled)
+    serverAlertSources.push(
+      batteryAlertSource({
+        providers: CARD_PROVIDERS,
+        runtimeDeps: cardRuntimeDeps,
+        cache: batteryCache,
+      }),
+    );
   if (certificateDutiesEnabled(enabledFiscal, config)) {
     serverAlertSources.push(
       certificateAlertSource(enabledFiscal.certificate, {
@@ -3549,7 +3553,6 @@ async function bootServer(
     { disk: diskFull, space: freeSpace },
     setsToMigrate,
   );
-  const paymentsEnabled = setsToMigrate.some((module) => module.name === "payments");
   const fiscalOutbox = enabledFiscal.outbox;
   const readClockStop = clockStopReader({
     backend: nodeBackend,

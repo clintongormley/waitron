@@ -1482,18 +1482,6 @@ once released. Belongs with A1016.
 - **'Equipo' names two things in the Spanish dashboard.**
   [Detail](box.md#equipo-names-two-things-in-the-spanish-dashboard)
 
-## Bundle: Card reader alerts
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A card reader whose status the provider could not read raises nothing.** SumUp and Stripe
-  answer `{ online: false, unreachable: true }` rather than throwing, so
-  `reader.status_unavailable` comes only from a throw or the 45 s deadline (slice 10 plan P2). Left
-  open by A798-B slice 10.
-- **On a box with card payments off, the card-reader battery check may raise
-  `alert.source_unavailable` on every bell read.**
-  [Detail](box.md#on-a-box-with-card-payments-off-the-card-reader-battery-check-may-raise-alertsource_unavailable-on-every-bell-read)
-
 ## Bundle: Backups screen leftovers
 
 9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -2063,15 +2051,6 @@ from the route's own `withTransaction` (`listHeldOrders`) after `requireSession`
 drain's refusal; for `GET /api/till` it was not isolated
 ([conventions-data.md](../developers/conventions-data.md#a-read-on-a-full-disk-must-not-fail-on-its-own-housekeeping-write)). PIN sign-in is refused on a full disk in every case, with no session
 written.
-
-## On a box with card payments off, the card-reader battery check may raise alert.source_unavailable on every bell read
-
-Left open by A798-B slice 7. `batteryAlertSource` is registered in `bootServer`'s alert
-sources whatever the module (`apps/server/src/boot.ts`), and reads `card_readers`, which does not
-exist when the payments module is off (A798-B slice 7 plan, M9: `select … from card_readers` threw
-`no such table` with the payments set left out); the registry turns a failing source into that
-alert (design §5). Read, not run on a booted box. The Box status page leaves its card readers row
-out in that case.
 
 ## AEAT's time for a confirmation comes from its QR validation host, not from a `consultar` reply
 
