@@ -11,7 +11,7 @@ import type {
 } from "../api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./payments-screen.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 
 afterEach(cleanupWidgets);
@@ -134,6 +134,12 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
         "dashboard-payments-screen",
         {
           api: stubApi({
+            releasePartialRefund: vi
+              .fn()
+              .mockRejectedValue({
+                code: "payment.outcome_unknown",
+                params: { reason: "refund_reference_missing" },
+              }),
             listStuckPayments: vi.fn().mockResolvedValue([
               {
                 ...STUCK[0]!,
@@ -161,6 +167,9 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=stuck-result]")!.getAttribute("role")).toBe(
         "alert",
+      );
+      expect(el.shadowRoot!.querySelector("[data-test=stuck-result]")!.textContent).toContain(
+        t("payments.partial.reference_missing"),
       );
       await expectNoA11yViolations(host);
     },
