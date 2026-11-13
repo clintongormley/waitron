@@ -173,7 +173,13 @@ export async function seedDeviceProfiles(
   const seeds = [values].flat();
   const rows = await db
     .insert(deviceProfiles)
-    .values(seeds.map(({ admitted: _admitted, ...row }) => row))
+    .values(
+      seeds.map((seed) => {
+        const row = { ...seed };
+        delete row.admitted;
+        return row;
+      }),
+    )
     .returning();
   const fixtureRole = seeds.some((seed) => seed.admitted === undefined)
     ? await ensureFixtureJobRole(db)
