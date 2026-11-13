@@ -177,7 +177,9 @@ export const en = {
     "The server's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
   "invoice_correction.close": "Close",
   "invoice_correction.saved":
-    "An earlier request to correct and refund {amount} got no answer. Send it again to find out what happened: it cannot happen twice.",
+    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and starts refunding {amount}. If it did, Send again shows what happened. Nothing happens twice.",
+  "invoice_correction.saved_cash":
+    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and gives {amount} back in cash, opening the cash drawer. If it did, Send again shows what happened. Nothing happens twice.",
   "invoice_correction.resend": "Send again",
   "invoice_correction.unknown_end":
     "The server's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
@@ -2238,7 +2240,9 @@ export const es: Record<StringKey, string> = {
     "No ha llegado la respuesta del servidor. Vuelve a pulsar: se envía la misma petición, así que nada ocurre dos veces.",
   "invoice_correction.close": "Cerrar",
   "invoice_correction.saved":
-    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Vuelve a enviarla para saber qué pasó: no puede ocurrir dos veces.",
+    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y empieza a devolver {amount}. Si llegó, Enviar de nuevo muestra qué pasó. Nada ocurre dos veces.",
+  "invoice_correction.saved_cash":
+    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y devuelve {amount} en efectivo, abriendo el cajón. Si llegó, Enviar de nuevo muestra qué pasó. Nada ocurre dos veces.",
   "invoice_correction.resend": "Enviar de nuevo",
   "invoice_correction.unknown_end":
     "No ha llegado la respuesta del servidor. Pulsa Volver a consultar para ver si se hizo antes de pulsar nada más.",

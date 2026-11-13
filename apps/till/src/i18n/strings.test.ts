@@ -363,3 +363,14 @@ describe("clock-stopped payment guidance", () => {
     expect(es["collect.clock_behind_chain"]).not.toContain("Venta no registrada");
   });
 });
+
+it("says plainly what Send again does to a correction whose answer was lost, in both languages", () => {
+  expect([en["invoice_correction.saved_cash"], en["invoice_correction.saved"]]).toEqual([
+    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and gives {amount} back in cash, opening the cash drawer. If it did, Send again shows what happened. Nothing happens twice.",
+    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and starts refunding {amount}. If it did, Send again shows what happened. Nothing happens twice.",
+  ]);
+  expect([es["invoice_correction.saved_cash"], es["invoice_correction.saved"]]).toEqual([
+    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y devuelve {amount} en efectivo, abriendo el cajón. Si llegó, Enviar de nuevo muestra qué pasó. Nada ocurre dos veces.",
+    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y empieza a devolver {amount}. Si llegó, Enviar de nuevo muestra qué pasó. Nada ocurre dos veces.",
+  ]);
+});

@@ -14,7 +14,10 @@ import type {
 } from "../api/invoice-correction-types.js";
 import { InvoiceCorrectionSession } from "../state/invoice-correction.js";
 import "./invoice-correction-dialog.js";
-import type { TillInvoiceCorrectionDialog } from "./invoice-correction-dialog.js";
+import type {
+  InvoiceCorrectionCardLeg,
+  TillInvoiceCorrectionDialog,
+} from "./invoice-correction-dialog.js";
 
 const reason = (id: string, name: string, noteRequired = false) =>
   ({
@@ -652,7 +655,7 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
     await confirmCorrection(el);
     await vi.waitFor(() => expect(root(el).querySelector("[data-saved]")).not.toBeNull());
     expect(text(root(el).querySelector("[data-saved]"))).toBe(
-      t("invoice_correction.saved").replace("{amount}", "€6.05"),
+      t("invoice_correction.saved").replaceAll("{amount}", "€6.05"),
     );
     expect(grossField(el)).toBeNull();
     expect(root(el).querySelector("wt-form-actions")!.error).toBe(t("invoice_correction.unknown"));
@@ -677,7 +680,7 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
       .catch(() => {});
     const first = await mountSending();
     expect(text(root(first.el).querySelector("[data-saved]"))).toBe(
-      t("invoice_correction.saved").replace("{amount}", "€2.00"),
+      t("invoice_correction.saved").replaceAll("{amount}", "€2.00"),
     );
     cleanupWidgets();
 
@@ -840,5 +843,78 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
         startReasonId: "overcharged",
       },
     ]);
+  });
+});
+
+describe("review fix round 2", () => {
+  afterEach(() => localStorage.clear());
+  const lost = () => new TypeError("Failed to fetch");
+
+  it.each([
+    ["only in cash", [TENDERS[0]!], "invoice_correction.saved_cash"],
+    ["in cash and by card", TENDERS, "invoice_correction.saved"],
+  ] as const)("says what Send again does to a bill paid %s", async (_paid, tenders, key) => {
+    const api = sendingApi();
+    api.getRefundableTenders.mockResolvedValue([...tenders]);
+    api.openInvoiceCorrection.mockRejectedValueOnce(lost());
+    const { el } = await mountSending(api);
+
+    await confirmCorrection(el);
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-saved]"))).toBe(
+        t(key).replaceAll("{amount}", "€6.05"),
+      ),
+    );
+  });
+
+  it("does not preselect its own reason on a correction another device opened", async () => {
+    const api = sendingApi();
+    api.openInvoiceCorrection.mockRejectedValue(
+      refused("invoice_correction.already_open", { correctionId: "correction-9" }),
+    );
+    api.getInvoiceCorrection.mockResolvedValue({ ...OPEN, id: "correction-9", reason: "Other" });
+    const { el } = await mountSending(api);
+    const cards: InvoiceCorrectionCardLeg[] = [];
+    el.addEventListener("invoice-correction-card", (event) =>
+      cards.push((event as CustomEvent<InvoiceCorrectionCardLeg>).detail),
+    );
+
+    await confirmCorrection(el);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-choice=card]")).not.toBeNull());
+    root(el).querySelector<HTMLElement>("[data-choice=card]")!.click();
+    expect(cards.map((card) => card.startReasonId)).toEqual(["other"]);
+  });
+
+  it("on an all-cash bill a device that may not refund cash stops after Open, showing the correction", async () => {
+    const api = sendingApi();
+    api.getRefundableTenders.mockResolvedValue([TENDERS[0]!]);
+    const { el } = await mountSending(api, "", ["integrated-card-payment"]);
+
+    await confirmCorrection(el);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-back]")).not.toBeNull());
+    expect(api.openInvoiceCorrection).toHaveBeenCalledOnce();
+    expect(api.giveInvoiceCorrectionCash).not.toHaveBeenCalled();
+  });
+
+  it("after a PIN, a lost filing answer still says to check, not that the same request goes again", async () => {
+    const api = sendingApi();
+    api.getInvoiceCorrection.mockResolvedValue({
+      ...OPEN,
+      moneyBack: "2.00",
+      left: "4.05",
+      fileNow: { gross: "2.00", vatBreakdown: SPLIT },
+    });
+    api.fileInvoiceCorrection
+      .mockRejectedValueOnce(refused("authorization.not_permitted", { permission: "sale.rectify" }))
+      .mockRejectedValueOnce(lost());
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=file]")!.click();
+    signIn(await pinDialog(el));
+    await vi.waitFor(() =>
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        t("invoice_correction.unknown_end"),
+      ),
+    );
   });
 });

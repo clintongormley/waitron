@@ -152,6 +152,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
   #retry?: () => Promise<void>;
   #openedReasonId?: string;
   #revisionMissed = false;
+  #retryLost: StringKey = "invoice_correction.unknown";
   /** An Open whose answer never arrived; while it exists the window sends only it again. */
   @state() private savedOpen: ReturnType<InvoiceCorrectionSession["savedOpen"]> = null;
   @state() private lostKey: StringKey = "invoice_correction.unknown";
@@ -370,17 +371,17 @@ export class TillInvoiceCorrectionDialog extends LitElement {
         throw error;
       }
       this.savedOpen = null;
-      this.#openedReasonId = request.reasonId;
       this.tenders = this.loaded?.tenders ?? [];
       if (opening.opened === null) {
         await this.#loadCorrection(opening.correctionId);
         return;
       }
+      this.#openedReasonId = request.reasonId;
       this.#show(opening.opened.correction);
       if (!this.isConnected || !this.active) return;
     }
     const correction = this.correction!;
-    if (correction.state === "open" && this.#paying().every((row) => row.method === "cash"))
+    if (correction.state === "open" && this.#refundsAllInCash())
       await this.#giveCash(correction.left);
   }
   /** What a lost cash answer was sent with, which the next cash press sends again. */
@@ -435,6 +436,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
         this.pinError = refusal.code;
       } else if (refusal.code === "authorization.not_permitted") {
         this.#retry = step;
+        this.#retryLost = lost;
         this.#override = undefined;
         try {
           this.approvers = await this.api.listApprovers(
@@ -468,7 +470,15 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     event.stopPropagation();
     if (this.approvers === null || this.busy || this.#retry === undefined) return;
     this.#override = { personId: event.detail.personId, pin: event.detail.pin };
-    void this.#run(this.#retry);
+    void this.#run(this.#retry, this.#retryLost);
+  }
+  /** Whether Open on this bill also gives the whole amount back in cash: every payment with money
+   * left is cash, and this device may refund cash. */
+  #refundsAllInCash(rows = this.tenders): boolean {
+    return (
+      rows.every((row) => !positive(row.appliedRemaining) || row.method === "cash") &&
+      refundMethodAllowed({ method: "cash", manual: false }, this.capabilities)
+    );
   }
   /** The payments with money still to give back. */
   #paying(): RefundableTender[] {
@@ -800,7 +810,11 @@ export class TillInvoiceCorrectionDialog extends LitElement {
   }
   #saved(saved: { gross: string }) {
     return html`<p data-saved>
-        ${t("invoice_correction.saved").replace("{amount}", () => this.#money(saved.gross))}
+        ${t(
+          this.#refundsAllInCash(this.loaded?.tenders ?? [])
+            ? "invoice_correction.saved_cash"
+            : "invoice_correction.saved",
+        ).replace(/\{amount\}/g, () => this.#money(saved.gross))}
       </p>
       <wt-form-actions .error=${this.sendRefusal === null ? "" : this.#sendText(this.sendRefusal)}
         >${this.#cancelButton()}
