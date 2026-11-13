@@ -497,7 +497,7 @@ it("keeps newer edits when a save finishes and ignores completions from a discon
   expect(save(el).disabled).toBe(false);
 });
 
-it("a late transfer load keeps a name edit dirty and does not resurrect a departed department's settings", async () => {
+it("a department switch clears validation and a late transfer load preserves current drafts and settings", async () => {
   const { el } = await mount();
   await change(el, "name", " ");
   save(el).click();
