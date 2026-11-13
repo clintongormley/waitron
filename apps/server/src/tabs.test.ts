@@ -1,4 +1,5 @@
-import { cancelItemForTest } from "./testing/cancel-line.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
+import { cancelItemForTest, ensureOperator } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -110,6 +111,7 @@ interface Seeded {
 }
 
 async function setupVenue(): Promise<Seeded> {
+  await withTransaction(db, (tx) => ensureOperator(tx, OPERATOR));
   await seedVenue(db, {
     name: "Barra",
     invoiceLocales: [LOCALE],
@@ -1070,7 +1072,7 @@ describe("readTabLines", () => {
 describe("listTablesWithState (occupancy)", () => {
   it("reflects free → open-tab while the party is seated, paid or not → free once it finishes", async () => {
     const { cfg, tableId, coffeeOffer } = await setupVenue();
-    const operatorId = randomUUID();
+    const operatorId = await seedPerson(db, { displayName: "Seated operator" });
 
     const free = await asApp(cfg, (tx) => listTablesWithState(tx));
     expect(free).toEqual([

@@ -881,3 +881,14 @@ WHEN exists (SELECT 1 FROM daily_closes c
 BEGIN
   SELECT raise(abort, 'day start history cannot change');
 END;
+
+--> statement-breakpoint
+CREATE TRIGGER party_allergy_guests_need_answer_insert
+BEFORE INSERT ON party_allergy_guests
+WHEN (SELECT allergy_answer FROM parties WHERE id = NEW.party_id) IS NULL
+BEGIN SELECT RAISE(ABORT, 'an allergic guest needs the party''s answer first'); END;
+--> statement-breakpoint
+CREATE TRIGGER party_allergy_guests_need_answer_update
+BEFORE UPDATE OF party_id ON party_allergy_guests
+WHEN (SELECT allergy_answer FROM parties WHERE id = NEW.party_id) IS NULL
+BEGIN SELECT RAISE(ABORT, 'an allergic guest needs the party''s answer first'); END;

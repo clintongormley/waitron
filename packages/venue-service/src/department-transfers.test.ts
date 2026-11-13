@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedBusinessDay, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -295,6 +296,7 @@ describe("departmental tab transfers", () => {
   it("refuses an open party tab before reserving its pending transfer slot", async () => {
     const v = await ready();
     const [before] = await withTransaction(suite.db, async (tx) => {
+      await seedPerson(tx, { id: "sender" });
       const [party] = await tx.insert(parties).values({ openedBy: "sender" }).returning();
       return tx
         .update(workingOrders)
@@ -1074,6 +1076,7 @@ describe("departmental tab transfers", () => {
             destinationDepartmentIds: [],
           });
         if (kind === "party") {
+          await seedPerson(tx, { id: "sender" });
           const [party] = await tx.insert(parties).values({ openedBy: "sender" }).returning();
           await tx
             .update(workingOrders)

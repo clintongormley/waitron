@@ -1,3 +1,4 @@
+import { seedPerson } from "../testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -30,6 +31,7 @@ const DOMESTIC: Identity = { value: "B12345674", kind: null, issuer: null };
 const NONE: Identity = { value: null, kind: null, issuer: null };
 
 beforeEach(async () => {
+  await seedPerson(suite.db, { id: "operator" });
   const db = suite.db;
   await seedVenue(db, {
     name: "Test venue",

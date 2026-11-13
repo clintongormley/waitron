@@ -10,6 +10,11 @@
  * from this log. State each kind's additional privacy rules beside its data declaration.
  */
 export interface ActivityKindData {
+  /** A count only; never a guest's label or allergens. */
+  readonly "party.allergy_answered": {
+    readonly answer: "none" | "allergies";
+    readonly guestCount: number;
+  };
   readonly "job_role.created": { readonly name: string };
   readonly "job_role.renamed": { readonly from: string; readonly to: string };
   readonly "job_role.deleted": { readonly name: string };
@@ -72,6 +77,7 @@ export interface ActivityKindRule {
   readonly subject: string;
 }
 export const ACTIVITY_KINDS = {
+  "party.allergy_answered": { subject: "party" },
   "job_role.created": { subject: "job_role" },
   "job_role.renamed": { subject: "job_role" },
   "job_role.deleted": { subject: "job_role" },

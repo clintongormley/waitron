@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -494,7 +495,10 @@ describe("what a removed table's delete waits on", () => {
             bookingTime: "20:00",
             partySize: 2,
             contactName: "Ana",
-            createdBy: randomUUID(),
+            createdBy: await seedPerson(tx, {
+              id: "table-removal-creator",
+              displayName: "Booking creator",
+            }),
             status,
           })
           .returning({ id: bookings.id });
@@ -621,14 +625,17 @@ describe("a catch-up that changes nothing", () => {
     } = await plannedZone("Cost held", "Cost booked", "Cost tied");
     await seat(v, held!);
     await renameInMaster(held!, "Cost held b");
-    await inTx(v, (tx) =>
+    await inTx(v, async (tx) =>
       tx.insert(bookings).values({
         tableId: booked!,
         bookingDate: "2026-10-10",
         bookingTime: "20:00",
         partySize: 2,
         contactName: "Ana",
-        createdBy: randomUUID(),
+        createdBy: await seedPerson(tx, {
+          id: "table-removal-creator",
+          displayName: "Booking creator",
+        }),
         status: "booked",
       }),
     );

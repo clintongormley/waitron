@@ -20,6 +20,7 @@ import {
   FORM_FACTOR_REFUSAL,
   LOCALES_REFUSAL,
   OPEN_PARENT_REFUSAL,
+  PARTY_ALLERGY_GUEST_ANSWER_REFUSAL,
   PRODUCT_ORDERING_REFUSAL,
   POST_SETTLEMENT_REFUSAL,
   PRODUCT_ID_FIXED_REFUSAL,
@@ -93,6 +94,8 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * this list is what notices.
  */
 const EXPECTED_TRIGGERS = [
+  "party_allergy_guests_need_answer_insert",
+  "party_allergy_guests_need_answer_update",
   "day_cutover_changes_no_update",
   "day_cutover_changes_keep_closed",
   "bill_payment_refunds_guard_update",
@@ -877,12 +880,14 @@ describe("working_order_lines_require_open_parent", () => {
   it("refuses a line inserted under a placed order", () => {
     expect(refusalFor(connection, line("line-placed", "wo-placed", '{"es":"a","ca":"b"}'))).toBe(
       OPEN_PARENT_REFUSAL,
+      PARTY_ALLERGY_GUEST_ANSWER_REFUSAL,
     );
   });
 
   it("refuses a line inserted under an order that does not exist", () => {
     expect(refusalFor(connection, line("line-ghost", "ghost-order", '{"es":"a","ca":"b"}'))).toBe(
       OPEN_PARENT_REFUSAL,
+      PARTY_ALLERGY_GUEST_ANSWER_REFUSAL,
     );
   });
 
@@ -913,6 +918,7 @@ describe("working_order_lines_require_open_parent", () => {
     connection.exec(`update working_orders set status = 'placed' where id = 'wo-lines-delete'`);
     expect(refusalFor(connection, `delete from working_order_lines where id = 'line-delete'`)).toBe(
       OPEN_PARENT_REFUSAL,
+      PARTY_ALLERGY_GUEST_ANSWER_REFUSAL,
     );
   });
 });
@@ -1929,5 +1935,39 @@ describe("day-start history", () => {
     } finally {
       connection.exec("rollback to day_start_case; release day_start_case");
     }
+  });
+});
+
+describe("party allergy guests need an answer", () => {
+  it("refuses inserting a guest before the answer and accepts one after", () => {
+    connection.exec(
+      "insert into parties (id,opened_at,opened_by) values ('allergy-insert','2026-11-13T12:00:00.000Z','person')",
+    );
+    const insert =
+      "insert into party_allergy_guests (id,party_id,position,who,allergens) values ('allergy-insert-guest','allergy-insert',0,'Window seat','{\"milk\":{}}')";
+    expect(refusalFor(connection, insert)).toBe(PARTY_ALLERGY_GUEST_ANSWER_REFUSAL);
+    connection.exec(
+      "update parties set allergy_answer='allergies',allergy_answered_by='person',allergy_answered_at='2026-11-13T12:00:00.000Z' where id='allergy-insert'",
+    );
+    expect(refusalFor(connection, insert)).toBeUndefined();
+  });
+
+  it("refuses moving a guest to an unanswered party and accepts an answered one", () => {
+    connection.exec(
+      "insert into parties (id,opened_at,opened_by) values ('allergy-from','2026-11-13T12:00:00.000Z','person'),('allergy-to','2026-11-13T12:00:00.000Z','person')",
+    );
+    connection.exec(
+      "update parties set allergy_answer='allergies',allergy_answered_by='person',allergy_answered_at='2026-11-13T12:00:00.000Z' where id='allergy-from'",
+    );
+    connection.exec(
+      "insert into party_allergy_guests (id,party_id,position,who,allergens) values ('allergy-move-guest','allergy-from',0,'Window seat','{\"milk\":{}}')",
+    );
+    const move =
+      "update party_allergy_guests set party_id='allergy-to' where id='allergy-move-guest'";
+    expect(refusalFor(connection, move)).toBe(PARTY_ALLERGY_GUEST_ANSWER_REFUSAL);
+    connection.exec(
+      "update parties set allergy_answer='none',allergy_answered_by='person',allergy_answered_at='2026-11-13T12:00:00.000Z' where id='allergy-to'",
+    );
+    expect(refusalFor(connection, move)).toBeUndefined();
   });
 });

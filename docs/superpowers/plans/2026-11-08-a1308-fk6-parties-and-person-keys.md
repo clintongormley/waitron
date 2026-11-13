@@ -30,6 +30,12 @@ before this cannot be restored or imported."
 **Who lands:** the lane (rules §6). `parties` feeds no fiscal value; `parties.last_bill_number` is not
 added here (below).
 
+**Watcher reconciliation, 2026-11-13 06:12 (Lane E questions.md):** Task 2's null-answer case uses unanswered + none. An allergy on either side continues to survive; the nine existing joining-answer cases and their guest/tick assertions stay unchanged. The R1 bill-request/name preservation decision is assigned to queued fk6b, immediately after fk6.
+
+**Watcher reconciliation, 2026-11-13 06:53:** `packages/bookings/src/schema/bookings.test.ts` also gains only `bookings_created_by_fk` in its exact key-name list. Other schema pins of this plan's own changes are ported without another question and listed in the PR's Changed test checks.
+
+**Watcher reconciliation, 2026-11-13 07:26:** Keep the planned history row and exactly the two guest triggers. They refuse inserting or reassigning guests to an unanswered party. No trigger refuses clearing the answer columns directly through SQL; the clearing writer deletes guests first. Its explicit deletion stays as the clearing operation's invariant, including when there are no guests to delete.
+
 ## What it builds
 
 - `parties.allergy_answer` (`none` | `allergies`, null = not asked yet), `allergy_answered_by` (key
@@ -188,7 +194,7 @@ appear under the `sql-only` headers as well as the others.
 
 ## Review Focus
 
-1. **Merging two parties where one was never asked** clears both answers and deletes both parties'
+1. **Merging an unanswered party with a no-allergies party** clears both answers and deletes both parties'
    guests (and, by their key, their ticks), as the old cascade did. Test: Task 2's merge case.
 2. **A guest inserted before its party's answer** is refused; writing the answer first, then the
    guests, in one transaction succeeds (`writePartyAllergy`'s order). Test: Task 1 and the existing
@@ -263,8 +269,8 @@ guest's label or allergens", slice 2's per-kind rule 4); write it with `recordAc
     { answer: "allergies", guestCount: 2 }`; the row's `data` holds no key other than those two.
   - `"no allergies" is an answer too` — `{ answer: "none", guests: [] }` writes a row with
     `guestCount: 0`.
-  - `merging a party never asked clears both answers and both parties' guests` — party A answered
-    with one guest and one tick, party B never asked; `mergePartyAllergies(tx, A, B, person)`: both
+  - `merging a party never asked with no-allergies clears both answers` — party A answered
+    "none", party B never asked; `mergePartyAllergies(tx, A, B, person)`: both
     parties' three columns null, no guest and no tick left for either, and **no** history row.
   - `splitting and moving a bill copy the answer without a history row`.
 - [ ] **Step 2: Run**; expect fail.

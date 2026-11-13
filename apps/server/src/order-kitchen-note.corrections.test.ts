@@ -1,3 +1,4 @@
+import { ensureOperator } from "./testing/cancel-line.js";
 import { fireGroup } from "./order-groups.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
@@ -191,6 +192,7 @@ it("A1378 lists only each printer's affected bills on a party note change", asyn
 
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
+  await inTx(v, (tx) => ensureOperator(tx, OPERATOR));
   const [station] = await v.db.select({ id: kitchenStations.id }).from(kitchenStations);
   stationId = station!.id;
 });

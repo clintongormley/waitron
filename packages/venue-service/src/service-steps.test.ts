@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
@@ -312,6 +313,7 @@ describe("service steps", () => {
 describe("a step's completions", () => {
   async function doneOnEach(stepIds: string[]): Promise<string> {
     return scoped(async (tx) => {
+      for (const id of ["sender", "waiter-1"]) await seedPerson(tx, { id, displayName: id });
       const [party] = await tx
         .insert(parties)
         .values({ openedBy: "sender" })

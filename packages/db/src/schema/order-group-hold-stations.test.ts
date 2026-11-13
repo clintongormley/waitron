@@ -1,3 +1,4 @@
+import { seedPerson } from "../testing/seed.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -21,6 +22,7 @@ describe("order group hold stations schema", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   beforeEach(async () => {
+    await seedPerson(suite.db, { id: OPERATOR });
     await seedVenue(suite.db, {
       name: "Loc A",
       invoiceLocales: ["es"],

@@ -1,3 +1,4 @@
+import { ensureOperator } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { parties, partyTables } from "@waitron/db";
@@ -23,6 +24,7 @@ async function joinedTables(secondJoinedAt: string) {
   const first = await v.table(`First ${suffix}`, v.tables.zoneId);
   const second = await v.table(`Second ${suffix}`, v.counter.zoneId);
   const partyId = await inTx(v, async (tx) => {
+    await ensureOperator(tx, OPERATOR);
     const [party] = await tx.insert(parties).values({ openedBy: OPERATOR }).returning();
     await tx.insert(partyTables).values({
       id: `f${suffix}`,

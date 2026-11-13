@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -52,14 +53,14 @@ function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 async function insertBooking(tableId: string, time: string): Promise<void> {
-  await asApp((tx) =>
+  await asApp(async (tx) =>
     tx.insert(bookings).values({
       tableId,
       bookingDate: "2026-09-15",
       bookingTime: time,
       partySize: 2,
       contactName: "Ann",
-      createdBy: randomUUID(),
+      createdBy: await seedPerson(tx, { displayName: randomUUID() }),
       status: "booked",
     }),
   );

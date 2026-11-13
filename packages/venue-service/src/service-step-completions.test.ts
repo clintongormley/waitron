@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedZone, seedPerson } from "@waitron/db/testing/seed.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import { saveServiceSteps } from "./service-steps.js";
 import {
@@ -34,6 +34,7 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 async function seedLocation(name: string): Promise<string> {
+  for (const id of ["sender", "p1", "p2", "p3"]) await seedPerson(db, { id, displayName: id });
   await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
   const venueId = await venueLocationId(db);
   const locationId = venueId;

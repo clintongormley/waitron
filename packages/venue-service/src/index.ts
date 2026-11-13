@@ -32,7 +32,6 @@ export {
   menuPeriodStaffMenus,
   orderKitchenNotes,
   orderServiceContexts,
-  partyAllergy,
   partyAllergyGuests,
   routingCellPeriods,
   routingCells,

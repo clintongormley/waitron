@@ -1,3 +1,4 @@
+import { ensureOperator } from "./cancel-line.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { addTabRound } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -213,7 +214,10 @@ export async function seat(
   tableId: string,
   guestCount: number | null = null,
 ): Promise<{ partyId: string; tabId: string; revision: number }> {
-  return inTx(v, (tx) => seatTable(tx, v.cfg, { tableId, guestCount, operatorId: OPERATOR }));
+  return inTx(v, async (tx) => {
+    await ensureOperator(tx, OPERATOR);
+    return seatTable(tx, v.cfg, { tableId, guestCount, operatorId: OPERATOR });
+  });
 }
 
 export async function seatWithNoAllergies(

@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { LEFT_MERGE } from "@waitron/db";
 import { inArray } from "drizzle-orm";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -129,7 +130,7 @@ async function seedDiningTables(db: Database): Promise<void> {
   ] as const) {
     const [party] = await db
       .insert(parties)
-      .values({ openedBy: randomUUID() })
+      .values({ openedBy: await seedPerson(db, { displayName: randomUUID() }) })
       .returning({ id: parties.id });
     await db.insert(partyTables).values({ partyId: party!.id, tableId: table.id, leftAt });
   }

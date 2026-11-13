@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f3c058a4-424b-4d73-8e94-26977713c7cb",
+  "id": "bc5b451b-e3b4-451b-a4ac-7468a8cb982d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -2745,6 +2745,27 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "allergy_answer": {
+          "name": "allergy_answer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "allergy_answered_by": {
+          "name": "allergy_answered_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "allergy_answered_at": {
+          "name": "allergy_answered_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -2769,11 +2790,58 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "parties_opened_by_fk": {
+          "name": "parties_opened_by_fk",
+          "tableFrom": "parties",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "opened_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "parties_closed_by_fk": {
+          "name": "parties_closed_by_fk",
+          "tableFrom": "parties",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "closed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "parties_allergy_answered_by_fk": {
+          "name": "parties_allergy_answered_by_fk",
+          "tableFrom": "parties",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "allergy_answered_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "parties_allergy_answer_ck": {
+          "name": "parties_allergy_answer_ck",
+          "value": "\"parties\".\"allergy_answer\" in ('none', 'allergies')"
+        },
+        "parties_allergy_answered_ck": {
+          "name": "parties_allergy_answered_ck",
+          "value": "(\"parties\".\"allergy_answer\" is null and \"parties\".\"allergy_answered_by\" is null and \"parties\".\"allergy_answered_at\" is null) or (\"parties\".\"allergy_answer\" is not null and \"parties\".\"allergy_answered_by\" is not null and \"parties\".\"allergy_answered_at\" is not null)"
+        },
         "parties_state_ck": {
           "name": "parties_state_ck",
           "value": "\"parties\".\"state\" in ('open', 'closed')"
@@ -6278,6 +6346,19 @@
         }
       },
       "foreignKeys": {
+        "ticket_item_moves_person_fk": {
+          "name": "ticket_item_moves_person_fk",
+          "tableFrom": "ticket_item_moves",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "moved_by_person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
         "ticket_item_moves_line_fk": {
           "name": "ticket_item_moves_line_fk",
           "tableFrom": "ticket_item_moves",
@@ -17930,63 +18011,6 @@
         }
       }
     },
-    "party_allergy": {
-      "name": "party_allergy",
-      "columns": {
-        "party_id": {
-          "name": "party_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "answer": {
-          "name": "answer",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "changed_by": {
-          "name": "changed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "changed_at": {
-          "name": "changed_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "party_allergy_party_id_parties_id_fk": {
-          "name": "party_allergy_party_id_parties_id_fk",
-          "tableFrom": "party_allergy",
-          "tableTo": "parties",
-          "columnsFrom": [
-            "party_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "party_allergy_answer_ck": {
-          "name": "party_allergy_answer_ck",
-          "value": "\"party_allergy\".\"answer\" in ('none', 'allergies')"
-        }
-      }
-    },
     "party_allergy_guests": {
       "name": "party_allergy_guests",
       "columns": {
@@ -18038,12 +18062,12 @@
         "party_allergy_guests_party_fk": {
           "name": "party_allergy_guests_party_fk",
           "tableFrom": "party_allergy_guests",
-          "tableTo": "party_allergy",
+          "tableTo": "parties",
           "columnsFrom": [
             "party_id"
           ],
           "columnsTo": [
-            "party_id"
+            "id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -18329,6 +18353,19 @@
         }
       },
       "foreignKeys": {
+        "service_step_completions_done_by_fk": {
+          "name": "service_step_completions_done_by_fk",
+          "tableFrom": "service_step_completions",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "done_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
         "service_step_completions_party_fk": {
           "name": "service_step_completions_party_fk",
           "tableFrom": "service_step_completions",

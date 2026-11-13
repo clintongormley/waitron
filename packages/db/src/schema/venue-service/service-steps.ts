@@ -1,3 +1,4 @@
+import { persons } from "../identity/persons.js";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import { count, enumCheck, enumType, id, label, newId, table, tsString } from "../columns.js";
@@ -59,10 +60,14 @@ export const serviceStepCompletions = table(
     partyId: id("party_id").notNull(),
     stepId: id("step_id").notNull(),
     doneAt: tsString("done_at").notNull(),
-    // The signed-in caller's person id. No key yet.
     doneBy: id("done_by").notNull(),
   },
   (t) => [
+    foreignKey({
+      columns: [t.doneBy],
+      foreignColumns: [persons.id],
+      name: "service_step_completions_done_by_fk",
+    }).onDelete("restrict"),
     foreignKey({
       columns: [t.partyId],
       foreignColumns: [parties.id],

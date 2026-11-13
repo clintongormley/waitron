@@ -26,7 +26,7 @@ import { setStationPrinting } from "./testing/station-printing.js";
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
-import { cancelLine } from "./testing/cancel-line.js";
+import { cancelLine, ensureOperator } from "./testing/cancel-line.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { attachPrinterToStation, replaceStationPrinters } from "./station-printers.js";
 import { commandNames, opensDrawer, printedLines } from "./testing/decode-ticket.js";
@@ -135,6 +135,7 @@ async function seatAndSubmit(
   cfg: OriginConfig,
   groups: { release: "fire" | "hold"; productIds: string[] }[],
 ): Promise<string> {
+  await ensureOperator(tx, OPERATOR);
   await setStationPrinting(tx, { printHeldWork: true });
   const offers = await offerProducts(tx, cfg, { zone: "tables" });
   const { id: tableId } = await createTable(tx, cfg, { label: "Table 7", zoneId: offers.zoneId });

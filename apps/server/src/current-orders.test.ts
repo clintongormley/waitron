@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { ADJUSTMENTS_PERMISSIONS } from "@waitron/adjustments";
 import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -12,7 +13,7 @@ import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   assignCatalogueToVenue,
@@ -146,6 +147,7 @@ interface Venue {
 }
 
 async function setupVenue(): Promise<Venue> {
+  for (const id of [ALEX, MIA]) await seedPerson(suite.db, { id, displayName: id });
   taxIds += 1;
   const venue = await applyVenue(
     planVenue(
@@ -1355,6 +1357,15 @@ describe("readCurrentOrders (spec §4)", () => {
       .where(eq(workingOrders.id, s.tabId));
     expect(bill!.status).toBe("settled");
 
+    // These historical group senders are missing; the party's opening person exists separately.
+    await suite.db
+      .update(orderGroups)
+      .set({ submittedBy: randomUUID() })
+      .where(eq(orderGroups.partyId, s.partyId));
+    await suite.db
+      .update(orderGroups)
+      .set({ firedBy: randomUUID() })
+      .where(and(eq(orderGroups.partyId, s.partyId), isNotNull(orderGroups.firedBy)));
     const read = await currentOrders(s.partyId);
 
     expect(read).toEqual({
@@ -2068,6 +2079,7 @@ describe("Sent panel read facts (A773)", () => {
 
 describe("a paid held dish fired on its own", () => {
   it("preserves the paid charge, adjustment, payment and fiscal snapshots while companions stay held", async () => {
+    await seedPersons(suite.db, { id: ALEX, displayName: "Alex", role: "admin", status: "active" });
     const v = await setupVenue();
     const s = await seated(v);
     const held = await groupedGroup(v, s, "hold", [
@@ -2078,7 +2090,6 @@ describe("a paid held dish fired on its own", () => {
       line(v, "flan"),
     ]);
     await inTx(async (tx) => {
-      await seedPersons(tx, { id: ALEX, displayName: "Alex", role: "admin", status: "active" });
       const reason = await createAdjustmentReason(tx, {
         name: "Held dish discount",
         names: {},

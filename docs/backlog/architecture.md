@@ -1278,11 +1278,10 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
 - **Passkey name column after A760:** A403 keeps the column under the schema hold; new registrations
   use the detected password manager. Decide whether to remove it after the hold.
   [Detail](dashboard.md#passkey-name-column-after-a760)
-- **Person-id columns and `order_draft_lines.menu_item_id` have no foreign key.** About 30 columns
-  holding a person's id, and that one, say "No key yet" at the column; their old reason (`persons`
-  sat in another migration set) ended when A760 moved
-  it into core. Declare the keys when A1308 rewrites the starting migrations (CLAUDE.md §3: declare
-  every foreign key).
+- **Finish the remaining person-id foreign keys and `order_draft_lines.menu_item_id`.**
+  Columns still marked "No key yet" need keys as A1308 rewrites their starting migrations
+  (CLAUDE.md §3: declare every foreign key). Their old reason — `persons` lived in another
+  migration set — ended when A760 moved it into core.
 - **A print job's payload sits ahead of its status columns.** `print_jobs.payload` averaged 20 KB
   on the bench's first full year (built 2026-11-06, since rebuilt), so any walk over print-job rows reads about five pages a job (the table was
   8 GB of the 12 GB year), and the printers-down check (`stationPrintersDownQuery` in

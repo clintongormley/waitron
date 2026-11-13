@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
@@ -1153,6 +1154,7 @@ describe("venue detail consumer reads", () => {
       .update(diningTables)
       .set({ onFloor: true })
       .where(eq(diningTables.id, table!.id));
+    const creator = await seedPerson(suite.db);
     await suite.db.insert(bookings).values([
       {
         tableId: table!.id,
@@ -1160,7 +1162,7 @@ describe("venue detail consumer reads", () => {
         bookingTime: "02:00:00",
         partySize: 2,
         contactName: "Saturday guest",
-        createdBy: randomUUID(),
+        createdBy: creator,
       },
       {
         tableId: table!.id,
@@ -1168,7 +1170,7 @@ describe("venue detail consumer reads", () => {
         bookingTime: "23:45:00",
         partySize: 2,
         contactName: "Friday guest",
-        createdBy: randomUUID(),
+        createdBy: creator,
       },
     ]);
     const retained = () => ({

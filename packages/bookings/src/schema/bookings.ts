@@ -14,6 +14,7 @@ import {
   timeOfDay,
   tsString,
   workingOrders,
+  persons,
 } from "@waitron/db";
 
 /**
@@ -46,12 +47,15 @@ export const bookings = table(
     // Set on seat.
     tabId: id("tab_id"),
     status: bookingStatus("status").notNull().default("booked"),
-    // No key yet. The route stamps it from `authorizeManager`, whose session lookup joins
-    // `persons`.
     createdBy: id("created_by").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
+    foreignKey({
+      columns: [t.createdBy],
+      foreignColumns: [persons.id],
+      name: "bookings_created_by_fk",
+    }).onDelete("restrict"),
     foreignKey({
       columns: [t.tableId],
       foreignColumns: [diningTables.id],

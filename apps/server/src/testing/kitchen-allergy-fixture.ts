@@ -21,7 +21,6 @@ import { createPrinter } from "@waitron/printing";
 import {
   allergyLineTicks,
   kitchenNotices,
-  partyAllergy,
   partyAllergyGuests,
   ticketItemAllergies,
 } from "@waitron/venue-service";
@@ -249,7 +248,14 @@ export function requestKitchen(f: KitchenFixture, command: KitchenCommand) {
 
 export async function kitchenState(db: Database) {
   return inTx({ db }, async (tx) => ({
-    answers: await tx.select().from(partyAllergy),
+    answers: await tx
+      .select({
+        partyId: parties.id,
+        answer: parties.allergyAnswer,
+        changedBy: parties.allergyAnsweredBy,
+        changedAt: parties.allergyAnsweredAt,
+      })
+      .from(parties),
     guests: await tx.select().from(partyAllergyGuests),
     ticks: await tx.select().from(allergyLineTicks),
     copies: await tx.select().from(ticketItemAllergies),

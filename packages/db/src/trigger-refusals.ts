@@ -80,3 +80,7 @@ export const TENDER_REFUND_CHANGE_REFUSAL = "tender refund cannot make that chan
 export const TENDER_REFUND_DELETE_REFUSAL = "a tender refund is never deleted";
 
 export const DAY_START_HISTORY_REFUSAL = "day start history cannot change";
+
+/** A guest requires an answer on its party before insertion or reassignment. */
+export const PARTY_ALLERGY_GUEST_ANSWER_REFUSAL =
+  "an allergic guest needs the party's answer first";

@@ -6,7 +6,7 @@ import { checkFailed, refusalOn } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { UNIQUE_VIOLATION } from "../sql-state.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode, seedVenue, seedZone, seedWorkingOrder } from "../testing/seed.js";
+import { seedNode, seedVenue, seedZone, seedWorkingOrder, seedPerson } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
@@ -32,6 +32,7 @@ describe("parties, party_tables and service_commands", () => {
       operationDescription: "Hostelería",
     });
     nodeId = await seedNode(db);
+    await seedPerson(db, { id: OPERATOR });
   });
 
   async function table(label: string): Promise<string> {
@@ -68,6 +69,72 @@ describe("parties, party_tables and service_commands", () => {
       billRequestedAt: null,
       openedBy: OPERATOR,
     });
+  });
+
+  it("stores an allergy answer with its person and time", async () => {
+    const id = await party();
+    await inTx(async (tx) =>
+      tx.execute(
+        sql`update parties set allergy_answer = 'none', allergy_answered_by = ${OPERATOR}, allergy_answered_at = '2026-11-13T12:00:00.000Z' where id = ${id}`,
+      ),
+    );
+    expect(
+      suite.db.get(
+        sql`select allergy_answer, allergy_answered_by, allergy_answered_at from parties where id = ${id}`,
+      ),
+    ).toEqual({
+      allergy_answer: "none",
+      allergy_answered_by: OPERATOR,
+      allergy_answered_at: "2026-11-13T12:00:00.000Z",
+    });
+  });
+
+  it.each([
+    [
+      "unknown answer",
+      "allergy_answer = 'unknown', allergy_answered_by = '" +
+        OPERATOR +
+        "', allergy_answered_at = '2026-11-13T12:00:00.000Z'",
+      "parties_allergy_answer_ck",
+    ],
+    [
+      "answer with no person",
+      "allergy_answer = 'none', allergy_answered_at = '2026-11-13T12:00:00.000Z'",
+      "parties_allergy_answered_ck",
+    ],
+  ])("refuses an %s", async (_name, assignment, constraint) => {
+    const id = await party();
+    const error = await captureError(() =>
+      inTx(async (tx) =>
+        tx.execute(sql`update parties set ${sql.raw(assignment!)} where id = ${id}`),
+      ),
+    );
+    expect(checkFailed(error, constraint!)).toBe(true);
+  });
+
+  it("refuses an allergy answer by a person who does not exist", async () => {
+    const id = await party();
+    await expect(
+      inTx(async (tx) =>
+        tx.execute(
+          sql`update parties set allergy_answer = 'none', allergy_answered_by = ${randomUUID()}, allergy_answered_at = '2026-11-13T12:00:00.000Z' where id = ${id}`,
+        ),
+      ),
+    ).rejects.toThrow("FOREIGN KEY constraint failed");
+  });
+
+  it("refuses a party opened by a person who does not exist", async () => {
+    await expect(
+      inTx((tx) => tx.insert(parties).values({ openedBy: randomUUID() })),
+    ).rejects.toThrow("FOREIGN KEY constraint failed");
+  });
+
+  it("checks the closing person key", async () => {
+    const id = await party();
+    await expect(
+      inTx((tx) => tx.update(parties).set({ closedBy: randomUUID() }).where(eq(parties.id, id))),
+    ).rejects.toThrow("FOREIGN KEY constraint failed");
+    await inTx((tx) => tx.update(parties).set({ closedBy: OPERATOR }).where(eq(parties.id, id)));
   });
 
   it("refuses a second ACTIVE membership for one table by the partial unique index", async () => {

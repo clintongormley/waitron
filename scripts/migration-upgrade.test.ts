@@ -54,9 +54,9 @@ import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
  * table the step creates gets its triggers at the second pass, not while that step migrates. The
  * rows are synthetic, not the product's: a few generic values per declared type, a CHECK's own
  * literals, a column's default and {@link CANDIDATES}. A nullable column outside every unique
- * index is null wherever its constraints allow, except that a second row points a self-reference
- * at the first. So a migration that fails only on values the product writes and these rows lack
- * passes. The reference check reads the SQL as text, with comments removed and quoted names not
+ * index is null wherever its constraints allow, except the party answer needed by its guests and
+ * a second row pointing a self-reference at the first. So a migration that fails only on values
+ * the product writes and these rows lack passes. The reference check reads the SQL as text, with comments removed and quoted names not
  * parsed: a `--`, `/*` or `'` inside a quoted name can hide a later key, and a string literal
  * holding `REFERENCES <table>` or `CREATE TABLE <table>` is read as if it were SQL. A reference is
  * to the latest migration in run order, at or before it, whose `CREATE TABLE` or `RENAME TO` names
@@ -1410,6 +1410,7 @@ type Row = Record<string, Value>;
 const CANDIDATES: Record<string, readonly Value[]> = {
   "settings.module": ["venue", "another"],
   "settings.doc": ['{"invoiceLocales":["es"]}'],
+  "parties.allergy_answer": ["allergies", "none"],
   "party_allergy_guests.allergens": ['{"milk":{}}'],
   "day_cutover_changes.effective_business_day": ["2026-01-01", "2026-01-02"],
   "day_cutover_changes.day_cutover": ["05:00:00", "07:00:00"],
@@ -1928,7 +1929,11 @@ function* solutions(
       }
     }
     values = values.filter((value) => value !== null);
-    if (!column.notnull) values = unique ? [...values, null] : [null, ...values];
+    if (!column.notnull) {
+      // Guests need an answered parent; other nullable columns retain the null-first fixture.
+      const answeredParty = shape.name === "parties" && column.name === "allergy_answer";
+      values = unique || answeredParty ? [...values, null] : [null, ...values];
+    }
     const seen = new Set<string>();
     values = values.filter((value) => !seen.has(key(value)) && seen.add(key(value)));
     if (template !== undefined) {

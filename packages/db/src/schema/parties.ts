@@ -13,6 +13,7 @@ import {
   table,
   tsString,
 } from "./columns.js";
+import { persons } from "./identity/persons.js";
 import { diningTables } from "./dining-tables.js";
 
 export const partyState = enumType(["open", "closed"]);
@@ -20,8 +21,6 @@ export const partyState = enumType(["open", "closed"]);
 /**
  * One seated party, from seating until its table is finished: it holds the party's tab, every bill
  * split from it (`working_orders.party_id`) and the tables it sits at (`party_tables`).
- *
- * `opened_by` and `closed_by` are plain person ids: no key yet.
  *
  * A party merged into another is closed and names the survivor in `merged_into_party_id`; its
  * bills that could no longer move stay here and count as the survivor's (`partyFamily`,
@@ -44,6 +43,9 @@ export const parties = table(
     name: label("name"),
     revision: count("revision").notNull().default(0),
     tableNames: labelList("table_names"),
+    allergyAnswer: enumType(["none", "allergies"])("allergy_answer"),
+    allergyAnsweredBy: id("allergy_answered_by"),
+    allergyAnsweredAt: tsString("allergy_answered_at"),
   },
   (t) => [
     foreignKey({
@@ -51,6 +53,26 @@ export const parties = table(
       foreignColumns: [t.id],
       name: "parties_merged_into_fk",
     }),
+    foreignKey({
+      columns: [t.openedBy],
+      foreignColumns: [persons.id],
+      name: "parties_opened_by_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.closedBy],
+      foreignColumns: [persons.id],
+      name: "parties_closed_by_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.allergyAnsweredBy],
+      foreignColumns: [persons.id],
+      name: "parties_allergy_answered_by_fk",
+    }).onDelete("restrict"),
+    check("parties_allergy_answer_ck", enumCheck(t.allergyAnswer)),
+    check(
+      "parties_allergy_answered_ck",
+      sql`(${t.allergyAnswer} is null and ${t.allergyAnsweredBy} is null and ${t.allergyAnsweredAt} is null) or (${t.allergyAnswer} is not null and ${t.allergyAnsweredBy} is not null and ${t.allergyAnsweredAt} is not null)`,
+    ),
     index("parties_merged_into_idx").on(t.mergedIntoPartyId),
     check("parties_state_ck", enumCheck(t.state)),
     check("parties_guest_count_ck", sql`${t.guestCount} is null or ${t.guestCount} >= 1`),

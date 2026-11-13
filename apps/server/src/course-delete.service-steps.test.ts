@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { kitchenCourses, parties, products, type Transaction } from "@waitron/db";
@@ -132,6 +133,7 @@ describe("deleting a course with service steps", () => {
       )
     ).map((row) => row.id);
     const partyId = await inTx(v, async (tx) => {
+      for (const id of ["sender", "waiter-1"]) await seedPerson(tx, { id, displayName: id });
       const [party] = await tx
         .insert(parties)
         .values({ openedBy: "sender" })

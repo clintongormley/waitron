@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { OFF_FLOOR } from "@waitron/db";
 import {
   diningTables,
@@ -57,7 +58,7 @@ beforeAll(async () => {
   const orderId = randomUUID();
   const [party] = await db
     .insert(parties)
-    .values({ openedBy: randomUUID() })
+    .values({ openedBy: await seedPerson(db, { displayName: randomUUID() }) })
     .returning({ id: parties.id });
   await seedWorkingOrder(db, {
     id: orderId,

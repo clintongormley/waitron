@@ -536,6 +536,54 @@ for (const locale of ["en", "es"] as const) {
       const parties = expected[phase].tables.parties!;
       parties.columns = parties.columns.filter((column) => column.name !== "main_bill_id");
       parties.foreignKeys = parties.foreignKeys.filter((key) => key.from !== "main_bill_id");
+      const answers = expected[phase].tables.party_allergy!;
+      for (const [name, source] of [
+        ["allergy_answer", "answer"],
+        ["allergy_answered_by", "changed_by"],
+        ["allergy_answered_at", "changed_at"],
+      ] as const) {
+        parties.columns.push({
+          ...answers.columns.find((column) => column.name === source)!,
+          name,
+          notnull: 0,
+        });
+        for (const row of Object.values(parties.rows)) {
+          const answer = Object.values(answers.rows).find((entry) => entry.party_id === row.id);
+          row[name] = answer?.[source] ?? null;
+        }
+      }
+      delete expected[phase].tables.party_allergy;
+      delete phases[phase]!.party_allergy;
+      const personKey = (from: string, id: number) => ({
+        id,
+        seq: 0,
+        table: "persons",
+        from,
+        to: "id",
+        on_update: "NO ACTION",
+        on_delete: "RESTRICT",
+        match: "NONE",
+      });
+      parties.foreignKeys = [
+        personKey("allergy_answered_by", 0),
+        personKey("closed_by", 1),
+        personKey("opened_by", 2),
+        ...parties.foreignKeys.map((key) => ({ ...key, id: key.id + 3 })),
+      ];
+      for (const [name, column] of [
+        ["service_step_completions", "done_by"],
+        ["ticket_item_moves", "moved_by_person_id"],
+        ["bookings", "created_by"],
+      ]) {
+        const table = expected[phase].tables[name!]!;
+        table.foreignKeys.push(personKey(column!, table.foreignKeys.length));
+      }
+      for (const key of expected[phase].tables.party_allergy_guests!.foreignKeys) {
+        if (key.from === "party_id") {
+          key.table = "parties";
+          key.to = "id";
+        }
+      }
       const ticketItems = expected[phase].tables.ticket_items!;
       ticketItems.columns = ticketItems.columns.filter((column) => column.name !== "away_at");
       for (const name of ["workforce_chains", "time_entries", "pay_period_closures"]) {

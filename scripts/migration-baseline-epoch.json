@@ -4,8 +4,8 @@
     {
       "name": "core",
       "tag": "0000_baseline",
-      "when": 1794539156003,
-      "sha256": "d491902d663265ba2d710f69976057ae4ab0fb97d5615a076c0dc571c3f3a301"
+      "when": 1794548967844,
+      "sha256": "f0a0a283c6d8d0d56e5fe5b80ce3f8f2f40e538f9fd6d52ae5f2c186c6229f5b"
     },
     {
       "name": "node",
@@ -34,8 +34,8 @@
     {
       "name": "bookings",
       "tag": "0000_baseline",
-      "when": 1794272446497,
-      "sha256": "49e068d4d38a7ab1010a8a67dd65ceae1712211d7f4cf3d8e0bea15242bc8116"
+      "when": 1794548879154,
+      "sha256": "4bb9d015921696777c2e9c9604ff59d60b5eb5de946aed4756b20943eeb29f34"
     },
     {
       "name": "fiscal-verifactu",

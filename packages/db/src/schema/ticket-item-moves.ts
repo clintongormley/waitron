@@ -1,3 +1,4 @@
+import { persons } from "./identity/persons.js";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import { id, newId, table, tsString } from "./columns.js";
@@ -16,10 +17,14 @@ export const ticketItemMoves = table(
     toStationId: id("to_station_id").notNull(),
     movedAt: tsString("moved_at").notNull(),
     movedByDeviceId: id("moved_by_device_id"),
-    // No key yet.
     movedByPersonId: id("moved_by_person_id"),
   },
   (t) => [
+    foreignKey({
+      columns: [t.movedByPersonId],
+      foreignColumns: [persons.id],
+      name: "ticket_item_moves_person_fk",
+    }).onDelete("restrict"),
     check(
       "ticket_item_moves_actor_ck",
       sql`${t.movedByDeviceId} is not null or ${t.movedByPersonId} is not null`,

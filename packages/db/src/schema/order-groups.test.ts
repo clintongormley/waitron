@@ -1,3 +1,4 @@
+import { seedPerson } from "../testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -29,6 +30,7 @@ describe("order_groups, order_group_events and working_order_lines.group_id", ()
 
   beforeAll(async () => {
     const db = suite.db;
+    await seedPerson(db, { id: OPERATOR });
     await seedVenue(db, {
       name: "Room",
       invoiceLocales: ["es"],

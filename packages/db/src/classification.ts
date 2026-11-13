@@ -376,7 +376,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("kitchen_notices", "state", SERVICE_STATE),
   classify("ticket_item_allergies", "state", SERVICE_STATE),
   classify("order_kitchen_notes", "state", SERVICE_STATE),
-  classify("party_allergy", "state", SERVICE_STATE),
   classify("party_allergy_guests", "state", SERVICE_STATE),
   classify("allergy_line_ticks", "state", SERVICE_STATE),
   classify("bill_identities", "state", SERVICE_STATE),

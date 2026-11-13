@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { inArray, sql, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -76,7 +77,7 @@ async function setupVenue(): Promise<Venue> {
   const locationId = await venueLocationId(db);
   return {
     cfg: { locationId: locationId },
-    createdBy: randomUUID(),
+    createdBy: await seedPerson(db),
   };
 }
 
@@ -473,8 +474,8 @@ describe("seatBooking", () => {
     return {
       cfg: { locationId: locationId },
       core: fakeCore({ locationId, nodeId }),
-      createdBy: randomUUID(),
-      seatedBy: randomUUID(),
+      createdBy: await seedPerson(db),
+      seatedBy: await seedPerson(db, { displayName: "Booking waiter" }),
     };
   }
 

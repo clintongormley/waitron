@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { orderGroups, parties, withTransaction } from "@waitron/db";
@@ -17,6 +18,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
 async function party(): Promise<string> {
+  await seedPerson(suite.db, { id: OPERATOR });
   const [row] = await inTx((tx) =>
     tx.insert(parties).values({ openedBy: OPERATOR }).returning({ id: parties.id }),
   );

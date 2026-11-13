@@ -1,3 +1,4 @@
+import { clearPartyAllergyForTest } from "@waitron/db/testing/seed.js";
 import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -390,7 +391,7 @@ describe("A773 waiter request: release", () => {
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, venue.party.tabId));
       expect(requested).toMatchObject({ firedAt: null, passControlled: true });
-      await tx.run(sql`delete from party_allergy where party_id = ${venue.party.partyId}`);
+      await clearPartyAllergyForTest(tx, venue.party.partyId);
       await fireOrderLines(tx, venue.cfg, venue.party.tabId, [requested!.workingOrderLineId]);
       expect(await tx.select().from(ticketItems).where(eq(ticketItems.id, requested!.id))).toEqual([
         requested,

@@ -1,4 +1,4 @@
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay, seedPerson } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, type Database } from "@waitron/db";
@@ -25,6 +25,8 @@ beforeEach(async () => {
       operationDescription: "Hospitality",
     });
     await seedBusinessDay(suite.db, {});
+    for (const id of ["recorded-person", "different-person"])
+      await seedPerson(suite.db, { id, displayName: id });
     await suite.db.insert(bookings).values({
       id: "record",
       bookingDate: "2026-10-25",

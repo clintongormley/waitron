@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import {
@@ -553,7 +554,7 @@ export async function seedPartyAt(
 ): Promise<string> {
   const [party] = await db
     .insert(parties)
-    .values({ openedBy: randomUUID() })
+    .values({ openedBy: await seedPerson(db, { displayName: randomUUID() }) })
     .returning({ id: parties.id });
   for (const table of tables) {
     const zone = await seedZone(db, { name: randomUUID() });

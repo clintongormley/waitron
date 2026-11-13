@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { sql, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { newId, nowIso, venueLocationId, withTransaction, diningTables } from "@waitron/db";
@@ -46,12 +46,13 @@ async function insertBooking(
   _v: Venue,
   fields: { tableId: string; date: string; time?: string; status?: string; contact?: string },
 ): Promise<string> {
+  const personId = await seedPerson(db, { id: "booking-reader" });
   const id = newId();
   await db.execute(sql`
     insert into bookings
       (id, created_at, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
     values
-      (${id}, ${nowIso()}, ${fields.tableId}, ${fields.date}, ${fields.time ?? "20:00:00"}, 2, ${fields.contact ?? "Ana"}, ${randomUUID()}, ${fields.status ?? "booked"})`);
+      (${id}, ${nowIso()}, ${fields.tableId}, ${fields.date}, ${fields.time ?? "20:00:00"}, 2, ${fields.contact ?? "Ana"}, ${personId}, ${fields.status ?? "booked"})`);
   return id;
 }
 

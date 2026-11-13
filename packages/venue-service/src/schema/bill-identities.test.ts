@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -36,6 +37,7 @@ beforeEach(async () => {
 });
 
 async function newParty(): Promise<string> {
+  await seedPerson(suite.db, { id: actor });
   const [party] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
   return party!.id;
 }

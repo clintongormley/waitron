@@ -1,3 +1,5 @@
+import { parties } from "../schema/parties.js";
+import { partyAllergyGuests } from "../schema/venue-service/party-allergy.js";
 import { persons } from "../schema/identity/persons.js";
 import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
@@ -342,4 +344,15 @@ export async function seedPerson(
 export async function seedActivityActor(db: Database | Transaction) {
   const personId = await seedPerson(db, { id: "test-activity-person", displayName: "Today actor" });
   return { personId, deviceId: null, authorizedBy: personId };
+}
+
+export async function clearPartyAllergyForTest(
+  db: Database | Transaction,
+  partyId: string,
+): Promise<void> {
+  await db.delete(partyAllergyGuests).where(eq(partyAllergyGuests.partyId, partyId));
+  await db
+    .update(parties)
+    .set({ allergyAnswer: null, allergyAnsweredBy: null, allergyAnsweredAt: null })
+    .where(eq(parties.id, partyId));
 }
