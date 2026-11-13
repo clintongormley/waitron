@@ -100,7 +100,8 @@ beforeEach(async () => {
   });
   const first = { ...binding, action: "setup", eventId: "original-hour" };
   await withOperationAuthority(first, "administrator", async (authority) => {
-    const run = () => setup.select({ binding: first, authority, comparisonId: "comparison" });
+    const run = () =>
+      setup.select({ binding: first, authority, comparisonId: "comparison", confirmed: true });
     const waiting = await run();
     if (waiting.status !== "waiting") throw new Error("setup did not wait");
     setupClock = clock("2026-10-16T11:40:00.000Z");
@@ -151,7 +152,8 @@ async function settled(
   f: Awaited<ReturnType<typeof fixture>>,
   authority: ModuleOperationInput["authority"],
 ) {
-  const run = () => f.preparation.select({ binding, authority, comparisonId: "comparison" });
+  const run = () =>
+    f.preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true });
   const waiting = await run();
   if (waiting.status !== "waiting") throw new Error("restore did not wait");
   Object.assign(f.facts, { clock: clock(new Date(waiting.targetMs).toISOString()) });
@@ -217,7 +219,7 @@ it.each([
   const before = await snapshot();
   await withOperationAuthority(binding, supplied, async (authority) => {
     await expect(
-      f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+      f.preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
     ).rejects.toMatchObject(refusal("reauthentication_required"));
   });
   expect(f.state.history).toEqual([]);
@@ -234,7 +236,7 @@ it.each([
   const before = await snapshot();
   await withOperationAuthority(binding, operator, async (authority) => {
     await expect(
-      f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+      f.preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
     ).rejects.toMatchObject(refusal(reason));
   });
   expect(f.state.history).toEqual([]);
@@ -265,7 +267,7 @@ it("refuses a settle-target minute a surviving host already names, beside an old
   });
   await withOperationAuthority(binding, operator, async (authority) => {
     await expect(
-      f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+      f.preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
     ).rejects.toMatchObject(refusal("minute_in_use"));
   });
   expect(f.state.history).toEqual([]);
@@ -294,7 +296,8 @@ it("rejects an operation moved to another backup after selection without changin
 it("does not let a forward wall-clock jump complete a retained recovery wait early", async () => {
   const f = await fixture();
   await withOperationAuthority(binding, operator, async (authority) => {
-    const run = () => f.preparation.select({ binding, authority, comparisonId: "comparison" });
+    const run = () =>
+      f.preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true });
     expect(await run()).toMatchObject({ status: "waiting", remainingMs: 120_000 });
     Object.assign(f.facts, { clock: clock("2026-10-16T12:40:30.000Z") });
     expect(await run()).toMatchObject({ status: "waiting", remainingMs: 120_000 });
@@ -404,7 +407,7 @@ it("rechecks authority after a delayed source read before spending an hour", asy
   });
   let pending!: ReturnType<typeof delayed.select>;
   await withOperationAuthority(binding, operator, async (authority) => {
-    pending = delayed.select({ binding, authority, comparisonId: "comparison" });
+    pending = delayed.select({ binding, authority, comparisonId: "comparison", confirmed: true });
     await entered;
   });
   const rejected = expect(pending).rejects.toMatchObject(refusal("reauthentication_required"));
@@ -424,6 +427,7 @@ it.each(["setup", "promote", "reserve"])(
           binding: other,
           authority,
           comparisonId: "comparison",
+          confirmed: true,
         }),
       ).rejects.toMatchObject(refusal("event_mismatch"));
     });
@@ -447,7 +451,7 @@ it("refuses an unknown prior-activation classification before spending an hour",
   Object.assign(f.facts, { priorActivation: "unknown" });
   await withOperationAuthority(binding, operator, async (authority) => {
     await expect(
-      f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+      f.preparation.select({ binding, authority, comparisonId: "comparison", confirmed: true }),
     ).rejects.toMatchObject(refusal("event_mismatch"));
   });
   expect(f.state.history).toEqual([]);
@@ -458,7 +462,12 @@ it("cannot prepare another module's recovery event", async () => {
   const other = { ...binding, module: "other-module" };
   await withOperationAuthority(other, operator, async (authority) => {
     await expect(
-      f.preparation.select({ binding: other, authority, comparisonId: "comparison" }),
+      f.preparation.select({
+        binding: other,
+        authority,
+        comparisonId: "comparison",
+        confirmed: true,
+      }),
     ).rejects.toMatchObject(refusal("event_mismatch"));
   });
   expect(f.state.history).toEqual([]);

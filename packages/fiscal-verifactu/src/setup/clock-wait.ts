@@ -7,6 +7,7 @@ import { detailRow } from "./check-venue.js";
 /** What a page explains instead of a name: design §6.5, "Every wait explains itself". */
 export type ClockProblem =
   | { kind: "second-clock" }
+  | { kind: "confirm" }
   | { kind: "disagreement" }
   | { kind: "later" | "in-use" }
   | { kind: "next-minute"; remainingMs: number; recheckInMs: number };
@@ -177,6 +178,7 @@ export function clockProblem(error: unknown): ClockProblem | undefined {
     return undefined;
   const { reason, remainingMs, recheckInMs } = error.params;
   if (reason === "second_clock_missing") return { kind: "second-clock" };
+  if (reason === "confirmation_required") return { kind: "confirm" };
   if (reason === "clock_disagreement") return { kind: "disagreement" };
   if (reason === "minute_not_later") return { kind: "later" };
   if (reason !== "minute_in_use") return undefined;

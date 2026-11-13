@@ -223,10 +223,20 @@ beforeEach(async () => {
     }),
   });
   await withOperationAuthority(first, ADMIN, async (authority) => {
-    let selected = await setup.select({ binding: first, authority, comparisonId: "comparison" });
+    let selected = await setup.select({
+      binding: first,
+      authority,
+      comparisonId: "comparison",
+      confirmed: true,
+    });
     if (selected.status === "waiting") {
       vi.advanceTimersByTime(selected.targetMs + 1 - Date.now());
-      selected = await setup.select({ binding: first, authority, comparisonId: "comparison" });
+      selected = await setup.select({
+        binding: first,
+        authority,
+        comparisonId: "comparison",
+        confirmed: true,
+      });
     }
     if (selected.status !== "selected") throw new Error("first setup selection");
     await setup.prepare({ binding: first, authority, input: selected.input }, (ready) =>

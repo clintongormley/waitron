@@ -170,7 +170,7 @@ const compared = await prepare({
   action: "compare-clocks",
   browser: { challengeId: challenge.id, instantMs: Date.now() },
 });
-const selected = await prepare({ action: "select", comparisonId: compared.id });
+const selected = await prepare({ action: "select", comparisonId: compared.id, confirmed: true });
 const activation = await post("activate", {
   moduleOperation: { binding: args.binding, input: selected.input },
   signIn: args.signIn,

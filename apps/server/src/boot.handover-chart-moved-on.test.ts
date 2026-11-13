@@ -147,6 +147,7 @@ async function startAndTryToActivate() {
     const selected = await prepare({
       action: "select",
       comparisonId: (compared.body as { id: string }).id,
+      confirmed: true,
     });
     input = (selected.body as { input: unknown }).input;
   }
@@ -393,6 +394,7 @@ describe("the emergency routes through a real spare start", () => {
     const selected = await prepare({
       action: "select",
       comparisonId: (compared.body as { id: string }).id,
+      confirmed: true,
     });
     expect(selected.status, JSON.stringify(selected.body)).toBe(200);
     const activationBody = {

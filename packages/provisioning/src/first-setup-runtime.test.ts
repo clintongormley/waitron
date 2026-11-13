@@ -282,6 +282,7 @@ async function selectThroughHost(
               binding: f.context.binding,
               authority,
               comparisonId: "comparison",
+              confirmed: true,
             }),
           ),
       ),
@@ -508,6 +509,7 @@ it("cannot retain an hour selection without a fresh owner password grant", async
           binding: f.context.binding,
           authority,
           comparisonId: "comparison",
+          confirmed: true,
         }),
       ),
     ),
@@ -527,7 +529,12 @@ it("an hour selection written outside the host's password scope is refused", asy
   });
   const select = () =>
     withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-      preparation.select({ binding: f.context.binding, authority, comparisonId: "comparison" }),
+      preparation.select({
+        binding: f.context.binding,
+        authority,
+        comparisonId: "comparison",
+        confirmed: true,
+      }),
     );
   const reconfirmation = await f.host.owner.reconfirm(owner, PASSWORD, "block-use");
   const waiting = await f.host.coordinator.run((hold) =>

@@ -356,7 +356,9 @@ it("prepares, switches and returns the exact committed event through status and 
   });
   let comparisonId = await compare();
   expect(await prepare({ action: "preview" })).toEqual({ status: "preview", identity: "0CNQR" });
-  expect(await prepare({ action: "select", comparisonId })).toMatchObject({ status: "waiting" });
+  expect(await prepare({ action: "select", comparisonId, confirmed: true })).toMatchObject({
+    status: "waiting",
+  });
   expect(await prepare({ action: "preview" })).toEqual({
     status: "waiting",
     targetMs: Date.parse("2026-10-16T12:42:00Z"),
@@ -366,7 +368,7 @@ it("prepares, switches and returns the exact committed event through status and 
   vi.setSystemTime(Date.now() + 120000);
   comparisonId = await compare();
   expect(await prepare({ action: "preview" })).toEqual({ status: "preview", identity: "0CNQT" });
-  const selected = await prepare({ action: "select", comparisonId });
+  const selected = await prepare({ action: "select", comparisonId, confirmed: true });
   if (!("input" in selected)) throw new Error("not selected");
   const input: ConflictAllocationInput = selected.input;
   expect(await answer({ kind: "status" })).toMatchObject({

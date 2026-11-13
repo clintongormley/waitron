@@ -999,8 +999,12 @@ describe("selected-hour admission before archive placement", () => {
       {},
       restarted,
     )) as { id: string };
-    expect(await f.invoke({ action: "select", comparisonId: compared.id }, {}, restarted)).toEqual(
-      selected,
-    );
+    expect(
+      await f.invoke(
+        { action: "select", comparisonId: compared.id, confirmed: true },
+        {},
+        restarted,
+      ),
+    ).toEqual(selected);
   });
 });

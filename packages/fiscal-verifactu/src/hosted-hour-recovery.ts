@@ -99,13 +99,16 @@ function createHostedHourRecovery(
         return result;
       });
     if (
-      exact(proposal, ["action", "comparisonId"]) &&
+      (exact(proposal, ["action", "comparisonId"]) ||
+        (exact(proposal, ["action", "comparisonId", "confirmed"]) &&
+          proposal.confirmed === true)) &&
       proposal.action === "select" &&
       typeof proposal.comparisonId === "string"
     )
       return preparationFor(operation.binding).select({
         ...operation,
         comparisonId: proposal.comparisonId,
+        ...(proposal.confirmed === true ? { confirmed: true } : {}),
       });
     if (exact(proposal, ["action"]) && proposal.action === "preview")
       return preparationFor(operation.binding).preview(operation);

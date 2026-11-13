@@ -69,10 +69,20 @@ export async function seedLiveConflict(
     targetNodeId: node.nodeId,
   };
   await withOperationAuthority(binding, "administrator", async (authority) => {
-    const waiting = await setup.select({ binding, authority, comparisonId: "clock" });
+    const waiting = await setup.select({
+      binding,
+      authority,
+      comparisonId: "clock",
+      confirmed: true,
+    });
     if (waiting.status !== "waiting") throw new Error("setup did not wait");
     clock.advance(waiting.remainingMs);
-    const selected = await setup.select({ binding, authority, comparisonId: "clock" });
+    const selected = await setup.select({
+      binding,
+      authority,
+      comparisonId: "clock",
+      confirmed: true,
+    });
     if (selected.status !== "selected") throw new Error("setup did not select");
     await setup.prepare({ binding, authority, input: selected.input }, (prepared) =>
       withTransaction(db, (tx) => activatePreparedModuleAllocation(tx, node, prepared)),

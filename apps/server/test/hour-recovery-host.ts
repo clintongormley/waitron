@@ -206,6 +206,7 @@ beforeEach(async () => {
         binding: first,
         authority,
         comparisonId: "comparison",
+        confirmed: true,
       }),
     );
     if (selected.status !== "selected") throw new Error("initial selection");
@@ -288,7 +289,7 @@ export async function host() {
     return compared;
   };
   /** One select naming the last comparison, with no wait. */
-  const select = () => prepare({ action: "select", comparisonId });
+  const select = () => prepare({ action: "select", comparisonId, confirmed: true });
   /** Compares and selects, repeated past the restore's settle wait. */
   const selectPastWaits = () => recoverySelectPastWaits(clock, service, client());
   return {
@@ -874,7 +875,7 @@ export async function interactiveHost() {
   };
   /** One select naming the last comparison, with no wait. */
   const select = (override: Partial<typeof request> = {}, current = session) =>
-    invoke({ action: "select", comparisonId }, override, current);
+    invoke({ action: "select", comparisonId, confirmed: true }, override, current);
   /** Compares and selects, repeated past the restore's settle wait. */
   const selectPastWaits = (override: Partial<typeof request> = {}) =>
     selectPastWaits_(clock, async () => {

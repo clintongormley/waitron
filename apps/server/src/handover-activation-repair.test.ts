@@ -354,6 +354,7 @@ describe("a box killed while activating, then a real start with its old box swit
     const selected = await prepare({
       action: "select",
       comparisonId: (compared.body as { id: string }).id,
+      confirmed: true,
     });
     const activation = await post("activate", {
       moduleOperation: { binding, input: (selected.body as { input: unknown }).input },

@@ -30,8 +30,10 @@ interface SelectionRequest {
   binding: OperationBinding;
   authority: OperationAuthority;
   comparisonId: string;
+  /** The person proved on the page confirmed a device's agreeing time. */
+  confirmed?: true;
 }
-type BareRequest = Omit<SelectionRequest, "comparisonId">;
+type BareRequest = Omit<SelectionRequest, "comparisonId" | "confirmed">;
 interface EntryBase {
   softwareId: string;
   operatorId: OperationOperator;
@@ -312,7 +314,7 @@ export function createHourSelection(options: {
   // Monotonic readings are process-local; persisted waits carry only their original UTC target.
   const timers = new Map<string, { start: number; duration: number }>();
   const perform = async (
-    supplied: BareRequest & { comparisonId?: string },
+    supplied: BareRequest & { comparisonId?: string; confirmed?: true },
     mode: "select" | "preview" | "selected" | "committed",
   ) => {
     const persist = mode === "select";
@@ -401,6 +403,13 @@ export function createHourSelection(options: {
       );
       if (facts.clock === undefined) return refuse("clock_unconfirmed");
       if (!canSelectHour(facts.clock)) return refuse(clockRefusal(facts.clock));
+      // A device's time counts only once the person confirms it; the internet time service needs no one.
+      if (
+        persist &&
+        request.confirmed !== true &&
+        !facts.clock.usable.some((sample) => sample.source === "internet")
+      )
+        return refuse("confirmation_required");
       const now = facts.clock.usable.find((sample) => sample.source === "box")!.lowerMs;
       const history = projectHourHistory({
         scope: facts.scope,

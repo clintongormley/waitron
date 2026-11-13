@@ -73,13 +73,20 @@ function fixture() {
 it("settles a live conflict minute and grants one callback-scoped activation", async () => {
   const f = fixture();
   await withOperationAuthority(binding, operator, async (authority) => {
-    expect(await f.preparation.select({ binding, authority, comparisonId: "clock" })).toEqual({
+    expect(
+      await f.preparation.select({ binding, authority, comparisonId: "clock", confirmed: true }),
+    ).toEqual({
       status: "waiting",
       targetMs: Date.parse("2026-10-16T12:40:00Z"),
       remainingMs: 120_000,
     });
     f.settle();
-    const selected = await f.preparation.select({ binding, authority, comparisonId: "clock" });
+    const selected = await f.preparation.select({
+      binding,
+      authority,
+      comparisonId: "clock",
+      confirmed: true,
+    });
     expect(selected.status).toBe("selected");
     if (selected.status !== "selected") throw new Error("not selected");
     expect(selected.input.approval.operatorId).toEqual(operator);
@@ -104,9 +111,14 @@ it.each(["restart", "failed-activation", "duplicate-select"])(
   async (loss) => {
     const f = fixture();
     await withOperationAuthority(binding, operator, async (authority) => {
-      await f.preparation.select({ binding, authority, comparisonId: "clock" });
+      await f.preparation.select({ binding, authority, comparisonId: "clock", confirmed: true });
       f.settle();
-      const selected = await f.preparation.select({ binding, authority, comparisonId: "clock" });
+      const selected = await f.preparation.select({
+        binding,
+        authority,
+        comparisonId: "clock",
+        confirmed: true,
+      });
       if (selected.status !== "selected") throw new Error("not selected");
       if (loss !== "restart")
         await expect(
@@ -115,9 +127,14 @@ it.each(["restart", "failed-activation", "duplicate-select"])(
           }),
         ).rejects.toThrow("rolled back");
       if (loss === "duplicate-select")
-        expect(await f.preparation.select({ binding, authority, comparisonId: "clock" })).toEqual(
-          selected,
-        );
+        expect(
+          await f.preparation.select({
+            binding,
+            authority,
+            comparisonId: "clock",
+            confirmed: true,
+          }),
+        ).toEqual(selected);
       const retry = loss === "restart" ? createHourRecoveryPreparation(f.options) : f.preparation;
       await expect(
         retry.prepare({ binding, authority, input: selected.input }, async () => "unexpected"),
@@ -131,7 +148,7 @@ it("requires a recovery key rather than an account authority for conflict switch
   const f = fixture();
   await withOperationAuthority(binding, "administrator", async (authority) => {
     await expect(
-      f.preparation.select({ binding, authority, comparisonId: "clock" }),
+      f.preparation.select({ binding, authority, comparisonId: "clock", confirmed: true }),
     ).rejects.toMatchObject(refusal("reauthentication_required"));
   });
   expect(f.history).toEqual([]);
@@ -140,9 +157,14 @@ it("requires a recovery key rather than an account authority for conflict switch
 it("compares an activation binding by values when its properties arrive in another order", async () => {
   const f = fixture();
   await withOperationAuthority(binding, operator, async (authority) => {
-    await f.preparation.select({ binding, authority, comparisonId: "clock" });
+    await f.preparation.select({ binding, authority, comparisonId: "clock", confirmed: true });
     f.settle();
-    const selected = await f.preparation.select({ binding, authority, comparisonId: "clock" });
+    const selected = await f.preparation.select({
+      binding,
+      authority,
+      comparisonId: "clock",
+      confirmed: true,
+    });
     if (selected.status !== "selected") throw new Error("not selected");
     const reordered = {
       targetNodeId: binding.targetNodeId,

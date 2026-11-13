@@ -80,6 +80,15 @@ it.each([
   },
 );
 
+it("a device's agreeing time waiting for the person's confirmation asks for it", () => {
+  expect(
+    clockProblem({
+      code: "sif.allocation_invalid",
+      params: { reason: "confirmation_required" },
+    }),
+  ).toEqual({ kind: "confirm" });
+});
+
 it("a minute in use counts down when the box says how long", () => {
   const read = clockProblem({
     code: "sif.allocation_invalid",

@@ -75,6 +75,7 @@ async function fixture(withStore = false) {
                             binding: context.binding,
                             authority,
                             comparisonId: "comparison",
+                            confirmed: true,
                           }),
                       ),
                     );

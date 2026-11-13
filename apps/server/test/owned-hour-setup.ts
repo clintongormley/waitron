@@ -74,7 +74,7 @@ export async function ownedHourSetup(
     const grant = await send("reconfirm", { password, purpose: "block-use" });
     return send("candidates", {
       module,
-      proposal: { comparisonId: compared.preparation.id },
+      proposal: { comparisonId: compared.preparation.id, confirmed: true },
       reconfirmation: grant.reconfirmation,
     });
   });
