@@ -133,6 +133,7 @@ import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
 import "../widgets/bill-name-dialog.js";
 import type { BillNameDetail } from "../widgets/bill-name-dialog.js";
 import type { PartyGuestsDetail } from "../widgets/party-guests-dialog.js";
+import { menuOfferToTillProduct } from "../api/client.js";
 import type {
   BillBalance,
   CurrentOrderGroup,
@@ -499,6 +500,7 @@ export interface BillPayDetail {
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
+  completed?: (saved: boolean, refusal?: string | TemplateResult) => void;
   expectedEdit: BillEditExpected | null;
   lineNo: number;
   /** The line's staff name, for a message about the change. */
@@ -638,6 +640,29 @@ export class TillTableOrderScreen extends LitElement {
     guestsStepperStyles,
     formMessageStyles,
     css`
+      .lunch {
+        display: grid;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-3);
+        margin-block-end: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+      .lunch-head,
+      .lunch-sends {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      .lunch-head {
+        justify-content: space-between;
+      }
+      .lunch-choices {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+      }
+
       .actions[data-split-pick],
       .split-lines {
         display: flex;
@@ -3197,12 +3222,187 @@ export class TillTableOrderScreen extends LitElement {
     return shown === undefined || shown.status === "open" ? this.#payStore!.total : shown.total;
   }
 
+  @state() private lunchPending: {
+    line: TabLine;
+    product: TillProduct;
+    selection: LineSelection;
+  } | null = null;
+
+  @state() private lunchSaving = false;
+  @state() private lunchRefusal: string | TemplateResult | typeof nothing = nothing;
+
+  #lunchChoices(): TemplateResult {
+    if (!this.lines.some((line) => line.lunchOffer !== undefined)) return html``;
+    const paid = this.#paidDishes();
+    return html`${this.lines
+      .filter((line) => line.lunchOffer !== undefined)
+      .map((line) => {
+        const children = (this.#linesIndex().children.get(line.lineNo) ?? []).filter(
+          (child) =>
+            compareDecimal(decimal(child.quantity), decimal(child.cancelledQuantity ?? "0")) > 0,
+        );
+        const unsentByCourse = new Map<string | null, TabLine[]>();
+        for (const child of children) {
+          if (child.sentAt !== null) continue;
+          unsentByCourse.set(child.courseId, [
+            ...(unsentByCourse.get(child.courseId) ?? []),
+            child,
+          ]);
+        }
+        const open = line.lunchOffer!.offeredModifiers.filter(
+          (list) =>
+            list.kind === "extras" &&
+            children
+              .filter((child) => child.listId === list.id)
+              .reduce((sum, child) => sum + Number(child.quantity) / Number(line.quantity), 0) <
+              list.minPicks,
+        );
+        return html`<section class="lunch" data-lunch=${line.id}>
+          <div class="lunch-head">
+            <strong>${this.#nameForLine(line)}</strong
+            ><wt-button
+              data-lunch-choices=${line.id}
+              variant="secondary"
+              ?disabled=${this.busy || paid.has(line.lineNo) || (this.#shownBill !== undefined && this.#shownBill.status !== "open")}
+              @click=${() => {
+                this.lunchRefusal = nothing;
+                this.lunchPending = {
+                  line,
+                  product: menuOfferToTillProduct({
+                    ...line.lunchOffer!,
+                    offeredModifiers: line.lunchOffer!.offeredModifiers.map((list) =>
+                      list.kind === "extras"
+                        ? {
+                            ...list,
+                            items: list.items.map((item) =>
+                              children.some(
+                                (child) =>
+                                  child.listId === list.id && child.productId === item.productId,
+                              )
+                                ? { ...item, available: true }
+                                : item,
+                            ),
+                          }
+                        : list,
+                    ),
+                  }),
+                  selection: {
+                    extras: children.map((child) => ({
+                      listId: child.listId!,
+                      productId: child.productId!,
+                      name: this.#nameForLine(child),
+                      price: child.unitPriceGross,
+                      quantity: perDishOptionQuantity(child.quantity, decimal(line.quantity)),
+                    })),
+                    options: deriveOptionSelections(
+                      line.lunchOffer!.offeredModifiers,
+                      line.optionSnapshots,
+                    ).options,
+                    note: line.note ?? "",
+                  },
+                };
+              }}
+              >${t("lunch.choices")}</wt-button
+            >
+          </div>
+          <p class="lunch-choices">
+            ${children.map((child) => this.#nameForLine(child)).join(" · ")}
+            ${open.map((list, index) => html`<span>${children.length > 0 || index > 0 ? " · " : ""}${list.name}: ${t("lunch.choose_later")}</span>`)}
+          </p>
+          <div class="lunch-sends">
+            ${[...unsentByCourse].map(
+              ([courseId, choices]) =>
+                html`<wt-button
+                  data-lunch-send=${courseId ?? ""}
+                  variant="primary"
+                  ?disabled=${this.busy || this.groupCommandBusy}
+                  @click=${() => {
+                    if (
+                      choices.every(
+                        (choice) =>
+                          choice.groupId !== null && heldGroupIds(this.groups).has(choice.groupId),
+                      )
+                    )
+                      this.#dispatch("fire-held-line", {
+                        lineId: choices[0]!.id,
+                        ...(choices.length > 1
+                          ? { lineIds: choices.map((choice) => choice.id) }
+                          : {}),
+                      });
+                    else
+                      this.#dispatch("send-lines", {
+                        lineNos: choices.map((choice) => choice.lineNo),
+                        expectedEdit: this.billEdit,
+                      });
+                  }}
+                  >${t("action.send_to_prep")} ·
+                  ${this.#courseName(courseId, choices[0]!.course)}</wt-button
+                >`,
+            )}
+          </div>
+        </section>`;
+      })}`;
+  }
+
+  #lunchPicker() {
+    const pending = this.lunchPending;
+    if (pending === null) return nothing;
+    return keyed(
+      pending,
+      html`<till-modifier-picker
+        data-lunch-picker
+        lineDetails
+        quantityReadOnly
+        withNote
+        .product=${pending.product}
+        .quantity=${pending.line.quantity}
+        .initialSelections=${pending.selection}
+        .draftParent=${this}
+        .lockedExtras=${(this.#linesIndex().children.get(pending.line.lineNo) ?? []).filter((line) => line.sentAt !== null && compareDecimal(decimal(line.quantity), decimal(line.cancelledQuantity ?? "0")) > 0).map((line) => ({ listId: line.listId!, productId: line.productId! }))}
+        .disabled=${this.busy || this.lunchSaving}
+        .refusal=${this.lunchRefusal}
+        @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
+          event.stopPropagation();
+          event.preventDefault();
+          if (this.lunchSaving || this.busy) return;
+          this.lunchSaving = true;
+          this.lunchRefusal = nothing;
+          const detail = event.detail;
+          const extras = toWireModifiers(detail).extras ?? [];
+          this.#dispatch("change-line", {
+            lineNo: pending.line.lineNo,
+            lineName: this.#nameForLine(pending.line),
+            patch: {
+              extras,
+              options: detail.options ?? [],
+              note: detail.note ?? null,
+              portionLineNos: [],
+            },
+            revision: this.revision,
+            expectedEdit: this.billEdit,
+            completed: (saved, refusal) => {
+              this.lunchSaving = false;
+              if (this.lunchPending !== pending) return;
+              if (saved) this.lunchPending = null;
+              else this.lunchRefusal = refusal ?? nothing;
+            },
+          } satisfies ChangeLineDetail);
+        }}
+        @wt-modifier-cancel=${(event: Event) => {
+          event.stopPropagation();
+          this.lunchPending = null;
+        }}
+      ></till-modifier-picker>`,
+    );
+  }
+
   #sentOrders(): TemplateResult {
     const billId = this.orderId ?? "";
     const scope = JSON.stringify([this.serviceVisit, this.party?.id ?? null]);
     const api = this.api;
     const bills = shownBills(this.bills);
     return html`<div data-sent-orders>
+      ${this.#lunchChoices()} ${this.#lunchPicker()}
       ${
         this.currentOrdersUnread
           ? html`<p role="status" data-sent-unread>${t("table.current_orders_unread")}</p>`

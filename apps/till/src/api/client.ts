@@ -283,6 +283,7 @@ import type { DietOverride, DietProfile } from "@waitron/shared";
  * retrieved order.
  */
 export interface TillProduct {
+  setLunch?: boolean;
   id: string;
   /** The shared product identity used by stock and preparation routing. */
   productId?: string;
@@ -460,6 +461,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     menuItemId: offer.id,
     ...(menuVersionId === undefined ? {} : { menuVersionId }),
     available: offer.available,
+    ...(offer.setLunch ? { setLunch: true } : {}),
     ...(offer.ordering === undefined ? {} : { ordering: offer.ordering }),
     ...(offer.color === undefined ? {} : { color: offer.color }),
     image: offer.image,
@@ -2335,6 +2337,7 @@ export interface SplitSources {
  * `unitPriceGross` is the gross unit price LOCKED at add-time.
  */
 export interface TabLine {
+  lunchOffer?: TillMenuOffer;
   nutrition?: LineNutrition;
   /** The row's id, which a group move names. A dish in an order group is listed by it in
    * {@link OrderGroup.lineIds}; a child extras row never is. */

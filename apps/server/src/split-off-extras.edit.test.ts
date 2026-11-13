@@ -1,5 +1,11 @@
 import { seedActivityActor } from "@waitron/db/testing/seed.js";
-import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
+import {
+  ensureOperator,
+  observedCancelItem,
+  cancelReasonId,
+  cancelItemForTest,
+  cancelLine,
+} from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
@@ -13,6 +19,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   printJobs,
+  lineServiceCancellations,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -40,6 +47,8 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
+import { readTabLines } from "./working-order.js";
+import { cancelItem } from "./line-cancel.js";
 import { fireGroup } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { placeGrouped } from "./testing/adjustment-venue.js";
@@ -819,6 +828,7 @@ it.each([false, true])(
       });
       const course = await createCourse(tx, { name: "Lunch main" });
       await setProductCourse(tx, venue.products.chips, course.id);
+      await setProductCourse(tx, venue.products.onionRings, course.id);
       const main = await createExtraList(
         tx,
         {
@@ -830,6 +840,12 @@ it.each([false, true])(
           active: true,
           items: [
             { productId: venue.products.chips, maxQuantity: 1, preselected: false, price: "3.00" },
+            {
+              productId: venue.products.onionRings,
+              maxQuantity: 1,
+              preselected: false,
+              price: "0.00",
+            },
           ],
         },
         venue.cfg.locale,
@@ -905,6 +921,40 @@ it.each([false, true])(
         zone: { zoneId: venue.tables.zoneId },
         orderStart: "table",
       });
+      const session = (
+        tx as unknown as {
+          session: {
+            prepareQuery(query: { sql: string; params: unknown[] }, ...args: unknown[]): unknown;
+          };
+        }
+      ).session;
+      const queries = vi.spyOn(session, "prepareQuery");
+      let shown: Awaited<ReturnType<typeof readTabLines>>[number];
+      try {
+        shown = (await readTabLines(tx, id)).find((row) => row.id === before.id)!;
+        expect(
+          queries.mock.calls.filter(
+            ([query]) =>
+              query.sql.includes('from "working_line_contexts"') &&
+              query.sql.includes('"menu_item_id"'),
+          ),
+        ).toHaveLength(1);
+        expect(
+          queries.mock.calls
+            .filter(([query]) => query.sql.includes('from "products"'))
+            .flatMap(([query]) => query.params),
+        ).not.toContain(venue.products.cheese);
+      } finally {
+        queries.mockRestore();
+      }
+      expect(shown.lunchOffer?.setLunch).toBe(true);
+      expect(shown.lunchOffer?.offeredModifiers.find((list) => list.id === main.id)).toMatchObject({
+        minPicks: 1,
+        items: [
+          expect.objectContaining({ productId: venue.products.chips, price: "3.00" }),
+          expect.objectContaining({ productId: venue.products.onionRings, price: "0.00" }),
+        ],
+      });
       await edit(tx, venue, before.lineNo, {
         portionLineNos: [],
         extras: [{ listId: main.id, picks: [{ productId: venue.products.chips, quantity: 1 }] }],
@@ -956,6 +1006,71 @@ it.each([false, true])(
       expect(completed.find((row) => row.id === child.id)?.lineTotal).toBe(300);
       expect(completed.map((row) => row.lineTotal).sort((a, b) => a - b)).toEqual([0, 300, 1800]);
       expect((await state(tx, id)).items).toEqual(initialItems);
+      const childLineNo = completed.find((row) => row.id === child.id)!.lineNo;
+      if (initialMain) {
+        const { target, lineId, body } = await observedCancelItem(tx, id, childLineNo);
+        await cancelItem(
+          tx,
+          venue.cfg,
+          target,
+          lineId,
+          {
+            ...body,
+            outcome: "keep_charge",
+            admission: testTradingAdmission(),
+            reasonId: await cancelReasonId(tx),
+          },
+          await ensureOperator(tx, OPERATOR),
+        );
+      } else await cancelLine(tx, venue.cfg, id, childLineNo, undefined, OPERATOR);
+      const currentParent = (await readTabLines(tx, id)).find((row) => row.id === parent.id);
+      expect(currentParent).toBeDefined();
+      if (initialMain)
+        expect
+          .soft((await readTabLines(tx, id)).find((row) => row.id === child.id)?.cancelledQuantity)
+          .toBe("1.000");
+      const cancellationsBefore = (await slips(tx, venue.printers.fryer)).length;
+      expect(
+        (await tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, child.id)))[0]
+          ?.lineTotal,
+      ).toBe(initialMain ? 300 : undefined);
+      await edit(tx, venue, currentParent!.lineNo, {
+        portionLineNos: [],
+        extras: [
+          { listId: main.id, picks: [{ productId: venue.products.onionRings, quantity: 1 }] },
+          { listId: coffee.id, picks: [{ productId: venue.products.water, quantity: 1 }] },
+        ],
+      });
+      const after = await readTabLines(tx, id);
+      expect(
+        (await tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, child.id)))[0]
+          ?.lineTotal,
+      ).toBe(initialMain ? 300 : undefined);
+      const billed = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id));
+      expect(billed.reduce((sum, row) => sum + row.lineTotal, 0)).toBe(initialMain ? 2100 : 1800);
+      expect((await slips(tx, venue.printers.fryer)).length).toBe(cancellationsBefore);
+      expect(
+        (
+          await tx
+            .select()
+            .from(lineServiceCancellations)
+            .where(eq(lineServiceCancellations.lineId, child.id))
+        )[0]?.quantity,
+      ).toBe(initialMain ? 1000 : undefined);
+      expect(
+        after
+          .filter((row) => Number(row.quantity) > Number(row.cancelledQuantity ?? "0"))
+          .map((row) => row.productId)
+          .sort(),
+      ).toEqual([venue.products.burger, venue.products.onionRings, venue.products.water].sort());
+      expect(after.find((row) => row.id === parent.id)?.unitPriceGross).toBe("18.00");
+      expect(after.find((row) => row.productId === venue.products.onionRings)).toMatchObject({
+        quantity: "1.000",
+        sentAt: null,
+      });
     });
   },
 );

@@ -11585,6 +11585,24 @@ describe("one held dish Fire now app command", () => {
     expect(banner(el)).toBeNull();
   });
 
+  it("fires a lunch course's two held dishes in turn with the refreshed party revision", async () => {
+    const fireHeldLine = vi
+      .fn()
+      .mockResolvedValueOnce({ revision: 4 })
+      .mockResolvedValueOnce({ revision: 5 });
+    const { el } = await mountApp({ fireHeldLine });
+    const order = await openPartyTable(el);
+    emit(order, "fire-held-line", { lineId: "starter", lineIds: ["starter", "bread"] });
+    await flush(el, 8);
+    expect(fireHeldLine.mock.calls.map((args) => [args[1], args[2].expectedPartyRevision])).toEqual(
+      [
+        ["starter", 3],
+        ["bread", 4],
+      ],
+    );
+    expect(tableOrder(el)!.party?.revision).toBe(5);
+  });
+
   it("refreshes a raced party but never fires a second time", async () => {
     const fireHeldLine = vi.fn().mockRejectedValue({ code: "party.out_of_date" });
     const { el } = await mountApp({ fireHeldLine });

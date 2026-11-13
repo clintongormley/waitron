@@ -7,6 +7,19 @@ un encargado elige **Consultar con el proveedor de pagos** para un pago del pedi
 o **Consultar al proveedor** para un pago parcial de una cuenta, y confirma. Así termina el intento
 de práctica sin registrar un cobro.
 
+## Tomar un pedido de menú del día {#set-lunch}
+
+Añade un menú por comensal y elige los platos que quiera ahora. **Elegir más tarde** indica
+un pase que aún no ha elegido. Cada menú queda separado para que puedas volver a él más tarde.
+
+Para retener pases ya elegidos, envía el pedido retenido. En el panel de ese menú, usa **Enviar a cocina**
+para el pase que quieras enviar ahora. Abre **Elegir platos** cuando el comensal elija
+otro pase, guarda y envía ese pase. Puedes cambiar una opción hasta enviarla; los platos ya enviados
+se mantienen.
+
+Si el comensal no toma café, usa **Cobrar** como siempre. Dejar esa opción pendiente mantiene
+el precio del menú y no envía nada por ella. Estos menús son para servicio en mesa.
+
 ## Invitar o aplicar un descuento {#comps-and-discounts}
 
 Elige un motivo al dejar un artículo gratis o aplicar un descuento. Con **Aplicar invitaciones**,

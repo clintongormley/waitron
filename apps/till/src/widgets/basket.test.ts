@@ -10,6 +10,7 @@ import { TillBasket } from "./basket.js";
 import {
   sellingValuesOf,
   type OfferedExtraItem,
+  type OfferedExtrasList,
   type OfferedModifier,
   type TillProduct,
 } from "../api/client.js";
@@ -1465,4 +1466,31 @@ describe("A668 nutrition beside the dish name", () => {
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
     expect(el.shadowRoot!.querySelector(".nutrition-icons")).toBeNull();
   });
+});
+
+it("shows a lunch's remaining required choices without adding a charge", async () => {
+  const store = new WorkingOrderStore();
+  store.addProduct(
+    {
+      ...coffee,
+      setLunch: true,
+      offeredModifiers: [
+        {
+          ...(offeredExtras("dessert", "Dessert or coffee", [
+            offeredItem("p-coffee", "Coffee", "0.00"),
+          ]) as OfferedExtrasList),
+          minPicks: 1,
+        },
+      ],
+    },
+    "1",
+  );
+  const { el } = await mountWidget<TillBasket>("till-basket", { store });
+  expect(el.shadowRoot!.querySelector("[data-lunch-open]")?.textContent).toContain(
+    "Dessert or coffee",
+  );
+  expect(el.shadowRoot!.querySelector("[data-lunch-open]")?.textContent).toContain(
+    t("lunch.choose_later"),
+  );
+  expect(store.total).toBe("1.50");
 });

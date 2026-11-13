@@ -6,6 +6,18 @@ blocked so you can practise recovery. In the dashboard's **Payments**, a manager
 **Check with the card provider** for a whole-order payment, or **Check with provider** for a bill
 contribution, and confirms. This ends the practice attempt without recording a charge.
 
+## Take a set-lunch order {#set-lunch}
+
+Add one lunch for each diner and choose the dishes they want now. **Choose later** marks a
+course they have not picked yet. Each lunch stays separate so you can return to it later.
+
+To hold chosen courses, send the order as held. In that lunch’s panel, use **Send to prep** for the
+course you want to send now. Open **Lunch choices** when the diner chooses another course, save
+it, then send that course. You can change a choice until it is sent; dishes already sent stay put.
+
+If the diner skips coffee, use **Pay** as usual. Leaving that choice open keeps the lunch price
+and sends nothing for it. Set lunches here are for service at the table.
+
 ## Give a comp or discount {#comps-and-discounts}
 
 Choose a reason when you make an item free or give a discount. With **Apply comps**, you can

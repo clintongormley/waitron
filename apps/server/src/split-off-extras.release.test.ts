@@ -18,10 +18,13 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { bumpCourseReady, markServed } from "./working-order.js";
-import { fireGroup, readCurrentOrders } from "./order-groups.js";
+import { partyRevision } from "./parties.js";
+import { fireGroup, fireHeldLine, readCurrentOrders, readHeldCounts } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
+import { updateProduct } from "@waitron/catalogue";
+import { offerProducts } from "./testing/zone-offers.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 const suite = useVenueDb({
@@ -408,5 +411,69 @@ describe("releasing split-off extras", () => {
         snapshot.mockRestore();
       }
     });
+  });
+});
+
+it("sends one lunch course from a held group without releasing the other course", async () => {
+  const venue = await setupSplitExtrasVenue();
+  await withTransaction(db, async (tx) => {
+    await updateProduct(tx, venue.products.burger, { setLunch: true });
+    const starter = await createCourse(tx, { name: "Starter" });
+    const main = await createCourse(tx, { name: "Main" });
+    await setProductCourse(tx, venue.products.chips, starter.id);
+    await setProductCourse(tx, venue.products.onionRings, main.id);
+    const offers = await offerProducts(tx, venue.cfg, {
+      zone: { zoneId: venue.tables.zoneId },
+      orderStart: "table",
+    });
+    await placeGroups(tx, venue.cfg, venue.party.partyId, {
+      operatorId: OPERATOR,
+      groups: [
+        {
+          release: "hold",
+          lines: [
+            {
+              menuItemId: offers.offerFor(venue.products.burger),
+              quantity: "1",
+              extras: [
+                {
+                  listId: venue.lists.burger,
+                  picks: [
+                    { productId: venue.products.chips, quantity: 1 },
+                    { productId: venue.products.onionRings, quantity: 1 },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const before = await rows(tx, venue.party.tabId);
+    const chips = before.lines.find((line) => line.productId === venue.products.chips)!;
+    const rings = before.lines.find((line) => line.productId === venue.products.onionRings)!;
+    const beforeCount = await readHeldCounts(tx, [venue.party.partyId]);
+    await fireHeldLine(tx, venue.cfg, venue.party.partyId, chips.id, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+      operatorId: OPERATOR,
+    });
+    expect((await readHeldCounts(tx, [venue.party.partyId])).get(venue.party.partyId)).toBe(
+      beforeCount.get(venue.party.partyId)! - 1,
+    );
+    const sent = await rows(tx, venue.party.tabId);
+    expect(sent.items.find((item) => item.lineId === chips.id)?.firedAt).toEqual(
+      expect.any(String),
+    );
+    expect(sent.items.find((item) => item.lineId === rings.id)?.firedAt).toBeNull();
+    const current = await readCurrentOrders(tx, venue.party.partyId);
+    expect(
+      current.groups.flatMap((group) => group.rows).find((row) => row.lineId === chips.id)
+        ?.released,
+    ).toBe(true);
+    expect(
+      current.groups.flatMap((group) => group.rows).find((row) => row.lineId === rings.id)
+        ?.released,
+    ).toBe(false);
   });
 });

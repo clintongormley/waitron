@@ -150,7 +150,7 @@ function toPriceable(line: OrderLine): BasketItem {
 /** Refuses a quantity the product's unit cannot take. */
 function newLine(product: TillProduct, quantity: string, selection?: LineSelection): OrderLine {
   assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
-  const line: OrderLine = { product, quantity };
+  const line: OrderLine = { product, quantity, ...(product.setLunch ? { noMerge: true } : {}) };
   applySelection(line, selection);
   if (selection?.note !== undefined) {
     line.note = selection.note;

@@ -1172,16 +1172,28 @@ export async function readLunchOffers(
   tx: Transaction,
   workingOrderId: string,
   lineIds: readonly string[],
+  knownContexts?: ReadonlyArray<Awaited<ReturnType<typeof listWorkingLineContexts>>[number]>,
 ) {
-  const contexts = await listWorkingLineContexts(tx, workingOrderId, lineIds);
+  const selected = new Set(lineIds);
+  const contexts =
+    knownContexts === undefined
+      ? await listWorkingLineContexts(tx, workingOrderId, lineIds)
+      : knownContexts.filter((row) => selected.has(row.workingOrderLineId));
   const documents = await readRecordedDocuments(
     tx,
     contexts.flatMap((row) => (row.menuVersionId === null ? [] : [row.menuVersionId])),
   );
   const versions = new Map<string, ZoneMenuOffer[]>();
   for (const [versionId, document] of documents) {
-    if (!Object.values(document.offers).some((offer) => offer.setLunch)) continue;
-    const { offers } = await applyLiveFields(tx, [document]);
+    const menuItemIds = new Set(
+      contexts
+        .filter(
+          (row) => row.menuVersionId === versionId && document.offers[row.menuItemId]?.setLunch,
+        )
+        .map((row) => row.menuItemId),
+    );
+    if (menuItemIds.size === 0) continue;
+    const { offers } = await applyLiveFields(tx, [document], menuItemIds);
     versions.set(versionId, offers.get(document.menuId) ?? []);
   }
   return new Map(

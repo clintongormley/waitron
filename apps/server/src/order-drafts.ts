@@ -374,7 +374,10 @@ export async function saveDraft(
         ...line,
         source: null,
         id: line.id ?? newId(),
-        noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
+        noMerge:
+          line.noMerge ||
+          offers.get(line.menuItemId)?.setLunch === true ||
+          (line.id !== undefined && assigned.has(line.id)),
         unavailable: false,
         measured: soldMeasured(offers.get(line.menuItemId)),
       })),

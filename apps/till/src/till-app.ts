@@ -13625,20 +13625,27 @@ export class TillApp extends LitElement {
   }
 
   async #onFireHeldLine(event: Event): Promise<void> {
-    const { lineId } = (event as CustomEvent<{ lineId: string }>).detail;
-    await this.#onGroupCommand(async (party) => {
-      const allergy = await this.#prepareTableAllergy(
-        party.id,
-        { kind: "held-line", lineId },
-        () => true,
-      );
-      if (allergy === null) return;
-      const written = await this.#writeTableAllergy(allergy, (command, signal) =>
-        allergy.api.fireHeldLine(party.id, lineId, command, { signal }),
-      );
-      if (written === null || !allergy.current()) return;
-      this.#notePartyRevision(party.id, written.value.revision);
-    });
+    const { lineId: firstLineId, lineIds } = (
+      event as CustomEvent<{ lineId: string; lineIds?: string[] }>
+    ).detail;
+    for (const lineId of lineIds ?? [firstLineId]) {
+      let sent = false;
+      await this.#onGroupCommand(async (party) => {
+        const allergy = await this.#prepareTableAllergy(
+          party.id,
+          { kind: "held-line", lineId },
+          () => true,
+        );
+        if (allergy === null) return;
+        const written = await this.#writeTableAllergy(allergy, (command, signal) =>
+          allergy.api.fireHeldLine(party.id, lineId, command, { signal }),
+        );
+        if (written === null || !allergy.current()) return;
+        this.#notePartyRevision(party.id, written.value.revision);
+        sent = true;
+      });
+      if (!sent) break;
+    }
   }
 
   async #onReorderGroups(event: Event): Promise<void> {
@@ -15334,6 +15341,26 @@ export class TillApp extends LitElement {
 
   async #onChangeLine(event: Event): Promise<void> {
     const change = (event as CustomEvent<ChangeLineDetail>).detail;
+    let saved = false;
+    try {
+      await this.#applyLineChange(event, () => {
+        saved = true;
+        change.completed?.(true);
+      });
+    } finally {
+      if (!saved)
+        change.completed?.(
+          false,
+          this.changeRefusal?.message ??
+            (this.errorKey === undefined
+              ? undefined
+              : errorText(this.errorKey, this.tableMenus, this.tables)),
+        );
+    }
+  }
+
+  async #applyLineChange(event: Event, onSaved: () => void): Promise<void> {
+    const change = (event as CustomEvent<ChangeLineDetail>).detail;
     const { lineNo, lineName, patch, revision } = change;
     const orderId = this.activeTabId;
     if (orderId === undefined) return;
@@ -15387,6 +15414,7 @@ export class TillApp extends LitElement {
       return;
     }
     if ("saved" in outcome) {
+      onSaved();
       if (this.activeTabId !== orderId) return;
       this.#noteBillParty(outcome.saved.party);
       this.tabRevision = outcome.saved.revision;
