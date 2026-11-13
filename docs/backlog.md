@@ -342,7 +342,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
   **2026-11-12:** PR 2 (server only): the approval given when a correction was opened counts. Once all its money is back, Waitron files the corrective itself under the till that opened it, at the till or in the background check when a card refund is confirmed later with nobody signed in, instead of waiting for Record correction. A refused filing raises `invoice_correction.filing_refused` among the tax-filing alerts, and Record correction stays the way out. Staff get nothing on the till until slice 5.
 
-  Next: PR 3, slice 5a (corrective paper, till client and journal), in the [reshape plan](superpowers/plans/2026-11-12-a802-reshape.md). Each fiscal PR waits for the owner to land it.
+  **2026-11-13:** PR 3, slice 5a: a corrective invoice prints at the till once, when a person's request filed it (the last cash step or File now), never on an automatic filing or a replay; staff reprint it on demand as a copy. The paper shows its title, the invoice it corrects and that invoice's date, and an emailed corrective is captioned "Factura rectificativa". The till gains the requests that open a correction and give its cash or card money back, each saved before sending so a retry never pays twice; no screen uses them yet.
+
+  Next: PR 4, slice 5b (the till's correction window, its buttons and the guide), in the [reshape plan](superpowers/plans/2026-11-12-a802-reshape.md) §6. Each fiscal PR waits for the owner to land it.
   [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
 
 - **Correct VAT without returning money.** Design the separate correction for a wrong VAT rate
