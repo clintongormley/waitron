@@ -45,7 +45,8 @@ export function createClockWatch(deps: {
     heads: (tx: Transaction) => Promise<ChainHeads>;
     /** This box's chain and the latest sale on it above a position that AEAT refused as dated in
      * the future. At each look, whatever the status, such a refusal of a sale recorded since the
-     * latest confirmation sends the box back to waiting unless the time service is synchronised. */
+     * latest confirmation, and above any refusal an earlier look found while the time service was
+     * synchronised, sends the box back to waiting unless the time service is synchronised. */
     futureDateRefusal?: {
       nodeId: string;
       latest: (tx: Transaction, abovePosition: number) => Promise<FutureDateRefusal | null>;
@@ -67,7 +68,9 @@ export function createClockWatch(deps: {
   /** The reading a jump took is not served to the next look, so a service that synchronises
    * just after the jump is seen then rather than a minute later. */
   let freshAfterJump = false;
-  let warnedSynchronisedAt: number | null = null;
+  /** The highest refused position judged while the time service was synchronised: handled, so
+   * a later look never sends the box back to waiting for it. */
+  let judgedSynchronised = 0;
 
   function recordable(): boolean {
     try {
@@ -119,14 +122,14 @@ export function createClockWatch(deps: {
     const { state } = start;
     if (state.mark === null) return;
     if (state.status === "waiting" && state.cause === "future_date_refused") return;
-    const above = state.mark[refusals.nodeId] ?? 0;
+    const above = Math.max(state.mark[refusals.nodeId] ?? 0, judgedSynchronised);
     const refusal = await deps.read((tx) => refusals.latest(tx, above));
     if (refusal === null || stopped) return;
     const outcome = await backToWaitingForRefusal(start, refusals.nodeId, refusal);
     const fields = { position: refusal.position, issuedOn: refusal.issuedOn };
     if (outcome === "moved") deps.log("warn", "clock_start.future_date_refused", fields);
-    if (outcome === "synchronised" && warnedSynchronisedAt !== refusal.position) {
-      warnedSynchronisedAt = refusal.position;
+    if (outcome === "synchronised") {
+      judgedSynchronised = refusal.position;
       deps.log("warn", "clock_start.future_date_refused_synchronised", fields);
     }
   }

@@ -4383,9 +4383,9 @@ How it moves (A1420 plan D3; A1506 plan row 3):
   `CLOCK_WATCH_MS`, on every node) reads the time service through the same shared reading, so the
   host program, which systemd starts once per request, runs at most once a minute. A synchronised
   answer confirms `by_internet`, from `waiting`, `by_devices` or `by_person`.
-- **Two devices.** While waiting, each look also offers the stored device readings: two or more
-  devices at different network addresses, each within 5 seconds (`START_CLOCK_MARGIN_MS`) of the
-  box and of each other, confirm `by_devices` and log `clock_start.confirmed` with source
+- **Two devices.** While waiting, except for a future-date refusal (below), each look also offers
+  the stored device readings: two or more devices at different network addresses, each within 5
+  seconds (`START_CLOCK_MARGIN_MS`) of the box and of each other, confirm `by_devices` and log `clock_start.confirmed` with source
   `devices` and their ids. They set nothing. A till or handheld sends its clock with each
   equipment read, every 15 seconds while it shows the PIN screen or someone is signed in on it, and
   the store keeps a reading for five minutes (plan R11). Tablets at the PIN screen count: two
@@ -4423,14 +4423,16 @@ How it moves (A1420 plan D3; A1506 plan row 3):
 - **A future-date refusal** (`lookForRefusal` in `apps/server/src/clock-watch.ts`, A1420 PR 2,
   task 10). Each look, whatever the status, asks the seat's optional
   `latestFutureDateRefusal?(tx, nodeId, abovePosition)` for the highest sale on this box's chain
-  that AEAT refused with code `1112` (dated in the future), above the position the latest
-  confirmation's heads hold for this box; before the first confirmation in a process it asks
-  nothing, so a restart never stops on an older refusal. Such a sale, with the time service not
+  that AEAT refused with code `1112` (dated in the future), above both the position the latest
+  confirmation's heads hold for this box and the highest refusal an earlier look found while the
+  time service was synchronised; before the first confirmation in a process it asks nothing, so a
+  restart never stops on an older refusal. Such a sale, with the time service not
   synchronised (a host that does not answer or throws counts as not synchronised), sends the box
   back to `waiting` with cause `future_date_refused` and the sale's issue date (`refusedOn`), and
   logs `clock_start.future_date_refused` as a warning (`backToWaitingForRefusal`,
   `apps/server/src/start-clock-check.ts`). Synchronised, nothing changes, and
-  `clock_start.future_date_refused_synchronised` is logged once per refused sale. Two devices
+  `clock_start.future_date_refused_synchronised` is logged, naming that highest sale, once for
+  each look that finds one; this process does not look at the refusals up to it again. Two devices
   agreeing do not end this wait, and a later jump does not replace its cause; a person, on a till
   or on Box status, or the time service synchronising does. The refusal holds no later record:
   the drain keeps sending (`packages/fiscal-verifactu/src/drain.future-date.test.ts`). Boot hands

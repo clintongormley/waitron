@@ -88,6 +88,25 @@ async function refusedAfterAPerson(host: () => ClockServiceStatus = () => NOT_SY
   return { ...h, refusedAt };
 }
 
+/** A box the internet confirmed, a refusal judged while it was synchronised, a hundred sales
+ * after it, and then a time service that throws. */
+async function judgedWhileSynchronised() {
+  let host: () => ClockServiceStatus = () => SYNCHRONISED;
+  const h = harness({ host: () => host() });
+  await h.looks();
+  expect(h.state.status).toBe("by_internet");
+  h.refuse(h.record());
+  await h.looks(3);
+  expect(h.events("clock_start.future_date_refused_synchronised")).toHaveLength(1);
+  for (let sale = 0; sale < 100; sale++) h.record();
+  await h.looks(A_MINUTE_OF_LOOKS);
+  host = () => {
+    throw new Error("host gone");
+  };
+  await h.looks(A_MINUTE_OF_LOOKS);
+  return h;
+}
+
 describe("the clock watch and AEAT refusing a sale as dated in the future", () => {
   it("sends a box a person confirmed back to waiting when a sale recorded since is refused, with the sale's date", async () => {
     const h = await refusedAfterAPerson();
@@ -148,20 +167,21 @@ describe("the clock watch and AEAT refusing a sale as dated in the future", () =
     expect(h.events("clock_start.future_date_refused_synchronised")).toEqual([]);
   });
 
-  it("leaves a synchronised box alone when a sale recorded since its confirmation is refused, warning once per refused sale", async () => {
+  it("leaves a synchronised box alone when a sale recorded since its confirmation is refused, warning once per look that finds a newer refusal, naming the highest", async () => {
     const h = harness({ host: () => SYNCHRONISED });
     await h.looks();
     expect(h.state.status).toBe("by_internet");
     const first = h.record();
     h.refuse(first);
     await h.looks(3);
-    const second = h.record();
-    h.refuse(second);
+    h.refuse(h.record());
+    const third = h.record();
+    h.refuse(third);
     await h.looks(3);
 
     expect(h.state.status).toBe("by_internet");
     expect(h.events("clock_start.future_date_refused_synchronised")).toEqual(
-      [first, second].map((position) => ({
+      [first, third].map((position) => ({
         level: "warn",
         event: "clock_start.future_date_refused_synchronised",
         fields: { position, issuedOn: REFUSED_ON },
@@ -169,14 +189,42 @@ describe("the clock watch and AEAT refusing a sale as dated in the future", () =
     );
   });
 
-  it("sends a box the internet confirmed back to waiting when the time service is no longer synchronised and a sale recorded since is refused", async () => {
+  it("keeps a box trading when a refusal it judged while synchronised is still the latest once the time service stops answering", async () => {
+    const h = await judgedWhileSynchronised();
+
+    expect(h.state.status).toBe("by_internet");
+    expect(h.events("clock_start.future_date_refused")).toEqual([]);
+  });
+
+  it("sends that box back to waiting when a sale above the judged refusal is refused while the time service does not answer", async () => {
+    const h = await judgedWhileSynchronised();
+    expect(h.state.status).toBe("by_internet");
+    const refusedAt = h.record();
+    h.refuse(refusedAt);
+    await h.looks();
+
+    expect(h.state).toMatchObject({ status: "waiting", cause: "future_date_refused" });
+    expect(h.events("clock_start.future_date_refused")).toEqual([
+      {
+        level: "warn",
+        event: "clock_start.future_date_refused",
+        fields: { position: refusedAt, issuedOn: REFUSED_ON },
+      },
+    ]);
+  });
+
+  it("sends a box the internet confirmed back to waiting when a sale recorded while it was synchronised is refused after it no longer is (control)", async () => {
     let answer = SYNCHRONISED;
     const h = harness({ host: () => answer });
     await h.looks();
     expect(h.state.status).toBe("by_internet");
-    answer = NOT_SYNCHRONISED;
-    h.refuse(h.record());
+    const recordedAt = h.record();
     await h.looks(A_MINUTE_OF_LOOKS);
+    answer = NOT_SYNCHRONISED;
+    await h.looks(A_MINUTE_OF_LOOKS);
+    expect(h.state.status).toBe("by_internet");
+    h.refuse(recordedAt);
+    await h.looks();
 
     expect(h.state).toMatchObject({ status: "waiting", cause: "future_date_refused" });
   });
