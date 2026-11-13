@@ -2246,7 +2246,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Local course-retention, service-step, status, kitchen-note, allergy, today-join, course and party route fixtures use Anna for staff.
   The provision, setup-api.throwaway, promote-api.handover, break-glass-command and
   backup-api.settings-evidence suites use Administrator for their local administrator display-name samples.
-  The two setup-api suites use Anna Mary and Smith Green for their administrator real-name samples.
+  The setup-api and setup-api.throwaway suites use Anna Mary and Smith Green for their administrator real-name samples.
   The backup-api.route and mirror-bundle-api suites use English staff display-name samples.
   The cancel-invoiced-order and unpaid-departure suites use Sophia for their local supervisor samples.
   The device-equipment and device-levers suites use English staff display-name samples.
