@@ -93,7 +93,7 @@ printer keys.
 Move repeated bottom-message assembly, attempt, refusal-dismissal and render-before-focus
 plumbing in the remaining dashboard editors other than the product editor, station
 refusal-dismissal and the till's forms onto `FormFeedback` in `@waitron/ui`. Inventory each later batch before migrating it; leave
-single-job forms local. Preserve each form's field mapping
+single-job forms local. Keep the product editor's field-specific focus local. Preserve each form's field mapping
 and message behavior; keep domain-specific refusal clearing local. See the
 [second-slice inventory](../superpowers/plans/2026-11-12-d-form-plumbing-2.md) and the
 [inventory of the remaining venue forms](../superpowers/plans/2026-11-13-d-form-plumbing-venue-batch.md).
