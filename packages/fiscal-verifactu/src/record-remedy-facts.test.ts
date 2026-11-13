@@ -257,6 +257,100 @@ it.each([
   expect(await snapshot()).toEqual(before);
 });
 
+/** Points `send` at a refused record of its own type: a corrective (R5, as `recordCorrection`
+ * writes it) or an exchange invoice (F3, as `recordSubstitution` writes it). */
+async function targetRefusedOfType(invoiceType: "R5" | "F3") {
+  const saleId = await seedSale(suite.db, node, 2);
+  const own = {
+    IDEmisorFactura: "89890001K",
+    NumSerieFactura: "PRIOR/0",
+    FechaExpedicionFactura: new Date("2026-07-18T00:00:00+02:00"),
+  };
+  await withTransaction(suite.db, async (tx) => {
+    const pending = altaFor(node, saleId, 2, 2, "preproduction");
+    const original = await appendToChain(tx, node.nodeId, {
+      ...pending,
+      input: {
+        ...pending.input,
+        TipoFactura: invoiceType,
+        ...(invoiceType === "R5"
+          ? { TipoRectificativa: "I" as const, FacturasRectificadas: [own] }
+          : { FacturasSustituidas: [own], Destinatarios: { IDDestinatario: [recipient] } }),
+      },
+    });
+    await tx
+      .insert(envios)
+      .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
+    const filingCase = await openFilingCase(tx, {
+      registroId: original.id,
+      cause: "fiscal.registro_rechazado",
+      evidence: { codigo: 1161, mensaje: null, csv: null },
+      now: NOW,
+    });
+    body = { ...body, caseId: filingCase.id, registroId: original.id };
+  });
+}
+
+it.each(["R5", "F3"] as const)(
+  "corrects %s reference facts while preserving their calendar date across a new generation offset",
+  async (invoiceType) => {
+    await targetRefusedOfType(invoiceType);
+    instant = new Date("2026-12-20T17:20:35Z");
+    const facts =
+      invoiceType === "R5"
+        ? { invoiceType, correctedInvoices: [reference] }
+        : { invoiceType, substitutedInvoices: [reference], recipients: [recipient] };
+    const res = await send(facts);
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    const { registroId } = (await res.json()) as { registroId: string };
+    const [row] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, registroId));
+    expect(row).toMatchObject({
+      tipoFactura: invoiceType,
+      fechaExpedicionFactura: "2026-07-20",
+      offsetMinutos: 60,
+      tipoRectificativa: invoiceType === "R5" ? "I" : null,
+      facturasRectificadas:
+        invoiceType === "R5"
+          ? { IDFacturaRectificada: [{ ...reference, FechaExpedicionFactura: "19-07-2026" }] }
+          : null,
+      facturasSustituidas:
+        invoiceType === "F3"
+          ? { IDFacturaSustituida: [{ ...reference, FechaExpedicionFactura: "19-07-2026" }] }
+          : null,
+      importeRectificacion: null,
+    });
+  },
+);
+
+it("accepts the record's own recipients sent back in another key order", async () => {
+  await targetRefusedOfType("F3");
+  const res = await send({
+    recipients: [{ NIF: recipient.NIF, NombreRazon: recipient.NombreRazon }],
+    description: "Corrected restaurant service",
+  });
+  expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+});
+
+it.each([
+  { correctionType: "S", correctionAmounts: { BaseRectificada: "0.00", CuotaRectificada: "0.00" } },
+  { correctedInvoices: [{ ...reference, NumSerieFactura: "PRIOR/2" }] },
+])(
+  "refuses changed corrective-reference decisions under a saved action key: %j",
+  async (change) => {
+    await targetRefusedOfType("R5");
+    const facts = { invoiceType: "R5", correctedInvoices: [reference] };
+    expect((await send(facts)).status).toBe(200);
+    const before = await snapshot();
+    const res = await send({ ...facts, ...change });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "filing_case.action_mismatch" } });
+    expect(await snapshot()).toEqual(before);
+  },
+);
+
 it("accepts explicit removal of optional facts the record does not carry", async () => {
   const before = await snapshot();
   const res = await send({
@@ -405,18 +499,19 @@ it.each(
   expect(await snapshot()).toEqual(before);
 });
 
-it.each([{ description: "Another restaurant service" }])(
-  "refuses changed saved facts %j",
-  async (change) => {
-    const facts = { description: "Corrected restaurant service" };
-    expect((await send(facts)).status).toBe(200);
-    const before = await snapshot();
-    const res = await send({ ...facts, ...change });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "filing_case.action_mismatch" } });
-    expect(await snapshot()).toEqual(before);
-  },
-);
+it.each([
+  { description: "Another restaurant service" },
+  { invoiceType: "F2" },
+  { recipients: null },
+])("refuses changed saved facts %j", async (change) => {
+  const facts = { description: "Corrected restaurant service" };
+  expect((await send(facts)).status).toBe(200);
+  const before = await snapshot();
+  const res = await send({ ...facts, ...change });
+  expect(res.status).toBe(409);
+  expect(await res.json()).toMatchObject({ error: { code: "filing_case.action_mismatch" } });
+  expect(await snapshot()).toEqual(before);
+});
 
 it.each([
   { change: { taxTotal: "20.01" }, field: "taxTotal" },
