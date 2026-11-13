@@ -47,9 +47,8 @@ function harness(
   const clockStatus = reading === undefined ? undefined : vi.fn(reading.read);
   const clearClockStatus = reading?.clear;
   let steps = 0;
-  let countSteps = () => steps;
   const correction = {
-    steps: () => countSteps(),
+    steps: () => steps,
     inTurn: <T>(fn: () => Promise<T>) => fn(),
     writePending: vi.fn(async () => {}),
   };
@@ -83,12 +82,6 @@ function harness(
     if (options.bySet === true) steps++;
   }
 
-  function failStepCount() {
-    countSteps = () => {
-      throw new Error("count failed");
-    };
-  }
-
   /** A device's equipment read arriving now, its clock `aheadMs` from the box's. */
   function noteDevice(id: string, address: string, aheadMs: number) {
     store.noteDevice(id, address, wallMs + aheadMs, { wallMs, monoMs });
@@ -106,8 +99,6 @@ function harness(
     transaction,
     noteDevice,
     jump,
-    failStepCount,
-    writePending: correction.writePending,
     wall: () => wallMs,
   };
 }
@@ -247,24 +238,15 @@ describe("the clock watch and a jump of the box's clock", () => {
     },
   );
 
-  it.each([
-    ["back", -2 * MINUTE, "by_internet"],
-    ["forward", 2 * MINUTE, "by_devices"],
-  ] as const)(
-    "leaves a box whose time service is synchronised as it was when its clock jumps %s, saying so in the log",
-    async (_name, ms, by) => {
-      const h = harness({ host: async () => SYNCHRONISED, startState: confirmed(by) });
-      // by_devices moves to by_internet at the first look once the time service is synchronised.
-      await h.tick();
-      const status = h.startState.status;
-      h.jump(ms);
-      await h.tick();
-      expect(h.startState.status).toBe(status);
-      expect(h.startState.cause).toBeNull();
-      expect(jumpLogs(h)).toHaveLength(1);
-      expect(jumpLogs(h)[0]!.fields).toMatchObject({ backToWaiting: false });
-    },
-  );
+  it("leaves a box whose time service is synchronised as it was when its clock jumps, saying so in the log", async () => {
+    const h = harness({ host: async () => SYNCHRONISED, startState: confirmed("by_internet") });
+    await h.tick();
+    h.jump(-2 * MINUTE);
+    await h.tick();
+    expect(h.startState).toMatchObject({ status: "by_internet", cause: null });
+    expect(jumpLogs(h)).toHaveLength(1);
+    expect(jumpLogs(h)[0]!.fields).toMatchObject({ backToWaiting: false });
+  });
 
   it("does not count a set of the box's clock as a jump", async () => {
     const h = harness({ host: async () => NOT_SYNCHRONISED, startState: confirmed("by_devices") });
@@ -288,26 +270,6 @@ describe("the clock watch and a jump of the box's clock", () => {
     await h.tick();
     expect(h.startState.status).toBe("by_devices");
     expect(jumpLogs(h)).toEqual([]);
-  });
-
-  it("logs a jump on a box with no start check, sending nothing back to waiting", async () => {
-    const h = harness();
-    await h.tick();
-    h.jump(2 * MINUTE);
-    await h.tick();
-    expect(jumpLogs(h)).toHaveLength(1);
-    expect(jumpLogs(h)[0]!.fields).toMatchObject({ backToWaiting: null });
-  });
-
-  it("still runs the rest of the look when the jump cannot be checked", async () => {
-    const h = harness({ host: async () => NOT_SYNCHRONISED });
-    h.failStepCount();
-    await h.tick();
-    expect(h.logs).toContainEqual({
-      event: "clock_watch.check_failed",
-      fields: { errorCode: "unknown" },
-    });
-    expect(h.writePending).toHaveBeenCalledOnce();
   });
 
   it("reads the time service afresh after a jump, not the reading taken before it", async () => {

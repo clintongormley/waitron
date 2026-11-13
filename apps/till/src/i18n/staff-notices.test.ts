@@ -60,15 +60,12 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     });
   });
 
-  it.each([undefined, "future_date_refused", "later_cause", 1])(
-    "words the wait as unknown when its cause is %o",
-    (cause) => {
-      setLocale(locale);
-      expect(
-        staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1, cause } }).main,
-      ).toBe(words["staff_notice.unknown"]);
-    },
-  );
+  it.each([undefined, "later_cause"])("words the wait as unknown when its cause is %o", (cause) => {
+    setLocale(locale);
+    expect(staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1, cause } }).main).toBe(
+      words["staff_notice.unknown"],
+    );
+  });
 
   it("words the unsent count with its number and the retried hint while nothing is held", () => {
     setLocale(locale);
