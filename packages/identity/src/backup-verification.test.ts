@@ -70,6 +70,8 @@ const passed = {
 
 beforeEach(async () => {
   for (const suite of [original, restored]) {
+    if (suite === restored)
+      await suite.db.insert(schema.roles).values(await original.db.select().from(schema.roles));
     await suite.db.insert(locations).values({ id: location });
     await seedVenueSettings(suite.db, {
       name: "Main",

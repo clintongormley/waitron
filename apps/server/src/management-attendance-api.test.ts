@@ -3,7 +3,7 @@ import { convenioConfig, WORKFORCE_ES_RECORD_EXPORT } from "@waitron/workforce-e
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -392,16 +392,12 @@ it("delivers paid totals through every attendance read route", async () => {
 
 it("offers self-approval to a Manager holding workforce.self_approve", async () => {
   await setBuiltInRoleForTest(suite.db, managerId, "manager");
-  registerModulePermissions([
-    { permission: "workforce.self_approve", defaultHolders: ["manager"] },
-  ]);
-  try {
-    const response = await request("lookups");
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      viewer: { personId: managerId, canSelfApprove: true },
-    });
-  } finally {
-    registerModulePermissions([{ permission: "workforce.self_approve", defaultHolders: [] }]);
-  }
+  suite.db.run(
+    sql`update roles set permissions = json_insert(permissions, '$[#]', 'workforce.self_approve') where built_in_key = 'manager'`,
+  );
+  const response = await request("lookups");
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    viewer: { personId: managerId, canSelfApprove: true },
+  });
 });

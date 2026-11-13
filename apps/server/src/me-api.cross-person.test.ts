@@ -162,6 +162,7 @@ async function seedPerson(name: string): Promise<string> {
       pinHash: hashPin("0000"),
       role: "staff",
     });
+    tx.run(sql`update roles set permissions = '["payment.take"]' where built_in_key = 'staff'`);
     return row!.id;
   });
 }

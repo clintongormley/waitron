@@ -433,7 +433,7 @@ describe("the start check on a real start", () => {
               .select()
               .from(persons)
               .where(eq(persons.email, "owner@example.test"));
-            await seedPersons(spareSuite.db, admin!);
+            await seedPersons(spareSuite.db, { ...admin!, role: "admin" });
             const session = await withTransaction(spareSuite.db, async (tx) => {
               const session = await startManagementSession(tx, { personId: admin!.id });
               await setFreshManagementSignIn(tx, session.token);

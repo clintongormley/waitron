@@ -965,19 +965,15 @@ it("delivers paid totals through every attendance read route", async () => {
 it("lists a Manager holding workforce.self_approve as their own approver", async () => {
   const itemId = await pending();
   await setBuiltInRoleForTest(suite.db, venue.personId, "manager");
-  registerModulePermissions([
-    { permission: "workforce.self_approve", defaultHolders: ["manager"] },
-  ]);
-  try {
-    const response = await request(`items/${itemId}/approvers?action=approve`);
-    expect(response.status).toBe(200);
-    expect(await response.json()).toContainEqual({ personId: venue.personId, displayName: "Anna" });
-    const declined = await request(`items/${itemId}/approvers?action=decline`);
-    expect(declined.status).toBe(200);
-    expect(
-      (await declined.json()).some((p: { personId: string }) => p.personId === venue.personId),
-    ).toBe(false);
-  } finally {
-    registerModulePermissions([{ permission: "workforce.self_approve", defaultHolders: [] }]);
-  }
+  suite.db.run(
+    sql`update roles set permissions = json_insert(permissions, '$[#]', 'workforce.self_approve') where built_in_key = 'manager'`,
+  );
+  const response = await request(`items/${itemId}/approvers?action=approve`);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toContainEqual({ personId: venue.personId, displayName: "Anna" });
+  const declined = await request(`items/${itemId}/approvers?action=decline`);
+  expect(declined.status).toBe(200);
+  expect(
+    (await declined.json()).some((p: { personId: string }) => p.personId === venue.personId),
+  ).toBe(false);
 });

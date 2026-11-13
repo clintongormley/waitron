@@ -106,8 +106,12 @@ it("confirming the zone preserves the exact clock stop, all saved facts and mana
     ),
   ).toEqual({
     authorizedBy: manager,
-    role: "manager",
-    authority: { personId: manager, admin: false, permissions: expect.any(Set) },
+    authority: {
+      personId: manager,
+      admin: false,
+      roleIds: [expect.any(String)],
+      permissions: expect.any(Set),
+    },
   });
   expect(await repairZone()).toEqual({
     repaired: true,
@@ -148,8 +152,12 @@ it("confirming the zone preserves the exact clock stop, all saved facts and mana
     ),
   ).toEqual({
     authorizedBy: manager,
-    role: "manager",
-    authority: { personId: manager, admin: false, permissions: expect.any(Set) },
+    authority: {
+      personId: manager,
+      admin: false,
+      roleIds: [expect.any(String)],
+      permissions: expect.any(Set),
+    },
   });
   const clock = {
     ...v.deps.clock,
