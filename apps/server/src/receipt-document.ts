@@ -353,8 +353,7 @@ export function buildReceiptDocument({
           ...filedRow(option, 2),
           ...(dishFigured!.line.setLunch
             ? {
-                item: label.supplement.replace(
-                  "{item}",
+                item: label.supplement.replace("{item}", () =>
                   lineName(option.line.descriptions, namesLocale),
                 ),
               }
@@ -388,7 +387,7 @@ export function buildReceiptDocument({
     for (const answer of answers(dish)) text(`  ${answer}`, 2);
     for (const option of options) {
       const dishName = lineName(option.descriptions, namesLocale);
-      const name = dish.setLunch ? label.supplement.replace("{item}", dishName) : dishName;
+      const name = dish.setLunch ? label.supplement.replace("{item}", () => dishName) : dishName;
       let caption: string;
       if (!simplified) {
         const { quantity: count, unitName, soldInEach } = option;

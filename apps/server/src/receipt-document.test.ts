@@ -1441,7 +1441,7 @@ describe("recorded issue offsets on plain F2 receipts", () => {
 });
 
 describe("set lunch presentation", () => {
-  const supplement = receiptLabelsFor("es-ES").supplement.replace("{item}", "Hake");
+  const supplement = receiptLabelsFor("es-ES").supplement.split("{item}").join("Hake $& chips $$");
   it.each(["F2", "F1"] as const)(
     "keeps each lunch and its supplement separate on %s",
     (invoiceType) => {
@@ -1457,7 +1457,7 @@ describe("set lunch presentation", () => {
         net: { unitPrice: "16.36", priceQuantity: "1.000", base: "16.36", tax: "1.64", rate: "10" },
       };
       const main = {
-        descriptions: { "es-ES": "Hake" },
+        descriptions: { "es-ES": "Hake $& chips $$" },
         quantity: "1",
         gross: "3.00",
         net: { unitPrice: "2.73", priceQuantity: "1.000", base: "2.73", tax: "0.27", rate: "10" },
@@ -1482,11 +1482,11 @@ describe("set lunch presentation", () => {
         expect(rows.map((row) => [row.item, row.amount])).toEqual([
           ["House lunch", "16,36"],
           [supplement, "2,73"],
-          ["Hake", ""],
+          ["Hake $& chips $$", ""],
           ["Coffee", ""],
           ["House lunch", "16,36"],
           [supplement, "2,73"],
-          ["Hake", ""],
+          ["Hake $& chips $$", ""],
           ["Coffee", ""],
         ]);
         expect(
@@ -1501,12 +1501,13 @@ describe("set lunch presentation", () => {
         ).toMatchObject([{ amount: "3,00" }, { amount: "3,00" }]);
         expect(
           elements.filter(
-            (el) => el.kind === "text" && ["Hake", "Coffee x2"].includes(el.text.trim()),
+            (el) =>
+              el.kind === "text" && ["Hake $& chips $$", "Coffee x2"].includes(el.text.trim()),
           ),
         ).toMatchObject([
-          { text: "  Hake" },
+          { text: "  Hake $& chips $$" },
           { text: "  Coffee x2" },
-          { text: "  Hake" },
+          { text: "  Hake $& chips $$" },
           { text: "  Coffee x2" },
         ]);
       }

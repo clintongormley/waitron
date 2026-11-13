@@ -113,16 +113,6 @@ export async function receiptLines(
         };
       });
     }
-  } else {
-    const lunches = await VENUE_SERVICE.readLunchLineIds(
-      tx,
-      identities.flatMap((identity, i) =>
-        priced.lines[i]!.parentLineNo == null ? [identity.id] : [],
-      ),
-    );
-    lines = lines.map((line, i) =>
-      lunches.has(identities[i]!.id) ? { ...line, setLunch: true as const } : line,
-    );
   }
   if (!lines.some((line) => line.listGross !== undefined)) return { lines };
   const records = workingOrderId === null ? [] : await readBillAdjustments(tx, workingOrderId);

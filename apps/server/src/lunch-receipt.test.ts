@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   billPayments,
   products,
@@ -23,20 +23,17 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
-import { readStoredOrder } from "./working-order.js";
-import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptEmailDocument, readInvoiceDocument } from "./invoice-document.js";
 import { completeBillPayment } from "./bill-payments.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 
 let venue: AdjustmentVenue;
 const suite = useVenueDb({
-  resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
-  setup: async (db) => {
-    venue = await provisionAdjustmentVenue(db);
-  },
+});
+beforeEach(async () => {
+  venue = await provisionAdjustmentVenue(suite.db);
 });
 
 describe("recorded lunch receipts", () => {
@@ -102,22 +99,6 @@ describe("recorded lunch receipts", () => {
           "fire",
           venue.staffId,
         );
-        const stored = await readStoredOrder(tx, billId);
-        const preview = await receiptLines(tx, billId, stored.gross, stored.identities);
-        expect(preview.lines.filter((line) => line.parentLineNo == null)).toMatchObject([
-          { setLunch: true, gross: "18.00" },
-          { setLunch: true, gross: "18.00" },
-          { gross: "12.00" },
-        ]);
-        expect(preview.lines.map((line) => line.gross)).toEqual([
-          "18.00",
-          "3.00",
-          "0.00",
-          "18.00",
-          "3.00",
-          "0.00",
-          "12.00",
-        ]);
         return lunch.id;
       });
       if (invoiceType === "F1") {

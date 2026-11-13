@@ -3239,14 +3239,14 @@ describe("A790 recorded document then printer", () => {
 });
 
 it("keeps lunch diners separate and shows included choices without prices", async () => {
-  const supplement = receiptLabelsFor("es-ES").supplement.replace("{item}", "Hake");
+  const supplement = receiptLabelsFor("es-ES").supplement.split("{item}").join("Hake $& chips $$");
   const lunch = {
     descriptions: { "es-ES": "House lunch" },
     quantity: "1",
     gross: "18.00",
     setLunch: true as const,
   };
-  const hake = { descriptions: { "es-ES": "Hake" }, quantity: "1", gross: "3.00" };
+  const hake = { descriptions: { "es-ES": "Hake $& chips $$" }, quantity: "1", gross: "3.00" };
   const coffee = { descriptions: { "es-ES": "Coffee" }, quantity: "2", gross: "0.00" };
   const { el } = await mount({
     total: "42.00",
@@ -3267,11 +3267,11 @@ it("keeps lunch diners separate and shows included choices without prices", asyn
   expect(rows).toEqual([
     ["House lunch", "18,00 €"],
     [supplement, "3,00 €"],
-    ["Hake", ""],
+    ["Hake $& chips $$", ""],
     ["Coffee x2", ""],
     ["House lunch", "18,00 €"],
     [supplement, "3,00 €"],
-    ["Hake", ""],
+    ["Hake $& chips $$", ""],
     ["Coffee x2", ""],
   ]);
 });
