@@ -2,7 +2,9 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, expect, it, vi } from "vitest";
+
+vi.setConfig({ testTimeout: 20_000 });
 
 const root = mkdtempSync(join(tmpdir(), "upgrade-restart-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));

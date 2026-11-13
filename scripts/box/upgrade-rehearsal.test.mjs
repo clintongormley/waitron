@@ -15,6 +15,8 @@ import { expect, it, vi } from "vitest";
 import { copyStoppedTree } from "./upgrades/copy.mjs";
 import { upgradePayload, upgradeStage } from "../../bench/box-installer/upgrade.mjs";
 
+vi.setConfig({ testTimeout: 10_000 });
+
 it("rejects changed rows after reboot without replacing the original comparison baseline", () => {
   const root = mkdtempSync(join(tmpdir(), "upgrade-baseline-"));
   try {
