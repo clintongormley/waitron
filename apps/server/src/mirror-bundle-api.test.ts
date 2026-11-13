@@ -1960,9 +1960,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const { designated } = await setupVenue();
       const draw = vi.spyOn(crypto, "randomUUID");
       try {
-        draw.mockReturnValueOnce(`${designated.nodeId.slice(0, 4)}0000-4000-8000-000000000001`);
+        draw.mockReturnValueOnce(
+          `${designated.nodeId.slice(0, 4)}0000-0000-4000-8000-000000000001`,
+        );
         const { ids } = await holdFullChart(designated);
-        draw.mockReturnValueOnce(`${ids[0]!.slice(0, 4)}0000-4000-8000-000000000002`);
+        draw.mockReturnValueOnce(`${ids[0]!.slice(0, 4)}0000-0000-4000-8000-000000000002`);
         const standby = validStandby();
         const prefixes = [designated.nodeId, ...ids, standby.standbyNodeId].map((id) =>
           id.slice(0, 4).toLowerCase(),
