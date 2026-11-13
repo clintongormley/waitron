@@ -1,8 +1,8 @@
 # Lane D: venue form feedback batch
 
 **13 November 2026.** Separate GPT-6.1 Sol high-effort author; driver checked the draft against source.
-Claude approach read and watcher clearance are pending. No implementation until both
-complete. This proposes scope inside the queue ask; no owner design approval is claimed.
+Claude approach read complete; driver applied its three corrections. Watcher clearance
+is pending; no implementation until cleared. This proposes scope inside the queue ask; no owner design approval is claimed.
 
 **Original queue ask, verbatim**, recorded in
 `/Users/clintongormley/waitron-campaign-d/queue.md`, D-form-plumbing:
@@ -56,16 +56,17 @@ The four prior exclusions (`email-settings-form`, `attendance-proposal-dialog`,
 pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/period-dialog src/dashboard/floor-plan-set-dialog src/dashboard/seasons-window
 ```
 
-`packages/ui/src/form-feedback.test.ts` owns helper semantics; callers retain mapping,
-footer, focus and reset assertions. Add a genuinely missing caller assertion before
-refactoring, passing against old code. Any bugfix requires an observed failing test
+`packages/ui/src/form-feedback.test.ts` owns helper semantics. Keep existing caller
+assertions. Before refactoring, add the missing Floor-plan set focus assertion to its
+invalid-Save case and a reopen-in-another-mode case proving failed-Save errors reset;
+both must pass on old code. Other callers already assert focus and reset. Any bugfix requires an observed failing test
 first. No speculative helper tests, rewritten assertions or moved test files.
 
-- [ ] **After clearance:** compare before/after in EN/ES, light/dark, phone/desktop,
-  including invalid/refused/reset states. No visible change or guide text is proposed
+- [ ] **After clearance:** one before/after visual comparison per form covers unchanged
+  feedback; expand only if a visible change appears. No visible change or guide text is proposed
   because staff steps stay unchanged. Narrow the backlog, retaining deferred forms;
   use the normal hook, scoped current-head CI and `finish-branch` after the hold lifts.
 
-**Forecast:** production **+45/−55 lines**; tests likely **+0/−0**; support/generated **0**;
+**Forecast:** production about **+26/−23 lines**; tests about **+25/−0**; support/generated **0**;
 docs separately approximately **75 lines**. Stop and return to the watcher at
 **1.5× forecast growth** or a material scope change.
