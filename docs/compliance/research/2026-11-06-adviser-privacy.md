@@ -183,7 +183,9 @@ RGPD for breaches [S22].
   changed or deleted. So can `print_jobs`, which holds the kitchen ticket's raw bytes, allergy block
   included, though nothing deletes them today.
   **2026-11-13 update:** A1308 fk8 folds the ticket snapshot into `ticket_items`
-  (`allergy_frozen`, `allergy_original`, `allergy_current`), which is classified `ledger`.
+  (`allergy_frozen`, `allergy_original`, `allergy_current`), classified `ledger` without append-only
+  protection in [core's classification](../../../packages/db/src/classification.ts). The current
+  copy can still be updated, and deleting its order line deletes the ticket.
   [Implementation plan](../../superpowers/plans/2026-11-08-a1308-fk8-kitchen-tickets.md).
 - The bucket keeps 168 hours of history (`packages/stream/src/litestream.ts`). Scheduled backups keep
   the newest 7 and nothing older than 30 days by default, and a venue can change that

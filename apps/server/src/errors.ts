@@ -1024,6 +1024,7 @@ declare module "@waitron/shared" {
      * repeat, or backwards). Its conditional UPDATE is the check: an illegal move matches no row.
      */
     "ticket.invalid_transition": { ticketItemId: string };
+    // `ticket_item.not_found` is declared in @waitron/venue-service's errors.ts.
     "ticket.already_fired": { workingOrderId: string };
 
     "ticket.not_fired": { workingOrderId: string };
