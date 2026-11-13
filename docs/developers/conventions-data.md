@@ -5641,8 +5641,7 @@ measurement), so the running server leaves that fact in `<state>/backup-room-not
 (`BACKUP_ROOM_NOTE_FILE`, `@waitron/provisioning`) for the start to use.
 
 **What it holds.** The node id, the installation start, `venue.db`'s device number, file number and
-birth time (`venueDbIdentity`, `apps/server/src/backup-room-note.ts`), whether the environment
-manages backups, the backup folders on the venue folder's disk, and when it was written. Each folder
+birth time (`venueDbIdentity`, `apps/server/src/backup-room-note.ts`), the backup folders on the venue folder's disk, and when it was written. Each folder
 is `{ destination, dir, configuredDir }`: `configuredDir` is the path backups are configured to
 write to, as given, and `dir` is the real path it led to when the note was written. No secret and
 no bucket.
@@ -5678,11 +5677,9 @@ disk is left alone: the step deletes only in folders on the venue folder's disk)
 takes the venue lock, or, when that fails other than in use, goes on without it unless the holder
 file is fresh. It deletes nothing unless the note is a regular file of at most 64 KiB that parses,
 names the box env's node id, and matches `venue.db`'s device number, file number and birth time; no
-restore or reset request is waiting; the recovery key loads; and who manages backups, judged on the
-raw environment, is what the note says. The folders are the environment's local destinations when it
-manages backups, resolved now, else the note's, each kept only if its `configuredDir` still leads
-to the `dir` the note recorded (a link moved while the server was stopped points backups at
-another folder); either way each is kept only if it is on the venue folder's disk now. Each
+restore or reset request is waiting; and the recovery key loads. Each note folder is kept only
+if its `configuredDir` still leads to the `dir` the note recorded (a link moved while the server
+was stopped points backups at another folder), and only if it is on the venue folder's disk now. Each
 refusal is logged once `backup.start_room_skipped` with a `reason`, `out_of_reach` among them when
 free space plus every deletable backup falls short of 24 MiB. A step still under 24 MiB after its
 deleting logs `backup.start_room_short`, whether or not any deletion succeeded; the refusal's

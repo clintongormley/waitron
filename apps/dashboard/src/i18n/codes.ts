@@ -1097,10 +1097,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Add at least one VAT line",
     es: "Añade al menos una línea de IVA",
   },
-  "backup.managed_by_environment": {
-    en: "Backups on this box are managed by its environment — there is nothing to change here",
-    es: "Las copias de seguridad de esta caja las gestiona su entorno; aquí no hay nada que cambiar",
-  },
   "backup.not_primary": {
     en: "This node isn't the venue's primary — change backups from the primary node",
     es: "Este nodo no es el principal del local; cambia las copias de seguridad desde el nodo principal",

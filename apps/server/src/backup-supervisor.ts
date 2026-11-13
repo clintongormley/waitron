@@ -81,8 +81,7 @@ export function destinationView(d: BackupDestination): DestinationView {
 export interface BackupRuntimeStatus {
   enabled: boolean;
   isPrimary: boolean;
-  managedByEnvironment: boolean;
-  source: "environment" | "dashboard" | null;
+
   revision: string | null;
   /** A dashboard record is stored switched off. */
   storedDisabled: boolean;
@@ -140,7 +139,7 @@ export interface BackupSupervisorDeps {
    * hot-reload a no-op. */
   buildConfig: () => Promise<BackupConfig | BackupConfigUnusable | undefined>;
   /** True iff a variable `BACKUP_ENV_KEYS` (`backup-config.ts`) lists is non-empty in the RAW base env. */
-  isManagedByEnvironment: () => boolean;
+
   /** The live singleton role, read fresh each reload/status so a promotion is followed. */
   readSingletonRole: () => SingletonRole;
   /** `config.venueDir`. The supervisor opens it ITSELF rather than taking boot's handle — see this
@@ -380,7 +379,7 @@ export class BackupSupervisor {
       venueDir: this.#deps.venueDir,
       nodeId,
       installationStartedAt,
-      managedByEnvironment: this.#deps.isManagedByEnvironment(),
+
       folders: folders.map((f) => ({ ...f, configuredDir: configured.get(f.destination)! })),
       now: () => this.#now(),
       log: this.#deps.log,
@@ -402,10 +401,9 @@ export class BackupSupervisor {
     return {
       enabled: cfg !== undefined && isPrimary && this.#db !== undefined,
       isPrimary,
-      managedByEnvironment: this.#deps.isManagedByEnvironment(),
-      source: cfg?.source ?? null,
+
       revision: cfg?.revision ?? null,
-      storedDisabled: cfg !== undefined && cfg.source === "dashboard" && !cfg.enabled,
+      storedDisabled: cfg !== undefined && !cfg.enabled,
       loadErrorCode: this.#loadErrorCode,
       destinations: cfg?.destinations.map(destinationView) ?? [],
       schedule: cfg?.schedule,

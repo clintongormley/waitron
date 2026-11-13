@@ -15,9 +15,6 @@ services:
     # map. The image carries cap_net_bind_service because this namespace keeps the kernel's 1024
     # floor, which Docker's own bridge namespace does not.
     network_mode: host
-    depends_on:
-      mailpit:
-        condition: service_started
     environment:
       # Written by the USB image recipe; absent for hand-installed deployments.
       WAITRON_INSTALLATION_ORIGIN: ${WAITRON_INSTALLATION_ORIGIN:-}
@@ -32,11 +29,7 @@ services:
       # only place an operator can override them.
       WAITRON_MANAGEMENT_RP_ID: ${WAITRON_MANAGEMENT_RP_ID:-waitron.local}
       WAITRON_MANAGEMENT_ORIGIN: ${WAITRON_MANAGEMENT_ORIGIN:-https://waitron.local}
-      # Local backups: a destination (the dir) needs a recovery key, or boot is refused rather than
-      # shipping unencrypted — set neither and no backup duty runs. There is no backup connection
-      # setting: the backup duty opens the box's own venue directory itself.
-      WAITRON_BACKUP_DIR: ${WAITRON_BACKUP_DIR:-}
-      WAITRON_BACKUP_RECOVERY_KEY: ${WAITRON_BACKUP_RECOVERY_KEY:-}
+      WAITRON_CLOUD_ORIGIN: ${WAITRON_CLOUD_ORIGIN:-}
       # Prepare uses the local card simulator unless an operator deliberately enables a configured
       # provider whose credential is restricted to its test environment.
       WAITRON_PAYMENT_TEST_PROVIDERS: ${WAITRON_PAYMENT_TEST_PROVIDERS:-}
@@ -83,6 +76,7 @@ services:
   # captures these only without SMTP; Demo and development capture invoice email. Keep both ports on the box loopback:
   # browsers read captured messages through Waitron's authenticated management API.
   mailpit:
+    profiles: [practice-inbox]
     image: axllent/mailpit:v1.33.0
     restart: unless-stopped
     networks:

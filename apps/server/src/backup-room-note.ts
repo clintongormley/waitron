@@ -20,7 +20,6 @@ export interface BackupRoomNote {
   nodeId: string;
   installationStartedAt: string;
   venueDb: VenueDbIdentity;
-  managedByEnvironment: boolean;
   folders: BackupRoomNoteFolder[];
   writtenAt: string;
 }
@@ -73,7 +72,6 @@ export async function writeBackupRoomNote(options: {
   venueDir: string;
   nodeId: string;
   installationStartedAt: Date;
-  managedByEnvironment: boolean;
   folders: readonly BackupRoomNoteFolder[];
   now: () => Date;
   log: Logger;
@@ -94,7 +92,6 @@ export async function writeBackupRoomNote(options: {
       nodeId: options.nodeId,
       installationStartedAt: options.installationStartedAt.toISOString(),
       venueDb,
-      managedByEnvironment: options.managedByEnvironment,
       folders: options.folders.map(({ destination, dir, configuredDir }) => ({
         destination,
         dir,
@@ -175,7 +172,7 @@ function parseNote(text: string): BackupRoomNote | null {
   const { venueDb, folders } = value;
   if (!isRecord(venueDb) || ![venueDb.dev, venueDb.ino, venueDb.birthtimeNs].every(isDigits))
     return null;
-  if (typeof value.managedByEnvironment !== "boolean" || !Array.isArray(folders)) return null;
+  if (!Array.isArray(folders)) return null;
   const foldersValid = folders.every(
     (folder) =>
       isRecord(folder) &&
@@ -193,7 +190,6 @@ function parseNote(text: string): BackupRoomNote | null {
       ino: venueDb.ino as string,
       birthtimeNs: venueDb.birthtimeNs as string,
     },
-    managedByEnvironment: value.managedByEnvironment,
     folders: (folders as BackupRoomNoteFolder[]).map(({ destination, dir, configuredDir }) => ({
       destination,
       dir,

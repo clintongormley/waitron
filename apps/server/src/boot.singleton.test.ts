@@ -1,3 +1,5 @@
+import { loadKeyRing } from "@waitron/credentials";
+import { writeArchiveSettings } from "./archive-settings.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -11,6 +13,7 @@ import {
   nodes,
   openVenueDatabase,
   stampDeployment,
+  withTransaction,
   tenants,
   type Database,
   type NodeDatabase,
@@ -92,6 +95,15 @@ async function seedIdentity(db: Database): Promise<void> {
       id: TILL_LOCATION_ID,
     })
     .onConflictDoNothing();
+  await withTransaction(db, (tx) =>
+    writeArchiveSettings(tx, loadKeyRing(KEY_ENV), {
+      enabled: true,
+      destinations: [{ kind: "local-fs", id: "primary", dir: backupDir }],
+      schedule: { kind: "interval", ms: 3_600_000 },
+      retention: { count: 7, days: 30 },
+      destinationTimeoutMs: 900_000,
+    }),
+  );
   await seedVenueSettings(db, {
     name: "Loc",
     invoiceLocales: ["en"],
@@ -243,8 +255,6 @@ function dutyEnv(port: number) {
 // without breaking the boot.
 function backupBase() {
   return {
-    WAITRON_BACKUP_DIR: backupDir,
-    // Without it `loadBackupConfig` throws `backup.recovery_key_missing` before the wiring asserted.
     WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
   };
 }

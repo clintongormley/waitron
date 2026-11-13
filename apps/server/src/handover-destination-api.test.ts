@@ -729,7 +729,7 @@ describe("POST /api/node/handover/offer", () => {
 
     it("a replay of a stored operation answers its stored status, whatever the settings are now", async () => {
       const first = await post(envelopeOf());
-      await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RETAIN=5\n");
+      await writeFile(join(stateDir, "backup.env"), "ARCHIVE_RETAIN=5\n");
       expect(await post(envelopeOf())).toEqual(first);
       await writeFile(join(stateDir, "modules.json"), "not json");
       expect(await post(envelopeOf())).toEqual(first);

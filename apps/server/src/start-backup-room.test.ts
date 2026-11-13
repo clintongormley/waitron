@@ -64,7 +64,6 @@ async function archive(dir: string, at: Date, mib: number): Promise<string> {
 
 async function note(
   over: {
-    managedByEnvironment?: boolean;
     folders?: { destination: string; dir: string; configuredDir: string }[];
   } = {},
 ) {
@@ -73,7 +72,7 @@ async function note(
     venueDir,
     nodeId: BACKUP_NODE_ID,
     installationStartedAt: STARTED,
-    managedByEnvironment: over.managedByEnvironment ?? false,
+
     folders: over.folders ?? [{ destination: "usb", dir: usb, configuredDir: usb }],
     now: () => NOW,
     log: () => undefined,
@@ -198,11 +197,10 @@ describe("deleteOldBackupsAtStart", () => {
     expect(release).toHaveBeenCalledOnce();
   });
 
-  it("deletes on a dashboard box whose recovery key is only in backup.env: management is judged on the raw environment", async () => {
-    await note({ managedByEnvironment: false });
+  it("deletes on a box whose recovery key is only in backup.env", async () => {
+    await note();
     await archive(usb, days(1), 15);
     await archive(usb, days(2), 15);
-    // The raw environment sets no backup variable; the key arrives only through the loaded env.
     const { deps, log, loadBoxEnv } = setup({ baseEnv: { PATH: "/usr/bin" } });
     await publishRestoreFlow(
       stateDir,
@@ -230,54 +228,6 @@ describe("deleteOldBackupsAtStart", () => {
     await deleteOldBackupsAtStart(deps);
 
     expect(await readdir(usb)).toEqual([before, at, newest].sort());
-  });
-
-  it("on an environment-managed box deletes only in the environment's own local folders, never a bucket", async () => {
-    const envFolder = join(root, "env-backups");
-    await mkdir(envFolder);
-    await note({
-      managedByEnvironment: true,
-      folders: [{ destination: "usb", dir: usb, configuredDir: usb }],
-    });
-    await archive(usb, days(1), 15);
-    await archive(usb, days(2), 15);
-    const envOldest = await archive(envFolder, days(1), 15);
-    const envNewest = await archive(envFolder, days(2), 15);
-    const baseEnv = {
-      WAITRON_BACKUP_DIR: envFolder,
-      WAITRON_BACKUP_RECOVERY_KEY: KEY,
-      WAITRON_BACKUP_DESTINATIONS: JSON.stringify([
-        {
-          kind: "s3",
-          id: "cloud",
-          endpoint: "https://s3.example.invalid",
-          region: "eu-west-1",
-          bucket: "backups",
-          prefix: "box",
-          accessKeyId: "id",
-          secretAccessKey: "secret",
-        },
-      ]),
-    };
-    const { deps, log } = setup({
-      baseEnv,
-      loadBoxEnv: async (base) => ({
-        ...base,
-        WAITRON_NODE_ID: BACKUP_NODE_ID,
-      }),
-      statfs: disk(10 * MIB, [usb, envFolder]),
-    });
-
-    await deleteOldBackupsAtStart(deps);
-
-    expect(await readdir(envFolder)).toEqual([envNewest]);
-    expect((await readdir(usb)).length).toBe(2);
-    expect(log).toHaveBeenCalledWith("info", "backup.archive_deleted", {
-      destination: "primary",
-      key: envOldest,
-      bytes: 15 * MIB,
-      reason: "start_room",
-    });
   });
 
   it("does nothing at or above the full-disk line, without reading the note, the env or the lock", async () => {
@@ -355,32 +305,6 @@ describe("deleteOldBackupsAtStart", () => {
         bytes: 15 * MIB,
         reason: "start_room",
       });
-      expect(skipped(log)).toEqual([]);
-    });
-
-    it("named by the environment is deleted from where the link leads now", async () => {
-      await note({
-        managedByEnvironment: true,
-        folders: [{ destination: "primary", dir: usb, configuredDir: link }],
-      });
-      await archive(usb, days(1), 15);
-      await archive(usb, days(2), 15);
-      const moved = join(root, "usb-2");
-      await mkdir(moved);
-      const movedOldest = await archive(moved, days(1), 15);
-      await archive(moved, days(2), 15);
-      await rm(link);
-      await fs.symlink(moved, link);
-      const { deps, log } = setup({
-        baseEnv: { WAITRON_BACKUP_DIR: link, WAITRON_BACKUP_RECOVERY_KEY: KEY },
-        loadBoxEnv: async (base) => ({ ...base, WAITRON_NODE_ID: BACKUP_NODE_ID }),
-        statfs: disk(10 * MIB, [usb, moved]),
-      });
-
-      await deleteOldBackupsAtStart(deps);
-
-      expect((await readdir(usb)).length).toBe(2);
-      expect(await readdir(moved)).not.toContain(movedOldest);
       expect(skipped(log)).toEqual([]);
     });
   });
@@ -532,34 +456,6 @@ describe("deleteOldBackupsAtStart", () => {
           WAITRON_BACKUP_RECOVERY_KEY: "short",
         }),
       }));
-
-    it("the environment manages backups now but the note says the dashboard did", () =>
-      expectSkip("management_changed", {
-        baseEnv: { WAITRON_BACKUP_DIR: usb, WAITRON_BACKUP_RECOVERY_KEY: KEY },
-      }));
-
-    it("the dashboard manages backups now but the note says the environment did", async () => {
-      await note({ managedByEnvironment: true });
-      const { deps, log } = setup();
-      await deleteOldBackupsAtStart(deps);
-      expect(skipped(log)).toEqual([{ reason: "management_changed" }]);
-    });
-
-    it("the environment's destinations do not parse", async () => {
-      await note({ managedByEnvironment: true });
-      await archive(usb, days(1), 15);
-      await archive(usb, days(2), 15);
-      const { deps, log } = setup({
-        baseEnv: {
-          WAITRON_BACKUP_DIR: usb,
-          WAITRON_BACKUP_RECOVERY_KEY: KEY,
-          WAITRON_BACKUP_DESTINATIONS: "[",
-        },
-      });
-      await deleteOldBackupsAtStart(deps);
-      expect(skipped(log)).toEqual([{ reason: "destinations_invalid" }]);
-      expect((await readdir(usb)).length).toBe(2);
-    });
 
     it("the box env cannot be loaded", () =>
       expectSkip("env_unreadable", {

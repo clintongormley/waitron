@@ -31,8 +31,7 @@ type Screen = HTMLElementTagNameMap["dashboard-backup-screen"];
 const off: BackupStatusView = {
   enabled: false,
   isPrimary: true,
-  managedByEnvironment: false,
-  source: null,
+
   revision: null,
   storedDisabled: false,
   loadErrorCode: null,

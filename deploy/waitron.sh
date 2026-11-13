@@ -732,6 +732,27 @@ is_production() {
   return 1
 }
 
+select_practice_inbox() {
+  local mode="$1" profiles="" profile selected=""
+  if [ "$mode" = decide ]; then
+    if is_production; then mode=off; else mode=on; fi
+  fi
+  if [ -f "$WAITRON_DIR/.env" ]; then
+    profiles="$(sed -n 's/^COMPOSE_PROFILES=//p' "$WAITRON_DIR/.env" | tail -n 1)"
+  fi
+  while [ -n "$profiles" ]; do
+    profile="${profiles%%,*}"
+    if [ "$profile" = "$profiles" ]; then profiles=""; else profiles="${profiles#*,}"; fi
+    [ -n "$profile" ] && [ "$profile" != practice-inbox ] || continue
+    selected="${selected:+${selected},}${profile}"
+  done
+  if [ "$mode" = on ]; then selected="${selected:+${selected},}practice-inbox"; fi
+  if [ -n "$selected" ]; then env_set COMPOSE_PROFILES "$selected"; else env_unset COMPOSE_PROFILES; fi
+  if [ "$mode" = off ]; then
+    docker compose -f "$WAITRON_DIR/compose.yml" rm -sf mailpit
+  fi
+}
+
 # ~3 minutes for the app container to report healthy (setup mode is healthy on /setup-api/status).
 # Two test overrides, because a suite cannot afford either term of that product:
 # WAITRON_TEST_HEALTH_TRIES cuts the try count, and WAITRON_TEST_HEALTH_DELAY cuts the wait between
@@ -976,6 +997,7 @@ cmd_install() {
   disable_bluetooth_autopair
   enable_time_sync
   install_box_service "$ref"
+  if [ "$wipe" -eq 1 ]; then select_practice_inbox on; else select_practice_inbox decide; fi
   select_image "$ref"
   cd "$WAITRON_DIR"
   local before
@@ -1028,7 +1050,7 @@ confirm_reset() {
 
 # Run from $WAITRON_DIR. Leaves the box down; the caller starts it.
 wipe_box() {
-  COMPOSE_PROFILES=staff-tunnel docker compose down --remove-orphans
+  COMPOSE_PROFILES=staff-tunnel,practice-inbox docker compose down --remove-orphans
   # A failed removal ABORTS the reset before the volumes further down this loop or state are touched,
   # so a box whose wipe half-failed is never restarted against surviving data with its settings
   # already gone. logs is simply first; nothing depends on the order beyond that. A volume that is
@@ -1061,6 +1083,7 @@ cmd_reset() {
   lock_managed_box
   confirm_reset
   cd "$WAITRON_DIR"
+  select_practice_inbox on
   wipe_box
   docker compose up -d --remove-orphans
   if wait_healthy; then announce_ready; else report_unhealthy; fi

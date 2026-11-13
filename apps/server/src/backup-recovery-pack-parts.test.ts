@@ -67,7 +67,6 @@ beforeEach(async () => {
       WAITRON_BACKUP_RECOVERY_KEY: KEY,
       WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-20T08:00:00.000Z",
     },
-    managedByEnvironment: false,
   };
 });
 
@@ -257,56 +256,12 @@ describe("the archives part", () => {
     expect((await inTx((tx) => buildArchivesPart(tx, short))).part.failure).toEqual(words);
   });
 
-  it("reads archives the environment manages from the box env", async () => {
-    const built = await inTx((tx) =>
-      buildArchivesPart(tx, {
-        ...context,
-        managedByEnvironment: true,
-        env: { ...context.env, WAITRON_BACKUP_DIR: "/srv/archives" },
-      }),
-    );
-    expect(built.record).toMatchObject({ state: "included", destination: "folder" });
-    expect(built.record.settingsRevision).toMatch(/^env:[0-9a-f]{16}$/);
-    expect(built.part.check).toBe("key of 20 Sept 2026");
-  });
-
   it("prints the stored record's revision in the check of archives the box keeps", async () => {
     await storeArchives();
     const built = await inTx((tx) => buildArchivesPart(tx, context));
     expect(built.part.check).toBe(
       `key of 20 Sept 2026 · rev ${built.record.settingsRevision!.slice(0, 8)}`,
     );
-  });
-
-  it("gives the environment's archives a revision that follows the destination, not the credentials or the key", async () => {
-    const revisionFor = async (destination: Record<string, unknown>, key = KEY) =>
-      (
-        await inTx((tx) =>
-          buildArchivesPart(tx, {
-            ...context,
-            managedByEnvironment: true,
-            env: {
-              ...context.env,
-              WAITRON_BACKUP_RECOVERY_KEY: key,
-              WAITRON_BACKUP_DESTINATIONS: JSON.stringify([
-                { kind: "s3", id: "archive", ...BUCKET, ...destination },
-              ]),
-            },
-          }),
-        )
-      ).record.settingsRevision;
-    const first = await revisionFor({});
-    expect(first).toMatch(/^env:[0-9a-f]{16}$/);
-    expect(await revisionFor({})).toBe(first);
-    expect(await revisionFor({}, "another-recovery-key-entirely")).toBe(first);
-    for (const change of [
-      { bucket: "other-bucket" },
-      { prefix: "elsewhere/" },
-      { region: "eu-south-2" },
-      { endpoint: "https://s3.example.net" },
-    ]) {
-      expect(await revisionFor(change)).not.toBe(first);
-    }
   });
 
   it("carries the whole archive code for a switched-off record's bucket, listed after its folder", async () => {
@@ -327,28 +282,6 @@ describe("the archives part", () => {
       bucket,
       archivePrefix: "archives/",
       recoveryKey: KEY,
-    });
-  });
-
-  it("names the environment's first bucket when it lists several, a hyphen folder kept", async () => {
-    const first = { ...BUCKET, bucket: "first-bucket", prefix: "-" };
-    const second = { ...BUCKET, bucket: "second-bucket", prefix: "" };
-    const built = await inTx((tx) =>
-      buildArchivesPart(tx, {
-        ...context,
-        managedByEnvironment: true,
-        env: {
-          ...context.env,
-          WAITRON_BACKUP_DESTINATIONS: JSON.stringify([
-            { kind: "s3", id: "one", ...first },
-            { kind: "s3", id: "two", ...second },
-          ]),
-        },
-      }),
-    );
-    expect(decodeArchiveRecoveryPack(built.file.archiveCode!)).toMatchObject({
-      bucket: first,
-      archivePrefix: "-/",
     });
   });
 

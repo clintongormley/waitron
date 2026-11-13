@@ -529,8 +529,7 @@ describe("removing the standby this box's pair link names", () => {
         stream: { reload: async () => {}, status: () => ({ state: "off" }) },
         venueId: "venue",
         isPrimary: () => true,
-        isManagedByEnvironment: () => false,
-        loadedArchives: () => [],
+
         readRecoveryKey: async () => "recovery-key-one-strong",
         writeRecoveryKey: async () => {},
         sealedState: { refresh: async () => "sealed" as const },

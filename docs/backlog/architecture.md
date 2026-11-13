@@ -1307,12 +1307,8 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   (`catalogue-screen.ts`) takes the first catalogue in the list, which is also the one every new
   product is created in; with two, the second becomes unreachable from the dashboard. **Next
   action:** decide whether more than one catalogue is a case Waitron supports.
-- **Backup settings the environment owns are not compared at a handover.** With `backup.env` absent
-  on both boxes both digests are `null`, whatever the two environments hold. Left open by A1018
-  Slice 5 (Ruling P15).
 - **A backup setting in `trading.env` or `secrets.env` is not compared at a handover.** Only a hand
-  edit puts one there (the writers read, not run). Two such boxes pass and can differ in a retention
-  count or a hidden recovery key. Left open by A1018 Slice 5 (Ruling R21).
+  edit puts one there (the writers read, not run). Two such boxes pass and can differ in a hidden recovery key. Left open by A1018 Slice 5 (Ruling R21).
 - **If a later slice moves `local` tables into `node.db`**, that slice decides again how the drain
   crosses the two files: SQLite refuses a trigger body that writes another attached database. A947
   slice 3a moved five tables with no change-log triggers; the question stays for `change_log`.

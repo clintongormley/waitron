@@ -29,7 +29,7 @@ import {
   type StreamStatus,
 } from "@waitron/stream";
 import { ARCHIVE_PURPOSE, readArchiveSettings, writeArchiveSettings } from "./archive-settings.js";
-import { destinationView, keyFingerprint } from "./backup-supervisor.js";
+import { keyFingerprint } from "./backup-supervisor.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -206,8 +206,7 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
     stream,
     venueId: VENUE_ID,
     isPrimary: () => true,
-    isManagedByEnvironment: () => false,
-    loadedArchives: () => [],
+
     readRecoveryKey: async () => key.value,
     writeRecoveryKey: vi.fn(async (k: string) => {
       order.push("write-key");
@@ -689,25 +688,10 @@ describe("stream settings routes", () => {
   });
 
   // As `apply` and `rotate` refuse to write backup.env on such a box.
-  it("Save that would set a recovery key is refused while backups are managed by the environment", async () => {
-    await clearBucket();
-    const { app, deps, reload } = harness({ isManagedByEnvironment: () => true });
-    const cookie = await login(app);
-    const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "backup.managed_by_environment" } });
-    expect(deps.probe).not.toHaveBeenCalled();
-    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
-    expect(reload).not.toHaveBeenCalled();
-    expect(await storedBucket()).toBeNull();
-  });
 
-  it("Save on a box whose backups the environment manages proceeds when a key is already held", async () => {
+  it("Save reuses the held recovery key", async () => {
     await clearBucket();
-    const { app, deps, reload } = harness(
-      { isManagedByEnvironment: () => true },
-      "recovery-key-one-strong",
-    );
+    const { app, deps, reload } = harness({}, "recovery-key-one-strong");
     const cookie = await login(app);
     const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     expect(res.status).toBe(200);
@@ -729,27 +713,6 @@ describe("stream settings routes", () => {
     };
     return { turns, waiting, release: () => (release(), held) };
   }
-
-  it("Save is refused when the environment takes over backups while it waits its turn", async () => {
-    await clearBucket();
-    const queue = heldTurns();
-    let managed = false;
-    const { app, deps, reload } = harness({
-      isManagedByEnvironment: () => managed,
-      turns: queue.turns,
-    });
-    const cookie = await login(app);
-    const pending = app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
-    await Promise.race([queue.waiting, pending]);
-    managed = true;
-    await queue.release();
-    const res = await pending;
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "backup.managed_by_environment" } });
-    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
-    expect(reload).not.toHaveBeenCalled();
-    expect(await storedBucket()).toBeNull();
-  });
 
   it("Save is refused when this node stops being the primary while it waits its turn", async () => {
     await clearBucket();
@@ -1136,60 +1099,6 @@ describe("stream settings routes", () => {
       } finally {
         finishProbe();
         await dropArchive();
-        await clearBucket();
-      }
-    });
-
-    it("while the environment owns backups, a leftover dashboard record does not refuse Save", async () => {
-      await clearBucket();
-      await holdArchive();
-      try {
-        const { app } = harness({ isManagedByEnvironment: () => true }, "recovery-key-one-strong");
-        const cookie = await login(app);
-        const res = await app.request("/api/backup/stream", {
-          method: "PUT",
-          ...json(cookie, OVERLAPPING),
-        });
-        expect(res.status).toBe(200);
-      } finally {
-        await dropArchive();
-        await clearBucket();
-      }
-    });
-
-    it("while the environment owns backups, Save refuses a stream folder overlapping the environment's archive bucket", async () => {
-      await clearBucket();
-      try {
-        const { app, deps } = harness(
-          {
-            isManagedByEnvironment: () => true,
-            loadedArchives: () => [
-              destinationView({
-                kind: "s3",
-                id: "bucket",
-                bucket: archiveBucket,
-              }),
-            ],
-          },
-          "recovery-key-one-strong",
-        );
-        const cookie = await login(app);
-        const res = await app.request("/api/backup/stream", {
-          method: "PUT",
-          ...json(cookie, OVERLAPPING),
-        });
-        expect(res.status).toBe(400);
-        expect(await res.json()).toMatchObject({
-          error: { code: "backup.archive_namespace_overlap" },
-        });
-        expect(deps.probe).not.toHaveBeenCalled();
-
-        const apart = await app.request("/api/backup/stream", {
-          method: "PUT",
-          ...json(cookie, { ...BODY, prefix: "stream/" }),
-        });
-        expect(apart.status).toBe(200);
-      } finally {
         await clearBucket();
       }
     });

@@ -7,7 +7,7 @@ import { isAppError } from "@waitron/shared";
 import { resolveAccountKey } from "./account-key.js";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive, type ArchiveEntry } from "./backup-archive.js";
-import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
+import { loadRecoveryKey } from "./backup-config.js";
 import type { BackupVerificationReason } from "./backup-verification-protocol.js";
 import { loadBoxEnv } from "./box-env.js";
 import { errnoOf } from "./errno.js";
@@ -89,7 +89,6 @@ export async function verifyBackupStateSecrets(
   }
   try {
     loadRecoveryKey(env);
-    loadBackupConfig(env);
     const config = byName.get("secrets/modules.json");
     if (config !== undefined) {
       const text = Buffer.from(config.bytes).toString("utf8");

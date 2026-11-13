@@ -36,15 +36,9 @@ export const ARCHIVE_SETTINGS_REASONS = [
 
 export type ArchiveSettingsReason = (typeof ARCHIVE_SETTINGS_REASONS)[number];
 
-/** The variables a dashboard record's load reads from the environment and can refuse. */
-export const CONFIG_VARIABLES = ["WAITRON_BACKUP_STALE_AFTER_MS"] as const;
-
 /** The one parameter of a load failure safe to keep and show. */
 export type LoadFailureDetail =
-  | { reason: ArchiveSettingsReason }
-  | { keyVersion: number }
-  | { min: number }
-  | { variable: (typeof CONFIG_VARIABLES)[number] };
+  { reason: ArchiveSettingsReason } | { keyVersion: number } | { min: number };
 
 /** What the saved record reveals without being opened. */
 export interface ArchiveRecordMeta {
@@ -79,10 +73,6 @@ export function safeLoadDetail(error: unknown): LoadFailureDetail | null {
   if (hasCode(error, "backup.recovery_key_too_short")) {
     const { min } = error.params;
     return Number.isSafeInteger(min) ? { min } : null;
-  }
-  if (hasCode(error, "server.config_invalid")) {
-    const { variable } = error.params;
-    return has(CONFIG_VARIABLES, variable) ? { variable } : null;
   }
   return null;
 }
@@ -141,7 +131,7 @@ export type RecordNow =
 /** The answer of `GET /api/backup/settings-evidence`. */
 export interface SettingsEvidence {
   readAt: string;
-  managedByEnvironment: boolean;
+
   failures: Readonly<LoadFailure>[];
   lastCleanLoadAt: string | null;
   latestLoadFailed: boolean;
@@ -235,10 +225,7 @@ export async function readSettingsEvidence(deps: SettingsEvidenceDeps): Promise<
       ? { state: "absent" }
       : {
           state: "readable",
-          // A record the environment overrides is not in effect, so none of its places are shown.
-          destinations: loaded.managedByEnvironment
-            ? []
-            : await evidenceDestinations(settings, deps),
+          destinations: await evidenceDestinations(settings, deps),
         });
   const env = await deps.readBoxEnv();
   const key = await recoveryKeyFacts(env, () => loaded.recoveryKey);
@@ -248,7 +235,6 @@ export async function readSettingsEvidence(deps: SettingsEvidenceDeps): Promise<
   const { previous } = deps.ring;
   return {
     readAt: deps.now().toISOString(),
-    managedByEnvironment: loaded.managedByEnvironment,
     failures,
     lastCleanLoadAt,
     latestLoadFailed,

@@ -9,11 +9,7 @@ import {
 import { codeOf } from "@waitron/server-kit";
 import { hasCode, isAppError } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
-import {
-  archiveDestinations,
-  isBackupManagedByEnvironment,
-  loadRecoveryKey,
-} from "./backup-config.js";
+import { loadRecoveryKey } from "./backup-config.js";
 import {
   foldersOnDisk,
   makeRoom,
@@ -35,7 +31,6 @@ import { RESET_REQUEST_FILE } from "./reset-request.js";
 export interface StartBackupRoomDeps {
   stateDir: string;
   venueDir: string;
-  /** The raw environment: who manages backups is judged on it alone. */
   baseEnv: NodeJS.ProcessEnv;
   loadBoxEnv: (base: NodeJS.ProcessEnv, stateDir: string) => Promise<NodeJS.ProcessEnv>;
   /** The spare file's size: the step makes room up to it plus {@link FULL_DISK_BYTES}. */
@@ -125,24 +120,9 @@ async function checks(
   } catch {
     return { skipped: "recovery_key_unusable" };
   }
-  // The raw environment, never `merged`: a dashboard box keeps its recovery key in backup.env.
-  const managedByEnvironment = isBackupManagedByEnvironment(deps.baseEnv);
-  if (note.managedByEnvironment !== managedByEnvironment) return { skipped: "management_changed" };
-  let candidates: { id: string; localDir: string }[] = [];
-  if (managedByEnvironment) {
-    try {
-      candidates = archiveDestinations({
-        managedByEnvironment: true,
-        env: merged,
-        sealed: null,
-      }).flatMap((d) => (d.kind === "local-fs" ? [{ id: d.id, localDir: d.dir }] : []));
-    } catch {
-      return { skipped: "destinations_invalid" };
-    }
-  }
   let folders: BackupFolder[];
   try {
-    if (!managedByEnvironment) candidates = await stillConfigured(note, deps);
+    const candidates = await stillConfigured(note, deps);
     ({ folders } = await foldersOnDisk(candidates, deps.venueDir, deps.deviceOf));
   } catch {
     return { skipped: "venue_disk_unreadable" };

@@ -49,13 +49,8 @@ const NAMED_CAUSES = new Set([
   "backup.archive_settings_invalid",
   "backup.recovery_key_missing",
   "backup.recovery_key_too_short",
-  "server.config_invalid",
   ...SHOWS_WRITTEN_TIME,
 ]);
-
-// The box's own environment, read on every load: saving again, replacing the key or restarting
-// fails the same way until the variable itself is changed.
-const EVERY_LOAD = new Set(["server.config_invalid"]);
 
 const when = (iso: string) => new Date(iso).toLocaleString(currentLocale());
 
@@ -97,9 +92,6 @@ function cause(
     case "backup.recovery_key_too_short":
       if (!detail || !("min" in detail)) break;
       return fill("backup_evidence.cause.recovery_key_too_short", { min: String(detail.min) });
-    case "server.config_invalid":
-      if (!detail || !("variable" in detail)) break;
-      return fill("backup_evidence.cause.config_invalid", { variable: detail.variable });
   }
   return fill("backup_evidence.cause.unknown", { code });
 }
@@ -331,18 +323,16 @@ export class BackupSettingsEvidenceDialog extends LitElement {
         }
       </p>
       ${
-        e.managedByEnvironment
-          ? html`<p>${t("backup_evidence.managed")}</p>`
-          : e.now.state === "readable"
-            ? html`<ul>
-                ${e.now.destinations.map((destination) => this.#destination(destination))}
-              </ul>`
-            : e.now.state === "unreadable"
-              ? html`<p data-test="now-cause">
-                    ${cause(e.now.code, e.now.detail, keys, e.record?.keyVersion ?? null)}
-                  </p>
-                  <p>${t("backup_evidence.cannot_tell")}</p>`
-              : nothing
+        e.now.state === "readable"
+          ? html`<ul>
+              ${e.now.destinations.map((destination) => this.#destination(destination))}
+            </ul>`
+          : e.now.state === "unreadable"
+            ? html`<p data-test="now-cause">
+                  ${cause(e.now.code, e.now.detail, keys, e.record?.keyVersion ?? null)}
+                </p>
+                <p>${t("backup_evidence.cannot_tell")}</p>`
+            : nothing
       }
       <h3>${t("backup_evidence.key_heading")}</h3>
       <p>
@@ -357,11 +347,7 @@ export class BackupSettingsEvidenceDialog extends LitElement {
         }
       </p>
       ${
-        e.now.state === "readable" &&
-        usableKey &&
-        !e.managedByEnvironment &&
-        e.latestLoadFailed &&
-        !EVERY_LOAD.has(e.failures[0]!.code)
+        e.now.state === "readable" && usableKey && e.latestLoadFailed
           ? html`<p data-test="reads-now">${t("backup_evidence.reads_now")}</p>`
           : nothing
       }

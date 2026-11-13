@@ -3,7 +3,7 @@ import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
 import { resolveBackupKeyInputs } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import { openBackupQuery } from "@waitron/store";
-import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
+import { loadRecoveryKey } from "./backup-config.js";
 import { OPTIONAL_BACKUP_STATE } from "./backup-optional-state.js";
 import type { Logger } from "./logger.js";
 import {
@@ -69,7 +69,6 @@ export async function placeBackupData(
     backupEnv: read("backup.env") ?? null,
   });
   loadRecoveryKey(env);
-  loadBackupConfig(env);
   await placeBackupDatabase(validated.databasePath, input, validated.nodeDump);
   await restoreSecrets({
     entries: validated.secretEntries.filter((entry) => entry.name !== "secrets/backup.env"),

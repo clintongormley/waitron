@@ -267,7 +267,7 @@ describe("assembleMirrorBundle (primary side)", () => {
     expect((await allocatedBundle(standby())).bundle.backupSettings).toBeNull();
     await writeFile(
       join(stateDir, "backup.env"),
-      "WAITRON_BACKUP_RECOVERY_KEY=recovery-0123456789abcdef\nWAITRON_BACKUP_DIR=\n",
+      "WAITRON_BACKUP_RECOVERY_KEY=recovery-0123456789abcdef\nARCHIVE_FOLDER=\n",
     );
     try {
       expect((await allocatedBundle(standby())).bundle.backupSettings).toEqual({

@@ -92,14 +92,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.expired": 401,
   "person.suspended": 403,
   "authorization.not_permitted": 403,
-  "backup.managed_by_environment": 409,
   "backup.not_primary": 409,
   "backup.reload_in_progress": 409,
   "backup.recovery_key_exists": 409,
   "backup.recovery_key_unstorable": 400,
   "backup.recovery_key_too_short": 400,
   "backup.destinations_invalid": 400,
-  "backup.schedule_invalid": 400,
   "backup.request_invalid": 400,
   "backup.effective_mismatch": 400,
   "backup.archive_namespace_overlap": 400,
@@ -298,7 +296,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   // Refuse a write the box would silently override or that would never take effect here.
   const guardWritable = (): void => {
     const s = deps.supervisor.current();
-    if (s.managedByEnvironment) throw new AppError("backup.managed_by_environment", {});
     if (!s.isPrimary) throw new AppError("backup.not_primary", {});
   };
 
@@ -470,7 +467,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         };
         // Refuse exactly what boot would, before anything is written.
         resolveBackupConfig({
-          managedByEnvironment: false,
           env: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey },
           sealed: archiveRecord(settings).stored,
         });

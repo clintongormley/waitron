@@ -12,8 +12,7 @@ afterEach(cleanupWidgets);
 const OFF_WITH_KEY: BackupStatusView = {
   enabled: false,
   isPrimary: true,
-  managedByEnvironment: false,
-  source: null,
+
   revision: null,
   storedDisabled: false,
   loadErrorCode: null,
@@ -29,8 +28,7 @@ const OFF_WITH_KEY: BackupStatusView = {
 const ENABLED: BackupStatusView = {
   enabled: true,
   isPrimary: true,
-  managedByEnvironment: false,
-  source: "dashboard",
+
   revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
   storedDisabled: false,
   loadErrorCode: null,

@@ -87,7 +87,6 @@ let keyInForce: { secret: string; name: string };
 let admin: { personId: string; token: string };
 let boxEnv: Record<string, string>;
 let loadedKey: string | undefined;
-let managed: boolean;
 const sockets: TLSSocket[] = [];
 const logs: unknown[][] = [];
 
@@ -98,7 +97,6 @@ afterEach(() => {
 
 beforeEach(async () => {
   logs.length = 0;
-  managed = false;
   boxEnv = {
     WAITRON_BACKUP_RECOVERY_KEY: KEY,
     WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-20T08:00:00.000Z",
@@ -180,7 +178,6 @@ function fixture(
       turns: options.turns ?? createTurns(),
       readBoxEnv: options.readBoxEnv ?? (async () => ({ ...boxEnv })),
       backups: () => ({
-        managedByEnvironment: managed,
         schedule: ARCHIVES.schedule,
         retention: ARCHIVES.retention,
         recoveryKey: loadedKey,
@@ -1145,14 +1142,11 @@ describe("the status route", () => {
     for (const key of [KEY, "short"]) expect(JSON.stringify(answer)).not.toContain(key);
   });
 
-  it("counts archives as changed when their record cannot be read, even after the environment managed them", async () => {
-    managed = true;
-    boxEnv = { ...boxEnv, WAITRON_BACKUP_DIR: "/srv/archives" };
+  it("counts archives as changed when their record cannot be read", async () => {
     const f = fixture();
     await (await f.make()).arrayBuffer();
     await f.received(1);
     expect((await read(f)).upToDate).toBe(true);
-    managed = false;
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{not json" } }),
     );
@@ -1161,11 +1155,13 @@ describe("the status route", () => {
     expect(answer.reasons).toContainEqual({ part: "archives", kind: "settings_changed" });
   });
 
-  it("says a pack is out of date when the environment's archive bucket changes, recording none of its credentials", async () => {
-    const destinations = (bucket: string) =>
-      JSON.stringify([{ kind: "s3", id: "archive", ...BUCKET, bucket }]);
-    managed = true;
-    boxEnv = { ...boxEnv, WAITRON_BACKUP_DESTINATIONS: destinations("old-bucket") };
+  it("says a pack is out of date when the archive bucket changes, recording none of its credentials", async () => {
+    const destinations = (bucket: string): ArchiveSettings["destinations"] => [
+      { kind: "s3", id: "bucket", bucket: { ...BUCKET, bucket } },
+    ];
+    await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(tx, RING, { ...ARCHIVES, destinations: destinations("old-bucket") }),
+    );
     const f = fixture();
     const file = await readRecoveryPackPdf(new Uint8Array(await (await f.make()).arrayBuffer()));
     expect(decodeArchiveRecoveryPack(file.archiveCode!).bucket.bucket).toBe("old-bucket");
@@ -1174,7 +1170,9 @@ describe("the status route", () => {
     const stored = JSON.stringify(await packs());
     for (const value of [BUCKET.accessKeyId, BUCKET.secretAccessKey, KEY])
       expect(stored).not.toContain(value);
-    boxEnv = { ...boxEnv, WAITRON_BACKUP_DESTINATIONS: destinations("new-bucket") };
+    await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(tx, RING, { ...ARCHIVES, destinations: destinations("new-bucket") }),
+    );
     const answer = await read(f);
     expect(answer.upToDate).toBe(false);
     expect(answer.reasons).toEqual([{ part: "archives", kind: "settings_changed" }]);

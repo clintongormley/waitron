@@ -131,8 +131,7 @@ lists the times the box could not use its saved backup settings since it last st
 and at most five, each with what went wrong: for example, the key number the settings were locked
 with and the key numbers this box holds. It then describes the saved record as it is now: when it
 was last written and, if it reads, the folders and buckets it names and whether each folder exists.
-If the box's environment sets its backups, the panel says so instead of naming them. It says whether
-the box holds a usable backup recovery key. It shows a bucket's access key ID but never its secret,
+It says whether the box holds a usable backup recovery key. It shows a bucket's access key ID but never its secret,
 and the recovery key only by its fingerprint. The panel reads and changes nothing: **Read again**
 reads the facts again and does not turn backups on, and **Stop** closes the panel. It repairs
 nothing either; to replace the saved settings, choose the destinations again and apply them. Keep

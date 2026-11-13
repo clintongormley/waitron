@@ -1397,8 +1397,6 @@ once released. Belongs with A1016.
 - **A1187: code part 1 built twice.**
   The archive code, the backup-key check, the bucket recovery kit, the server key's name and its created date are each built in more than one place.
   [Detail](box.md#a1187-code-part-1-built-twice).
-- **A1187: a credentials-only change to environment-managed archive settings does not make a pack
-  out of date.** The pack record holds a digest of the non-secret settings only.
 - **A1187: the pack PDF's presentation.** It uses one regular-weight font: no bold, and codes not
   in a fixed-width face, so l and I look alike. The cover says "The dashboard's Backups screen shows
   the same checks" beside a check value (`key of <day> · rev <8 characters>`) that no part of the

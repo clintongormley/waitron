@@ -318,7 +318,7 @@ describe("a box started from its spare file", () => {
       venueDir: join(box.stateDir, "venue"),
       nodeId: box.baseEnv.WAITRON_NODE_ID!,
       installationStartedAt: daysAgo(3),
-      managedByEnvironment: false,
+
       folders: [{ destination: "usb", dir: folder, configuredDir: folder }],
       now: () => new Date(now),
       log: () => undefined,

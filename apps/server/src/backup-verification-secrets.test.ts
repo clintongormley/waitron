@@ -210,7 +210,7 @@ describe("private host recovery material", () => {
       set(
         entries(),
         "backup.env",
-        "WAITRON_BACKUP_DIR=/private-old-destination-sentinel\nWAITRON_BACKUP_RECOVERY_KEY=private-backup-key-sentinel\n",
+        "ARCHIVE_FOLDER=/private-old-destination-sentinel\nWAITRON_BACKUP_RECOVERY_KEY=private-backup-key-sentinel\n",
       ),
       "modules.json",
       '{"modules":{"payments":false}}',
@@ -221,15 +221,14 @@ describe("private host recovery material", () => {
     expect(await verifyBackupKeyPlacement(input, dir)).toBe("passed");
   });
 
-  it.each([
-    "WAITRON_BACKUP_RECOVERY_KEY=short\n",
-    "WAITRON_BACKUP_DIR=/old\n",
-    'WAITRON_BACKUP_DESTINATIONS={"secret":"private-destination-sentinel"}\n',
-  ])("refuses malformed optional backup settings %#", async (value) => {
-    expect(
-      await verifyBackupStateSecrets(set(entries(), "backup.env", value), source, now),
-    ).toEqual(unsupported);
-  });
+  it.each(["WAITRON_BACKUP_RECOVERY_KEY=short\n"])(
+    "refuses malformed optional backup settings %#",
+    async (value) => {
+      expect(
+        await verifyBackupStateSecrets(set(entries(), "backup.env", value), source, now),
+      ).toEqual(unsupported);
+    },
+  );
   it.each([
     "{",
     "null",
@@ -498,7 +497,7 @@ it.each(["placement", "identity", "keyring", "settings", "decrypt", "archive"])(
         throw fault;
       });
     if (boundary === "settings")
-      vi.spyOn(configReaders, "loadBackupConfig").mockImplementationOnce(() => {
+      vi.spyOn(configReaders, "loadRecoveryKey").mockImplementationOnce(() => {
         throw fault;
       });
     if (boundary === "decrypt")

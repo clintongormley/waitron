@@ -239,10 +239,20 @@ describe("the container image's environment", () => {
     },
   );
 
-  it("does not enable backups, which are fail-closed without their other two variables", () => {
-    // Setting the directory alone throws at boot (backup-config.ts), which would kill a box on its
-    // first start into trading. compose passes the three together from the box's .env.
-    expect(IMAGE_ENV).not.toHaveProperty("WAITRON_BACKUP_DIR");
+  it("passes no backup setting and the Cloud origin through compose", () => {
+    const app = only(COMPOSE, /\n {2}app:\n([\s\S]*?)(?=\n {2}[a-z])/, "app service");
+    expect(app).not.toContain("WAITRON_BACKUP_");
+    expect(app).toContain("WAITRON_CLOUD_ORIGIN: ${WAITRON_CLOUD_ORIGIN:-}");
+    const sample = read("deploy/.env.example");
+    expect(sample).not.toContain("WAITRON_BACKUP_");
+    expect(sample).toContain("# WAITRON_CLOUD_ORIGIN=");
+  });
+
+  it("starts Mailpit only under the practice-inbox profile", () => {
+    const app = only(COMPOSE, /\n {2}app:\n([\s\S]*?)(?=\n {2}[a-z])/, "app service");
+    const inbox = only(COMPOSE, /\n {2}mailpit:\n([\s\S]*?)(?=\n {2}[a-z])/, "mailpit service");
+    expect(inbox).toContain("profiles: [practice-inbox]");
+    expect(app).not.toContain("depends_on:");
   });
 
   it("ships every operator CLI and nothing else from the server bundle", () => {

@@ -7,7 +7,7 @@ import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { NODE_LOCAL_MANIFEST, type NodeLocalItem } from "@waitron/handover";
 import { canonicalize } from "@waitron/membership";
 import { isAppError } from "@waitron/shared";
-import { resolveBackupConfig } from "./backup-config.js";
+import { loadRecoveryKey, loadKeyRotatedAt } from "./backup-config.js";
 import { loadBoxEnv } from "./box-env.js";
 import {
   backupSettingsDigestOf,
@@ -175,18 +175,24 @@ describe("buildNodeLocalManifest", () => {
     /** The backup settings this folder's box runs on, as a start reads them. */
     async function backupSettingsRead(folder: string): Promise<string> {
       const env = await loadBoxEnv({}, folder);
-      return JSON.stringify(resolveBackupConfig({ managedByEnvironment: true, env, sealed: null }));
+      return JSON.stringify({
+        recoveryKey: loadRecoveryKey(env),
+        keyRotatedAt: loadKeyRotatedAt(env),
+      });
     }
 
-    const SETTINGS = `WAITRON_BACKUP_DIR=/mnt/usb\nWAITRON_BACKUP_RECOVERY_KEY=${"k".repeat(40)}\n`;
+    const SETTINGS = `WAITRON_BACKUP_RECOVERY_KEY=${"k".repeat(40)}\n`;
 
     it.each([
       ["an empty file", ""],
       ["only blank lines", "\n  \n"],
       ["only comments", "# kept by hand\n\n"],
-      ["only an empty value", "WAITRON_BACKUP_RETAIN=\n"],
-      ["an empty value padded with spaces", "WAITRON_BACKUP_RETAIN=   \n"],
-      ["a value emptied by a later line", "WAITRON_BACKUP_RETAIN=5\nWAITRON_BACKUP_RETAIN=\n"],
+      ["only an empty value", "WAITRON_BACKUP_KEY_ROTATED_AT=\n"],
+      ["an empty value padded with spaces", "WAITRON_BACKUP_KEY_ROTATED_AT=   \n"],
+      [
+        "a value emptied by a later line",
+        "WAITRON_BACKUP_KEY_ROTATED_AT=5\nWAITRON_BACKUP_KEY_ROTATED_AT=\n",
+      ],
     ])("backup.env holding %s digests as no file, and the box reads it so", async (_name, text) => {
       await writeFile(join(stateDir, "backup.env"), text);
       expect(await digests(stateDir, "backup.env")).toBeNull();
@@ -195,12 +201,11 @@ describe("buildNodeLocalManifest", () => {
     });
 
     it("an empty value digests as no line, and the box reads it so", async () => {
-      await writeFile(join(stateDir, "backup.env"), `${SETTINGS}WAITRON_BACKUP_RETAIN=\n`);
+      await writeFile(join(stateDir, "backup.env"), `${SETTINGS}WAITRON_BACKUP_KEY_ROTATED_AT=\n`);
       await writeFile(join(other, "backup.env"), SETTINGS);
       const digest = await digests(other, "backup.env");
       expect(digest).toBe(
         valuesDigest({
-          WAITRON_BACKUP_DIR: "/mnt/usb",
           WAITRON_BACKUP_RECOVERY_KEY: "k".repeat(40),
         }),
       );
@@ -219,20 +224,20 @@ describe("buildNodeLocalManifest", () => {
     });
 
     it("control: a value of two quote marks is a value, for the digest and for the box", async () => {
-      await writeFile(join(stateDir, "backup.env"), `${SETTINGS}WAITRON_BACKUP_AT=""\n`);
+      await writeFile(join(stateDir, "backup.env"), `${SETTINGS}WAITRON_BACKUP_RECOVERY_KEY=""\n`);
       await writeFile(join(other, "backup.env"), SETTINGS);
       expect(await digests(stateDir, "backup.env")).not.toBe(await digests(other, "backup.env"));
       await expect(backupSettingsRead(stateDir)).rejects.toMatchObject({
-        code: "backup.schedule_invalid",
+        code: "backup.recovery_key_too_short",
       });
-      expect(await backupSettingsRead(other)).toContain("/mnt/usb");
+      expect(await backupSettingsRead(other)).toContain("k".repeat(40));
     });
 
     it("limit: an empty value that hides another file's setting digests as no line, though the box reads them differently", async () => {
       for (const folder of [stateDir, other]) {
-        await writeFile(join(folder, "trading.env"), "WAITRON_BACKUP_RETAIN=5\n");
+        await writeFile(join(folder, "trading.env"), "WAITRON_BACKUP_KEY_ROTATED_AT=5\n");
       }
-      await writeFile(join(stateDir, "backup.env"), `${SETTINGS}WAITRON_BACKUP_RETAIN=\n`);
+      await writeFile(join(stateDir, "backup.env"), `${SETTINGS}WAITRON_BACKUP_KEY_ROTATED_AT=\n`);
       await writeFile(join(other, "backup.env"), SETTINGS);
       expect(await digests(stateDir, "backup.env")).toBe(await digests(other, "backup.env"));
       expect(await backupSettingsRead(stateDir)).not.toBe(await backupSettingsRead(other));
@@ -416,7 +421,7 @@ describe("readBackupSettings", () => {
     const source = await folder();
     await writeFile(
       join(source, "backup.env"),
-      "WAITRON_BACKUP_RECOVERY_KEY=key-0123456789abcdef\nWAITRON_BACKUP_DIR=\nWAITRON_BACKUP_KEY_ROTATED_AT=2026-11-01T00:00:00.000Z\n",
+      "WAITRON_BACKUP_RECOVERY_KEY=key-0123456789abcdef\nWAITRON_BACKUP_KEY_ROTATED_AT=2026-11-01T00:00:00.000Z\n",
     );
     const settings = await readBackupSettings(source);
     expect(settings).toEqual({
@@ -443,7 +448,7 @@ describe("readBackupSettings", () => {
     const dir = await folder();
     expect(await readBackupSettings(dir)).toBeNull();
     expect(backupSettingsDigestOf(null)).toBeNull();
-    await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_DIR=\nWAITRON_BACKUP_RETAIN=\n");
+    await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_KEY_ROTATED_AT=\n");
     expect(await readBackupSettings(dir)).toBeNull();
   });
 

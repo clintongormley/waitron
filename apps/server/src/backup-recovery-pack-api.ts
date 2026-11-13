@@ -29,17 +29,11 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { readHeldArchiveSettingsIn, type ArchiveSettings } from "./archive-settings.js";
+import { readHeldArchiveSettingsIn } from "./archive-settings.js";
 import { inTurn } from "./attempt-turns.js";
 import { makeBreakGlassSecret, takenKeyNames } from "./break-glass.js";
+import { loadKeyRotatedAt, loadRecoveryKey, readHeldKey } from "./backup-config.js";
 import {
-  archiveDestinations,
-  loadKeyRotatedAt,
-  loadRecoveryKey,
-  readHeldKey,
-} from "./backup-config.js";
-import {
-  archivesRevision,
   buildArchivesPart,
   buildBucketPart,
   buildServerKeyPart,
@@ -73,10 +67,7 @@ export interface BackupRecoveryPackMakeDeps {
   turns: Turns;
   readBoxEnv: () => Promise<Readonly<Record<string, string | undefined>>>;
   /** What the backup supervisor holds now; the key never leaves the server. */
-  backups: () => Pick<
-    BackupRuntimeStatus,
-    "managedByEnvironment" | "schedule" | "retention" | "recoveryKey"
-  >;
+  backups: () => Pick<BackupRuntimeStatus, "schedule" | "retention" | "recoveryKey">;
   documentEvidence: RecoveryDocumentEvidence;
   loadFont: () => Promise<Uint8Array>;
   now: () => Date;
@@ -166,21 +157,10 @@ function keyInForceOf(
 async function currentArchives(
   tx: Transaction,
   deps: BackupRecoveryPackMakeDeps,
-  env: Readonly<Record<string, string | undefined>>,
 ): Promise<CurrentChecks["archives"]> {
-  const { managedByEnvironment } = deps.backups();
-  let sealed: ArchiveSettings | null = null;
-  if (!managedByEnvironment) {
-    const read = await readHeldArchiveSettingsIn(tx, deps.ring);
-    if ("unreadable" in read) return "unreadable";
-    sealed = read.settings;
-  }
-  const destinations = archiveDestinations({
-    managedByEnvironment,
-    env,
-    sealed,
-  });
-  return destinations.length === 0 ? null : { revision: archivesRevision(sealed, destinations) };
+  const read = await readHeldArchiveSettingsIn(tx, deps.ring);
+  if ("unreadable" in read) return "unreadable";
+  return read.settings === null ? null : { revision: read.settings.revision };
 }
 
 async function currentChecks(
@@ -193,7 +173,7 @@ async function currentChecks(
   return {
     keyChangedAt: loadKeyRotatedAt(env),
     bucket: streamRevision === null ? null : { revision: streamRevision },
-    archives: await currentArchives(tx, deps, env),
+    archives: await currentArchives(tx, deps),
     serverKeyName: filesInvoices
       ? await readRecoveryKeyName(deps.nodeDb, deps.node.nodeId)
       : undefined,
@@ -259,7 +239,6 @@ async function makePack(
     venueId: deps.venueId,
     ring: deps.ring,
     env: input.env,
-    managedByEnvironment: deps.backups().managedByEnvironment,
   };
   const bucket = await buildBucketPart(tx, context);
   const archives = await buildArchivesPart(tx, context);

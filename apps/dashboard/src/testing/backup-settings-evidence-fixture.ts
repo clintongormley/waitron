@@ -22,7 +22,7 @@ export function failure(overrides: Partial<BackupLoadFailure> = {}): BackupLoadF
 export function evidence(overrides: Partial<BackupSettingsEvidence> = {}): BackupSettingsEvidence {
   return {
     readAt: "2026-10-29T11:00:00.000Z",
-    managedByEnvironment: false,
+
     failures: [failure()],
     lastCleanLoadAt: null,
     latestLoadFailed: true,

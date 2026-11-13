@@ -61,7 +61,6 @@ async function write(overrides: Partial<Parameters<typeof writeBackupRoomNote>[0
     venueDir,
     nodeId: "node-1",
     installationStartedAt: startedAt,
-    managedByEnvironment: false,
     folders: [{ destination: "usb", dir: join(root, "usb"), configuredDir: join(root, "usb") }],
     now: () => now,
     log,
@@ -102,7 +101,7 @@ describe("writeBackupRoomNote", () => {
   });
 
   it("writes the installation start, venue.db's identity, the folders and the time", async () => {
-    const log = await write({ managedByEnvironment: true });
+    const log = await write();
     const stored = JSON.parse(await readFile(notePath(), "utf8")) as BackupRoomNote;
     expect(stored).toEqual({
       version: 1,
@@ -113,7 +112,6 @@ describe("writeBackupRoomNote", () => {
         ino: expect.stringMatching(/^\d+$/),
         birthtimeNs: expect.stringMatching(/^\d+$/),
       },
-      managedByEnvironment: true,
       folders: [{ destination: "usb", dir: join(root, "usb"), configuredDir: join(root, "usb") }],
       writtenAt: "2026-10-29T12:00:00.000Z",
     });
@@ -143,6 +141,8 @@ describe("writeBackupRoomNote", () => {
     const stored = JSON.parse(await readFile(notePath(), "utf8")) as Record<string, unknown>;
     const current = { ...stored };
     delete current.managedByEnvironment;
+    stored.managedByEnvironment = true;
+    await writeFile(notePath(), JSON.stringify(stored));
     expect(await read()).toEqual({ note: current });
     delete stored.folders;
     await writeFile(notePath(), JSON.stringify(stored));
@@ -406,7 +406,6 @@ describe("readBackupRoomNote", () => {
     nodeId: "node-1",
     installationStartedAt: "2026-10-01T09:00:00.000Z",
     venueDb: { dev: "1", ino: "2", birthtimeNs: "3" },
-    managedByEnvironment: false,
     folders: [{ destination: "usb", dir: "/mnt/usb", configuredDir: "/media/usb" }],
     writtenAt: "2026-10-29T12:00:00.000Z",
   });
@@ -447,10 +446,6 @@ describe("readBackupRoomNote", () => {
     [
       "a venue.db identity number",
       (note) => ({ ...note, venueDb: { dev: "1", ino: "2", birthtimeNs: 3 } }),
-    ],
-    [
-      "a managed flag that is not true or false",
-      (note) => ({ ...note, managedByEnvironment: "no" }),
     ],
     ["folders that are not a list", (note) => ({ ...note, folders: {} })],
     ["a folder that is not an object", (note) => ({ ...note, folders: ["usb"] })],

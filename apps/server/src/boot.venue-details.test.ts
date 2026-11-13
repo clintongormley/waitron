@@ -1,3 +1,4 @@
+import { writeArchiveSettings } from "./archive-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createServer, type AddressInfo } from "node:net";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -93,11 +94,18 @@ async function prepareBox(
     WAITRON_NODE_ID: venue.cfg.nodeId,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
-    WAITRON_BACKUP_DIR: join(scratch, "backup-destination"),
     WAITRON_BACKUP_RECOVERY_KEY: "venue-preview-recovery-key",
-    WAITRON_BACKUP_INTERVAL_MS: "86400000",
   };
   beforeServerStarts();
+  await withTransaction(suite.db, (tx) =>
+    writeArchiveSettings(tx, loadKeyRing(env), {
+      enabled: true,
+      destinations: [{ kind: "local-fs", id: "primary", dir: join(scratch, "backup-destination") }],
+      schedule: { kind: "interval", ms: 86_400_000 },
+      retention: { count: 7, days: 30 },
+      destinationTimeoutMs: 900_000,
+    }),
+  );
   const [admin] = await seedPersons(suite.db, {
     displayName: "Email Clock Admin",
     pinHash: hashPin("1234"),

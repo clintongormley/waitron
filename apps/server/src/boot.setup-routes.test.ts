@@ -2087,33 +2087,3 @@ describe("startServer — the configuration export route in trading mode", () =>
     60_000,
   );
 });
-
-it("a direct start refuses its environment backup path before sweeping scratch", async () => {
-  beforeServerStarts();
-  const venue = await freshVenue();
-  const root = await mkdtemp(join(tmpdir(), "fl2-direct-start-"));
-  let started: StartedServer | undefined;
-  try {
-    const destination = join(root, "scratch", "backups");
-    await mkdir(destination, { recursive: true });
-    const archive = join(destination, "saved.backup.enc");
-    await writeFile(archive, "keep");
-    const env = {
-      WAITRON_VENUE_DIR: venue.directory,
-      WAITRON_STATE_DIR: root,
-      WAITRON_ENV: "preproduction",
-      WAITRON_BACKUP_DIR: destination,
-    };
-    await expect(
-      (async () => {
-        started = await startServer(env, env);
-      })(),
-    ).rejects.toMatchObject({ code: "server.config_invalid" });
-    expect(await readFile(archive, "utf8")).toBe("keep");
-  } finally {
-    await started?.close();
-    await venue.store.close();
-    await rm(venue.directory, { recursive: true, force: true });
-    await rm(root, { recursive: true, force: true });
-  }
-});

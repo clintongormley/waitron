@@ -51,17 +51,17 @@ describe("assertStorableKey", () => {
 describe("assertStorableRecord", () => {
   it("passes a clean record and rejects any value carrying a control char / newline", () => {
     const clean = {
-      WAITRON_BACKUP_DIR: "/srv/backups",
+      WAITRON_BACKUP_TEST_FOLDER: "/srv/backups",
       WAITRON_BACKUP_RECOVERY_KEY: "abcDEF-_1234567890",
-      WAITRON_BACKUP_INTERVAL_MS: "3600000",
+      WAITRON_BACKUP_TEST_INTERVAL: "3600000",
     };
     expect(() => assertStorableRecord(clean)).not.toThrow();
     // A newline in ANY value injects a second KEY=value line on the round-trip.
-    expect(() => assertStorableRecord({ ...clean, WAITRON_BACKUP_DIR: "/srv\nEVIL=1" })).toThrow(
-      /destinations_invalid/,
-    );
+    expect(() =>
+      assertStorableRecord({ ...clean, WAITRON_BACKUP_TEST_FOLDER: "/srv\nEVIL=1" }),
+    ).toThrow(/destinations_invalid/);
     // A bare carriage return / control char is refused too.
-    expect(() => assertStorableRecord({ ...clean, WAITRON_BACKUP_DIR: "/srv\rx" })).toThrow(
+    expect(() => assertStorableRecord({ ...clean, WAITRON_BACKUP_TEST_FOLDER: "/srv\rx" })).toThrow(
       /destinations_invalid/,
     );
   });
@@ -78,7 +78,7 @@ describe("assertStorableRecord — values the env file would read back different
   }
 
   it("refuses a directory with a trailing space, which reading the file back would drop", () => {
-    expect(refusal({ WAITRON_BACKUP_DIR: "/srv/backups " })).toMatchObject({
+    expect(refusal({ WAITRON_BACKUP_TEST_FOLDER: "/srv/backups " })).toMatchObject({
       code: "backup.destinations_invalid",
       params: { reason: "round_trip" },
     });
@@ -117,11 +117,11 @@ describe("writeRecoveryKey", () => {
     await writeFile(
       join(dir, "backup.env"),
       formatEnvFile({
-        WAITRON_BACKUP_DIR: "/srv/backups",
+        WAITRON_BACKUP_TEST_FOLDER: "/srv/backups",
         WAITRON_BACKUP_RECOVERY_KEY: "old-key-0123456789",
-        WAITRON_BACKUP_INTERVAL_MS: "3600000",
-        WAITRON_BACKUP_RETAIN: "7",
-        WAITRON_BACKUP_RETAIN_DAYS: "30",
+        WAITRON_BACKUP_TEST_INTERVAL: "3600000",
+        WAITRON_BACKUP_TEST_COUNT: "7",
+        WAITRON_BACKUP_TEST_AGE: "30",
       }),
     );
     await writeRecoveryKey(dir, {
@@ -129,11 +129,11 @@ describe("writeRecoveryKey", () => {
       keyRotatedAt: "2026-09-23T00:00:00.000Z",
     });
     expect(parseEnvFile(await readFile(join(dir, "backup.env"), "utf8"))).toEqual({
-      WAITRON_BACKUP_DIR: "/srv/backups",
+      WAITRON_BACKUP_TEST_FOLDER: "/srv/backups",
       WAITRON_BACKUP_RECOVERY_KEY: "new-key-0123456789",
-      WAITRON_BACKUP_INTERVAL_MS: "3600000",
-      WAITRON_BACKUP_RETAIN: "7",
-      WAITRON_BACKUP_RETAIN_DAYS: "30",
+      WAITRON_BACKUP_TEST_INTERVAL: "3600000",
+      WAITRON_BACKUP_TEST_COUNT: "7",
+      WAITRON_BACKUP_TEST_AGE: "30",
       WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-23T00:00:00.000Z",
     });
   });
@@ -155,10 +155,14 @@ const SECRET = "secret-recovery-key-0123456789";
 const REFUSED: ReadonlyArray<[string, unknown, string]> = [
   ["a name outside WAITRON_BACKUP_", { WAITRON_BACKUP_RECOVERY_KEY: SECRET, PATH: "/bin" }, "name"],
   ["a lower-case name", { waitron_backup_dir: SECRET }, "name"],
-  ["a value that is not text", { WAITRON_BACKUP_RETAIN: 7 }, "value"],
+  ["a value that is not text", { WAITRON_BACKUP_TEST_COUNT: 7 }, "value"],
   ["a value holding a tab", { WAITRON_BACKUP_RECOVERY_KEY: `${SECRET}\tx` }, "control_char"],
   ["a value holding a newline", { WAITRON_BACKUP_RECOVERY_KEY: `${SECRET}\nX=1` }, "control_char"],
-  ["a value the file would not round-trip", { WAITRON_BACKUP_DIR: `${SECRET} ` }, "round_trip"],
+  [
+    "a value the file would not round-trip",
+    { WAITRON_BACKUP_TEST_FOLDER: `${SECRET} ` },
+    "round_trip",
+  ],
   ["an array", [SECRET], "shape"],
 ];
 
@@ -167,15 +171,15 @@ describe("replaceBackupSettings", () => {
     const dir = tempDir();
     await writeFile(
       join(dir, "backup.env"),
-      "WAITRON_BACKUP_DIR=/srv/old\nWAITRON_BACKUP_RETAIN=7\n",
+      "WAITRON_BACKUP_TEST_FOLDER=/srv/old\nWAITRON_BACKUP_TEST_COUNT=7\n",
     );
     await replaceBackupSettings(dir, {
       WAITRON_BACKUP_RECOVERY_KEY: SECRET,
-      WAITRON_BACKUP_DIR: "/srv/new",
+      WAITRON_BACKUP_TEST_FOLDER: "/srv/new",
     });
     expect(parseEnvFile(await readFile(join(dir, "backup.env"), "utf8"))).toEqual({
       WAITRON_BACKUP_RECOVERY_KEY: SECRET,
-      WAITRON_BACKUP_DIR: "/srv/new",
+      WAITRON_BACKUP_TEST_FOLDER: "/srv/new",
     });
     expect((await stat(join(dir, "backup.env"))).mode & 0o777).toBe(0o600);
   });
@@ -184,14 +188,14 @@ describe("replaceBackupSettings", () => {
     const dir = tempDir();
     const path = join(dir, "backup.env");
     const events = await syncsAndRenames(() =>
-      replaceBackupSettings(dir, { WAITRON_BACKUP_DIR: "/srv/new" }),
+      replaceBackupSettings(dir, { WAITRON_BACKUP_TEST_FOLDER: "/srv/new" }),
     );
     expect(events).toEqual([`sync ${path}.tmp`, `rename ${path}.tmp ${path}`, `sync ${dir}`]);
   });
 
   it("null removes the file, and removing a missing file is not an error", async () => {
     const dir = tempDir();
-    await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_DIR=/srv\n");
+    await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_TEST_FOLDER=/srv\n");
     await replaceBackupSettings(dir, null);
     await expect(stat(join(dir, "backup.env"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(replaceBackupSettings(dir, null)).resolves.toBeUndefined();
@@ -201,7 +205,7 @@ describe("replaceBackupSettings", () => {
     "refuses %s, writing nothing and naming no value",
     async (_label, record, reason) => {
       const dir = tempDir();
-      await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_DIR=/srv/kept\n");
+      await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_TEST_FOLDER=/srv/kept\n");
       const refusal = await replaceBackupSettings(dir, record as Record<string, string>).then(
         () => null,
         (error: unknown) => error,
@@ -211,7 +215,7 @@ describe("replaceBackupSettings", () => {
       expect(JSON.stringify(refusal)).not.toContain("secret-recovery");
       expect(String((refusal as Error).message)).not.toContain("secret-recovery");
       expect(await readFile(join(dir, "backup.env"), "utf8")).toBe(
-        "WAITRON_BACKUP_DIR=/srv/kept\n",
+        "WAITRON_BACKUP_TEST_FOLDER=/srv/kept\n",
       );
     },
   );
@@ -226,7 +230,7 @@ describe("replaceBackupSettings", () => {
   });
 
   it("control: the check passes a clean record through", () => {
-    const record = { WAITRON_BACKUP_RECOVERY_KEY: SECRET, WAITRON_BACKUP_DIR: "/srv" };
+    const record = { WAITRON_BACKUP_RECOVERY_KEY: SECRET, WAITRON_BACKUP_TEST_FOLDER: "/srv" };
     expect(checkBackupSettings(record)).toEqual({ ok: true, settings: record });
   });
 });

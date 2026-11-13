@@ -49,8 +49,6 @@ const ANSWERS: Record<string, () => Promise<BackupSettingsEvidence>> = {
       record: { keyVersion: 2, writtenAt: "2026-10-29T10:30:00.000Z", digest: "digest-c" },
       rewrittenSinceLastFailure: true,
     }),
-  environment: async () =>
-    evidence({ managedByEnvironment: true, now: { state: "readable", destinations: [] } }),
 };
 /** The selector that shows each state has finished drawing. */
 const READY: Record<string, string> = {

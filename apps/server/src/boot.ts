@@ -434,12 +434,7 @@ import {
   sealedStateJob,
   type SealedStateStatus,
 } from "./sealed-state.js";
-import {
-  isBackupManagedByEnvironment as backupKeysInEnv,
-  assertBackupOutsideScratch,
-  loadBackupSettings,
-  loadRecoveryKey,
-} from "./backup-config.js";
+import { loadBackupSettings, loadRecoveryKey } from "./backup-config.js";
 import { readArchiveSettingsWithMeta } from "./archive-settings.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import { recordStartDeletions } from "./start-backup-room-record.js";
@@ -1114,7 +1109,6 @@ async function bootServer(
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
   refuseUnreleasedBuild(config.environment, seams.builtRelease ?? builtRelease());
-  if (backupKeysInEnv(base)) await assertBackupOutsideScratch(env, config.stateDir);
   await assertOutsideScratchResolved(config.stateDir, config.venueDir, "WAITRON_VENUE_DIR");
   await assertOutsideScratchResolved(config.stateDir, config.logDir, "WAITRON_LOG_DIR");
   const timings = resolveDutyTimings(seams.timings);
@@ -3125,13 +3119,10 @@ async function bootServer(
     },
     log,
   );
-  // Provenance and the backup config's disk re-read both use the RAW `base` env, not the merged
-  // `env`, so a file-sourced value is distinguishable from an env-sourced one.
   // Filled by the supervisor's sweep and read by the backups alert source below.
   const backupOutcomes: BackupOutcomeHolder = { failed: new Map() };
   const readRecoveryKey = async (): Promise<string | undefined> =>
     loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
-  const isBackupManagedByEnvironment = (): boolean => backupKeysInEnv(base);
   const stagingTurn = createStagingTurn();
   const backupRoom = createBackupRoomHooks({
     db,
@@ -3154,11 +3145,10 @@ async function bootServer(
     bus: liveEvents,
     buildConfig: async () =>
       loadBackupSettings({
-        managedByEnvironment: isBackupManagedByEnvironment(),
         env: await loadBoxEnv(base, config.stateDir),
         readSealedWithMeta: () => readArchiveSettingsWithMeta(db, ring),
       }),
-    isManagedByEnvironment: isBackupManagedByEnvironment,
+
     readSingletonRole: () => holders.singletonRole.current,
     venueDir: config.venueDir,
     modules: availableModules,
@@ -3680,8 +3670,7 @@ async function bootServer(
       stream: streamHost,
       venueId,
       isPrimary: () => holders.singletonRole.current === "primary",
-      isManagedByEnvironment: isBackupManagedByEnvironment,
-      loadedArchives: () => backupSupervisor.current().destinations,
+
       readRecoveryKey,
       writeRecoveryKey: (recoveryKey) =>
         writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),

@@ -293,7 +293,7 @@ it("has English and Spanish copy for every code in the bucket-copy routes' statu
     "authorization.not_permitted",
     "backup.request_invalid",
     "backup.stream_config_unsafe",
-    "backup.managed_by_environment",
+    "backup.not_primary",
     "backup.recovery_key_too_short",
     "backup.not_primary",
     "backup.reload_in_progress",

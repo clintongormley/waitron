@@ -2369,7 +2369,7 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("does not schedule the backup sweep when WAITRON_BACKUP_DIR is unset, and boots unaffected", async () => {
+  it("does not schedule the backup sweep without a saved record, and boots unaffected", async () => {
     const port = await freePort();
     const [server, disabled] = await withCapturedStdout(async (lines) => {
       const started = await startServer({
@@ -2860,7 +2860,7 @@ describe("startServer, against a migrated venue directory", () => {
     const orderId = randomUUID();
     await seedWorkingOrder(sharedDb, {
       id: orderId,
-      source: "dashboard",
+
       deviceId: null,
       orderNumber: 990_001,
       paymentAttemptAt: new Date(Date.now() - 1_000).toISOString(),
@@ -2899,7 +2899,7 @@ describe("startServer, against a migrated venue directory", () => {
     const orderId = randomUUID();
     await seedWorkingOrder(sharedDb, {
       id: orderId,
-      source: "dashboard",
+
       deviceId: null,
       orderNumber: 990_002,
     });

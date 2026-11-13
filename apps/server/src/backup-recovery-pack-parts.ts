@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { KeyRing } from "@waitron/credentials";
 import { credentialRevision } from "@waitron/credentials";
 import { readNodePublicKeyTx, type RecoveryPackPartRecord, type Transaction } from "@waitron/db";
@@ -18,11 +17,7 @@ import {
 import { AppError, isAppError } from "@waitron/shared";
 import { encodeRecoveryKit } from "@waitron/stream";
 import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
-import {
-  archiveNamespace,
-  readHeldArchiveSettingsIn,
-  type ArchiveSettings,
-} from "./archive-settings.js";
+import { archiveNamespace, readHeldArchiveSettingsIn } from "./archive-settings.js";
 import {
   archiveDestinations,
   loadKeyRotatedAt,
@@ -30,7 +25,6 @@ import {
   readHeldKey,
 } from "./backup-config.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
-import type { BackupDestination } from "./storage-backend.js";
 import { readStreamSettingsIn, STREAM_PURPOSE } from "./stream-host.js";
 import "./errors.js";
 
@@ -44,7 +38,6 @@ export type PartsContext = {
   readonly venueId: string;
   readonly ring: KeyRing;
   readonly env: Readonly<Record<string, string | undefined>>;
-  readonly managedByEnvironment: boolean;
 };
 
 type FileFields = Partial<
@@ -174,53 +167,20 @@ export function buildBucketPart(tx: Transaction, context: PartsContext): Promise
   });
 }
 
-/**
- * What a pack's archive check compares: the stored record's revision, or, for archives the
- * environment manages, a digest of where they go. Weaker than it looks for the environment's: the
- * record travels into every backup, so credentials stay out of the digest and a change of access key
- * alone is not seen.
- */
-export function archivesRevision(
-  sealed: ArchiveSettings | null,
-  destinations: readonly BackupDestination[],
-): string {
-  if (sealed !== null) return sealed.revision;
-  const where = destinations.map((d) =>
-    d.kind === "local-fs"
-      ? { kind: d.kind, dir: d.dir }
-      : {
-          kind: d.kind,
-          endpoint: d.bucket.endpoint ?? null,
-          region: d.bucket.region,
-          bucket: d.bucket.bucket,
-          prefix: d.bucket.prefix,
-        },
-  );
-  // The prefix keeps it apart from a stored record's revision, which is a UUID.
-  return `env:${createHash("sha256").update(JSON.stringify(where)).digest("hex").slice(0, 16)}`;
-}
-
 export function buildArchivesPart(tx: Transaction, context: PartsContext): Promise<BuiltPart> {
   return orFailed("archives", context, async () => {
-    let sealed = null;
-    if (!context.managedByEnvironment) {
-      const read = await readHeldArchiveSettingsIn(tx, context.ring);
-      if ("unreadable" in read) {
-        throw new AppError("backup.archive_settings_unreadable", { reason: read.unreadable });
-      }
-      sealed = read.settings;
+    const read = await readHeldArchiveSettingsIn(tx, context.ring);
+    if ("unreadable" in read) {
+      throw new AppError("backup.archive_settings_unreadable", { reason: read.unreadable });
     }
-    const destinations = archiveDestinations({
-      managedByEnvironment: context.managedByEnvironment,
-      env: context.env,
-      sealed,
-    });
+    const sealed = read.settings;
+    if (sealed === null) return absent("archives");
+    const destinations = archiveDestinations(sealed);
     const bucket = destinations.find((d) => d.kind === "s3");
     const folder = destinations.find((d) => d.kind === "local-fs");
-    if (bucket === undefined && folder === undefined) return absent("archives");
     const recoveryKey = await backupKey(context.env);
-    const revision = archivesRevision(sealed, destinations);
-    const facts = keyFacts(context, sealed?.revision);
+    const revision = sealed.revision;
+    const facts = keyFacts(context, sealed.revision);
     const words = PART_WORDS[context.locale].archives;
     const record: RecoveryPackPartRecord = {
       part: "archives",

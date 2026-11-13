@@ -185,6 +185,15 @@ EQUAL. Any line is a stop.
 
 ## Stop points (beyond rules §5)
 
+**Current-base correction, 2026-11-13.** The watcher cleared refreshing the protection baseline
+after the rebase onto `f46da9fc0e` (#3021) at 03:25. The exact-base/candidate comparison is EQUAL.
+
+**Current-base correction, 2026-11-13.** Handover's quote-mark reader control now uses the retained
+recovery key and expects `backup.recovery_key_too_short`, with its digest assertions kept. The
+watcher cleared this on 13 November at 03:10; its other empty-value controls use the retained key
+and rotation stamp. The resolver no longer needs `venueId` after 5f removed its use, so no unused
+argument is added.
+
 **Current-base correction, 2026-11-13.** The watcher cleared the newer `loadBackupConfig` callers
 in `backup-data-placement.ts:72` and `backup-verification-secrets.ts:92`, and the environment-only
 scratch guard in `node-entry.ts:348-352`, as consumers of this removal (Lane H questions.md, 01:30).

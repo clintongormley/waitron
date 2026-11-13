@@ -1729,7 +1729,7 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
   useTempDirs("waitron-optstate-");
   beforeEach(resetSeries); // the round-trips run the identity phase; re-arm the node's one live series
 
-  const BACKUP_ENV = "WAITRON_BACKUP_DIR=/mnt/usb\nWAITRON_BACKUP_RETAIN=7\n";
+  const BACKUP_ENV = "ARCHIVE_FOLDER=/mnt/usb\nARCHIVE_RETAIN=7\n";
   // A modules.json that disables the second fiscal-slot member, so exactly one regime is enabled.
   const MODULES_JSON = `${JSON.stringify({ modules: { "fiscal-none": false } }, null, 2)}\n`;
   const OPTIONAL_ENTRIES: ArchiveEntry[] = [

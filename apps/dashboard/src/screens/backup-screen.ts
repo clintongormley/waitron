@@ -427,7 +427,7 @@ export class BackupScreen extends LitElement {
   #trackArchive(): void {
     if (!this.isConnected) return;
     const mode = this.#archiveValue().mode;
-    if (!this.status?.isPrimary || this.status.managedByEnvironment) {
+    if (!this.status?.isPrimary) {
       this.#archiveScope?.dispose();
       this.#archiveScope = undefined;
       this.#archiveMode = undefined;
@@ -570,7 +570,7 @@ export class BackupScreen extends LitElement {
   async #mintIfNone(): Promise<void> {
     const s = this.status!;
     if (this.mintedKey !== null || this.#watcherAsked) return;
-    if (!s.isPrimary || s.managedByEnvironment || this.#reusesHeldKey) return;
+    if (!s.isPrimary || this.#reusesHeldKey) return;
     this.#watcherAsked = true;
     await this.#mint();
   }
@@ -894,7 +894,7 @@ export class BackupScreen extends LitElement {
     const generation = this.#generation;
     const s = this.status;
     if (generation !== this.#generation || s === undefined) return;
-    if (!s.storedDisabled || s.enabled || !s.isPrimary || s.managedByEnvironment) return;
+    if (!s.storedDisabled || s.enabled || !s.isPrimary) return;
     if (!afterTurnOff) {
       if (this.#archiveScope?.isDirty()) return;
       const current = this.#archiveValue();
@@ -1206,7 +1206,6 @@ export class BackupScreen extends LitElement {
         <dashboard-stream-settings
           .api=${this.api}
           @stream-settings-written=${() => this.#packSettingsChanged()}
-          .managedByEnvironment=${s?.managedByEnvironment}
           .archivesEnabled=${s?.enabled}
         ></dashboard-stream-settings>
       </div>
@@ -1284,7 +1283,7 @@ export class BackupScreen extends LitElement {
   }
 
   #renderBody(s: BackupStatusView): TemplateResult {
-    const writable = s.isPrimary && !s.managedByEnvironment;
+    const writable = s.isPrimary;
     return html`
       <div class="card" id="backup-body">
         ${this.#renderStatus(s)}
@@ -1296,11 +1295,9 @@ export class BackupScreen extends LitElement {
               </p>`
         }
         ${
-          s.managedByEnvironment
-            ? html`<p class="hint" data-test="managed">${t("backup.status.managed")}</p>`
-            : !s.isPrimary
-              ? html`<p class="hint" data-test="not-primary">${t("backup.status.not_primary")}</p>`
-              : nothing
+          !s.isPrimary
+            ? html`<p class="hint" data-test="not-primary">${t("backup.status.not_primary")}</p>`
+            : nothing
         }
         ${writable && (!s.enabled || this.configureAfterApply) ? this.#renderConfigure() : nothing}
         ${writable && s.enabled && this.editSettings ? this.#renderEditSettings() : nothing}
