@@ -164,11 +164,11 @@ it("shows owner approval when registration import is still pending", async () =>
 it.each([
   [
     "en",
-    "The saved Cloud reconnection request on this box cannot be used, so reconnection cannot continue.",
+    "The saved Cloud reconnection request on this box cannot be read. Choose “Get a fresh reconnection request” to set it aside and ask Cloud for a new one; the Cloud owner then approves it as before.",
   ],
   [
     "es",
-    "No se puede usar la solicitud guardada de reconexión con Cloud de este equipo, por lo que la reconexión no puede continuar.",
+    "No se puede leer la solicitud guardada de reconexión con Cloud de este equipo. Elige «Obtener una nueva solicitud de reconexión» para apartarla y pedir una nueva a Cloud; después, el propietario de Cloud la aprueba como antes.",
   ],
 ])("shows a saved reconnection refusal in %s", async (locale, message) => {
   const previous = currentLocale();
@@ -198,6 +198,73 @@ it.each([
   expect(el.shadowRoot!.querySelector("#connect")).toBeNull();
   expect(el.shadowRoot!.querySelector("#request-reconnection")).toBeNull();
   await expectNoA11yViolations(host);
+});
+
+it("offers a fresh reconnection request on the primary only when the saved request is unreadable", async () => {
+  setLocale("en");
+  const calls: string[] = [];
+  let primary = false;
+  let replacementError = "cloud.replacement_state_invalid";
+  const api = new DashboardApi("", async (url) => {
+    calls.push(String(url));
+    if (String(url).endsWith("/replacement/reissue"))
+      return Response.json({
+        state: "not_connected",
+        code: "",
+        configured: true,
+        isPrimary: true,
+        replacementEligible: true,
+        replacementPending: true,
+        replacementError: null,
+        replacementApproval: {
+          requestId,
+          code: "87654321",
+          openCloudUrl: `https://cloud.example/recover#request=${requestId}`,
+        },
+        replacement: {
+          state: "awaiting_owner",
+          oldInstallationId: "old",
+          organisationName: "Test Org",
+          legalBusinessName: "Test Business",
+        },
+      });
+    return Response.json({
+      state: "not_connected",
+      code: "",
+      configured: true,
+      isPrimary: primary,
+      replacementEligible: true,
+      replacementPending: false,
+      replacement: null,
+      replacementError,
+    });
+  });
+  const mount = async () =>
+    (await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api })).el;
+  let el = await mount();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("[data-test=cloud-error]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("#reissue-reconnection")).toBeNull();
+  cleanupWidgets();
+  primary = true;
+  replacementError = "cloud.failed";
+  el = await mount();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("#reissue-reconnection")).toBeNull();
+  cleanupWidgets();
+  replacementError = "cloud.replacement_state_invalid";
+  el = await mount();
+  await flush(el);
+  const reissue = el.shadowRoot!.querySelector("#reissue-reconnection");
+  expect(reissue?.textContent?.trim()).toBe("Get a fresh reconnection request");
+  click(el, "reissue-reconnection");
+  click(el, "reissue-reconnection");
+  await expect.poll(() => el.shadowRoot!.textContent).toContain("87654321");
+  expect(calls.filter((url) => url.endsWith("/replacement/reissue"))).toHaveLength(1);
+  expect(el.shadowRoot!.textContent).toContain("Waiting for the Cloud owner");
+  expect(el.shadowRoot!.querySelector("[data-test=cloud-error]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("#reissue-reconnection")).toBeNull();
+  expect(el.shadowRoot!.querySelector("#check-reconnection")).not.toBeNull();
 });
 
 it("shows Spanish replacement approval status and keeps a non-primary from checking", async () => {

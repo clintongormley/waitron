@@ -111,6 +111,10 @@ Mantén separados producción y preproducción.
 La clave de la copia, el kit del bucket y la aprobación de Cloud dan acceso a una copia. También
 necesitas la clave de recuperación de su nodo para identificarte.
 
+En un servidor de prueba restaurado desde Waitron Cloud, si **Servicios Cloud** dice que no se puede
+leer la solicitud guardada de reconexión, elige **Obtener una nueva solicitud de reconexión** y pide
+al propietario de Cloud que apruebe la nueva solicitud en Cloud.
+
 ## Identifícate ante la copia elegida {#proof}
 
 Bajo la revisión, en «Recuperar este servidor», elige en **PDF de recuperación** tu paquete de

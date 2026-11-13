@@ -304,7 +304,8 @@ internet unplugged. A cloud mirror needs the internet anyway and is outside this
 If that file is
 later repaired and `cloud/connection.json` lost, the next start restores the connection without
 the stop and the next check sends `renew`, so a stop Cloud had not yet heard is lost (left open
-by C29, #808). Owner to choose: refuse Stop access while the replacement file is unreadable, or
+by C29, #808). Since A1500, **Get a fresh reconnection request** is a second way back: it sets the
+unreadable file aside and, once the Cloud owner approves, imports the connection without the stop. Owner to choose: refuse Stop access while the replacement file is unreadable, or
 record the stop somewhere that survives the repair.
 
 ## Waitron retains

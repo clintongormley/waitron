@@ -101,6 +101,10 @@ preproduction separate.
 The backup's key, the bucket kit and the Cloud approval give access to a copy. You still need that
 copy's named node recovery key to authenticate recovery.
 
+On a test server restored from Waitron Cloud, if **Cloud services** says the saved reconnection
+request cannot be read, choose **Get a fresh reconnection request**, then ask the Cloud owner to
+approve the new request in Cloud.
+
 ## Prove access to the selected backup {#proof}
 
 Below the review, under "Recover this box", choose your recovery pack, or an older recovery PDF,

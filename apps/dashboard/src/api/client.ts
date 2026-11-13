@@ -4586,6 +4586,9 @@ export class DashboardApi {
   prepareCloudReplacement(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/replacement/prepare", "POST", {});
   }
+  reissueCloudReplacement(): Promise<CloudConnectionStatus> {
+    return this.#request("/management-api/cloud/replacement/reissue", "POST", {});
+  }
   checkCloudReplacement(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/replacement/check", "POST", {});
   }

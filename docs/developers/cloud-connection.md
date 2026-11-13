@@ -427,6 +427,14 @@ reconnection** is running may be refused as busy; if it is, press it again once 
 finishes. On a server that was not restored from a Cloud snapshot, the screen offers **Connect to
 Cloud** instead of **Request reconnection**. Keep the previous server out of service throughout.
 
+If the screen says the saved reconnection request cannot be read, choose **Get a fresh
+reconnection request**. The server keeps the unreadable `cloud/replacement.json` under a second
+name in the same folder (`replacement.json.set-aside-<time>`), leaving `cloud/recovery.json` and
+`cloud/connection.json` alone, saves a fresh installation key and WireGuard key in its place, then
+asks Cloud to reissue the request; the Cloud owner approves it as in step 2. After a lost reply,
+**Check reconnection** sends the reissue again with the same keys. A fresh request does not carry
+a stop recorded only in the unreadable file.
+
 Reconnecting registers the replacement with Cloud. Installing the new WireGuard tunnel remains
 an operator step. For a test installation using the separate staff entrance, the certificate
 worker requests its new chain after reconnection. Cloud access and backups need their own checks

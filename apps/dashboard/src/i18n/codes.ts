@@ -122,8 +122,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Termina la restauración de la instantánea aprobada de Cloud en este servidor y comunícala antes de solicitar la reconexión.",
   },
   "cloud.replacement_state_invalid": {
-    en: "The saved Cloud reconnection request on this box cannot be used, so reconnection cannot continue.",
-    es: "No se puede usar la solicitud guardada de reconexión con Cloud de este equipo, por lo que la reconexión no puede continuar.",
+    en: "The saved Cloud reconnection request on this box cannot be read. Choose “Get a fresh reconnection request” to set it aside and ask Cloud for a new one; the Cloud owner then approves it as before.",
+    es: "No se puede leer la solicitud guardada de reconexión con Cloud de este equipo. Elige «Obtener una nueva solicitud de reconexión» para apartarla y pedir una nueva a Cloud; después, el propietario de Cloud la aprueba como antes.",
   },
   "cloud.replacement_refused": {
     en: "Cloud refused the replacement request. Check the approved recovery and old installation in Cloud, then check reconnection here.",

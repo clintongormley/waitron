@@ -83,7 +83,7 @@ it.each(["start", "complete", "revoke", "remote-access"] as const)(
     }
   },
 );
-it.each(["prepare", "check"] as const)(
+it.each(["prepare", "check", "reissue"] as const)(
   "requires confirmation before replacement %s",
   async (action) => {
     const manager = await person("manager");
@@ -103,6 +103,7 @@ it.each(["prepare", "check"] as const)(
           hasProposal: async () => false,
           prepare: effect,
           check: effect,
+          reissue: effect,
           recordStop: vi.fn(),
         },
       },
@@ -183,7 +184,7 @@ it.each(["complete", "revoke", "remote-access"] as const)(
     }
   },
 );
-it.each(["prepare", "check"] as const)(
+it.each(["prepare", "check", "reissue"] as const)(
   "rechecks confirmation inside replacement %s",
   async (action) => {
     const manager = await person("manager");
@@ -206,6 +207,7 @@ it.each(["prepare", "check"] as const)(
           hasProposal: async () => false,
           prepare: change,
           check: change,
+          reissue: change,
           recordStop: async () => {},
         },
       },
@@ -536,56 +538,66 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
     await f.close();
   }
 });
-it("requires manager, origin and primary, and rechecks primary before responding", async () => {
-  const manager = await person("manager"),
-    staff = await person("staff");
-  let primary = true;
-  let release!: () => void;
-  let entered!: () => void;
-  const waiting = new Promise<void>((resolve) => {
-    entered = resolve;
-  });
-  const replacement = {
-    status: vi.fn(async () => null),
-    eligible: vi.fn(async () => true),
-    approval: vi.fn(async () => null),
-    hasProposal: vi.fn(async () => false),
-    prepare: vi.fn(async (authorize?: () => Promise<void>) => {
+it.each(["prepare", "reissue"] as const)(
+  "requires manager, origin and primary for replacement %s, and rechecks primary before responding",
+  async (action) => {
+    const manager = await person("manager"),
+      staff = await person("staff");
+    let primary = true;
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const replacement = {
+      status: vi.fn(async () => null),
+      eligible: vi.fn(async () => true),
+      approval: vi.fn(async () => null),
+      hasProposal: vi.fn(async () => false),
+      prepare: vi.fn(),
+      check: vi.fn(),
+      reissue: vi.fn(),
+      recordStop: vi.fn(),
+    };
+    replacement[action].mockImplementation(async (authorize?: () => Promise<void>) => {
       entered();
       await new Promise<void>((resolve) => {
         release = resolve;
       });
       await authorize?.();
       return { state: "awaiting_owner" } as ReplacementView;
-    }),
-    check: vi.fn(),
-    recordStop: vi.fn(),
-  };
-  const app = new Hono();
-  mountCloudApi(
-    app,
-    { db: suite.db, replacement, managementOrigin: "https://venue.test", isPrimary: () => primary },
-    () => {},
-  );
-  const send = (cookie: string, origin = "https://venue.test") =>
-    app.request("/management-api/cloud/replacement/prepare", {
-      method: "POST",
-      headers: { cookie, origin, "content-type": "application/json" },
-      body: "{}",
     });
-  expect((await send("")).status).toBe(401);
-  expect((await send(staff.cookie)).status).toBe(403);
-  expect((await send(manager.cookie, "https://attacker.test")).status).toBe(403);
-  expect(replacement.prepare).toHaveBeenCalledTimes(0);
-  primary = false;
-  expect((await send(manager.cookie)).status).toBe(409);
-  primary = true;
-  const pending = send(manager.cookie);
-  await waiting;
-  primary = false;
-  release();
-  expect((await pending).status).toBe(409);
-});
+    const app = new Hono();
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        replacement,
+        managementOrigin: "https://venue.test",
+        isPrimary: () => primary,
+      },
+      () => {},
+    );
+    const send = (cookie: string, origin = "https://venue.test") =>
+      app.request(`/management-api/cloud/replacement/${action}`, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: "{}",
+      });
+    expect((await send("")).status).toBe(401);
+    expect((await send(staff.cookie)).status).toBe(403);
+    expect((await send(manager.cookie, "https://attacker.test")).status).toBe(403);
+    expect(replacement[action]).toHaveBeenCalledTimes(0);
+    primary = false;
+    expect((await send(manager.cookie)).status).toBe(409);
+    primary = true;
+    const pending = send(manager.cookie);
+    await waiting;
+    primary = false;
+    release();
+    expect((await pending).status).toBe(409);
+  },
+);
 it("keeps Cloud status visible with a diagnostic when saved replacement state is corrupt", async () => {
   const manager = await person("manager");
   const app = new Hono();
@@ -604,6 +616,7 @@ it("keeps Cloud status visible with a diagnostic when saved replacement state is
         hasProposal: async () => false,
         prepare: vi.fn(),
         check: vi.fn(),
+        reissue: vi.fn(),
         recordStop: vi.fn(),
       },
     },
@@ -811,6 +824,7 @@ it("Stop access records the stop with the replacement after the permission reche
           hasProposal: async () => false,
           prepare: vi.fn(),
           check: vi.fn(),
+          reissue: vi.fn(),
           recordStop: async () => {
             stops.push(f.requests.filter((v) => v[2] === "revoke").length);
           },

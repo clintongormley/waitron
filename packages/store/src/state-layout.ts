@@ -57,6 +57,7 @@ export const CLOUD_DIR = "cloud";
 export const CLOUD_CONNECTION_FILE = "cloud/connection.json";
 export const CLOUD_RECOVERY_FILE = "cloud/recovery.json";
 export const CLOUD_REPLACEMENT_FILE = "cloud/replacement.json";
+export const CLOUD_REPLACEMENT_SET_ASIDE_PREFIX = "cloud/replacement.json.set-aside-";
 export const CLOUD_STAFF_KEY_FILE = "cloud/staff.key";
 export const CLOUD_STAFF_CERT_FILE = "cloud/staff.crt";
 export const CLOUD_SNAPSHOTS_DIR = "cloud/snapshots";
