@@ -62,6 +62,9 @@ const deferredBatch = new Error("Wait for a full sending batch");
  * them breaks the run. The chain's first held record is sent hourly when `claimProbes` finds it
  * due, and the hold is lifted once that send breaks the run (`releaseSettledBrakeHolds`). */
 export const SAME_CODE_REFUSAL_LIMIT = 3;
+/** AEAT's future-date refusal: a run of it starts no claim hold, so correctly dated sales never
+ * wait behind a refused future-dated one (owner, 2026-11-10; A1420 D11). */
+const FUTURE_DATE_REFUSAL = 1112;
 
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
 export const BACKOFF_BASE_MS = 60_000;
@@ -788,8 +791,8 @@ async function pendingWasSendable(
  * Holds a row `claimBatch` just claimed, in the claim's own transaction so it never reaches
  * `client.submit`, when an earlier row of its chain is `detenido`, or when this is its first
  * claim and the `SAME_CODE_REFUSAL_LIMIT` rows immediately before it on its chain are all
- * `rechazado` with one and the same code. A held row becomes `detenido` with `incidencia`, so
- * every later claimed row of its chain is held with it.
+ * `rechazado` with one and the same code other than `FUTURE_DATE_REFUSAL`. A held row becomes
+ * `detenido` with `incidencia`, so every later claimed row of its chain is held with it.
  *
  * An ordinary cancellation whose current alta (same invoice identity, on any chain) is `rechazado` is set aside
  * instead (`setAside`): `retenido`, with an incident and a filing case of its own
@@ -852,7 +855,7 @@ async function haltOpenChainClaims(
           and held_envio.estado = 'detenido'
       ) or (exists (
         select 1 from envios own where own.registro_id = r.id and own.intentos = 1
-      ) and ${sameCodeRunBefore("r")}))
+      ) and ${holdingRunBefore("r")}))
   `);
   if (blocked.rows.length === 0) return rest;
   const blockedIds = new Set(blocked.rows.map((row) => row.id));
@@ -978,6 +981,16 @@ function sameCodeRunBefore(record: "r" | "d" | "p"): SQL {
       limit ${SAME_CODE_REFUSAL_LIMIT}
     ) run
   )`;
+}
+
+/** `sameCodeRunBefore`, except a run of `FUTURE_DATE_REFUSAL`: the claim hold's run. */
+function holdingRunBefore(record: "r"): SQL {
+  return sql`(${sameCodeRunBefore(record)} and (
+    select preceding_envio.codigo_error
+    ${recordsBefore(record)}
+    order by preceding.secuencia desc
+    limit 1
+  ) is not ${String(FUTURE_DATE_REFUSAL)})`;
 }
 
 /**
