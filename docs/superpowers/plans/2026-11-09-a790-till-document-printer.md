@@ -1,5 +1,7 @@
 # A790: choose the recorded document, then its printer
 
+> **13 November 2026:** A790’s remaining payment-time mixed Invoice-list choice is satisfied by A739’s existing after-settlement chooser; the watcher cleared its [documentation-only closeout](2026-11-13-a790-payment-invoice-printer.md). Dashboard routing and the Devices A4 marker landed as #3050 and #3057.
+
 **Approved by the watcher, 9 November 2026 at 23:14**, in Lane F `questions.md`, “WATCHER 2026-11-09 23:14 — A790 plan: APPROVED with these changes (no new Claude read)”. Owner20:34: “Drop it, small slices”, recorded there under “OWNER 2026-11-09 20:34 — lane F walk”. Claude’s completed read and the watcher’s corrections are incorporated below.
 
 **Finish:** live sales and history with a working-order id have one **Print/Reprint** entry. F1 chooses recorded **Receipt/Invoice**, then that role’s printer; F2 opens directly at Receipt’s printer row. Explicit confirmation names the destination and original/copy. F1 Receipt retains its customer. Selection, saving, Refresh and Back print nothing.

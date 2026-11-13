@@ -1,5 +1,7 @@
 # A790: dashboard document and printer routing
 
+> **13 November 2026:** A790’s remaining payment-time mixed Invoice-list choice is satisfied by A739’s existing after-settlement chooser; the watcher cleared its [documentation-only closeout](2026-11-13-a790-payment-invoice-printer.md). Dashboard routing and the Devices A4 marker landed as #3050 and #3057.
+
 **Authority:** Lane F `queue.md` A790, quoted in the 13 November Sol-high writer brief. Claude reviewed the draft in367s and the sole reread in303s; this revision accepts the simplifications and precision fixes. The watcher cleared this slice on13November04:49, citing the owner’s22October picker answer (`~/waitron-campaign-f/archive/questions-to-2026-10-23.md:2917`) and design rows A, B, E/H/I and G/J. That record approves the A–M design for implementation planning; no fresh owner approval of this revised plan is claimed.
 
 **Finish line:** Dashboard Orders has one Print/Reprint entry: choose the recorded document, then its eligible printer. F1 offers Receipt/Invoice; F2 opens Receipt directly. Print actions name the printer in EN/ES. This browser remembers a printer per document separately from till Equipment. Devices marks an Invoice printer that uses A4.

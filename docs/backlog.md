@@ -1189,14 +1189,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Guest count** (bundle of 2, size S, needs the owner). [Detail](backlog/printers.md#bundle-guest-count)
 
-- **A790. Remaining document and printer choices.** The mixed-printer payment choice
-  remains open. A739’s order-linked till prerequisite
-  is released by the [till document/printer slice](superpowers/plans/2026-11-09-a790-till-document-printer.md);
-  its payment window comes before the combined A840/A842/A848 change. G4/A947, recovery-origin
-  file, browser journal, prepare/accept and duplicate-print protection are dropped. Landed
-  foundations grant no cleanup authority; fiscal issuance and F2 replacement stay outside A790.
-  [Detail](backlog/printers.md#a790-document-and-printer-routing-plan)
-
 - **Loose ends left by A661 (#1745).**
   [Detail](backlog/printers.md#loose-ends-left-by-a661-1745)
 

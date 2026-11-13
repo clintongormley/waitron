@@ -105,28 +105,6 @@ command-line Android tools (`android-commandlinetools`) through Homebrew on 2026
 about 30 minutes, every Homebrew process idle at its sandboxed unpacking step, and was stopped;
 the cause was not found.
 
-## A790: document and printer routing plan
-
-A790 remains open for the payment-time mixed-printer choice and subsequent integration checks. The [order-linked till slice](../superpowers/plans/2026-11-09-a790-till-document-printer.md)
-releases A739’s prerequisite for sales with an order (watcher approval, 9 November 2026 at23:14).
-A739 owns its payment window and final-entry changes, including the separate handheld paid view;
-A840/A842/A848 follow as one change.
-
-From Transactions, an orderless historical F1 uses its device’s Invoice printer for an original
-or copy on A4 or receipt paper. Receipt offers a compact copy after an original completes.
-F2 A4 remains unavailable; A739 supplies order-linked Receipt Email. F2-to-F1 replacement remains separate fiscal work.
-
-The payment-time mixed-printer choice remains in A790: a printed full invoice should offer the
-profile's Invoice list, including receipt-paper printers, using the device's saved choice and then
-the profile default. Do not mistake #2640's ticket-view chooser for that payment change. Keep the Printers tab's A4
-printers wording and A661's separate print-queue Resend policy question.
-
-G4, the recovery-origin file, browser operation journal and two-stage prepare/accept exchange are
-dropped entirely for remaining A790; nothing here or in A739/A840–A848 waits on A947. Do not plan a
-new table, ledger, all-writer revision or duplicate-print protection. Already landed foundations
-are not cleanup authority. The historical design and plans carry dated supersession pointers;
-their old machinery and release gates do not govern the remaining slices.
-
 ## Show a failed automatic invoice copy to staff
 
 `reserveStagedInvoiceDelivery` returns `undefined` after its failed reservation is rolled back;
@@ -742,6 +720,12 @@ Hardware and inbox checks to complete in the owner session.
   [Detail](printers.md#loose-ends-left-by-a663-part-3b-1827)
 
 ## Decisions and deliberate limits
+
+- **Document/printer routing scope (A790).** The owner dropped G4/A947, the recovery-origin
+  file, browser journal, prepare/accept and duplicate-print protection on 9 November 2026 at
+  20:34. Landed foundations grant no cleanup authority. Keep the Printers tab’s A4-printers
+  wording; F2 replacement and A661’s print-queue Resend policy remain separate work. See the
+  [closeout and implementation receipts](../superpowers/plans/2026-11-13-a790-payment-invoice-printer.md).
 
 - **Add a printer lists a Bluetooth device its agent reports paired unless the agent says it is
   not a printer; one whose kind it cannot tell is listed (A404, 2026-11-05).** The owner asked that
