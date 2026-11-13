@@ -45,7 +45,7 @@ function harness(
       ? undefined
       : sharedClockServiceReading({ clockStatus: host }, () => new Date(wallMs));
   const clockStatus = reading === undefined ? undefined : vi.fn(reading.read);
-  const clearClockStatus = reading === undefined ? undefined : vi.fn(reading.clear);
+  const clearClockStatus = reading?.clear;
   let steps = 0;
   let countSteps = () => steps;
   const correction = {
@@ -108,7 +108,6 @@ function harness(
     jump,
     failStepCount,
     writePending: correction.writePending,
-    clearClockStatus,
     wall: () => wallMs,
   };
 }
@@ -316,11 +315,14 @@ describe("the clock watch and a jump of the box's clock", () => {
     const h = harness({ host: async () => answer });
     await h.tick();
     expect(h.startState.status).toBe("by_internet");
+    // Confirmed by the internet, the looks read nothing, so the reading ages with the clock.
+    for (let look = 0; look < 4; look++) await h.tick();
     answer = NOT_SYNCHRONISED;
-    // Back, so the shared reading's minute would still serve the synchronised answer.
-    h.jump(-2 * MINUTE);
+    // Back 70 seconds, 75 seconds after the reading: by the box's clock it is 5 seconds old, so
+    // the shared reading's minute would still serve the synchronised answer.
+    h.jump(-70_000);
     await h.tick();
-    expect(h.clearClockStatus).toHaveBeenCalledOnce();
     expect(h.startState).toMatchObject({ status: "waiting", cause: "clock_jumped" });
+    expect(h.host).toHaveBeenCalledTimes(2);
   });
 });
