@@ -305,7 +305,7 @@ async function refusingRelay(at: "rcpt" | "data"): Promise<Relay> {
   };
 }
 
-// The relay refusal must carry the address for the log-omission checks to be meaningful.
+// The relay refusal must carry the address for the checks that omit it to be meaningful.
 async function relayRefusal(relay: Relay): Promise<string> {
   const transport = nodemailer.createTransport({ url: relay.url });
   try {

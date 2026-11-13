@@ -874,7 +874,7 @@ the helper's constant status is not evidence of the write.
   The shared adjustment venue uses Anna and Martha for its staff and manager samples.
   Local `issuance-pass.test.ts`, `till-sale-tender-block.test.ts`, `sale-till-source.receipt.test.ts`,
   `served.test.ts`, `report-api.categories-reconcile.test.ts` and `demo-seed.db.test.ts` use English staff display names.
-  The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its venue, location and table samples remain.
+  The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its Spanish venue legal-name, location and table-name samples remain.
   Spanish staff display-name samples remain in other local and shared `testing/` fixtures.
   Location and dish samples remain in the issuance-pass and list-unit-price fiscal-identity,
   served-at-huella, split-bill fiscal and tabs filing suites.
