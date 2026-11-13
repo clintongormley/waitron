@@ -63,7 +63,7 @@ it("keeps allergy ticks writable after settlement while the dish line is frozen"
       .where(eq(allergyLineTicks.guestId, guestId)),
   ).toEqual([{ guestId, workingLineId: line!.id }]);
   const error = await captureError(() =>
-    inTx(v, (tx) =>
+    inTx(v, async (tx) =>
       tx.run(
         sql`update working_order_lines set kitchen_name = kitchen_name || ' ' where id = ${line!.id}`,
       ),
