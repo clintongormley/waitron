@@ -29,6 +29,7 @@ import {
   madridWithVatClassChanges,
   type MadridVatClassChange,
 } from "./testing/madrid-vat-class-changes.js";
+import { madridWithAddedRows, type MadridAddedCategory } from "./testing/madrid-added-rows.js";
 import {
   madridWithRenamedColumns,
   type MadridColumnRenames,
@@ -59,6 +60,67 @@ const VAT_CLASS_CHANGES: MadridVatClassChange[] = [
     "d51ec2b2e6c7f9ff0e66731d405ec20f103ea2caade5dd4aa9ea61a77ad22401", // Mahón
   ].map((image) => ({ product: madridProduct(image), old: "reduced", new: "super_reduced" })),
 ];
+
+// Sweetened soft drinks and alcoholic drinks sold as goods take the general rate
+// (LIVA art. 91.Uno.1.1.º excludes them; art. 90.Uno).
+const TAKEAWAY_DRINKS = {
+  cola: {
+    image: "5796adbb32bc1ed2781bb2ce4755d2b0d9ed7ff37226cfa8b4ff23335684cfeb.webp",
+    customerName: { en: "Coca-Cola can (33 cl)", es: "Coca-Cola en lata (33 cl)" },
+    unitPrice: 180,
+    vatClass: "general",
+    pricingUnit: "each",
+  },
+  colaZero: {
+    image: "1697b140ce241b4ec3c003b86fc62e4212780eff2c2659b3ee71117aa85564a6.webp",
+    customerName: { en: "Coca-Cola Zero can (33 cl)", es: "Coca-Cola Zero en lata (33 cl)" },
+    unitPrice: 180,
+    vatClass: "general",
+    pricingUnit: "each",
+  },
+  beer: {
+    image: "4b2c42eed14559d95309ef3b2e63ad31a625ee1d9db7212326c6b2258eb14a5c.webp",
+    customerName: { en: "Bottle of lager (33 cl)", es: "Botellín de cerveza (33 cl)" },
+    unitPrice: 160,
+    vatClass: "general",
+    pricingUnit: "each",
+  },
+};
+const TAKEAWAY_DRINK_NAMES = { en: "Drinks to take away", es: "Bebidas para llevar" };
+const ADDED_CATEGORIES: Record<"en" | "es", MadridAddedCategory[]> = {
+  en: [
+    {
+      menu: "Deli takeaway",
+      name: "Drinks to take away",
+      names: TAKEAWAY_DRINK_NAMES,
+      products: [
+        { ...TAKEAWAY_DRINKS.cola, name: "Coca-Cola", kitchenName: "COCA-COLA · DELI" },
+        {
+          ...TAKEAWAY_DRINKS.colaZero,
+          name: "Coca-Cola Zero",
+          kitchenName: "COCA-COLA ZERO · DELI",
+        },
+        { ...TAKEAWAY_DRINKS.beer, name: "Bottled beer", kitchenName: "BOTTLED BEER · DELI" },
+      ],
+    },
+  ],
+  es: [
+    {
+      menu: "Charcutería para llevar",
+      name: "Bebidas para llevar",
+      names: TAKEAWAY_DRINK_NAMES,
+      products: [
+        { ...TAKEAWAY_DRINKS.cola, name: "Coca-Cola", kitchenName: "COCA-COLA · CHARCUTERÍA" },
+        {
+          ...TAKEAWAY_DRINKS.colaZero,
+          name: "Coca-Cola Zero",
+          kitchenName: "COCA-COLA ZERO · CHARCUTERÍA",
+        },
+        { ...TAKEAWAY_DRINKS.beer, name: "Botellín", kitchenName: "BOTELLÍN · CHARCUTERÍA" },
+      ],
+    },
+  ],
+};
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
   persons: ["role"],
@@ -1196,6 +1258,15 @@ for (const locale of ["en", "es"] as const) {
           ),
         );
         phases[phase]!.activity_log! += 1;
+      }
+      if (phase === "seeded") {
+        const { semantics, added } = madridWithAddedRows(
+          expected.seeded,
+          canonical.seeded,
+          ADDED_CATEGORIES[locale],
+        );
+        expected.seeded = semantics;
+        for (const [name, count] of Object.entries(added)) phases.seeded![name]! += count;
       }
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));
