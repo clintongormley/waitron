@@ -4,7 +4,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
+  bottomMessage,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -380,7 +381,7 @@ export class StationEditor extends LitElement {
     forgottenAfterMinutes: "",
     readyWarningAfterMinutes: "",
   };
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   /** A chosen printer left the printer list, so the draft lost it. */
   @state() private printerDropped = false;
   private scope?: DraftScope<Draft>;
@@ -439,7 +440,7 @@ export class StationEditor extends LitElement {
         ...timingDraft(station),
       };
       this.baseline = copy(this.draft);
-      this.attempted = false;
+      this.feedback.reset();
       this.printerDropped = false;
       this.refusal = undefined;
     }
@@ -572,11 +573,11 @@ export class StationEditor extends LitElement {
       this.nothingToSend
     )
       return;
-    this.attempted = true;
+    this.feedback.press();
     this.refusal = undefined;
     this.printerDropped = false;
     if (Object.keys(this.fieldErrors()).length > 0) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     const detail = this.sendable();
@@ -630,7 +631,7 @@ export class StationEditor extends LitElement {
   override render(): unknown {
     if (!this.open || this.station === undefined) return nothing;
     const s = saveActionState(this.scope);
-    const errors = this.attempted ? this.fieldErrors() : {};
+    const errors = this.feedback.attempted ? this.fieldErrors() : {};
     const invalid = Object.keys(errors).length > 0;
     const nameError = errors.name ?? "";
     const refusal = this.refusal;
@@ -848,13 +849,11 @@ export class StationEditor extends LitElement {
         </div>
         <wt-form-actions
           slot="footer"
-          .error=${[
+          .error=${bottomMessage(
             unplaced,
             marked ? t("prep.fix_fields") : "",
             this.printerDropped ? t("prep.printer_deleted") : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          )}
         >
           <wt-button
             slot="cancel"

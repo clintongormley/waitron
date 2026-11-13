@@ -4,7 +4,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -64,7 +64,7 @@ export class RangeDialog extends LitElement {
   @property({ attribute: false }) periods: readonly { id: string; name: string }[] = [];
   @property({ attribute: false }) occupied: readonly (ClosedRange | ServiceRange)[] = [];
   @state() private draft: ServiceRange = this.rangeDraft();
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   private baseline?: ServiceRange;
   private scope?: DraftScope<ServiceRange>;
   private leave?: LeaveCoordinator;
@@ -96,7 +96,7 @@ export class RangeDialog extends LitElement {
       this.generation = {};
       this.draft = this.rangeDraft();
       this.baseline = this.rangeDraft();
-      this.attempted = false;
+      this.feedback.reset();
     }
     if (this.isConnected && !this.scope) {
       const { coordinator, scope } = draftScopeFor(this, {
@@ -172,9 +172,9 @@ export class RangeDialog extends LitElement {
   private save() {
     if (!this.open || !this.isConnected || this.busy || saveActionState(this.scope).unchanged)
       return;
-    this.attempted = true;
+    this.feedback.press();
     if (Object.keys(this.errors).length) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     const input = copy(this.draft);
@@ -194,7 +194,7 @@ export class RangeDialog extends LitElement {
   override render(): unknown {
     if (!this.open) return nothing;
     const state = saveActionState(this.scope);
-    const errors = this.attempted ? this.errors : {};
+    const errors = this.feedback.attempted ? this.errors : {};
     const generation = this.generation;
     const current = () =>
       generation === this.generation && this.isConnected && this.open && !this.busy;
@@ -295,7 +295,7 @@ export class RangeDialog extends LitElement {
           <wt-button
             data-test="save-range"
             variant=${state.variant}
-            ?disabled=${state.unchanged || this.busy || (this.attempted && Object.keys(this.errors).length > 0)}
+            ?disabled=${state.unchanged || this.busy || (this.feedback.attempted && Object.keys(this.errors).length > 0)}
             @click=${() => {
               if (current()) this.save();
             }}
