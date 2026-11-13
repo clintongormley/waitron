@@ -77,6 +77,8 @@ describe("SumUp audit", () => {
   it.each([
     { status: null, timestamp: "2026-07-01T12:00:00Z", unsettled: ["capture"] },
     { status: "CANCELLED", timestamp: "2026-07-01T12:00:00Z", unsettled: ["capture"] },
+    { status: "PENDING", timestamp: "2026-07-01T12:00:00Z", unsettled: ["capture"] },
+    { status: "FAILED", timestamp: "2026-07-01T12:00:00Z", unsettled: ["capture"] },
     { status: "SUCCESSFUL", timestamp: "2026-06-30T12:00:00Z", unsettled: [] },
   ])(
     "audits $status capture on the normal next-day run, including cross-day recovery",
