@@ -67,7 +67,7 @@ interface Venue {
   seriesId: ReturnType<typeof brandSeriesId>;
   cfg: DeviceRequestConfig;
   offers: ZoneOffers;
-  cana: string;
+  beer: string;
 }
 let venue: Venue;
 
@@ -140,7 +140,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       name: `Bill payments signed in menu ${venueId}`,
     });
     const drinks = await createCategory(tx, { name: "Drinks" });
-    const cana = await createProduct(tx, {
+    const beer = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: drinks.id,
       name: "Draft beer",
@@ -155,7 +155,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       cfg,
       seriesId: brandSeriesId(provisioned.seriesIds[0]!),
       offers: await offerProducts(tx, cfg, { zone: "tables" }),
-      cana: cana.id,
+      beer: beer.id,
     };
   });
 }
@@ -211,7 +211,7 @@ async function bill(): Promise<string> {
     });
     const { tabId } = await openPartyTab(tx, venue.cfg, {
       tableId: table.id,
-      lines: [{ menuItemId: venue.offers.offerFor(venue.cana), quantity: "1" }],
+      lines: [{ menuItemId: venue.offers.offerFor(venue.beer), quantity: "1" }],
     });
     return tabId;
   });

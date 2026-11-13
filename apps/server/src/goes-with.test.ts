@@ -309,7 +309,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
   it("A773 fire paper: two bills of one group", async () => {
     const k = await kitchen(true);
     const [desserts] = await place(k, [{ names: ["Red wine bottle", "Tarta"], release: "hold" }]);
-    const [tarta] = await inTx(k.v, (tx) =>
+    const [cake] = await inTx(k.v, (tx) =>
       tx
         .select({ lineNo: workingOrderLines.lineNo })
         .from(workingOrderLines)
@@ -320,7 +320,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
           ),
         ),
     );
-    const billTwo = await split(k.v, k.partyId, k.tabId, [tarta!.lineNo]);
+    const billTwo = await split(k.v, k.partyId, k.tabId, [cake!.lineNo]);
     expect(billTwo).not.toBe(k.tabId);
     await fire(k, desserts!);
 
@@ -369,7 +369,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     expect(before).toHaveLength(2);
     expect(before[1]!.filter((text) => text === CUE)).toHaveLength(1);
 
-    const [tarta] = await inTx(k.v, (tx) =>
+    const [cake] = await inTx(k.v, (tx) =>
       tx
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
@@ -382,7 +382,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     );
     const expectedPartyRevision = await revisionOf(k.v, k.partyId);
     await inTx(k.v, (tx) =>
-      markServed(tx, k.v.cfg, k.partyId, [{ lineId: tarta!.id, quantity: "1" }], {
+      markServed(tx, k.v.cfg, k.partyId, [{ lineId: cake!.id, quantity: "1" }], {
         operatorId: OPERATOR,
         submissionId: randomUUID(),
         expectedPartyRevision,
@@ -408,7 +408,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     it("A773 fire paper: no cue when a held dish on another bill sits at a station that does not wait", async () => {
       const k = await kitchen(false);
       const [desserts] = await place(k, [{ names: ["Red wine bottle", "Tarta"], release: "hold" }]);
-      const [tarta] = await inTx(k.v, (tx) =>
+      const [cake] = await inTx(k.v, (tx) =>
         tx
           .select({ lineNo: workingOrderLines.lineNo })
           .from(workingOrderLines)
@@ -419,7 +419,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
             ),
           ),
       );
-      const billTwo = await split(k.v, k.partyId, k.tabId, [tarta!.lineNo]);
+      const billTwo = await split(k.v, k.partyId, k.tabId, [cake!.lineNo]);
       expect(billTwo).not.toBe(k.tabId);
       await fire(k, desserts!);
 

@@ -827,28 +827,28 @@ describe("A803 move dishes refuses, and changes nothing", () => {
 
   it("A803 move dishes refuses: two dishes asked for under a fresh revision, one already on another bill, is tab.line_not_found and neither moves", async () => {
     const p = await party([dish("Caña"), dish("Flan")]);
-    const [cana, flan] = await dishIds(p.bill1);
+    const [beer, flan] = await dishIds(p.bill1);
     await move(p.partyId, p.bill1, p.bill2, [flan!]);
     const third = await inTx(v, (tx) => insertPartyBill(tx, v.cfg, p.partyId));
-    await refused(() => move(p.partyId, p.bill1, third, [cana!, flan!]), "tab.line_not_found", {
+    await refused(() => move(p.partyId, p.bill1, third, [beer!, flan!]), "tab.line_not_found", {
       tabId: p.bill1,
       lineId: flan,
     });
-    expect(await dishIds(p.bill1)).toEqual([cana]);
+    expect(await dishIds(p.bill1)).toEqual([beer]);
     expect(await dishIds(p.bill2)).toEqual([flan]);
     expect(await dishIds(third)).toEqual([]);
   });
 
   it("A803 move dishes refuses: two dishes asked to go, under a fresh revision, to a bill merged away is tab.not_open and neither moves", async () => {
     const p = await party([dish("Caña"), dish("Flan")]);
-    const [cana, flan] = await dishIds(p.bill1);
+    const [beer, flan] = await dishIds(p.bill1);
     const third = await inTx(v, (tx) => insertPartyBill(tx, v.cfg, p.partyId));
     const command = await commandFor(v, p.partyId);
     await inTx(v, (tx) => mergeBills(tx, v.cfg, third, p.bill2, command));
-    await refused(() => move(p.partyId, p.bill1, p.bill2, [cana!, flan!]), "tab.not_open", {
+    await refused(() => move(p.partyId, p.bill1, p.bill2, [beer!, flan!]), "tab.not_open", {
       tabId: p.bill2,
     });
-    expect(await dishIds(p.bill1)).toEqual([cana, flan]);
+    expect(await dishIds(p.bill1)).toEqual([beer, flan]);
     expect(await dishIds(p.bill2)).toEqual([]);
     expect(await dishIds(third)).toEqual([]);
   });
@@ -1090,9 +1090,9 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
   it("A1519 move dishes: asks nothing when one dish stays on the full-invoice bill", async () => {
     const p = await party([dish("Caña"), dish("Burger")]);
     await fullInvoice(v, p.bill1, ACME);
-    const [cana, burger] = await dishIds(p.bill1);
+    const [beer, burger] = await dishIds(p.bill1);
 
-    await move(p.partyId, p.bill1, p.bill2, [cana!]);
+    await move(p.partyId, p.bill1, p.bill2, [beer!]);
 
     expect(await dishIds(p.bill1)).toEqual([burger]);
     expect(await invoiceOf(v, p.bill1)).toMatchObject(invoiceTo(ACME));
@@ -1119,10 +1119,10 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
   it("A1519 move dishes refuses: a choice sent with a move that leaves a dish on the bill is bill.merge_invoice_choice_required", async () => {
     const p = await party([dish("Caña"), dish("Burger")]);
     await fullInvoice(v, p.bill1, ACME);
-    const [cana] = await dishIds(p.bill1);
+    const [beer] = await dishIds(p.bill1);
 
     await refused(
-      () => moveChoosing(p, p.bill2, [cana!], KEEP_ACME),
+      () => moveChoosing(p, p.bill2, [beer!], KEEP_ACME),
       "bill.merge_invoice_choice_required",
       { workingOrderId: p.bill1, intoWorkingOrderId: p.bill2 },
     );
