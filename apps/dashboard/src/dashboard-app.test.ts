@@ -1088,7 +1088,8 @@ describe("dashboard-app", () => {
   ])(
     "a person holding only %s signs in and sees permitted pages",
     async (_name, permissions, screens) => {
-      const { role: _role, ...person } = meResponse;
+      const person: Partial<typeof meResponse> = { ...meResponse };
+      delete person.role;
       const api = stubApi({
         getMe: vi.fn().mockResolvedValue({ ...person, permissions, modules: [] }),
       });
