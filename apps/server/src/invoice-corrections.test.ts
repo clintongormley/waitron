@@ -23,7 +23,6 @@ import {
   createPinThrottle,
   hashPin,
   loginWithPin,
-  persons,
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
