@@ -193,6 +193,11 @@ it("Save sends only the changed field, closes the form and shows the answer", as
     "Privacy notice web page: https://example.com/answered",
     "Privacy email: privacy@example.com",
   ]);
+  await edit(el);
+  await type(el, "privacyEmail", "invalid");
+  expect(input(el, "privacyEmail")!.error).toBe("");
+  expect(bottom(el)).toBe("");
+  expect(saveButton(el).disabled).toBe(false);
 });
 
 it("Save sends a changed field as the draft holds it, surrounding spaces included", async () => {

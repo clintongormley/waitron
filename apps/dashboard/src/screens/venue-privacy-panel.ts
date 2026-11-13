@@ -10,6 +10,7 @@ import {
 } from "@waitron/shared";
 import {
   baseStyles,
+  FormFeedback,
   draftScopeFor,
   focusFirstInvalid,
   saveActionState,
@@ -93,7 +94,7 @@ export class VenuePrivacyPanel extends LitElement {
   @state() private model?: VenuePrivacy;
   @state() private readError = "";
   @state() private draft?: Draft;
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private refusals: Errors = {};
   @state() private actionError = "";
   @state() private submitting = false;
@@ -151,7 +152,7 @@ export class VenuePrivacyPanel extends LitElement {
     this.#registerDraft();
   }
   #reset(): void {
-    this.attempted = false;
+    this.#feedback.reset();
     this.refusals = {};
     this.actionError = "";
   }
@@ -201,7 +202,7 @@ export class VenuePrivacyPanel extends LitElement {
   }
   #errors(): Errors {
     if (!this.draft) return {};
-    return { ...this.refusals, ...(this.attempted ? ownErrors(this.draft) : {}) };
+    return { ...this.refusals, ...(this.#feedback.attempted ? ownErrors(this.draft) : {}) };
   }
   #change(field: Field, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
@@ -220,7 +221,7 @@ export class VenuePrivacyPanel extends LitElement {
   async #save(): Promise<void> {
     if (this.submitting || !this.draft || !this.#expected) return;
     if (saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
+    this.#feedback.press();
     this.refusals = {};
     this.actionError = "";
     if (Object.keys(ownErrors(this.draft)).length > 0) {
@@ -311,7 +312,8 @@ export class VenuePrivacyPanel extends LitElement {
   }
   #form() {
     const errors = this.#errors();
-    const failsOwnChecks = this.attempted && Object.keys(ownErrors(this.draft!)).length > 0;
+    const failsOwnChecks =
+      this.#feedback.attempted && Object.keys(ownErrors(this.draft!)).length > 0;
     const saveAction = saveActionState(this.#scope);
     return html`<form
       @submit=${(event: Event) => {

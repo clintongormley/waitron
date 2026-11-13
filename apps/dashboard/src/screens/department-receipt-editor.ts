@@ -8,6 +8,8 @@ import {
 import { QueryController } from "@waitron/dashboard-kit";
 import {
   baseStyles,
+  FormFeedback,
+  bottomMessage,
   draftScopeFor,
   saveActionState,
   submitOnEnter,
@@ -117,7 +119,7 @@ export class DepartmentReceiptEditor extends LitElement {
     policy: { printTradingName: true },
   };
   @state() private busy = false;
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   @state() private errors: Record<string, string> = {};
   @state() private actionError = "";
   @state() private readError = "";
@@ -174,7 +176,7 @@ export class DepartmentReceiptEditor extends LitElement {
     this.model = undefined;
     this.#baseline = undefined;
     this.busy = false;
-    this.attempted = false;
+    this.#feedback.reset();
     this.errors = {};
     this.actionError = this.readError = this.previewError = "";
     this.preview = undefined;
@@ -245,7 +247,7 @@ export class DepartmentReceiptEditor extends LitElement {
         this.draft = structuredClone(value);
         this.errors = {};
         this.actionError = "";
-        this.attempted = false;
+        this.#feedback.reset();
         this.#queuePreview();
       },
     });
@@ -505,12 +507,11 @@ export class DepartmentReceiptEditor extends LitElement {
   async #save(): Promise<void> {
     if (this.busy || !this.department || !this.#scope || saveActionState(this.#scope).unchanged)
       return;
-    this.attempted = true;
+    this.#feedback.press();
     this.errors = {};
     this.actionError = "";
     if (Object.keys(this.#problems()).length) {
-      await this.updateComplete;
-      await focusFirstInvalid(this.shadowRoot!);
+      await this.#feedback.focus(this.shadowRoot!);
       return;
     }
     const submitted = this.#body();
@@ -561,7 +562,7 @@ export class DepartmentReceiptEditor extends LitElement {
     scope.commit(submitted);
     this.#baseline = submitted;
     this.draft = structuredClone(submitted);
-    this.attempted = false;
+    this.#feedback.reset();
     this.busy = false;
     this.#queuePreview();
     this.#notify("department-receipt-saved", id);
@@ -598,7 +599,7 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#marked = false;
     if (!this.department) return nothing;
     const action = saveActionState(this.#scope);
-    const problems = this.attempted ? this.#problems() : {};
+    const problems = this.#feedback.attempted ? this.#problems() : {};
     const errors = { ...problems, ...this.errors };
     const hasErrors = Object.keys(errors).length > 0;
     this.#marked = hasErrors;
@@ -785,7 +786,7 @@ export class DepartmentReceiptEditor extends LitElement {
           : nothing
       }
       <wt-form-actions
-        .error=${[hasErrors ? t("form.fix_fields") : "", this.actionError].filter(Boolean).join(" ")}
+        .error=${bottomMessage(hasErrors ? t("form.fix_fields") : "", this.actionError)}
       >
         <wt-button
           slot="cancel"

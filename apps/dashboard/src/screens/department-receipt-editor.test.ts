@@ -57,6 +57,10 @@ it("saves exact independent receipt and policy, keeps hidden translations and st
   await el.updateComplete;
   expect(receiptSave(el).variant).toBe("secondary");
   expect(receiptSave(el).disabled).toBe(true);
+  await editReceipt(el, "email", "invalid");
+  expect(receiptField(el, "email").error).toBe("");
+  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");
+  expect(receiptSave(el).disabled).toBe(false);
 });
 it("explains an empty required description and disables Save until repaired", async () => {
   const { el, api } = await mountReceiptEditor();
