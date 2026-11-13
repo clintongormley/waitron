@@ -649,7 +649,7 @@ describe("the box's clock was stepped", () => {
   });
 
   it("says the setup or restore page's device set it, naming the administrator on first setup", () => {
-    const named = both({ ...base, source: "setup", person: "Luis", bySetupPerson: true });
+    const named = both({ ...base, source: "setup", person: "Luis", bySetupAdmin: true });
     expect(named.english).toBe(
       `The box's clock was set from the device showing the setup or restore page, by Luis: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
     );

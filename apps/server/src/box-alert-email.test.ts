@@ -373,7 +373,7 @@ describe("boxEmailMessage for the box setting its clock", () => {
   });
 
   it("says the setup or restore page's device set it, naming the administrator on first setup", () => {
-    const named = { ...STEP, source: "setup", person: "Ben", bySetupPerson: true };
+    const named = { ...STEP, source: "setup", person: "Ben", bySetupAdmin: true };
     expect(message("en", named).text).toBe(
       "The box's clock was set from the device showing the setup or restore page, by Ben: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to 18/10/2026 23:40.",
     );

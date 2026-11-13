@@ -638,7 +638,7 @@ describe("the running server's managers' email check", () => {
         unverified: false,
         byAdmin: false,
         byStaff: false,
-        ...(person === null ? { bySetup: true } : { bySetupPerson: true }),
+        ...(person === null ? { bySetup: true } : { bySetupAdmin: true }),
       },
     });
     const steps = [

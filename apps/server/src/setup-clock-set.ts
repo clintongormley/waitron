@@ -60,7 +60,7 @@ function noteEntry(request: ClockStepRequest): SetupClockStep {
       unverified: !request.verified,
       byAdmin: false,
       byStaff: false,
-      ...(person === null ? { bySetup: true as const } : { bySetupPerson: true as const }),
+      ...(person === null ? { bySetup: true as const } : { bySetupAdmin: true as const }),
     },
   };
 }

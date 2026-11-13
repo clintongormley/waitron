@@ -149,7 +149,7 @@ describe("setting the box's clock from the setup and restore pages", () => {
       unverified: false,
       byAdmin: false,
       byStaff: false,
-      bySetupPerson: true,
+      bySetupAdmin: true,
     });
   });
 
@@ -255,7 +255,7 @@ describe("the venue's first full start raises the setup's clock steps", () => {
     expect(rows.find((row) => row.id === entries[0]!.id)!.params).toMatchObject({
       source: "setup",
       person: "Luis",
-      bySetupPerson: true,
+      bySetupAdmin: true,
     });
     expect(await note(dir)).toBeNull();
   });

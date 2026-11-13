@@ -195,7 +195,7 @@ export const ALERT_MESSAGES: Readonly<
         en: "The box's clock was set from {person}'s device: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
         es: "El reloj del equipo se puso con la hora del dispositivo de {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
       },
-      bySetupPerson: {
+      bySetupAdmin: {
         mode: "replace",
         en: "The box's clock was set from the device showing the setup or restore page, by {person}: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
         es: "El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración, por {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",

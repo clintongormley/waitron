@@ -424,7 +424,7 @@ declare module "@waitron/shared" {
      * one, else null. `before` and `after` are ISO 8601 instants, each with its own offset;
      * `stepMs` the measured step, `direction` its sign. `byAdmin` and `byStaff` say which person
      * confirmed. A `setup` step was made from the setup or restore page before the venue existed
-     * and raised at its first full start: `bySetupPerson` when `person` names the administrator,
+     * and raised at its first full start: `bySetupAdmin` when `person` names the administrator,
      * `bySetup` when it names nobody.
      */
     "clock.corrected": {
@@ -444,7 +444,7 @@ declare module "@waitron/shared" {
       byAdmin: boolean;
       byStaff: boolean;
       bySetup?: true;
-      bySetupPerson?: true;
+      bySetupAdmin?: true;
     };
 
     /**

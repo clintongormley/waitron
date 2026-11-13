@@ -106,10 +106,6 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
     "clock.corrected.byStaff",
     "true when a staff member confirmed; picks the alert's words and names no one",
   ],
-  [
-    "clock.corrected.bySetupPerson",
-    "true when the setup page's step names the administrator; picks the alert's words and names no one",
-  ],
   ["course.name_taken.name", "the name of a course"],
   ["credentials.key_invalid.byteLength", "a size in bytes"],
   ["department.name_taken.name", "the name of a department"],
