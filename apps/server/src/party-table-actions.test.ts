@@ -835,7 +835,7 @@ describe("A803 a paid bill kept on a party combined away is one of the table's b
       .map((bill) => ({ id: bill.workingOrderId, status: bill.status }));
   }
 
-  async function luisJoinsPaidAna(prefix: string) {
+  async function lewisJoinsPaidAnna(prefix: string) {
     const [m4, m7] = await tables(prefix, 4, 7);
     const anna = await seat(v, m4);
     const lewis = await seat(v, m7);
@@ -864,7 +864,7 @@ describe("A803 a paid bill kept on a party combined away is one of the table's b
   });
 
   it("Join a seated table answers the joined party's paid bill among the bills", async () => {
-    const { anna, lewis, result } = await luisJoinsPaidAna("Family join");
+    const { anna, lewis, result } = await lewisJoinsPaidAnna("Family join");
 
     expect(await shownBills(lewis.partyId)).toEqual([
       { id: lewis.tabId, status: "open" },
@@ -874,7 +874,7 @@ describe("A803 a paid bill kept on a party combined away is one of the table's b
   });
 
   it("Move guests and Join a free table afterwards still answer that paid bill", async () => {
-    const { anna, lewis } = await luisJoinsPaidAna("Family free");
+    const { anna, lewis } = await lewisJoinsPaidAnna("Family free");
     const [m9, m10] = await tables("Family free", 9, 10);
 
     const moving = await opts(lewis.partyId);
@@ -888,7 +888,7 @@ describe("A803 a paid bill kept on a party combined away is one of the table's b
   });
 
   it("Split a table taking the staying party's last bill of its own makes no new bill while that paid bill is still shown", async () => {
-    const { anna, lewis, m4, m7 } = await luisJoinsPaidAna("Family split");
+    const { anna, lewis, m4, m7 } = await lewisJoinsPaidAnna("Family split");
 
     const splitting = await cmd(lewis.partyId);
     const result = await act((tx) =>
@@ -1100,23 +1100,23 @@ describe("kitchen groups when parties combine", () => {
       { names: ["Burger"], release: "fire" },
       { names: ["Flan"], release: "hold" },
     ]);
-    const luisGroups = await groupsOf(lewis.partyId);
-    const anaGroups = await groupsOf(anna.partyId);
-    const anaLines = await linesOf(v, anna.tabId);
-    expect(anaGroups.map((group) => group.state)).toEqual(["fired", "held"]);
+    const lewisGroups = await groupsOf(lewis.partyId);
+    const annaGroups = await groupsOf(anna.partyId);
+    const annaLines = await linesOf(v, anna.tabId);
+    expect(annaGroups.map((group) => group.state)).toEqual(["fired", "held"]);
 
     const moving = await opts(anna.partyId, lewis.partyId);
     await act((tx) => moveGuests(tx, v.cfg, anna.partyId, m7, moving));
 
-    const last = luisGroups.at(-1)!.position;
+    const last = lewisGroups.at(-1)!.position;
     expect(await groupsOf(lewis.partyId)).toEqual([
-      ...luisGroups,
-      { id: anaGroups[0]!.id, state: "fired", position: last + 1 },
-      { id: anaGroups[1]!.id, state: "held", position: last + 2 },
+      ...lewisGroups,
+      { id: annaGroups[0]!.id, state: "fired", position: last + 1 },
+      { id: annaGroups[1]!.id, state: "held", position: last + 2 },
     ]);
     expect(await groupsOf(anna.partyId)).toEqual([]);
-    expect(await linesOf(v, anna.tabId)).toEqual(anaLines);
-    expect(anaLines[1]!.groupId).toBe(anaGroups[1]!.id);
+    expect(await linesOf(v, anna.tabId)).toEqual(annaLines);
+    expect(annaLines[1]!.groupId).toBe(annaGroups[1]!.id);
   });
 });
 
@@ -1324,7 +1324,7 @@ describe("join tables", () => {
 });
 
 describe("split a table", () => {
-  async function anaAtTwo(prefix: string) {
+  async function annaAtTwo(prefix: string) {
     const [m4, m5] = await tables(prefix, 4, 5);
     const anna = await seat(v, m4);
     await joinFree(anna.partyId, m5);
@@ -1334,7 +1334,7 @@ describe("split a table", () => {
   }
 
   it("starts a new unnamed party on the table with the chosen bill as its Bill 1", async () => {
-    const { anna, m4, m5, b2 } = await anaAtTwo("Split");
+    const { anna, m4, m5, b2 } = await annaAtTwo("Split");
 
     const splitting = await cmd(anna.partyId);
     const result = await act((tx) => splitTable(tx, v.cfg, anna.partyId, m5, b2, splitting));
@@ -1358,7 +1358,7 @@ describe("split a table", () => {
   });
 
   it("gives the new party a new, empty Bill 1 at once when no bill is chosen", async () => {
-    const { anna, m5 } = await anaAtTwo("Vacant");
+    const { anna, m5 } = await annaAtTwo("Vacant");
 
     const splitting = await cmd(anna.partyId);
     const result = await act((tx) => splitTable(tx, v.cfg, anna.partyId, m5, null, splitting));
@@ -1404,7 +1404,7 @@ describe("split a table", () => {
   });
 
   it("takes the party's first bill, once refused as its main, like any other: Bill 1 at the new party", async () => {
-    const { anna, m4, m5, b2 } = await anaAtTwo("Main S");
+    const { anna, m4, m5, b2 } = await annaAtTwo("Main S");
     const splitting = await cmd(anna.partyId);
 
     const result = await act((tx) =>
@@ -1455,7 +1455,7 @@ describe("split a table", () => {
     });
 
     it("refuses a table not in the party", async () => {
-      const { anna, m4, m5, b2 } = await anaAtTwo("Elsewhere");
+      const { anna, m4, m5, b2 } = await annaAtTwo("Elsewhere");
       const [elsewhere] = await tables("Elsewhere other", 9);
       const splitting = await cmd(anna.partyId);
 
@@ -1470,7 +1470,7 @@ describe("split a table", () => {
     });
 
     it("refuses a paid bill", async () => {
-      const { anna, m4, m5, b2 } = await anaAtTwo("Settled");
+      const { anna, m4, m5, b2 } = await annaAtTwo("Settled");
       await pay(v, b2, "30.00");
       const splitting = await cmd(anna.partyId);
 
@@ -1482,7 +1482,7 @@ describe("split a table", () => {
     });
 
     it("refuses another party's bill", async () => {
-      const { anna, m4, m5, b2 } = await anaAtTwo("Foreign");
+      const { anna, m4, m5, b2 } = await annaAtTwo("Foreign");
       const [m7] = await tables("Foreign other", 7);
       const lewis = await seat(v, m7);
       const splitting = await cmd(anna.partyId);
@@ -1501,7 +1501,7 @@ describe("split a table", () => {
     });
 
     it("refuses an abandoned bill, and one that does not exist, as not open", async () => {
-      const { anna, m4, m5, b2 } = await anaAtTwo("Abandoned");
+      const { anna, m4, m5, b2 } = await annaAtTwo("Abandoned");
       const b3 = await splitOff(anna.partyId, anna.tabId, [1]);
       v.db.run(sql`update working_orders set status = 'abandoned' where id = ${b3}`);
       const missing = randomUUID();
@@ -1520,7 +1520,7 @@ describe("split a table", () => {
   });
 
   it("A803 waiting copy: Split a table takes a bill holding a dish held for the kitchen, and the new party holds its own copy of the group", async () => {
-    const { anna, m5, b2 } = await anaAtTwo("Held");
+    const { anna, m5, b2 } = await annaAtTwo("Held");
     await sendGroups(anna.partyId, [{ names: ["Flan"], release: "hold" }], b2);
     const flanBefore = (await lineRows(b2)).find((line) => line.lineNo === 2)!;
     const source = flanBefore.groupId!;
@@ -1567,13 +1567,13 @@ describe("MOVED notices after a table action", () => {
     await order(v, anna.tabId, "Paella", "Burger");
     const b2 = await splitOff(anna.partyId, anna.tabId, [2]);
     await order(v, lewis.tabId, "Tarta");
-    const anaNotices = noticesOn([anna.tabId, b2]);
-    const luisNotices = noticesOn([lewis.tabId]);
+    const annaNotices = noticesOn([anna.tabId, b2]);
+    const lewisNotices = noticesOn([lewis.tabId]);
 
     await joinFree(anna.partyId, m5);
 
-    expect(noticesOn([anna.tabId, b2])).toEqual(anaNotices);
-    expect(noticesOn([lewis.tabId])).toEqual(luisNotices);
+    expect(noticesOn([anna.tabId, b2])).toEqual(annaNotices);
+    expect(noticesOn([lewis.tabId])).toEqual(lewisNotices);
   });
 
   it("tells the kitchen of the split bill's dishes at the split table, and nothing of the dishes that stayed", async () => {
@@ -1599,7 +1599,7 @@ describe("MOVED notices after a table action", () => {
     const lewis = await seat(v, m7);
     await order(v, anna.tabId, "Burger");
     await order(v, lewis.tabId, "Tarta");
-    const luisNotices = noticesOn([lewis.tabId]);
+    const lewisNotices = noticesOn([lewis.tabId]);
 
     const moving = await opts(anna.partyId, lewis.partyId);
     const result = await act((tx) => moveGuests(tx, v.cfg, anna.partyId, m7, moving));
@@ -1607,7 +1607,7 @@ describe("MOVED notices after a table action", () => {
     expect(result).toEqual({ partyId: lewis.partyId, billIds: [lewis.tabId, anna.tabId] });
     expect(await billRow(v, anna.tabId)).toMatchObject({ status: "open", partyId: lewis.partyId });
     expect(noticesOn([anna.tabId, lewis.tabId])).toEqual([
-      ...luisNotices,
+      ...lewisNotices,
       { working_order_id: anna.tabId, kind: "moved", line_name: "BURG", moved_to: "NoticeM 7" },
     ]);
   });
