@@ -20280,7 +20280,13 @@ export class TillApp extends LitElement {
         const ticket = await api.getFiledTicket(billId);
         if (current()) await this.#showPaidTicket(open, ticket, payment.change);
       } catch {
-        if (current()) this.errorKey = "bill_pay.ticket_unread";
+        if (!current()) return true;
+        this.errorKey = "bill_pay.ticket_unread";
+        // The payment settled the order, so the basket lets it go.
+        if (open.surface === "counter") {
+          this.#releaseCounterOrder(billId);
+          await this.#refreshAfterWrite("held", "refresh.held_after_sale");
+        }
       }
       return true;
     }

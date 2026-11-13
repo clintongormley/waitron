@@ -4792,6 +4792,53 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(sent()[0]).toHaveProperty("guestCount", null);
   });
 
+  it("lets a Counter order go and reads the held list again when the payment it got no answer for settled it but its receipt cannot be read", async () => {
+    let settled = false;
+    const getBillBalance = vi.fn(async () =>
+      settled
+        ? balanceOf({
+            workingOrderId: "wo-1",
+            status: "settled",
+            received: "120.00",
+            outstanding: "0.00",
+            payments: [
+              paymentOf(),
+              paymentOf({
+                id: "pay-2",
+                submissionId: sent()[0]!.submissionId,
+                applied: "70.00",
+                tendered: "70.00",
+              }),
+            ],
+          })
+        : counterBalance,
+    );
+    const el = await retrieved({
+      takeBillPayment: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      getBillBalance,
+      getFiledTicket: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
+    });
+    await payTheRest(el);
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    settled = true;
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    const listReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+    payRest(el)!.click();
+    await flush(el, 6);
+
+    expect(api.getFiledTicket).toHaveBeenCalledWith("wo-1");
+    expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector(".error")?.textContent).toContain(
+      t("bill_pay.ticket_unread"),
+    );
+    expect(counter(el).store.id).not.toBe("wo-1");
+    expect(counter(el).store.lines).toEqual([]);
+    expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(listReads);
+  });
+
   it("sends a payment that got no answer again under the same complete request after the guests count changed", async () => {
     const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await retrieved({ takeBillPayment });
