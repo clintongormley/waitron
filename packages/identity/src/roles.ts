@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
 import {
   persons,
   personRoles,
@@ -9,6 +9,7 @@ import {
 } from "@waitron/db";
 import "./errors.js";
 import { AppError } from "@waitron/shared";
+import { foldForUniqueness } from "./fold.js";
 import { isDeclaredPermission, defaultPermissionsFor, type BuiltInRoleKey } from "./permissions.js";
 
 export const BUILT_IN_ROLE_KEYS = ["staff", "supervisor", "manager", "admin"] as const;
@@ -58,7 +59,8 @@ export async function heldBuiltInKey(
     .from(personRoles)
     .innerJoin(roles, eq(roles.id, personRoles.roleId))
     .innerJoin(persons, eq(persons.id, personRoles.personId))
-    .where(and(eq(personRoles.personId, personId), isNotNull(roles.builtInKey)));
+    .where(and(eq(personRoles.personId, personId), isNotNull(roles.builtInKey)))
+    .orderBy(desc(eq(roles.builtInKey, "admin")));
   return row?.key ?? null;
 }
 
@@ -101,8 +103,8 @@ export async function importAccessRole(
   const [role] = await tx
     .insert(roles)
     .values({
-      name: source.name as string,
-      nameFolded: source.name_folded as string,
+      name: (source.name as string).trim(),
+      nameFolded: foldForUniqueness(source.name as string),
       permissions,
       createdAt: source.created_at as string,
     })

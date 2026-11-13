@@ -6,7 +6,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { locations, nodes, tenants, persons } from "@waitron/db";
+import { locations, nodes, tenants } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";

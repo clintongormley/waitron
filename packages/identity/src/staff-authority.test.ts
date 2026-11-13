@@ -4,12 +4,13 @@ import {
   type Transaction,
   persons,
   roles,
+  personRoles,
   webauthnCredentials,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { builtInRoleForTest } from "../test/person-rows.js";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   openFreshManagementSession as openManagementSession,
   seedPerson,
@@ -664,3 +665,64 @@ it.each(["create", "invite", "details", "setRole"] as const)(
     expect(await row(target)).toEqual(before);
   },
 );
+
+it("does not rewrite an unchanged built-in membership when saving details", async () => {
+  const actor = await openManagementSession(suite.db, "admin");
+  const personId = await seedPerson(suite.db, "staff");
+  await suite.db
+    .update(persons)
+    .set({ email: "target@example.test", emailFolded: "target@example.test" })
+    .where(eq(persons.id, personId));
+  const before = await row(personId);
+  await run(async (tx) => {
+    const writes = vi.spyOn(tx, "delete");
+    try {
+      await updatePersonDetails(tx, {
+        managementSessionId: actor.token,
+        personId,
+        displayName: "Renamed",
+        firstNames: "First",
+        lastNames: "Last",
+        telephone: null,
+        email: before.email!,
+        role: "staff",
+        status: "active",
+      });
+      expect(writes.mock.calls.filter(([table]) => table === personRoles)).toHaveLength(0);
+    } finally {
+      writes.mockRestore();
+    }
+  });
+  expect((await row(personId)).displayName).toBe("Renamed");
+});
+
+it("recognises Admin membership when another built-in membership sorts first", async () => {
+  await suite.db.insert(roles).values([
+    { id: "a-staff", builtInKey: "staff", permissions: [] },
+    { id: "z-admin", builtInKey: "admin", permissions: [] },
+  ]);
+  const actor = await openManagementSession(suite.db, "manager");
+  const personId = await seedPerson(suite.db, "staff");
+  await suite.db.insert(personRoles).values({ personId, roleId: "z-admin" });
+  await suite.db
+    .update(persons)
+    .set({ email: "target@example.test", emailFolded: "target@example.test" })
+    .where(eq(persons.id, personId));
+  const before = await row(personId);
+  await expect(
+    run((tx) =>
+      updatePersonDetails(tx, {
+        managementSessionId: actor.token,
+        personId,
+        displayName: before.displayName,
+        firstNames: "First",
+        lastNames: "Last",
+        telephone: null,
+        email: before.email!,
+        role: "staff",
+        status: "active",
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "authorization.not_permitted" });
+  expect(await builtInRoleForTest(suite.db, personId)).toBe("admin");
+});

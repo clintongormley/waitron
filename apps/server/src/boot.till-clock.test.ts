@@ -28,7 +28,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillClockState } from "./till-clock-state.js";
 import { timeEntries, WorkforceBackend } from "@waitron/workforce";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { createClockVenue } from "./testing/clock-venue.js";
 import { awaitListening, copyMigrationsRoot } from "./testing/boot-harness.js";
 import { serverFixture } from "./testing/server-fixture.js";

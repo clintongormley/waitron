@@ -56,3 +56,17 @@ it("replaces only the built-in membership", async () => {
   expect(authority.roleIds).toContain("accountant");
   expect(await identity.heldBuiltInKey(suite.db, crypto.randomUUID())).toBeNull();
 });
+
+it("normalises an imported custom role name instead of trusting its folded value", async () => {
+  const id = await withTransaction(suite.db, (tx) =>
+    identity.importAccessRole(tx, {
+      built_in_key: null,
+      name: "  ACCOUNTANT  ",
+      name_folded: "WRONG",
+      permissions: "[]",
+      created_at: "2026-11-13T00:00:00Z",
+    }),
+  );
+  const rows = await suite.db.execute(sql`select name, name_folded from roles where id = ${id}`);
+  expect(rows.rows).toEqual([{ name: "ACCOUNTANT", name_folded: "accountant" }]);
+});

@@ -5,7 +5,7 @@ import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { authorize } from "./authorize.js";
 import { loginWithPin } from "./login.js";
 import { loginManager } from "./manager-login.js";
@@ -502,6 +502,22 @@ describe("listActiveStaff", () => {
 });
 
 describe("listPersons", () => {
+  it("reads the staff roster in a fixed number of queries", async () => {
+    const { token, personId } = await openManagementSession(suite.db, "admin");
+    for (let i = 0; i < 20; i++) await seedPerson(suite.db, "staff");
+    await run(async (tx) => {
+      const reads = vi.spyOn(tx, "select");
+      try {
+        const roster = await listPersons(tx, { managementSessionId: token });
+        expect(roster.length).toBeGreaterThanOrEqual(21);
+        expect(roster.find((person) => person.personId === personId)?.role).toBe("admin");
+        expect(reads.mock.calls.length).toBeLessThanOrEqual(4);
+      } finally {
+        reads.mockRestore();
+      }
+    });
+  });
+
   it("listPersons returns a roster with credential booleans, no secrets", async () => {
     const { token, personId: manager } = await openManagementSession(suite.db, "admin");
     await run((tx) =>

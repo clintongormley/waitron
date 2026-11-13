@@ -24,7 +24,7 @@ import {
 } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { endSession, loginWithPin, persons } from "@waitron/identity";
+import { endSession, loginWithPin } from "@waitron/identity";
 import type { DeviceKitchenScreen, ScreenSlot } from "@waitron/module";
 import type { PassBoard } from "./pass-card.js";
 import { routeProductTo } from "./testing/zone-offers.js";

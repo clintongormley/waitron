@@ -976,6 +976,24 @@ describe("Management API staff + session routes", () => {
     expect(await countPersonsNamed("Bad")).toBe(0);
   });
 
+  it("refuses an invitation with an unknown access role before creating a person", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    const response = await app.request("/management-api/staff", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(
+        invitationBody("Unknown role", "unknown-role@example.test", { role: "owner" }),
+      ),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "role" } },
+    });
+    expect(await countPersonsNamed("Unknown role")).toBe(0);
+  });
+
   it("create with a non-string email → 400 management.request_invalid (field email)", async () => {
     await setupTenant();
     const app = mountApp();

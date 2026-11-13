@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, isNull, ne, or } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne, or } from "drizzle-orm";
 import {
   indexViolated,
   isUniqueViolation,
@@ -289,7 +289,7 @@ export async function updatePersonDetails(
   } catch (error) {
     asPersonUniqueViolation(error, { displayName, email });
   }
-  await setBuiltInMembership(tx, person.id, input.role);
+  if (input.role !== personRole) await setBuiltInMembership(tx, person.id, input.role);
   if (becomesSuspended) await deleteSignInRows(tx, person.id);
   if (email !== person.email || input.status !== person.status)
     await revokePersonAccess(tx, person.id);
@@ -656,6 +656,15 @@ export async function listPersons(
     })
     .from(persons)
     .orderBy(persons.displayName);
+  const memberships = await tx
+    .select({ personId: personRoles.personId, key: roles.builtInKey })
+    .from(personRoles)
+    .innerJoin(roles, eq(roles.id, personRoles.roleId))
+    .where(isNotNull(roles.builtInKey));
+  const builtInKeys = new Map<string, BuiltInRoleKey>();
+  for (const membership of memberships)
+    if (!builtInKeys.has(membership.personId) || membership.key === "admin")
+      builtInKeys.set(membership.personId, membership.key!);
   const result: PersonSummary[] = [];
   for (const r of rows)
     result.push({
@@ -665,7 +674,7 @@ export async function listPersons(
       lastNames: r.lastNames,
       telephone: r.telephone,
       email: r.email,
-      role: await heldBuiltInKey(tx, r.personId),
+      role: builtInKeys.get(r.personId) ?? null,
       status: r.status as "pending" | "active" | "suspended",
       hasPassword: r.passwordHash !== null,
       hasTotp: r.totpSecret !== null,

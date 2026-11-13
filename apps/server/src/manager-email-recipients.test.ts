@@ -1,18 +1,14 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedPersons, type PersonSeed } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readManagerEmailRecipients } from "./manager-email-recipients.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-async function person(
-  displayName: string,
-  values: Partial<typeof persons.$inferInsert>,
-): Promise<string> {
+async function person(displayName: string, values: Partial<PersonSeed>): Promise<string> {
   const [row] = await seedPersons(suite.db, { displayName, ...values });
   return row!.id;
 }
