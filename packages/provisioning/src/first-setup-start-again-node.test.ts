@@ -1,8 +1,8 @@
+import { dirname, join } from "node:path";
 import { closeSync, openSync, writeSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, it } from "vitest";
@@ -39,6 +39,7 @@ async function attemptWithMigratedNode() {
   const store = await openVenueDatabase(roots.venueDir);
   await runMigrations(store.node, NODE_MIGRATIONS);
   await store.close();
+  await mkdir(dirname(join(roots.stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(roots.stateDir, "flows/setup/record.json"), "state");
   return roots;
 }
@@ -108,10 +109,16 @@ function damageNodeIndexes(roots: { venueDir: string }) {
   }
 }
 
-async function files(dir: string) {
+async function files(dir: string, prefix = ""): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
-  for (const name of (await fs.readdir(dir)).sort())
-    if (!/^venue\.(lock|holder)/.test(name)) result[name] = sha(await readFile(join(dir, name)));
+  for (const entry of await fs.readdir(join(dir, prefix), { withFileTypes: true })) {
+    const name = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+    if (/^venue\.(lock|holder)/.test(name)) continue;
+    if (entry.isDirectory()) {
+      result[`${name}/`] = "";
+      Object.assign(result, await files(dir, name));
+    } else result[name] = sha(await readFile(join(dir, name)));
+  }
   return result;
 }
 

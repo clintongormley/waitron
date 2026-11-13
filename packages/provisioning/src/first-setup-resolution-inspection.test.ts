@@ -1,3 +1,4 @@
+import { dirname, join } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
@@ -13,7 +14,6 @@ import {
   truncate,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS } from "@waitron/db";
@@ -130,8 +130,14 @@ it.each(["missing", "corrupt", "partial", "symlink"] as const)(
     const f = await fixture();
     const path = join(f.venueDir, "venue.db");
     await rm(path);
-    if (kind === "corrupt") await writeFile(path, "not a SQLite file");
-    if (kind === "partial") await writeFile(path, Buffer.alloc(0));
+    if (kind === "corrupt") {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "not a SQLite file");
+    }
+    if (kind === "partial") {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, Buffer.alloc(0));
+    }
     if (kind === "symlink") await symlink(join(f.root, "missing.db"), path);
     const before = await readdir(f.venueDir);
     const result = await f.service.inspectFirstSetupResolution();
@@ -176,10 +182,13 @@ it.each(["missing", "corrupt", "wrong-root"] as const)(
     const f = await fixture();
     const path = join(f.stateDir, "flows/setup/record.json");
     if (why === "missing") await rm(path);
-    else if (why === "corrupt") await writeFile(path, "{broken");
-    else {
+    else if (why === "corrupt") {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "{broken");
+    } else {
       const state = JSON.parse(await readFile(path, "utf8"));
       state.venueDir = join(f.root, "other");
+      await mkdir(dirname(path), { recursive: true });
       await writeFile(path, JSON.stringify(state));
     }
     const inspected = await f.service.inspectFirstSetupResolution();
@@ -330,8 +339,14 @@ it.each(["symlink", "directory", "oversize", "array"] as const)(
     const path = join(f.stateDir, "flows/setup/node-key.json");
     if (kind === "symlink") await symlink(join(f.root, "lost.json"), path);
     if (kind === "directory") await mkdir(path);
-    if (kind === "oversize") await writeFile(path, "x".repeat(1024 * 1024 + 1));
-    if (kind === "array") await writeFile(path, "[]");
+    if (kind === "oversize") {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "x".repeat(1024 * 1024 + 1));
+    }
+    if (kind === "array") {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "[]");
+    }
     const inspected = await f.service.inspectFirstSetupResolution();
     expect(inspected.artifacts).toContainEqual(
       expect.objectContaining({
@@ -511,7 +526,10 @@ it.each(["file", "symlink"] as const)(
       store,
     });
     const inspected = await service.inspectFirstSetupResolution();
-    expect(inspected.artifacts).toContainEqual({ name: "flows/setup/record.json", status: "unreadable" });
+    expect(inspected.artifacts).toContainEqual({
+      name: "flows/setup/record.json",
+      status: "unreadable",
+    });
     expect(inspected.revision).toBeNull();
     expect(inspected.ownerGeneration).toBeNull();
   },
@@ -522,6 +540,7 @@ it.each(["directory", "oversize", "removed"])(
   async (fault) => {
     const f = await fixture("active");
     const path = join(f.stateDir, "flows/setup/public-evidence.json");
+    await mkdir(dirname(path), { recursive: true });
     await writeFile(path, '{"retained":true}');
     const inspect = f.service.inspectFirstSetupResolution.bind(f.service);
     let changed = false;
@@ -557,8 +576,10 @@ it.each(["file", "overflow"])(
       const result = await inspect();
       if (!changed) {
         changed = true;
-        if (fault === "file") await writeFile(directory, "not a directory");
-        else {
+        if (fault === "file") {
+          await mkdir(dirname(directory), { recursive: true });
+          await writeFile(directory, "not a directory");
+        } else {
           await mkdir(directory);
           await Promise.all(
             Array.from({ length: 1025 }, (_, i) => writeFile(join(directory, `${i}.json`), "{}")),
@@ -585,6 +606,7 @@ it.each([
   const f = await fixture("active");
   const artifact = join(f.stateDir, "flows/setup/public-evidence.json");
   const delivery = join(f.stateDir, "flows/setup/documents");
+  await mkdir(dirname(artifact), { recursive: true });
   await writeFile(artifact, '{"retained":true}');
   const inspect = f.service.inspectFirstSetupResolution.bind(f.service);
   let changed = false;
@@ -597,8 +619,10 @@ it.each([
         await mkdir(artifact);
       } else if (fault === "a state artifact over the size limit")
         await truncate(artifact, 128 * 1024 * 1024 + 1);
-      else if (fault === "a delivery folder made a file") await writeFile(delivery, "not a folder");
-      else {
+      else if (fault === "a delivery folder made a file") {
+        await mkdir(dirname(delivery), { recursive: true });
+        await writeFile(delivery, "not a folder");
+      } else {
         await mkdir(delivery);
         await Promise.all(
           Array.from({ length: 1025 }, (_, i) => writeFile(join(delivery, `${i}.json`), "{}")),
@@ -617,6 +641,7 @@ it.each([
 it("leaves a damaged ownership record and its marker as they are when inspected", async () => {
   const f = await fixture("active");
   const path = join(f.stateDir, "flows/setup/record.json");
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, "{damaged setup state");
   const before = await readFile(path);
   const marker = await readFile(join(f.stateDir, "flows/setup/record.json"));

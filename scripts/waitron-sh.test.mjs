@@ -2185,7 +2185,8 @@ describe("waitron.sh reset", () => {
     mkdirSync(join(state, "records/set-aside/x"), { recursive: true });
     mkdirSync(join(state, "first-setup-start-again-choices"));
     writeFileSync(join(state, "first-setup-start-again-choices/old.json"), "{}");
-    writeFileSync(join(state, "first-setup.json"), "{}");
+    mkdirSync(join(state, "flows/setup"), { recursive: true });
+    writeFileSync(join(state, "flows/setup/record.json"), "{}");
     writeFileSync(join(state, "trading.env"), "WAITRON_ENV=preproduction\n");
     writeFileSync(join(state, ".leftover"), "x");
     const r = spawnSync("sh", ["-c", match[1]], {
@@ -2212,7 +2213,9 @@ describe("waitron.sh reset", () => {
     writeFileSync(join(state, "records/choices", "choice.json"), "{}");
     mkdirSync(join(state, "records/set-aside"));
     writeFileSync(join(state, "records/set-aside", "venue.db"), "db");
+    mkdirSync(join(state, "flows/setup"), { recursive: true });
     writeFileSync(join(state, "flows/setup/start-again-guesses.json"), "{}");
+    mkdirSync(join(state, "flows/setup"), { recursive: true });
     writeFileSync(join(state, "flows/setup/record.json"), "{}");
     const r = spawnSync("sh", ["-c", match[1]], {
       encoding: "utf8",

@@ -688,7 +688,9 @@ it.each(["input", "document"])(
     vi.spyOn(filesystem, "rename").mockImplementation(async (from, to) => {
       if (
         !injected &&
-        String(to).endsWith(point === "document" ? `/${MODULE}.recovery.json` : "/first-setup.json")
+        String(to).endsWith(
+          point === "document" ? `/${MODULE}.recovery.json` : "/flows/setup/record.json",
+        )
       ) {
         injected = true;
         throw new Error("synthetic persistence refusal");
@@ -793,14 +795,14 @@ it.each([
   "refuses malformed claim import selection %j before changing the claimed event",
   async (intent) => {
     const f = await fixture();
-    const before = await readFile(join(f.stateDir, "first-setup.json"), "utf8");
+    const before = await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8");
     const response = await f.post("/setup-api/first-setup/claim", {
       venue: request,
       ...intent,
     });
     expect(response.status).toBe(400);
     expect((await response.json()).error.code).toBe("setup.request_invalid");
-    expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(before);
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe(before);
   },
 );
 

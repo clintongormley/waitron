@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { InitialSetupContribution, WaitronModule, ModuleOperationHost } from "@waitron/module";
 import { ALL_MODULES } from "@waitron/composition";
@@ -717,6 +717,7 @@ it("a changed staged key cannot authorize resumption with the original kept docu
   const path = join(f.root, "state/flows/setup/node-key.json");
   const stage = JSON.parse(await readFile(path, "utf8"));
   stage.name = stage.name.endsWith("AAAA") ? "2026-10-16 · CCCC" : "2026-10-16 · AAAA";
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(stage));
   await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",

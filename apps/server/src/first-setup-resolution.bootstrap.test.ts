@@ -1,6 +1,6 @@
+import { dirname, join } from "node:path";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { ALL_MODULES } from "@waitron/composition";
 import { afterEach, beforeAll, expect, it } from "vitest";
 import { request } from "../test/first-fiscal.js";
@@ -28,8 +28,10 @@ async function fixture(frozen: "production" | "preproduction" | null) {
     venueDir = join(root, "venue");
   await mkdir(stateDir);
   await mkdir(venueDir);
-  if (frozen === null) await writeFile(join(stateDir, "flows/setup/record.json"), "torn");
-  else {
+  if (frozen === null) {
+    await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
+    await writeFile(join(stateDir, "flows/setup/record.json"), "torn");
+  } else {
     const host = createFirstSetupModuleHost({
       stateDir,
       venueDir,

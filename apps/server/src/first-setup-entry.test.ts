@@ -53,6 +53,7 @@ async function fixture() {
   const stateDir = join(root, "state");
   await mkdir(venueDir);
   await mkdir(stateDir);
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(stateDir, "flows/setup/record.json"), "{}");
   return { root, venueDir, stateDir };
 }
@@ -476,6 +477,7 @@ async function markedDeletion() {
   const stateDir = join(root, "state");
   await mkdir(venueDir);
   await mkdir(stateDir);
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(stateDir, "flows/setup/record.json"), '{"synthetic":"attempt"}');
   const roots = { venueDir, stateDir };
   await writeStartAgainMarker(
@@ -499,6 +501,7 @@ it("an interrupted Start again is finished and setup is served", async () => {
 
 it("an unfinishable deletion is refused setup.start_again_incomplete and nothing is deleted", async () => {
   const f = await markedDeletion();
+  await mkdir(dirname(join(f.stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(f.stateDir, "flows/setup/record.json"), '{"changed":"after the marker"}');
   const entry = await resolveFirstSetupEntry(f, {});
   expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });

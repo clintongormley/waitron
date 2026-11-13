@@ -1,9 +1,9 @@
 import {
   CLOUD_REPLACEMENT_FILE,
   FIRST_SETUP_FILE,
-  FIRST_SETUP_NODE_KEY_FILE,
+  SETUP_FLOW_DIR,
+  START_AGAIN_GUESSES_FILE,
   MODULES_FILE,
-  MODULE_OPERATION_PUBLIC_FILE,
   MODULE_PREPARATION_STATE_FILE,
   RESET_REQUEST_FILE,
   RESTORE_FLOW_DIR,
@@ -14,7 +14,7 @@ import {
 } from "@waitron/store";
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { readRestoreFlowPhase } from "./restore-flow-phase.js";
 import type { DatabaseSync } from "node:sqlite";
 import { getTableName } from "drizzle-orm";
@@ -135,15 +135,14 @@ function listed(root: Root, name: string): boolean {
   const parts = name.split("/");
   if (!parts.every(entryName)) return false;
   if (root === "venue") return parts.length === 1 && ["venue.db", "node.db"].includes(name);
-  if (parts.length === 1)
-    return [
-      MODULE_PREPARATION_STATE_FILE,
-      FIRST_SETUP_NODE_KEY_FILE,
-      MODULE_OPERATION_PUBLIC_FILE,
-      ...HELD_ONLY,
-      FIRST_SETUP_FILE,
-    ].includes(name);
-  if (parts[0] === DOCUMENTS) return parts.length === 2;
+  if ([MODULE_PREPARATION_STATE_FILE, ...HELD_ONLY].includes(name)) return true;
+  if (name.startsWith(`${SETUP_FLOW_DIR}/`)) {
+    const flow = name.slice(SETUP_FLOW_DIR.length + 1).split("/");
+    return (
+      name !== START_AGAIN_GUESSES_FILE &&
+      (flow.length === 1 || (flow.length === 2 && ["documents", "import"].includes(flow[0]!)))
+    );
+  }
   return (
     parts[0] === RECORDS &&
     isUuid(parts[1]!) &&
@@ -233,7 +232,10 @@ type Item =
   | { kind: "side"; path: string }
   | { kind: "folder"; path: string };
 
-async function entries(path: string): Promise<{ name: string; folder: boolean }[] | null> {
+async function entries(
+  path: string,
+  skip?: string,
+): Promise<{ name: string; folder: boolean }[] | null> {
   const folder = await info(path);
   if (folder === null) return null;
   if (!folder.isDirectory() || folder.isSymbolicLink())
@@ -241,6 +243,7 @@ async function entries(path: string): Promise<{ name: string; folder: boolean }[
   const names = (await readdir(path)).sort();
   const result: { name: string; folder: boolean }[] = [];
   for (const name of names) {
+    if (name === skip) continue;
     const entry = await lstat(join(path, name));
     if (entry.isSymbolicLink() || !(entry.isFile() || entry.isDirectory()))
       throw incomplete(`layout unexpected: ${join(path, name)}`);
@@ -276,10 +279,6 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
     if (await present(path)) items.push({ kind: "side", path });
   }
   await file("state", MODULE_PREPARATION_STATE_FILE);
-  if ((await filesIn(DOCUMENTS, false)) !== null)
-    items.push({ kind: "folder", path: join(roots.stateDir, DOCUMENTS) });
-  await file("state", FIRST_SETUP_NODE_KEY_FILE);
-  await file("state", MODULE_OPERATION_PUBLIC_FILE);
   if (options.held === true) for (const name of HELD_ONLY) await file("state", name);
   const records = await entries(join(roots.stateDir, RECORDS));
   if (records !== null) {
@@ -298,7 +297,28 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
     }
     items.push({ kind: "folder", path: join(roots.stateDir, RECORDS) });
   }
-  await file("state", FIRST_SETUP_FILE);
+  const flow = await entries(
+    join(roots.stateDir, SETUP_FLOW_DIR),
+    basename(START_AGAIN_GUESSES_FILE),
+  );
+  if (flow !== null) {
+    for (const entry of flow)
+      if (entry.folder && !["documents", "import"].includes(entry.name))
+        throw incomplete(`layout unexpected: ${SETUP_FLOW_DIR}/${entry.name}`);
+    for (const relative of [DOCUMENTS, `${SETUP_FLOW_DIR}/import`])
+      if ((await filesIn(relative, false)) !== null)
+        items.push({ kind: "folder", path: join(roots.stateDir, relative) });
+    for (const entry of flow)
+      if (
+        !entry.folder &&
+        ![FIRST_SETUP_FILE, START_AGAIN_GUESSES_FILE].includes(`${SETUP_FLOW_DIR}/${entry.name}`)
+      )
+        await file("state", `${SETUP_FLOW_DIR}/${entry.name}`);
+    await file("state", FIRST_SETUP_FILE);
+    const guesses = join(roots.stateDir, START_AGAIN_GUESSES_FILE);
+    if (await present(guesses)) items.push({ kind: "side", path: guesses });
+    items.push({ kind: "folder", path: join(roots.stateDir, SETUP_FLOW_DIR) });
+  }
   return items;
 }
 

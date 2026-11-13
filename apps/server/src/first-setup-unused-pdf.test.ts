@@ -1,5 +1,5 @@
-import { readFile, readdir, writeFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -193,11 +193,15 @@ it.each([
 ] as const)("unused-PDF reset refuses %s evidence", async (why) => {
   const f = await fixture();
   const directory = join(f.stateDir, "flows/setup/documents");
-  if (why === "key") await writeFile(join(f.stateDir, "flows/setup/node-key.json"), "{}");
+  if (why === "key") {
+    await mkdir(dirname(join(f.stateDir, "flows/setup/node-key.json")), { recursive: true });
+    await writeFile(join(f.stateDir, "flows/setup/node-key.json"), "{}");
+  }
   if (why === "stage") {
     const path = join(f.stateDir, "flows/setup/node-key.json");
     const key = JSON.parse(await readFile(path, "utf8"));
     key.stageId = "11111111-1111-4111-8111-111111111111";
+    await mkdir(dirname(path), { recursive: true });
     await writeFile(path, JSON.stringify(key));
   }
   if (why === "modules") await writeFile(join(f.stateDir, "modules.json"), "{}");
@@ -206,6 +210,7 @@ it.each([
     const path = join(f.stateDir, "flows/setup/record.json");
     const state = JSON.parse(await readFile(path, "utf8"));
     state.inputs.unknown = { evidence: "not understood" };
+    await mkdir(dirname(path), { recursive: true });
     await writeFile(path, JSON.stringify(state));
   }
   if (why === "orphan-document") await writeFile(join(directory, "unknown.json"), "{}");
@@ -272,6 +277,7 @@ async function damageRecord(
     const path = join(directory, `${f.module}.recovery.json`);
     const manifest = JSON.parse(await readFile(path, "utf8"));
     manifest.bindingDigest = "0".repeat(64);
+    await mkdir(dirname(path), { recursive: true });
     await writeFile(path, JSON.stringify(manifest));
   }
   if (why === "rehashed") {
@@ -368,17 +374,22 @@ it.each(["key", "stage", "unknown-input", "orphan-document"] as const)(
   async (why) => {
     const f = await fixture();
     const directory = join(f.stateDir, "flows/setup/documents");
-    if (why === "key") await writeFile(join(f.stateDir, "flows/setup/node-key.json"), "{}");
+    if (why === "key") {
+      await mkdir(dirname(join(f.stateDir, "flows/setup/node-key.json")), { recursive: true });
+      await writeFile(join(f.stateDir, "flows/setup/node-key.json"), "{}");
+    }
     if (why === "stage") {
       const path = join(f.stateDir, "flows/setup/node-key.json");
       const key = JSON.parse(await readFile(path, "utf8"));
       key.stageId = "11111111-1111-4111-8111-111111111111";
+      await mkdir(dirname(path), { recursive: true });
       await writeFile(path, JSON.stringify(key));
     }
     if (why === "unknown-input") {
       const path = join(f.stateDir, "flows/setup/record.json");
       const state = JSON.parse(await readFile(path, "utf8"));
       state.inputs.unknown = { evidence: "not understood" };
+      await mkdir(dirname(path), { recursive: true });
       await writeFile(path, JSON.stringify(state));
     }
     if (why === "orphan-document") await writeFile(join(directory, "unknown.json"), "{}");

@@ -242,7 +242,9 @@ it("the built command waits and takes its name in the same run, and a run after 
     childError: undefined,
   });
   expect(second.output).not.toContain("Confirm setup password: ");
-  expect(JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"))).toEqual(before);
+  expect(JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"))).toEqual(
+    before,
+  );
   expect(await readFile(pdfPath)).toEqual(pdf);
   const stored = await openVenueDatabase(target);
   try {

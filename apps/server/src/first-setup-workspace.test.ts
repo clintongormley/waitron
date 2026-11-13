@@ -1,5 +1,5 @@
+import { dirname, join } from "node:path";
 import { mkdtemp, mkdir, rm, writeFile, stat, readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
 import { startServer } from "./boot.js";
@@ -16,6 +16,7 @@ it("raw boot refuses an unfinishable deletion with setup.start_again_incomplete"
     stateDir = join(root, "state");
   await mkdir(venueDir);
   await mkdir(stateDir);
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(stateDir, "flows/setup/record.json"), '{"synthetic":"attempt"}');
   await writeStartAgainMarker(
     { venueDir, stateDir },
@@ -24,6 +25,7 @@ it("raw boot refuses an unfinishable deletion with setup.start_again_incomplete"
       { attemptId: "33333333-3333-4333-8333-333333333333", frozenDigest: "a".repeat(64) },
     ),
   );
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(stateDir, "flows/setup/record.json"), '{"changed":"after the marker"}');
   const [port] = await freePorts(1);
   let server: Awaited<ReturnType<typeof startServer>> | undefined;

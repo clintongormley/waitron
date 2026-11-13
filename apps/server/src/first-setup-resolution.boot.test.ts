@@ -1,5 +1,5 @@
+import { dirname, join } from "node:path";
 import { mkdtemp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { IncomingHttpHeaders } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -46,6 +46,7 @@ async function torn() {
     venueDir = join(root, "venue");
   await mkdir(stateDir);
   await mkdir(venueDir);
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(stateDir, "flows/setup/record.json"), "{}");
   await mkdir(join(stateDir, "flows/restore"), { recursive: true });
   await writeFile(join(stateDir, "flows/restore/record.json"), "retained restore");
@@ -172,7 +173,7 @@ it("direct entry still boots a normal unclaimed workspace", async () => {
 
 it("a normal start's failure after waiting for its peers reaches the returned handle", async () => {
   const f = await torn();
-  await rm(join(f.stateDir, "first-setup.json"));
+  await rm(join(f.stateDir, "flows/setup/record.json"));
   const failure = new Error("failed after the wait");
   let fail: (error: unknown) => void = () => {};
   const fullyStarted = new Promise<void>((_, reject) => (fail = reject));
@@ -284,7 +285,7 @@ it.each([{ failure: false }, { failure: true }])(
     try {
       await suite.db.archiveTo(join(f.venueDir, "venue.db"));
       const paths = [f.venueDir];
-      const originals = await readFile(join(f.stateDir, "first-setup.json"));
+      const originals = await readFile(join(f.stateDir, "flows/setup/record.json"));
       const admission = await resolveFirstSetupEntry(f, {});
       expect(admission.kind).toBe("normal");
       if (admission.kind !== "normal") throw new Error("expected startup admission");
@@ -297,7 +298,7 @@ it.each([{ failure: false }, { failure: true }])(
       if (failure) await expect(start).rejects.toBe(sentinel);
       else await expect(start).resolves.toBe("startup completed");
       for (const path of paths) expect(startupLockFromAnotherProcess(path)).toBe("AVAILABLE");
-      expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(originals);
+      expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(originals);
     } finally {
       await f.dispose();
     }
@@ -315,7 +316,7 @@ it.each(["activation-started", "abandoned", "uncertain"] as const)(
       if (admission.kind !== "normal") throw new Error("expected startup admission");
       const state = (await f.store.read())!;
       await f.store.update(state.frozen.attemptId, state.revision, { kind });
-      const retained = await readFile(join(f.stateDir, "first-setup.json"));
+      const retained = await readFile(join(f.stateDir, "flows/setup/record.json"));
       let entered = false;
       await expect(
         admission.run(async () => {
@@ -323,7 +324,7 @@ it.each(["activation-started", "abandoned", "uncertain"] as const)(
         }),
       ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
       expect(entered).toBe(false);
-      expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(retained);
+      expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(retained);
       expect(startupLockFromAnotherProcess(f.venueDir)).toBe("AVAILABLE");
     } finally {
       await f.dispose();
@@ -394,7 +395,8 @@ async function startingBox(box: Box) {
     await writeFile(join(oldRecovery, "current.json"), "{}");
     return { root, ...roots };
   }
-  await writeFile(join(stateDir, "first-setup.json"), '{"synthetic":"attempt"}');
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
+  await writeFile(join(stateDir, "flows/setup/record.json"), '{"synthetic":"attempt"}');
   if (box === "old-recovery") {
     await mkdir(oldRecovery, { recursive: true });
     await writeFile(join(oldRecovery, "current.json"), "{}");
@@ -407,8 +409,10 @@ async function startingBox(box: Box) {
       frozenDigest: "a".repeat(64),
     }),
   );
-  if (box === "unfinishable")
-    await writeFile(join(stateDir, "first-setup.json"), '{"changed":"after the marker"}');
+  if (box === "unfinishable") {
+    await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
+    await writeFile(join(stateDir, "flows/setup/record.json"), '{"changed":"after the marker"}');
+  }
   if (box === "unlisted") await writeFile(join(venueDir, "venue.db"), "written after the marker");
   return { root, ...roots };
 }
@@ -535,7 +539,7 @@ it.each(MODES)(
     const f = await startingBox("interrupted");
     const started = await startIn(mode, f);
     expect(started.startServer).toHaveBeenCalledOnce();
-    await gone(join(f.stateDir, "first-setup.json"));
+    await gone(join(f.stateDir, "flows/setup/record.json"));
     await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
   },
 );
@@ -547,7 +551,7 @@ it.each(MODES)(
     const started = await startIn(mode, f);
     await expectRefusedPage(started.port, "setup.start_again_incomplete");
     expect(started.startServer).not.toHaveBeenCalled();
-    expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe(
       '{"changed":"after the marker"}',
     );
     expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
@@ -600,7 +604,7 @@ it.each(MODES)(
       venueDir: join(link, "venue"),
     });
     expect(started.startServer).toHaveBeenCalledOnce();
-    await gone(join(f.stateDir, "first-setup.json"));
+    await gone(join(f.stateDir, "flows/setup/record.json"));
     await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
   },
 );

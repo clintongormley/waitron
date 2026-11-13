@@ -89,7 +89,7 @@ it.each([
   await filesystem.mkdir(venueDir);
   const directory =
     kind === "local" ? join(stateDir, "flows/setup/documents") : join(root, "receipts");
-  await filesystem.mkdir(directory);
+  await filesystem.mkdir(directory, { recursive: true });
   const path = join(directory, "one.json");
   await filesystem.writeFile(path, '{"position":42}');
   const store = createFirstSetupStore({

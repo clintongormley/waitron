@@ -1,3 +1,4 @@
+import { dirname, join } from "node:path";
 import {
   mkdtemp,
   mkdir,
@@ -9,7 +10,6 @@ import {
   symlink,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -224,6 +224,9 @@ it("a missing-database Start again, once confirmed, deletes first-setup.json and
   await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });
   await rm(join(f.venueDir, "venue.db"));
   await mkdir(join(f.stateDir, "flows/setup/documents"));
+  await mkdir(dirname(join(f.stateDir, "flows/setup/documents", "orphan.json")), {
+    recursive: true,
+  });
   await writeFile(
     join(f.stateDir, "flows/setup/documents", "orphan.json"),
     "retained malformed public chunk",

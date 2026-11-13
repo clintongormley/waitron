@@ -1431,7 +1431,9 @@ it.each(["rejected", "uncertain"] as const)(
       expect(f.drain).toHaveBeenCalledOnce();
       expect(await readDeploymentEnvironment(venue.db)).toBeNull();
       expect(await readTenantIdentities(venue.db)).toEqual([]);
-      await expect(readFile(join(f.root, "state/flows/setup/readiness.json"))).rejects.toMatchObject({
+      await expect(
+        readFile(join(f.root, "state/flows/setup/readiness.json")),
+      ).rejects.toMatchObject({
         code: "ENOENT",
       });
     } finally {

@@ -1,8 +1,8 @@
+import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { verifyPassword } from "@waitron/identity";
 import { START_AGAIN_ADMIN_PASSWORD, startAgainAttempt } from "../test/start-again-attempt.js";
@@ -55,7 +55,9 @@ const snapshot = async (roots: { venueDir: string; stateDir: string }) => ({
 it("the shared fixture is a real setup a Start again left: its record parses, its password verifies, the finisher finishes it, and a venue.db written after it is refused unlisted", async () => {
   const attempt = await startAgainAttempt(await scratch());
   const { roots } = attempt;
-  const record = JSON.parse(await readFile(join(roots.stateDir, "flows/setup/record.json"), "utf8"));
+  const record = JSON.parse(
+    await readFile(join(roots.stateDir, "flows/setup/record.json"), "utf8"),
+  );
   const parsed = parseState(record, roots.venueDir, roots.stateDir);
   expect(parsed.frozen.attemptId).toBe(attempt.attemptId);
   expect(parsed.frozen.administratorId).toBe(attempt.administratorId);
@@ -81,6 +83,9 @@ async function fourFindings() {
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
   await writeFile(join(roots.venueDir, "venue.db"), "a different database");
   await mkdir(join(roots.stateDir, "flows/setup/documents"), { recursive: true });
+  await mkdir(dirname(join(roots.stateDir, "flows/setup/documents", "extra.json")), {
+    recursive: true,
+  });
   await writeFile(join(roots.stateDir, "flows/setup/documents", "extra.json"), "{}");
   await writeFile(join(roots.venueDir, "venue.db-wal"), "pages");
   return attempt;

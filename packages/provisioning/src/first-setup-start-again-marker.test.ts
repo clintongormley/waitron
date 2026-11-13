@@ -109,6 +109,7 @@ const snapshot = async (roots: { venueDir: string; stateDir: string }) => ({
 async function expectOnlyKept(roots: { venueDir: string; stateDir: string }) {
   expect(Object.keys(await tree(roots.venueDir))).toEqual([]);
   expect(await tree(roots.stateDir)).toEqual({
+    "flows/": "",
     "records/": "",
     "records/choices/": "",
     "records/choices/1-x.json": sha("confirmation"),
@@ -313,7 +314,7 @@ it.each<[string, (roots: { venueDir: string; stateDir: string }) => Promise<void
     (roots) => writeFile(join(roots.venueDir, "venue.db-wal"), "x"),
   ],
   [
-    "beside a file newly added inside first-fiscal-documents/",
+    "beside a file newly added inside flows/setup/documents/",
     (roots) => writeFile(join(roots.stateDir, "flows/setup/documents", "b.json"), "new"),
   ],
   [
@@ -330,11 +331,14 @@ it.each<[string, (roots: { venueDir: string; stateDir: string }) => Promise<void
     "beside a symbolic link in place of venue.db",
     async (roots) => {
       await fs.unlink(join(roots.venueDir, "venue.db"));
-      await symlink(join(roots.stateDir, "flows/setup/record.json"), join(roots.venueDir, "venue.db"));
+      await symlink(
+        join(roots.stateDir, "flows/setup/record.json"),
+        join(roots.venueDir, "venue.db"),
+      );
     },
   ],
   [
-    "beside a folder inside first-fiscal-documents/",
+    "beside a folder inside flows/setup/documents/",
     (roots) => mkdir(join(roots.stateDir, "flows/setup/documents", "inner")),
   ],
   [
@@ -354,9 +358,10 @@ it.each<[string, (roots: { venueDir: string; stateDir: string }) => Promise<void
     (roots) => writeFile(join(roots.stateDir, "first-setup-resolutions", "loose.json"), "x"),
   ],
   [
-    "beside first-fiscal-documents as a file",
+    "beside flows/setup/documents as a file",
     async (roots) => {
       await rm(join(roots.stateDir, "flows/setup/documents"), { recursive: true });
+      await mkdir(dirname(join(roots.stateDir, "flows/setup/documents")), { recursive: true });
       await writeFile(join(roots.stateDir, "flows/setup/documents"), "x");
     },
   ],
@@ -391,10 +396,11 @@ it("a row written into venue.db-wal after the cut is refused, and nothing is del
   reader.close();
 });
 
-it("a file newly added inside first-fiscal-documents/ stops the folder's rmdir and is kept", async () => {
+it("a file newly added inside flows/setup/documents/ stops the folder's rmdir and is kept", async () => {
   const roots = await attemptFolders();
   const marker = await marked(roots);
   const added = join(roots.stateDir, "flows/setup/documents", "b.json");
+  await mkdir(dirname(added), { recursive: true });
   await writeFile(added, "new");
   await expect(deleteMarkedAttempt(roots, marker)).rejects.toMatchObject(incomplete);
   expect(await readFile(added, "utf8")).toBe("new");

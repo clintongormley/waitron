@@ -1,5 +1,5 @@
+import { dirname, join } from "node:path";
 import { mkdtemp, rm, readFile, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
@@ -386,9 +386,11 @@ it("does not claim over an unreadable operation or filesystem entry", async () =
   const f = await fixture();
   await mkdir(f.options.stateDir);
   const operation = join(f.options.stateDir, "flows/setup/operation.json");
+  await mkdir(dirname(operation), { recursive: true });
   await writeFile(operation, "not JSON");
   await expect(f.claim()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   await rm(operation);
+  await mkdir(dirname(operation), { recursive: true });
   await writeFile(operation, "{}");
   const spy = vi.spyOn(filesystem, "lstat").mockRejectedValueOnce(new Error("unreadable state"));
   try {

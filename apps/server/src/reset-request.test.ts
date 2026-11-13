@@ -1,8 +1,8 @@
+import { dirname, join } from "node:path";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -257,7 +257,7 @@ describe("runStagedReset", () => {
       "venue/.venue.db-litestream",
       "modules.json",
       PENDING_ADOPTION_FILE,
-      "setup-operation.json",
+      "flows/setup/operation.json",
       "reset-request.json",
     ]) {
       expect(existsSync(join(stateDir, gone)), gone).toBe(false);
@@ -501,8 +501,9 @@ describe("runStagedReset", () => {
       "the adopt has since completed",
       "operation_mismatch",
       async (box: { stateDir: string; operationId: string }) => {
-        const path = join(box.stateDir, "setup-operation.json");
+        const path = join(box.stateDir, "flows/setup/operation.json");
         const record = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+        await mkdir(dirname(path), { recursive: true });
         await writeFile(path, JSON.stringify({ ...record, phase: "complete" }));
         await stageResetRequest(box.stateDir, box.operationId);
       },
@@ -511,8 +512,9 @@ describe("runStagedReset", () => {
       "the record is another kind of operation",
       "operation_mismatch",
       async (box: { stateDir: string; operationId: string }) => {
-        const path = join(box.stateDir, "setup-operation.json");
+        const path = join(box.stateDir, "flows/setup/operation.json");
         const record = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+        await mkdir(dirname(path), { recursive: true });
         await writeFile(path, JSON.stringify({ ...record, kind: "provision" }));
         await stageResetRequest(box.stateDir, box.operationId);
       },
@@ -521,7 +523,8 @@ describe("runStagedReset", () => {
       "the record cannot be read",
       "operation_mismatch",
       async (box: { stateDir: string; operationId: string }) => {
-        await writeFile(join(box.stateDir, "setup-operation.json"), "{");
+        await mkdir(dirname(join(box.stateDir, "flows/setup/operation.json")), { recursive: true });
+        await writeFile(join(box.stateDir, "flows/setup/operation.json"), "{");
         await stageResetRequest(box.stateDir, box.operationId);
       },
     ],
@@ -634,11 +637,11 @@ describe("runStagedReset", () => {
     await expect(runStagedReset({ stateDir, venueDir, log: () => {} })).rejects.toThrow();
     expect(existsSync(join(venueDir, "venue.db"))).toBe(false);
     expect(existsSync(join(stateDir, "reset-request.json"))).toBe(true);
-    expect(existsSync(join(stateDir, "setup-operation.json"))).toBe(true);
+    expect(existsSync(join(stateDir, "flows/setup/operation.json"))).toBe(true);
 
     await rm(join(stateDir, "modules.json"), { recursive: true });
     expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
-    expect(existsSync(join(stateDir, "setup-operation.json"))).toBe(false);
+    expect(existsSync(join(stateDir, "flows/setup/operation.json"))).toBe(false);
     expect(existsSync(join(stateDir, "reset-request.json"))).toBe(false);
   });
 });

@@ -1158,8 +1158,9 @@ the helper's constant status is not evidence of the write.
   environment variables become 51. Duplicate address names are merged, the print agent uses its host name,
   and host-script and full-disk tests use shared roots. The remaining environment slices stay open.
   There is one state-folder layout, and a box keeps its venue under that state folder.
-  A first setup has no venue claim or separate setup lock; Start again sets files aside
-  under the state folder. The box certificate and key
+  A first setup has no venue claim or separate setup lock; its record and attachments live
+  in `flows/setup/`. Start again removes its listed files and then the empty folders,
+  and sets unknown files aside under the state folder. The box certificate and key
   share one PEM file, and a completed certificate repair ends after a start stays healthy. It keeps
   the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror
   link, the pinned main-box key, the handover tables) and removes only the standby's reserved identity

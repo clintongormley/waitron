@@ -1,6 +1,6 @@
-import { mkdtemp, unlink, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { mkdir, mkdtemp, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { createSetupOperationStore } from "./setup-operation.js";
@@ -93,6 +93,8 @@ describe("setup operation store", () => {
 
   it("reads a well-formed saved operation back as it was written", async () => {
     const dir = await stateDir();
+    await mkdir(join(dir, "flows/setup"), { recursive: true });
+    await mkdir(dirname(join(dir, "flows/setup/operation.json")), { recursive: true });
     await writeFile(join(dir, "flows/setup/operation.json"), JSON.stringify(validState));
     await expect(createSetupOperationStore(dir).read()).resolves.toEqual(validState);
   });
@@ -112,6 +114,8 @@ describe("setup operation store", () => {
     ["has no update time", JSON.stringify({ ...validState, updatedAt: undefined })],
   ])("refuses a saved operation that %s", async (_label, raw) => {
     const dir = await stateDir();
+    await mkdir(join(dir, "flows/setup"), { recursive: true });
+    await mkdir(dirname(join(dir, "flows/setup/operation.json")), { recursive: true });
     await writeFile(join(dir, "flows/setup/operation.json"), raw);
     const store = createSetupOperationStore(dir);
     await expect(store.read()).rejects.toMatchObject({ code: "setup.operation_conflict" });

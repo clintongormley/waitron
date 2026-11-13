@@ -1,6 +1,6 @@
+import { dirname, join } from "node:path";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Agent } from "undici";
 import { Hono } from "hono";
@@ -281,6 +281,7 @@ it.each([
       if (change === "replacement") {
         const replaced = decodeConfigurationBundle(artifact, "import passphrase");
         replaced.createdAt = "2026-10-16T12:00:00.000Z";
+        await mkdir(dirname(join(stateDir, "flows/setup/import/artifact")), { recursive: true });
         await writeFile(
           join(stateDir, "flows/setup/import/artifact"),
           encodeConfigurationBundle(replaced, "import passphrase"),
@@ -360,7 +361,9 @@ it.each([
         newTaxpayer,
       });
       if (change === "none") {
-        await expect(readFile(join(stateDir, "flows/setup/import/marker.json"))).rejects.toMatchObject({
+        await expect(
+          readFile(join(stateDir, "flows/setup/import/marker.json")),
+        ).rejects.toMatchObject({
           code: "ENOENT",
         });
         server = await startServer(await loadBoxEnv(env, stateDir), env, { testClock });
@@ -368,7 +371,9 @@ it.each([
         expect((await transport(`${base}/setup-api/first-setup/status`)).status).toBe(404);
         await server.close();
         server = undefined;
-        const restarted = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
+        const restarted = JSON.parse(
+          await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
+        );
         expect(restarted.frozen).toEqual(saved.frozen);
         expect(restarted.result).toEqual(saved.result);
       }

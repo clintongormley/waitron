@@ -127,7 +127,7 @@ function recoveryRecordDamagedOf(
     try {
       readFirstSetupRecoveryDeliverySnapshot(module, state, originals, modules);
     } catch (error) {
-      const recoveryName = `state/first-fiscal-documents/${module}.recovery.json`;
+      const recoveryName = `state/flows/setup/documents/${module}.recovery.json`;
       if (
         !(error instanceof AppError) ||
         originals.find((entry) => entry.name === recoveryName)?.bytes == null

@@ -1,8 +1,3 @@
-import {
-  FIRST_FISCAL_DOCUMENTS_DIR,
-  FIRST_SETUP_NODE_KEY_FILE,
-  MODULE_OPERATION_PUBLIC_FILE,
-} from "@waitron/store";
 import { FIRST_SETUP_FILE } from "@waitron/store";
 import { lstat, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -12,8 +7,7 @@ import type { DeploymentEnvironment } from "@waitron/db";
 import { VENUE_FIELDS, type VenueRequest } from "./venue-plan.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
-import { RECORDS_DIR } from "@waitron/store";
-import { START_AGAIN_GUESSES_FILE } from "./first-setup-start-again-names.js";
+import { FLOWS_DIR, RECORDS_DIR } from "@waitron/store";
 import "./errors.js";
 
 export interface FirstSetupHold {
@@ -124,15 +118,9 @@ export interface FirstSetupStore {
   ): Promise<FirstSetupState>;
 }
 export const FIRST_SETUP_HOST_FILES = [
-  FIRST_SETUP_FILE,
-  MODULE_OPERATION_PUBLIC_FILE,
-  FIRST_SETUP_NODE_KEY_FILE,
-  FIRST_FISCAL_DOCUMENTS_DIR,
-  "first-setup-resolutions",
-
-  "first-setup-deleting.json",
+  FLOWS_DIR,
   RECORDS_DIR,
-  START_AGAIN_GUESSES_FILE,
+  "first-setup-deleting.json",
 ] as const;
 export function isFirstSetupHostPath(path: string): boolean {
   return FIRST_SETUP_HOST_FILES.some((name) => path === name || path.startsWith(`${name}/`));

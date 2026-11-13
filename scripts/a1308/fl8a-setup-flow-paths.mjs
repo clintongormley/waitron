@@ -1,3 +1,4 @@
+import ts from "typescript";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -27,13 +28,33 @@ const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
 
 for (const file of files) {
   const source = readFileSync(file, "utf8");
-  const changed = source.replace(/(["'`])(?:\\[\s\S]|(?!\1)[^\\])*?\1/g, (literal) => {
-    for (const [oldPath, newPath] of paths) {
-      const escaped = oldPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      literal = literal.replace(new RegExp(`(["'\x60/])${escaped}(?=["'\x60/])`, "g"), `$1${newPath}`);
+  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const edits = [];
+  const visit = (node) => {
+    if (
+      ts.isStringLiteralLike(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node)
+    ) {
+      const start = node.getStart(tree);
+      const literal = source.slice(start, node.end);
+      let value = literal;
+      for (const [oldPath, newPath] of paths) {
+        const escaped = oldPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        value = value.replace(
+          new RegExp(`(["'\x60/])${escaped}(?=["'\x60/])`, "g"),
+          `$1${newPath}`,
+        );
+      }
+      if (value !== literal) edits.push({ start, end: node.end, value });
     }
-    return literal;
-  });
+    ts.forEachChild(node, visit);
+  };
+  visit(tree);
+  let changed = source;
+  for (const { start, end, value } of edits.sort((a, b) => b.start - a.start))
+    changed = changed.slice(0, start) + value + changed.slice(end);
   if (source !== changed) {
     writeFileSync(file, changed);
     process.stdout.write(`${file}\n`);

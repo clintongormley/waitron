@@ -213,6 +213,6 @@ async function expectRepairPageDeletes(f: Awaited<ReturnType<typeof heldSetup>>)
     expect(
       (await readdir(dir)).filter((name) => !name.endsWith(".lock")),
       dir,
-    ).toEqual(dir === f.roots.stateDir ? [SCRATCH_DIR] : []);
+    ).toEqual(dir === f.roots.stateDir ? ["flows", SCRATCH_DIR] : []);
   expect(await readdir(join(f.roots.stateDir, SCRATCH_DIR))).toEqual([]);
 }

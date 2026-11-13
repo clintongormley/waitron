@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFiscalReadinessStore, type FiscalReadinessInput } from "./fiscal-readiness.js";
 
@@ -78,6 +78,8 @@ describe("fiscal activation readiness", () => {
     ).run(input);
     const path = join(dir, "flows/setup/readiness.json");
     const evidence = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    await mkdir(join(dir, "flows/setup"), { recursive: true });
+    await mkdir(dirname(path), { recursive: true });
     await writeFile(path, JSON.stringify({ ...evidence, mac: "00".repeat(32) }));
 
     await expect(
@@ -109,6 +111,8 @@ describe("fiscal activation readiness", () => {
     ).run(input);
     const path = join(dir, "flows/setup/readiness.json");
     const evidence = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    await mkdir(join(dir, "flows/setup"), { recursive: true });
+    await mkdir(dirname(path), { recursive: true });
     await writeFile(path, JSON.stringify({ ...evidence, ...change }));
 
     await expect(
@@ -118,6 +122,8 @@ describe("fiscal activation readiness", () => {
 
   it("treats unreadable stored evidence as absent and submits again", async () => {
     const dir = await stateDir();
+    await mkdir(join(dir, "flows/setup"), { recursive: true });
+    await mkdir(dirname(join(dir, "flows/setup/readiness.json")), { recursive: true });
     await writeFile(join(dir, "flows/setup/readiness.json"), "not json");
     const submit = vi.fn().mockResolvedValue({ status: "accepted" });
     const store = createFiscalReadinessStore(dir, submit, evidenceKey);

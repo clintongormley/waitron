@@ -1612,7 +1612,7 @@ describe("a Start again choice on a real full disk", () => {
       expect(listed).toBeDefined();
 
       const marker = readFileSync(join(venueDir, START_AGAIN_MARKER_FILE));
-      const setup = readFileSync(join(stateDir, "first-setup.json"));
+      const setup = readFileSync(join(stateDir, "flows/setup/record.json"));
       const foundInode = inodeOf(found);
       small.fill();
       expect(small.free()).toBeLessThan(65_536);
@@ -1644,7 +1644,7 @@ describe("a Start again choice on a real full disk", () => {
       expect(readFileSync(found, "utf8")).toBe("found database");
       expect(inodeOf(found)).toBe(foundInode);
       expect(readFileSync(join(venueDir, START_AGAIN_MARKER_FILE))).toEqual(marker);
-      expect(readFileSync(join(stateDir, "first-setup.json"))).toEqual(setup);
+      expect(readFileSync(join(stateDir, "flows/setup/record.json"))).toEqual(setup);
       expect(d.exit).not.toHaveBeenCalled();
     } finally {
       const server = served;

@@ -1,6 +1,6 @@
+import { dirname, join } from "node:path";
 import { mkdtemp, readFile, rm, writeFile, mkdir, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Agent } from "undici";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -389,6 +389,7 @@ it.each([
       if (change === "replacement") {
         const replacement = decodeConfigurationBundle(artifact, "synthetic import passphrase");
         replacement.createdAt = "2026-10-16T12:00:00.000Z";
+        await mkdir(dirname(join(stateDir, "flows/setup/import/artifact")), { recursive: true });
         await writeFile(
           join(stateDir, "flows/setup/import/artifact"),
           encodeConfigurationBundle(replacement, "synthetic import passphrase"),
@@ -487,13 +488,17 @@ it.each([
       } finally {
         isolated.close();
       }
-      const persisted = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
+      const persisted = JSON.parse(
+        await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
+      );
       expect(persisted.status).toBe("complete");
       expect(persisted.frozen.configurationImport).toEqual({
         digest: expect.stringMatching(/^[a-f0-9]{64}$/),
         newTaxpayer,
       });
-      await expect(readFile(join(stateDir, "flows/setup/import/marker.json"))).rejects.toMatchObject({
+      await expect(
+        readFile(join(stateDir, "flows/setup/import/marker.json")),
+      ).rejects.toMatchObject({
         code: "ENOENT",
       });
       const merged = await loadBoxEnv(env, stateDir);
@@ -506,7 +511,9 @@ it.each([
       expect(setup.status).toBe(404);
       await server.close();
       server = undefined;
-      const restarted = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
+      const restarted = JSON.parse(
+        await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
+      );
       expect(restarted.frozen).toEqual(persisted.frozen);
       expect(restarted.result).toEqual(persisted.result);
     } finally {

@@ -58,7 +58,7 @@ it("stages 192 random bits without installing or persisting the raw node key", a
   expect(persisted).not.toContain(PASSWORD);
   const metadata = await f.keys.readStage(f.ownerAttempt);
   expect(await verifySecretAsync(result.key.secret, metadata.verifier)).toBe(true);
-  expect(await readdir(f.stateDir)).toContain("flows/setup/node-key.json");
+  expect(await readdir(join(f.stateDir, "flows/setup"))).toContain("node-key.json");
 });
 it("same-visit delivery returns exactly the same key and stage", async () => {
   const f = await fixture();

@@ -1,7 +1,7 @@
+import { dirname, join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -298,6 +298,7 @@ it("retires an attempt whose saved committed result no longer matches the actual
   const path = join(f.stateDir, "flows/setup/record.json"),
     disk = JSON.parse(await readFile(path, "utf8"));
   disk.result.modules[MODULE].sifId = "wrong-sif";
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(disk));
   await f.refresh();
   const reconfirm = await f.post(

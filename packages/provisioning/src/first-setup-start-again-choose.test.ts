@@ -1,3 +1,4 @@
+import { dirname, join } from "node:path";
 import * as guesses from "./first-setup-start-again-guesses.js";
 import * as folderSync from "./folder-sync.js";
 import { type ChildProcess, spawn } from "node:child_process";
@@ -16,7 +17,6 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   START_AGAIN_ADMIN,
@@ -119,8 +119,8 @@ async function folders(roots: StartAgainAttempt["roots"]) {
   const visit = async (root: string, relative: string) => {
     for (const name of (await readdir(join(root, relative))).sort()) {
       if (relative === "" && root === roots.venueDir && LOCK_OWNED.test(name)) continue;
-      if (relative === "" && root === roots.stateDir && name === START_AGAIN_GUESSES_FILE) continue;
       const path = relative === "" ? name : `${relative}/${name}`;
+      if (root === roots.stateDir && path === START_AGAIN_GUESSES_FILE) continue;
       const info = await lstat(join(root, path), { bigint: true });
       if (info.isDirectory()) {
         out[`${root}:${path}`] = `folder ${info.ino}`;
@@ -188,6 +188,39 @@ async function keepRecord(f: StartAgainAttempt) {
     setAside: null,
   });
 }
+
+it("a wrong guess does not change the list the page shows", async () => {
+  const f = await startAgainAttempt(await scratch());
+  const stray = "flows/setup/stray.json";
+  await writeFile(join(f.roots.stateDir, stray), "unlisted setup file");
+  const survey = await surveyStartAgainLeftovers(f.roots);
+  if (survey?.kind !== "choice") throw new Error(`expected choice, got ${JSON.stringify(survey)}`);
+  const input = {
+    roots: f.roots,
+    choice: "move" as const,
+    listed: survey.digest,
+    now: () => new Date(T0),
+  };
+  await expect(chooseStartAgainLeftovers({ ...input, password: WRONG })).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
+  expect(await counter(f.roots.stateDir)).toMatchObject({ failures: 1 });
+  expect(await surveyStartAgainLeftovers(f.roots)).toMatchObject({
+    kind: "choice",
+    digest: survey.digest,
+  });
+  const result = await chooseStartAgainLeftovers({
+    ...input,
+    password: START_AGAIN_ADMIN_PASSWORD,
+  });
+  if (result.choice !== "move") throw new Error("expected move");
+  expect(await readFile(join(f.roots.stateDir, result.setAside.state, stray), "utf8")).toBe(
+    "unlisted setup file",
+  );
+  await expect(lstat(join(f.roots.stateDir, "flows/setup"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
 
 it("a wrong password is refused setup.owner_required, counted, and changes no file of either folder except the counter", async () => {
   const f = await found();
@@ -338,13 +371,16 @@ it("checks the password against the setup record's own verifier", async () => {
       verify,
     }),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
-  const record = JSON.parse(await readFile(join(f.roots.stateDir, "first-setup.json"), "utf8"));
+  const record = JSON.parse(
+    await readFile(join(f.roots.stateDir, "flows/setup/record.json"), "utf8"),
+  );
   expect(verify).toHaveBeenCalledWith("typed", record.ownerVerifier);
 });
 
 it("a box whose setup record changed refuses setup.not_ready", async () => {
   const f = await found();
-  const path = join(f.roots.stateDir, "first-setup.json");
+  const path = join(f.roots.stateDir, "flows/setup/record.json");
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${await readFile(path, "utf8")} `);
   const verify = vi.fn(async () => true);
   await expect(
@@ -363,7 +399,7 @@ it("a box whose setup record changed refuses setup.not_ready", async () => {
 
 it("a setup record changed after the survey refuses setup.not_ready and costs no guess", async () => {
   const f = await found();
-  const path = join(f.roots.stateDir, "first-setup.json");
+  const path = join(f.roots.stateDir, "flows/setup/record.json");
   const verify = vi.fn(async () => true);
   afterSurvey = async () => writeFile(path, "{}");
   await expect(
@@ -384,12 +420,12 @@ it("a setup record for another attempt, written after the survey, refuses setup.
   const f = await found();
   const other = await startAgainAttempt(await scratch());
   const record = JSON.parse(
-    await readFile(join(other.roots.stateDir, "first-setup.json"), "utf8"),
+    await readFile(join(other.roots.stateDir, "flows/setup/record.json"), "utf8"),
   ) as Record<string, unknown>;
   const verify = vi.fn(async () => true);
   afterSurvey = async () =>
     writeFile(
-      join(f.roots.stateDir, "first-setup.json"),
+      join(f.roots.stateDir, "flows/setup/record.json"),
       JSON.stringify({ ...record, venueDir: f.roots.venueDir, stateDir: f.roots.stateDir }),
     );
   await expect(
@@ -547,7 +583,9 @@ it("Keep writes one record with who, when, what and which files, and moves nothi
   const f = await found();
   const survey = await choiceSurvey(f);
   const before = await folders(f.roots);
-  const state = JSON.parse(await readFile(join(f.roots.stateDir, "first-setup.json"), "utf8"));
+  const state = JSON.parse(
+    await readFile(join(f.roots.stateDir, "flows/setup/record.json"), "utf8"),
+  );
 
   expect(await choose(f, "keep")).toEqual({ choice: "keep" });
 
@@ -634,7 +672,7 @@ it("Move then finishes Start again: the marker and the marked files are gone, th
   const [record] = await recordsOf(f);
   expect(result).toEqual({ choice: "move", setAside: record!.setAside });
   await absent(join(f.roots.venueDir, "first-setup-deleting.json"));
-  await absent(join(f.roots.stateDir, "first-setup.json"));
+  await absent(join(f.roots.stateDir, "flows/setup/record.json"));
   await absent(join(f.roots.venueDir, "venue.db"));
   const at = join(f.roots.stateDir, record!.setAside!.venue, "venue.db");
   const there = await lstat(at, { bigint: true });

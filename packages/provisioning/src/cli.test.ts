@@ -1,6 +1,6 @@
+import { dirname, join } from "node:path";
 import { mkdtemp, mkdir, writeFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { ModuleConfig, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
@@ -1054,6 +1054,7 @@ it("leaves the venue folder untouched when refusing a damaged setup record", asy
   try {
     await mkdir(venueDir);
     await mkdir(stateDir);
+    await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
     await writeFile(join(stateDir, "flows/setup/record.json"), "{}");
     const h = harness({
       env: { ...VENUE_ENV, WAITRON_STATE_DIR: stateDir },
@@ -1080,6 +1081,7 @@ it("rechecks a claim that appears while the store is opening", async () => {
     const h = harness({
       env: { ...VENUE_ENV, WAITRON_STATE_DIR: stateDir },
       openVenue: async () => {
+        await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
         await writeFile(join(stateDir, "flows/setup/record.json"), "{}");
         return {
           venue: {},

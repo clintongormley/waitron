@@ -1,12 +1,23 @@
-import { chmod, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
 import { lockVenueDatabase } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { BACKUP_ROOM_NOTE_FILE, BACKUP_ROOM_START_DELETED_FILE } from "@waitron/store";
 import { stagedPath } from "./fs-atomic.js";
+import { removeAndSync } from "./folder-sync.js";
 import {
   START_AGAIN_MARKER_FILE,
   assertStartAgainAllowedOnDisk,
@@ -51,11 +62,102 @@ async function box() {
   directories.push(root);
   const roots = { venueDir: join(root, "venue"), stateDir: join(root, "state") };
   for (const path of Object.values(roots)) await mkdir(path);
+  await mkdir(join(roots.stateDir, "flows/setup"), { recursive: true });
+  await mkdir(dirname(join(roots.stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(roots.stateDir, "flows/setup/record.json"), "attempt record");
   await writeFile(join(roots.venueDir, "venue.db"), "attempt database bytes");
   (await lockVenueDatabase(roots.venueDir)).release();
   return roots;
 }
+
+async function flowBox() {
+  const roots = await box();
+  for (const folder of ["documents", "import"])
+    await mkdir(join(roots.stateDir, "flows/setup", folder), { recursive: true });
+  for (const name of [
+    "documents/probe.json",
+    "import/artifact",
+    "import/key",
+    "import/marker.json",
+    "readiness.json",
+    "node-key.json",
+    "public-evidence.json",
+  ]) {
+    await mkdir(dirname(join(roots.stateDir, "flows/setup", name)), { recursive: true });
+    await writeFile(join(roots.stateDir, "flows/setup", name), name);
+  }
+  return roots;
+}
+
+it("Start again removes flows/setup with its import, readiness and guesses", async () => {
+  const roots = await flowBox();
+  const marker = await startAgainMarkerFor(roots, attempt);
+  await writeStartAgainMarker(roots, marker);
+  await mkdir(dirname(join(roots.stateDir, "flows/setup/start-again-guesses.json")), {
+    recursive: true,
+  });
+  await writeFile(join(roots.stateDir, "flows/setup/start-again-guesses.json"), "guesses");
+  expect(marker.files.map((file) => file.name)).toContain("flows/setup/import/key");
+  expect(marker.files.map((file) => file.name)).toContain("flows/setup/readiness.json");
+  expect((await collectStartAgainFindings(roots))?.findings).toEqual([]);
+  await finishStartAgainDeletion(roots);
+  expect(await exists(join(roots.stateDir, "flows/setup"))).toBe(false);
+  expect(await readdir(join(roots.stateDir, "flows"))).toEqual([]);
+  expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
+});
+
+it.each(["documents/probe.json", "node-key.json"])(
+  "a deletion cut before %s finishes at the next start and clears its crash record",
+  async (cutAt) => {
+    const roots = await flowBox();
+    const marker = await startAgainMarkerFor(roots, attempt);
+    await writeStartAgainMarker(roots, marker);
+    const cut = join(roots.stateDir, "flows/setup", cutAt);
+    await expect(
+      deleteMarkedAttempt(roots, marker, async (path, kind) => {
+        if (path === cut) throw Object.assign(new Error("cut"), { code: "EIO" });
+        await removeAndSync(path, kind);
+      }),
+    ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
+    expect(await exists(join(roots.venueDir, "venue.db"))).toBe(false);
+    expect(await readFile(cut, "utf8")).toBe(cutAt);
+    await finishStartAgainDeletion(roots);
+    expect(await readdir(join(roots.stateDir, "flows"))).toEqual([]);
+    expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
+  },
+);
+
+it("an unlisted file in flows/setup is reported and kept", async () => {
+  const roots = await flowBox();
+  await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt));
+  const stray = join(roots.stateDir, "flows/setup/stray.json");
+  await mkdir(dirname(stray), { recursive: true });
+  await writeFile(stray, "unlisted");
+  expect(await refusal(finishStartAgainDeletion(roots))).toEqual({
+    code: "setup.start_again_incomplete",
+    reason: "unlisted file: state/flows/setup/stray.json",
+  });
+  expect(await readFile(stray, "utf8")).toBe("unlisted");
+  expect(await readFile(join(roots.stateDir, "flows/setup/record.json"), "utf8")).toBe(
+    "attempt record",
+  );
+});
+
+it("a file that appears after the checks is never deleted", async () => {
+  const roots = await flowBox();
+  const marker = await startAgainMarkerFor(roots, attempt);
+  const late = join(roots.stateDir, "flows/setup/late.json");
+  await expect(
+    deleteMarkedAttempt(roots, marker, async (path, kind) => {
+      if (path === join(roots.stateDir, "flows/setup") && kind === "folder") {
+        await mkdir(dirname(late), { recursive: true });
+        await writeFile(late, "arrived after the checks");
+      }
+      await removeAndSync(path, kind);
+    }),
+  ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
+  expect(await readFile(late, "utf8")).toBe("arrived after the checks");
+});
 
 it("reports a records folder that is a file as an unexpected layout when building the marker", async () => {
   const roots = await box();
@@ -126,7 +228,7 @@ it("the disk check refuses an unexpected folder in the venue's documents as an u
   expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
     code: "setup.not_ready",
     params: { cause: "unexpected" },
-    reason: "layout unexpected: first-fiscal-documents/inner",
+    reason: "layout unexpected: flows/setup/documents/inner",
   });
 });
 
@@ -245,7 +347,7 @@ it("the backup room's files written after the marker are no finding, and Start a
   expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
   expect(await exists(join(roots.venueDir, "venue.db"))).toBe(false);
   expect((await readdir(roots.stateDir)).sort()).toEqual(
-    [BACKUP_ROOM_START_DELETED_FILE, temporary, recordTemporary].sort(),
+    [BACKUP_ROOM_START_DELETED_FILE, temporary, recordTemporary, "flows"].sort(),
   );
 });
 

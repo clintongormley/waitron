@@ -43,11 +43,11 @@ export async function firstSetupUnusedAssignment(
   )
     return false;
   const allowed = new Set([
-    "state/first-setup.json",
+    "state/flows/setup/record.json",
     "venue/venue.db",
     "venue/venue.db-wal",
-    "state/first-setup-node-key.json",
-    "directory:state/first-fiscal-documents",
+    "state/flows/setup/node-key.json",
+    "directory:state/flows/setup/documents",
   ]);
   if (
     originals.some(
@@ -56,7 +56,7 @@ export async function firstSetupUnusedAssignment(
         original.name.startsWith("directory:outside:") ||
         (original.bytes !== null &&
           !allowed.has(original.name) &&
-          !original.name.startsWith("state/first-fiscal-documents/")),
+          !original.name.startsWith("state/flows/setup/documents/")),
     )
   )
     return false;
@@ -65,7 +65,7 @@ export async function firstSetupUnusedAssignment(
     return bytes == null ? null : (JSON.parse(Buffer.from(bytes).toString("utf8")) as unknown);
   };
   try {
-    const staged = read("state/first-setup-node-key.json");
+    const staged = read("state/flows/setup/node-key.json");
     const key = staged === null ? null : readFirstSetupStagedKey(staged, state);
     let assignments = 0;
     let recoveryRecordDamaged = false;
@@ -99,7 +99,7 @@ export async function firstSetupUnusedAssignment(
             !(error instanceof AppError) ||
             originals.find(
               (original) =>
-                original.name === `state/first-fiscal-documents/${module.module}.recovery.json`,
+                original.name === `state/flows/setup/documents/${module.module}.recovery.json`,
             )?.bytes == null
           )
             throw error;
@@ -126,7 +126,7 @@ export async function firstSetupUnusedAssignment(
       if (key === null) return false;
       const manifest = readDeliveryManifest(
         module.module,
-        read(`state/first-fiscal-documents/${module.module}.json`),
+        read(`state/flows/setup/documents/${module.module}.json`),
       );
       if (
         manifest === null ||
@@ -150,8 +150,8 @@ export async function firstSetupUnusedAssignment(
     return assignments > 0 &&
       originals.every(
         (original) =>
-          !original.name.startsWith("state/first-fiscal-documents/") ||
-          names.has(original.name.slice("state/first-fiscal-documents/".length)),
+          !original.name.startsWith("state/flows/setup/documents/") ||
+          names.has(original.name.slice("state/flows/setup/documents/".length)),
       )
       ? { recoveryRecordDamaged }
       : false;

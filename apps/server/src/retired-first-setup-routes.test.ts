@@ -1,8 +1,8 @@
+import { dirname, join } from "node:path";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { afterEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
@@ -96,6 +96,7 @@ it("the repair entry no longer serves Finish setup", async () => {
   const venueDir = join(root, "venue");
   await mkdir(stateDir);
   await mkdir(venueDir);
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(stateDir, "flows/setup/record.json"), "retained torn claim");
   const entry = await resolveFirstSetupEntry({ stateDir, venueDir }, {});
   if (entry.kind !== "resolution") throw new Error(`expected the repair entry, got ${entry.kind}`);

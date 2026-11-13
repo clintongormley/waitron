@@ -137,7 +137,7 @@ it("lifetime: that setup's own Start again leaves the moved files", async () => 
     ...ids,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown },
   });
-  await expect(lstat(join(roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
+  await expect(lstat(join(roots.stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
   expect(await readStartAgainMarker(roots.venueDir)).toBeNull();

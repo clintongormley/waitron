@@ -1,6 +1,6 @@
+import { dirname, join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
 import { once } from "node:events";
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import { expect, it, vi } from "vitest";
 import {
@@ -73,7 +73,11 @@ it.each([
 
 it("a stop the repair page would refuse is refused, and writes nothing", async () => {
   const s = await ordinaryServer();
-  await writeFile(join(s.stateDir, "flows/setup/operation.json"), JSON.stringify({ left: "behind" }));
+  await mkdir(dirname(join(s.stateDir, "flows/setup/operation.json")), { recursive: true });
+  await writeFile(
+    join(s.stateDir, "flows/setup/operation.json"),
+    JSON.stringify({ left: "behind" }),
+  );
   const ids = await s.ids();
   const summary = await createFirstSetupResolutionActions({
     stateDir: s.stateDir,
@@ -201,7 +205,11 @@ it.each([
   [
     "leaves a file Start again refuses",
     async (s: Server) => {
-      await writeFile(join(s.stateDir, "flows/setup/operation.json"), JSON.stringify({ left: "behind" }));
+      await mkdir(dirname(join(s.stateDir, "flows/setup/operation.json")), { recursive: true });
+      await writeFile(
+        join(s.stateDir, "flows/setup/operation.json"),
+        JSON.stringify({ left: "behind" }),
+      );
     },
     409,
     "setup.attempt_conflict",

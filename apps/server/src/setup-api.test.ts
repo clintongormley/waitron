@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash, X509Certificate } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -410,6 +410,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   it("keeps setup status healthy when persisted operation state needs operator recovery", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-corrupt-operation-"));
     try {
+      mkdirSync(join(dir, "flows/setup"), { recursive: true });
       writeFileSync(join(dir, "flows/setup/operation.json"), "not-json");
       const app = new Hono();
       mountSetup(
@@ -2763,7 +2764,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
 
   describe("a refused adopt and the recorded setup operation", () => {
     const conflict = { error: { code: "setup.operation_conflict", params: {} } };
-    const recordPath = (dir: string): string => join(dir, "setup-operation.json");
+    const recordPath = (dir: string): string => join(dir, "flows/setup/operation.json");
     const CLOUD_POINT_ID = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
 
     it.each([
@@ -3753,8 +3754,9 @@ describe("setup routes — remaining refusals and resumption paths", () => {
 describe("the setup latch after a request refused before its work starts", () => {
   /** A recorded setup operation, as `createSetupOperationStore` writes it. */
   function recordOperation(dir: string, kind: string, requestHash: string): void {
+    mkdirSync(join(dir, "flows/setup"), { recursive: true });
     writeFileSync(
-      join(dir, "setup-operation.json"),
+      join(dir, "flows/setup/operation.json"),
       JSON.stringify({
         version: 1,
         id: "00000000-0000-4000-8000-000000000001",
@@ -3811,7 +3813,8 @@ describe("the setup latch after a request refused before its work starts", () =>
   it("provision: an unreadable recorded operation is reported again, not as setup already running", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-latch-unreadable-"));
     try {
-      writeFileSync(join(dir, "setup-operation.json"), "not-json");
+      mkdirSync(join(dir, "flows/setup"), { recursive: true });
+      writeFileSync(join(dir, "flows/setup/operation.json"), "not-json");
       const app = new Hono();
       mountSetup(app, makeDeps({ operations: createSetupOperationStore(dir) }).deps, noopLog);
 
@@ -3907,7 +3910,7 @@ describe("the setup latch after a request refused before its work starts", () =>
         expect(refused.status).toBe(409);
         expect(await refused.json()).toMatchObject({ error: { code: "setup.operation_conflict" } });
 
-        rmSync(join(dir, "setup-operation.json"));
+        rmSync(join(dir, "flows/setup/operation.json"));
         expect((await post(app)).status).toBe(202);
       } finally {
         rmSync(dir, { recursive: true, force: true });
@@ -3918,7 +3921,7 @@ describe("the setup latch after a request refused before its work starts", () =>
 
 describe("POST /setup-api/reset-incomplete-adopt", () => {
   const OPERATION_ID = "00000000-0000-4000-8000-0000000000aa";
-  const recordPath = (dir: string): string => join(dir, "setup-operation.json");
+  const recordPath = (dir: string): string => join(dir, "flows/setup/operation.json");
   const unavailable = { error: { code: "setup.reset_unavailable", params: {} } };
   const invalid = { error: { code: "password.invalid", params: {} } };
 
@@ -3937,6 +3940,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
   });
 
   function writeRecord(dir: string, kind: string, phase: string, data = {}): void {
+    mkdirSync(join(dir, "flows/setup"), { recursive: true });
     writeFileSync(
       recordPath(dir),
       JSON.stringify({
@@ -4115,6 +4119,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
   it("answers a record that holds something that is not a valid setup record with setup.operation_conflict", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-unreadable-"));
     try {
+      mkdirSync(join(dir, "flows/setup"), { recursive: true });
       writeFileSync(recordPath(dir), "{");
       const stageReset = vi.fn(async () => {});
       const app = new Hono();

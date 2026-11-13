@@ -1827,8 +1827,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     const operationId = "44444444-4444-4444-8444-444444444444";
     try {
       await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
+        await mkdir(dirname(join(stateDir, "flows/setup/operation.json")), { recursive: true });
         await writeFile(
-          join(stateDir, "setup-operation.json"),
+          join(stateDir, "flows/setup/operation.json"),
           JSON.stringify({
             version: 1,
             id: operationId,

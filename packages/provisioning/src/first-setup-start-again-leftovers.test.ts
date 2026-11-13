@@ -181,6 +181,7 @@ async function withFoundDatabase(options: Parameters<typeof startAgainAttempt>[1
 
 it("the setup record changed, or gone, explains instead", async () => {
   const changed = await withFoundDatabase();
+  await mkdir(dirname(join(changed.stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(changed.stateDir, "flows/setup/record.json"), "{}");
   expect(await surveyStartAgainLeftovers(changed)).toEqual({
     kind: "explain",
@@ -198,7 +199,10 @@ it("the setup record changed, or gone, explains instead", async () => {
 it("a setup record parseFirstSetupState refuses explains", async () => {
   const roots = await withFoundDatabase({
     before: async ({ stateDir }) =>
-      writeFile(join(stateDir, "flows/setup/record.json"), JSON.stringify({ synthetic: "attempt" })),
+      writeFile(
+        join(stateDir, "flows/setup/record.json"),
+        JSON.stringify({ synthetic: "attempt" }),
+      ),
   });
   expect(await surveyStartAgainLeftovers(roots)).toEqual({
     kind: "explain",
@@ -210,9 +214,12 @@ it("a marker that does not name the setup record explains", async () => {
   const roots = await withFoundDatabase();
   const path = join(roots.venueDir, "first-setup-deleting.json");
   const marker = JSON.parse(await readFile(path, "utf8"));
-  marker.files = marker.files.filter((file: { name: string }) => file.name !== "flows/setup/record.json");
+  marker.files = marker.files.filter(
+    (file: { name: string }) => file.name !== "flows/setup/record.json",
+  );
   await writeFile(path, JSON.stringify(marker));
   await rm(join(roots.stateDir, "flows/setup/record.json"));
+  await mkdir(dirname(join(roots.stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(roots.stateDir, "flows/setup/record.json"), "{}");
   expect(await surveyStartAgainLeftovers(roots)).toEqual({
     kind: "explain",
@@ -252,7 +259,7 @@ it("a link explains, whether the finisher's walk or the survey's finds it", asyn
   await symlink("/etc/hosts", join(walked.stateDir, "flows/setup/documents", "link.json"));
   expect(await surveyStartAgainLeftovers(walked)).toMatchObject({
     kind: "explain",
-    reason: expect.stringMatching(/^layout unexpected: .*first-fiscal-documents\/link\.json$/),
+    reason: expect.stringMatching(/^layout unexpected: .*flows\/setup\/documents\/link\.json$/),
   });
 
   const surveyed = (await startAgainAttempt(await scratch())).roots;
@@ -370,6 +377,7 @@ it("moving every unit by hand leaves the finisher nothing to refuse", async () =
     before: async ({ venueDir, stateDir }) => {
       await writeFile(join(venueDir, "venue.db"), "attempt database");
       await writeFile(join(venueDir, "node.db"), "attempt node");
+      await mkdir(dirname(join(stateDir, "flows/setup/node-key.json")), { recursive: true });
       await writeFile(join(stateDir, "flows/setup/node-key.json"), "{}");
       await put(join(stateDir, marked, "record.json"), "{}");
     },
@@ -377,6 +385,7 @@ it("moving every unit by hand leaves the finisher nothing to refuse", async () =
   const found = `${RECORDS}/${randomUUID()}`;
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
   await put(join(roots.venueDir, ".venue.db-litestream", "a.wal"), "one");
+  await mkdir(dirname(join(roots.stateDir, "flows/setup/node-key.json")), { recursive: true });
   await writeFile(join(roots.stateDir, "flows/setup/node-key.json"), '{"changed":true}');
   await writeFile(join(roots.venueDir, "venue.db"), "a changed database");
   await writeFile(join(roots.venueDir, "venue.db-wal"), "pages");
@@ -389,9 +398,9 @@ it("moving every unit by hand leaves the finisher nothing to refuse", async () =
   const survey = choice(await surveyStartAgainLeftovers(roots));
   const order = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   expect(survey.units.map((unit) => `${unit.root}/${unit.path}`)).toEqual([
+    ...[`state/${marked}/later.json`, `state/${found}`].sort(order),
     "state/flows/setup/documents/extra.json",
     "state/flows/setup/node-key.json",
-    ...[`state/${marked}/later.json`, `state/${found}`].sort(order),
     "state/trading.env",
     "venue/.venue.db-litestream",
     "venue/node.db",
@@ -441,6 +450,7 @@ it("classifyStartAgainRefusal gives files_found with the finisher's reason, and 
   expect(classified.survey).toEqual(await surveyStartAgainLeftovers(roots));
 
   const explained = await withFoundDatabase();
+  await mkdir(dirname(join(explained.stateDir, "flows/setup/record.json")), { recursive: true });
   await writeFile(join(explained.stateDir, "flows/setup/record.json"), "{}");
   const unchanged = await finishStartAgainDeletion(explained).then(
     () => null,
