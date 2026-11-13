@@ -596,18 +596,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the form and try again",
     es: "Revisa el formulario e inténtalo de nuevo",
   },
-  "person.roles_changed": {
-    en: "This person's access roles changed while you were editing. Reload their roles and try again.",
-    es: "Los roles de acceso de esta persona cambiaron mientras editabas. Vuelve a cargarlos e inténtalo de nuevo.",
-  },
-  "role.not_found": {
-    en: "That access role no longer exists. Reload the roles and choose again.",
-    es: "Ese rol de acceso ya no existe. Vuelve a cargar los roles y elige de nuevo.",
-  },
-  "role.not_permitted": {
-    en: "You can only give or remove access roles whose permissions you hold. Choose another role or sign in with an account that holds the required permissions.",
-    es: "Solo puedes dar o quitar roles de acceso cuyos permisos tengas. Elige otro rol o entra con una cuenta que tenga los permisos necesarios.",
-  },
 
   "device_profile.not_found": {
     en: "That device profile no longer exists",

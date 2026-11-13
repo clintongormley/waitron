@@ -103,13 +103,19 @@ it("cancels delivery if the person no longer has an email", async () => {
       kind: "role_membership_changed",
       dedupeKey: "membership",
       personId: person!.id,
-      params: {},
+      params: {
+        change: "added",
+        builtInKey: "staff",
+        roleName: null,
+        editorName: "Editor",
+        at: now.toISOString(),
+      },
       now,
       notAfter: new Date(now.getTime() + 86400000),
     }),
   );
   await suite.db.update(persons).set({ email: null }).where(eq(persons.id, person!.id));
-  const send = vi.fn();
+  const send = vi.fn(async () => ({ status: "sent" as const }));
   const result = await runMailPass({
     db: suite.db,
     owners: [
@@ -126,6 +132,6 @@ it("cancels delivery if the person no longer has an email", async () => {
     log: () => {},
   });
   expect(result.processed).toBe(true);
-  expect((await suite.db.select().from(outgoingMail))[0]!.status).toBe("cancelled");
   expect(send).not.toHaveBeenCalled();
+  expect((await suite.db.select().from(outgoingMail))[0]!.status).toBe("cancelled");
 });
