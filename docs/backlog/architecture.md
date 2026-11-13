@@ -837,6 +837,7 @@ the helper's constant status is not evidence of the write.
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.**
+  Local session-person and recovery-page route fixtures use Anna for their staff display sample.
   The invoice-PDF download suite uses Martha for its manager sample and audit readback.
   The recovery-pack status suite uses Martha Green for its staff sample and name readback.
   The single- and multi-bill editor suites use Anna and Lewis as local staff samples.

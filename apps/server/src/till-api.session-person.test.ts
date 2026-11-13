@@ -44,7 +44,7 @@ const id = randomUUID();
 
 type Class = "public" | "device only";
 
-/** Routes that answer Ben's cookies naming Ana exactly as Ben's device cookie alone, which is not
+/** Routes that answer Ben's cookies naming Anna exactly as Ben's device cookie alone, which is not
  * `session.required`: none of them acts as the signed-in person on these requests. */
 const BLIND: readonly { route: string; class: Class; reason: string }[] = [
   { route: "POST /api/session", class: "public", reason: "the sign-in itself" },
@@ -299,7 +299,7 @@ beforeAll(async () => {
     noopLog,
   );
   mountScheduleApi(app, { db: suite.db }, noopLog);
-  ana = await person("Ana", "staff");
+  ana = await person("Anna", "staff");
   ben = await person("Ben", "admin");
   const [station] = await suite.db
     .insert(kitchenStations)
@@ -309,7 +309,7 @@ beforeAll(async () => {
 }, 120_000);
 
 describe("every till, device and schedule route checks the person a request names", () => {
-  it("refuses Ben's session naming Ana or nobody, or answers as if nobody were signed in", async () => {
+  it("refuses Ben's session naming Anna or nobody, or answers as if nobody were signed in", async () => {
     const failures: string[] = [];
     const blindOn: Set<string>[] = [];
     const refusedOn = new Set<string>();

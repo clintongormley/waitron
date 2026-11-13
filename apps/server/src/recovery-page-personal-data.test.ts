@@ -666,7 +666,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
     const deviceId = await seedSessionDevice(v.db);
     const session = await inTx(v, async (tx) => {
       const [person] = await seedPersons(tx, {
-        displayName: "Ana",
+        displayName: "Anna",
         pinHash: hashPin("5555"),
         role: "staff",
       });
