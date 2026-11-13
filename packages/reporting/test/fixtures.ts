@@ -444,15 +444,13 @@ export async function seedFiredLine(
       servedAt: opts.served ? firedAt : null,
     })
     .returning({ id: workingOrderLines.id });
-  await db
-    .insert(ticketItems)
-    .values({
-      workingOrderId: opts.orderId,
-      workingOrderLineId: line!.id,
-      stationId: seed.stationId,
-      queuedAt: opts.queuedAt ?? new Date(firedAtMs - opts.ageMinutes * 60_000).toISOString(),
-      firedAt,
-    });
+  await db.insert(ticketItems).values({
+    workingOrderId: opts.orderId,
+    workingOrderLineId: line!.id,
+    stationId: seed.stationId,
+    queuedAt: opts.queuedAt ?? new Date(firedAtMs - opts.ageMinutes * 60_000).toISOString(),
+    firedAt,
+  });
 }
 
 /** What {@link seedFiredOrder} needs to seed one KITCHEN order with a single fired line. */
