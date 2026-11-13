@@ -766,23 +766,23 @@ describe("A803 race replay: Split a table against another command, from one read
 
   for (const order of orders) {
     it(`A803 race replay: two splits of one party from one read: one commits, the other is refused, and one new party exists (${order[0]} asked first)`, async () => {
-      const ana = await seatedWith(venue, "Tarta", "Caña", "Octopus");
+      const anna = await seatedWith(venue, "Tarta", "Caña", "Octopus");
       const tables = {
-        left: await joinFree(ana.partyId),
-        right: await joinFree(ana.partyId),
+        left: await joinFree(anna.partyId),
+        right: await joinFree(anna.partyId),
       };
       const dishes = {
-        left: lineNamed(ana.tabId, "Caña").id,
-        right: lineNamed(ana.tabId, "Octopus").id,
+        left: lineNamed(anna.tabId, "Caña").id,
+        right: lineNamed(anna.tabId, "Octopus").id,
       };
       const commands = {
-        left: await splitOf(ana.partyId, tables.left, {
+        left: await splitOf(anna.partyId, tables.left, {
           wholeBillIds: [],
-          loose: [{ billId: ana.tabId, lineIds: [dishes.left] }],
+          loose: [{ billId: anna.tabId, lineIds: [dishes.left] }],
         }),
-        right: await splitOf(ana.partyId, tables.right, {
+        right: await splitOf(anna.partyId, tables.right, {
           wholeBillIds: [],
-          loose: [{ billId: ana.tabId, lineIds: [dishes.right] }],
+          loose: [{ billId: anna.tabId, lineIds: [dishes.right] }],
         }),
       };
       const partiesBefore = howMany("parties");
@@ -792,8 +792,8 @@ describe("A803 race replay: Split a table against another command, from one read
       const won = (await judge(raced, "party.out_of_date")) as { partyId: string };
       expect(howMany("parties")).toBe(partiesBefore + 1);
       expect(holderOf(tables[order[0]])).toBe(won.partyId);
-      expect(holderOf(tables[order[1]])).toBe(ana.partyId);
-      expect(namesOn(ana.tabId)).toEqual(
+      expect(holderOf(tables[order[1]])).toBe(anna.partyId);
+      expect(namesOn(anna.tabId)).toEqual(
         order[0] === "left" ? ["Tarta", "Octopus"] : ["Tarta", "Caña"],
       );
       expect(billsOf(won.partyId).flatMap(namesOn)).toEqual([
@@ -809,10 +809,10 @@ describe("A803 race replay: Split a table against another command, from one read
     it(`A803 race replay: a split with a loose dish and a payment taking that dish: one commits (${order[0]} asked first)`, async () => {
       // Two dishes of one price, so if a split renumbered its lines, this payment would commit
       // against the staying dish and the case would go red.
-      const ana = await seatedWith(venue, "Tarta", "Tarta");
-      const table = await joinFree(ana.partyId);
-      const [dish, staying] = linesOf(ana.tabId);
-      const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, ana.tabId));
+      const anna = await seatedWith(venue, "Tarta", "Tarta");
+      const table = await joinFree(anna.partyId);
+      const [dish, staying] = linesOf(anna.tabId);
+      const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, anna.tabId));
       const operator = {
         personId: venue.operatorId,
         sessionId: await openTillSession(venue.db, {
@@ -821,9 +821,9 @@ describe("A803 race replay: Split a table against another command, from one read
         }),
       };
       const commands = {
-        split: await splitOf(ana.partyId, table, {
+        split: await splitOf(anna.partyId, table, {
           wholeBillIds: [],
-          loose: [{ billId: ana.tabId, lineIds: [dish!.id] }],
+          loose: [{ billId: anna.tabId, lineIds: [dish!.id] }],
         }),
         pay: () =>
           takeBillPayment(
@@ -834,7 +834,7 @@ describe("A803 race replay: Split a table against another command, from one read
               admission: testTradingAdmission(),
             },
             venue.cfg,
-            ana.tabId,
+            anna.tabId,
             {
               submissionId: randomUUID(),
               expectedEdit,
@@ -854,18 +854,18 @@ describe("A803 race replay: Split a table against another command, from one read
 
       const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });
 
-      const payments = await paymentRows(venue, ana.tabId);
+      const payments = await paymentRows(venue, anna.tabId);
       if (order[0] === "pay") {
         await judge(raced, "bill.line_paid");
         expect(howMany("order_group_events")).toBe(events);
         expect(howMany("kitchen_notices")).toBe(notices);
-        expect(holderOf(table)).toBe(ana.partyId);
-        expect(idsOn(ana.tabId)).toEqual([dish!.id, staying!.id]);
+        expect(holderOf(table)).toBe(anna.partyId);
+        expect(idsOn(anna.tabId)).toEqual([dish!.id, staying!.id]);
         expect(payments).toHaveLength(1);
       } else {
         const won = (await judge(raced, "tab.line_not_found")) as { partyId: string };
         expect(holderOf(table)).toBe(won.partyId);
-        expect(idsOn(ana.tabId)).toEqual([staying!.id]);
+        expect(idsOn(anna.tabId)).toEqual([staying!.id]);
         expect(billsOf(won.partyId).flatMap(idsOn)).toEqual([dish!.id]);
         expect(payments).toEqual([]);
       }
@@ -877,14 +877,14 @@ describe("A803 race replay: Split a table against another command, from one read
     ["split", "takeOver"],
   ] as const) {
     it(`A803 race replay: a take-over and a split of that bill: one commits and no dish is lost (${order[0]} asked first)`, async () => {
-      const ana = await seatedWith(venue, "Octopus");
-      const table = await joinFree(ana.partyId);
+      const anna = await seatedWith(venue, "Octopus");
+      const table = await joinFree(anna.partyId);
       const saved = await inTx(venue, async (tx) =>
-        saveDraft(tx, venue.cfg, ana.partyId, venue.adminId, {
-          billId: ana.tabId,
+        saveDraft(tx, venue.cfg, anna.partyId, venue.adminId, {
+          billId: anna.tabId,
           draftId: null,
           revision: 0,
-          expectedEdit: await readBillEditState(tx, ana.tabId),
+          expectedEdit: await readBillEditState(tx, anna.tabId),
           lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
         }),
       );
@@ -896,14 +896,14 @@ describe("A803 race replay: Split a table against another command, from one read
       };
       const commands = {
         split: await splitOf(
-          ana.partyId,
+          anna.partyId,
           table,
-          { wholeBillIds: [ana.tabId], loose: [] },
+          { wholeBillIds: [anna.tabId], loose: [] },
           venue.adminId,
         ),
         takeOver: () =>
           inTx(venue, (tx) =>
-            takeOverDraft(tx, venue.cfg, ana.partyId, draftId, venue.operatorId, asked),
+            takeOverDraft(tx, venue.cfg, anna.partyId, draftId, venue.operatorId, asked),
           ),
       };
 
@@ -914,19 +914,19 @@ describe("A803 race replay: Split a table against another command, from one read
         .from(orderDraftLines)
         .where(eq(orderDraftLines.draftId, draftId));
       expect(draftLines).toHaveLength(1);
-      expect(namesOn(ana.tabId)).toEqual(["Octopus"]);
-      const after = await inTx(venue, (tx) => readBillEditState(tx, ana.tabId));
+      expect(namesOn(anna.tabId)).toEqual(["Octopus"]);
+      const after = await inTx(venue, (tx) => readBillEditState(tx, anna.tabId));
       expect(after.draftId).toBe(draftId);
       if (order[0] === "takeOver") {
         await judge(raced, "draft.out_of_date");
         expect(after.editorId).toBe(venue.operatorId);
-        expect(holderOf(table)).toBe(ana.partyId);
-        expect(billsOf(ana.partyId)).toEqual([ana.tabId]);
+        expect(holderOf(table)).toBe(anna.partyId);
+        expect(billsOf(anna.partyId)).toEqual([anna.tabId]);
       } else {
         const won = (await judge(raced, "draft.not_found")) as { partyId: string };
         expect(after.editorId).toBe(venue.adminId);
         expect(holderOf(table)).toBe(won.partyId);
-        expect(billsOf(won.partyId)).toEqual([ana.tabId]);
+        expect(billsOf(won.partyId)).toEqual([anna.tabId]);
       }
     });
   }
@@ -936,23 +936,23 @@ describe("A803 race replay: Split a table against another command, from one read
     ["split", "move"],
   ] as const) {
     it(`A803 race replay: a split and a Move dishes of the same dish: one commits (${order[0]} asked first)`, async () => {
-      const ana = await seatedWith(venue, "Tarta", "Caña");
-      const table = await joinFree(ana.partyId);
-      const beerLineId = lineNamed(ana.tabId, "Caña").id;
+      const anna = await seatedWith(venue, "Tarta", "Caña");
+      const table = await joinFree(anna.partyId);
+      const beerLineId = lineNamed(anna.tabId, "Caña").id;
       const moving = {
         admission: testTradingAdmission(),
-        partyId: ana.partyId,
+        partyId: anna.partyId,
         operatorId: venue.operatorId,
-        expectedPartyRevision: revisionOf(ana.partyId),
-        expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, ana.tabId))],
+        expectedPartyRevision: revisionOf(anna.partyId),
+        expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, anna.tabId))],
       };
       const commands = {
-        split: await splitOf(ana.partyId, table, {
+        split: await splitOf(anna.partyId, table, {
           wholeBillIds: [],
-          loose: [{ billId: ana.tabId, lineIds: [beerLineId] }],
+          loose: [{ billId: anna.tabId, lineIds: [beerLineId] }],
         }),
         move: () =>
-          inTx(venue, (tx) => moveDishes(tx, venue.cfg, ana.tabId, null, [beerLineId], moving)),
+          inTx(venue, (tx) => moveDishes(tx, venue.cfg, anna.tabId, null, [beerLineId], moving)),
       };
 
       const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });
@@ -961,15 +961,15 @@ describe("A803 race replay: Split a table against another command, from one read
         partyId?: string;
         billId?: string;
       };
-      expect(namesOn(ana.tabId)).toEqual(["Tarta"]);
+      expect(namesOn(anna.tabId)).toEqual(["Tarta"]);
       if (order[0] === "move") {
-        expect(holderOf(table)).toBe(ana.partyId);
+        expect(holderOf(table)).toBe(anna.partyId);
         expect(namesOn(won.billId!)).toEqual(["Caña"]);
-        expect(billsOf(ana.partyId)).toContain(won.billId);
+        expect(billsOf(anna.partyId)).toContain(won.billId);
       } else {
         expect(holderOf(table)).toBe(won.partyId);
         expect(billsOf(won.partyId!).flatMap(namesOn)).toEqual(["Caña"]);
-        expect(billsOf(ana.partyId)).toEqual([ana.tabId]);
+        expect(billsOf(anna.partyId)).toEqual([anna.tabId]);
       }
     });
   }
@@ -979,10 +979,10 @@ describe("A803 race replay: Split a table against another command, from one read
     ["split", "fire"],
   ] as const) {
     it(`A803 race replay: a split and Fire of a held group holding a loose pick: each table ends right (${order[0]} asked first)`, async () => {
-      const ana = await seatedWith(venue, "Octopus");
-      const table = await joinFree(ana.partyId);
+      const anna = await seatedWith(venue, "Octopus");
+      const table = await joinFree(anna.partyId);
       await inTx(venue, (tx) =>
-        submitGroups(tx, venue.cfg, ana.partyId, {
+        submitGroups(tx, venue.cfg, anna.partyId, {
           groups: [
             {
               release: "hold",
@@ -993,40 +993,40 @@ describe("A803 race replay: Split a table against another command, from one read
             },
           ],
           operatorId: venue.operatorId,
-          billId: ana.tabId,
-          expectedPartyRevision: revisionOf(ana.partyId),
+          billId: anna.tabId,
+          expectedPartyRevision: revisionOf(anna.partyId),
           submissionId: randomUUID(),
         }),
       );
-      const beerLine = lineNamed(ana.tabId, "Caña");
-      const cakeLine = lineNamed(ana.tabId, "Tarta");
+      const beerLine = lineNamed(anna.tabId, "Caña");
+      const cakeLine = lineNamed(anna.tabId, "Tarta");
       const source = beerLine.groupId!;
       const firing = {
         operatorId: venue.operatorId,
-        expectedPartyRevision: revisionOf(ana.partyId),
+        expectedPartyRevision: revisionOf(anna.partyId),
         submissionId: randomUUID(),
       };
       const commands = {
-        split: await splitOf(ana.partyId, table, {
+        split: await splitOf(anna.partyId, table, {
           wholeBillIds: [],
-          loose: [{ billId: ana.tabId, lineIds: [beerLine.id] }],
+          loose: [{ billId: anna.tabId, lineIds: [beerLine.id] }],
         }),
-        fire: () => inTx(venue, (tx) => fireGroup(tx, venue.cfg, ana.partyId, source, firing)),
+        fire: () => inTx(venue, (tx) => fireGroup(tx, venue.cfg, anna.partyId, source, firing)),
       };
 
       const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });
 
       const won = (await judge(raced, "party.out_of_date")) as { partyId: string };
       if (order[0] === "fire") {
-        expect(holderOf(table)).toBe(ana.partyId);
-        expect(groupStateOf(source)).toEqual({ partyId: ana.partyId, state: "fired" });
-        expect(lineNamed(ana.tabId, "Caña").groupId).toBe(source);
+        expect(holderOf(table)).toBe(anna.partyId);
+        expect(groupStateOf(source)).toEqual({ partyId: anna.partyId, state: "fired" });
+        expect(lineNamed(anna.tabId, "Caña").groupId).toBe(source);
         expect(firedAtOf(beerLine.id)).toEqual(expect.any(String));
         expect(firedAtOf(cakeLine.id)).toEqual(expect.any(String));
       } else {
         expect(holderOf(table)).toBe(won.partyId);
-        expect(groupStateOf(source)).toEqual({ partyId: ana.partyId, state: "held" });
-        expect(lineNamed(ana.tabId, "Tarta").groupId).toBe(source);
+        expect(groupStateOf(source)).toEqual({ partyId: anna.partyId, state: "held" });
+        expect(lineNamed(anna.tabId, "Tarta").groupId).toBe(source);
         const [newBill] = billsOf(won.partyId);
         const moved = lineNamed(newBill!, "Caña");
         expect(moved.groupId).not.toBe(source);
