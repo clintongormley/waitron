@@ -1,25 +1,10 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, enumCheck, enumType, id, json, label, newId, table, tsString } from "../columns.js";
+import { count, id, json, label, newId, table } from "../columns.js";
 import { orderDraftLines } from "../order-drafts.js";
 import { workingOrderLines } from "../orders.js";
 import { parties } from "../parties.js";
 import type { AllergenMap } from "@waitron/shared";
-
-const allergyAnswer = enumType(["none", "allergies"]);
-export const partyAllergy = table(
-  "party_allergy",
-  {
-    partyId: id("party_id")
-      .primaryKey()
-      .references(() => parties.id, { onDelete: "cascade" }),
-    answer: allergyAnswer("answer").notNull(),
-    // A plain person id; the authenticated caller establishes the actor, outside this module's set.
-    changedBy: id("changed_by").notNull(),
-    changedAt: tsString("changed_at").notNull(),
-  },
-  (t) => [check("party_allergy_answer_ck", enumCheck(t.answer))],
-);
 
 export const partyAllergyGuests = table(
   "party_allergy_guests",
@@ -34,7 +19,7 @@ export const partyAllergyGuests = table(
   (t) => [
     foreignKey({
       columns: [t.partyId],
-      foreignColumns: [partyAllergy.partyId],
+      foreignColumns: [parties.id],
       name: "party_allergy_guests_party_fk",
     }).onDelete("cascade"),
     check(

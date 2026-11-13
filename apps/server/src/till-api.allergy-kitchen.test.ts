@@ -43,8 +43,8 @@ const changed: KitchenAllergyBlock = {
 };
 
 async function fixture() {
+  await seedPersons(suite.db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   const v = await setupPartyVenue(suite.db);
-  await seedPersons(v.db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   const token = randomUUID();
   await v.db
     .update(sessions)

@@ -7,7 +7,7 @@ import {
   parties,
   orderDraftLines,
   orderDrafts,
-  partyAllergy,
+  recordActivity,
   partyAllergyGuests,
   workingOrderLines,
   workingOrders,
@@ -50,11 +50,15 @@ export async function readPartyAllergy(
   partyId: string,
 ): Promise<PartyAllergySnapshot> {
   const [party] = await tx
-    .select({ revision: parties.revision })
+    .select({
+      revision: parties.revision,
+      answer: parties.allergyAnswer,
+      changedBy: parties.allergyAnsweredBy,
+      changedAt: parties.allergyAnsweredAt,
+    })
     .from(parties)
     .where(eq(parties.id, partyId));
   if (party === undefined) invalid("partyId");
-  const [answer] = await tx.select().from(partyAllergy).where(eq(partyAllergy.partyId, partyId));
   const guests = await tx
     .select()
     .from(partyAllergyGuests)
@@ -78,11 +82,11 @@ export async function readPartyAllergy(
           )
           .orderBy(asc(allergyLineTicks.id));
   return {
-    answer: answer?.answer ?? null,
+    answer: party.answer,
     guests,
     ticks,
-    changedBy: answer?.changedBy ?? null,
-    changedAt: answer?.changedAt ?? null,
+    changedBy: party.changedBy,
+    changedAt: party.changedAt,
     revision: party.revision,
   };
 }
@@ -153,12 +157,13 @@ export async function writePartyAllergy(
     return { id: guestId, partyId, position, who, allergens, note };
   });
   await tx
-    .insert(partyAllergy)
-    .values({ partyId, answer: input.answer, changedBy: operatorId, changedAt: nowIso() })
-    .onConflictDoUpdate({
-      target: partyAllergy.partyId,
-      set: { answer: input.answer, changedBy: operatorId, changedAt: nowIso() },
-    });
+    .update(parties)
+    .set({
+      allergyAnswer: input.answer,
+      allergyAnsweredBy: operatorId,
+      allergyAnsweredAt: nowIso(),
+    })
+    .where(eq(parties.id, partyId));
   for (const old of current)
     if (!seen.has(old.id))
       await tx.delete(partyAllergyGuests).where(eq(partyAllergyGuests.id, old.id));
@@ -167,6 +172,12 @@ export async function writePartyAllergy(
       await tx.update(partyAllergyGuests).set(guest).where(eq(partyAllergyGuests.id, guest.id));
     else await tx.insert(partyAllergyGuests).values(guest);
   }
+  await recordActivity(tx, {
+    kind: "party.allergy_answered",
+    subjectId: partyId,
+    personId: operatorId,
+    data: { answer: input.answer, guestCount: guests.length },
+  });
 }
 
 export async function setAllergyLineTicks(
@@ -336,22 +347,26 @@ export async function mergePartyAllergies(
         ? null
         : "none";
   if (answer === null) {
-    await tx.delete(partyAllergy).where(inArray(partyAllergy.partyId, [from, into]));
+    await tx.delete(partyAllergyGuests).where(inArray(partyAllergyGuests.partyId, [from, into]));
+    await tx
+      .update(parties)
+      .set({ allergyAnswer: null, allergyAnsweredBy: null, allergyAnsweredAt: null })
+      .where(inArray(parties.id, [from, into]));
     return;
   }
   await tx
-    .insert(partyAllergy)
-    .values({ partyId: into, answer, changedBy: operatorId, changedAt: nowIso() })
-    .onConflictDoUpdate({
-      target: partyAllergy.partyId,
-      set: { answer, changedBy: operatorId, changedAt: nowIso() },
-    });
+    .update(parties)
+    .set({ allergyAnswer: answer, allergyAnsweredBy: operatorId, allergyAnsweredAt: nowIso() })
+    .where(eq(parties.id, into));
   for (const [i, guest] of source.guests.entries())
     await tx
       .update(partyAllergyGuests)
       .set({ partyId: into, position: target.guests.length + i })
       .where(eq(partyAllergyGuests.id, guest.id));
-  await tx.delete(partyAllergy).where(eq(partyAllergy.partyId, from));
+  await tx
+    .update(parties)
+    .set({ allergyAnswer: null, allergyAnsweredBy: null, allergyAnsweredAt: null })
+    .where(eq(parties.id, from));
 }
 
 export async function splitPartyAllergies(
@@ -364,8 +379,13 @@ export async function splitPartyAllergies(
   const source = await readPartyAllergy(tx, from);
   if (source.answer === null) return;
   await tx
-    .insert(partyAllergy)
-    .values({ partyId: into, answer: source.answer, changedBy: operatorId, changedAt: nowIso() });
+    .update(parties)
+    .set({
+      allergyAnswer: source.answer,
+      allergyAnsweredBy: operatorId,
+      allergyAnsweredAt: nowIso(),
+    })
+    .where(eq(parties.id, into));
   await copyGuestsAndBillTicks(tx, source.guests, into, billIds, 0);
 }
 
@@ -424,12 +444,9 @@ export async function moveBillAllergies(
   if (source.answer !== "allergies") return;
   const target = await readPartyAllergy(tx, into);
   await tx
-    .insert(partyAllergy)
-    .values({ partyId: into, answer: "allergies", changedBy: operatorId, changedAt: nowIso() })
-    .onConflictDoUpdate({
-      target: partyAllergy.partyId,
-      set: { answer: "allergies", changedBy: operatorId, changedAt: nowIso() },
-    });
+    .update(parties)
+    .set({ allergyAnswer: "allergies", allergyAnsweredBy: operatorId, allergyAnsweredAt: nowIso() })
+    .where(eq(parties.id, into));
   // The source keeps its guests; both tick kinds follow only the bill that leaves.
   await copyGuestsAndBillTicks(
     tx,

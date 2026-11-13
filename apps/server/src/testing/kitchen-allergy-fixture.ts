@@ -21,7 +21,6 @@ import { createPrinter } from "@waitron/printing";
 import {
   allergyLineTicks,
   kitchenNotices,
-  partyAllergy,
   partyAllergyGuests,
   ticketItemAllergies,
 } from "@waitron/venue-service";
@@ -52,8 +51,8 @@ export type KitchenCaller = "edit" | "groups" | "draft" | "release" | "move";
 export const kitchenCallers: KitchenCaller[] = ["edit", "groups", "draft", "release", "move"];
 
 export async function kitchenFixture(db: Database) {
-  const v = await setupPartyVenue(db);
   await seedPersons(db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
+  const v = await setupPartyVenue(db);
   const token = randomUUID();
   await db
     .update(sessions)
@@ -249,7 +248,14 @@ export function requestKitchen(f: KitchenFixture, command: KitchenCommand) {
 
 export async function kitchenState(db: Database) {
   return inTx({ db }, async (tx) => ({
-    answers: await tx.select().from(partyAllergy),
+    answers: await tx
+      .select({
+        partyId: parties.id,
+        answer: parties.allergyAnswer,
+        changedBy: parties.allergyAnsweredBy,
+        changedAt: parties.allergyAnsweredAt,
+      })
+      .from(parties),
     guests: await tx.select().from(partyAllergyGuests),
     ticks: await tx.select().from(allergyLineTicks),
     copies: await tx.select().from(ticketItemAllergies),

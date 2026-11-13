@@ -81,7 +81,6 @@ const KITCHEN_TYPES = [
   "kitchen_notices",
   "menu_periods",
   "settings.venue",
-  "party_allergy",
   "party_allergy_guests",
   "allergy_line_ticks",
 ];
@@ -196,7 +195,6 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "persons",
     ...ORDER_TYPES,
     ...MENU_TYPES,
-    "party_allergy",
     "party_allergy_guests",
     "allergy_line_ticks",
     "parties",

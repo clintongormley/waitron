@@ -1,5 +1,6 @@
+import { clearPartyAllergyForTest } from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -166,8 +167,7 @@ it.each([
     [a, left, "Staying guest"],
     [b, right, "Joining guest"],
   ] as const) {
-    if (answer === null)
-      await v.db.run(sql`delete from party_allergy where party_id = ${p.partyId}`);
+    if (answer === null) await clearPartyAllergyForTest(v.db, p.partyId);
     else if (answer === "allergies") await save(p.partyId, who);
   }
   const command = await commandFor(v, a.partyId);

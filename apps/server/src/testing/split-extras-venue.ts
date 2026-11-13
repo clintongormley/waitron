@@ -1,3 +1,4 @@
+import { ensureOperator } from "./cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { venueLocationId, workingOrderLines, withTransaction } from "@waitron/db";
@@ -68,6 +69,7 @@ export async function setupVenue(): Promise<Venue> {
 export async function setupSplitExtrasVenue() {
   const { cfg, catalogueId } = await setupVenue();
   const built = await withTransaction(db, async (tx) => {
+    await ensureOperator(tx, OPERATOR);
     const stations = {
       grill: (await createStation(tx, { name: "Grill" })).id,
       fryer: (await createStation(tx, { name: "Fryer" })).id,

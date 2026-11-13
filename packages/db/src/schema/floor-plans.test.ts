@@ -1,3 +1,4 @@
+import { seedPerson } from "../testing/seed.js";
 import { todaySet } from "@waitron/db";
 import { todayColumns } from "../floor-today-columns.js";
 import { eq, inArray, isNotNull, sql, and } from "drizzle-orm";
@@ -47,6 +48,7 @@ describe("floor plan tables", () => {
 
   beforeEach(async () => {
     const db = suite.db;
+    await seedPerson(db, { id: PERSON });
     await seedVenue(db, {
       name: "Loc A",
       invoiceLocales: ["es"],

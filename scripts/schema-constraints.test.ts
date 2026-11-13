@@ -31,6 +31,13 @@ const PACKAGES_DIR = join(REPO_ROOT, "packages");
 
 /** `[child table, child columns, parent table]`, one row per foreign key. */
 const EXPECTED_FOREIGN_KEYS = [
+  ["parties", ["opened_by"], "persons"],
+  ["parties", ["closed_by"], "persons"],
+  ["parties", ["allergy_answered_by"], "persons"],
+  ["party_allergy_guests", ["party_id"], "parties"],
+  ["service_step_completions", ["done_by"], "persons"],
+  ["ticket_item_moves", ["moved_by_person_id"], "persons"],
+  ["bookings", ["created_by"], "persons"],
   ["dining_tables", ["merge_id"], "table_merges"],
   ["activity_log", ["device_id"], "devices"],
   ["activity_log", ["person_id"], "persons"],
@@ -726,6 +733,8 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "order_groups_firer_ck",
   "order_groups_state_ck",
   "order_service_contexts_mode_ck",
+  "parties_allergy_answer_ck",
+  "parties_allergy_answered_ck",
   "parties_closed_at_ck",
   "parties_guest_count_ck",
   "parties_merged_into_ck",

@@ -18,7 +18,12 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
+import {
+  seedVenue,
+  seedVenueSettings,
+  seedBusinessDay,
+  seedPerson,
+} from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -31,6 +36,8 @@ let courseId = "";
 
 beforeAll(async () => {
   db = suite.db;
+  for (const id of ["sender", "waiter-1", "waiter-2"])
+    await seedPerson(db, { id, displayName: id });
   await seedVenue(db, {
     name: "Steps",
     invoiceLocales: ["en-GB"],
@@ -154,6 +161,8 @@ describe("the service_steps table", () => {
 describe("the service_step_completions table", () => {
   async function stepAndParty(name: string) {
     return withTransaction(db, async (tx) => {
+      for (const id of ["sender", "waiter-1", "waiter-2"])
+        await seedPerson(tx, { id, displayName: id });
       await tx.insert(locations).values({}).returning({ id: locations.id });
       await seedVenueSettings(tx, {
         name,
@@ -201,6 +210,18 @@ describe("the service_step_completions table", () => {
       { partyId, stepId, doneAt: "2026-10-22T20:33:00.000Z", doneBy: "waiter-1" },
       { partyId, stepId, doneAt: "2026-10-22T20:58:00.000Z", doneBy: "waiter-2" },
     ]);
+  });
+
+  it("checks the completing person key", async () => {
+    const row = await stepAndParty("Person key");
+    await expect(
+      db
+        .insert(serviceStepCompletions)
+        .values({ ...row, doneAt: "2026-10-22T20:33:00.000Z", doneBy: "missing-person" }),
+    ).rejects.toThrow("FOREIGN KEY constraint failed");
+    await db
+      .insert(serviceStepCompletions)
+      .values({ ...row, doneAt: "2026-10-22T20:33:00.000Z", doneBy: "waiter-1" });
   });
 
   it("refuses a completion naming no party or no step", async () => {

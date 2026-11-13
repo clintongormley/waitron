@@ -31,7 +31,6 @@ export const VENUE_SERVICE_TABLES = [
   "kitchen_notices",
   "ticket_item_allergies",
   "order_kitchen_notes",
-  "party_allergy",
   "party_allergy_guests",
   "allergy_line_ticks",
   "bill_identities",

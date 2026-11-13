@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { partyTables, parties, workingOrderLines, workingOrders } from "@waitron/db";
@@ -31,6 +32,7 @@ export async function openPartyTab(
     operatorId?: string;
   },
 ): Promise<{ tabId: string; orderNumber: number; partyId: string }> {
+  await seedPerson(tx, { id: OPERATOR, displayName: "Serving operator" });
   const [party] = await tx
     .insert(parties)
     .values({ guestCount: null, openedBy: OPERATOR })

@@ -1281,7 +1281,7 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   holding a person's id, and that one, say "No key yet" at the column; their old reason (`persons`
   sat in another migration set) ended when A760 moved
   it into core. Declare the keys when A1308 rewrites the starting migrations (CLAUDE.md §3: declare
-  every foreign key).
+  every foreign key). Party open/close and allergy-answer actors, service-step completions, station moves and booking creators now have checked person keys.
 - **A print job's payload sits ahead of its status columns.** `print_jobs.payload` averaged 20 KB
   on the bench's first full year (built 2026-11-06, since rebuilt), so any walk over print-job rows reads about five pages a job (the table was
   8 GB of the 12 GB year), and the printers-down check (`stationPrintersDownQuery` in

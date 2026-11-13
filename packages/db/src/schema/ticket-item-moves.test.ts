@@ -1,3 +1,4 @@
+import { seedPerson } from "../testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -23,6 +24,7 @@ describe("ticket_item_moves schema", () => {
   let fryer: string;
 
   beforeEach(async () => {
+    for (const id of ["person-1", "manager-1"]) await seedPerson(suite.db, { id, displayName: id });
     const db = suite.db;
     await seedVenue(db, {
       name: "Kitchen",
@@ -131,6 +133,13 @@ describe("ticket_item_moves schema", () => {
     expect(await suite.db.select().from(ticketItemMoves)).toEqual([
       expect.objectContaining({ movedByDeviceId: null, movedByPersonId: "manager-1" }),
     ]);
+  });
+
+  it("checks the moving person key", async () => {
+    await expect(move({ personId: "missing-person" })).rejects.toThrow(
+      "FOREIGN KEY constraint failed",
+    );
+    await move({ personId: "person-1" });
   });
 
   it("refuses a move naming neither device nor person", async () => {

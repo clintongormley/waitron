@@ -1,3 +1,4 @@
+import { clearPartyAllergyForTest } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -69,7 +70,7 @@ async function fixture(ungrouped = false, multiBill = false) {
       .update(workingOrderLines)
       .set({ groupId: null })
       .where(eq(workingOrderLines.workingOrderId, p.tabId));
-  await v.db.run(sql`delete from party_allergy where party_id = ${p.partyId}`);
+  await clearPartyAllergyForTest(v.db, p.partyId);
   return {
     ...p,
     groupId: placed.groups[0]!.id,
@@ -158,7 +159,7 @@ describe("A669 release matrix", () => {
     const after = frozen();
     const written = new Set([
       "parties",
-      "party_allergy",
+      "activity_log",
       "party_allergy_guests",
       "service_commands",
     ]);
@@ -367,7 +368,7 @@ describe("A669 release matrix", () => {
       }),
     );
     const secondId = second.groups[0]!.lineIds[0]!;
-    await v.db.run(sql`delete from party_allergy where party_id = ${p.partyId}`);
+    await clearPartyAllergyForTest(v.db, p.partyId);
     const allergy: AllergyPatch = {
       party: {
         answer: "allergies",
@@ -419,7 +420,7 @@ describe("A669 release matrix", () => {
     const p = await fixture(true);
     await inTx(v, (tx) => VENUE_SERVICE.writePartyAllergy(tx, p.partyId, none.party, OPERATOR));
     await run(p, "all");
-    await v.db.run(sql`delete from party_allergy where party_id = ${p.partyId}`);
+    await clearPartyAllergyForTest(v.db, p.partyId);
     const after = frozen();
     await run(p, "all");
     expect(frozen()).toEqual(after);

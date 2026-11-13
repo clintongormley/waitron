@@ -408,7 +408,15 @@ CREATE TABLE `parties` (
 	`name` text,
 	`revision` integer DEFAULT 0 NOT NULL,
 	`table_names` text,
+	`allergy_answer` text,
+	`allergy_answered_by` text,
+	`allergy_answered_at` text,
 	FOREIGN KEY (`merged_into_party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`opened_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`closed_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`allergy_answered_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "parties_allergy_answer_ck" CHECK("parties"."allergy_answer" in ('none', 'allergies')),
+	CONSTRAINT "parties_allergy_answered_ck" CHECK(("parties"."allergy_answer" is null and "parties"."allergy_answered_by" is null and "parties"."allergy_answered_at" is null) or ("parties"."allergy_answer" is not null and "parties"."allergy_answered_by" is not null and "parties"."allergy_answered_at" is not null)),
 	CONSTRAINT "parties_state_ck" CHECK("parties"."state" in ('open', 'closed')),
 	CONSTRAINT "parties_guest_count_ck" CHECK("parties"."guest_count" is null or "parties"."guest_count" >= 1),
 	CONSTRAINT "parties_closed_at_ck" CHECK(("parties"."state" = 'open') = ("parties"."closed_at" is null)),
@@ -911,6 +919,7 @@ CREATE TABLE `ticket_item_moves` (
 	`moved_at` text NOT NULL,
 	`moved_by_device_id` text,
 	`moved_by_person_id` text,
+	FOREIGN KEY (`moved_by_person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`working_order_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`from_station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`to_station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
@@ -2663,15 +2672,6 @@ CREATE TABLE `allergy_line_ticks` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `allergy_line_ticks_draft_key` ON `allergy_line_ticks` (`draft_line_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `allergy_line_ticks_working_key` ON `allergy_line_ticks` (`working_line_id`);--> statement-breakpoint
-CREATE TABLE `party_allergy` (
-	`party_id` text PRIMARY KEY NOT NULL,
-	`answer` text NOT NULL,
-	`changed_by` text NOT NULL,
-	`changed_at` text NOT NULL,
-	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "party_allergy_answer_ck" CHECK("party_allergy"."answer" in ('none', 'allergies'))
-);
---> statement-breakpoint
 CREATE TABLE `party_allergy_guests` (
 	`id` text PRIMARY KEY NOT NULL,
 	`party_id` text NOT NULL,
@@ -2679,7 +2679,7 @@ CREATE TABLE `party_allergy_guests` (
 	`who` text NOT NULL,
 	`allergens` text NOT NULL,
 	`note` text,
-	FOREIGN KEY (`party_id`) REFERENCES `party_allergy`(`party_id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE cascade,
 	CONSTRAINT "party_allergy_guests_position_ck" CHECK(typeof("party_allergy_guests"."position") = 'integer' and "party_allergy_guests"."position" >= 0),
 	CONSTRAINT "party_allergy_guests_who_ck" CHECK(length(trim("party_allergy_guests"."who")) between 1 and 40),
 	CONSTRAINT "party_allergy_guests_allergens_ck" CHECK(json_valid("party_allergy_guests"."allergens") and json_type("party_allergy_guests"."allergens") = 'object' and "party_allergy_guests"."allergens" <> '{}'),
@@ -2750,6 +2750,7 @@ CREATE TABLE `service_step_completions` (
 	`step_id` text NOT NULL,
 	`done_at` text NOT NULL,
 	`done_by` text NOT NULL,
+	FOREIGN KEY (`done_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`step_id`) REFERENCES `service_steps`(`id`) ON UPDATE no action ON DELETE cascade
 );
@@ -3829,3 +3830,14 @@ WHEN exists (SELECT 1 FROM daily_closes c
 BEGIN
   SELECT raise(abort, 'day start history cannot change');
 END;
+
+--> statement-breakpoint
+CREATE TRIGGER party_allergy_guests_need_answer_insert
+BEFORE INSERT ON party_allergy_guests
+WHEN (SELECT allergy_answer FROM parties WHERE id = NEW.party_id) IS NULL
+BEGIN SELECT RAISE(ABORT, 'an allergic guest needs the party''s answer first'); END;
+--> statement-breakpoint
+CREATE TRIGGER party_allergy_guests_need_answer_update
+BEFORE UPDATE OF party_id ON party_allergy_guests
+WHEN (SELECT allergy_answer FROM parties WHERE id = NEW.party_id) IS NULL
+BEGIN SELECT RAISE(ABORT, 'an allergic guest needs the party''s answer first'); END;

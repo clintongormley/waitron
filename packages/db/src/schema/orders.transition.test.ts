@@ -1,3 +1,4 @@
+import { seedPerson } from "../testing/seed.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -626,6 +627,7 @@ describe("working_orders state machine (enforce_transition)", () => {
 
   /** A party for a bill to belong to. */
   async function party(): Promise<string> {
+    await seedPerson(suite.db, { id: "person" });
     const [row] = await suite.db
       .insert(parties)
       .values({ openedBy: "person" })

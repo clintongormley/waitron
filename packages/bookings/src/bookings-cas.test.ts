@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 /**
  * `seatBooking`'s compare-and-swap: its terminal UPDATE carries `and status = 'booked'`, so a
  * booking that has left `booked` matches no row and the verb throws `booking.invalid_transition`.
@@ -30,7 +31,7 @@ async function setupVenue(
   });
   const locationId = await venueLocationId(db);
   await seedNode(db);
-  return { cfg: { locationId: locationId }, createdBy: crypto.randomUUID() };
+  return { cfg: { locationId: locationId }, createdBy: await seedPerson(db) };
 }
 
 /** An ACTIVE dining table for the venue (createTable's raw equivalent — the verb lives in

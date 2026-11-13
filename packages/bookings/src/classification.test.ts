@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { sql, eq } from "drizzle-orm";
 import {
   CORE_CHANGE_SOURCES,
@@ -84,6 +84,7 @@ describe("booking change interests", () => {
       events.push(event);
     });
     try {
+      const personId = await seedPerson(suite.db);
       const { id } = await withTransaction(suite.db, (tx) =>
         createBooking(tx, {
           tableId: oldId,
@@ -91,7 +92,7 @@ describe("booking change interests", () => {
           bookingTime: "20:00",
           partySize: 2,
           contactName: "Ana",
-          createdBy: randomUUID(),
+          createdBy: personId,
         }),
       );
       expect(events).toEqual([

@@ -226,7 +226,7 @@ it("re-reads table allergies on change and quiets their timer while connected", 
   stream.event("ready");
   await vi.advanceTimersByTimeAsync(0);
   const before = read.mock.calls.length;
-  stream.event("change", '[{"type":"party_allergy"}]');
+  stream.event("change", '[{"type":"parties"}]');
   await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(before + 1));
   stream.event("change", '[{"type":"device_profile_admission_roles"}]');
   await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(before + 2));

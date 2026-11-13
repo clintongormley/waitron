@@ -1,3 +1,4 @@
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -305,6 +306,7 @@ describe("related bills", () => {
 
   it("lists nothing for a party with no bills", async () => {
     const lone = await inTx(suite, async (tx) => {
+      await seedPerson(tx, { id: OPERATOR });
       const [row] = await tx.insert(parties).values({ openedBy: OPERATOR }).returning();
       return row!.id;
     });
@@ -1232,6 +1234,7 @@ describe("merged parties keep their bills", () => {
     const { t } = await mergedParties();
     expect(await inTx(suite, (tx) => partyFamily(tx, t.partyId))).toHaveLength(2);
     const lone = await inTx(suite, async (tx) => {
+      await seedPerson(tx, { id: OPERATOR });
       const [row] = await tx.insert(parties).values({ openedBy: OPERATOR }).returning();
       return row!.id;
     });
@@ -1442,6 +1445,7 @@ describe("checkAndBumpParty", () => {
 describe("runServiceCommand", () => {
   async function openParty(): Promise<string> {
     return inTx(suite, async (tx) => {
+      await seedPerson(tx, { id: OPERATOR });
       const [row] = await tx.insert(parties).values({ openedBy: OPERATOR }).returning();
       return row!.id;
     });

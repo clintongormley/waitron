@@ -1,3 +1,4 @@
+import { clearPartyAllergyForTest } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { randomUUID } from "node:crypto";
@@ -415,7 +416,7 @@ describe("finishing a table by sending the food still to come to the counter", (
   it("refuses a merged-in party's held dish when the combined table has no allergy answer", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], ["12.00"]);
     const other = await table([{ name: "Burger" }], "hold", [], ["12.00"]);
-    await venue.db.run(sql`delete from party_allergy where party_id = ${other.partyId}`);
+    await clearPartyAllergyForTest(venue.db, other.partyId);
     await combine(t, other);
     expect(await allergyAnswer(t.partyId)).toBeNull();
     const body = await collect(t.partyId, await bodyFor(t));

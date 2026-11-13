@@ -1,9 +1,10 @@
+import { clearPartyAllergyForTest } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
@@ -354,7 +355,7 @@ describe("waiter cooking authority", () => {
     it(`signed-in ${path} saves its first allergy answer with Fire and replays exactly`, async () => {
       const f = await fixture();
       const held = await f.heldBurger();
-      await suite.db.run(sql`delete from party_allergy where party_id = ${held.partyId}`);
+      await clearPartyAllergyForTest(suite.db, held.partyId);
       const [line] = await suite.db
         .select()
         .from(workingOrderLines)

@@ -11,7 +11,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder, seedPerson } from "@waitron/db/testing/seed.js";
 import * as allergy from "./index.js";
 
 const suite = useVenueDb({
@@ -27,6 +27,7 @@ beforeEach(async () => {
     operationDescription: "Restaurant",
     timeZone: "UTC",
   });
+  await seedPerson(suite.db, { id: actor });
   const [party] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
   partyId = party!.id;
 });
@@ -309,11 +310,10 @@ it("enforces one target and one guest per line at the database boundary", async 
   await tx((t) => t.delete(orderDraftLines).where(eq(orderDraftLines.id, draftLineId)));
   expect((await read()).ticks).toEqual([]);
   const tables = await suite.db.execute<{ name: string }>(
-    sql`select name from sqlite_master where type = 'table' and name in ('party_allergy','party_allergy_guests','allergy_line_ticks')`,
+    sql`select name from sqlite_master where type = 'table' and name in ('party_allergy_guests','allergy_line_ticks')`,
   );
   expect(tables.rows.map((r) => r.name).sort()).toEqual([
     "allergy_line_ticks",
-    "party_allergy",
     "party_allergy_guests",
   ]);
 });

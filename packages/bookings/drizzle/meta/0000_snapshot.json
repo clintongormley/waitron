@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "33e07465-74ce-4bdf-b9a0-dabee1d69ced",
+  "id": "c90f205e-2beb-40e6-9d73-811709e04962",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bookings": {
@@ -120,6 +120,19 @@
         }
       },
       "foreignKeys": {
+        "bookings_created_by_fk": {
+          "name": "bookings_created_by_fk",
+          "tableFrom": "bookings",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
         "bookings_table_fk": {
           "name": "bookings_table_fk",
           "tableFrom": "bookings",

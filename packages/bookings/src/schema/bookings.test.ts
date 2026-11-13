@@ -3,6 +3,7 @@ import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import {
   captureError,
+  isRefusal,
   CHECK_VIOLATION,
   diningTables,
   engineErrorMessage,
@@ -14,6 +15,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedTenant,
+  seedPerson,
   seedVenueSettings,
   seedBusinessDay,
   seedZone,
@@ -22,12 +24,13 @@ import { BOOKINGS_TEST_MIGRATIONS } from "../testing/migrations.js";
 import { bookings } from "./bookings.js";
 
 describe("the bookings Drizzle table config", () => {
-  it("declares both FKs, two indexes, no unique key and both checks", () => {
+  it("declares all three FKs, two indexes, no unique key and both checks", () => {
     const config = getTableConfig(bookings);
     expect(config.columns.map((c) => c.name)).not.toContain("tenant_id");
     // The only place the keys' names are pinned: drizzle emits the keys unnamed and
     // `pragma foreign_key_list` reports no name, so `../migrations.test.ts` checks shapes only.
     expect(config.foreignKeys.map((fk) => fk.getName())).toEqual([
+      "bookings_created_by_fk",
       "bookings_table_fk",
       "bookings_tab_fk",
     ]);
@@ -55,7 +58,7 @@ describe("the bookings Drizzle table config", () => {
 // told apart only by which parent row each made absent.
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 const TABLE = "aaaaaaaa-0000-4000-8000-000000000009";
-// The identity person recorded in created_by — a plain uuid, no FK (the drawer_opens.person_id seam).
+// The person recorded as the booking creator.
 const CREATED_BY = "cccccccc-0000-4000-8000-000000000001";
 
 describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
@@ -64,6 +67,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
   // Each test seeds its own parents: the helper empties every table after each test.
   async function seedParents(): Promise<void> {
     await seedTenant(suite.db);
+    await seedPerson(suite.db, { id: CREATED_BY });
     await suite.db.insert(locations).values({
       id: LOCATION,
     });
@@ -127,6 +131,14 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
       tx.select({ status: bookings.status }).from(bookings).where(eq(bookings.id, id)),
     );
     expect(after!.status).toBe("cancelled");
+  });
+
+  it("checks the creating person key", async () => {
+    await seedParents();
+    const error = await captureError(() => seedBooking("20:00", { created_by: "missing-person" }));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
+    await seedBooking("20:00");
   });
 
   it("rejects a non-positive party_size (CHECK party_size > 0)", async () => {

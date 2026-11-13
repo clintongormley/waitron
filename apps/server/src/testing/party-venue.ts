@@ -24,7 +24,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedPerson } from "@waitron/db/testing/seed.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { planVenue } from "@waitron/provisioning";
@@ -139,6 +139,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
+  await seedPerson(db, { id: OPERATOR });
   const operator = {
     personId: OPERATOR,
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),

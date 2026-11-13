@@ -1,5 +1,6 @@
+import { clearPartyAllergyForTest } from "@waitron/db/testing/seed.js";
 import { seedActivityActor } from "@waitron/db/testing/seed.js";
-import { asc, eq, getTableColumns, sql } from "drizzle-orm";
+import { asc, eq, getTableColumns } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -134,7 +135,7 @@ describe("A773 waiter request: tab send", () => {
       expect(requested).toMatchObject({ requestedAt: AT, firedAt: null, passControlled: true });
       expect(held).toMatchObject({ requestedAt: null, firedAt: null });
       const requestedCopies = await allergyCopies(tx, requested!.id);
-      await tx.run(sql`delete from party_allergy where party_id = ${venue.party.partyId}`);
+      await clearPartyAllergyForTest(tx, venue.party.partyId);
       const before = await jobCounts(tx, venue);
       const asked = async (target: Parameters<typeof readAllergySendView>[3]) =>
         (await readAllergySendView(tx, venue.cfg, venue.party.partyId, target)).dishes.map(
