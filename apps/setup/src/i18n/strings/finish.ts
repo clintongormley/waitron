@@ -68,15 +68,10 @@ export const finishEn = {
     "Older backups need the key from that time. Keep it until those backups are deleted.",
   "done.break_glass.warning":
     "Write this down and store it offline. It is shown once and will not be shown again.",
-  "done.break_glass.join_stalled":
-    "It was meant to let this server take over if the primary server could not be reached. It cannot do that in this version, because this server does not finish joining — so keep the code, but do not count on it.",
   "done.break_glass.promote": "You need it to promote this server if the primary is unreachable.",
-  "done.stalled.heading": "This server did not join",
-  "done.stalled.body":
-    "The sign-in to the restaurant's primary worked and this server is restarting. It will not come back able to do anything: it stops part-way through joining, and it will not get any further however many times you restart it. It holds none of the restaurant's information, it has no till and no dashboard, and it cannot sell or file anything.",
-  "done.stalled.restarted":
-    "The server has restarted, and this setup wizard is gone from it — reloading this page will not bring anything up, and there is nothing else on the server to open. Nothing on this page can fix that: tell whoever installed this server.",
-  "done.stalled.waiting": "Waiting for the server to restart…",
+  "done.joining.heading": "This server is joining",
+  "done.joining.body":
+    "The sign-in to the restaurant's primary worked. This server now takes its first copy of the restaurant's data from the primary, over the restaurant's network; no internet is needed. This can take a few minutes. It restarts by itself when it has the copy, and then waits as the standby. The primary keeps selling throughout.",
 } as const;
 
 export const finishEs: Record<keyof typeof finishEn, string> = {
@@ -150,14 +145,9 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
     "Las copias antiguas necesitan la clave de entonces. Consérvala hasta que se borren esas copias.",
   "done.break_glass.warning":
     "Anótalo y guárdalo fuera de línea. Se muestra una sola vez y no se volverá a mostrar.",
-  "done.break_glass.join_stalled":
-    "Servía para que este servidor tomara el relevo si no se pudiera contactar con el servidor principal. En esta versión no puede hacerlo, porque este servidor no termina de unirse, así que conserva el código, pero no cuentes con él.",
   "done.break_glass.promote":
     "Lo necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
-  "done.stalled.heading": "Este servidor no se ha unido",
-  "done.stalled.body":
-    "El inicio de sesión en el servidor principal del restaurante ha funcionado y este servidor se está reiniciando. No volverá pudiendo hacer nada: se detiene a medias al unirse y no avanzará más por muchas veces que lo reinicies. No guarda ninguna información del restaurante, no tiene caja ni panel, y no puede vender ni enviar registros fiscales.",
-  "done.stalled.restarted":
-    "El servidor se ha reiniciado y este asistente de configuración ya no está en él: recargar esta página no mostrará nada, y no hay nada más que abrir en el servidor. Nada de esta página puede arreglarlo: avisa a quien instaló este servidor.",
-  "done.stalled.waiting": "Esperando a que el servidor se reinicie…",
+  "done.joining.heading": "Este servidor se está uniendo",
+  "done.joining.body":
+    "El inicio de sesión en el servidor principal del restaurante ha funcionado. Este servidor recibe ahora su primera copia de los datos del restaurante desde el principal, por la red del restaurante; no hace falta internet. Puede tardar unos minutos. Se reinicia solo cuando tiene la copia y después espera como servidor en espera. El principal sigue vendiendo todo el tiempo.",
 };
