@@ -282,7 +282,11 @@ export class ClockWait<Selected extends { status: "selected" }> {
   #device: DeviceClock | undefined;
   /** The box's clock was set from this device while this page was open. */
   #setHere = false;
-  /** Confirm the time was pressed since the person last started again. */
+  /**
+   * Confirm the time was pressed. Only `show()` with nothing clears it, which a page calls when the
+   * person starts again (Compare again, Proceed, a changed detail); a new page starts without it.
+   * Until then the automatic re-checks after a press keep sending `confirmed: true`.
+   */
   #pressed = false;
 
   constructor(host: ReactiveControllerHost, recheck: () => void) {

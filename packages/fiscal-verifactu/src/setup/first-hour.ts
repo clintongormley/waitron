@@ -272,7 +272,7 @@ export class FirstSetupHour extends LitElement {
     };
     return { api, context, current, send };
   }
-  /** `press`: Proceed, which confirms the times the step shows. */
+  /** `press`: Proceed pressed while the step showing both times was on screen, which confirms them. */
   async #run(automatic = false, press = false): Promise<void> {
     if (!this.api?.preparation || this.busy || this.#wait.result?.status === "selected") return;
     const { api, context, current, send } = this.#begin();
@@ -291,6 +291,7 @@ export class FirstSetupHour extends LitElement {
       if (!this.#confirmed && !recorded) {
         this.#wait.show();
         if (!claimed || clock.disagreement) return;
+        // Only for what it shows: the times to confirm when no internet time is among the clocks.
         this.#wait.toSelect(comparison);
         this.#wait.showPreview(await send({ action: "selection" }));
         this.#recordedWait = !this.#askedOrEdited && this.#wait.counting;
@@ -506,8 +507,9 @@ export class FirstSetupHour extends LitElement {
               ?loading=${Boolean(sending)}
               @click=${() => {
                 if (this.busy) return;
+                const press = action === "proceed" && this.#wait.problem?.kind === "confirm";
                 if (action === "proceed") this.#confirmed = true;
-                void this.#run(false, action === "proceed");
+                void this.#run(false, press);
                 this.sending = this.busy ? action : undefined;
               }}
               >${t[action]}</wt-button

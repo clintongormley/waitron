@@ -1845,6 +1845,14 @@ it.each([
           : ["clock-challenge", "compare-clocks"],
       );
       await proceed(el);
+      if (previewRefusal) {
+        // The comparison itself agrees on this device alone, so Proceed first shows the times.
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).not.toBeNull(),
+        );
+        expect(calls.some((c) => c.action === "candidates")).toBe(false);
+        await proceed(el);
+      }
       await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
       expect(detailRows(el, "clock-times")).toEqual([
         ["Server time", "18 October 2026 at 14:30:00"],
@@ -2419,6 +2427,77 @@ it("when only this device agrees, the step shows both times above Proceed, and P
       { comparisonId: "comparison-2", confirmed: true },
     ]),
   );
+});
+const deviceOnly = {
+  ...clock,
+  usable: clock.usable.filter((r) => r.source !== "internet"),
+  unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
+};
+const CONFIRM_PROCEED =
+  "The server could not check its time over the internet. Check that both times below are right before you press Proceed.";
+it.each([
+  ["the internet's time agreed", clock],
+  ["the clocks differed", { ...deviceOnly, disagreement: true }],
+  ["there was no second clock yet", noSecondClock],
+] as [string, typeof clock][])(
+  "when %s before Proceed, and only this device agrees at Proceed, Proceed shows the times to confirm and sends nothing; the next Proceed confirms them",
+  async (_, before) => {
+    let decision = before;
+    const { el, calls } = await mount({ decision: () => decision });
+    await ready(el);
+    expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).toBeNull();
+    decision = deviceOnly;
+    await proceed(el);
+    const confirmStep = () => el.shadowRoot!.querySelector("[data-test=clock-confirm]");
+    await vi.waitFor(() =>
+      expect(calls.some((c) => c.action === "candidates") || confirmStep() !== null).toBe(true),
+    );
+    expect(calls.filter((c) => c.action === "candidates")).toEqual([]);
+    expect(confirmStep()).not.toBeNull();
+    expect(text(el)).toContain(CONFIRM_PROCEED);
+    expect(detailRows(el, "clock-times")).toEqual([
+      ["Server time", "18 October 2026 at 14:30:00"],
+      ["This device", "18 October 2026 at 14:30:00"],
+    ]);
+    await vi.waitFor(() => expect(action(el)).toBe("Proceed"));
+    await proceed(el);
+    await vi.waitFor(() =>
+      expect(calls.filter((c) => c.action === "candidates").map((c) => c.value)).toEqual([
+        { comparisonId: "comparison-3", confirmed: true },
+      ]),
+    );
+  },
+);
+it("a wait the box recorded before the page loaded that ends with only this device agreeing shows the times with Proceed and sends nothing; Proceed then confirms them", async () => {
+  let decision = clock;
+  fakeClock();
+  try {
+    const { el, calls } = await mount({ prepare: reloadedDuringWait(() => decision) });
+    await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
+    decision = deviceOnly;
+    vi.advanceTimersByTime(61_000);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).not.toBeNull(),
+    );
+    expect(text(el)).toContain(CONFIRM_PROCEED);
+    expect(detailRows(el, "clock-times")).toEqual([
+      ["Server time", "18 October 2026 at 14:30:00"],
+      ["This device", "18 October 2026 at 14:30:00"],
+    ]);
+    expect(action(el)).toBe("Proceed");
+    expect(calls.filter((c) => c.action === "candidates")).toEqual([]);
+    await userEvent.click(detailsTick(el));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).not.toBeNull();
+    await proceed(el);
+    await vi.waitFor(() =>
+      expect(calls.filter((c) => c.action === "candidates").map((c) => c.value)).toEqual([
+        { comparisonId: "comparison", confirmed: true },
+      ]),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 it.each(["en", "es"] as const)(
   "%s: clocks that differ show one time per clock, ask which is correct; The server and Both times are wrong send nothing",
