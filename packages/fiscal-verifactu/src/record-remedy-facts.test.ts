@@ -351,33 +351,41 @@ it.each([
   },
 );
 
-it("accepts explicit removal of optional facts the record does not carry", async () => {
+it("removes a fact the record carries when sent null, and accepts null for facts it does not carry", async () => {
+  await targetRefusedOfType("F3");
   const before = await snapshot();
+  const original = before.records.find((row) => row.id === body.registroId)!;
+  expect(original.facturasSustituidas).not.toBeNull();
   const res = await send({
-    invoiceType: "F2",
+    substitutedInvoices: null,
     correctionType: null,
     correctedInvoices: null,
-    substitutedInvoices: null,
     correctionAmounts: null,
-    recipients: null,
   });
-  expect(res.status).toBe(200);
+  expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+  const { registroId } = (await res.json()) as { registroId: string };
   const after = await snapshot();
-  expect(after.records[0]).toEqual(before.records[0]);
-  expect(after.records[1]).toMatchObject({
-    tipoFactura: "F2",
+  expect(after.records.find((row) => row.id === body.registroId)).toEqual(original);
+  expect(after.records.find((row) => row.id === registroId)).toMatchObject({
+    tipoFactura: "F3",
+    facturasSustituidas: null,
     tipoRectificativa: null,
     facturasRectificadas: null,
-    facturasSustituidas: null,
     importeRectificacion: null,
-    destinatarios: null,
+    destinatarios: original.destinatarios,
   });
   expect(after.sales).toEqual(before.sales);
 });
 
 it("replays complete facts in another key order after the clock and delivery change", async () => {
-  const filed = (await snapshot()).records[0]!.desglose as Record<string, string>[];
-  const facts = { breakdown: filed, description: "Corrected restaurant service" };
+  await targetRefusedOfType("F3");
+  const filed = (await snapshot()).records.find((row) => row.id === body.registroId)!
+    .desglose as Record<string, string>[];
+  const facts = {
+    breakdown: filed,
+    recipients: [recipient],
+    description: "Corrected restaurant service",
+  };
   const first = await send(facts);
   expect(first.status).toBe(200);
   const result = await first.json();
@@ -390,6 +398,7 @@ it("replays complete facts in another key order after the clock and delivery cha
   const replay = await send({
     description: "Corrected restaurant service",
     breakdown: filed.map((item) => Object.fromEntries(Object.entries(item).reverse())),
+    recipients: [{ NIF: recipient.NIF, NombreRazon: recipient.NombreRazon }],
   });
   expect(replay.status).toBe(200);
   expect(await replay.json()).toEqual(result);
