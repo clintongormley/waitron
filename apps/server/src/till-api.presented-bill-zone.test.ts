@@ -164,26 +164,26 @@ async function indoorContext() {
 
 /** Ana's party on the terrace, with `names` split off the bill made at her seating and presented. */
 async function presentedSplit(...names: string[]) {
-  const ana = await seatedWith(venue, "Caña", ...names);
+  const anna = await seatedWith(venue, "Caña", ...names);
   const split = await post(
-    `/api/bills/${ana.tabId}/move-dishes`,
-    await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/move-dishes`, {
+    `/api/bills/${anna.tabId}/move-dishes`,
+    await observedBillActionBody(venue.db, `/api/bills/${anna.tabId}/move-dishes`, {
       lineIds: venue.db
         .all<{ id: string }>(
-          sql`select id from working_order_lines where working_order_id = ${ana.tabId}
+          sql`select id from working_order_lines where working_order_id = ${anna.tabId}
               order by line_no`,
         )
         .slice(1)
         .map((row) => row.id),
       toBillId: null,
-      expectedPartyRevision: ana.revision,
+      expectedPartyRevision: anna.revision,
     }),
   );
   expect(split.status).toBe(200);
   const presented = split.json.billId as string;
   const placed = await post(`/api/working-orders/${presented}/place`, {});
   expect(placed).toMatchObject({ status: 200, json: { status: "placed" } });
-  return { ana, presented };
+  return { anna, presented };
 }
 
 function moveParty(partyId: string, toTableId: string) {
@@ -224,10 +224,10 @@ const notAllowed = (zoneId: string) => ({
 
 describe("a presented bill moving with its party", () => {
   it("takes the new zone, its department and its service mode, so the new zone's till takes its payment and the old one's is refused", async () => {
-    const { ana, presented } = await presentedSplit("Tarta");
+    const { anna, presented } = await presentedSplit("Tarta");
     expect(await contextOf(presented)).toMatchObject({ zoneId: terrace });
 
-    const moved = await moveParty(ana.partyId, await freeTable(indoor));
+    const moved = await moveParty(anna.partyId, await freeTable(indoor));
 
     expect(moved.status).toBe(200);
     expect(await contextOf(presented)).toEqual(await indoorContext());
@@ -238,14 +238,14 @@ describe("a presented bill moving with its party", () => {
   });
 
   it("moves the open bill made at seating with it, while a settled bill keeps the zone it was paid in", async () => {
-    const { ana, presented } = await presentedSplit("Tarta");
+    const { anna, presented } = await presentedSplit("Tarta");
     expect((await payInCash(presented, "18.00")).status).toBe(200);
     expect(await statusOf(venue, presented)).toBe("settled");
 
-    const moved = await moveParty(ana.partyId, await freeTable(indoor));
+    const moved = await moveParty(anna.partyId, await freeTable(indoor));
 
     expect(moved.status).toBe(200);
-    expect(await contextOf(ana.tabId)).toEqual(await indoorContext());
+    expect(await contextOf(anna.tabId)).toEqual(await indoorContext());
     expect(await contextOf(presented)).toMatchObject({
       zoneId: terrace,
       departmentId: await departmentOf(terrace),
@@ -253,7 +253,7 @@ describe("a presented bill moving with its party", () => {
   });
 
   it("files the same lines, total and VAT after the move as an unmoved presented bill", async () => {
-    const { ana, presented } = await presentedSplit("Tarta", "Octopus");
+    const { anna, presented } = await presentedSplit("Tarta", "Octopus");
     const control = await presentedSplit("Tarta", "Octopus");
     const priced = () =>
       inTx(venue, async (tx) =>
@@ -261,7 +261,7 @@ describe("a presented bill moving with its party", () => {
       );
     const before = await priced();
 
-    expect((await moveParty(ana.partyId, await freeTable(indoor))).status).toBe(200);
+    expect((await moveParty(anna.partyId, await freeTable(indoor))).status).toBe(200);
 
     expect(await contextOf(presented)).toMatchObject({ zoneId: indoor });
     expect(await priced()).toEqual(before);
@@ -285,10 +285,10 @@ describe("a presented bill moving with its party", () => {
 describe("a presented bill moved on its own", () => {
   it("takes the zone of another party's table it joins", async () => {
     const { presented } = await presentedSplit("Tarta");
-    const luisTable = await freeTable(indoor);
-    expect((await post(`/api/tables/${luisTable}/seat`, {})).status).toBe(200);
+    const lewisTable = await freeTable(indoor);
+    expect((await post(`/api/tables/${lewisTable}/seat`, {})).status).toBe(200);
 
-    const moved = await moveBill(presented, luisTable);
+    const moved = await moveBill(presented, lewisTable);
 
     expect(moved.status).toBe(200);
     expect(await statusOf(venue, presented)).toBe("placed");

@@ -340,7 +340,7 @@ function ask(kind: BillPaymentAsk["kind"], method: "cash" | "card"): BillPayment
 describe("unsent dishes block new payments on their own bill", () => {
   it("refuses each bill's own fresh dishes without owner details", async () => {
     const billId = await tabWith(venue, "Tarta");
-    const ana = await unsent(billId, venue.operatorId, "1.25");
+    const anna = await unsent(billId, venue.operatorId, "1.25");
     const [colleague] = await seedPersons(venue.db, { displayName: "Zoë" });
     const otherBillId = randomUUID();
     await inTx(venue, async (tx) => {
@@ -357,7 +357,7 @@ describe("unsent dishes block new payments on their own bill", () => {
       .set({
         extras: [{ listId: randomUUID(), picks: [{ productId: randomUUID(), quantity: 9 }] }],
       })
-      .where(eq(orderDraftLines.draftId, ana.id));
+      .where(eq(orderDraftLines.draftId, anna.id));
 
     await expect(
       previewBillPayment(
