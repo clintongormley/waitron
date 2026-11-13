@@ -523,8 +523,8 @@ A1424's live qualification was added on 7 November 2026.
   The health check chooses hosted while the server queue is stuck, and the independent
   watchdog dispatches trusted-main health recovery for untouched queued PR planners;
   other stuck work is reported without moving runs. First-attempt PR planners use published
-  spare capacity; non-PR planning remains hosted. A1473 still needs controller publication
-  and its staged overflow drill. Run 43278084012’s first planner never ran the ratio during
+  spare capacity; non-PR planning remains hosted. A1473’s reviewed controller is installed;
+  its staged overflow drill remains open. Run 43278084012’s first planner never ran the ratio during
   its 32-minute wait; the historical admission/recovery cause remains unproved.
   Qualify the idle probe, browser guest
   requirements and current-head coverage/aggregate results.
