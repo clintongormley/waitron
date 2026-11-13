@@ -1374,7 +1374,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     beforeServerStarts();
     const venue = await freshVenue();
     const source = await freshVenue();
-    await source.store.venue.insert(persons).values({
+    await seedPersons(source.store.venue, {
       displayName: "Backup administrator",
       role: "admin",
       passwordHash: hashPassword("fixture-restore-password"),

@@ -5,7 +5,6 @@ import { AppError } from "@waitron/shared";
 import { nowIso, managementSessions, persons } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { and, eq, isNull } from "drizzle-orm";
-import type { PersonRoleValue } from "@waitron/shared";
 import { hashSessionToken, mintSessionToken } from "./session-token.js";
 
 /** Sliding: a resolve restarts it unless the read is passive or passes `touch: false`. */
@@ -42,7 +41,6 @@ async function readManagementSession(tx: Database | Transaction, token: string) 
       sessionRowId: managementSessions.id,
       personId: managementSessions.personId,
       lastSeenAt: managementSessions.lastSeenAt,
-      role: persons.role,
       status: persons.status,
       email: persons.email,
       displayName: persons.displayName,
@@ -84,7 +82,6 @@ export async function resolveManagementSession(
   return {
     sessionRowId: row.sessionRowId,
     personId: row.personId,
-    role: row.role as PersonRoleValue,
     authority: await readPersonAuthority(tx, row.personId),
     email: row.email,
     displayName: row.displayName,

@@ -60,7 +60,7 @@ const suite = useVenueDb({
   resetPerTest: false,
   timeoutMs: 120_000,
   setup: async (db) => {
-    await db.insert(persons).values({
+    await seedPersons(db, {
       displayName: "Backup administrator",
       role: "admin",
       passwordHash: hashPassword("fixture-restore-password"),

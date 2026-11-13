@@ -186,7 +186,6 @@ it("imports staff without their source login credentials and preserves the targe
   const staff = {
     id: "source-staff",
     display_name: "Imported staff",
-    role: "staff",
     status: "active",
     created_at: now.toISOString(),
     pin_hash: "synthetic-source-pin",
@@ -204,7 +203,6 @@ it("imports staff without their source login credentials and preserves the targe
         id: bundle.sourceOperatorId,
         display_name: "Source operator",
         email: "source-owner@example.test",
-        role: "admin",
       },
       staff,
     ],

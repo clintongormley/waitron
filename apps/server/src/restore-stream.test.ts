@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { hashPassword, persons } from "@waitron/identity";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { readdirSync } from "node:fs";
@@ -129,7 +130,7 @@ let fixtureDb: string;
 
 beforeAll(async () => {
   const db = suite.db;
-  await db.insert(persons).values({
+  await seedPersons(db, {
     displayName: "Backup administrator",
     role: "admin",
     passwordHash: hashPassword("fixture-restore-password"),
@@ -1366,7 +1367,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
         try {
           selected
             .prepare(
-              "update persons set password_hash = ? where role = 'admin' and status = 'active'",
+              "update persons set password_hash = ? where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin') and status = 'active'",
             )
             .run("stream-password-hash");
         } finally {

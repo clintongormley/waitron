@@ -1,3 +1,4 @@
+import { setBuiltInMembership } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { asc, eq, like, sql } from "drizzle-orm";
@@ -399,12 +400,10 @@ async function seed(
       await tx.insert(persons).values({
         displayName: `${WAITER_PREFIX}${w}`,
         pinHash: fixturePinHash(waiterPin(w)),
-        role: "staff",
       });
     await tx.insert(persons).values({
       displayName: MANAGER_NAME,
       pinHash: fixturePinHash("9999"),
-      role: "manager",
     });
 
     const [benchJob] = await tx.insert(staffRoles).values({ name: "Bench team" }).returning();
@@ -416,6 +415,8 @@ async function seed(
       .select({ id: persons.id })
       .from(persons)
       .where(eq(persons.displayName, MANAGER_NAME));
+    for (const person of holders) await setBuiltInMembership(tx, person.id, "staff");
+    await setBuiltInMembership(tx, manager!.id, "manager");
     await tx.insert(personStaffRoles).values(
       [...holders, manager!].map((person) => ({
         personId: person.id,

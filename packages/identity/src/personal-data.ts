@@ -5,6 +5,8 @@ import {
   managementAccountActions,
   managementSessions,
   persons,
+  roles,
+  personRoles,
   recoveryCodes,
   sessions,
   totpEnrollments,
@@ -40,7 +42,6 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
           emailVerifiedAt: persons.emailVerifiedAt,
           telephone: persons.telephone,
           locale: persons.locale,
-          role: persons.role,
           status: persons.status,
           createdAt: persons.createdAt,
         },
@@ -58,6 +59,12 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
       .where(eq(persons.id, personId));
     if (person === undefined) throw new AppError("person.not_found", { personId });
 
+    const accessRoles = await tx
+      .select({ builtInKey: roles.builtInKey, name: roles.name })
+      .from(personRoles)
+      .innerJoin(roles, eq(roles.id, personRoles.roleId))
+      .where(eq(personRoles.personId, personId))
+      .orderBy(roles.builtInKey, roles.name);
     const passkeys = await readPasskeys(tx, personId);
 
     const [codes] = await tx
@@ -125,7 +132,10 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
       .orderBy(asc(googleOidcStates.expiresAt), asc(googleOidcStates.id));
 
     return async () => [
-      jsonFile("profile.json", person.profile),
+      jsonFile("profile.json", {
+        ...person.profile,
+        accessRoles: accessRoles.map((role) => role.builtInKey ?? role.name!),
+      }),
       jsonFile("sign-in.json", {
         ...person.signIn,
         passkeys: passkeys.map(({ name, provider, createdAt, lastUsedAt }) => ({

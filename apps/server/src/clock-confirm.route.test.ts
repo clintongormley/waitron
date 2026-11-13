@@ -12,7 +12,7 @@ import {
 import { incidents as incidentRows, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { BootReading, FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPin, startManagementSession, type PersonRoleValue } from "@waitron/identity";
+import { hashPin, startManagementSession, type BuiltInRoleKey } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { jobOrigin } from "@waitron/shared";
@@ -66,7 +66,7 @@ interface Manager {
   cookie: string;
 }
 
-async function seedPerson(role: PersonRoleValue, name: string): Promise<Manager> {
+async function seedPerson(role: BuiltInRoleKey, name: string): Promise<Manager> {
   return withTransaction(venue.db, async (tx) => {
     const [person] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
     const session = await startManagementSession(tx, { personId: person!.id });

@@ -16,7 +16,12 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
-import { hashPin, hashSessionToken, personRole, startManagementSession } from "@waitron/identity";
+import {
+  hashPin,
+  hashSessionToken,
+  BUILT_IN_ROLE_KEYS,
+  startManagementSession,
+} from "@waitron/identity";
 import {
   stringToBasisPoints,
   stringToCents,
@@ -245,7 +250,7 @@ const suite = useVenueDb({
     const sids = await withTransaction(db, async (tx) => {
       const mkPerson = async (
         name: string,
-        role: (typeof personRole.enumValues)[number],
+        role: (typeof BUILT_IN_ROLE_KEYS)[number],
       ): Promise<string> => {
         const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
         return (await startManagementSession(tx, { personId: p!.id })).token;

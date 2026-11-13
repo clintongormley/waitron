@@ -48,36 +48,13 @@ function rowIdentity() {
 }
 
 describe("persons, from core's set layered under workforce", () => {
-  it("stores a person and defaults role to staff and status to active", async () => {
+  it("stores a person and defaults status to active", async () => {
     await suite.db.execute(sql`
       insert into persons (id, created_at, display_name, pin_hash)
       values (${rowIdentity()}, 'Ana', ${PIN})`);
-    const rows = await suite.db.execute<{ role: string; status: string }>(sql`
-      select role, status from persons where display_name = 'Ana'`);
-    expect(rows.rows[0]).toEqual({ role: "staff", status: "active" });
-  });
-
-  it("accepts every person_role value", async () => {
-    for (const role of ["staff", "supervisor", "manager", "admin"]) {
-      await suite.db.execute(sql`
-        insert into persons (id, created_at, display_name, pin_hash, role)
-        values (${rowIdentity()}, ${`role-${role}`}, ${PIN}, ${role})`);
-    }
-    const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*) as n from persons
-      where role in ('staff','supervisor','manager','admin')`);
-    expect(rows.rows[0]!.n).toBeGreaterThanOrEqual(4);
-  });
-
-  it("rejects a role outside the enum", async () => {
-    const error = await captureError(() =>
-      suite.db.execute(sql`
-        insert into persons (id, created_at, display_name, pin_hash, role)
-        values (${rowIdentity()}, 'Bad role', ${PIN}, 'ceo')`),
-    );
-    // The name as well as the class: any other check on this table would satisfy the class.
-    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(error)).toMatch(/persons_role_ck/);
+    const rows = await suite.db.execute<{ status: string }>(sql`
+      select status from persons where display_name = 'Ana'`);
+    expect(rows.rows[0]).toEqual({ status: "active" });
   });
 
   it("rejects a status outside the enum", async () => {

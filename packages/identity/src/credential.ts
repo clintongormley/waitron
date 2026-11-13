@@ -5,7 +5,6 @@ import type { Database, Transaction } from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
 import { persons } from "@waitron/db";
 import { hashPin, verifyPin } from "./verify-pin.js";
-import type { PersonRoleValue } from "@waitron/shared";
 import type { PinThrottle } from "./pin-throttle.js";
 import { DUMMY, issueCheck, trustedVerdict, type SecretCheck } from "./secret-check.js";
 
@@ -40,10 +39,9 @@ export async function verifyPersonCredential(
   personId: string,
   pin: string,
   checked?: SecretCheck,
-): Promise<{ role: PersonRoleValue; authority: PersonAuthority; locale: string | null }> {
+): Promise<{ authority: PersonAuthority; locale: string | null }> {
   const [person] = await tx
     .select({
-      role: persons.role,
       status: persons.status,
       pinHash: persons.pinHash,
       locale: persons.locale,
@@ -69,7 +67,6 @@ export async function verifyPersonCredential(
     throw new AppError("pin.invalid", {}, { reason: "wrong_pin" });
   }
   return {
-    role: person.role as PersonRoleValue,
     authority: await readPersonAuthority(tx, personId),
     locale: person.locale,
   };
@@ -91,7 +88,7 @@ export async function verifyThrottledCredential(
   pin: string,
   attempts: PinAttempts,
   checked?: SecretCheck,
-): Promise<{ role: PersonRoleValue; authority: PersonAuthority; locale: string | null }> {
+): Promise<{ authority: PersonAuthority; locale: string | null }> {
   const { throttle, slot } = attempts;
   throttle.check(slot, personId);
   let cred;

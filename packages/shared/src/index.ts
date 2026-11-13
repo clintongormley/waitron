@@ -488,7 +488,6 @@ export type {
 } from "./content-translation-report-types.js";
 export type { AllergenMap } from "./allergen-map.js";
 export type { KitchenAllergyBlock, KitchenNoteChange } from "./kitchen-notice-types.js";
-export type { PersonRoleValue } from "./person-role.js";
 export {
   REASON_KINDS,
   ADJUSTMENT_ACTIONS,

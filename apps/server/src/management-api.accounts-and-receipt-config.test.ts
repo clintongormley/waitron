@@ -2155,6 +2155,7 @@ describe("Management API — fresh sign-in for people changes", () => {
         );
       const snapshot = async () => ({
         people: await suite.db.select().from(persons),
+        memberships: (await suite.db.execute(sql`select * from person_roles`)).rows,
         actions: (await suite.db.execute(sql`select * from management_account_actions`)).rows,
         mail: (await suite.db.execute(sql`select * from outgoing_mail`)).rows,
       });
@@ -2188,7 +2189,7 @@ describe("Management API — fresh sign-in for people changes", () => {
       );
       const [person] = await suite.db.select().from(persons).where(eq(persons.id, staffId));
       if (action.endsWith("email")) expect(person!.email).toBe("changed@example.test");
-      if (action === "role") expect(person!.role).toBe("supervisor");
+      if (action === "role") expect(await builtInRoleForTest(suite.db, staffId)).toBe("supervisor");
       if (action === "status" || action === "deactivate") expect(person!.status).toBe("suspended");
       if (action === "reactivate" || action === "reset-login")
         expect(person!.status).toBe("pending");
@@ -2964,7 +2965,7 @@ it("refuses a manager suspending an admin through details with the same email", 
   expect(await suite.db.select().from(persons).where(eq(persons.id, staffId))).toEqual(before);
 });
 
-it("retires a pre-promotion invitation and lets an admin issue its replacement", async () => {
+it("keeps the original invitation usable after promotion to Supervisor and Admin", async () => {
   await setupTenant();
   const sent: Parameters<MailSink>[0][] = [];
   const app = mountApp(async (message) => {
@@ -2984,6 +2985,12 @@ it("retires a pre-promotion invitation and lets an admin issue its replacement",
   await app.flushMail();
   expect(sent).toHaveLength(1);
   const oldToken = new URL(sent[0]!.actionUrl).searchParams.get("token")!;
+  const supervised = await app.request(`/management-api/staff/${id}`, {
+    method: "PUT",
+    headers: { cookie: adminCookie, "content-type": "application/json" },
+    body: JSON.stringify({ ...body, role: "supervisor", status: "pending" }),
+  });
+  expect(supervised.status).toBe(204);
   const promoted = await app.request(`/management-api/staff/${id}`, {
     method: "PUT",
     headers: { cookie: adminCookie, "content-type": "application/json" },
@@ -3001,21 +3008,8 @@ it("retires a pre-promotion invitation and lets an admin issue its replacement",
         pin: "4321",
       }),
     });
-  const refused = await complete(oldToken);
-  expect(refused.status).toBe(400);
-  expect(await refused.json()).toMatchObject({ error: { code: "account_action.invalid" } });
-  expect(refused.headers.get("set-cookie")).toBeNull();
-  const resent = await app.request(`/management-api/staff/${id}/invitation`, {
-    method: "POST",
-    headers: { cookie: adminCookie },
-  });
-  expect(resent.status).toBe(200);
-  expect(await resent.json()).toEqual({ invitationSent: true, delivery: "queued" });
-  await app.flushMail();
-  expect(sent).toHaveLength(2);
-  const freshToken = new URL(sent[1]!.actionUrl).searchParams.get("token")!;
-  expect(freshToken).not.toBe(oldToken);
-  const completed = await complete(freshToken);
+  const completed = await complete(oldToken);
+  expect(sent).toHaveLength(1);
   expect(completed.status).toBe(200);
   expect(await completed.json()).toEqual({ personId: id, authenticated: true });
   expect(completed.headers.get("set-cookie")).toContain("waitron_management_session=");

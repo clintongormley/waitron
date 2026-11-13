@@ -1,5 +1,7 @@
 import { dirname, join } from "node:path";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { roles, personRoles } from "@waitron/db";
+import { listAdminHolders, readPersonAuthority } from "@waitron/identity";
 import { STARTER_PROFILE_NAMES } from "@waitron/provisioning";
 import { personStaffRoles, staffRoles } from "@waitron/db";
 import { canUseDeviceProfile } from "@waitron/identity";
@@ -996,7 +998,7 @@ describe("configuration transfer database path", () => {
     });
     const sourceOperator = await suite.db.execute<{ id: string }>(sql`
       select id from persons
-      where role = 'admin'
+      where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')
         and id <> '12121212-aaaa-aaaa-aaaa-121212121212'
     `);
     const versions = await schemaVersionsByModule(
@@ -1084,10 +1086,10 @@ describe("configuration transfer database path", () => {
     }>(sql`
       select
         (select count(*) from products ) as products,
-        (select count(*) from persons where role = 'manager') as staff,
-        (select count(*) from persons where role = 'admin' and status = 'suspended') as suspended_admins,
+        (select count(*) from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'manager')) as staff,
+        (select count(*) from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin') and status = 'suspended') as suspended_admins,
         (select count(*) from persons where (pin_hash = 'source-pin-secret' or password_hash = 'source-password-secret')) as secret_hits,
-        (select status from persons where role = 'manager') as status,
+        (select status from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'manager')) as status,
         (select count(*) from sales ) as target_sales,
         (select count(*) from print_agents
           where not active) as inactive_agents,
@@ -2074,7 +2076,7 @@ it("transfers staff roles, who holds them and a painted season week under new id
     {
       ...source,
       sourceOperatorId: suite.db.all<{ id: string }>(
-        sql`select id from persons where role = 'admin'`,
+        sql`select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')`,
       )[0]!.id,
     },
     ALL_MODULES,
@@ -4818,7 +4820,9 @@ it("transfers job-role admission, omits retired profiles, and admits the importi
     const [admin] = await tx
       .select({ id: persons.id })
       .from(persons)
-      .where(eq(persons.role, "admin"));
+      .innerJoin(personRoles, eq(personRoles.personId, persons.id))
+      .innerJoin(roles, eq(roles.id, personRoles.roleId))
+      .where(eq(roles.builtInKey, "admin"));
     const rows = await tx
       .select({ profile: deviceProfiles.name, job: staffRoles.name })
       .from(deviceProfileAdmissionRoles)
@@ -5393,7 +5397,7 @@ describe("venue detail edits and configuration boundaries", () => {
         {
           ...target,
           sourceOperatorId: suite.db.all<{ id: string }>(
-            sql`select id from persons where role = 'admin'`,
+            sql`select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')`,
           )[0]!.id,
         },
         ALL_MODULES,
@@ -7608,7 +7612,7 @@ describe("dated business-day configuration transfer", () => {
       {
         ...target,
         sourceOperatorId: suite.db.all<{ id: string }>(
-          sql`select id from persons where role = 'admin'`,
+          sql`select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')`,
         )[0]!.id,
       },
       ALL_MODULES,
@@ -8238,5 +8242,87 @@ it.each([true, false])(
       continuousPaidBreakMinutes: configured ? 20 : null,
       breaksCountAsWorked: false,
     });
+  },
+);
+
+it.each([false, true])(
+  "imports access-role memberships and validates declared permissions (unknown: %s)",
+  async (unknown) => {
+    const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const sourceAdmin = (await listAdminHolders(suite.db))[0]!.id;
+    const [staff] = await seedPersons(suite.db, {
+      displayName: "Imported supervisor",
+      role: "supervisor",
+    });
+    await suite.db
+      .update(roles)
+      .set({ permissions: [unknown ? "access_test.unknown" : "report.view"] })
+      .where(eq(roles.builtInKey, "supervisor"));
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const bundle = await buildConfigurationBundle(
+      suite.db,
+      { ...source, sourceOperatorId: sourceAdmin },
+      ALL_MODULES,
+      new Date(),
+      versions,
+    );
+    expect(bundle.tables.roles).toHaveLength(4);
+    expect(bundle.tables.person_roles).toHaveLength(2);
+    let targetId = "";
+    let targetRoles: (typeof roles.$inferSelect)[] = [];
+    const imported = applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: async (tx) => {
+        targetId = (await listAdminHolders(tx))[0]!.id;
+        targetRoles = await tx.select().from(roles);
+        await importConfigurationTables(tx, bundle, ALL_MODULES, versions);
+      },
+    });
+    if (unknown) {
+      await expect(imported).rejects.toMatchObject({
+        code: "setup.request_invalid",
+        params: { field: "roles.permissions" },
+      });
+      return;
+    }
+    await imported;
+    expect((await listAdminHolders(targetSuite.db)).map((person) => person.id)).toEqual([targetId]);
+    expect((await targetSuite.db.select().from(roles)).map((role) => role.id).sort()).toEqual(
+      targetRoles.map((role) => role.id).sort(),
+    );
+    const [supervisor] = await targetSuite.db
+      .select()
+      .from(roles)
+      .where(eq(roles.builtInKey, "supervisor"));
+    expect(supervisor!.permissions).toEqual(["report.view"]);
+    const [member] = await targetSuite.db
+      .select()
+      .from(personRoles)
+      .where(eq(personRoles.roleId, supervisor!.id));
+    expect(member!.personId).not.toBe(staff!.id);
+    expect((await readPersonAuthority(targetSuite.db, member!.personId)).permissions).toEqual(
+      new Set(["report.view"]),
+    );
+    expect(
+      await targetSuite.db
+        .select({ personId: activityLog.personId, data: activityLog.data })
+        .from(activityLog)
+        .where(
+          and(
+            eq(activityLog.kind, "access_role.member_added"),
+            eq(activityLog.subjectId, member!.personId),
+          ),
+        ),
+    ).toEqual([
+      { personId: null, data: { roleId: supervisor!.id, builtInKey: "supervisor", name: null } },
+    ]);
+    expect(await targetSuite.db.select().from(outgoingMail)).toEqual([]);
   },
 );

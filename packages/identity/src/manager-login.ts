@@ -11,7 +11,6 @@ import { verifyTotp } from "./totp.js";
 import { consumeRecoveryCode, decryptTotpSecret, type TotpKeyRing } from "./mfa.js";
 import type { Permission } from "./permissions.js";
 import { holds, type PersonAuthority } from "./authority.js";
-import type { PersonRoleValue } from "@waitron/shared";
 import {
   resolveManagementSession,
   startManagementSession,
@@ -189,16 +188,12 @@ export async function authorizeManager(
   // `permission` widens past the core `Permission` union so a module's OWN permission string
   // type-checks. `touch: false` leaves the session's last-seen time alone.
   args: { managementSessionId: string; permission: Permission | (string & {}); touch?: boolean },
-): Promise<{ authorizedBy: string; role: PersonRoleValue; authority: PersonAuthority }> {
-  const { personId, role, authority } = await resolveManagementSession(
-    tx,
-    args.managementSessionId,
-    {
-      touch: args.touch,
-    },
-  );
+): Promise<{ authorizedBy: string; authority: PersonAuthority }> {
+  const { personId, authority } = await resolveManagementSession(tx, args.managementSessionId, {
+    touch: args.touch,
+  });
   if (!holds(authority, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }
-  return { authorizedBy: personId, role, authority };
+  return { authorizedBy: personId, authority };
 }

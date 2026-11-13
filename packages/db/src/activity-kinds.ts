@@ -15,6 +15,16 @@ export interface ActivityKindData {
     readonly answer: "none" | "allergies";
     readonly guestCount: number;
   };
+  readonly "access_role.member_added": {
+    readonly roleId: string;
+    readonly builtInKey: string | null;
+    readonly name: string | null;
+  };
+  readonly "access_role.member_removed": {
+    readonly roleId: string;
+    readonly builtInKey: string | null;
+    readonly name: string | null;
+  };
   readonly "job_role.created": { readonly name: string };
   readonly "job_role.renamed": { readonly from: string; readonly to: string };
   readonly "job_role.deleted": { readonly name: string };
@@ -78,6 +88,8 @@ export interface ActivityKindRule {
 }
 export const ACTIVITY_KINDS = {
   "party.allergy_answered": { subject: "party" },
+  "access_role.member_added": { subject: "person" },
+  "access_role.member_removed": { subject: "person" },
   "job_role.created": { subject: "job_role" },
   "job_role.renamed": { subject: "job_role" },
   "job_role.deleted": { subject: "job_role" },

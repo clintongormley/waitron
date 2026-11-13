@@ -14,6 +14,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { WaitronModule } from "@waitron/module";
 import {
   BUSINESS_DAY_SETTINGS,
+  activityLog,
   dayCutoverChanges,
   readSettings,
   deviceProfiles,
@@ -539,6 +540,24 @@ describe("applyVenue", () => {
     const people = { rows: [] as Omit<(typeof seededPeople.rows)[number], "id">[] };
     for (const { id, ...person } of seededPeople.rows)
       people.rows.push({ ...person, role: await builtInRoleForTest(suite.db, id) });
+    expect(
+      await suite.db
+        .select({
+          kind: activityLog.kind,
+          personId: activityLog.personId,
+          subjectId: activityLog.subjectId,
+          data: activityLog.data,
+        })
+        .from(activityLog)
+        .where(eq(activityLog.kind, "access_role.member_added")),
+    ).toEqual([
+      {
+        kind: "access_role.member_added",
+        personId: null,
+        subjectId: seededPeople.rows[0]!.id,
+        data: { roleId: expect.any(String), builtInKey: "admin", name: null },
+      },
+    ]);
     expect(people.rows).toHaveLength(1);
     expect(people.rows[0]).toEqual({
       display_name: "Alicia",

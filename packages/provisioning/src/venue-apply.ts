@@ -1,9 +1,11 @@
+import { setBuiltInMembership, registerModulePermissions } from "@waitron/identity";
 import { createStarterStaffRole } from "@waitron/staffing";
 import { requireCountryTimeZone } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import {
   BUSINESS_DAY_SETTINGS,
+  roles,
   personStaffRoles,
   recordActivity,
   FIRST_DAY_START,
@@ -124,6 +126,7 @@ export async function applyVenue(
 ): Promise<VenueResult> {
   const actions = structuredClone(suppliedActions);
   const modules = [...deps.modules];
+  registerModulePermissions(modules.flatMap((module) => module.permissions ?? []));
   const ensure = actions.find((a) => a.kind === "ensure-tenant");
   if (ensure === undefined || ensure.kind !== "ensure-tenant") {
     throw new Error("applyVenue: plan is missing ensure-tenant");
@@ -238,10 +241,20 @@ export async function applyVenue(
                 emailFolded:
                   action.email === undefined ? undefined : foldForUniqueness(action.email),
                 displayNameFolded: foldForUniqueness(action.displayName),
-                role: "admin",
               })
               .returning({ id: persons.id });
             createdAdministrator = created!.id;
+            await setBuiltInMembership(tx, created!.id, "admin");
+            const [adminRole] = await tx
+              .select({ id: roles.id })
+              .from(roles)
+              .where(eq(roles.builtInKey, "admin"));
+            await recordActivity(tx, {
+              kind: "access_role.member_added",
+              subjectId: created!.id,
+              personId: null,
+              data: { roleId: adminRole!.id, builtInKey: "admin", name: null },
+            });
             const staffRoleId = await createStarterStaffRole(tx, action.jobRoleName);
             await tx.insert(personStaffRoles).values({ personId: created!.id, staffRoleId });
             starterJob = { id: staffRoleId, name: action.jobRoleName };

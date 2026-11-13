@@ -1,3 +1,4 @@
+import { heldBuiltInKey } from "./roles.js";
 import { CORE_MIGRATIONS, personStaffRoles, refusalError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
@@ -52,8 +53,8 @@ async function personRow(
     status: string;
     pin_hash: string;
     password_hash: string | null;
-  }>(sql`select role, status, pin_hash, password_hash from persons where id = ${id}`);
-  return rows.rows[0]!;
+  }>(sql`select status, pin_hash, password_hash from persons where id = ${id}`);
+  return { ...rows.rows[0]!, role: (await heldBuiltInKey(suite.db, id))! };
 }
 
 async function emailOf(id: string): Promise<string | null> {
@@ -79,8 +80,9 @@ describe("createPerson", () => {
     );
 
     const rows = await suite.db.execute<{ role: string; status: string; display_name: string }>(
-      sql`select role, status, display_name from persons where id = ${id}`,
+      sql`select status, display_name from persons where id = ${id}`,
     );
+    for (const person of rows.rows) person.role = (await heldBuiltInKey(suite.db, id))!;
     expect(rows.rows).toEqual([{ role: "supervisor", status: "active", display_name: "Bea" }]);
 
     await run(async (tx) => {
@@ -93,8 +95,12 @@ describe("createPerson", () => {
       token: expect.any(String),
       personId: id,
       deviceId,
-      role: "supervisor",
-      authority: { personId: id, admin: false, permissions: expect.any(Set) },
+      authority: {
+        personId: id,
+        admin: false,
+        roleIds: [expect.any(String)],
+        permissions: expect.any(Set),
+      },
       locale: null,
     });
   });
@@ -351,8 +357,12 @@ describe("resetPin", () => {
       token: expect.any(String),
       personId: targetId,
       deviceId,
-      role: "staff",
-      authority: { personId: targetId, admin: false, permissions: expect.any(Set) },
+      authority: {
+        personId: targetId,
+        admin: false,
+        roleIds: [expect.any(String)],
+        permissions: expect.any(Set),
+      },
       locale: null,
     });
 

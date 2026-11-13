@@ -61,6 +61,7 @@ const VAT_CLASS_CHANGES: MadridVatClassChange[] = [
 ];
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
+  persons: ["role"],
   device_profile_admission_roles: ["role"],
   nodes: ["location_id"],
   adjustment_reasons: ["apply_roles", "approver_roles"],
@@ -370,6 +371,9 @@ for (const locale of ["en", "es"] as const) {
     const phases = structuredClone(manifest.phases[locale]!);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
       const at = "2026-10-08T10:00:00.000Z";
+      const accessMemberships = Object.values(expected[phase].tables.persons!.rows).map(
+        (person) => ({ person_id: person.id, role_id: `@roles:${stable([person.role])}` }),
+      );
       const venueMetadata = {
         module: "venue",
         version: 1,
@@ -480,6 +484,78 @@ for (const locale of ["en", "es"] as const) {
         expected[phase].tables[name] = structuredClone(added!);
         phases[phase]![name] = 0;
       }
+      const roleDefaults = {
+        admin: [],
+        staff: ["payment.take", "adjustment.apply"],
+        supervisor: [
+          "payment.take",
+          "sale.void",
+          "sale.refund",
+          "sale.rectify",
+          "venue.view",
+          "report.view",
+          "cash.drawer",
+          "workforce.correct",
+          "adjustment.apply",
+          "adjustment.approve",
+        ],
+        manager: [
+          "payment.take",
+          "sale.void",
+          "sale.refund",
+          "sale.rectify",
+          "person.manage",
+          "catalogue.manage",
+          "venue.configure",
+          "venue.view",
+          "system.manage",
+          "schedule.manage",
+          "purchase.manage",
+          "report.export",
+          "report.view",
+          "hardware.manage",
+          "cash.drawer",
+          "fiscal.view",
+          "workforce.correct",
+          "booking.manage",
+          "adjustment.manage",
+          "adjustment.apply",
+          "adjustment.approve",
+        ],
+      };
+      expected[phase].tables.roles = {
+        ...structuredClone(canonical[phase].tables.roles!),
+        rows: Object.fromEntries(
+          phase === "before"
+            ? []
+            : Object.entries(roleDefaults)
+                .map(([built_in_key, permissions]) => {
+                  const id = `@roles:${stable([built_in_key])}`;
+                  return [
+                    id,
+                    {
+                      id,
+                      built_in_key,
+                      name: null,
+                      name_folded: null,
+                      permissions,
+                      created_at: at,
+                    },
+                  ];
+                })
+                .sort(([a], [b]) => String(a).localeCompare(String(b))),
+        ),
+      };
+      phases[phase]!.roles = phase === "before" ? 0 : 4;
+      expected[phase].tables.person_roles = {
+        ...structuredClone(canonical[phase].tables.person_roles!),
+        rows: Object.fromEntries(
+          accessMemberships
+            .map((row) => [stable(row), row])
+            .sort(([a], [b]) => String(a).localeCompare(String(b))),
+        ),
+      };
+      phases[phase]!.person_roles = phase === "before" ? 0 : phase === "seeded" ? 6 : 1;
       for (const name of REMOVED_TABLES_WITH_ROWS) {
         expect(expected[phase].tables[name], `${phase}/${name} in the capture`).toBeDefined();
         delete expected[phase].tables[name];
@@ -1087,6 +1163,20 @@ for (const locale of ["en", "es"] as const) {
             .sort(([a], [b]) => String(a).localeCompare(String(b))),
         );
         phases[phase]!.person_staff_roles = phase === "seeded" ? 7 : 1;
+        const accessData = { roleId: '@roles:["admin"]', builtInKey: "admin", name: null };
+        const accessSubject = '@persons:["owner@example.test"]';
+        const accessId = `@activity_log:${stable(["access_role.member_added", accessSubject, at, JSON.stringify(accessData)])}`;
+        expected[phase].tables.activity_log!.rows[accessId] = {
+          id: accessId,
+          at,
+          kind: "access_role.member_added",
+          subject_kind: "person",
+          subject_id: accessSubject,
+          person_id: null,
+          device_id: null,
+          data: accessData,
+        };
+        phases[phase]!.activity_log! += 1;
         const data = { staffRoleId: roleId(team), name: team };
         const subject = '@persons:["owner@example.test"]';
         const id = `@activity_log:${stable(["job_role.member_added", subject, at, JSON.stringify(data)])}`;

@@ -3,9 +3,11 @@ import {
   withTransaction,
   type Transaction,
   persons,
+  roles,
   webauthnCredentials,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { builtInRoleForTest } from "../test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
@@ -124,8 +126,10 @@ const changes: {
 ];
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
-const row = async (id: string) =>
-  (await suite.db.select().from(persons).where(eq(persons.id, id)))[0]!;
+const row = async (id: string) => ({
+  ...(await suite.db.select().from(persons).where(eq(persons.id, id)))[0]!,
+  role: await builtInRoleForTest(suite.db, id),
+});
 
 describe("admin sign-in authority", () => {
   it.each(changes)(
@@ -374,7 +378,7 @@ describe("account links across admin role changes", () => {
     { method: "setRole", purpose: "password_reset" },
     { method: "setRole", purpose: "invitation" },
   ] as const)(
-    "refuses a $purpose link issued before $method promotes the person",
+    "serves a $purpose link issued before $method promotes the person",
     async ({ method, purpose }) => {
       const actor = await openManagementSession(suite.db, "admin");
       const target = await seedPerson(
@@ -403,7 +407,6 @@ describe("account links across admin role changes", () => {
               status: person.status,
             }),
       );
-      const promoted = await row(target);
       await expect(
         run((tx) =>
           completeAccountAction(tx, {
@@ -413,8 +416,9 @@ describe("account links across admin role changes", () => {
             pin: "4321",
           }),
         ),
-      ).rejects.toMatchObject({ code: "account_action.invalid" });
-      expect(await row(target)).toEqual(promoted);
+      ).resolves.toMatchObject({ personId: target });
+      expect((await row(target)).role).toBe("admin");
+      expect((await row(target)).status).toBe("active");
       await expect(
         run((tx) => inspectAccountAction(tx, { token: issued.token, purpose })),
       ).rejects.toMatchObject({ code: "account_action.invalid" });
@@ -477,7 +481,7 @@ it("preserves an unused reset when a non-admin becomes a manager", async () => {
 });
 
 it.each(["details", "setRole"] as const)(
-  "retires an admin's unused reset on demotion through %s",
+  "preserves an admin's unused reset on demotion through %s",
   async (method) => {
     const actor = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "admin");
@@ -512,7 +516,7 @@ it.each(["details", "setRole"] as const)(
           password: "new manager password",
         }),
       ),
-    ).rejects.toMatchObject({ code: "account_action.invalid" });
+    ).resolves.toEqual({ personId: target, session: null });
     expect((await row(target)).role).toBe("manager");
   },
 );
@@ -606,5 +610,57 @@ it.each(["details", "setRole"] as const)(
       params: { permission: "person.admin" },
     });
     expect(await row(actor.personId)).toEqual(before);
+  },
+);
+
+it.each(["create", "invite", "details", "setRole"] as const)(
+  "only an Admin holder grants Admin through %s, even with person.admin",
+  async (method) => {
+    const actor = await openManagementSession(suite.db, "manager");
+    await suite.db
+      .update(roles)
+      .set({ permissions: ["person.manage", "person.admin"] })
+      .where(eq(roles.builtInKey, "manager"));
+    const target = await seedPerson(suite.db, "staff");
+    const before = await row(target);
+    await expect(
+      run<unknown>((tx) =>
+        method === "create"
+          ? createPerson(tx, {
+              managementSessionId: actor.token,
+              displayName: "New Admin",
+              email: "new-admin@example.test",
+              role: "admin",
+              pin: "4321",
+            })
+          : method === "invite"
+            ? invitePerson(tx, {
+                managementSessionId: actor.token,
+                displayName: "New Admin",
+                firstNames: "New",
+                lastNames: "Admin",
+                telephone: null,
+                email: "new-admin@example.test",
+                role: "admin",
+              })
+            : method === "setRole"
+              ? setRole(tx, { managementSessionId: actor.token, personId: target, role: "admin" })
+              : updatePersonDetails(tx, {
+                  managementSessionId: actor.token,
+                  personId: target,
+                  displayName: before.displayName,
+                  firstNames: "New",
+                  lastNames: "Admin",
+                  telephone: null,
+                  email: before.email!,
+                  role: "admin",
+                  status: "active",
+                }),
+      ),
+    ).rejects.toMatchObject({
+      code: "authorization.not_permitted",
+      params: { permission: "person.admin" },
+    });
+    expect(await row(target)).toEqual(before);
   },
 );

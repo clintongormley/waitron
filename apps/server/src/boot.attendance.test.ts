@@ -1,3 +1,4 @@
+import { listAdminHolders } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -79,9 +80,7 @@ describe("attendance boot with permanent workforce", () => {
     async function prepared() {
       beforeServerStarts();
       const venue = await createClockVenue(suite.db, () => new Date(), modules);
-      const administrator = (await suite.db.select().from(persons)).find(
-        (person) => person.role === "admin",
-      )!;
+      const administrator = (await listAdminHolders(suite.db))[0]!;
       const management = await withTransaction(suite.db, (tx) =>
         startManagementSession(tx, { personId: administrator.id }),
       );

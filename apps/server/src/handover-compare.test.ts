@@ -1341,9 +1341,6 @@ describe("compareFinalCopy", () => {
     it.each([
       ["suspended", "status = 'suspended'"],
       ["pending", "status = 'pending'"],
-      ["only a member of staff", "role = 'staff'"],
-      ["only a supervisor", "role = 'supervisor'"],
-      ["only a manager", "role = 'manager'"],
     ])("someone %s is refused", async (_label, change) => {
       const r = await rig();
       alter(r.path, `update persons set ${change} where id = '${r.authorisedBy}'`);
@@ -1352,9 +1349,26 @@ describe("compareFinalCopy", () => {
       );
     });
 
+    it.each(["staff", "supervisor", "manager"])(
+      "someone holding only %s is refused",
+      async (key) => {
+        const r = await rig();
+        alter(
+          r.path,
+          `update person_roles set role_id = (select id from roles where built_in_key = '${key}') where person_id = '${r.authorisedBy}'`,
+        );
+        expect(await r.compareRow(await r.resignedForFile())).toEqual(
+          refused("handover.authoriser_not_permitted"),
+        );
+      },
+    );
+
     it("someone with no row in the copy is refused", async () => {
       const r = await rig();
-      alter(r.path, `delete from persons where id = '${r.authorisedBy}'`);
+      alter(
+        r.path,
+        `delete from person_roles where person_id = '${r.authorisedBy}'; delete from persons where id = '${r.authorisedBy}'`,
+      );
       expect(await r.compareRow(await r.resignedForFile())).toEqual(
         refused("handover.authoriser_not_permitted"),
       );
@@ -1362,7 +1376,7 @@ describe("compareFinalCopy", () => {
 
     it("a copy with no table of people is refused", async () => {
       const r = await rig();
-      alter(r.path, "drop table persons");
+      alter(r.path, "delete from person_roles; drop table persons");
       expect(await r.compareRow(await r.resignedForFile())).toEqual(
         refused("handover.authoriser_not_permitted"),
       );
@@ -1372,7 +1386,7 @@ describe("compareFinalCopy", () => {
       const r = await rig();
       alter(
         r.path,
-        `pragma ignore_check_constraints = on; update persons set role = 'later' where id = '${r.authorisedBy}'`,
+        `pragma ignore_check_constraints = on; update roles set built_in_key = 'later', permissions = '[]' where id in (select role_id from person_roles where person_id = '${r.authorisedBy}')`,
       );
       expect(await r.compareRow(await r.resignedForFile())).toEqual(
         refused("handover.authoriser_not_permitted"),

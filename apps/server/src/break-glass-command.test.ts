@@ -64,7 +64,7 @@ async function setupTenant(adminPassword: string = OLD_PASSWORD): Promise<{ admi
 
 async function readSoleAdminId(): Promise<string> {
   const rows = await suite.db.execute<{ id: string }>(
-    sql`select id from persons where role = 'admin'`,
+    sql`select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')`,
   );
   return rows.rows[0]!.id;
 }

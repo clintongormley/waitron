@@ -12,12 +12,12 @@ import { seedPersons, setBuiltInRoleForTest, builtInRoleForTest } from "../test/
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-it("seeds one person with the column's staff default and returns the complete stored row", async () => {
+it("seeds one person with Staff membership by default and returns the complete stored row", async () => {
   const rows = await seedPersons(suite.db, { displayName: "Waiter", email: "waiter@example.test" });
   expect(rows).toHaveLength(1);
   const [person] = rows;
   expect(person!.displayName).toBe("Waiter");
-  expect(person!.role).toBe("staff");
+  expect(await builtInRoleForTest(suite.db, person!.id)).toBe("staff");
   const [stored] = await suite.db.select().from(persons).where(eq(persons.id, person!.id));
   expect(person).toEqual(stored);
 });
@@ -28,7 +28,9 @@ it("seeds several people with their explicit roles inside the caller's transacti
       { displayName: "Admin", role: "admin" },
     ]),
   );
-  expect(rows.map((row) => [row.displayName, row.role])).toEqual([
+  const held = [];
+  for (const row of rows) held.push([row.displayName, await builtInRoleForTest(suite.db, row.id)]);
+  expect(held).toEqual([
     ["Manager", "manager"],
     ["Admin", "admin"],
   ]);

@@ -544,7 +544,11 @@ it("authorizes Move using an administrator password committed only in a retained
   let shm: Buffer;
   try {
     writer.exec("pragma journal_mode = wal; pragma wal_autocheckpoint = 0");
-    writer.prepare("update persons set password_hash = ? where role = 'admin'").run(hash);
+    writer
+      .prepare(
+        "update persons set password_hash = ? where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')",
+      )
+      .run(hash);
     wal = await readFile(`${path}-wal`);
     shm = await readFile(`${path}-shm`);
   } finally {

@@ -24,7 +24,7 @@ import {
   seedVenueSettings,
 } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
-import type { PersonRoleValue } from "@waitron/identity";
+import type { BuiltInRoleKey } from "@waitron/identity";
 import { AppError, isAppError } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -47,7 +47,7 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 /** Through drizzle rather than raw SQL: `persons.id` and `created_at` take their value from the
  * table's `$defaultFn`, which is not a SQL DEFAULT, so a raw insert naming neither is refused
  * `NOT NULL constraint failed: persons.id`. */
-async function seedSession(role: PersonRoleValue): Promise<string> {
+async function seedSession(role: BuiltInRoleKey): Promise<string> {
   const [person] = await seedPersons(suite.db, {
     displayName: `Operator ${randomUUID()}`,
     pinHash: "seed-pin-hash",

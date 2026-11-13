@@ -75,7 +75,7 @@ import {
   verifyOwnCredentials,
   readProfileAdmissions,
   setProfileAdmission,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
   type ProfileAdmission,
   type TotpKeyRing,
 } from "@waitron/identity";
@@ -1075,7 +1075,7 @@ export function mountManagementApi(
         firstNames?: string;
         lastNames?: string;
         telephone?: string | null;
-        role?: PersonRoleValue;
+        role?: BuiltInRoleKey;
         email?: string;
       }>(c);
       if (

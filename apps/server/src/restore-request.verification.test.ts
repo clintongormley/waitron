@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash, generateKeyPairSync } from "node:crypto";
@@ -634,7 +635,7 @@ describe("comparison immediately before real archive placement", () => {
 
 it("stages only the selected database's active administrator hashes, never request-supplied hashes", async () => {
   const db = adminDb.db;
-  await db.insert(persons).values([
+  await seedPersons(db, [
     {
       displayName: "Active administrator",
       role: "admin",

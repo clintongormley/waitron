@@ -338,9 +338,9 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       emailVerifiedAt: t(2),
       telephone: "+44 7700 2021",
       locale: "es",
-      role: "supervisor",
       status: "active",
       createdAt: t(0),
+      accessRoles: ["supervisor"],
     };
     const expectedSignIn = {
       pinSet: true,
@@ -445,7 +445,7 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       emailVerifiedAt: null,
       telephone: null,
       locale: null,
-      role: "staff",
+      accessRoles: ["staff"],
       status: "active",
       createdAt: row!.createdAt,
     });

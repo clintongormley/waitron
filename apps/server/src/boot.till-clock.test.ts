@@ -1,3 +1,4 @@
+import { listAdminHolders } from "@waitron/identity";
 import { convenioConfig } from "@waitron/workforce-es";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { once } from "node:events";
@@ -351,9 +352,7 @@ for (const spain of [false, true]) {
         let managementCookie: string | undefined;
         if (spain) {
           managementCookie = await withTransaction(suite.db, async (tx) => {
-            const admin = (await tx.select().from(persons)).find(
-              (person) => person.role === "admin",
-            )!;
+            const admin = (await listAdminHolders(tx))[0]!;
             const session = await startManagementSession(tx, { personId: admin.id });
             return `waitron_management_session=${session.token}`;
           });

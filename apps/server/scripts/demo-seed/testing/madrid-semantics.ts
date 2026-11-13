@@ -206,6 +206,7 @@ export async function canonicalMadridSemantics(
       case "activity_log": {
         const data = JSON.parse(String(row.data)) as Record<string, unknown>;
         if (typeof data.staffRoleId === "string") data.staffRoleId = alias(data.staffRoleId);
+        if (typeof data.roleId === "string") data.roleId = alias(data.roleId);
         key = [...parts("kind", "subject_id", "at"), JSON.stringify(data)];
         break;
       }
@@ -223,6 +224,9 @@ export async function canonicalMadridSemantics(
       case "seasons":
       case "special_days":
         key = parts("name");
+        break;
+      case "roles":
+        key = parts("built_in_key");
         break;
       case "persons":
         key = parts("email");

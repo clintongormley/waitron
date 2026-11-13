@@ -119,7 +119,9 @@ function facts(directory: string) {
     return {
       deployment: all("select environment from deployment"),
       nodes: all("select id from nodes order by id"),
-      administrators: all("select id from persons where role = 'admin' order by id"),
+      administrators: all(
+        "select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin') order by id",
+      ),
       allocations: all(
         "select event_key, allocation_key, node_id, environment from fiscal_allocations",
       ),
