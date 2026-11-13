@@ -378,7 +378,13 @@ import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { mountGuidePages } from "./guide-pages.js";
-import { mountDeclarationPages } from "./declaration-pages.js";
+import {
+  declarationRoot,
+  type DeclarationPagesDeps,
+  type KeptDeclarations,
+  mountDeclarationPages,
+} from "./declaration-pages.js";
+import { keepRunningDeclaration, keptDeclarationsReader } from "./keep-declaration.js";
 import {
   startMdnsResponder,
   watchVenueNameInSetup,
@@ -888,6 +894,7 @@ function landingHostFor(config: LandingListenerConfig, spare: boolean): LandingL
 export function startLandingListener(
   config: LandingListenerConfig,
   log: Logger,
+  declarationPages: DeclarationPagesDeps = {},
 ): { close(): Promise<void> } | undefined {
   if (
     config.landingPort === 0 ||
@@ -910,6 +917,7 @@ export function startLandingListener(
     connection: config.connection,
     landingPort: config.landingPort,
     connectionHostnames: BOX_LEAF_HOSTNAMES,
+    declarationPages,
   });
   const server = serve(
     buildServeOptions(
@@ -1025,6 +1033,8 @@ export interface StartServerSeams {
   waitingStart?: { intervalMs?: number; secure?: (c: Context) => boolean };
   /** What this build's release stamp says; unset, the stamp `builtRelease()` reads. */
   builtRelease?: BuiltRelease;
+  /** The folder holding the running release's declaration; unset, `declarationRoot()`. */
+  declarationRoot?: string;
   /** The mDNS responder's socket; unset, the real multicast one. */
   mdnsSocket?: () => MdnsSocket;
   /** The socket the setup start asks whether another box answers `waitron.local`. */
@@ -1422,7 +1432,10 @@ async function bootServer(
     log,
   );
   mountGuidePages(app, {}, log);
-  mountDeclarationPages(app, { build }, log);
+  const releaseDeclaration = seams.declarationRoot ?? declarationRoot();
+  let keptDeclarations: KeptDeclarations | undefined;
+  const declarationPages = { root: releaseDeclaration, build, kept: () => keptDeclarations };
+  mountDeclarationPages(app, declarationPages, log);
 
   if (config.node === undefined) {
     // SETUP MODE — this box is bound to no venue. Beyond the routes mounted above, it serves
@@ -2294,6 +2307,9 @@ async function bootServer(
   // Resolved through the generic slot so `boot.ts` names no regime package
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
+  const declarationsSeat = enabledFiscal.declarations;
+  if (declarationsSeat !== undefined)
+    keptDeclarations = keptDeclarationsReader(db, declarationsSeat);
   const startClock = startClockState();
   // Bound once the clock correction is built below; until then no set can be with the host.
   let clockSetting = () => false;
@@ -2465,8 +2481,17 @@ async function bootServer(
         closePools: () => store.close(),
       },
       { stop: () => Promise.resolve() },
-      startLandingListener(landingHostFor(config, isMirror), log),
+      startLandingListener(landingHostFor(config, isMirror), log, declarationPages),
     );
+  }
+  if (acceptingSales && declarationsSeat !== undefined) {
+    await keepRunningDeclaration({
+      root: releaseDeclaration,
+      seat: declarationsSeat,
+      db,
+      now,
+      log,
+    });
   }
   tradingAdmission.admit();
   const jobRunner = createJobRunner({ now, log });
@@ -4308,7 +4333,7 @@ async function bootServer(
       closePools: () => store.close(),
     },
     mdns,
-    startLandingListener(landingHostFor(config, isMirror), log),
+    startLandingListener(landingHostFor(config, isMirror), log, declarationPages),
     // Decided once at boot: a box exposes one in-process promote, never both.
     isMirror
       ? { kind: "mirror" as const, run: promoteMirrorRun }

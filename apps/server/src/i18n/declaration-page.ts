@@ -21,4 +21,5 @@ export const DECLARATION_LINK_WORDS = {
   title: "Declaración responsable",
   downloadPdf: "Descargar PDF",
   downloadText: "Descargar texto",
+  earlierTitle: "Versiones anteriores",
 } as const;

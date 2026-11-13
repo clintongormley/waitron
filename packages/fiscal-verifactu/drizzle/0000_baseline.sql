@@ -71,6 +71,13 @@ CREATE TABLE `clock_stop_restarts` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `clock_stop_restarts_registro_uq` ON `clock_stop_restarts` (`registro_id`);--> statement-breakpoint
+CREATE TABLE `declaraciones_responsables` (
+	`version` text PRIMARY KEY NOT NULL,
+	`text` text NOT NULL,
+	`first_started_at` text NOT NULL,
+	CONSTRAINT "declaraciones_responsables_version_ck" CHECK("declaraciones_responsables"."version" glob '[0-9]*.[0-9]*.[0-9]*' and "declaraciones_responsables"."version" not glob '*[^0-9.]*' and length("declaraciones_responsables"."version") - length(replace("declaraciones_responsables"."version", '.', '')) = 2 and "declaraciones_responsables"."version" not glob '0[0-9]*' and "declaraciones_responsables"."version" not glob '*.0[0-9]*')
+);
+--> statement-breakpoint
 CREATE TABLE `envio_flujo` (
 	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
 	`proximo_envio_en` text NOT NULL,

@@ -19,3 +19,6 @@ Para abrirla:
 
 Cuando un inspector o tu asesor pidan una copia, elige **Descargar PDF** bajo la declaración y
 envíales el archivo.
+
+Si preguntan por facturas de una versión anterior de Waitron, abre esa versión en
+**Versiones anteriores**.

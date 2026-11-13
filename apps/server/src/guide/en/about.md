@@ -17,3 +17,6 @@ To open it:
 
 When an inspector or your tax adviser asks for a copy, choose **Descargar PDF** under the declaration
 and send them the file.
+
+If they ask about invoices from an earlier version of Waitron, open that version under
+**Versiones anteriores**.

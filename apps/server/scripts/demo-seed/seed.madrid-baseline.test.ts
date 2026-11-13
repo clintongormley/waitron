@@ -126,6 +126,7 @@ const ADDED_TABLES = [
   "sale_line_portions",
   "deferred_closures",
   "working_line_portions",
+  "declaraciones_responsables",
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues"];
 const REMOVED_TABLES = [

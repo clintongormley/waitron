@@ -272,6 +272,7 @@ const OPEN_READS: Record<string, Answer> = {
   "/legal/declaration": { status: 404 },
   "/legal/declaration.pdf": { status: 404 },
   "/legal/declaration.txt": { status: 404 },
+  [`/legal/declaration/${MADE_UP}`]: { status: 404 },
   "/legal/x": { status: 404 },
   "/public/availability": { status: 503 },
   "/api/node": { status: 200 },

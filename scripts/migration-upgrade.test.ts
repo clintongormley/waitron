@@ -1431,6 +1431,8 @@ const CANDIDATES: Record<string, readonly Value[]> = {
   "special_day_dates.date": ["2026-01-01", "2026-01-02"],
   // Its CHECK wants a bare `MM-DD` that is not `02-29`.
   "seasons.starts_on": ["03-01", "06-01"],
+  // Its CHECK wants a release version, three dot-separated whole numbers.
+  "declaraciones_responsables.version": ["1.0.0", "1.0.1"],
 };
 
 /** Tables filled with one row rather than two, each with its reason. */

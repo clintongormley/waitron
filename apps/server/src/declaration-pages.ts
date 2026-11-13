@@ -2,7 +2,8 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applicationVersion } from "@waitron/db";
-import type { LegalAbout } from "@waitron/shared";
+import { isReleaseVersion, type LegalAbout } from "@waitron/shared";
+import { codeOf } from "@waitron/server-kit";
 import type { Context, Hono } from "hono";
 import { boxPageAnswer, renderBoxPage } from "./guide-pages.js";
 import { escapeHtml } from "./html-page.js";
@@ -28,6 +29,15 @@ export interface DeclarationPagesDeps {
   /** The folder holding the release's four files; defaults to `declarationRoot()`. */
   root?: string;
   build?: string;
+  /** The venue database's kept declarations. Asked per request, because `bootServer` sets it only
+   * once the fiscal module is resolved; absent in setup, adoption-pending, restricted and waiting
+   * starts, and where the fiscal module has no `declarations` seat. */
+  kept?: () => KeptDeclarations | undefined;
+}
+
+export interface KeptDeclarations {
+  versions(): Promise<string[]>;
+  text(version: string): Promise<string | null>;
 }
 
 /** `/app/declaration/` in the image, beside the bundle, as the guides are found. */
@@ -125,8 +135,34 @@ function wordsPage(c: Context, title: string, text: string | undefined, status: 
   return boxPageAnswer(c, renderBoxPage(languageOf(c), title, body), status);
 }
 
+/** The kept versions below `running`, lowest first, compared part by part as whole numbers of any
+ * size: a release version may run to 50 characters. */
+function earlierVersions(kept: readonly string[], running: string): string[] {
+  const order = (a: string, b: string) => {
+    const [x, y] = [a.split(".").map(BigInt), b.split(".").map(BigInt)];
+    const at = x.findIndex((part, i) => part !== y[i]);
+    return at < 0 ? 0 : x[at]! < y[at]! ? -1 : 1;
+  };
+  return kept.filter((version) => order(version, running) < 0).sort(order);
+}
+
 function fileName(version: string, ext: "pdf" | "txt"): string {
   return `waitron-${version}-declaration.${ext}`;
+}
+
+const FILE_TYPES = { pdf: "application/pdf", txt: "text/plain; charset=utf-8" } as const;
+
+function fileAnswer(
+  c: Context,
+  body: string | Uint8Array<ArrayBuffer>,
+  version: string,
+  ext: keyof typeof FILE_TYPES,
+): Response {
+  return c.body(body, 200, {
+    "Content-Type": FILE_TYPES[ext],
+    "Content-Disposition": `inline; filename="${fileName(version, ext)}"`,
+    "Cache-Control": "no-cache",
+  });
 }
 
 export function mountDeclarationPages(app: Hono, deps: DeclarationPagesDeps, log: Logger): void {
@@ -143,7 +179,10 @@ export function mountDeclarationPages(app: Hono, deps: DeclarationPagesDeps, log
   }
 
   function withRelease(
-    serve: (c: Context, release: Extract<DeclarationFolder, { kind: "release" }>) => Response,
+    serve: (
+      c: Context,
+      release: Extract<DeclarationFolder, { kind: "release" }>,
+    ) => Response | Promise<Response>,
   ) {
     return async (c: Context) => {
       const found = await folder();
@@ -155,30 +194,63 @@ export function mountDeclarationPages(app: Hono, deps: DeclarationPagesDeps, log
     };
   }
 
+  const notFound = (c: Context) =>
+    wordsPage(c, DECLARATION_PAGE_WORDS[languageOf(c)].notFoundTitle, undefined, 404);
+
+  async function earlier(running: string): Promise<string[]> {
+    const reader = deps.kept?.();
+    if (reader === undefined) return [];
+    try {
+      return earlierVersions(await reader.versions(), running);
+    } catch (error) {
+      log("warn", "declaration.kept_read_failed", { errorCode: codeOf(error) });
+      return [];
+    }
+  }
+
   app.get(
     "/legal/declaration",
-    withRelease((c, release) => {
+    withRelease(async (c, release) => {
       const link = (ext: "pdf" | "txt", label: string) =>
         `<a href="/legal/declaration.${ext}" download="${escapeHtml(fileName(release.version, ext))}">${escapeHtml(label)}</a>`;
+      const versions = await earlier(release.version);
+      const list =
+        versions.length === 0
+          ? ""
+          : `
+<h2>${escapeHtml(DECLARATION_LINK_WORDS.earlierTitle)}</h2>
+<ul>
+${versions.map((v) => `<li><a href="/legal/declaration/${escapeHtml(v)}.txt">Waitron ${escapeHtml(v)}</a></li>`).join("\n")}
+</ul>`;
       const body = `${release.body}
-<p>${link("pdf", DECLARATION_LINK_WORDS.downloadPdf)} · ${link("txt", DECLARATION_LINK_WORDS.downloadText)}</p>`;
+<p>${link("pdf", DECLARATION_LINK_WORDS.downloadPdf)} · ${link("txt", DECLARATION_LINK_WORDS.downloadText)}</p>${list}`;
       const title = `${DECLARATION_LINK_WORDS.title} ${release.version}`;
       return boxPageAnswer(c, renderBoxPage("es", title, body), 200);
     }),
   );
 
-  for (const [ext, type] of [
-    ["pdf", "application/pdf"],
-    ["txt", "text/plain; charset=utf-8"],
-  ] as const) {
+  app.get("/legal/declaration/:file", async (c) => {
+    const file = c.req.param("file");
+    const version = file.endsWith(".txt") ? file.slice(0, -".txt".length) : "";
+    const reader = deps.kept?.();
+    if (!isReleaseVersion(version) || reader === undefined) return notFound(c);
+    let text: string | null;
+    try {
+      text = await reader.text(version);
+    } catch (error) {
+      log("warn", "declaration.kept_read_failed", { errorCode: codeOf(error) });
+      const words = DECLARATION_PAGE_WORDS[languageOf(c)];
+      return wordsPage(c, words.damagedTitle, undefined, 500);
+    }
+    if (text === null) return notFound(c);
+    return fileAnswer(c, text, version, "txt");
+  });
+
+  for (const ext of ["pdf", "txt"] as const) {
     app.get(
       `/legal/declaration.${ext}`,
       withRelease((c, release) =>
-        c.body(ext === "pdf" ? release.pdf : release.text, 200, {
-          "Content-Type": type,
-          "Content-Disposition": `inline; filename="${fileName(release.version, ext)}"`,
-          "Cache-Control": "no-cache",
-        }),
+        fileAnswer(c, ext === "pdf" ? release.pdf : release.text, release.version, ext),
       ),
     );
   }
@@ -193,8 +265,6 @@ export function mountDeclarationPages(app: Hono, deps: DeclarationPagesDeps, log
     return c.json(answer);
   });
 
-  const notFound = (c: Context) =>
-    wordsPage(c, DECLARATION_PAGE_WORDS[languageOf(c)].notFoundTitle, undefined, 404);
   app.get("/legal", notFound);
   app.get("/legal/*", notFound);
 }
