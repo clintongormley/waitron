@@ -1,7 +1,9 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
-import { CLOCK_WITNESS_MARGIN_MS, type FiscalBackend, type TrustedClock } from "@waitron/fiscal";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+// The registry of `clock.check_expired`, which this file throws.
+import "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import {
   createErrorBoundary,
@@ -10,8 +12,6 @@ import {
 } from "@waitron/server-kit";
 import { AppError, diskFullIn } from "@waitron/shared";
 import {
-  EARLIEST_TARGET_MS,
-  LATEST_TARGET_MS,
   wallMovedAgainstSteady,
   type ClockSetRefusal,
   type clockCorrection,
@@ -106,20 +106,17 @@ export function clockSetBody(body: unknown): { challengeId: string; deviceAt: nu
   return { challengeId, deviceAt };
 }
 
-/** `{ challengeId, asShown: true }` confirms the box's time as it stands; otherwise the body is a
- * device's reading, as for a set. */
-function clockConfirmBody(body: unknown): { challengeId: string; deviceAt: number | null } {
-  const asShown =
+/** `{ challengeId, asShown: true }`: confirm the box's time as it stands. */
+function clockConfirmBody(body: unknown): { challengeId: string } {
+  const fields =
     typeof body === "object" && body !== null && !Array.isArray(body)
-      ? (body as { asShown?: unknown }).asShown
-      : undefined;
-  if (asShown !== undefined && typeof asShown !== "boolean")
-    throw new AppError("management.request_invalid", { field: "asShown" });
-  if (asShown !== true) return clockSetBody(body);
-  const { challengeId } = body as { challengeId?: unknown };
+      ? (body as { challengeId?: unknown; asShown?: unknown })
+      : {};
+  const { challengeId, asShown } = fields;
   if (typeof challengeId !== "string" || challengeId === "")
     throw new AppError("management.request_invalid", { field: "challengeId" });
-  return { challengeId, deviceAt: null };
+  if (asShown !== true) throw new AppError("management.request_invalid", { field: "asShown" });
+  return { challengeId };
 }
 
 export async function requiredNameOf(tx: Transaction, personId: string): Promise<string> {
@@ -199,7 +196,7 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       const boxAtMs = reading.instant.getTime() - halfMs;
       const startWaits = clockSet.start?.state.status === "waiting";
       const answer = await correction.set({
-        reason: startWaits && !clockUnusableAt(backend, reading) ? "start" : "unusable",
+        reason: startWaits ? "start" : "unusable",
         source: "admin",
         offsetMs: Math.round(deviceAt - boxAtMs),
         measuredAt: { wallMs: boxAtMs, monoMs: steadyMs - halfMs },
@@ -236,31 +233,20 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
       const { authorizedBy } = await withTransaction(deps.db, (tx) =>
         authorizeAdmin(tx, sessionId),
       );
-      const { challengeId, deviceAt } = clockConfirmBody(await readRawJsonBody<unknown>(c));
+      const { challengeId } = clockConfirmBody(await readRawJsonBody<unknown>(c));
       const stepsSeen = correction.steps();
       const reading = clockSet.clock.now();
       const steadyMs = clockSet.steady();
-      const challenge = challenges.take(sessionId, challengeId);
-      if (challenge === null) throw new AppError("clock.check_expired", {});
-      const refuse = (
-        reason: "stale" | "stopped" | "not_stopped" | "target_invalid" | "disagrees",
-      ) => new AppError("clock.set_refused", { reason });
-      if (deviceAt !== null) {
-        if (!(deviceAt >= EARLIEST_TARGET_MS && deviceAt < LATEST_TARGET_MS))
-          throw refuse("target_invalid");
-        // The device read its clock at the round trip's midpoint, give or take half of it.
-        const halfMs = challenge.elapsedMs / 2;
-        const boxAtMs = reading.instant.getTime() - halfMs;
-        if (Math.abs(deviceAt - boxAtMs) + Math.ceil(halfMs) > CLOCK_WITNESS_MARGIN_MS)
-          throw refuse("disagrees");
-      }
+      if (challenges.take(sessionId, challengeId) === null)
+        throw new AppError("clock.check_expired", {});
+      const refuse = (reason: "stale" | "stopped" | "not_stopped") =>
+        new AppError("clock.set_refused", { reason });
       const start = clockSet.start;
       // It sets nothing, so it writes no row (plan A1420 D3). Taken around the whole transaction,
       // never inside it: a set in the turn waits for the write lock a transaction holds.
       const confirmed = await correction.inTurn(() =>
         withTransaction(deps.db, async (tx) => {
           const now = clockSet.clock.now();
-          // A set landed, or the wall clock stepped, after the reading: the comparison is void.
           if (
             correction.steps() !== stepsSeen ||
             wallMovedAgainstSteady(
@@ -269,7 +255,7 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
             )
           )
             throw refuse("stale");
-          if (deviceAt === null && clockUnusableAt(backend, now)) throw refuse("stopped");
+          if (clockUnusableAt(backend, now)) throw refuse("stopped");
           if (start === undefined || start.state.status !== "waiting") throw refuse("not_stopped");
           const heads = await start.heads(tx);
           start.state.confirm("by_person", heads);

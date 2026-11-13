@@ -137,9 +137,15 @@ interface Box {
   clock: TrustedClock;
   host: FakeHost;
   correction: ReturnType<typeof clockCorrection>;
+  /** The start's clock check handed to the routes, if any. */
+  start: StartClockState | undefined;
+  /** What the routes logged. */
+  logs: { event: string; fields: Record<string, unknown> }[];
   setClock(ms: number): void;
   setSteady(ms: number): void;
   setFromBox(fromBox: boolean): void;
+  /** The route's next read of the step counter is one behind, as if a step landed after it. */
+  stepBehindOnce(): void;
 }
 
 /** A new latest record, then a box whose clock reads `gapMs` behind it, with an empty witness
@@ -167,6 +173,8 @@ async function stoppedBox(
   let boxMs = behind;
   let steadyMs = 0;
   let fromBox = false;
+  let lag = 0;
+  const logs: Box["logs"] = [];
   const witnesses = createClockWitnessStore({ wall: () => boxMs, monotonic: () => steadyMs });
   const base = systemClock();
   const clock: TrustedClock = {
@@ -230,12 +238,16 @@ async function stoppedBox(
               correction: {
                 inTurn: correction.inTurn,
                 set: correction.set,
-                steps: () => correction.steps() - stepsBehind,
+                steps: () => {
+                  const steps = correction.steps() - stepsBehind - lag;
+                  lag = 0;
+                  return steps;
+                },
               },
             }),
       },
     },
-    () => {},
+    (_level, event, fields) => void logs.push({ event, fields: { ...fields } }),
   );
   return {
     behind,
@@ -245,6 +257,8 @@ async function stoppedBox(
     clock,
     host,
     correction,
+    start: options.start,
+    logs,
     setClock: (ms) => {
       boxMs = ms;
     },
@@ -253,6 +267,9 @@ async function stoppedBox(
     },
     setFromBox: (value) => {
       fromBox = value;
+    },
+    stepBehindOnce: () => {
+      lag = 1;
     },
   };
 }
@@ -308,18 +325,31 @@ function confirmationRow(id: string) {
 
 const refused = (reason: string) => ({ code: "clock.set_refused", params: { reason } });
 
-/** Asserts a refusal: its answer, nothing written, nothing set. */
+/** Asserts a refusal: its answer, nothing written, nothing set, the start check unchanged. */
 async function expectRefused(
   box: Box,
   sent: Promise<{ status: number; json: Record<string, unknown> }>,
   reason: string,
 ): Promise<void> {
-  const before = written(box);
+  const before = { ...written(box), start: box.start?.status };
   const answer = await sent;
   expect(answer.status).toBe(409);
   expect(answer.json).toEqual(refused(reason));
-  expect(written(box)).toEqual(before);
+  expect({ ...written(box), start: box.start?.status }).toEqual(before);
 }
+
+/** A challenge, then "Confirm the time as shown". */
+async function confirmAsShown(box: Box, cookie: string | undefined) {
+  const asked = await ask(box, cookie);
+  if (asked.status !== 200) return asked;
+  return send(box.app, cookie ?? "", "POST", "/api/box/clock-confirm", {
+    challengeId: asked.json.challengeId,
+    asShown: true,
+  });
+}
+
+const realHeads = () =>
+  venue.db.withWriteLock(() => venue.backend.recordHeads!(venue.db as unknown as Transaction));
 
 it("lets only an administrator with a management session set the clock", async () => {
   const box = await stoppedBox(10 * MINUTE);
@@ -433,8 +463,9 @@ it("sets a clock that reads a date before 28-10-2024, as that stop", async () =>
   expect(boxTime(box)).toBe(trueTime);
 });
 
-it("sets a waiting start's clock that reads before 28-10-2024 as that stop", async () => {
-  const box = await stoppedBox(10 * MINUTE, { start: startClockState() });
+it("sets a waiting start's clock that reads before 28-10-2024 at the start, confirming it by a person", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(10 * MINUTE, { start });
   const trueTime = latest().at.getTime();
   box.setClock(Date.UTC(2020, 0, 1, 12));
 
@@ -442,8 +473,107 @@ it("sets a waiting start's clock that reads before 28-10-2024 as that stop", asy
 
   expect(answer.status).toBe(200);
   expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
-    reason: "unusable",
+    source: "admin",
+    reason: "start",
   });
+  expect(boxTime(box)).toBe(trueTime);
+  expect(start.status).toBe("by_person");
+});
+
+it("confirms a waiting start as the box's date and time stand, setting nothing", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(0, { start });
+  const before = written(box);
+
+  const answer = await confirmAsShown(box, mario.cookie);
+
+  expect(answer.status).toBe(200);
+  expect(answer.json).toEqual({
+    confirmationId: null,
+    stepMs: 0,
+    confirmedAt: new Date(boxTime(box)).toISOString(),
+  });
+  expect(written(box)).toEqual(before);
+  expect(box.host.statusAsks).toBe(0);
+  expect(start.status).toBe("by_person");
+  const heads = await realHeads();
+  expect(Object.keys(heads)).not.toHaveLength(0);
+  expect(start.mark).toEqual(heads);
+  expect(box.logs.filter((l) => l.event === "clock_start.confirmed")).toEqual([
+    {
+      event: "clock_start.confirmed",
+      fields: {
+        source: "admin",
+        person: mario.id,
+        boxAt: new Date(boxTime(box)).toISOString(),
+        heads,
+      },
+    },
+  ]);
+});
+
+it("refuses a confirmation while the start does not wait, or with no start check", async () => {
+  const confirmed = startClockState();
+  confirmed.confirm("by_internet", {});
+  for (const start of [confirmed, undefined]) {
+    const box = await stoppedBox(0, start === undefined ? {} : { start });
+    await expectRefused(box, confirmAsShown(box, mario.cookie), "not_stopped");
+  }
+});
+
+it("refuses a confirmation while the clock reads a date before 28-10-2024", async () => {
+  const box = await stoppedBox(0, { start: startClockState() });
+  box.setClock(Date.UTC(2020, 0, 1, 12));
+  await expectRefused(box, confirmAsShown(box, mario.cookie), "stopped");
+});
+
+it("refuses a confirmation when a step of the box's clock lands during it", async () => {
+  const box = await stoppedBox(0, { start: startClockState() });
+  const asked = await ask(box, mario.cookie);
+  box.stepBehindOnce();
+  await expectRefused(
+    box,
+    send(box.app, mario.cookie, "POST", "/api/box/clock-confirm", {
+      challengeId: asked.json.challengeId,
+      asShown: true,
+    }),
+    "stale",
+  );
+});
+
+it("refuses a confirmation on the box itself, and from anyone but an administrator", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(0, { start });
+  const body = { challengeId: randomUUID(), asShown: true };
+  const answers = [];
+  for (const cookie of ["", venue.cookie, marta.cookie])
+    answers.push(await send(box.app, cookie, "POST", "/api/box/clock-confirm", body));
+  box.setFromBox(true);
+  answers.push(await send(box.app, mario.cookie, "POST", "/api/box/clock-confirm", body));
+
+  expect(answers.map((a) => [a.status, a.json.code])).toEqual([
+    [401, "management_session.required"],
+    [401, "management_session.required"],
+    [403, "authorization.not_permitted"],
+    [409, "clock.set_refused"],
+  ]);
+  expect(answers[3]!.json).toEqual(refused("same_machine"));
+  expect(start.status).toBe("waiting");
+});
+
+it("refuses a confirmation body without asShown: true", async () => {
+  const box = await stoppedBox(0, { start: startClockState() });
+  for (const extra of [{}, { asShown: false }, { asShown: "yes" }, { deviceAt: boxTime(box) }]) {
+    const answer = await send(box.app, mario.cookie, "POST", "/api/box/clock-confirm", {
+      challengeId: randomUUID(),
+      ...extra,
+    });
+    expect(answer.status).toBe(400);
+    expect(answer.json).toEqual({
+      code: "management.request_invalid",
+      params: { field: "asShown" },
+    });
+  }
 });
 
 it("has no set route when the routes are handed no correction", async () => {
