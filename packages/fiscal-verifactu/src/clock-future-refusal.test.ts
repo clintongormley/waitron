@@ -1,6 +1,6 @@
-import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { sql, type Query } from "drizzle-orm";
+import { describe, expect, it, vi } from "vitest";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { VerifactuClient } from "@waitron/verifactu";
@@ -29,6 +29,33 @@ async function drainOnce(client: VerifactuClient) {
 
 const refusalOn = (nodeId: string, above = 0) =>
   withTransaction(suite.db, (tx) => latestFutureDateRefusal(tx, nodeId, above));
+
+type Session = { prepareQuery(query: Query, ...rest: unknown[]): { all(): unknown } };
+
+/** The plan of the one statement the read sends. */
+function planOfRead(): Promise<string[]> {
+  return withTransaction(suite.db, async (tx: Transaction) => {
+    const session = (tx as unknown as { session: Session }).session;
+    const prepare = vi.spyOn(session, "prepareQuery");
+    let sent: Query[];
+    try {
+      await latestFutureDateRefusal(tx, "node-1", 0);
+      sent = prepare.mock.calls.map(([query]) => query);
+    } finally {
+      prepare.mockRestore();
+    }
+    expect(sent).toHaveLength(1);
+    const rows = session
+      .prepareQuery(
+        { sql: `explain query plan ${sent[0]!.sql}`, params: sent[0]!.params },
+        undefined,
+        "all",
+        false,
+      )
+      .all() as { detail: string }[];
+    return rows.map((row) => row.detail);
+  });
+}
 
 describe("latestFutureDateRefusal", () => {
   it("answers the highest position above the given one on the node's chain AEAT refused as dated in the future, with its issue date", async () => {
@@ -80,5 +107,11 @@ describe("latestFutureDateRefusal", () => {
 
     expect(rows).toEqual([{ estado: "rechazado" }]);
     expect(await refusalOn(seeded.nodeId)).toBeNull();
+  });
+
+  it("starts from the refused filing replies through envios_drenaje_idx", async () => {
+    const plan = await planOfRead();
+
+    expect(plan[0]).toBe("SEARCH e USING INDEX envios_drenaje_idx (estado=?)");
   });
 });

@@ -1,33 +1,26 @@
-import { and, desc, eq, gt } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { FutureDateRefusal } from "@waitron/fiscal";
 import { FUTURE_DATE_REFUSAL } from "./drain.js";
-import { envios } from "./schema/envios.js";
-import { registrosFacturacion } from "./schema/registros.js";
 
 /** The highest position above `abovePosition` on `nodeId`'s chain whose filing reply carries
- * AEAT's future-date refusal, with that record's issue date; null when none does. The bound keeps
- * the scan to records written since the caller's mark. */
+ * AEAT's future-date refusal, with that record's issue date; null when none does. Only a
+ * `rechazado` envío ever holds that code, and it never leaves `rechazado`, so the read starts from
+ * the refused envíos through `envios_drenaje_idx` rather than from the chain. */
 export async function latestFutureDateRefusal(
   tx: Transaction,
   nodeId: string,
   abovePosition: number,
 ): Promise<FutureDateRefusal | null> {
-  const [row] = await tx
-    .select({
-      position: registrosFacturacion.secuencia,
-      issuedOn: registrosFacturacion.fechaExpedicionFactura,
-    })
-    .from(registrosFacturacion)
-    .innerJoin(envios, eq(envios.registroId, registrosFacturacion.id))
-    .where(
-      and(
-        eq(registrosFacturacion.nodeId, nodeId),
-        gt(registrosFacturacion.secuencia, abovePosition),
-        eq(envios.codigoError, String(FUTURE_DATE_REFUSAL)),
-      ),
-    )
-    .orderBy(desc(registrosFacturacion.secuencia))
-    .limit(1);
-  return row === undefined ? null : { position: Number(row.position), issuedOn: row.issuedOn };
+  const { rows } = await tx.execute<{ position: number; issued_on: string }>(sql`
+    select r.secuencia as position, r.fecha_expedicion_factura as issued_on
+    from envios e indexed by envios_drenaje_idx
+    cross join registros_facturacion r
+    where e.estado = 'rechazado' and e.codigo_error = ${String(FUTURE_DATE_REFUSAL)}
+      and r.id = e.registro_id and r.node_id = ${nodeId} and r.secuencia > ${abovePosition}
+    order by r.secuencia desc
+    limit 1
+  `);
+  const [row] = rows;
+  return row === undefined ? null : { position: Number(row.position), issuedOn: row.issued_on };
 }
