@@ -311,11 +311,10 @@ accountant's file (Task 6,
 [plan](../superpowers/plans/2026-11-11-a275-transfer-export.md): its server route, and a button on
 **Sales & takings** for a session holding `report.export`). Task 5 is built: the overview and Sales
 report show Bills closed and Deferred payment apart from money received
-([Task 5 plan](../superpowers/plans/2026-11-11-a275-closed-bills.md)). Task 7's first part is built: the
-open bill's Pay window offers Close as deferred payment
-([plan](../superpowers/plans/2026-11-11-a275-till-deferred-close.md)). The presented bill's Pay
-window, Counter bills and the screenshot check remain; A275 stays open for them and the owner's
-acceptance. The reviewed plan includes an explicit recovery read,
+([Task 5 plan](../superpowers/plans/2026-11-11-a275-closed-bills.md)). Task 7 is built: the
+open bill's, the presented bill's and the Counter's Pay windows offer Close as deferred payment
+([plan](../superpowers/plans/2026-11-11-a275-till-deferred-close.md)). A275 stays open for the
+owner's acceptance. The reviewed plan includes an explicit recovery read,
 party completion before its retained result, live Bills exclusion, separate delivery/closing actors
 and bounded implementation checkpoints.
 2026-11-10: the table's digest column is now `fingerprint`, the request id `submissionId`, and
