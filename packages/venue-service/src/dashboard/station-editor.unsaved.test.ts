@@ -35,6 +35,7 @@ class StationEditorLeaveApp extends LitElement {
           { id: "epson", name: "Epson" },
           { id: "star", name: "Star" },
         ]}
+        .stations=${[{ id: "bar", name: "Bar", colour: "red" }]}
         .canManagePrinters=${true}
       ></prep-station-editor
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
@@ -344,6 +345,24 @@ it("a changed changes after sending choice asks before closing, and choosing bac
   await choose("keep");
   expect(await close).toBe(false);
   await pickChanges("held-or-waiting");
+  expect(unload()).toBe(false);
+  expect(await modal(el).requestClose("escape")).toBe(true);
+});
+
+it("A1510: a changed when-closed choice asks before closing, and choosing back the opened one does not", async () => {
+  const el = await mount();
+  const pickWhenClosed = async (value: string) => {
+    el.shadowRoot!.querySelector("wt-combobox[name=whenClosedSendsTo]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value } }),
+    );
+    await el.updateComplete;
+  };
+  await pickWhenClosed("bar");
+  expect(unload()).toBe(true);
+  const close = modal(el).requestClose("escape");
+  await choose("keep");
+  expect(await close).toBe(false);
+  await pickWhenClosed("");
   expect(unload()).toBe(false);
   expect(await modal(el).requestClose("escape")).toBe(true);
 });

@@ -84,6 +84,22 @@ export async function stationDestinations(
     .map((station) => ({ ...station, preferred: station.id === whenClosedSendsToStationId }));
 }
 
+export async function assertStationDestination(
+  tx: Transaction,
+  stationId: string,
+  sendsToStationId: string,
+): Promise<void> {
+  const refuse = (reason: "self" | "unknown" | "inactive") =>
+    new AppError("station.destination_invalid", { stationId, sendsToStationId, reason });
+  if (sendsToStationId === stationId) throw refuse("self");
+  const [destination] = await tx
+    .select({ active: kitchenStations.active })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.id, sendsToStationId));
+  if (destination === undefined) throw refuse("unknown");
+  if (!destination.active) throw refuse("inactive");
+}
+
 export async function closeStationForToday(
   tx: Transaction,
   stationId: string,
@@ -93,28 +109,7 @@ export async function closeStationForToday(
 ): Promise<void> {
   const station = await requireStation(tx, stationId);
   if (station.isDefault) throw new AppError("station.always_open", { stationId });
-  if (sendsToStationId === stationId)
-    throw new AppError("station.destination_invalid", {
-      stationId,
-      sendsToStationId,
-      reason: "self",
-    });
-  const [destination] = await tx
-    .select({ active: kitchenStations.active })
-    .from(kitchenStations)
-    .where(eq(kitchenStations.id, sendsToStationId));
-  if (destination === undefined)
-    throw new AppError("station.destination_invalid", {
-      stationId,
-      sendsToStationId,
-      reason: "unknown",
-    });
-  if (!destination.active)
-    throw new AppError("station.destination_invalid", {
-      stationId,
-      sendsToStationId,
-      reason: "inactive",
-    });
+  await assertStationDestination(tx, stationId, sendsToStationId);
   if (!(await stationDestinations(tx, stationId, at)).some((row) => row.id === sendsToStationId))
     throw new AppError("station.destination_invalid", {
       stationId,

@@ -17,6 +17,7 @@ import {
 import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
+import { assertStationDestination } from "@waitron/venue-service";
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { replaceStationPrinters } from "./station-printers.js";
@@ -169,22 +170,6 @@ export async function listStationsToday(tx: Transaction) {
   });
 }
 
-async function requireClosedDestination(
-  tx: Transaction,
-  stationId: string,
-  sendsToStationId: string,
-): Promise<void> {
-  const refuse = (reason: "self" | "unknown" | "inactive") =>
-    new AppError("station.destination_invalid", { stationId, sendsToStationId, reason });
-  if (sendsToStationId === stationId) throw refuse("self");
-  const [destination] = await tx
-    .select({ active: kitchenStations.active })
-    .from(kitchenStations)
-    .where(eq(kitchenStations.id, sendsToStationId));
-  if (destination === undefined) throw refuse("unknown");
-  if (!destination.active) throw refuse("inactive");
-}
-
 export async function updateStation(
   tx: Transaction,
   id: string,
@@ -214,7 +199,7 @@ export async function updateStation(
     whenClosedSendsTo,
     ...set
   } = patch;
-  if (whenClosedSendsTo != null) await requireClosedDestination(tx, id, whenClosedSendsTo);
+  if (whenClosedSendsTo != null) await assertStationDestination(tx, id, whenClosedSendsTo);
   const timingPatch: StationTimingPatch = {};
   if (warmAfterMinutes !== undefined) timingPatch.warmAfterMinutes = warmAfterMinutes;
   if (overdueAfterMinutes !== undefined) timingPatch.overdueAfterMinutes = overdueAfterMinutes;

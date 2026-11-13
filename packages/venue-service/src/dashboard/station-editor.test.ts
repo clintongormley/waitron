@@ -811,6 +811,12 @@ it("A1510: a chosen station that has since been disabled stays chosen, named as 
     ["pizza", "Pizza oven"],
     ["old-station", "A disabled station"],
   ]);
+  expect(closedField(el)!.options.at(-1)).toEqual({
+    value: "old-station",
+    label: "A disabled station",
+    disabled: true,
+    fixed: true,
+  });
 });
 
 it("A1510: sends only a changed when-closed choice, null once cleared, and nothing for a choice put back", async () => {

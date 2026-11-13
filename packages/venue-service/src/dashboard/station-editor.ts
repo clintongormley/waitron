@@ -284,7 +284,7 @@ function whenClosedOptions(
     { value: "", label: t("prep.when_closed_not_set") },
     ...others.map((station) => ({ value: station.id, label: station.name })),
     ...(chosen !== "" && !others.some((station) => station.id === chosen)
-      ? [{ value: chosen, label: t("prep.when_closed_unavailable") }]
+      ? [{ value: chosen, label: t("prep.when_closed_unavailable"), disabled: true, fixed: true }]
       : []),
   ];
 }
