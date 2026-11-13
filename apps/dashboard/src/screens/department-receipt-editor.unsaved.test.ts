@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, reattachAfterDetachedUpdate } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import {
   clickReceiptSave,
   deferred,
@@ -159,3 +159,27 @@ it.each(["success", "refusal"] as const)(
     expect(receiptSave(el).disabled).toBe(true);
   },
 );
+
+it("discarding a failed draft clears its attempt before the next edit", async () => {
+  const { app, el, api } = await mountReceiptEditor();
+  await editReceipt(el, "email", "invalid");
+  await clickReceiptSave(el);
+  expect(receiptField(el, "email").error).toBe(t("receipts.invalid_email"));
+  const leaving = app.leave.coordinator.request({
+    scopes: "all",
+    reason: "navigation",
+    proceed() {},
+  });
+  const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await expect.poll(() => question.open).toBe(true);
+  await question.updateComplete;
+  await userEvent.click(
+    page.elementLocator(question.shadowRoot!.querySelector("[data-choice=discard]")!),
+  );
+  expect(await leaving).toBe("proceeded");
+  await editReceipt(el, "email", "invalid");
+  expect(receiptField(el, "email").error).toBe("");
+  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");
+  expect(receiptSave(el).disabled).toBe(false);
+  expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
+});

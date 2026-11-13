@@ -399,7 +399,9 @@ it("a selected department removed during its live read returns its identity to t
 
 it("a replacement subject loads the new department and shows its values in place of a dirty draft", async () => {
   const { el, api, app } = await mountReceiptEditor();
-  await editReceipt(el, "email", "draft@example.com");
+  await editReceipt(el, "email", "invalid");
+  await clickReceiptSave(el);
+  expect(receiptField(el, "email").error).toBe(t("receipts.invalid_email"));
   api.getDepartmentReceipt.mockImplementation(async (id: string) =>
     id === "terrace"
       ? { ...receiptModel, receipt: { operationDescription: "Terrace service" } }
@@ -413,6 +415,10 @@ it("a replacement subject loads the new department and shows its values in place
   expect(receiptField(el, "email").value).toBe("");
   expect(receiptSave(el).disabled).toBe(true);
   expect(app.leave.coordinator.isDirty()).toBe(false);
+  await editReceipt(el, "email", "invalid");
+  expect(receiptField(el, "email").error).toBe("");
+  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");
+  expect(receiptSave(el).disabled).toBe(false);
 });
 
 it("compares and sends trimmed offered text while preserving hidden authored values exactly", async () => {
