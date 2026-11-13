@@ -5217,7 +5217,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners when the ignored-stop
   case hit its 30 s limit, main's own CI among them. Guards: the "prefers gnutimeout" and "kills an
   attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
-  rule: pnpm setup's process only; `scripts/ci-main-recovery.test.mjs` also checks ci-diff-paths'
+  rule: the process-tree probe covers pnpm setup only; `scripts/ci-main-recovery.test.mjs` also checks ci-diff-paths'
   GNU preference and deadline arguments, but not whether `gh` starts children or how they end.
   [Receipt](ci-and-gates.md#every-pnpm-setup-is-bounded).
 

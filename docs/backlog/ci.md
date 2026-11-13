@@ -465,11 +465,9 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
 - **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.**
   [Detail](ci.md#a-sixth-a-ci-shard-exited-1-with-every-test-passing-pr-414).
 
-## Bundle: Finish the time limits on CI's network steps
+## Qualify CI's server routing and action setup
 
-The 13 November network-limit change closes the GNU selection, artifact-download guard,
-cache/Docker/CodeQL step limits, CodeQL measurement and buildx decision. The remaining
-routing qualification and action-repository setup download stay here.
+The remaining work concerns live routing qualification and the action-repository download at setup.
 
 - **A1424 / A1440: finish qualifying server routing and recovery on real workloads.**
   CI compares server and GitHub `(running + waiting) / slots`, with server ties
@@ -612,6 +610,8 @@ routing qualification and action-repository setup download stay here.
 ## Decisions and deliberate limits
 
 - **A1473 point 4 and reverse movement were dropped by the owner on 13 November 2026.** Reopen only after a measured stall leaves a job waiting with free room for a reason other than a refusal or a recorded turn (watcher, 09:55).
+
+- **Keep buildx for the existing image builds (13 November 2026).** Publication rebuilds from its local checking-build cache with SBOM and provenance; image smoke uses the same builder for loaded images. The [recorded action limits](../developers/ci-and-gates.md#cache-docker-and-codeql-steps-have-measured-limits) retain this reason. No builder-removal experiment was run.
 
 - **A1454: retain measured-family memory admission (watcher, 2026-11-13 08:39).**
   The sixteen-identifier pool is the running setup. The bounded third watch reached fifteen
