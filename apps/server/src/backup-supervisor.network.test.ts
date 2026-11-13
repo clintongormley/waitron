@@ -70,7 +70,6 @@ function config(
   overrides: Partial<BackupConfig> = {},
 ): BackupConfig {
   return {
-    source: "environment",
     revision: undefined,
     enabled: true,
     destinations: destinations.map((d) => ({ kind: "local-fs", ...d })),
@@ -97,7 +96,7 @@ async function supervisor(
   return new BackupSupervisor({
     nodeId: BACKUP_NODE_ID,
     buildConfig: async () => cfg(),
-    isManagedByEnvironment: () => false,
+
     readSingletonRole: () => "primary",
     venueDir: await makeVenueDir(),
     modules: ALL_MODULES,

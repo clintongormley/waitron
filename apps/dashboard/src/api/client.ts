@@ -1769,8 +1769,6 @@ export type BackupDestinationView =
 export interface BackupStatusView {
   enabled: boolean;
   isPrimary: boolean;
-  managedByEnvironment: boolean;
-  source: "environment" | "dashboard" | null;
   revision: string | null;
   /** A dashboard record is stored switched off. */
   storedDisabled: boolean;
@@ -2040,8 +2038,7 @@ export type StreamStatusView =
   StreamSupervisorStatus | { state: "off"; reason: string; stateSince: string } | { state: "off" };
 
 /** LOCAL copy of `LoadFailureDetail` (`apps/server/src/backup-settings-evidence.ts`). */
-export type BackupLoadFailureDetail =
-  { reason: string } | { keyVersion: number } | { min: number } | { variable: string };
+export type BackupLoadFailureDetail = { reason: string } | { keyVersion: number } | { min: number };
 
 /** One failure to load the saved backup settings, as the box kept it. */
 export interface BackupLoadFailure {
@@ -2067,7 +2064,6 @@ export type BackupEvidenceDestination =
  * (`apps/server/src/backup-settings-evidence.ts`). Never carries a secret. */
 export interface BackupSettingsEvidence {
   readAt: string;
-  managedByEnvironment: boolean;
   /** Newest first. */
   failures: BackupLoadFailure[];
   lastCleanLoadAt: string | null;

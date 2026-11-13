@@ -141,7 +141,7 @@ async function fixture() {
     {
       name: "secrets/backup.env",
       bytes: Buffer.from(
-        "WAITRON_BACKUP_DIR=/old/private/destination\nWAITRON_BACKUP_RECOVERY_KEY=private-long-enough-key\n",
+        "ARCHIVE_FOLDER=/old/private/destination\nWAITRON_BACKUP_RECOVERY_KEY=private-long-enough-key\n",
       ),
     },
   ];
@@ -290,7 +290,7 @@ it("migrates the populated catalogue predecessor and preserves every original co
     db.close();
   }
 });
-it.each(["WAITRON_BACKUP_DIR=/old/private/destination\n", ""])(
+it.each(["ARCHIVE_FOLDER=/old/private/destination\n", ""])(
   "rejects an invalid archived backup key before moving the database (destination=%s)",
   async (destination) => {
     const f = await fixture();
@@ -381,7 +381,7 @@ it("uses captured env precedence to validate backup settings without reaching th
     "WAITRON_BACKUP_RECOVERY_KEY=earlier-valid-archive-key\n",
   );
   f.entries.find((entry) => entry.name === "secrets/backup.env")!.bytes = Buffer.from(
-    "WAITRON_BACKUP_DIR=/old/unreachable/destination\n",
+    "ARCHIVE_FOLDER=/old/unreachable/destination\n",
   );
   await seal(f);
   const validated = await validateBackupArtifactFile(f);
@@ -392,25 +392,6 @@ it("uses captured env precedence to validate backup settings without reaching th
       "WAITRON_BACKUP_RECOVERY_KEY=earlier-valid-archive-key\n",
     );
     await expect(stat(join(f.stateDir, "backup.env"))).rejects.toMatchObject({ code: "ENOENT" });
-  } finally {
-    await validated.discard();
-  }
-});
-
-it("refuses an invalid old backup schedule before moving the database", async () => {
-  const f = await fixture();
-  f.entries.find((entry) => entry.name === "secrets/backup.env")!.bytes = Buffer.from(
-    "WAITRON_BACKUP_DIR=/old/destination\nWAITRON_BACKUP_RECOVERY_KEY=long-enough-backup-key\nWAITRON_BACKUP_SCHEDULE_DAYS=daily\nWAITRON_BACKUP_INTERVAL_MS=1000\n",
-  );
-  await seal(f);
-  const validated = await validateBackupArtifactFile(f);
-  try {
-    await expect(placeBackupData(validated, f)).rejects.toMatchObject({
-      code: "backup.schedule_invalid",
-      params: { reason: "interval_and_wall_clock" },
-    });
-    expect((await stat(validated.databasePath)).isFile()).toBe(true);
-    await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
   } finally {
     await validated.discard();
   }

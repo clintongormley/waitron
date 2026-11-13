@@ -63,8 +63,9 @@ in `deploy/.env` stops backing up until they are set on the Backups screen."
    require a key.
 2. The start's backup room (`apps/server/src/start-backup-room.ts:120-145`) skipped when "management
    changed" between the note and the start; with one source that check goes, and a note written
-   before this lands (it carries `managedByEnvironment`) must read as "no note", not crash the start
-   (`backup-room-note.ts:182`).
+   before this lands (it carries `managedByEnvironment`) still reads as a note: ignore that extra
+   key and keep validating its folders (`backup-room-note.ts:182`). This follows Task 1's specific
+   case, confirmed by the watcher in Lane H's questions.md on 2026-11-13 at 01:30.
 3. A Demo box installed before setup has no `trading.env`: `is_production` reads it as not
    production, so Mailpit starts, as a Demo box needs.
 4. A Live box set up after install keeps Mailpit running until the next `waitron.sh install`, update
@@ -113,6 +114,32 @@ export function loadBackupSettings(input: { env: Env; venueId: string } & Sealed
 // kept unchanged: checkedRecoveryKey, loadRecoveryKey, mintRecoveryKey, readHeldKey, loadKeyRotatedAt,
 // DEFAULT/MIN/MAX_DESTINATION_TIMEOUT_MS (archive-settings.ts imports the last two)
 ```
+
+**13 November 2026, watcher 03:45: review corrections supersede the placement below.**
+"First install: select the image for the requested ref before any production read. Treat an
+install as fresh only when compose.yml is absent AND no state volume exists; a failed docker
+volume ls counts as not fresh (fail closed)." Fresh installs and resets select the inbox before
+image selection; existing installations select the requested image before the new profile decision.
+The existing reset confirmation still checks the installed box before changing it. `install --reset`'s image
+availability check stays before the wipe; a plain source install keeps its existing image-check behavior.
+Compose's own environment parser decodes profile values, then the comma-list selector trims spaces.
+The USB recipe writes the profile, and upgrade config/stop includes it; upgrade restart adds an explicit inbox profile
+only when its captured running-service image map includes Mailpit. Otherwise Compose uses the profiles
+from the installed environment. These fixes follow the watcher's
+"USB inbox and profile ... must work with the new profile" instruction; no installer or upgrade flow is added.
+
+**13 November 2026, watcher 04:06.** Restrict the production-selection claim to `waitron.sh`
+installations. USB Live updates keep the inbox profile; record that in the existing box-installation
+backlog, with no USB updater behaviour change in this slice.
+
+**13 November 2026, watcher 06:07, after A950 (#3030).** This supersedes the update-selection
+claim in Review Focus 4 and the placement notes above and below. Existing installations now enter
+`cmd_manual_install` before the profile selector. Keep that flow: both `waitron.sh` updates and
+USB updater runs retain the installed inbox profile. First installs and resets keep their profile
+selection; the image-before-production-read test uses first installation with retained state.
+The watcher's words in Lane H's questions.md: "Keep that flow; extend the already-cleared
+inbox-limit wording to updates of existing installations, name both paths in the box-installation
+bundle line, and keep first-install/reset profile selection and the backup behaviour."
 
 `deploy/waitron.sh` gains `select_practice_inbox <on|off|decide>`. It reads `.env`'s
 `COMPOSE_PROFILES` line (comma-separated), adds or removes only the entry `practice-inbox`, keeps every
@@ -183,6 +210,20 @@ and stub 130, deploy and dashboard guards 40). Not counted: the deleted environm
 EQUAL. Any line is a stop.
 
 ## Stop points (beyond rules §5)
+
+**Current-base correction, 2026-11-13.** The watcher cleared refreshing the protection baseline
+after the rebase onto `f46da9fc0e` (#3021) at 03:25. The exact-base/candidate comparison is EQUAL.
+
+**Current-base correction, 2026-11-13.** Handover's quote-mark reader control now uses the retained
+recovery key and expects `backup.recovery_key_too_short`, with its digest assertions kept. The
+watcher cleared this on 13 November at 03:10; its other empty-value controls use the retained key
+and rotation stamp. The resolver no longer needs `venueId` after 5f removed its use, so no unused
+argument is added.
+
+**Current-base correction, 2026-11-13.** The watcher cleared the newer `loadBackupConfig` callers
+in `backup-data-placement.ts:72` and `backup-verification-secrets.ts:92`, and the environment-only
+scratch guard in `node-entry.ts:348-352`, as consumers of this removal (Lane H questions.md, 01:30).
+Port these in this slice, keeping their behaviour checks. The recovery-key checks remain.
 
 1. A behaviour suite that set a variable to configure backups asserts something the dashboard record
    cannot express (for example `WAITRON_BACKUP_INTERVAL_MS` below the record's smallest interval):

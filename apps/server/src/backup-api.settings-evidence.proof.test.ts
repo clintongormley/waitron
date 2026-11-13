@@ -31,12 +31,9 @@ import {
   writeArchiveSettings,
   type ArchiveSettings,
 } from "./archive-settings.js";
+import { attachRecordMeta } from "./backup-settings-evidence.js";
 import { mountBackupApi, type BackupApiDeps } from "./backup-api.js";
-import {
-  isBackupManagedByEnvironment,
-  loadBackupSettings,
-  loadRecoveryKey,
-} from "./backup-config.js";
+import { loadBackupSettings, loadRecoveryKey } from "./backup-config.js";
 import { writeRecoveryKey } from "./backup-env-writer.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { createTurns, type Turns } from "./backup-turns.js";
@@ -138,12 +135,11 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
     nodeId: BACKUP_NODE_ID,
     buildConfig: async () =>
       loadBackupSettings({
-        managedByEnvironment: isBackupManagedByEnvironment(sc.base),
         env: await loadBoxEnv(sc.base, sc.stateDir),
         readSealedWithMeta: () =>
           (sc.readRecord ?? (() => readArchiveSettingsWithMeta(suite.db, sc.ring)))(),
       }),
-    isManagedByEnvironment: () => isBackupManagedByEnvironment(sc.base),
+
     readSingletonRole: () => sc.role,
     venueDir,
     modules: ALL_MODULES,
@@ -436,7 +432,15 @@ describe("GET /api/backup/settings-evidence proofs", () => {
       const read = evidence(app);
       await lookStarted;
       // Read on every load, so the Save's own reload fails on the record it has just written.
-      sc.base = { ...sc.base, WAITRON_BACKUP_STALE_AFTER_MS: "not-a-number" };
+      sc.readRecord = async () => {
+        const read = await readArchiveSettingsWithMeta(suite.db, sc.ring);
+        const error = new AppError("server.config_invalid", {
+          variable: "WAITRON_ENV",
+          reason: "invalid",
+        });
+        attachRecordMeta(error, read.meta!);
+        throw error;
+      };
       const saved = await post(app, "/api/backup/apply", {
         destinations: [{ kind: "local-fs", dir: destDir() }],
         schedule: DAILY,
@@ -484,8 +488,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
           stream: { reload: async () => {}, status: () => ({ state: "off" }) },
           venueId: VENUE,
           isPrimary: () => true,
-          isManagedByEnvironment: () => false,
-          loadedArchives: () => sup.current().destinations,
+
           readRecoveryKey: readKey(sc),
           writeRecoveryKey: (recoveryKey) =>
             writeRecoveryKey(sc.stateDir, { recoveryKey, keyRotatedAt: undefined }),

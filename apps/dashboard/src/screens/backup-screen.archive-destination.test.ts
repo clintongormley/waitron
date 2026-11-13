@@ -31,8 +31,7 @@ const quiet: BackupDestinationStatus = {
 const TWO: BackupStatusView = {
   enabled: true,
   isPrimary: true,
-  managedByEnvironment: false,
-  source: "dashboard",
+
   revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
   storedDisabled: false,
   loadErrorCode: null,
@@ -285,7 +284,7 @@ describe("a write whose reload failed", () => {
     const off: BackupStatusView = {
       ...LOCAL_ONLY,
       enabled: false,
-      source: null,
+
       revision: null,
       destinations: [],
       backupStatus: { configured: false },
@@ -315,7 +314,7 @@ describe("a write whose reload failed", () => {
     const off: BackupStatusView = {
       ...LOCAL_ONLY,
       enabled: false,
-      source: null,
+
       revision: null,
       destinations: [],
       backupStatus: { configured: false },
@@ -399,7 +398,7 @@ const STREAM_ON = {
 const OFF_WITH_KEY: BackupStatusView = {
   ...LOCAL_ONLY,
   enabled: false,
-  source: null,
+
   revision: null,
   destinations: [],
   backupStatus: { configured: false },
@@ -1532,17 +1531,6 @@ describe("switching off", () => {
     await press(el, "turn-off");
     await press(el, "turn-off");
     await vi.waitFor(() => expect(api.disableBackup).toHaveBeenCalledTimes(2));
-  });
-
-  it("is not offered when the environment manages backups", async () => {
-    const { el } = await mount({
-      ...TWO,
-      managedByEnvironment: true,
-      source: "environment",
-      revision: null,
-    } as BackupStatusView);
-    expect(q(el, "[data-test=turn-off]")).toBeNull();
-    expect(q(el, "[data-test=edit-settings]")).toBeNull();
   });
 
   it("is not offered on a node that is not the primary", async () => {

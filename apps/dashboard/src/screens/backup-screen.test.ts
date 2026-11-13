@@ -26,8 +26,7 @@ afterEach(cleanupWidgets);
 const OFF: BackupStatusView = {
   enabled: false,
   isPrimary: true,
-  managedByEnvironment: false,
-  source: null,
+
   revision: null,
   storedDisabled: false,
   loadErrorCode: null,
@@ -62,8 +61,7 @@ it("does not offer key replacement without system.manage", async () => {
 const ENABLED: BackupStatusView = {
   enabled: true,
   isPrimary: true,
-  managedByEnvironment: false,
-  source: "dashboard",
+
   revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
   storedDisabled: false,
   loadErrorCode: null,
@@ -90,8 +88,6 @@ const ENABLED: BackupStatusView = {
   recoveryKeySet: true,
   recoveryKeyTooShort: false,
 };
-
-const MANAGED: BackupStatusView = { ...OFF, managedByEnvironment: true };
 
 const STREAM_ON: StreamSettingsView = {
   isPrimary: true,
@@ -283,7 +279,7 @@ describe("backup-screen", () => {
     expect(t("stream.error.recovery_key_too_short")).toContain(t("backup.apply"));
     const panel = q(el, "dashboard-stream-settings") as StreamSettingsPanel;
     expect(apply.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(panel.managedByEnvironment).toBe(false);
+    expect(panel.archivesEnabled).toBe(false);
   });
 
   it("tells the bucket-copy panel whether archives are on, so a too-short key's refusal names the action shown", async () => {
@@ -302,15 +298,6 @@ describe("backup-screen", () => {
     );
   });
 
-  it("tells the bucket-copy panel the environment owns a too-short key, where there is no button to replace it", async () => {
-    const api = stubApi({}, { ...MANAGED, recoveryKeySet: true, recoveryKeyTooShort: true });
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
-    await flush(el);
-    expect(q(el, "[data-test=apply]")).toBeNull();
-    const panel = q(el, "dashboard-stream-settings") as StreamSettingsPanel;
-    expect(panel.managedByEnvironment).toBe(true);
-  });
-
   it("tells the bucket-copy panel it does not know who owns the backup settings when the status read fails", async () => {
     const api = stubApi({
       getBackupStatus: vi.fn().mockRejectedValue({ code: "connection.failed" }),
@@ -321,7 +308,7 @@ describe("backup-screen", () => {
     expect(q(el, "[data-test=apply]")).toBeNull();
     const panel = q(el, "dashboard-stream-settings") as StreamSettingsPanel;
     expect(panel).not.toBeNull();
-    expect(panel.managedByEnvironment).toBeUndefined();
+    expect(panel.archivesEnabled).toBeUndefined();
   });
 
   it("explains a refused second recovery key in words", async () => {
@@ -617,16 +604,6 @@ describe("backup-screen", () => {
     expect(q(el, "[data-test=paste-key]")).not.toBeNull();
     // The minted reveal is hidden while pasting your own.
     expect(q(el, "[data-test=minted-key]")).toBeNull();
-  });
-
-  it("is read-only when backups are managed by the environment, and makes no key", async () => {
-    const api = stubApi({}, MANAGED);
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
-    await flush(el);
-    expect(q(el, "[data-test=managed]")).not.toBeNull();
-    expect(q(el, "[data-test=destination]")).toBeNull();
-    expect(q(el, "[data-test=apply]")).toBeNull();
-    expect(api.mintBackupKey).not.toHaveBeenCalled();
   });
 
   it("apply sends the destination + key + policy and refreshes the status", async () => {

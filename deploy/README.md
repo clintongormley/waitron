@@ -206,6 +206,21 @@ current installer before upgrading a box that still has an older copy.
 Set `WAITRON_DIR` to install somewhere other than `/opt/waitron` (that is how the script is
 exercised on a developer machine without touching `/opt`).
 
+The practice email inbox (Mailpit) runs under the `practice-inbox` compose profile. On a first
+installation, `waitron.sh install` enables it when the box is not production, including one awaiting
+setup. It disables and removes it when retained state says production, or when that state cannot
+be read. A reset turns it on for the new setup. Other profiles in `.env` are kept, so a manual
+`docker compose up -d` uses the same selection.
+
+Changing Demo to Live leaves an already-running inbox up. Updates of existing installations keep
+the inbox profile, whether you use `waitron.sh` or the USB recipe's updater. These updates do not
+run the production selector.
+
+Configure backup destinations, schedule and retention on the dashboard's **Backups** screen.
+Backups previously configured in `deploy/.env` stop until you configure them there. Keep the old recovery
+key from `deploy/.env` to open existing archives. The dashboard stores its backup key in
+`backup.env`; keep each key with your recovery documents.
+
 The compose project is named `waitron`. On a developer machine that is also running the repository's
 dev stack (`docker-compose.yml`, started by `wa-wt`, which sets `COMPOSE_PROJECT_NAME=waitron`) the
 two collide. A `docker compose up` here would then reconcile that running project, and because
@@ -774,7 +789,7 @@ command against it treat that entrypoint differently:
 
 The repository's `deploy/.env.example` at your installed ref documents every line.
 A box reached at `waitron.local` needs none of them set by
-hand: with neither AppArmor nor systemd a plain `install` leaves it with no `.env` at all. Where AppArmor is on,
+hand. On first installation, `install` records the practice inbox profile in `.env` for a box that is not production. Where AppArmor is on,
 listing, pairing, forgetting and printing to Bluetooth printers needs the `WAITRON_PRINT_AGENT_APPARMOR` line `waitron.sh install` writes
 there once it has loaded the profile. Where systemd runs, setting the box's clock needs the
 `WAITRON_BOX_SOCKET_DIR` line `waitron.sh install` writes once the clock service's socket has

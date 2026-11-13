@@ -1,6 +1,6 @@
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -17,7 +17,6 @@ import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ARCHIVE_PURPOSE, writeArchiveSettings } from "./archive-settings.js";
-import { parseBackupArchiveKey } from "./backup-keys.js";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -279,7 +278,8 @@ describe("trading with an archive destination the box cannot use", () => {
       async (scratch) => {
         const notAFolder = join(scratch, "backup-destination-is-a-file");
         await writeFile(notAFolder, "not a folder");
-        return { WAITRON_BACKUP_DIR: notAFolder, WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
+        await storeArchiveRecord(boxRing(), notAFolder);
+        return { WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
       },
       async (lines) => {
         const failed = await waitForEvent(lines, "backup.destination_failed");
@@ -295,9 +295,9 @@ describe("trading with an archive destination the box cannot use", () => {
     let cookie = "";
     await bootAndTrade(
       async (scratch) => {
+        await storeArchiveRecord(boxRing(), join(scratch, "backups"));
         cookie = await managerCookie();
         return {
-          WAITRON_BACKUP_DIR: join(scratch, "backups"),
           WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
         };
       },
@@ -398,58 +398,36 @@ describe("trading with dashboard archive settings the box cannot use", () => {
   }, 60_000);
 });
 
-describe("trading with environment backup settings beside a sealed record", () => {
-  it("takes the environment's settings and never reads a sealed record that would not decrypt", async () => {
-    let cookie = "";
-    let archiveDir = "";
-    await bootAndTrade(
-      async (scratch) => {
-        const otherRing = loadKeyRing({
-          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 6).toString("base64"),
-          WAITRON_CREDENTIALS_KEY_VERSION: "1",
-        });
-        await storeArchiveRecord(otherRing, join(scratch, "sealed-backups"));
-        cookie = await managerCookie();
-        archiveDir = join(scratch, "env-backups");
-        return {
-          WAITRON_BACKUP_DIR: archiveDir,
-          WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
-        };
-      },
-      async (lines, { base, via }) => {
-        expect(await waitForEvent(lines, "backup.destination_completed")).toMatchObject({
-          destination: "primary",
-        });
-        const archives = await readdir(archiveDir);
-        expect(archives).toHaveLength(1);
-        expect(parseBackupArchiveKey(archives[0]!)?.nodeId).toBe(venue.cfg.nodeId);
-        const status = await fetch(`${base}/api/backup/status`, { ...via, headers: { cookie } });
-        expect(await status.json()).toMatchObject({
-          enabled: true,
-          source: "environment",
-          loadErrorCode: null,
-        });
-      },
-    );
-  }, 60_000);
-
-  it("refuses a stream folder overlapping the environment's archive bucket", async () => {
+describe("trading with a saved archive bucket", () => {
+  it("refuses a stream folder overlapping the saved archive bucket", async () => {
     stall.on = true;
     const place = { endpoint: "https://s3.example.test", region: "eu-north-1", bucket: "owner" };
     let cookie = "";
     await bootAndTrade(
       async () => {
+        beforeServerStarts();
+        await withTransaction(venue.db, (tx) =>
+          writeArchiveSettings(tx, boxRing(), {
+            enabled: true,
+            destinations: [
+              {
+                kind: "s3",
+                id: "bucket",
+                bucket: {
+                  ...place,
+                  prefix: "",
+                  accessKeyId: "AKIAENV",
+                  secretAccessKey: "env-secret-access-key",
+                },
+              },
+            ],
+            schedule: { kind: "interval", ms: 3_600_000 },
+            retention: { count: 7, days: 30 },
+            destinationTimeoutMs: 900_000,
+          }),
+        );
         cookie = await managerCookie();
         return {
-          WAITRON_BACKUP_DESTINATIONS: JSON.stringify([
-            {
-              kind: "s3",
-              id: "offsite",
-              ...place,
-              accessKeyId: "AKIAENV",
-              secretAccessKey: "env-secret-access-key",
-            },
-          ]),
           WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
         };
       },

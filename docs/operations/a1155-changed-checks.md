@@ -53,6 +53,8 @@ Tests added by A1167 and A1127 on main now use the same node-only contract. The 
 backup-note promotion fixtures, disk-stop boot fixture, full-disk note fixture and
 restore-note fixture retain their original node values and behavioural assertions.
 The rejoin-note test keeps its exact retained-file equality under the renamed key.
+**13 November 2026:** env5 retires the environment-configured backup cases described below. Backup destinations now come from the dashboard record.
+
 `start-backup-room.test.ts` removes its location fixture while retaining its local-only
 deletion, source binding, skipped reasons and no-bucket assertions. Its environment-managed
 case includes a bucket destination and still deletes only from the configured local folder.

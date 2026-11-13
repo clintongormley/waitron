@@ -91,7 +91,6 @@ const UNSAFE_FIELD_KEYS: Partial<Record<Field, StringKey>> = {
 
 /** Refusals whose wording elsewhere does not fit what this panel was doing. */
 const PANEL_CODE_KEYS: Readonly<Record<string, StringKey>> = {
-  "backup.managed_by_environment": "stream.error.managed_by_environment",
   "backup.recovery_key_too_short": "stream.error.recovery_key_too_short",
 };
 
@@ -213,8 +212,6 @@ export class StreamSettingsPanel extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  /** Whether the box's environment owns the backup settings: true, false, or undefined when not known. */
-  @property({ attribute: false }) managedByEnvironment: boolean | undefined = undefined;
   /** Whether scheduled backups are on, which decides what replaces a too-short key. */
   @property({ attribute: false }) archivesEnabled: boolean | undefined = undefined;
 
@@ -503,10 +500,9 @@ export class StreamSettingsPanel extends LitElement {
 
   #failureText(failure: Failure): string {
     if (failure.code === "backup.recovery_key_too_short") {
-      if (this.managedByEnvironment === undefined) {
+      if (this.archivesEnabled === undefined) {
         return t("stream.error.recovery_key_too_short_unknown");
       }
-      if (this.managedByEnvironment) return t("stream.error.recovery_key_too_short_managed");
       if (this.archivesEnabled) return t("stream.error.recovery_key_too_short_archives_on");
     }
     const panelKey = PANEL_CODE_KEYS[failure.code];

@@ -55,7 +55,7 @@ async function mount(path = "/manage/backup", permissions = ["venue.view", "venu
       getBackupStatus: async () => ({
         enabled: false,
         isPrimary: true,
-        managedByEnvironment: false,
+
         loadErrorCode: null,
         destinations: [],
         backupStatus: { configured: false },

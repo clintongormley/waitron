@@ -1250,7 +1250,7 @@ describe("two requests at once", () => {
 });
 
 describe("the settings the offer carries", () => {
-  const BACKUP = "WAITRON_BACKUP_RETAIN=5\nWAITRON_BACKUP_SCHEDULE=hourly\n";
+  const BACKUP = "ARCHIVE_RETAIN=5\nWAITRON_BACKUP_SCHEDULE=hourly\n";
   const write = (state: string, file: string, text: string) => writeFile(join(state, file), text);
   const switchedOff = (...names: string[]) =>
     JSON.stringify({ modules: Object.fromEntries(names.map((name) => [name, false])) });
@@ -1335,11 +1335,7 @@ describe("the settings the offer carries", () => {
   describe("settings that match", () => {
     it("the same settings in another key order pass", async () => {
       await write(mainState, "backup.env", BACKUP);
-      await write(
-        spareState,
-        "backup.env",
-        "WAITRON_BACKUP_SCHEDULE=hourly\nWAITRON_BACKUP_RETAIN=5\n",
-      );
+      await write(spareState, "backup.env", "WAITRON_BACKUP_SCHEDULE=hourly\nARCHIVE_RETAIN=5\n");
       await write(mainState, "modules.json", switchedOff("bookings", "workforce-es"));
       await write(spareState, "modules.json", switchedOff("workforce-es", "bookings"));
 
@@ -1350,9 +1346,9 @@ describe("the settings the offer carries", () => {
     });
 
     it("limit: on settings owned by the environment both digests are null and nothing compares them, and the digest reads backup.env alone", async () => {
-      await write(mainState, "trading.env", "WAITRON_BACKUP_RETAIN=5\n");
+      await write(mainState, "trading.env", "ARCHIVE_RETAIN=5\n");
       await write(mainState, "secrets.env", "WAITRON_BACKUP_RECOVERY_KEY=main\n");
-      await write(spareState, "trading.env", "WAITRON_BACKUP_RETAIN=9\n");
+      await write(spareState, "trading.env", "ARCHIVE_RETAIN=9\n");
 
       expect((await start()).status).toBe(200);
 
@@ -1566,11 +1562,7 @@ describe("the settings the offer carries", () => {
       await write(mainState, "backup.env", BACKUP);
       await write(spareState, "backup.env", BACKUP);
       await startedThenForgotten();
-      await write(
-        mainState,
-        "backup.env",
-        "WAITRON_BACKUP_SCHEDULE=hourly\nWAITRON_BACKUP_RETAIN=5\n",
-      );
+      await write(mainState, "backup.env", "WAITRON_BACKUP_SCHEDULE=hourly\nARCHIVE_RETAIN=5\n");
       expect((await start()).status).toBe(200);
       expect(exchanged).toEqual([OFFER_PATH]);
       expect(stepDownAfterOffer).toHaveBeenCalledTimes(1);

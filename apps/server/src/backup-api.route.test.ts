@@ -38,7 +38,6 @@ import {
 } from "@waitron/credentials";
 import { mountStreamApi } from "./stream-api.js";
 import {
-  isBackupManagedByEnvironment,
   loadBackupSettings,
   loadRecoveryKey,
   resolveBackupConfig,
@@ -193,12 +192,11 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
     // As boot builds it.
     buildConfig: async () =>
       loadBackupSettings({
-        managedByEnvironment: isBackupManagedByEnvironment(sc.base),
         env: await loadBoxEnv(sc.base, sc.stateDir),
         readSealed: () => (sc.readRecord ?? readSealed)(),
       }),
     buildBackend,
-    isManagedByEnvironment: () => isBackupManagedByEnvironment(sc.base),
+
     readSingletonRole: () => sc.role,
     venueDir,
     modules: ALL_MODULES,
@@ -609,28 +607,6 @@ describe("backup admin routes", () => {
     });
   });
 
-  it("apply refuses when the environment owns the config", async () => {
-    const sc: Scenario = {
-      stateDir: await makeStateDir(),
-      base: { WAITRON_BACKUP_DIR: makeDestDir() }, // an env var set → managed by environment
-      role: "primary",
-    };
-    const app = buildApp(makeSupervisor(sc), sc.stateDir);
-    const cookie = await login(app);
-    const res = await app.request("/api/backup/apply", {
-      method: "POST",
-      headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({
-        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-        recoveryKey: KEY_1,
-        schedule: DAILY_AT_0330,
-        retention: RETENTION,
-      }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "backup.managed_by_environment" } });
-  });
-
   it("apply refuses on a non-primary node", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "secondary" };
     const app = buildApp(makeSupervisor(sc), sc.stateDir);
@@ -650,20 +626,13 @@ describe("backup admin routes", () => {
   });
 
   it("recovery-key returns the EFFECTIVE key, not the file, under a partial env override", async () => {
-    const dest = makeDestDir();
     const stateDir = await makeStateDir();
     // The FILE holds KEY_2 (a prior wizard apply)…
     await writeRecoveryKey(stateDir, { recoveryKey: KEY_2, keyRotatedAt: undefined });
-    // …but the ENV injects KEY_1 (and the rest), which wins on merge — so the box encrypts under KEY_1.
     const sc: Scenario = {
       stateDir,
       base: {
-        WAITRON_BACKUP_DIR: dest,
         WAITRON_BACKUP_RECOVERY_KEY: KEY_1,
-        WAITRON_BACKUP_SCHEDULE_DAYS: "daily",
-        WAITRON_BACKUP_AT: "03:30",
-        WAITRON_BACKUP_RETAIN: "7",
-        WAITRON_BACKUP_RETAIN_DAYS: "30",
       },
       role: "primary",
     };
@@ -676,17 +645,6 @@ describe("backup admin routes", () => {
     const res = await app.request("/api/backup/recovery-key", { headers: { cookie } });
     expect(res.status).toBe(200);
     expect((await res.json()).key).toBe(KEY_1); // the EFFECTIVE key, not the file's KEY_2
-
-    // And a rotate cannot silently orphan archives: the env owns the config, so it is refused.
-    const rot = await app.request("/api/backup/rotate", {
-      method: "POST",
-      headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ recoveryKey: "a-third-strong-key" }),
-    });
-    expect(rot.status).toBe(409);
-    expect(await rot.json()).toMatchObject({ error: { code: "backup.managed_by_environment" } });
-    // The file still holds KEY_2 — nothing was written by the refused rotate.
-    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toContain(KEY_2);
   }, 60_000);
 
   it("rotate takes an immediate dump under the new key and bumps keyRotatedAt", async () => {
@@ -800,7 +758,6 @@ describe("backup admin routes", () => {
     const dest = makeDestDir();
     const stateDir = await makeStateDir();
     const mismatch: BackupConfig = {
-      source: "environment",
       revision: undefined,
       enabled: true,
       destinations: [{ kind: "local-fs", id: "primary", dir: dest }],
@@ -815,7 +772,7 @@ describe("backup admin routes", () => {
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => mismatch, // ignores the file the route writes
-      isManagedByEnvironment: () => false,
+
       readSingletonRole: () => "primary",
       venueDir,
       modules: ALL_MODULES,
@@ -850,7 +807,6 @@ describe("backup admin routes", () => {
     const dest = makeDestDir();
     const stateDir = await makeStateDir();
     const pinned: BackupConfig = {
-      source: "environment",
       revision: undefined,
       enabled: true,
       destinations: [{ kind: "local-fs", id: "primary", dir: dest }],
@@ -865,7 +821,7 @@ describe("backup admin routes", () => {
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => pinned, // ignores the file the route writes, so KEY_1 stays effective
-      isManagedByEnvironment: () => false,
+
       readSingletonRole: () => "primary",
       venueDir,
       modules: ALL_MODULES,
@@ -949,7 +905,6 @@ describe("backup admin routes", () => {
     expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_2);
     expect(typeof file.WAITRON_BACKUP_KEY_ROTATED_AT).toBe("string");
     // Rotating the key did not invent an archive destination.
-    expect(file.WAITRON_BACKUP_DIR).toBeUndefined();
     expect(sup.current().enabled).toBe(false);
 
     const after = await app.request("/api/backup/recovery-key", { headers: { cookie } });
@@ -1081,7 +1036,6 @@ describe("backup admin routes", () => {
     expect(rotated.recoveryKeyTooShort).toBe(false);
     const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
     expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_2);
-    expect(file.WAITRON_BACKUP_DIR).toBeUndefined();
     const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
     expect((await rk.json()).key).toBe(KEY_2);
   }, 60_000);
@@ -1170,19 +1124,9 @@ describe("backup admin routes", () => {
     expect(st.status).toBe(200);
     expect(await st.json()).toMatchObject({
       enabled: false,
-      managedByEnvironment: true,
       recoveryKeySet: true,
       recoveryKeyTooShort: true,
     });
-    // The environment owns this key, so rotate refuses before writing anything.
-    const rot = await app.request("/api/backup/rotate", {
-      method: "POST",
-      headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ recoveryKey: KEY_2 }),
-    });
-    expect(rot.status).toBe(409);
-    expect(await rot.json()).toMatchObject({ error: { code: "backup.managed_by_environment" } });
-    await expect(readFile(join(stateDir, "backup.env"), "utf8")).rejects.toThrow();
   }, 60_000);
 
   it("refuses a different key when the held key comes from the supervisor's own loaded settings (archives already on)", async () => {
@@ -1349,12 +1293,11 @@ describe("backup admin routes", () => {
           await gate; // …and parked here until we release it
         }
         return resolveBackupConfig({
-          managedByEnvironment: false,
           env: await loadBoxEnv(base, stateDir),
           sealed: await readSealed(),
         });
       },
-      isManagedByEnvironment: () => false,
+
       readSingletonRole: () => "primary",
       venueDir,
       modules: ALL_MODULES,
@@ -1582,8 +1525,7 @@ describe("backup admin routes", () => {
         stream: { reload: async () => {}, status: () => ({ state: "off" }) },
         venueId: "c0000000-0000-4000-8000-000000000002",
         isPrimary: () => true,
-        isManagedByEnvironment: () => false,
-        loadedArchives: () => [],
+
         readRecoveryKey: readKey,
         writeRecoveryKey: (recoveryKey) =>
           writeRecoveryKey(sc.stateDir, { recoveryKey, keyRotatedAt: undefined }),
@@ -1726,7 +1668,7 @@ describe("backup admin routes", () => {
       });
       expect(body).toMatchObject({
         enabled: true,
-        source: "dashboard",
+
         revision: sealed!.revision,
       });
       expect(body.reloadErrorCode).toBeUndefined();
@@ -1759,8 +1701,7 @@ describe("backup admin routes", () => {
             stream: { reload: async () => {}, status: () => ({ state: "off" }) },
             venueId: VENUE,
             isPrimary: () => true,
-            isManagedByEnvironment: () => false,
-            loadedArchives: () => [],
+
             readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv({}, sc.stateDir)),
             writeRecoveryKey: async () => {},
             sealedState: { refresh: async () => "sealed" },
@@ -2647,19 +2588,6 @@ describe("backup admin routes", () => {
       });
     }, 60_000);
 
-    it("disable refuses when the environment owns the settings", async () => {
-      const sc: Scenario = {
-        stateDir: await makeStateDir(),
-        base: { WAITRON_BACKUP_DIR: makeDestDir() },
-        role: "primary",
-      };
-      const app = buildApp(makeSupervisor(sc), sc.stateDir);
-      const cookie = await login(app);
-      const res = await app.request("/api/backup/disable", { method: "POST", headers: { cookie } });
-      expect(res.status).toBe(409);
-      expect(await res.json()).toMatchObject({ error: { code: "backup.managed_by_environment" } });
-    }, 60_000);
-
     it("refuses unknown, null and mistyped fields by name", async () => {
       const { post } = await primaryApp();
       const good = applyBody({ kind: "local-fs", dir: makeDestDir() });
@@ -3177,25 +3105,6 @@ describe("backup admin routes", () => {
         expect(tabANext.keyRotatedAt).not.toBe(tabA.keyRotatedAt);
         expect(tabANext.revision).not.toBe(tabA.revision);
         expect(tabANext.destinations).toEqual(tabA.destinations);
-      }, 60_000);
-
-      it("still refuses when the environment owns the settings", async () => {
-        const sc: Scenario = {
-          stateDir: await makeStateDir(),
-          base: { WAITRON_BACKUP_DIR: makeDestDir(), WAITRON_BACKUP_RECOVERY_KEY: KEY_1 },
-          role: "primary",
-        };
-        const app = buildApp(makeSupervisor(sc), sc.stateDir, sc.base);
-        const cookie = await login(app);
-        const res = await app.request("/api/backup/rotate", {
-          method: "POST",
-          headers: { cookie, "content-type": "application/json" },
-          body: JSON.stringify({ recoveryKey: KEY_2 }),
-        });
-        expect(res.status).toBe(409);
-        expect(await res.json()).toMatchObject({
-          error: { code: "backup.managed_by_environment" },
-        });
       }, 60_000);
     });
   });

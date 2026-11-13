@@ -1430,16 +1430,11 @@ declare module "@waitron/shared" {
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };
-    /** WAITRON_BACKUP_DESTINATIONS is not a valid JSON array of destination descriptors. */
     "backup.destinations_invalid": { reason: string };
     /** A box's backup settings this box would not write as its `backup.env`: a name outside
      * `WAITRON_BACKUP_`, a value that is not text, or one the file would not keep. `reason` names
      * the check and never a value, which may be the backup recovery key. */
     "spare.settings_invalid": { reason: string };
-    /** The backup schedule env vars are inconsistent or malformed: an interval AND a wall-clock
-     * schedule both set, or a bad weekday token or `WAITRON_BACKUP_AT` time. `reason` is a short
-     * machine tag. */
-    "backup.schedule_invalid": { reason: string };
     /**
      * A module declared a `backup.nonDbState` `source` the resolver map carries no entry for. Fails
      * the backup loudly rather than skip that state. `source` is the module's own identifier.
@@ -1450,12 +1445,6 @@ declare module "@waitron/shared" {
      * branch for. Fails the backup loudly rather than treat a new kind as a flat directory.
      */
     "backup.source_kind_unsupported": { kind: string };
-    /**
-     * A backup admin route (`apply`/`disable`/`rotate`), or the bucket copy's Save on a box holding no
-     * recovery key, was refused because a variable `BACKUP_ENV_KEYS` (`backup-config.ts`) lists is
-     * set in the environment. The environment then owns this box's backup settings, and the server
-     * does not write `backup.env` beside it. No params: an env var could hold the recovery key. */
-    "backup.managed_by_environment": Record<string, never>;
     /**
      * A backup admin route (`apply`/`disable`/`rotate`) or the bucket copy's Save or switch-off was refused
      * because this node is not the primary; only the primary runs the backup duty. */
@@ -1578,7 +1567,7 @@ declare module "@waitron/shared" {
      * `maxBytes` (`SMALL_OBJECT_MAX_BYTES`, `storage-backend.ts`). */
     "backup.destination_object_too_large": { maxBytes: number };
     /** A call to one destination did not finish within `timeoutMs`: an upload plus
-     * its pruning (`WAITRON_BACKUP_DESTINATION_TIMEOUT_MS`), or a status listing
+     * its pruning (the saved destination timeout), or a status listing
      * (`STATUS_READ_TIMEOUT_MS`, `backup-status.ts`). */
     "backup.destination_timed_out": { timeoutMs: number };
     /** The backup staging folder's filesystem reported fewer than `neededBytes` free, so the tick

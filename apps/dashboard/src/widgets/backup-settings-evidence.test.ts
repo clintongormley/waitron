@@ -112,17 +112,6 @@ const CAUSES: {
     expected: (c) => words(c, "backup_evidence.cause.recovery_key_too_short", { min: "20" }),
   },
   {
-    name: "an invalid box setting",
-    failure: {
-      code: "server.config_invalid",
-      detail: { variable: "WAITRON_BACKUP_STALE_AFTER_MS" },
-    },
-    expected: (c) =>
-      words(c, "backup_evidence.cause.config_invalid", {
-        variable: "WAITRON_BACKUP_STALE_AFTER_MS",
-      }),
-  },
-  {
     name: "the unknown code",
     failure: { code: "unknown", detail: null },
     expected: (c) => words(c, "backup_evidence.cause.unknown", { code: "unknown" }),
@@ -282,7 +271,6 @@ const READS_NOW_CASES: [string, Partial<BackupSettingsEvidence>, boolean][] = [
   ["a readable record and a usable key", { now: READABLE }, true],
   ["a short key", { now: READABLE, recoveryKey: { held: true, tooShort: true } }, false],
   ["no key", { now: READABLE, recoveryKey: { held: false, tooShort: false } }, false],
-  ["settings from the environment", { now: READABLE, managedByEnvironment: true }, false],
   ["an unreadable record", {}, false],
   ["no record", { now: { state: "absent" }, record: null }, false],
   ["no failure recorded", { now: READABLE, failures: [], latestLoadFailed: false }, false],
@@ -306,34 +294,6 @@ const READS_NOW_CASES: [string, Partial<BackupSettingsEvidence>, boolean][] = [
     { now: READABLE, lastCleanLoadAt: "2026-10-29T10:30:00.000Z", latestLoadFailed: true },
     true,
   ],
-  [
-    "a newest failure from a box setting read on every load",
-    {
-      now: READABLE,
-      failures: [
-        failure({
-          code: "server.config_invalid",
-          detail: { variable: "WAITRON_BACKUP_STALE_AFTER_MS" },
-        }),
-      ],
-    },
-    false,
-  ],
-  [
-    "a box-setting failure older than the newest failure",
-    {
-      now: READABLE,
-      failures: [
-        failure(),
-        failure({
-          at: "2026-10-29T08:00:00.000Z",
-          code: "server.config_invalid",
-          detail: { variable: "WAITRON_BACKUP_STALE_AFTER_MS" },
-        }),
-      ],
-    },
-    true,
-  ],
 ];
 for (const [name, overrides, shown] of READS_NOW_CASES)
   it(`${shown ? "says" : "does not say"} the settings read correctly now with ${name}`, async () => {
@@ -343,17 +303,6 @@ for (const [name, overrides, shown] of READS_NOW_CASES)
       shown ? words(en, "backup_evidence.reads_now") : "",
     );
   });
-
-it("says the environment sets backups and shows no saved destination", async () => {
-  const el = await mount(
-    apiAnswering(async () =>
-      evidence({ managedByEnvironment: true, now: { state: "readable", destinations: [] } }),
-    ),
-  );
-  await expect.poll(() => text(q(el, "[data-test=record-now]"))).not.toBe("");
-  expect(text(q(el, "[data-test=record-now]"))).toContain(words(en, "backup_evidence.managed"));
-  expect(qa(el, "[data-test=destination]")).toEqual([]);
-});
 
 it("Read again replaces the facts, shows it is reading and keeps Stop available", async () => {
   const second = deferred<BackupSettingsEvidence>();

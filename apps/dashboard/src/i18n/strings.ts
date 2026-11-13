@@ -1982,8 +1982,6 @@ export const en = {
   "backup.status.archive_current": "Backup under the current key",
   "backup.status.archive_yes": "yes",
   "backup.status.archive_no": "not yet",
-  "backup.status.managed":
-    "Backups on this box are managed by its environment — there is nothing to change here.",
   "backup.status.not_primary":
     "This node isn't the venue's primary, so backups are changed from the primary node.",
   "backup.status.stored_off": "Switched off — the saved destination is kept",
@@ -2012,8 +2010,6 @@ export const en = {
     "The saved settings read correctly, but this box holds no backup recovery key, and backups are never made without one.",
   "backup_evidence.cause.recovery_key_too_short":
     "The saved settings read correctly, but the backup recovery key on this box is shorter than {min} characters.",
-  "backup_evidence.cause.config_invalid":
-    "The saved settings read correctly, but this box's own setting {variable} is not a whole number above zero.",
   "backup_evidence.cause.unknown":
     "The box could not use its backup settings ({code}). Waitron cannot say more about this failure.",
   "backup_evidence.part.not_json": "format",
@@ -2039,8 +2035,6 @@ export const en = {
   "backup_evidence.written": "Last written at {time}, locked with key number {n}.",
   "backup_evidence.box_keys": "This box holds key number {m}.",
   "backup_evidence.box_keys_two": "This box holds key numbers {m} and {p}.",
-  "backup_evidence.managed":
-    "Backups on this box are set by its environment, not by saved settings, so no saved destination is in effect.",
   "backup_evidence.cannot_tell": "Waitron cannot tell which folder or bucket these settings named.",
   "backup_evidence.folder": "Folder",
   "backup_evidence.look.folder": "It exists and is a folder.",
@@ -2205,14 +2199,10 @@ export const en = {
   "stream.field.key_characters":
     "Use only unaccented letters, digits, spaces and basic keyboard symbols. A single quote (') cannot be used.",
   "stream.field.check": "Check this value.",
-  "stream.error.managed_by_environment":
-    "This box's backup settings come from its environment and it holds no recovery key, so the bucket copy cannot be turned on from this page.",
   "stream.error.recovery_key_too_short":
     "The recovery key this box holds is too short, so the bucket copy cannot use it. Use “Turn on backups” above: the new key it saves replaces the short one.",
   "stream.error.recovery_key_too_short_archives_on":
     "The recovery key this box holds is too short, so the bucket copy cannot use it. Use “Change the recovery key” above: the new key replaces the short one.",
-  "stream.error.recovery_key_too_short_managed":
-    "The recovery key this box holds is too short, so the bucket copy cannot use it. This box's backup settings come from its environment, so a longer key has to be set there.",
   "stream.error.recovery_key_too_short_unknown":
     "The recovery key this box holds is too short, so the bucket copy cannot use it.",
   "stream.change": "Change bucket",
@@ -5927,8 +5917,6 @@ export const es: Record<StringKey, string> = {
   "backup.status.archive_current": "Copia con la clave actual",
   "backup.status.archive_yes": "sí",
   "backup.status.archive_no": "todavía no",
-  "backup.status.managed":
-    "Las copias de seguridad de esta caja las gestiona su entorno; aquí no hay nada que cambiar.",
   "backup.status.not_primary":
     "Este nodo no es el principal del local, así que las copias de seguridad se cambian desde el nodo principal.",
   "backup.status.stored_off": "Desactivadas; el destino guardado se conserva",
@@ -5958,8 +5946,6 @@ export const es: Record<StringKey, string> = {
     "Los ajustes guardados se leen bien, pero este equipo no tiene clave de recuperación de copias, y nunca se hacen copias sin ella.",
   "backup_evidence.cause.recovery_key_too_short":
     "Los ajustes guardados se leen bien, pero la clave de recuperación de copias de este equipo tiene menos de {min} caracteres.",
-  "backup_evidence.cause.config_invalid":
-    "Los ajustes guardados se leen bien, pero el ajuste propio de este equipo {variable} no es un número entero mayor que cero.",
   "backup_evidence.cause.unknown":
     "El equipo no pudo usar sus ajustes de copias de seguridad ({code}). Waitron no puede decir nada más de este fallo.",
   "backup_evidence.part.not_json": "el formato",
@@ -5985,8 +5971,6 @@ export const es: Record<StringKey, string> = {
   "backup_evidence.written": "Última escritura: {time}, cerrado con la clave número {n}.",
   "backup_evidence.box_keys": "Este equipo tiene la clave número {m}.",
   "backup_evidence.box_keys_two": "Este equipo tiene las claves número {m} y {p}.",
-  "backup_evidence.managed":
-    "Las copias de seguridad de este equipo las fija su entorno, no unos ajustes guardados, así que ningún destino guardado está en uso.",
   "backup_evidence.cannot_tell":
     "Waitron no puede saber qué carpeta o bucket indicaban estos ajustes.",
   "backup_evidence.folder": "Carpeta",
@@ -6158,14 +6142,10 @@ export const es: Record<StringKey, string> = {
   "stream.field.key_characters":
     "Usa solo letras sin tilde, cifras, espacios y símbolos básicos del teclado. No se puede usar la comilla simple (').",
   "stream.field.check": "Revisa este valor.",
-  "stream.error.managed_by_environment":
-    "Los ajustes de copia de este equipo vienen de su entorno y no tiene clave de recuperación, así que la copia en el bucket no se puede activar desde esta página.",
   "stream.error.recovery_key_too_short":
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Activar las copias» más arriba: la clave nueva que guarda sustituye a la corta.",
   "stream.error.recovery_key_too_short_archives_on":
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Cambiar la clave de recuperación» más arriba: la clave nueva sustituye a la corta.",
-  "stream.error.recovery_key_too_short_managed":
-    "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Los ajustes de copia de este equipo vienen de su entorno, así que hay que poner allí una clave más larga.",
   "stream.error.recovery_key_too_short_unknown":
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla.",
   "stream.change": "Cambiar de bucket",

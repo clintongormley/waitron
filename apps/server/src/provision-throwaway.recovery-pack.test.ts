@@ -106,7 +106,6 @@ async function makePack(options: { beforeMaking?: () => Promise<void> } = {}) {
         WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-20T08:00:00.000Z",
       }),
       backups: () => ({
-        managedByEnvironment: false,
         schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
         retention: { count: 7, days: 30 },
         recoveryKey: KEY,

@@ -447,16 +447,6 @@ describe("stream-settings-panel: the bucket form", () => {
     },
   );
 
-  it("explains, in this panel's words, a Save refused because the environment sets the backups", async () => {
-    const api = stubApi({
-      saveStreamSettings: vi.fn().mockRejectedValue({ code: "backup.managed_by_environment" }),
-    });
-    const { el } = await mount(api);
-    fillRequired(el);
-    await press(el, "save");
-    expect(text(el, "[role=alert]")).toBe(t("stream.error.managed_by_environment"));
-  });
-
   it("sends the corrected value once a refused field is fixed", async () => {
     const api = stubApi();
     const save = vi
@@ -590,7 +580,7 @@ describe("stream-settings-panel: the bucket form", () => {
 
   it("leaves Save working after a refusal that names no field", async () => {
     const api = stubApi({
-      saveStreamSettings: vi.fn().mockRejectedValue({ code: "backup.managed_by_environment" }),
+      saveStreamSettings: vi.fn().mockRejectedValue({ code: "backup.not_primary" }),
     });
     const { el } = await mount(api);
     fillRequired(el);
@@ -805,7 +795,7 @@ describe("stream-settings-panel: once set up", () => {
   it("explains, in this panel's words, a save refused because the box's recovery key is too short", async () => {
     const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
     const api = stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) });
-    const { el } = await mount(api, { managedByEnvironment: false });
+    const { el } = await mount(api, { archivesEnabled: false });
     fillRequired(el);
     await press(el, "save");
     expect(text(el, "[role=alert]")).toBe(t("stream.error.recovery_key_too_short"));
@@ -822,30 +812,10 @@ describe("stream-settings-panel: once set up", () => {
             .fn()
             .mockRejectedValue({ code: "backup.recovery_key_too_short", params: { min: 12 } }),
         });
-        const { el } = await mount(api, { managedByEnvironment: false });
+        const { el } = await mount(api, { archivesEnabled: false });
         fillRequired(el);
         await press(el, "save");
         expect(text(el, "[role=alert]")).toContain(t("backup.apply"));
-      } finally {
-        setLocale(before);
-      }
-    },
-  );
-
-  it.each(["en-GB", "es-ES"] as const)(
-    "in %s, sends a save refused for a too-short key to the box's environment when the environment owns the backup settings",
-    async (locale) => {
-      const before = currentLocale();
-      setLocale(locale);
-      try {
-        const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
-        const api = stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) });
-        const { el } = await mount(api, { managedByEnvironment: true });
-        fillRequired(el);
-        await press(el, "save");
-        const alert = text(el, "[role=alert]");
-        expect(alert).toBe(t("stream.error.recovery_key_too_short_managed"));
-        expect(alert).not.toContain(t("backup.apply"));
       } finally {
         setLocale(before);
       }
@@ -861,7 +831,7 @@ describe("stream-settings-panel: once set up", () => {
         const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
         const api = stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) });
         const { el } = await mount(api);
-        expect(el.managedByEnvironment).toBeUndefined();
+        expect(el.archivesEnabled).toBeUndefined();
         fillRequired(el);
         await press(el, "save");
         const alert = text(el, "[role=alert]");
@@ -882,7 +852,7 @@ describe("stream-settings-panel: once set up", () => {
       try {
         const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
         const api = stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) });
-        const { el } = await mount(api, { managedByEnvironment: false, archivesEnabled: true });
+        const { el } = await mount(api, { archivesEnabled: true });
         fillRequired(el);
         await press(el, "save");
         const alert = text(el, "[role=alert]");
@@ -897,21 +867,12 @@ describe("stream-settings-panel: once set up", () => {
   it("with archives off, points a too-short key's refusal at Turn on backups", async () => {
     const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
     const api = stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) });
-    const { el } = await mount(api, { managedByEnvironment: false, archivesEnabled: false });
+    const { el } = await mount(api, { archivesEnabled: false });
     fillRequired(el);
     await press(el, "save");
     const alert = text(el, "[role=alert]");
     expect(alert).toContain(t("backup.apply"));
     expect(alert).not.toContain(t("backup.rotate.title"));
-  });
-
-  it("with archives on but the environment owning the settings, sends a too-short key's refusal to the environment", async () => {
-    const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
-    const api = stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) });
-    const { el } = await mount(api, { managedByEnvironment: true, archivesEnabled: true });
-    fillRequired(el);
-    await press(el, "save");
-    expect(text(el, "[role=alert]")).toBe(t("stream.error.recovery_key_too_short_managed"));
   });
 
   it("Cancel leaves the bucket as it was", async () => {

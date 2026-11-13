@@ -44,7 +44,8 @@ import { stopBackgroundDuties } from "./background-duties.js";
 import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 import { startSpareStore } from "./spare-store.js";
 import { loadKeyRing, writePairLinkTx } from "@waitron/credentials";
-import { withNodeTransaction } from "@waitron/db";
+import { writeArchiveSettings } from "./archive-settings.js";
+import { withTransaction, withNodeTransaction } from "@waitron/db";
 vi.mock("./background-duties.js", async (original) => {
   const actual = await original<typeof import("./background-duties.js")>();
   return { ...actual, stopBackgroundDuties: vi.fn(actual.stopBackgroundDuties) };
@@ -743,16 +744,30 @@ describe("a start that fails after the venue folder is opened gives the folder b
     const venueDir = await seededVenueDir();
     const state = await stateDir();
     const backupDir = await tempDir("waitron-failed-start-backup-");
+    const env = await tradingEnv(venueDir, state);
+    const store = await openVenueDatabase(venueDir);
+    try {
+      await withTransaction(store.venue, (tx) =>
+        writeArchiveSettings(tx, loadKeyRing(env), {
+          enabled: true,
+          destinations: [{ kind: "local-fs", id: "primary", dir: backupDir }],
+          schedule: { kind: "interval", ms: 3_600_000 },
+          retention: { count: 7, days: 30 },
+          destinationTimeoutMs: 900_000,
+        }),
+      );
+    } finally {
+      await store.close();
+    }
 
     await expect(
       startServer(
         {
-          ...(await tradingEnv(venueDir, state)),
+          ...env,
           WAITRON_TLS_CERT_FILE: join(state, "does-not-exist.crt"),
           WAITRON_TLS_KEY_FILE: join(state, "does-not-exist.key"),
         },
-        // The backup settings are read from the raw base env (`loadBoxEnv`), not the merged one.
-        { WAITRON_BACKUP_DIR: backupDir, WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" },
+        { WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" },
       ),
     ).rejects.toMatchObject({ code: "ENOENT" });
     expect(readVenueHolder(venueDir)).toBeNull();

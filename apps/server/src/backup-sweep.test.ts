@@ -245,12 +245,12 @@ describe("runOnce (fan-out)", () => {
   });
 
   it("captures backup.env + modules.json as secrets/<name> when present, skips them when absent", async () => {
-    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_DIR=/mnt/usb\n");
+    await writeFile(join(stateDir, "backup.env"), "ARCHIVE_FOLDER=/mnt/usb\n");
     await writeFile(join(stateDir, "modules.json"), '{"modules":{"fiscal-none":false}}\n');
     const a = new FakeBackend("a");
     await runOnce(deps([a]));
     const entries = entriesOf(a);
-    expect(entries.get("secrets/backup.env")!.toString()).toBe("WAITRON_BACKUP_DIR=/mnt/usb\n");
+    expect(entries.get("secrets/backup.env")!.toString()).toBe("ARCHIVE_FOLDER=/mnt/usb\n");
     expect(entries.get("secrets/modules.json")!.toString()).toBe(
       '{"modules":{"fiscal-none":false}}\n',
     );
@@ -270,7 +270,7 @@ describe("runOnce (fan-out)", () => {
   });
 
   it("packs the archive in a fixed entry order: manifest, database, node copy, required state, optional state", async () => {
-    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_DIR=/mnt/usb\n");
+    await writeFile(join(stateDir, "backup.env"), "ARCHIVE_FOLDER=/mnt/usb\n");
     await writeFile(join(stateDir, "modules.json"), '{"modules":{}}\n');
     const a = new FakeBackend("a");
     await runOnce(deps([a]));

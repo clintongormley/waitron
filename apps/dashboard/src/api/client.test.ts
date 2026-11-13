@@ -170,13 +170,13 @@ describe("DashboardApi", () => {
   });
 
   it("rejects a failed configuration export with the envelope's code and the HTTP status", async () => {
-    const response = new Response(
-      JSON.stringify({ error: { code: "backup.managed_by_environment" } }),
-      { status: 409, headers: { "content-type": "application/json" } },
-    );
+    const response = new Response(JSON.stringify({ error: { code: "backup.not_primary" } }), {
+      status: 409,
+      headers: { "content-type": "application/json" },
+    });
     const api = new DashboardApi("", vi.fn().mockResolvedValue(response));
     await expect(api.exportConfiguration("a strong passphrase")).rejects.toMatchObject({
-      code: "backup.managed_by_environment",
+      code: "backup.not_primary",
       status: 409,
     });
   });

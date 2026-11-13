@@ -105,12 +105,14 @@ case "$1" in
     shift
     [ "$1" = "-f" ] && shift 2
     args="$*"
+    profiles="\${COMPOSE_PROFILES:-$(sed -n 's/^COMPOSE_PROFILES=//p' "$WAITRON_DIR/.env" 2>/dev/null)}"
     case "$1" in
       pull)
         # Mimics real compose, which exits 0 on a failed pull when given --ignore-pull-failures
         # (probed on Compose v5.1.0). install must not pass the flag; if it does, this stub exits 0
         # and the pull-failure test fails.
         case "$args" in *--ignore-pull-failures*) exit 0 ;; esac
+        printf '%s\\n' "$profiles" >> "\${WT_LOG}.pull-profiles"
         [ "\${WT_PULL_FAIL}" = "1" ] && exit 1 ;;
       ps)
         case "$args" in
@@ -152,12 +154,17 @@ case "$1" in
         # psql, is taken by another arm or by none, and reads as a clean empty stamp.
         case "$args" in *psql*) exit 1 ;; esac ;;
       config)
-        # A fixed set of image names, one per line, the shape real compose prints.
+        # Compose lists the active profiles' images, one per line.
         case "$args" in
-          *--images*) printf '%s\\n' waitron:stub axllent/mailpit:v1.31.2 waitron-print-agent:stub ;;
+          *--environment*) printf 'COMPOSE_PROFILES=%s\\n' "\${WT_COMPOSE_ENV_PROFILES-$profiles}" ;;
+          *--images*)
+            printf '%s\\n' "$profiles" >> "\${WT_LOG}.images-profiles"
+            printf '%s\\n' waitron:stub waitron-print-agent:stub
+            case ",$profiles," in *,practice-inbox,*) echo axllent/mailpit:v1.31.2 ;; esac ;;
           *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
         esac ;;
-      up) : > "\${WT_LOG}.up" ;;
+      rm) exit 0 ;;
+      up) printf '%s\\n' "$profiles" >> "\${WT_LOG}.up-profiles"; : > "\${WT_LOG}.up" ;;
       down) printf '%s\\n' "\${COMPOSE_PROFILES:-}" >> "\${WT_LOG}.profiles"; : > "\${WT_LOG}.down" ;;
       *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
     esac ;;
@@ -208,6 +215,10 @@ case "$1" in
     fi ;;
   volume)
     case "$2" in
+      ls)
+        [ "\${WT_VOLUME_LIST_FAIL}" = 1 ] && exit 1
+        [ "\${WT_STATE_VOLUME_ABSENT}" = 1 ] || echo waitron_state
+        exit 0 ;;
       inspect) exit 0 ;;
       rm)
         if [ -n "\${WT_RM_FAIL}" ]; then
@@ -1013,7 +1024,9 @@ describe("waitron.sh install (published main)", () => {
     const r = run(sb, ["install"]);
     expect(r.status).toBe(0);
     expect(existsSync(join(sb.boxDir, ".env.example"))).toBe(false);
-    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toBe("WAITRON_LOG_LEVEL=debug\n");
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toBe(
+      "WAITRON_LOG_LEVEL=debug\nCOMPOSE_PROFILES=practice-inbox\n",
+    );
   });
 
   it("pulls, starts, records no image override, and prints the links", () => {
@@ -1023,8 +1036,7 @@ describe("waitron.sh install (published main)", () => {
     const compose = composeCalls(sb);
     expect(compose).toContainEqual(expect.stringMatching(/^pull\b/));
     expect(compose).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
-    // No .env AT ALL: this path records no image override, so nothing asks install to write the file.
-    expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toBe("COMPOSE_PROFILES=practice-inbox\n");
     expect(r.stdout).toContain("https://waitron.local/manage/email");
     expect(r.stdout).not.toContain("http://waitron.local:9110");
     expect(r.stdout).toContain("http://waitron.local/setup/trust");
@@ -1223,7 +1235,7 @@ describe("waitron.sh install of a release", () => {
     expect(r.status, r.stderr).toBe(0);
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^pull\b/));
     expect(readFileSync(sb.log, "utf8")).not.toContain("docker build");
-    expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toBe("COMPOSE_PROFILES=practice-inbox\n");
   });
 });
 
@@ -2060,7 +2072,7 @@ describe("waitron.sh reset", () => {
     installedBox(sb);
     const r = run(sb, args);
     expect(r.status).toBe(0);
-    expect(readFileSync(sb.log + ".profiles", "utf8").trim()).toBe("staff-tunnel");
+    expect(readFileSync(sb.log + ".profiles", "utf8").trim()).toBe("staff-tunnel,practice-inbox");
   });
   it.each([
     ["reset", "--yes"],
@@ -2557,12 +2569,21 @@ describe("waitron.sh --reset install", () => {
   });
 
   it("keeps its checked installer when the requested ref carries an older script", () => {
-    const sb = sandbox({ refScript: "pre-reset", systemd: true });
+    const sb = sandbox({
+      refScript: "pre-reset",
+      systemd: true,
+      tradingEnv: "WAITRON_ENV=production",
+    });
     installedBox(sb);
+    const profiles = "COMPOSE_PROFILES=practice-inbox\n";
+    writeFileSync(join(sb.boxDir, ".env"), profiles);
     const before = readFileSync(sb.script, "utf8");
     const r = run(sb, ["install", "old-branch"]);
     expect(r.status).toBe(0);
     expect(readFileSync(sb.script, "utf8")).toBe(before);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toContain(profiles);
+    expect(readFileSync(sb.log, "utf8")).not.toContain("rm -sf mailpit");
+    expect(readFileSync(sb.log, "utf8")).not.toContain("trading.env");
     expect(loggedCalls(sb).filter((c) => c.startsWith("waitron.sh-start "))).toEqual([]);
     expect(readFileSync(sb.log, "utf8")).toContain(
       `cli.mjs apply ${sb.boxDir} bash ${join(sb.root, "host/waitron.sh")} __candidate old-branch`,
@@ -2882,4 +2903,102 @@ it.each([
   expect(result.status).toBe(1);
   expect(result.stderr).toContain("another host operation");
   expect(composeCalls(sb).some((line) => line.startsWith("down"))).toBe(false);
+});
+
+describe("the installed practice inbox", () => {
+  it.each([
+    ["preproduction", { tradingEnv: "WAITRON_ENV=preproduction" }, true],
+    ["production", { tradingEnv: "WAITRON_ENV=production" }, false],
+    ["unreadable mode", { readError: true }, false],
+    ["an unprovisioned box", {}, true],
+  ])("selects the inbox for %s before starting services", (_name, options, wanted) => {
+    const sb = sandbox(options);
+    writeFileSync(join(sb.boxDir, ".env"), wanted ? "" : "COMPOSE_PROFILES=practice-inbox\n");
+    const r = run(sb, ["install"]);
+    expect(r.status, r.stderr).toBe(0);
+    const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
+    expect(env.includes("COMPOSE_PROFILES=practice-inbox")).toBe(wanted);
+    const calls = readFileSync(sb.log, "utf8");
+    expect(calls.includes("rm -sf mailpit")).toBe(!wanted);
+    if (!wanted) expect(calls.indexOf("rm -sf mailpit")).toBeLessThan(calls.indexOf("compose up"));
+    expect(readFileSync(`${sb.log}.up-profiles`, "utf8").trim()).toBe(
+      wanted ? "practice-inbox" : "",
+    );
+  });
+
+  it.each([
+    ["preproduction", "staff-tunnel,practice-inbox"],
+    ["production", "staff-tunnel"],
+  ])("keeps an operator's other profile on %s", (mode, expected) => {
+    const sb = sandbox({ tradingEnv: `WAITRON_ENV=${mode}` });
+    writeFileSync(join(sb.boxDir, ".env"), "COMPOSE_PROFILES=staff-tunnel\n");
+    const r = run(sb, ["install"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toContain(
+      `COMPOSE_PROFILES=${expected}\n`,
+    );
+  });
+
+  it("pulls Mailpit before the wipe", () => {
+    const sb = sandbox({ imageMissing: "axllent/mailpit", imagePullFail: "axllent/mailpit" });
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("nothing was taken down or wiped");
+    expect(readFileSync(sb.log, "utf8")).not.toContain("compose down");
+  });
+
+  it("reset turns the inbox on", () => {
+    const sb = sandbox();
+    installedBox(sb);
+    const r = run(sb, ["reset", "--yes"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toContain(
+      "COMPOSE_PROFILES=practice-inbox\n",
+    );
+    expect(readFileSync(`${sb.log}.profiles`, "utf8")).toContain("staff-tunnel,practice-inbox");
+  });
+});
+
+it("selects the requested image before reading retained state on a first install", () => {
+  const sb = sandbox();
+  const r = run(sb, ["install"]);
+  expect(r.status, r.stderr).toBe(0);
+  const calls = readFileSync(sb.log, "utf8").split("\n");
+  const pull = calls.findIndex((line) => line.includes(" pull"));
+  const read = calls.findIndex((line) => line.includes("trading.env"));
+  expect(pull).toBeGreaterThan(-1);
+  expect(read).toBeGreaterThan(pull);
+});
+
+it("a fresh install needs no production image read when no state volume exists", () => {
+  const sb = sandbox({ readError: true });
+  const r = run(sb, ["install"], { WT_STATE_VOLUME_ABSENT: "1" });
+  expect(r.status, r.stderr).toBe(0);
+  expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toContain(
+    "COMPOSE_PROFILES=practice-inbox",
+  );
+  expect(readFileSync(sb.log, "utf8")).not.toContain("trading.env");
+  expect(readFileSync(`${sb.log}.pull-profiles`, "utf8").trim()).toBe("practice-inbox");
+});
+
+it("a failed state-volume listing does not classify an install as fresh", () => {
+  const sb = sandbox({ readError: true });
+  const r = run(sb, ["install"], { WT_VOLUME_LIST_FAIL: "1" });
+  expect(r.status, r.stderr).toBe(0);
+  expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
+  expect(readFileSync(sb.log, "utf8")).toContain("trading.env");
+});
+
+it.each([
+  ['"staff-tunnel"', "staff-tunnel", "preproduction", "staff-tunnel,practice-inbox"],
+  ["staff-tunnel, practice-inbox", "staff-tunnel, practice-inbox", "production", "staff-tunnel"],
+  ["practice-inbox # inbox", "practice-inbox", "production", ""],
+])("keeps Compose's decoded profile value for %s", (raw, decoded, mode, expected) => {
+  const sb = sandbox({ tradingEnv: `WAITRON_ENV=${mode}` });
+  writeFileSync(join(sb.boxDir, ".env"), `COMPOSE_PROFILES=${raw}\n`);
+  const r = run(sb, ["install"], { WT_COMPOSE_ENV_PROFILES: decoded });
+  expect(r.status, r.stderr).toBe(0);
+  const saved = readFileSync(join(sb.boxDir, ".env"), "utf8");
+  expect(saved).toBe(expected ? `COMPOSE_PROFILES=${expected}\n` : "");
 });

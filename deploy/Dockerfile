@@ -283,13 +283,7 @@ COPY --from=build --chown=waitron:waitron /third-party/libvips/ /app/third-party
 COPY --from=declaration --chown=waitron:waitron /release-root/ /app/
 
 # Fixed in the image, never operator-set: the server's own defaults for these sit beside the bundle,
-# which is a read-only layer — every writable path is a volume. WAITRON_BACKUP_DIR is deliberately
-# NOT here: a destination without WAITRON_BACKUP_RECOVERY_KEY is fail-closed (backup-config.ts's
-# loadBackupConfig throws), so setting the path alone would take a provisioned box down at boot.
-# There is no backup connection setting: the backup duty opens the box's own venue directory
-# (backup-config.ts's header, and backup-supervisor.ts, which takes `venueDir` and calls the venue
-# handle's own archiveTo). compose.yml passes the dir and the recovery key from the box's .env —
-# those two backup values and no third.
+# which is a read-only layer. Every writable path is a volume.
 #
 # WAITRON_HTTP_HOST must be 0.0.0.0: config.ts defaults it to 127.0.0.1, which is right for a dev
 # machine and wrong for every container — the phone is the screen, so a server bound to the

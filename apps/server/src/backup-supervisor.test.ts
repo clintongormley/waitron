@@ -84,7 +84,6 @@ interface Refs {
   role: SingletonRole;
   venueDir: string;
   logs: LogLine[];
-  managed: boolean;
 }
 
 async function makeStateDir(): Promise<string> {
@@ -104,7 +103,6 @@ async function makeDestDir(): Promise<string> {
 
 function localFsConfig(dirs: string[], recoveryKey: string): BackupConfig {
   return {
-    source: "environment",
     revision: undefined,
     enabled: true,
     destinations: dirs.map((dir, i) => ({
@@ -130,7 +128,7 @@ function makeSupervisor(
   return new BackupSupervisor({
     nodeId: BACKUP_NODE_ID,
     buildConfig: async () => refs.config,
-    isManagedByEnvironment: () => refs.managed,
+
     readSingletonRole: () => refs.role,
     venueDir: refs.venueDir,
     modules: ALL_MODULES,
@@ -186,7 +184,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const bus = new LiveEvents();
     const snapshots: unknown[] = [];
@@ -227,7 +224,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const sup = makeSupervisor(refs, await makeStateDir());
     try {
@@ -272,7 +268,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "primary",
       venueDir,
       logs: [],
-      managed: false,
     };
     const sup = makeSupervisor(refs, await makeStateDir());
     let release!: () => void;
@@ -309,7 +304,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const sup = makeSupervisor(refs, await makeStateDir());
     try {
@@ -337,7 +331,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const sup = makeSupervisor(refs, await makeStateDir());
     try {
@@ -377,7 +370,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const sup = makeSupervisor(refs, await makeStateDir());
     try {
@@ -401,12 +393,11 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "primary",
       venueDir,
       logs: [],
-      managed: false,
     };
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
-      isManagedByEnvironment: () => refs.managed,
+
       readSingletonRole: () => refs.role,
       venueDir,
       modules: ALL_MODULES,
@@ -457,7 +448,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "primary",
       venueDir,
       logs: [],
-      managed: false,
     };
     const turn = createStagingTurn();
     let copyStarted!: () => void;
@@ -471,7 +461,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
-      isManagedByEnvironment: () => refs.managed,
+
       readSingletonRole: () => refs.role,
       venueDir,
       modules: ALL_MODULES,
@@ -520,7 +510,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "primary",
       venueDir,
       logs: [],
-      managed: false,
     };
     let entered!: () => void;
     const oldCopyEntered = new Promise<void>((r) => (entered = r));
@@ -544,7 +533,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
-      isManagedByEnvironment: () => refs.managed,
+
       readSingletonRole: () => refs.role,
       venueDir,
       modules: ALL_MODULES,
@@ -602,7 +591,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "primary",
       venueDir,
       logs: [],
-      managed: false,
     };
     const sup = makeSupervisor(refs, await makeStateDir());
     try {
@@ -623,7 +611,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
         role: "primary",
         venueDir: await makeVenueDir(),
         logs: [],
-        managed: false,
       };
       const sup = makeSupervisor(refs, await makeStateDir());
       try {
@@ -646,7 +633,6 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "secondary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const sup = makeSupervisor(refs, await makeStateDir());
     try {
@@ -672,7 +658,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
         await gate;
         return undefined;
       },
-      isManagedByEnvironment: () => false,
+
       readSingletonRole: () => "primary",
       venueDir: await makeVenueDir(),
       modules: ALL_MODULES,
@@ -700,12 +686,11 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
-      isManagedByEnvironment: () => refs.managed,
+
       readSingletonRole: () => refs.role,
       venueDir: refs.venueDir,
       modules: ALL_MODULES,
@@ -762,7 +747,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
         await reading.released;
         return localFsConfig([dest], STRONG_KEY_1);
       },
-      isManagedByEnvironment: () => false,
+
       readSingletonRole: () => "primary",
       venueDir: await makeVenueDir(),
       modules: ALL_MODULES,
@@ -794,7 +779,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => localFsConfig([dest], STRONG_KEY_1),
-      isManagedByEnvironment: () => false,
+
       readSingletonRole: () => "primary",
       venueDir: await makeVenueDir(),
       modules: ALL_MODULES,
@@ -832,7 +817,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => localFsConfig([dest], STRONG_KEY_1),
-      isManagedByEnvironment: () => false,
+
       readSingletonRole: () => "primary",
       venueDir: await makeVenueDir(),
       modules: ALL_MODULES,
@@ -885,7 +870,7 @@ describe("BackupSupervisor when a destination fails to build", () => {
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => config(),
-      isManagedByEnvironment: () => false,
+
       readSingletonRole: () => "primary",
       venueDir: await makeVenueDir(),
       modules: ALL_MODULES,
@@ -1004,12 +989,11 @@ describe("BackupSupervisor closes the sweep's destinations", () => {
         role: "primary",
         venueDir: await makeVenueDir(),
         logs: [],
-        managed: false,
       };
       const sup = new BackupSupervisor({
         nodeId: BACKUP_NODE_ID,
         buildConfig: async () => refs.config,
-        isManagedByEnvironment: () => false,
+
         readSingletonRole: () => refs.role,
         venueDir: refs.venueDir,
         modules: ALL_MODULES,
@@ -1046,7 +1030,7 @@ describe("BackupSupervisor closes the sweep's destinations", () => {
       const sup = new BackupSupervisor({
         nodeId: BACKUP_NODE_ID,
         buildConfig: async () => localFsConfig([a, b], STRONG_KEY_1),
-        isManagedByEnvironment: () => false,
+
         readSingletonRole: () => "primary",
         venueDir: await makeVenueDir(),
         modules: ALL_MODULES,
@@ -1079,7 +1063,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
     return new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => config,
-      isManagedByEnvironment: () => false,
+
       readSingletonRole: () => "primary",
       venueDir,
       modules: ALL_MODULES,
@@ -1101,7 +1085,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
     const sup = supervisorFor(
       {
         ...localFsConfig([dest], STRONG_KEY_1),
-        source: "dashboard",
+
         revision: REVISION,
         enabled: false,
       },
@@ -1115,7 +1099,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
       expect(sup.current()).toMatchObject({
         enabled: false,
         storedDisabled: true,
-        source: "dashboard",
+
         revision: REVISION,
         destinations: [{ id: "primary", kind: "local-fs", dir: dest }],
       });
@@ -1130,7 +1114,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
     const sup = supervisorFor(
       {
         ...localFsConfig([dest], STRONG_KEY_1),
-        source: "dashboard",
+
         revision: REVISION,
         enabled: false,
       },
@@ -1174,7 +1158,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => load,
-      isManagedByEnvironment: () => false,
+
       readSingletonRole: () => "primary",
       venueDir: await makeVenueDir(),
       modules: ALL_MODULES,
@@ -1197,7 +1181,6 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
       });
       expect(sup.current()).toMatchObject({
         enabled: false,
-        source: null,
         destinations: [],
         loadErrorCode: "credentials.decrypt_failed",
       });
@@ -1222,7 +1205,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
       await sup.reload();
       expect(sup.current()).toMatchObject({
         storedDisabled: false,
-        source: "environment",
+
         revision: null,
       });
     } finally {
@@ -1230,17 +1213,16 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
     }
   });
 
-  it("reports nothing configured as no source", async () => {
+  it("reports nothing configured without a record", async () => {
     const refs: Refs = {
       config: undefined,
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const sup = makeSupervisor(refs, await makeStateDir());
     await sup.reload();
-    expect(sup.current()).toMatchObject({ source: null, revision: null, storedDisabled: false });
+    expect(sup.current()).toMatchObject({ revision: null, storedDisabled: false });
   });
 
   it("shows a bucket destination's place, never its secret", async () => {
@@ -1248,7 +1230,7 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
       {
         ...localFsConfig([], STRONG_KEY_1),
         enabled: false,
-        source: "dashboard",
+
         revision: REVISION,
         destinations: [
           {
@@ -1318,7 +1300,7 @@ describe("BackupSupervisor hands each run the room hooks", () => {
     return new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: async () => refs.config,
-      isManagedByEnvironment: () => refs.managed,
+
       readSingletonRole: () => refs.role,
       venueDir: refs.venueDir,
       modules: ALL_MODULES,
@@ -1338,7 +1320,6 @@ describe("BackupSupervisor hands each run the room hooks", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const recordArchivesDeleted = vi.fn(async () => {});
     // No room while the old archive is there; plenty once it is gone.
@@ -1379,7 +1360,6 @@ describe("BackupSupervisor hands each run the room hooks", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const latestClockStep = vi.fn(async () => ({
       confirmedAt: new Date(Date.now() - HOUR).toISOString(),
@@ -1403,7 +1383,6 @@ describe("BackupSupervisor hands each run the room hooks", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const outcomes: BackupOutcomeHolder = { failed: new Map() };
     const sup = supervisorFor(refs, await makeStateDir(), {
@@ -1458,7 +1437,7 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
   ): BackupSupervisor {
     return new BackupSupervisor({
       buildConfig: async () => refs.config,
-      isManagedByEnvironment: () => refs.managed,
+
       readSingletonRole: () => refs.role,
       venueDir: refs.venueDir,
       modules: ALL_MODULES,
@@ -1495,7 +1474,6 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: true,
     };
     const stateDir = await makeStateDir();
     const sup = supervisorFor(refs, stateDir, {
@@ -1513,7 +1491,6 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       version: 1,
       nodeId: NODE,
       installationStartedAt: STARTED.toISOString(),
-      managedByEnvironment: true,
       folders: [{ destination: "primary", dir: sameDisk }],
     });
   }, 60_000);
@@ -1527,7 +1504,6 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const stateDir = await makeStateDir();
     const sup = supervisorFor(refs, stateDir);
@@ -1546,7 +1522,6 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       role: "secondary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const stateDir = await stateWithNote();
     const sup = supervisorFor(refs, stateDir);
@@ -1564,7 +1539,6 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const stateDir = await stateWithNote();
     const sup = supervisorFor(refs, stateDir);
@@ -1582,7 +1556,6 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const stateDir = await stateWithNote();
     const sup = supervisorFor(refs, stateDir, {
@@ -1605,7 +1578,6 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const stateDir = await stateWithNote();
     const sup = supervisorFor(refs, stateDir, {
@@ -1632,7 +1604,6 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const stateDir = await stateWithNote();
     const sup = supervisorFor(refs, stateDir, {
@@ -1666,7 +1637,6 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const stateDir = await stateWithNote();
     const sup = supervisorFor(refs, stateDir, {
@@ -1696,7 +1666,6 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       role: "primary",
       venueDir: await makeVenueDir(),
       logs: [],
-      managed: false,
     };
     const stateDir = await stateWithNote();
     const actual = await vi.importActual<typeof fs>("node:fs/promises");
@@ -1728,7 +1697,7 @@ describe("BackupSupervisor keeps each settings load failure's safe facts", () =>
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
       buildConfig: next,
-      isManagedByEnvironment: () => false,
+
       readSingletonRole: () => "primary",
       venueDir: "/nonexistent/never-opened",
       modules: ALL_MODULES,

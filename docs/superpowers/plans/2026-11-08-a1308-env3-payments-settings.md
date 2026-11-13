@@ -31,6 +31,15 @@ live types, the transfer path); 4b landed (`TillAppSettings` is `{ tipsEnabled }
 adjustments area slice landed (it owns `packages/payments`' tables and code). Cites were read at
 `a086eedfb7`; where 4b or the area slice moved a line, follow it (env1, "Base").
 
+**Preflight note, 2026-11-13 (base `a7bdba21bf`).** The watcher confirmed at 00:53 in Lane H's
+questions.md that the payments-area dependency above still applies; do not build this slice yet.
+Its simulator-snapshot stop also applies: `mountPaymentsApi` copies `deps.simulator` into the
+object passed to `refundProvidersOf` (`apps/server/src/payments-api.ts:1514-1523`), and
+`mountTenderRefundApi` copies `deps.cardProvider` (`tender-refund-api.ts:147-157`). Although the
+resolver reads that object's property later (`bill-refunds.ts:124-137`), the mount has already
+copied the value. This is a source trace, not a runtime proof. Recheck these consumers when the
+payments slices land and settle the correction with the watcher before changing their wiring.
+
 **Owner lands:** no. Tips are kept off the invoice (`docs/backlog.md:2598`, the Tips row), so the
 switch's source moving changes no sale, invoice number, fiscal record or hashed value; the rule that
 clamps a tip to zero when tips are off (`apps/server/src/bill-allocation.ts:112,126`,

@@ -17,8 +17,7 @@ import { t } from "../i18n/t.js";
 const OFF: BackupStatusView = {
   enabled: false,
   isPrimary: true,
-  managedByEnvironment: false,
-  source: null,
+
   revision: null,
   storedDisabled: false,
   loadErrorCode: null,
@@ -32,8 +31,7 @@ const OFF: BackupStatusView = {
 const ENABLED: BackupStatusView = {
   enabled: true,
   isPrimary: true,
-  managedByEnvironment: false,
-  source: "dashboard",
+
   revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
   storedDisabled: false,
   loadErrorCode: null,
@@ -60,8 +58,6 @@ const ENABLED: BackupStatusView = {
   recoveryKeySet: true,
   recoveryKeyTooShort: false,
 };
-
-const MANAGED: BackupStatusView = { ...OFF, managedByEnvironment: true };
 
 const FAILING: BackupWriteAnswer = {
   ...ENABLED,
@@ -280,16 +276,6 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     );
     await flush(el);
     expect(q(el, "[data-test=short-key]")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders the read-only managed surface accessibly", async () => {
-    const { el, host } = await mountWidget<BackupScreen>(
-      "dashboard-backup-screen",
-      { api: stubApi(MANAGED) },
-      theme,
-    );
-    await flush(el);
     await expectNoA11yViolations(host);
   });
 

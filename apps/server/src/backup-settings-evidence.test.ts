@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import {
   ARCHIVE_SETTINGS_REASONS,
-  CONFIG_VARIABLES,
   attachRecordMeta,
   recordMetaOf,
   safeLoadDetail,
@@ -53,14 +52,7 @@ describe("safeLoadDetail", () => {
     ).toBeNull();
   });
 
-  it("keeps a configuration variable only when it is on the list", () => {
-    for (const variable of CONFIG_VARIABLES) {
-      expect(
-        safeLoadDetail(
-          new AppError("server.config_invalid", { variable, reason: "not_a_positive_integer" }),
-        ),
-      ).toEqual({ variable });
-    }
+  it("drops configuration-error parameters", () => {
     expect(
       safeLoadDetail(
         new AppError("server.config_invalid", {

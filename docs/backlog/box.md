@@ -548,6 +548,8 @@ Plan one multi-platform application image with arm64 smoke, and an arm64 install
 
 ## B3. The bootable USB installer
 
+- Live updates of existing installations keep the practice inbox profile, through both `waitron.sh`’s checked manual-upgrade path and the USB recipe’s updater: `scripts/box/upgrades/host.mjs` restarts it without the production selector (env5 limit; watcher, 2026-11-13 06:07).
+
 The [network display](../superpowers/plans/2026-11-12-b3-20-network-screen.md) shows the installed host’s wired and Wi-Fi observation on Settings → Box status. Network controls, scan/join/forget and Wi-Fi boot-copy reconciliation remain to be built.
 
 The development console shows Spanish and English together, names the checked venue and warns when its tag marks it Live; missing or unusable tags leave Live status unknown. It returns through a one-time EFI boot choice after 15 seconds. Keys pause it until 120 seconds without typing. The `existing-stick` rig completes Prepare, waits for the real startup counter to clear, and requires a continuous return with USB attached, unchanged disk hash before installed startup, unchanged chip unlock and `/health`. The graphical warning, reinstall controls and physical qualification remain open. [Return cut](../superpowers/plans/2026-11-11-b3-18b-firmware-return.md).
@@ -1385,8 +1387,6 @@ once released. Belongs with A1016.
 
 ## Bundle: What pack part 1's reviews left
 
-10 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
 - **A1187 part 1's defaults, which the owner has not confirmed.** The plan settled each question
   the design left open with a conservative default, among them the keep-until date counting from
   the key's change time (a stated departure from design §4) and Make offered wherever the old
@@ -1397,8 +1397,6 @@ once released. Belongs with A1016.
 - **A1187: code part 1 built twice.**
   The archive code, the backup-key check, the bucket recovery kit, the server key's name and its created date are each built in more than one place.
   [Detail](box.md#a1187-code-part-1-built-twice).
-- **A1187: a credentials-only change to environment-managed archive settings does not make a pack
-  out of date.** The pack record holds a digest of the non-secret settings only.
 - **A1187: the pack PDF's presentation.** It uses one regular-weight font: no bold, and codes not
   in a fixed-width face, so l and I look alike. The cover says "The dashboard's Backups screen shows
   the same checks" beside a check value (`key of <day> · rev <8 characters>`) that no part of the

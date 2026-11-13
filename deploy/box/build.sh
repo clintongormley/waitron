@@ -86,7 +86,7 @@ for kind in app agent mailpit; do
 done
 app="$(tar -xOf "$inputs/app.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
 agent="$(tar -xOf "$inputs/agent.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
-printf 'WAITRON_IMAGE=%s\nWAITRON_PRINT_AGENT_IMAGE=%s\nWAITRON_INSTALLATION_ORIGIN=usb\nWAITRON_BOX_SOCKET_DIR=/run/waitron-box\n' "$app" "$agent" > "$root/opt/waitron/.env"
+printf 'WAITRON_IMAGE=%s\nWAITRON_PRINT_AGENT_IMAGE=%s\nWAITRON_INSTALLATION_ORIGIN=usb\nCOMPOSE_PROFILES=practice-inbox\nWAITRON_BOX_SOCKET_DIR=/run/waitron-box\n' "$app" "$agent" > "$root/opt/waitron/.env"
 chmod 0600 "$root/opt/waitron/.env"
 install -D -m 0644 "$output/sandbox/usr/share/keyrings/docker.asc" "$root/usr/share/keyrings/docker.asc"
 install -D -m 0644 "$output/sandbox/etc/apt/sources.list.d/docker.sources" "$root/etc/apt/sources.list.d/docker.sources"

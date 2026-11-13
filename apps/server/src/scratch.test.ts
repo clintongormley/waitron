@@ -90,6 +90,6 @@ it("refuses a configured folder whose existing parent links into scratch", async
   await mkdir(scratch);
   await symlink(scratch, join(root, "alias"));
   await expect(
-    assertOutsideScratchResolved(root, join(root, "alias", "backups"), "WAITRON_BACKUP_DIR"),
+    assertOutsideScratchResolved(root, join(root, "alias", "backups"), "ARCHIVE_FOLDER"),
   ).rejects.toMatchObject({ code: "server.config_invalid" });
 });

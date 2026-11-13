@@ -49,15 +49,15 @@ describe("loadBoxEnv", () => {
 
   it("an empty base value does not mask a file value (compose ${VAR:-} case)", async () => {
     const dir = await mkdtemp(join(tmpdir(), "boxenv-"));
-    await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_DIR=/mnt/usb\n");
-    const merged = await loadBoxEnv({ WAITRON_BACKUP_DIR: "" }, dir);
-    expect(merged.WAITRON_BACKUP_DIR).toBe("/mnt/usb");
+    await writeFile(join(dir, "backup.env"), "ARCHIVE_FOLDER=/mnt/usb\n");
+    const merged = await loadBoxEnv({ ARCHIVE_FOLDER: "" }, dir);
+    expect(merged.ARCHIVE_FOLDER).toBe("/mnt/usb");
   });
 
   it("a non-empty base value still wins over the file", async () => {
     const dir = await mkdtemp(join(tmpdir(), "boxenv-"));
-    await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_DIR=/mnt/usb\n");
-    const merged = await loadBoxEnv({ WAITRON_BACKUP_DIR: "/mnt/env" }, dir);
-    expect(merged.WAITRON_BACKUP_DIR).toBe("/mnt/env");
+    await writeFile(join(dir, "backup.env"), "ARCHIVE_FOLDER=/mnt/usb\n");
+    const merged = await loadBoxEnv({ ARCHIVE_FOLDER: "/mnt/env" }, dir);
+    expect(merged.ARCHIVE_FOLDER).toBe("/mnt/env");
   });
 });

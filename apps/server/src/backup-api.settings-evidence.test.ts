@@ -36,7 +36,7 @@ import {
   type ArchiveSettings,
 } from "./archive-settings.js";
 import { mountBackupApi, type BackupApiDeps } from "./backup-api.js";
-import { isBackupManagedByEnvironment, loadBackupSettings } from "./backup-config.js";
+import { loadBackupSettings } from "./backup-config.js";
 import { loadBoxEnv } from "./box-env.js";
 import { readSettingsEvidence, type SettingsEvidenceDeps } from "./backup-settings-evidence.js";
 import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
@@ -117,12 +117,11 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
     nodeId: BACKUP_NODE_ID,
     buildConfig: async () =>
       loadBackupSettings({
-        managedByEnvironment: isBackupManagedByEnvironment(sc.base),
         env: await loadBoxEnv(sc.base, sc.stateDir),
         readSealedWithMeta: () =>
           (sc.readRecord ?? (() => readArchiveSettingsWithMeta(suite.db, sc.ring)))(),
       }),
-    isManagedByEnvironment: () => isBackupManagedByEnvironment(sc.base),
+
     // A secondary starts no sweep, so a clean load writes nothing into the folders these cases look at.
     readSingletonRole: () => "secondary",
     venueDir,
@@ -284,7 +283,7 @@ describe("GET /api/backup/settings-evidence", () => {
 
     expect(await evidence(buildApp(sup, sc))).toEqual({
       readAt: "2026-10-29T09:05:00.000Z",
-      managedByEnvironment: false,
+
       failures: [
         {
           at: "2026-10-29T09:00:00.000Z",
@@ -410,27 +409,6 @@ describe("GET /api/backup/settings-evidence", () => {
     expect(body.recoveryKey).toEqual({ held: true, tooShort: true });
   }, 60_000);
 
-  it("a box setting that is not a whole number: the variable, and the record's destinations", async () => {
-    const folder = destDir();
-    await write(RING, folderSettings(folder));
-    const sc = await scenario({ base: { WAITRON_BACKUP_STALE_AFTER_MS: "soon" } });
-    await storeKey(sc, KEY_1);
-    const sup = makeSupervisor(sc);
-    await sup.reload();
-
-    const body = await evidence(buildApp(sup, sc));
-    expect(body.failures).toEqual([
-      expect.objectContaining({
-        code: "server.config_invalid",
-        detail: { variable: "WAITRON_BACKUP_STALE_AFTER_MS" },
-      }),
-    ]);
-    expect(body.now).toEqual({
-      state: "readable",
-      destinations: [{ kind: "folder", dir: folder, look: "folder" }],
-    });
-  }, 60_000);
-
   it("a clean load: no failures, the time it loaded, and the destinations", async () => {
     const folder = destDir();
     await write(RING, folderSettings(folder));
@@ -519,23 +497,6 @@ describe("GET /api/backup/settings-evidence", () => {
         { kind: "folder", dir: file, look: "not_a_folder" },
         { kind: "folder", dir: denied, look: "unknown" },
       ],
-    });
-  }, 60_000);
-
-  it("settings the environment owns: the saved record's facts, but no destinations", async () => {
-    await write(RING, folderSettings(destDir()));
-    const meta = await recordNow();
-    const sc = await scenario({
-      base: { WAITRON_BACKUP_DIR: destDir(), WAITRON_BACKUP_RECOVERY_KEY: KEY_1 },
-    });
-    const sup = makeSupervisor(sc);
-    await sup.reload();
-
-    const body = await evidence(buildApp(sup, sc));
-    expect(body).toMatchObject({
-      managedByEnvironment: true,
-      record: { digest: meta!.digest },
-      now: { state: "readable", destinations: [] },
     });
   }, 60_000);
 

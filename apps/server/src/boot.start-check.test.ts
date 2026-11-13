@@ -450,8 +450,7 @@ describe("the start check on a real start", () => {
                 stream: publisher,
                 venueId: "returning-main",
                 isPrimary: () => true,
-                isManagedByEnvironment: () => false,
-                loadedArchives: () => [],
+
                 readRecoveryKey: async () => recoveryKey,
                 writeRecoveryKey: async (key) => {
                   recoveryKey = key;
