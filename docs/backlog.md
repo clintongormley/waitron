@@ -2239,6 +2239,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A976. Finish the server's English test-venue defaults.**
   The VAT-class, issue-rate, line-transfer and move/merge filing suites use Administrator for their staff sample; their location and dish samples remain.
+  The issuance-pass and list-unit-price fiscal-identity, served-at-huella, split-bill fiscal and tabs filing suites use Administrator for their staff sample; their other display samples remain.
   Local invoice-correction and fiscal-sale route staff samples use Martha, Administrator, Cashier and Supervisor.
   Local workforce-export staff use Martha Canary, Colleague Green, Anna Admin and Lewis Manager;
   the adjustment-approval and box-email incident samples use Paul and Anna.
