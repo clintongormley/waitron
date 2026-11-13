@@ -240,7 +240,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#a445-a-free-item-on-a-bill-with-mixed-vat-rates-should-take-a-share-of-the-price-paid).
 
 - **A446. Build the pre-bill: each printed pre-bill is stored as printed and linked to the invoice that follows — OPEN, build it now to the strict reading, without waiting for S2 (owner, 2026-11-04).** Needs a build plan from A803 §3.9.
-  [Detail](backlog/fiscal.md#a446-when-the-pre-bill-is-built-each-printed-pre-bill-is-stored-as-printed-and-linked-to-the-invoice-that-follows).
+  [Detail](backlog/fiscal.md#a446-build-the-pre-bill-each-printed-pre-bill-is-stored-as-printed-and-linked-to-the-invoice-that-follows).
 
 - **A447. A guest's part-payment taken before the table is fully served may need its own advance-payment invoice.** No change until answered.
   [Detail](backlog/fiscal.md#a447-a-guests-part-payment-taken-before-the-table-is-fully-served-may-need-its-own-advance-payment-invoice).
@@ -1222,7 +1222,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **The reconciler's card reversal records only after the provider call, with a fresh key each time.**
   Next: give the reconciler's reversal the same durable-attempt rule.
-  [Detail](backlog/payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time)
+  [Detail](backlog/payments.md#the-reconcilers-card-reversal-records-only-after-the-provider-call-with-a-fresh-key-each-time)
 
 
 
@@ -1284,10 +1284,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   bigger brainstorm." Next: that brainstorm with the owner, before any build or further question.
   [Detail](backlog/payments.md#a793--tips-who-a-tip-belongs-to-how-it-is-shared-out-and-what-payroll-gets)
 
-- **Three small tip display gaps** (found by A793's design, read): the dashboard's order detail
-  shows a bill payment's applied amount without its tip; the card slip's words are fixed Spanish;
-  and the Spanish refund slip says "Propina" where the English says "Tip returned".
-  [Detail](backlog/payments.md#three-small-tip-display-gaps)
+- **Two small tip display gaps** (found by A793's design, read): the dashboard's order detail
+  shows a bill payment's applied amount without its tip; and the Spanish refund slip says
+  "Propina" where the English says "Tip returned".
+  [Detail](backlog/payments.md#tip-display-gaps)
 
 - **Reader status time limits** (bundle of 2, size S). [Detail](backlog/payments.md#bundle-reader-status-time-limits)
 
@@ -1981,9 +1981,6 @@ For package distribution and the four-minute target, use the
   The later rows never run; the run still exits 1. Cause not found.
   [Detail](backlog/ci.md#one-failing-success-branch-check-in-the-first-fiscal-setup-end-to-end-file-ends-its-worker)
 
-- **A backlog detail link still names the old five-handler heading.**
-  [Detail](backlog/ci.md#a-backlog-detail-link-still-names-the-old-five-handler-heading).
-
 For browser storage checks, inspect the operation's own entry and every write, comparing complete
 values rather than PIN substrings inside random IDs. See the
 [testing guide](developers/testing-guide.md#check-stored-secrets-as-values-and-inspect-every-write).
@@ -2020,11 +2017,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **Root guard deadlines under extreme external load (left open by A751).**
   [Detail](backlog/ci.md#at-a-load-average-near-60-more-root-guard-files-fail-on-time).
-
-- **A1307 follow-up: the file-progress reporter's tests set up a page with two near-copies of one helper.**
-  Fold the new setup into the existing helper and move the two cases beside their neighbours; no
-  assertion changes.
-  [Detail](backlog/ci.md#a1307-follow-up-the-file-progress-reporters-tests-set-up-a-page-with-two-near-copies-of-one-helper).
 
 - **Test-helper debt:** `provisionTestVenue(db, overrides)` for `apps/server`'s sixty-odd suites; the
   duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/` (`freePort` has moved there,

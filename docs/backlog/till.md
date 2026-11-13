@@ -159,8 +159,6 @@ may make one or both of those branches reachable, or show they can go.
   `apps/server/src/receipt-guests.ts`), so that receipt prints no guests line where Part 3a would
   have printed one. Decide whether bookings and parties take the same 1 to 999 bound.
 
-<a id="five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen"></a>
-
 ## Three till handlers still leave a failed list refresh unhandled
 
 - `#onRetrieveOrder` awaits `#refreshHeldOrders()`, and `#onAdvanceTicketItem` awaits
@@ -2424,7 +2422,7 @@ except that it no longer waits on the retired split and transfer routes (A1196).
   await their list refresh after their `try`/`catch`, outside it, and `#onMarkCollected` awaits
   `#refreshStationQueue()` after a failed collect in a `try`/`finally` with no `catch`. **Next
   action:** decide what each shows when that refresh fails.
-  [Detail](till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen)
+  [Detail](till.md#three-till-handlers-still-leave-a-failed-list-refresh-unhandled)
 
 ## Bundle: Two forms not yet on the Forms contract
 

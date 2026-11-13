@@ -26,19 +26,6 @@ Current command after A976’s staff-sample rename (2026-11-09):
 `pnpm --filter @waitron/server exec vitest run src/order-portions.adjustments.test.ts -t 'two croquettes from two rounds|a cancel naming portions of two different rows'`
 The dated experiment above retains its original titles and command.
 
-## A backlog detail link still names the old five-handler heading
-
-The till entry’s
-`backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen`
-no longer matches “Three till handlers still leave a failed list refresh unhandled”.
-Retarget the link during the till backlog cleanup; keep the open handlers entry.
-
-One other index link needs the same cleanup:
-the payments link still names “The card refund path records only after the provider call,
-with a fresh key each time”, while its detail now says “The reconciler's card reversal records
-only after the provider call, with a fresh key each time”. Retarget it without changing
-its open work, then check the index's local heading links.
-
 ## Retain failure screenshots for long browser test names
 
 A failed waiting-list refresh case
@@ -1420,9 +1407,3 @@ highest-id copy of each report name. Check on a throwaway branch (fail one shard
 re-run it, read which artifact id the helper downloads) that the highest id is the re-run's. If
 it is, delete this entry; if not, make the helper keep the re-run's copy.
 
-## A1307 follow-up: the file-progress reporter's tests set up a page with two near-copies of one helper
-
-`scripts/vitest-file-progress.test.mjs` gained a second page-and-module setup beside the
-existing one in #2395, and two of its new cases sit apart from the cases they extend. Fold the
-new setup into the existing helper and move the two cases beside their neighbours; no assertion
-changes.
