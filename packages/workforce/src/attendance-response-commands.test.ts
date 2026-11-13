@@ -398,6 +398,20 @@ it("approval changes 480 to 540 only after the manager decides", async () => {
   });
   await intact();
 });
+it("a demoted proposal authorizer cannot replay a saved correction", async () => {
+  const payload = pair();
+  if (payload.action !== "request") throw new Error("fixture requires request");
+  const value = await command({
+    action: "propose",
+    personId,
+    changes: payload.changes,
+    reason: "Please check these times",
+  });
+  await send(value, manager);
+  await setBuiltInRoleForTest(suite.db, manager, "staff");
+  await refused(() => send(value, manager), "correction.not_permitted");
+});
+
 it("manager pair stays pending until the worker accepts the entire item", async () => {
   const payload = pair();
   if (payload.action !== "request") throw new Error("fixture requires request");

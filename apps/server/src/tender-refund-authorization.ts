@@ -10,7 +10,7 @@ import {
 import {
   authorize,
   canUseDeviceProfile,
-  roleHasPermission,
+  holds,
   verifyThrottledCredential,
   type Authorization,
   type PinAttempts,
@@ -161,7 +161,7 @@ export async function withTenderRefundAuthorization<T>(
                 operator.attempts,
                 override.checked,
               );
-              if (!roleHasPermission(confirmer.role, "sale.refund"))
+              if (!holds(confirmer.authority, "sale.refund"))
                 throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
               authorization = {
                 ...authorization,

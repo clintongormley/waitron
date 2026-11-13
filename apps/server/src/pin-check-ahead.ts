@@ -3,10 +3,10 @@ import type { Database } from "@waitron/db";
 import {
   checkPin,
   persons,
-  roleHasPermission,
+  holds,
+  readPersonAuthority,
   sessions,
   type Permission,
-  type PersonRoleValue,
   type PinAttempts,
   type SecretCheck,
 } from "@waitron/identity";
@@ -60,13 +60,13 @@ export async function overrideToCheck<T extends { personId: string; pin: string 
 ): Promise<T | undefined> {
   if (override === undefined) return undefined;
   const [operator] = await db
-    .select({ role: persons.role })
+    .select({ personId: sessions.personId })
     .from(sessions)
     .innerJoin(persons, eq(persons.id, sessions.personId))
     .where(and(eq(sessions.id, authz.sessionId), isNull(sessions.endedAt)));
   if (
     operator === undefined ||
-    (!checkedAnyway && roleHasPermission(operator.role as PersonRoleValue, authz.permission))
+    (!checkedAnyway && holds(await readPersonAuthority(db, operator.personId), authz.permission))
   ) {
     return undefined;
   }

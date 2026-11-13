@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { withTransaction, type Database } from "@waitron/db";
-import { authorizeManager, roleHasPermission, type Permission } from "@waitron/identity";
+import { authorizeManager, holds, type Permission } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -37,7 +37,7 @@ export function mountEmailInboxApi(app: Hono, deps: EmailInboxApiDeps, log: Logg
     run(c, log, async () => {
       const actor = await authorize(c);
       const mode = await deps.resolveMode();
-      if (mode !== "local_capture" || !roleHasPermission(actor.role, "person.admin"))
+      if (mode !== "local_capture" || !holds(actor.authority, "person.admin"))
         return c.json({ mode, count: 0, messages: [] });
       const inbox = await deps.mailpit.list();
       return c.json({ mode, ...inbox });

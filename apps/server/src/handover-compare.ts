@@ -8,7 +8,7 @@ import {
   type FinalStateIndicator,
   type RetainedRevision,
 } from "@waitron/handover";
-import { personRole, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
+import { holdsInCopy } from "@waitron/identity";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import { imageMigrationHashes, manifestSets, type MigrationSetSource } from "@waitron/migrations";
 import {
@@ -387,18 +387,7 @@ async function authoriserRefused(
 ): Promise<Refusal | null> {
   const authorisedBy = await offeredAuthoriser(deps, operationId);
   if (await hasTable(query, "persons")) {
-    for await (const row of query.rows("select role, status from persons where id = ?", [
-      authorisedBy,
-    ])) {
-      const role = String(row.role);
-      if (
-        row.status === "active" &&
-        (personRole.enumValues as readonly string[]).includes(role) &&
-        roleHasPermission(role as PersonRoleValue, "node.manage")
-      ) {
-        return null;
-      }
-    }
+    if (await holdsInCopy(query, authorisedBy, "node.manage")) return null;
   }
   return refuse("handover.authoriser_not_permitted");
 }

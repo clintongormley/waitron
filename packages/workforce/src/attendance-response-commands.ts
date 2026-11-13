@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
-import { persons, roleHasPermission } from "@waitron/identity";
+import { persons, holds, readPersonAuthority } from "@waitron/identity";
 import { AppError, type Origin } from "@waitron/shared";
 import type {
   AttendanceCommand,
@@ -133,7 +133,7 @@ async function authority(
     payload.action === "approve" ||
     payload.action === "decline"
   ) {
-    if (!roleHasPermission(actor!.role, "workforce.correct")) refuse();
+    if (!holds(await readPersonAuthority(tx, authorizer), "workforce.correct")) refuse();
     if (payload.action === "propose") {
       if (requester !== authorizer || authorizer === personId) refuse();
     } else if (

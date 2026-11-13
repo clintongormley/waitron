@@ -13,7 +13,6 @@ import {
   absenceKind,
 } from "@waitron/workforce";
 import {
-  permissionsForRole,
   beginOwnPasskeyCheck,
   IDLE_TIMEOUT_MS,
   markPasskeyOffered,
@@ -371,10 +370,12 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   app.get("/management-api/session/me", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const { personId, role, email, locale, venueName, expiresAt } = await asStaff(async (tx) => ({
-        ...(await resolveManagementSession(tx, sessionId, { touch: false })),
-        venueName: await readVenueName(tx),
-      }));
+      const { personId, role, authority, email, locale, venueName, expiresAt } = await asStaff(
+        async (tx) => ({
+          ...(await resolveManagementSession(tx, sessionId, { touch: false })),
+          venueName: await readVenueName(tx),
+        }),
+      );
       // This body describes ONE person in ONE browser: it turns on the session cookie AND on
       // Accept-Language, so no cache may keep a copy, and any cache that ignores `no-store` must at
       // least key on the language it varies by.
@@ -394,7 +395,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         sessionDefault: resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
         venueName,
         onboardingIntent: deps.onboardingIntent,
-        permissions: permissionsForRole(role),
+        permissions: [...authority.permissions],
         modules: deps.modules,
         sessionExpiresInSeconds: Math.min(
           IDLE_TIMEOUT_MS / 1000,

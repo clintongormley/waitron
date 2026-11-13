@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { addIncidentNote, findIncident, markIncidentHandled } from "@waitron/core";
-import { permissionsForRole, resolveManagementSession } from "@waitron/identity";
+import { resolveManagementSession } from "@waitron/identity";
 import { createErrorBoundary, requireManagementSession, type Logger } from "@waitron/server-kit";
 import { AppError, diskFullIn, isUuid } from "@waitron/shared";
 import {
@@ -83,7 +83,7 @@ export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): voi
     const sessionId = requireManagementSession(c);
     return withTransaction(deps.db, async (tx) => {
       const session = await resolveManagementSession(tx, sessionId);
-      const held = new Set(permissionsForRole(session.role));
+      const held = session.authority.permissions;
       return fn(tx, { personId: session.personId, held });
     });
   };
@@ -94,7 +94,7 @@ export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       const readAs = async (tx: Transaction, touch: boolean) => {
         const session = await resolveManagementSession(tx, sessionId, { touch });
-        const held: ReadonlySet<string> = new Set(permissionsForRole(session.role));
+        const held: ReadonlySet<string> = session.authority.permissions;
         if (!alertsVisible(deps.registry, held)) return { visible: false, alerts: [], held };
         const alerts = await read(tx, { registry: deps.registry, now, log }, held);
         return { visible: true, alerts, held };

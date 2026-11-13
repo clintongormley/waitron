@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { devices, nowIso, sessions } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import type { PersonAuthority } from "./authority.js";
 import { verifyPersonCredential } from "./credential.js";
 import { canUseDeviceProfile } from "./profile-admission.js";
 import type { PersonRoleValue } from "@waitron/shared";
@@ -15,9 +16,10 @@ export interface Session {
   token: string;
   personId: string;
   deviceId: string;
-  /** Convenience for client-side affordances only: every server gate re-derives the role from the
+  /** Convenience for client-side affordances only: every server gate re-derives authority from the
    * session and re-checks the permission (`authorize`), so a tampered client value grants nothing. */
   role: PersonRoleValue;
+  authority: PersonAuthority;
   /** `null` means no preference: fall back to the venue default. */
   locale: string | null;
 }
@@ -30,7 +32,7 @@ export async function loginWithPin(
   tx: Transaction,
   input: { deviceId: string; personId: string; pin: string; checked?: SecretCheck },
 ): Promise<Session> {
-  const { role, locale } = await verifyPersonCredential(
+  const { role, authority, locale } = await verifyPersonCredential(
     tx,
     input.personId,
     input.pin,
@@ -60,6 +62,7 @@ export async function loginWithPin(
     personId: input.personId,
     deviceId: input.deviceId,
     role,
+    authority,
     locale,
   };
 }

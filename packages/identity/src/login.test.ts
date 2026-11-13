@@ -39,6 +39,7 @@ describe("loginWithPin", () => {
       personId,
       deviceId,
       role: "staff",
+      authority: { personId, admin: false, permissions: expect.any(Set) },
       locale: null,
     });
 

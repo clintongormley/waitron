@@ -29,8 +29,8 @@ import {
   IDENTITY_PERSONAL_DATA,
   PERMISSIONS,
   registerModulePermissions,
-  roleHasPermission,
 } from "@waitron/identity";
+import { roleHasPermission } from "@waitron/identity/src/permissions.js";
 import { manifestSets } from "@waitron/migrations";
 import {
   parseModuleOverrides,

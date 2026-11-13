@@ -94,6 +94,7 @@ describe("createPerson", () => {
       personId: id,
       deviceId,
       role: "supervisor",
+      authority: { personId: id, admin: false, permissions: expect.any(Set) },
       locale: null,
     });
   });
@@ -351,6 +352,7 @@ describe("resetPin", () => {
       personId: targetId,
       deviceId,
       role: "staff",
+      authority: { personId: targetId, admin: false, permissions: expect.any(Set) },
       locale: null,
     });
 

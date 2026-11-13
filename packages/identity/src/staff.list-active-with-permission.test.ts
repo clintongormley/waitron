@@ -1,5 +1,5 @@
 import { seedPersons } from "../test/person-rows.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -63,4 +63,31 @@ it("lists active managers for a registered module permission, excluding staff an
       listActivePersonsWithPermission(tx, "test.active_manager"),
     ),
   ).toEqual([{ personId: managerId, displayName: "Manager" }]);
+});
+
+it("uses one select for a supervisor picker with 50 people", async () => {
+  const people = await seedPersons(
+    suite.db,
+    Array.from({ length: 50 }, (_, index) => ({
+      displayName: `Person ${String(index).padStart(2, "0")}`,
+      pinHash: PIN,
+      role: index % 2 === 0 ? ("manager" as const) : ("staff" as const),
+    })),
+  );
+  await withTransaction(suite.db, async (tx) => {
+    const reads = vi.spyOn(tx, "select");
+    try {
+      expect(await listActivePersonsWithPermission(tx, "cash.drawer")).toEqual(
+        people
+          .filter((_, index) => index % 2 === 0)
+          .map((person) => ({
+            personId: person.id,
+            displayName: person.displayName,
+          })),
+      );
+      expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+  });
 });

@@ -143,7 +143,11 @@ describe("verifyPersonCredential with a check", () => {
 
     const cred = await run((tx) => verifyPersonCredential(tx, personId, "1234", checked));
 
-    expect(cred).toEqual({ role: "supervisor", locale: null });
+    expect(cred).toEqual({
+      role: "supervisor",
+      locale: null,
+      authority: { personId, admin: false, permissions: expect.any(Set) },
+    });
     expect(pinSpy).not.toHaveBeenCalled();
   });
 

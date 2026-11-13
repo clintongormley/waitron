@@ -3,8 +3,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { persons, sessions } from "@waitron/db";
-import { roleHasPermission, type Permission } from "./permissions.js";
-import type { PersonRoleValue } from "@waitron/shared";
+import type { Permission } from "./permissions.js";
+import { readPersonAuthority, holds } from "./authority.js";
 import {
   verifyPersonCredential,
   verifyThrottledCredential,
@@ -47,13 +47,13 @@ export async function authorize(
   // so a session whose person row is gone is absent from this join and reads as `session.not_open`,
   // which fails closed.
   const [row] = await tx
-    .select({ personId: sessions.personId, role: persons.role })
+    .select({ personId: sessions.personId })
     .from(sessions)
     .innerJoin(persons, eq(persons.id, sessions.personId))
     .where(and(eq(sessions.id, args.sessionId), isNull(sessions.endedAt)));
   if (row === undefined) throw new AppError("session.not_open", { sessionId: args.sessionId });
 
-  if (roleHasPermission(row.role as PersonRoleValue, args.permission)) {
+  if (holds(await readPersonAuthority(tx, row.personId), args.permission)) {
     return { authorizedBy: row.personId, permission: args.permission, viaOverride: false };
   }
 
@@ -64,7 +64,7 @@ export async function authorize(
   const cred = await (attempts === undefined
     ? verifyPersonCredential(tx, personId, pin, checked)
     : verifyThrottledCredential(tx, personId, pin, attempts, checked));
-  if (!roleHasPermission(cred.role, args.permission)) {
+  if (!holds(cred.authority, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }
   return { authorizedBy: args.override.personId, permission: args.permission, viaOverride: true };
@@ -77,7 +77,7 @@ export async function authorizeByPin(
 ): Promise<Authorization> {
   const { personId, pin, checked } = args.override;
   const cred = await verifyThrottledCredential(tx, personId, pin, attempts, checked);
-  if (!roleHasPermission(cred.role, args.permission)) {
+  if (!holds(cred.authority, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }
   return { authorizedBy: personId, permission: args.permission, viaOverride: true };

@@ -49,7 +49,13 @@ describe("verifyThrottledCredential", () => {
 
     const cred = await run((tx) => verifyThrottledCredential(tx, personId, "1234", attempts));
 
-    expect(cred).toEqual({ role: "supervisor", locale: null });
+    expect(cred).toEqual({
+      role: "supervisor",
+      locale: null,
+      authority: { personId, admin: false, permissions: expect.any(Set) },
+    });
+    expect(cred.authority.permissions.has("sale.refund")).toBe(true);
+    expect(cred.authority.permissions.has("report.export")).toBe(false);
     expect(throttle.check).toHaveBeenCalledWith("override:device-1", personId);
     expect(throttle.clear).toHaveBeenCalledWith("override:device-1", personId);
     expect(throttle.recordFailure).not.toHaveBeenCalled();

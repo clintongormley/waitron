@@ -536,6 +536,8 @@ describe("authorizeManager", () => {
       authorizeManager(tx, { managementSessionId: session.token, permission: "person.manage" }),
     );
     expect(auth.authorizedBy).toBe(personId);
+    expect(auth.authority.permissions.has("person.manage")).toBe(true);
+    expect(auth.authority.permissions.has("system.box_admin")).toBe(false);
   });
   it("refuses a staff role for person.manage", async () => {
     await seedManager(suite.db, { email: "staff@x.com", role: "staff" });

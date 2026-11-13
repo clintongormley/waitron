@@ -1,6 +1,6 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { persons, roleHasPermission } from "@waitron/identity";
+import { persons, listActivePersonsWithPermission } from "@waitron/identity";
 
 export interface ManagerEmailRecipient {
   readonly personId: string;
@@ -13,12 +13,14 @@ async function recipients(
   venueLanguage: "en" | "es",
   personId?: string,
 ): Promise<ManagerEmailRecipient[]> {
+  const admitted = new Set(
+    (await listActivePersonsWithPermission(tx, "system.manage")).map((person) => person.personId),
+  );
   const people = await tx
     .select({
       id: persons.id,
       email: persons.email,
       locale: persons.locale,
-      role: persons.role,
     })
     .from(persons)
     .where(
@@ -30,7 +32,7 @@ async function recipients(
       ),
     );
   return people
-    .filter((person) => roleHasPermission(person.role, "system.manage"))
+    .filter((person) => admitted.has(person.id))
     .map((person) => ({
       personId: person.id,
       email: person.email!.trim(),

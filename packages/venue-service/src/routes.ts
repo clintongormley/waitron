@@ -12,7 +12,7 @@ import {
   type ServiceStepStart,
   type Transaction,
 } from "@waitron/db";
-import { authorizeManager, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
+import { authorizeManager, holds, type PersonAuthority } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
   createErrorBoundary,
@@ -470,14 +470,14 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const gatedAs = <T>(
       sessionId: string,
-      fn: (tx: Transaction, role: PersonRoleValue, personId: string) => Promise<T>,
+      fn: (tx: Transaction, authority: PersonAuthority, personId: string) => Promise<T>,
     ): Promise<T> =>
       withTransaction(ctx.db, async (tx) => {
-        const { role, authorizedBy } = await authorizeManager(tx, {
+        const { authority, authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "venue.configure",
         });
-        return fn(tx, role, authorizedBy);
+        return fn(tx, authority, authorizedBy);
       });
     const gated = <T>(
       sessionId: string,
@@ -698,9 +698,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         return c.json(
-          await gatedAs(sessionId, async (tx, role) => ({
+          await gatedAs(sessionId, async (tx, authority) => ({
             ...(await routingModel(tx, new Date())),
-            canMakeDefault: roleHasPermission(role, "venue.configure"),
+            canMakeDefault: holds(authority, "venue.configure"),
           })),
         );
       }),

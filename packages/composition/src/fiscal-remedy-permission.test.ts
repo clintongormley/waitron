@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { registerModulePermissions, roleHasPermission } from "@waitron/identity";
+import { registerModulePermissions } from "@waitron/identity";
+import { roleHasPermission } from "@waitron/identity/src/permissions.js";
 import { ALL_MODULES } from "./modules.js";
 
 it("grants fiscal remedy decisions only to administrators through the fiscal module", () => {

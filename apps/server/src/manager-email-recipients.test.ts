@@ -1,5 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -47,5 +47,21 @@ describe("readManagerEmailRecipients", () => {
       { personId: manager, email: "manager@example.test", language: "en" },
       { personId: plain, email: "plain@example.test", language: "es" },
     ]);
+  });
+});
+
+it("uses at most two selects to find eligible email recipients", async () => {
+  const managerId = await person("Manager", { role: "manager", email: "manager@example.test" });
+  await person("Staff", { role: "staff", email: "staff@example.test" });
+  await withTransaction(suite.db, async (tx) => {
+    const reads = vi.spyOn(tx, "select");
+    try {
+      expect(await readManagerEmailRecipients(tx, "en")).toEqual([
+        { personId: managerId, email: "manager@example.test", language: "en" },
+      ]);
+      expect(reads.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally {
+      reads.mockRestore();
+    }
   });
 });
