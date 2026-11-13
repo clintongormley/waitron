@@ -4,7 +4,7 @@ import { codeOf, currentLocale } from "@waitron/dashboard-kit";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   type DraftScope,
   type LeaveCoordinator,
@@ -409,7 +409,7 @@ export class SpecialDayPainter extends LitElement {
   @state() private draft: Draft = blank([]);
   @state() private loading = false;
   @state() private loadFailed = false;
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   @state() private refused?: Refused;
   /** Edits a refresh dropped because what they belonged to is gone or inactive; shown beside Save. */
   @state() private notice = "";
@@ -493,7 +493,7 @@ export class SpecialDayPainter extends LitElement {
         equal: sameDraft,
         restore: (value) => {
           this.draft = copyDraft(value);
-          this.attempted = false;
+          this.feedback.reset();
           this.refused = undefined;
           this.notice = "";
         },
@@ -554,7 +554,7 @@ export class SpecialDayPainter extends LitElement {
     this.filling = undefined;
     this.seeded = key;
     this.saving = false;
-    this.attempted = false;
+    this.feedback.reset();
     this.refused = undefined;
     this.notice = "";
     this.deleting = undefined;
@@ -878,7 +878,7 @@ export class SpecialDayPainter extends LitElement {
     return errors;
   }
   private blocked(): boolean {
-    return this.attempted && Object.keys(this.ownErrors()).length > 0;
+    return this.feedback.attempted && Object.keys(this.ownErrors()).length > 0;
   }
 
   private async save() {
@@ -889,10 +889,9 @@ export class SpecialDayPainter extends LitElement {
       saveActionState(this.scope, { savableAtOpen: this.savableAtOpen }).unchanged
     )
       return;
-    this.attempted = true;
+    this.feedback.press();
     if (this.blocked()) {
-      await this.updateComplete;
-      focusFirstInvalid(this.shadowRoot!);
+      await this.feedback.focus(this.shadowRoot!);
       return;
     }
     const seed = this.seedToken;
@@ -935,7 +934,7 @@ export class SpecialDayPainter extends LitElement {
     if (seed !== this.seedToken) return;
     this.specialDayId = detail.id;
     this.seeded = this.seedKey();
-    this.attempted = false;
+    this.feedback.reset();
     this.adopt(detail, [], "", this.paintedSince(sent));
     const dropped = this.dropUnpaintable(model);
     this.dispatchEvent(
@@ -1529,7 +1528,7 @@ export class SpecialDayPainter extends LitElement {
   }
 
   private panel(locked: boolean) {
-    const errors = this.attempted ? this.ownErrors() : {};
+    const errors = this.feedback.attempted ? this.ownErrors() : {};
     const holidayDates = new Set(this.holidays.map(({ date }) => date));
     const onHoliday = this.draft.dates.some(({ date }) =>
       this.stored.has(date) ? this.stored.get(date) !== undefined : holidayDates.has(date),

@@ -5,7 +5,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
+  bottomMessage,
   saveActionState,
   type DraftScope,
   type LeaveCoordinator,
@@ -129,7 +130,7 @@ export class RoutingCellEditor extends LitElement {
   };
 
   @state() private draft: Draft = { target: "", lines: [] };
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   /** Names of periods a live update deleted while this draft held them. */
   @state() private removed: string[] = [];
   private scope?: DraftScope<Draft>;
@@ -182,7 +183,7 @@ export class RoutingCellEditor extends LitElement {
       this.draft = this.opening();
       this.baseline = copy(this.draft);
       this.edited = new Set();
-      this.attempted = false;
+      this.feedback.reset();
       this.refusal = undefined;
       this.removed = [];
     } else if (changed.has("periods")) {
@@ -480,10 +481,10 @@ export class RoutingCellEditor extends LitElement {
 
   private save() {
     if (!this.open || !this.isConnected || this.busy || this.saveState.unchanged) return;
-    this.attempted = true;
+    this.feedback.press();
     this.refusal = undefined;
     if (this.hasOwnErrors()) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     const detail: RoutingCellSave = {
@@ -523,7 +524,7 @@ export class RoutingCellEditor extends LitElement {
   override render(): unknown {
     if (!this.open || this.cell === undefined) return nothing;
     const s = this.saveState;
-    const own: OwnErrors = this.attempted ? this.ownErrors() : { lines: new Map() };
+    const own: OwnErrors = this.feedback.attempted ? this.ownErrors() : { lines: new Map() };
     const refused = this.refusedLine();
     const marked = own.target !== undefined || own.lines.size > 0 || refused !== undefined;
     const unplaced =
@@ -679,7 +680,7 @@ export class RoutingCellEditor extends LitElement {
         </div>
         <wt-form-actions
           slot="footer"
-          .error=${[unplaced, marked ? t("prep.fix_fields") : ""].filter(Boolean).join(" ")}
+          .error=${bottomMessage(unplaced, marked ? t("prep.fix_fields") : "")}
         >
           <wt-button
             slot="cancel"
@@ -713,7 +714,7 @@ export class RoutingCellEditor extends LitElement {
           <wt-button
             data-test="save-cell"
             variant=${s.variant}
-            ?disabled=${s.unchanged || this.busy || (this.attempted && this.hasOwnErrors())}
+            ?disabled=${s.unchanged || this.busy || (this.feedback.attempted && this.hasOwnErrors())}
             ?loading=${this.busy}
             @click=${() => {
               if (current()) this.save();
