@@ -29,7 +29,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
-import { parkOrder } from "./working-order.js";
+import { parkOrder, readInvoiceNumber } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -551,6 +551,22 @@ describe("GET /api/invoice-corrections", () => {
     expect(ids).toEqual(expect.arrayContaining([here, there]));
     expect(ids).not.toContain(filed);
     await serveOnly(venue.zoneId);
+  });
+
+  it("names each correction's invoice by its number", async () => {
+    const first = await sold(["10.00"]);
+    const second = await sold(["10.00"]);
+    const numbers = await inTx(venue, async (tx) => [
+      await readInvoiceNumber(tx, first),
+      await readInvoiceNumber(tx, second),
+    ]);
+    expect(numbers[0]).not.toBe(numbers[1]);
+    const ids = [await opened(first), await opened(second)];
+
+    const listed = (await list()).json.corrections as { id: string; invoiceNumber: string }[];
+    expect(
+      ids.map((id) => listed.find((correction) => correction.id === id)?.invoiceNumber),
+    ).toEqual(numbers);
   });
 });
 

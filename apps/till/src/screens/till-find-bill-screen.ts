@@ -107,9 +107,15 @@ export class TillFindBillScreen extends LitElement {
       .corrections {
         display: flex;
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
         gap: var(--wt-space-2);
         margin-bottom: var(--wt-space-3);
+      }
+      .correction-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       h2 {
         font-size: var(--wt-font-size-lg);
@@ -189,6 +195,7 @@ export class TillFindBillScreen extends LitElement {
   #correctionRow(correction: OpenInvoiceCorrection, timeZone: string): string {
     const money = (value: string) => formatMoney(value, currentLocale());
     const values: Record<string, string> = {
+      invoice: correction.invoiceNumber,
       when: new Date(correction.openedAt).toLocaleString(currentLocale(), { timeZone }),
       reason: correction.reason,
       left: money(correction.left),
@@ -218,10 +225,13 @@ export class TillFindBillScreen extends LitElement {
         (correction) =>
           html`<wt-button
             variant="secondary"
+            align="start"
             data-correction=${correction.id}
             .disabled=${this.busy}
             @click=${() => this.#emit("find-correction-open", { correction })}
-            >${this.#correctionRow(correction, timeZone)}</wt-button
+            ><span class="correction-text" data-correction-text
+              >${this.#correctionRow(correction, timeZone)}</span
+            ></wt-button
           >`,
       )}
     </section>`;

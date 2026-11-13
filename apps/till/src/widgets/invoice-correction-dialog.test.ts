@@ -109,6 +109,13 @@ async function mount(api = fakeApi()) {
   await el.updateComplete;
   return { el, api };
 }
+/** The focused element, looked for through every shadow root on the way down. */
+function focused(): Element | null {
+  let found = document.activeElement;
+  while (found?.shadowRoot?.activeElement) found = found.shadowRoot.activeElement;
+  return found;
+}
+
 const root = (el: TillInvoiceCorrectionDialog) => el.shadowRoot!;
 const text = (node: Element | null) => node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
 const dish = (el: TillInvoiceCorrectionDialog, id: string) =>
@@ -153,6 +160,27 @@ it("shows each dish with what is left of it, the money still refundable and the 
   ]);
   expect(grossField(el).label).toBe("Money back, VAT included");
   expect(grossField(el).required).toBe(true);
+});
+
+it("opens the form with focus on its first dish, not on the window", async () => {
+  const { el } = await mount();
+
+  await vi.waitFor(() => expect(dish(el, "rice").shadowRoot!.contains(focused())).toBe(true));
+});
+
+it("puts each dish on a row of its own, however wide the window", async () => {
+  const previous = { width: innerWidth, height: innerHeight };
+  await page.viewport(1280, 800);
+  try {
+    const { el } = await mount();
+    const [rice, steak] = [dish(el, "rice"), dish(el, "steak")].map((node) =>
+      node.getBoundingClientRect(),
+    );
+    expect(steak!.top).toBeGreaterThanOrEqual(rice!.bottom);
+    expect(steak!.left).toBe(rice!.left);
+  } finally {
+    await page.viewport(previous.width, previous.height);
+  }
 });
 
 it("previews the typed amount and shows the server's split, keeping only the latest answer", async () => {
@@ -549,6 +577,13 @@ describe("sending a correction", () => {
 describe("an open correction", () => {
   afterEach(() => localStorage.clear());
 
+  it("opens with focus on its first choice, not on the window", async () => {
+    const { el } = await mountSending(sendingApi(), "correction-1");
+
+    const check = root(el).querySelector<HTMLElement>("[data-choice=check]")!;
+    await vi.waitFor(() => expect(check.shadowRoot!.contains(focused())).toBe(true));
+  });
+
   it("shows the money already back before more cash, and files it with the split shown", async () => {
     const api = sendingApi();
     const split = [{ rate: "21.00", base: "1.65", tax: "0.35" }];
@@ -658,7 +693,7 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
       t("invoice_correction.saved").replaceAll("{amount}", "€6.05"),
     );
     expect(grossField(el)).toBeNull();
-    expect(root(el).querySelector("wt-form-actions")!.error).toBe(t("invoice_correction.unknown"));
+    expect(root(el).querySelector("wt-form-actions")!.error).toBe("");
 
     resend(el).click();
     await vi.waitFor(() => expect(root(el).querySelector("[data-back]")).not.toBeNull());

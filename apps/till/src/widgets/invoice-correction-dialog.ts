@@ -131,6 +131,11 @@ export class TillInvoiceCorrectionDialog extends LitElement {
         flex-direction: column;
         gap: var(--wt-space-1);
       }
+      .dishes {
+        display: grid;
+        justify-items: start;
+        gap: var(--wt-space-1);
+      }
     `,
   ];
   @property({ attribute: false }) api!: InvoiceCorrectionApi;
@@ -155,6 +160,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
   #openedReasonId?: string;
   #revisionMissed = false;
   #retryLost: StringKey = "invoice_correction.unknown";
+  #lastShown = "";
   /** An Open whose answer never arrived; while it exists the window sends only it again. */
   @state() private savedOpen: ReturnType<InvoiceCorrectionSession["savedOpen"]> = null;
   @state() private lostKey: StringKey = "invoice_correction.unknown";
@@ -239,9 +245,31 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     this.#scope?.commit(this.draft);
   }
   override updated(changed: PropertyValues<this>): void {
+    const shown = this.#shown();
+    if (shown !== this.#lastShown) {
+      this.#lastShown = shown;
+      void this.#focusFirstControl();
+    }
     if (!changed.has("legsRevision") || this.correction?.state !== "open") return;
     if (this.busy) this.#revisionMissed = true;
     else this.#reload();
+  }
+  /** Which of the window's bodies is drawn. */
+  #shown(): string {
+    if (this.correction !== null) return `correction:${this.correction.state}`;
+    if (this.loaded !== null) return this.savedOpen !== null ? "saved" : "form";
+    return this.loadRefusal === null ? "loading" : "refused";
+  }
+  /** The window loads after it opens, so the browser's opening focus finds nothing to take it but
+   * the window itself; the first control takes it once drawn, unless a control already has it. */
+  async #focusFirstControl(): Promise<void> {
+    const dialog = this.shadowRoot!.querySelector<WtDialog>("wt-dialog");
+    await dialog?.updateComplete;
+    const active = this.shadowRoot!.activeElement;
+    if (active !== null && active !== dialog) return;
+    this.shadowRoot!.querySelector<HTMLElement>(
+      ".body :is(wt-switch, wt-price-input, wt-combobox, wt-button):not([disabled])",
+    )?.focus();
   }
   #reload(): void {
     void this.#run(
@@ -500,29 +528,31 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     const picked = loaded.lines.find((line) => this.draft.lineIds.includes(line.id));
     return html`<fieldset>
       <legend>${t("invoice_correction.dishes")}</legend>
-      ${loaded.lines.map(
-        (line) =>
-          html`<wt-switch
-            name="dish"
-            data-line=${line.id}
-            .label=${[
-              lineName(line.descriptions, this.namesLocale),
-              this.#money(line.gross),
-              t("invoice_correction.left").replace("{amount}", () => this.#money(line.left)),
-            ].join(" · ")}
-            .checked=${this.draft.lineIds.includes(line.id)}
-            .disabled=${
-              this.busy ||
-              compareDecimal(decimal(line.left), decimal("0")) <= 0 ||
-              (picked !== undefined && picked.rate !== line.rate)
-            }
-            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-              event.stopPropagation();
-              const others = this.draft.lineIds.filter((id) => id !== line.id);
-              this.#set({ lineIds: event.detail.checked ? [...others, line.id] : others });
-            }}
-          ></wt-switch>`,
-      )}
+      <div class="dishes">
+        ${loaded.lines.map(
+          (line) =>
+            html`<wt-switch
+              name="dish"
+              data-line=${line.id}
+              .label=${[
+                lineName(line.descriptions, this.namesLocale),
+                this.#money(line.gross),
+                t("invoice_correction.left").replace("{amount}", () => this.#money(line.left)),
+              ].join(" · ")}
+              .checked=${this.draft.lineIds.includes(line.id)}
+              .disabled=${
+                this.busy ||
+                compareDecimal(decimal(line.left), decimal("0")) <= 0 ||
+                (picked !== undefined && picked.rate !== line.rate)
+              }
+              @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                event.stopPropagation();
+                const others = this.draft.lineIds.filter((id) => id !== line.id);
+                this.#set({ lineIds: event.detail.checked ? [...others, line.id] : others });
+              }}
+            ></wt-switch>`,
+        )}
+      </div>
       ${error ? html`<p class="error" data-lines-error role="alert">${error}</p>` : nothing}
     </fieldset>`;
   }
@@ -820,7 +850,12 @@ export class TillInvoiceCorrectionDialog extends LitElement {
             : "invoice_correction.saved",
         ).replace(/\{amount\}/g, () => this.#money(saved.gross))}
       </p>
-      <wt-form-actions .error=${this.sendRefusal === null ? "" : this.#sendText(this.sendRefusal)}
+      <wt-form-actions
+        .error=${
+          this.sendRefusal === null || this.sendRefusal.code === "network"
+            ? ""
+            : this.#sendText(this.sendRefusal)
+        }
         >${this.#cancelButton()}
         <wt-button
           variant="primary"

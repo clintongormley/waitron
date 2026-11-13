@@ -766,6 +766,7 @@ const openCorrection = (patch: Record<string, unknown> = {}) => ({
   openedAt: "2026-10-15T12:00:00Z",
   correctiveSaleId: null,
   legs: [],
+  invoiceNumber: "T/0012",
   ...patch,
 });
 
@@ -782,6 +783,7 @@ it("lists the corrections under way and opens the one chosen", async () => {
     openedAt: "2026-10-15T12:00:00Z",
     correctiveSaleId: null,
     legs: [],
+    invoiceNumber: "T/0012",
   };
   const { el, fetcher } = await mount(findBillApi(undefined, [correction]));
   await ready(el);
@@ -794,7 +796,7 @@ it("lists the corrections under way and opens the one chosen", async () => {
     "Corrections under way",
   );
   expect(button.textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "15/10/2026, 14:00:00 · Overcharged · €4.05 of €6.05 left to give back",
+    "T/0012 · 15/10/2026, 14:00:00 · Overcharged · €4.05 of €6.05 left to give back",
   );
   expect(requests(fetcher, "/api/invoice-corrections")).toHaveLength(1);
   const opened = vi.fn();
@@ -821,8 +823,39 @@ it("writes a reason exactly as typed, even one holding replacement patterns", as
     return found!;
   });
   expect(button.textContent!.replace(/\s+/g, " ").trim()).toBe(
-    `15/10/2026, 14:00:00 · ${reason} · €4.05 of €6.05 left to give back`,
+    `T/0012 · 15/10/2026, 14:00:00 · ${reason} · €4.05 of €6.05 left to give back`,
   );
+});
+
+it("draws the corrections as rows of the section's full width, a long one cut short at phone width", async () => {
+  const previous = { width: innerWidth, height: innerHeight };
+  await page.viewport(390, 844);
+  try {
+    const long = openCorrection({
+      id: "correction-2",
+      reason: "Dish sent back cold, customer asked for the whole table's mains refunded",
+    });
+    const { el } = await mount(findBillApi(undefined, [openCorrection(), long]));
+    await ready(el);
+    const rows = await vi.waitFor(() => {
+      const found = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-correction]")];
+      expect(found).toHaveLength(2);
+      return found;
+    });
+    const section = el.shadowRoot!.querySelector("[data-corrections]")!.getBoundingClientRect();
+    for (const row of rows) {
+      const box = row.getBoundingClientRect();
+      expect([box.left, box.width]).toEqual([section.left, section.width]);
+    }
+    const text = rows[1]!.querySelector<HTMLElement>("[data-correction-text]")!;
+    expect(text.scrollWidth).toBeGreaterThan(text.clientWidth);
+    expect(getComputedStyle(text).textOverflow).toBe("ellipsis");
+    expect(rows[1]!.shadowRoot!.querySelector("button")!.getBoundingClientRect().right).toBe(
+      section.right,
+    );
+  } finally {
+    await page.viewport(previous.width, previous.height);
+  }
 });
 
 it("offers Retry when the corrections cannot be read, still loading the bills", async () => {

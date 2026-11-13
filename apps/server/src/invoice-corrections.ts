@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { findAdjustmentReason } from "@waitron/adjustments";
 import {
+  formatInvoiceNumber,
   previewCorrectionAmounts,
   readCorrectableLines,
   recordCorrection,
@@ -297,17 +298,24 @@ async function summaryOf(tx: Transaction, correctionId: string) {
 }
 
 /** The open corrections whose invoice's working order `inZones` admits, oldest first, each without
- * `fileNow`. */
+ * `fileNow` and with the number of the invoice it corrects. */
 export async function listOpenInvoiceCorrections(
   tx: Transaction,
   inZones?: OrderZoneCondition,
-): Promise<Omit<InvoiceCorrectionView, "fileNow">[]> {
-  const rows = await tx.execute<{ id: string }>(sql`select c.id from invoice_corrections c
+): Promise<(Omit<InvoiceCorrectionView, "fileNow"> & { invoiceNumber: string })[]> {
+  const rows = await tx.execute<{ id: string; code: string; number: number }>(sql`select c.id,
+      sr.code, s.invoice_number as number
+    from invoice_corrections c
     join sales s on s.id = c.original_sale_id
+    join invoice_series sr on sr.id = s.series_id
     where c.state = 'open' and (${inZones?.(sql`s.working_order_id`) ?? sql`1`})
     order by c.created_at, c.id`);
-  const views: Omit<InvoiceCorrectionView, "fileNow">[] = [];
-  for (const { id } of rows.rows) views.push((await summaryOf(tx, id)).view);
+  const views: (Omit<InvoiceCorrectionView, "fileNow"> & { invoiceNumber: string })[] = [];
+  for (const { id, code, number } of rows.rows)
+    views.push({
+      ...(await summaryOf(tx, id)).view,
+      invoiceNumber: formatInvoiceNumber(code, number),
+    });
   return views;
 }
 

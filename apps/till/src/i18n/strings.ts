@@ -715,7 +715,7 @@ export const en = {
   "find_page.open_bill": "Open bill",
   "find_page.open_receipt": "Open receipt",
   "find_page.corrections": "Corrections under way",
-  "find_page.correction_row": "{when} · {reason} · {left} of {gross} left to give back",
+  "find_page.correction_row": "{invoice} · {when} · {reason} · {left} of {gross} left to give back",
   "find_page.remove_dates": "Remove date filter",
   "find_page.remove_filter": "Remove {filter} filter",
   "find_page.retry": "Retry",
@@ -2244,11 +2244,11 @@ export const es: Record<StringKey, string> = {
     "No ha llegado la respuesta del servidor. Vuelve a pulsar: se envía la misma petición, así que nada ocurre dos veces.",
   "invoice_correction.close": "Cerrar",
   "invoice_correction.saved":
-    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo abre la rectificación, para que luego elijas cómo devolver {amount}; aún no se devuelve ni se presenta nada. Si llegó, Enviar de nuevo la muestra. Nada ocurre dos veces.",
+    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo abre la rectificación, para que luego elijas cómo devolver {amount}; aún no se devuelve ni se presenta nada. Si llegó, al pulsar Enviar de nuevo verás la rectificación. Nada ocurre dos veces.",
   "invoice_correction.no_cash_here":
     "Esta caja no puede devolver efectivo. Devuelve el efectivo desde una caja que pueda; mientras no se haya devuelto nada, Descartar termina la rectificación.",
   "invoice_correction.saved_cash":
-    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y devuelve {amount} en efectivo, abriendo el cajón. Si llegó, Enviar de nuevo muestra qué pasó. Nada ocurre dos veces.",
+    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y devuelve {amount} en efectivo, abriendo el cajón. Si llegó, al pulsar Enviar de nuevo verás lo que pasó. Nada ocurre dos veces.",
   "invoice_correction.resend": "Enviar de nuevo",
   "invoice_correction.unknown_end":
     "No ha llegado la respuesta del servidor. Pulsa Volver a consultar para ver si se hizo antes de pulsar nada más.",
@@ -2777,7 +2777,8 @@ export const es: Record<StringKey, string> = {
   "find_page.open_bill": "Abrir cuenta",
   "find_page.open_receipt": "Abrir recibo",
   "find_page.corrections": "Rectificaciones en curso",
-  "find_page.correction_row": "{when} · {reason} · quedan {left} de {gross} por devolver",
+  "find_page.correction_row":
+    "{invoice} · {when} · {reason} · quedan {left} de {gross} por devolver",
   "find_page.remove_dates": "Quitar filtro de fechas",
   "find_page.remove_filter": "Quitar filtro de {filter}",
   "find_page.retry": "Reintentar",
