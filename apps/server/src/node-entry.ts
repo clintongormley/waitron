@@ -274,7 +274,8 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  * 3. It clears only from the stayed-up callback — `startServer` resolved, the server's
  *    `fullyStarted` (present on a box that answered while it waited for its peers) settled, and the
  *    process then survived `STAYED_UP_MS`. Clearing on "started" alone would let a module throwing
- *    seconds in reset the counter on every attempt.
+ *    seconds in reset the counter on every attempt. A restart this start's own server asks for
+ *    takes its attempt back off (`beforeRestart`).
  * 4. The ahead check runs after `runStagedRestore` and `runStagedReset`, which replace or remove
  *    the venue files, and before `startServer`, which migrates and then queries the schema. It
  *    judges a database nothing has migrated yet, which the one-directional comparison in

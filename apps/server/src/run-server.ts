@@ -32,7 +32,6 @@ export const SHUTDOWN_DEADLINE_MS = 8000;
 
 let shutdownUnderWay = false;
 let handlersInstalled = false;
-let restartAsked = false;
 let restartRequested = false;
 
 /** What the shutdown handlers stop. */
@@ -117,11 +116,9 @@ export function installShutdownHandlers(
     );
   };
   for (const signal of ["SIGTERM", "SIGINT"] as const) deps.on(signal, onSignal);
+  const askedBeforeAnyHandler = restartRequested && !handlersInstalled;
   handlersInstalled = true;
-  if (restartAsked) {
-    restartAsked = false;
-    onSignal();
-  }
+  if (askedBeforeAnyHandler) onSignal();
 }
 
 /**
@@ -132,6 +129,5 @@ export function installShutdownHandlers(
 export function restartProcess(): void {
   if (shutdownUnderWay) return;
   restartRequested = true;
-  if (!handlersInstalled) restartAsked = true;
-  else process.kill(process.pid, "SIGTERM");
+  if (handlersInstalled) process.kill(process.pid, "SIGTERM");
 }
