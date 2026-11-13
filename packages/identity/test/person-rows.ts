@@ -14,7 +14,14 @@ export async function seedPersons(
   const seeds = [values].flat();
   const rows = await db
     .insert(persons)
-    .values(seeds.map(({ role: _role, jobRoles: _jobs, ...person }) => person))
+    .values(
+      seeds.map((seed) => {
+        const person = { ...seed };
+        delete person.role;
+        delete person.jobRoles;
+        return person;
+      }),
+    )
     .returning();
   for (const [index, row] of rows.entries())
     await setBuiltInMembership(db, row.id, seeds[index]!.role ?? "staff");
