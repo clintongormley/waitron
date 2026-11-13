@@ -739,7 +739,9 @@ export class TillInvoiceCorrectionDialog extends LitElement {
               t("invoice_correction.give_cash_hint"),
               () => void this.#run(() => this.#giveCash((savedCash ?? cash)!)),
             )
-          : nothing
+          : positive(left) && positive(cashLeft)
+            ? html`<p data-no-cash>${t("invoice_correction.no_cash_here")}</p>`
+            : nothing
       }
       ${
         positive(left)

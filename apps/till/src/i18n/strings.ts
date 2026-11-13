@@ -177,7 +177,9 @@ export const en = {
     "The server's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
   "invoice_correction.close": "Close",
   "invoice_correction.saved":
-    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and starts refunding {amount}. If it did, Send again shows what happened. Nothing happens twice.",
+    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again opens the correction, so you can then choose how to give back {amount}; nothing is refunded or filed yet. If it did, Send again shows it. Nothing happens twice.",
+  "invoice_correction.no_cash_here":
+    "This till cannot give cash back. Give the cash back from a till that can; while nothing has been given back, Discard ends the correction.",
   "invoice_correction.saved_cash":
     "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and gives {amount} back in cash, opening the cash drawer. If it did, Send again shows what happened. Nothing happens twice.",
   "invoice_correction.resend": "Send again",
@@ -2242,7 +2244,9 @@ export const es: Record<StringKey, string> = {
     "No ha llegado la respuesta del servidor. Vuelve a pulsar: se envía la misma petición, así que nada ocurre dos veces.",
   "invoice_correction.close": "Cerrar",
   "invoice_correction.saved":
-    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y empieza a devolver {amount}. Si llegó, Enviar de nuevo muestra qué pasó. Nada ocurre dos veces.",
+    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo abre la rectificación, para que luego elijas cómo devolver {amount}; aún no se devuelve ni se presenta nada. Si llegó, Enviar de nuevo la muestra. Nada ocurre dos veces.",
+  "invoice_correction.no_cash_here":
+    "Esta caja no puede devolver efectivo. Devuelve el efectivo desde una caja que pueda; mientras no se haya devuelto nada, Descartar termina la rectificación.",
   "invoice_correction.saved_cash":
     "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y devuelve {amount} en efectivo, abriendo el cajón. Si llegó, Enviar de nuevo muestra qué pasó. Nada ocurre dos veces.",
   "invoice_correction.resend": "Enviar de nuevo",

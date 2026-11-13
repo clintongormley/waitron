@@ -851,13 +851,19 @@ describe("review fix round 2", () => {
   const lost = () => new TypeError("Failed to fetch");
 
   it.each([
-    ["only in cash", [TENDERS[0]!], "invoice_correction.saved_cash"],
-    ["in cash and by card", TENDERS, "invoice_correction.saved"],
-  ] as const)("says what Send again does to a bill paid %s", async (_paid, tenders, key) => {
+    ["only in cash", [TENDERS[0]!], EVERY_METHOD, "invoice_correction.saved_cash"],
+    [
+      "only in cash, on a till that cannot give cash back",
+      [TENDERS[0]!],
+      ["integrated-card-payment"],
+      "invoice_correction.saved",
+    ],
+    ["in cash and by card", TENDERS, EVERY_METHOD, "invoice_correction.saved"],
+  ] as const)("says what Send again does to a bill paid %s", async (_paid, tenders, can, key) => {
     const api = sendingApi();
     api.getRefundableTenders.mockResolvedValue([...tenders]);
     api.openInvoiceCorrection.mockRejectedValueOnce(lost());
-    const { el } = await mountSending(api);
+    const { el } = await mountSending(api, "", [...can]);
 
     await confirmCorrection(el);
     await vi.waitFor(() =>
@@ -894,6 +900,10 @@ describe("review fix round 2", () => {
     await vi.waitFor(() => expect(root(el).querySelector("[data-back]")).not.toBeNull());
     expect(api.openInvoiceCorrection).toHaveBeenCalledOnce();
     expect(api.giveInvoiceCorrectionCash).not.toHaveBeenCalled();
+    expect(text(root(el).querySelector("[data-no-cash]"))).toBe(
+      t("invoice_correction.no_cash_here"),
+    );
+    expect(root(el).querySelector("[data-choice=cash]")).toBeNull();
   });
 
   it("after a PIN, a lost filing answer still says to check, not that the same request goes again", async () => {
