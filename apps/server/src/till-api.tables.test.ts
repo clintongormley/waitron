@@ -42,7 +42,7 @@ import { seedSessionDevice, sessionCookieForTest } from "./testing/session-devic
 // are pinned in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites.
 // The schema is the whole manifest: the tables here span modules that FK into core.
 let cfg: TradingContext;
-let ana: { id: string };
+let anna: { id: string };
 /** A supervisor, who holds the refund permission a sent dish's cancel needs. */
 let sara: { id: string };
 // The one product seeded into the venue's catalogue, so a tab can open with a real line
@@ -82,7 +82,7 @@ const suite = useVenueDb({
       pinHash: hashPin("5555"),
       role: "staff",
     });
-    ana = { id: person!.id };
+    anna = { id: person!.id };
     const [supervisor] = await seedPersons(db, {
       displayName: "Sara",
       pinHash: hashPin("6666"),
@@ -178,7 +178,10 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-async function openSession(db: Database, who = { personId: ana.id, pin: "5555" }): Promise<string> {
+async function openSession(
+  db: Database,
+  who = { personId: anna.id, pin: "5555" },
+): Promise<string> {
   const deviceId = await seedSessionDevice(db);
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, { deviceId, ...who });
@@ -413,7 +416,7 @@ describe("table + tab routes", () => {
         { ...cfg, origin: jobOrigin("dashboard") },
         { partyId, tabId },
         { lines: [{ menuItemId, quantity: "3" }], release: "fire" },
-        ana.id,
+        anna.id,
         { party: { answer: "none", guests: [] }, ticks: [] },
       ),
     );
@@ -824,7 +827,7 @@ describe("table + tab routes", () => {
 it.each(["PUT", "DELETE"])(
   "answers %s /api/tables/:id/placement 404 for a manager and leaves tables unchanged",
   async (method) => {
-    await setBuiltInRoleForTest(suite.db, ana.id, "manager");
+    await setBuiltInRoleForTest(suite.db, anna.id, "manager");
     try {
       const managerCookie = await sessionCookieForTest(suite.db, await openSession(suite.db));
       const { id } = await withTransaction(suite.db, (tx) =>
@@ -848,7 +851,7 @@ it.each(["PUT", "DELETE"])(
       expect(response.status).toBe(404);
       expect(rows()).toEqual(before);
     } finally {
-      await setBuiltInRoleForTest(suite.db, ana.id, "staff");
+      await setBuiltInRoleForTest(suite.db, anna.id, "staff");
     }
   },
 );

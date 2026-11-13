@@ -97,7 +97,7 @@ async function fixture() {
     { db: suite.db, cfg: v.cfg, secureCookies: false, pairingMode: createPairingMode() },
     log,
   );
-  const [ana] = await seedPersons(suite.db, {
+  const [anna] = await seedPersons(suite.db, {
     displayName: "Anna",
     pinHash: hashPin("5555"),
     role: "admin",
@@ -126,12 +126,12 @@ async function fixture() {
     const login = await app.request("/api/session", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: deviceCookie },
-      body: JSON.stringify({ personId: ana!.id, pin: "5555" }),
+      body: JSON.stringify({ personId: anna!.id, pin: "5555" }),
     });
     expect(login.status).toBe(200);
     return `${deviceCookie}; ${login.headers.get("set-cookie")!.split(";")[0]!}`;
   };
-  return { v, app, mains, profile, device, runner, pass, heldBurger, signIn, ana: ana!.id };
+  return { v, app, mains, profile, device, runner, pass, heldBurger, signIn, anna: anna!.id };
 }
 
 async function send(app: Hono, cookie: string, path: string, body: unknown = {}) {
@@ -328,7 +328,7 @@ describe("waiter cooking authority", () => {
       });
       const request = new Request(`http://localhost${url}`, {
         method: "POST",
-        headers: { cookie, "content-type": "application/json", [PERSON_HEADER]: f.ana },
+        headers: { cookie, "content-type": "application/json", [PERSON_HEADER]: f.anna },
         body: JSON.stringify(body),
       });
       request.text = async () => {
@@ -631,10 +631,10 @@ describe("a till's session Fire", () => {
     await fireAsWaiter(f, held);
     expect(await groupRow(held.groupId)).toMatchObject({
       state: "fired",
-      firedBy: f.ana,
+      firedBy: f.anna,
       firedByDeviceId: null,
     });
-    expect(await firedEvent(held.groupId)).toMatchObject({ actorId: f.ana, actorDeviceId: null });
+    expect(await firedEvent(held.groupId)).toMatchObject({ actorId: f.anna, actorDeviceId: null });
     expect((await itemsOf(held.tabId)).every((item) => item.firedAt !== null)).toBe(true);
     const current = await f.app.request(`/api/parties/${held.partyId}/current-orders`, {
       headers: { cookie: await tillCookie(f) },

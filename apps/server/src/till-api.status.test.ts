@@ -25,7 +25,7 @@ import type { TradingContext } from "./trading-context.js";
 // Venue-made table statuses are retired: the till API serves neither the status list nor the
 // set-status route, and the floor read carries no manual status.
 let cfg: TradingContext;
-let ana: { id: string };
+let anna: { id: string };
 let TABLE_ID: string;
 
 const suite = useVenueDb({
@@ -47,7 +47,7 @@ const suite = useVenueDb({
       pinHash: hashPin("5555"),
       role: "staff",
     });
-    ana = { id: person!.id };
+    anna = { id: person!.id };
     cfg = makeCfg(nodeId);
     TABLE_ID = await withTransaction(db, async (tx) => {
       const { id: tableId } = await createTable(tx, cfg, {
@@ -110,7 +110,7 @@ async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
       deviceId,
-      personId: ana.id,
+      personId: anna.id,
       pin: "5555",
     });
   });

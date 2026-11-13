@@ -130,9 +130,9 @@ async function sendRound(
 }
 
 let cfg: WithVenueRowId;
-let ana: { id: string };
+let anna: { id: string };
 // The pre-login roster fixtures: `abel` is a second ACTIVE person whose name sorts BEFORE "Anna" but
-// is inserted AFTER it, so `[abel, ana]` proves `listActiveStaff` sorts by name rather than by
+// is inserted AFTER it, so `[abel, anna]` proves `listActiveStaff` sorts by name rather than by
 // insertion order; `zoe` is SUSPENDED, so its absence proves the `status = 'active'` filter. The
 // tenant's tax_id is generated (a fresh NIF each run), so `GET /api/till`'s `nif` is asserted against
 // the value read back here, not a hardcoded one.
@@ -190,7 +190,7 @@ const suite = useVenueDb({
       pinHash: hashPin("5555"),
       role: "staff",
     });
-    ana = { id: person!.id };
+    anna = { id: person!.id };
     // Abel: ACTIVE, inserted after Anna but sorts before her. Zoe: SUSPENDED, must be excluded.
     const [abelRow] = await seedPersons(db, {
       displayName: "Abel",
@@ -360,7 +360,7 @@ async function openSession(db: Database, deviceId: string = sessionDeviceId): Pr
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
       deviceId,
-      personId: ana.id,
+      personId: anna.id,
       pin: "5555",
     });
   });
@@ -429,13 +429,13 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const res = await app.request("/api/session", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: deviceCookie },
-      body: JSON.stringify({ personId: ana.id, pin: "5555" }),
+      body: JSON.stringify({ personId: anna.id, pin: "5555" }),
     });
     expect(res.status).toBe(200);
     // `locale` is the operator's own UI-language preference — Anna has none, so null.
     const body = (await res.json()) as { permissions: string[] };
     expect(body).toEqual({
-      personId: ana.id,
+      personId: anna.id,
       permissions: permissionsForRole("staff"),
       locale: null,
     });
@@ -535,7 +535,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const res = await app.request("/api/session", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: deviceCookie },
-      body: JSON.stringify({ personId: ana.id, pin: "0000" }),
+      body: JSON.stringify({ personId: anna.id, pin: "0000" }),
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "pin.invalid" } });
@@ -551,7 +551,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     const res = await app.request("/api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ personId: ana.id, pin: "5555" }),
+      body: JSON.stringify({ personId: anna.id, pin: "5555" }),
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
@@ -658,10 +658,10 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     });
 
     it.each([
-      ["their own id", () => ana.id],
-      ["their own id in capitals", () => ana.id.toUpperCase()],
+      ["their own id", () => anna.id],
+      ["their own id in capitals", () => anna.id.toUpperCase()],
     ])("ends the session of the person named by %s", async (_how, named) => {
-      expect(ana.id.toUpperCase()).not.toBe(ana.id);
+      expect(anna.id.toUpperCase()).not.toBe(anna.id);
       const app = signOutApp();
       const token = await openSession(suite.db);
 
@@ -695,7 +695,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       const token = await openSession(suite.db);
 
       const del = await signOut(app, token, {
-        named: ana.id,
+        named: anna.id,
         body: JSON.stringify({ personId: abel.id }),
       });
 
@@ -790,11 +790,11 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       it("leaves that person signed in", async () => {
         const app = signOutApp();
         const device = await enrolTillDeviceCookie(suite.db);
-        const anaIn = await signIn(app, device, ana, "5555");
-        const anaOut = await signOut(app, tokenOf(anaIn), { named: ana.id });
+        const annaIn = await signIn(app, device, anna, "5555");
+        const annaOut = await signOut(app, tokenOf(annaIn), { named: anna.id });
         const benIn = await signIn(app, device, abel, "1111");
 
-        const held = await read(app, sessionCookieAfter(anaIn, benIn, anaOut));
+        const held = await read(app, sessionCookieAfter(annaIn, benIn, annaOut));
 
         expect(held.status).toBe(200);
         expect(await held.json()).toEqual({ personId: abel.id });
@@ -803,15 +803,15 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       it("still ends her session when nobody follows, so her token answers as no cookie does", async () => {
         const app = signOutApp();
         const device = await enrolTillDeviceCookie(suite.db);
-        const anaIn = await signIn(app, device, ana, "5555");
-        const token = tokenOf(anaIn);
+        const annaIn = await signIn(app, device, anna, "5555");
+        const token = tokenOf(annaIn);
         expect((await read(app, `${SESSION_COOKIE}=${token}`)).status).toBe(200);
 
-        const anaOut = await signOut(app, token, { named: ana.id });
-        expect(anaOut.status).toBe(200);
-        expect(anaOut.headers.get("set-cookie")).toBeNull();
+        const annaOut = await signOut(app, token, { named: anna.id });
+        expect(annaOut.status).toBe(200);
+        expect(annaOut.headers.get("set-cookie")).toBeNull();
 
-        const withDeadToken = await read(app, sessionCookieAfter(anaIn, anaOut));
+        const withDeadToken = await read(app, sessionCookieAfter(annaIn, annaOut));
         const withNoCookie = await read(app, null);
         expect(withDeadToken.status).toBe(401);
         expect(withNoCookie.status).toBe(401);
@@ -823,16 +823,16 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       it("lets the next sign-in replace the dead cookie it was sent with", async () => {
         const app = signOutApp();
         const device = await enrolTillDeviceCookie(suite.db);
-        const anaIn = await signIn(app, device, ana, "5555");
-        const deadToken = tokenOf(anaIn);
-        const anaOut = await signOut(app, deadToken, { named: ana.id });
-        const dead = sessionCookieAfter(anaIn, anaOut);
+        const annaIn = await signIn(app, device, anna, "5555");
+        const deadToken = tokenOf(annaIn);
+        const annaOut = await signOut(app, deadToken, { named: anna.id });
+        const dead = sessionCookieAfter(annaIn, annaOut);
         expect(dead).toBe(`${SESSION_COOKIE}=${deadToken}`);
 
         const benIn = await signIn(app, device, abel, "1111", `${dead!}; `);
 
         expect(tokenOf(benIn)).not.toBe(deadToken);
-        const after = await read(app, sessionCookieAfter(anaIn, anaOut, benIn));
+        const after = await read(app, sessionCookieAfter(annaIn, annaOut, benIn));
         expect(after.status).toBe(200);
         expect(await after.json()).toEqual({ personId: abel.id });
       });
@@ -863,7 +863,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     const res = await app.request("/api/session", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: deviceCookie },
-      body: JSON.stringify({ personId: ana.id, pin: "5555" }),
+      body: JSON.stringify({ personId: anna.id, pin: "5555" }),
     });
     expect(res.status).toBe(200);
     const token = /waitron_till_session=([^;]+)/.exec(res.headers.get("set-cookie")!)![1]!;
@@ -891,7 +891,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
       app.request("/api/session", {
         method: "POST",
         headers,
-        body: JSON.stringify({ personId: ana.id, pin }),
+        body: JSON.stringify({ personId: anna.id, pin }),
       });
 
     // Four wrong PINs: three are free, the 4th failure opens the first (2s) wait window. Each still
@@ -905,14 +905,14 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     // The next attempt is now inside the window. Using Anna's CORRECT PIN proves `loginWithPin` was NOT
     // reached: were it, a session would open (200). Instead it is 429 `pin.throttled` carrying
     // `retryAfterSeconds`, with NO session cookie and NO new session row.
-    const before = await sessionCount(ana.id);
+    const before = await sessionCount(anna.id);
     const throttled = await post("5555");
     expect(throttled.status).toBe(429);
     expect(await throttled.json()).toMatchObject({
       error: { code: "pin.throttled", params: { retryAfterSeconds: 2 } },
     });
     expect(throttled.headers.get("set-cookie")).toBeNull();
-    expect(await sessionCount(ana.id)).toBe(before);
+    expect(await sessionCount(anna.id)).toBe(before);
   });
 
   it("keys the throttle on the CANONICAL personId, so an alternate UUID spelling shares the bucket (§5)", async () => {
@@ -937,18 +937,18 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
       });
 
     // Four wrong PINs on the LOWERCASE (canonical) id open the wait window on this (device, person).
-    for (let i = 0; i < 4; i++) expect((await post(ana.id, "0000")).status).toBe(401);
+    for (let i = 0; i < 4; i++) expect((await post(anna.id, "0000")).status).toBe(401);
 
     // A DIFFERENT spelling of the SAME id — uppercase — with Anna's CORRECT PIN must ALSO be throttled
     // (429), NOT reach `loginWithPin` (a 200 would prove it did) nor land in a fresh bucket (a 401
     // `pin.invalid`). Keyed on the raw string, uppercase is a distinct bucket and this is a 200 — the
     // bypass the canonicalisation closes.
-    const upper = await post(ana.id.toUpperCase(), "5555");
+    const upper = await post(anna.id.toUpperCase(), "5555");
     expect(upper.status).toBe(429);
     expect(await upper.json()).toMatchObject({ error: { code: "pin.throttled" } });
 
     // And a dash-free spelling, which `canonicaliseUuid` folds the same way, shares the bucket.
-    const dashless = await post(ana.id.replace(/-/g, ""), "5555");
+    const dashless = await post(anna.id.replace(/-/g, ""), "5555");
     expect(dashless.status).toBe(429);
     expect(await dashless.json()).toMatchObject({ error: { code: "pin.throttled" } });
   });
@@ -967,7 +967,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
       app.request("/api/session", {
         method: "POST",
         headers,
-        body: JSON.stringify({ personId: ana.id, pin }),
+        body: JSON.stringify({ personId: anna.id, pin }),
       });
 
     // Three wrong PINs (still free), then a correct PIN succeeds and CLEARS the streak.
@@ -982,7 +982,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     expect(p2.status).toBe(401);
     expect(await p2.json()).toMatchObject({ error: { code: "pin.invalid" } });
 
-    await suite.db.execute(sql`delete from sessions where person_id = ${ana.id}`);
+    await suite.db.execute(sql`delete from sessions where person_id = ${anna.id}`);
   });
 
   it("throttles per (device, person): a second person on the same device is unaffected (§5)", async () => {
@@ -1003,8 +1003,8 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
       });
 
     // Fully throttle (device, Anna).
-    for (let i = 0; i < 4; i++) expect((await post(ana.id, "0000")).status).toBe(401);
-    expect((await post(ana.id, "5555")).status).toBe(429); // Anna is locked out on this device
+    for (let i = 0; i < 4; i++) expect((await post(anna.id, "0000")).status).toBe(401);
+    expect((await post(anna.id, "5555")).status).toBe(429); // Anna is locked out on this device
 
     // Abel — a DIFFERENT person on the SAME device — is independent: his correct PIN logs in (200).
     const abelOk = await post(abel.id, "1111");
@@ -1039,11 +1039,11 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
       error: { code: "pin.throttled", params: { retryAfterSeconds: 60 } },
     });
 
-    const ok = await post(other, ana.id, "5555");
+    const ok = await post(other, anna.id, "5555");
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toMatchObject({ personId: ana.id });
+    expect(await ok.json()).toMatchObject({ personId: anna.id });
 
-    await suite.db.execute(sql`delete from sessions where person_id = ${ana.id}`);
+    await suite.db.execute(sql`delete from sessions where person_id = ${anna.id}`);
   });
 });
 
@@ -1155,7 +1155,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
       label: string;
     }>(sql`select device_profile_id, label from devices where id = ${sessionDeviceId}`);
     return {
-      personId: ana.id,
+      personId: anna.id,
       sessionId,
       deviceId: sessionDeviceId,
       device: {
@@ -1316,7 +1316,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     const db = stampRefused(new AppError("storage.disk_full", {}));
     const res = await guardApp(db).request("/whoami", { headers });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ personId: ana.id, deviceId });
+    expect(await res.json()).toMatchObject({ personId: anna.id, deviceId });
     expect(await lastSeen()).toBeNull();
   });
 
@@ -1420,7 +1420,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
 });
 
 describe("PUT /api/session/locale (set your OWN UI locale)", () => {
-  // Log in a FRESH staff person rather than the shared `ana`, so the row this route MUTATES is
+  // Log in a FRESH staff person rather than the shared `anna`, so the row this route MUTATES is
   // disposable and no sibling test's locale assertion (e.g. the login block's `locale: null` for Anna)
   // is disturbed. Cleaned up (session + person) in a finally so the suite stays order-independent (§4).
   async function loginFresh(pin: string): Promise<{ personId: string; token: string }> {
@@ -1591,7 +1591,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // Sorted by displayName (Abel before Anna, though Abel was inserted second), suspended Zoe absent.
     expect(staff).toEqual([
       { personId: abel.id, displayName: "Abel" },
-      { personId: ana.id, displayName: "Anna" },
+      { personId: anna.id, displayName: "Anna" },
     ]);
     // The roster carries the login id + display name only — nothing a customer or a bystander at the
     // lock screen must not see (no pin material, no role, no status).
@@ -2568,7 +2568,7 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
   });
 
   it("401s device.unauthorized on /api/pay from a session whose device has been revoked", async () => {
-    const cookie = await revokedDeviceSessionCookie(suite.db, ana.id, "5555");
+    const cookie = await revokedDeviceSessionCookie(suite.db, anna.id, "5555");
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
@@ -2645,7 +2645,7 @@ describe("POST /api/session refusals say nothing about the account", () => {
       unknown: { personId: randomUUID(), pin: "5555" },
       // Zoe's own PIN, so only her suspension can be the cause.
       suspended: { personId: zoe!.id, pin: "2222" },
-      wrongPin: { personId: ana.id, pin: "0000" },
+      wrongPin: { personId: anna.id, pin: "0000" },
       notAUuid: { personId: "ana", pin: "5555" },
       notAString: { personId: 42, pin: "5555" },
     };
@@ -2712,7 +2712,7 @@ describe("a device's profile decides who may sign in on it", () => {
     await suite.db
       .insert(deviceProfileAdmissionRoles)
       .values({ deviceProfileId: profileId, staffRoleId: job!.id });
-    await suite.db.insert(personStaffRoles).values({ personId: ana.id, staffRoleId: job!.id });
+    await suite.db.insert(personStaffRoles).values({ personId: anna.id, staffRoleId: job!.id });
     const { deviceId, cookie } = await enrolTillDevice(suite.db, profileId);
     return { deviceId, cookie, profileId };
   }
@@ -2735,10 +2735,10 @@ describe("a device's profile decides who may sign in on it", () => {
     const unrestricted = await app.request("/api/staff", { headers: { cookie: open } });
 
     expect(restricted.status).toBe(200);
-    expect(await restricted.json()).toEqual([{ personId: ana.id, displayName: "Anna" }]);
+    expect(await restricted.json()).toEqual([{ personId: anna.id, displayName: "Anna" }]);
     expect(await unrestricted.json()).toEqual([
       { personId: abel.id, displayName: "Abel" },
-      { personId: ana.id, displayName: "Anna" },
+      { personId: anna.id, displayName: "Anna" },
     ]);
   });
 
@@ -2752,7 +2752,7 @@ describe("a device's profile decides who may sign in on it", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
       { personId: abel.id, displayName: "Abel" },
-      { personId: ana.id, displayName: "Anna" },
+      { personId: anna.id, displayName: "Anna" },
     ]);
   });
 
@@ -2763,7 +2763,7 @@ describe("a device's profile decides who may sign in on it", () => {
 
     const res = await app.request("/api/staff", { headers: { [DEV_DEVICE_HEADER]: deviceId } });
 
-    expect(await res.json()).toEqual([{ personId: ana.id, displayName: "Anna" }]);
+    expect(await res.json()).toEqual([{ personId: anna.id, displayName: "Anna" }]);
   });
 
   it("POST /api/session refuses a person the profile does not admit exactly as a wrong PIN, and signs in one it does", async () => {
@@ -2790,9 +2790,9 @@ describe("a device's profile decides who may sign in on it", () => {
     ).toEqual(["not_admitted", "wrong_pin"]);
     expect(await sessionsOf(abel.id, deviceId)).toBe(0);
 
-    const admitted = await post(ana.id, "5555");
+    const admitted = await post(anna.id, "5555");
     expect(admitted.status).toBe(200);
-    expect(await sessionsOf(ana.id, deviceId)).toBe(1);
+    expect(await sessionsOf(anna.id, deviceId)).toBe(1);
   });
 });
 

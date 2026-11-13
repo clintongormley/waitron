@@ -341,7 +341,7 @@ describe("the floor's attention signals", () => {
   it("shows a just-seated party's Take order step until dishes are drafted", async () => {
     const v = await setupPartyVenue(suite.db);
     const [takeOrder] = await setSteps(v, await departmentOf(v, v.tables.zoneId), [TAKE_ORDER]);
-    const lucia = await person(v, "Lucy");
+    const lucy = await person(v, "Lucy");
     const quiet = await seat(v, await v.table("Mesa 1"));
     const drafting = await seat(v, await v.table("Mesa 3"));
     const takeOrderSignal = {
@@ -352,7 +352,7 @@ describe("the floor's attention signals", () => {
     expect((await floorRow(v, await tableOf(v, quiet.partyId))).signals).toEqual([takeOrderSignal]);
 
     await inTx(v, (tx) =>
-      saveDraft(tx, v.cfg, quiet.partyId, lucia, {
+      saveDraft(tx, v.cfg, quiet.partyId, lucy, {
         billId: quiet.tabId,
         draftId: null,
         revision: 0,
@@ -360,7 +360,7 @@ describe("the floor's attention signals", () => {
       }),
     );
     await inTx(v, (tx) =>
-      saveDraft(tx, v.cfg, drafting.partyId, lucia, {
+      saveDraft(tx, v.cfg, drafting.partyId, lucy, {
         billId: drafting.tabId,
         draftId: null,
         revision: 0,
@@ -997,7 +997,7 @@ describe("the floor's attention signals", () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);
     await inTx(v, (tx) => setReleaseReminderInEveryDepartment(tx, 10));
-    const lucia = await person(v, "Lucy");
+    const lucy = await person(v, "Lucy");
     const tabs = new Map<string, string>();
     const seatBusyTable = async (label: string) => {
       const tableId = await v.table(label);
@@ -1008,7 +1008,7 @@ describe("the floor's attention signals", () => {
       await holdGroup(v, partyId, "Burger");
       await askForBill(v, partyId);
       await inTx(v, (tx) =>
-        saveDraft(tx, v.cfg, partyId, lucia, {
+        saveDraft(tx, v.cfg, partyId, lucy, {
           billId: tabId,
           draftId: null,
           revision: 0,
@@ -1224,10 +1224,10 @@ describe("the counter's tab list", () => {
     await queuedAgo(v, counterBill, 20);
 
     const listed = await listHeldOrders({ db: v.db });
-    const ana = listed.find((row) => row.id === counterBill)!;
+    const counterTab = listed.find((row) => row.id === counterBill)!;
 
-    expect(ana).toMatchObject({ label: "Ana", partyId: null });
-    expect(ana.signals).toEqual([
+    expect(counterTab).toMatchObject({ label: "Ana", partyId: null });
+    expect(counterTab.signals).toEqual([
       {
         kind: "ready",
         byStation: [
