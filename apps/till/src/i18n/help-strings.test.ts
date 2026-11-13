@@ -150,14 +150,14 @@ describe("the kitchen board's help", () => {
       "English",
       helpEn,
       en,
-      "Each card is an order from a table or the counter. Tap a dish to move it on a step, or the card's heading to move the whole card to the next column. On a Whole ticket card, the dishes move together. A dashed card is held: it hasn't been sent to cook yet. Cards turn amber, then red, the longer they wait.",
+      "Each card is an order from a table or the counter. Tap a dish to move it on a step, or the card's heading to move the whole card to the next column. Tap a Ready dish to put it back. On a Whole ticket card, the dishes move together. A dashed card is held: it hasn't been sent to cook yet. Cards turn amber, then red, the longer they wait.",
       "Tap a heading to fold its column. Use Columns to choose which columns show, and in what order.",
     ],
     [
       "Spanish",
       helpEs,
       es,
-      "Cada tarjeta es un pedido de una mesa o del mostrador. Toca un plato para avanzarlo un paso, o la cabecera de la tarjeta para pasar toda la tarjeta a la siguiente columna. En una tarjeta de Toda la comanda, los platos avanzan juntos. Una tarjeta con borde discontinuo está en espera: aún no se ha mandado a preparar. Las tarjetas pasan a ámbar y luego a rojo cuanto más esperan.",
+      "Cada tarjeta es un pedido de una mesa o del mostrador. Toca un plato para avanzarlo un paso, o la cabecera de la tarjeta para pasar toda la tarjeta a la siguiente columna. Toca un plato Listo para devolverlo. En una tarjeta de Toda la comanda, los platos avanzan juntos. Una tarjeta con borde discontinuo está en espera: aún no se ha mandado a preparar. Las tarjetas pasan a ámbar y luego a rojo cuanto más esperan.",
       "Toca una cabecera para plegar su columna. Con Columnas eliges qué columnas se ven y en qué orden.",
     ],
   ] as const) {
