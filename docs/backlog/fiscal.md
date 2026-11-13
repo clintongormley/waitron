@@ -338,11 +338,11 @@ file's edit scope is authorised. The live procedure is documented in
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
-2026-11-11: the filing investigation screen's slice 2 (W41s-9,
-[plan](../superpowers/plans/2026-11-09-w41s-9-fiscal-filing-screen.md)) adds the possibly-missing-history
-lists to **Reporting → Fiscal filing**: invoices AEAT holds under a series this box no longer uses that
-it did not issue, and fiscal identity changes without a handover; the complete
-old-backup/new-hardware exercise (W41s-11) reads them. Signed witnesses and fencing (W41s-10b) were retired on 9 November 2026: A1342
+**Reporting → Fiscal filing** lists invoices a check with AEAT found under a series this box no
+longer uses and that this box did not issue, and fiscal identity changes without a handover (W41s-9,
+[plan](../superpowers/plans/2026-11-09-w41s-9-fiscal-filing-screen.md)); the complete
+old-backup/new-hardware exercise (W41s-11), still to do, reads them. Importing, matching or reconciling recovered
+history, and any missing-history remedy, stay out until the adviser answers Q41. Signed witnesses and fencing (W41s-10b) were retired on 9 November 2026: A1342
 (#2654) stops a returning old main box on signed newer evidence in the backup bucket, and A1418
 with A1425 cover a one-box venue restored from its backup. Keep their authority, recovery and
 public fiscal-enablement gates. W41s-10a's remaining qualification work follows.

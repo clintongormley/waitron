@@ -286,9 +286,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The precise H2 writer approval, released clock/Pay contracts and separate F1/delivery/physical gates remain.
   [Design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md), [detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17).
 
-- **W41s. Fiscal prevention and offline recovery.** The filing investigation screen's slice 2 (W41s-9,
-  2026-11-11) adds the possibly-missing-history lists to **Reporting → Fiscal filing**, which the
-  complete old-backup/new-hardware exercise (W41s-11) reads. Signed witnesses and fencing (W41s-10b)
+- **W41s. Fiscal prevention and offline recovery.** The complete old-backup/new-hardware exercise
+  (W41s-11) remains; it reads the possibly-missing-history lists on **Reporting → Fiscal filing**
+  (W41s-9).
+  Importing, matching or reconciling recovered history, and any missing-history remedy, wait for
+  the adviser's answer to Q41. Signed witnesses and fencing (W41s-10b)
   were retired on 9 November 2026: A1342 (#2654) and A1418 with A1425 cover them. Qualify live AEAT reconciliation, production TLS, a till payment through a booted
   restored server, and history before the oldest known month. Task 8's disputed production remedies
   remain disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision. Once its original's

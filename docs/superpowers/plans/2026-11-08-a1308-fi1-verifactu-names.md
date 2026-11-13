@@ -349,10 +349,9 @@ W41s-9 slice 1 (2026-11-10) added readers of `registros_facturacion`, `envios` a
 which this slice renames: `packages/fiscal-verifactu/src/filing-overview.ts`, and
 `openFilingCases` in `filing-cases.ts`, which reads the cases' records. The Fiscal filing screen and its export name each case by its record id (`registroId`).
 
-W41s-9 slice 2 (2026-11-11) added handwritten SQL in `filing-overview.ts`'s missing-history
-queries that names `fiscal_allocations`, `registro_sif`, `registros_facturacion`,
-`fiscal_series_conflicts` and `invoice_series`, which this slice reshapes. Their order rests on an
-identity row and its activation row being inserted together (`allocation.ts:441`, `:465`).
+W41s-9 slice 2 (2026-11-11) added handwritten SQL in `filing-overview.ts`'s `readIdentityChanges`
+that names `registro_sif` and `registros_facturacion`, which this slice renames; `readMissingHistory`
+reads `registro_sif`, `registros_facturacion` and `fiscal_series_conflicts` through drizzle.
 
 **Landed by: owner.**
 
