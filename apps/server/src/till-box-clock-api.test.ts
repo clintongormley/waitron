@@ -63,7 +63,6 @@ let profileId = "";
 let staffCookie = "";
 /** Anna again, on the second till. */
 let otherTillCookie = "";
-/** Marta, a manager, PIN 1234. */
 let managerId = "";
 /** The provisioned administrator, PIN 1234, signed in on a till of their own. */
 let adminTillCookie = "";
@@ -120,7 +119,7 @@ useVenueDb({
       .from(devices)
       .where(eq(devices.id, venue.deviceId));
     profileId = till!.profileId;
-    managerId = await seedPerson("manager", "Marta");
+    managerId = await seedPerson("manager", "Martha");
     const adminTill = await enrolDeviceForTest(db, venue.cfg, { name: "Caja admin", profileId });
     adminTillId = adminTill.deviceId;
     adminTillCookie = await signIn(adminTill, venue.adminId, "1234");

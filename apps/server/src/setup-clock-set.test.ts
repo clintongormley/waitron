@@ -35,7 +35,7 @@ vi.mock("./fs-atomic.js", async (original) => {
 
 const H = 3_600_000;
 const START_MS = Date.parse("2026-10-31T10:00:00.000Z");
-const ADMIN = { id: "0b6f1c1e-7f2a-4a35-9c1d-2f0e5a8b9c10", name: "Luis" };
+const ADMIN = { id: "0b6f1c1e-7f2a-4a35-9c1d-2f0e5a8b9c10", name: "Lewis" };
 
 const UNSYNCHRONISED: ClockServiceStatus = {
   available: true,
@@ -158,7 +158,7 @@ describe("setting the box's clock from the setup and restore pages", () => {
     expect(entries[0]!.params).toEqual({
       confirmationId: null,
       source: "setup",
-      person: "Luis",
+      person: "Lewis",
       deviceId: null,
       device: null,
       before: new Date(START_MS).toISOString(),
@@ -320,7 +320,7 @@ describe("the venue's first full start raises the setup's clock steps", () => {
     expect(remembered).toEqual(entries.map((entry) => entry.id));
     expect(rows.find((row) => row.id === entries[0]!.id)!.params).toMatchObject({
       source: "setup",
-      person: "Luis",
+      person: "Lewis",
       bySetupAdmin: true,
     });
     expect(await note(dir)).toBeNull();
