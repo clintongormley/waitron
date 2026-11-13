@@ -839,7 +839,7 @@ describe("the corrective invoice's paper", () => {
     expect(papers(correctiveSaleId)).toHaveLength(1);
   });
 
-  it("prints the corrective File now files, for the till that asked", async () => {
+  it("prints the corrective File now files", async () => {
     const id = await threeBack();
     const filed = await fileNow(id, fileBody());
     const correctiveSaleId = (filed.json as { correctiveSaleId: string }).correctiveSaleId;
@@ -878,7 +878,9 @@ describe("the corrective invoice's paper", () => {
     }
     const [original, copy] = papers(correctiveSaleId);
     expect(copy).toMatchObject({ kind: "document", copy: true });
-    expect(copy!.text).not.toBe(original!.text);
+    const { duplicate } = receiptLabelsFor("es-ES");
+    expect(original!.text).not.toContain(duplicate);
+    expect(copy!.text).toContain(duplicate);
     expect(counts()).toEqual(before);
   });
 });

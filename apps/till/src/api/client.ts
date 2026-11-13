@@ -1004,7 +1004,9 @@ export type TenderBlock =
 export interface TillSaleResult extends ReceiptPresentation {
   invoiceEvidence?: InvoiceEvidence;
   issuedOffsetMinutes?: number;
-  invoiceType?: "F1" | "F2";
+  invoiceType?: "F1" | "F2" | "R5";
+  /** On a corrective invoice (R5), the invoice it corrects. */
+  corrects?: { invoiceNumber: string; issuedAt: string; issuedOffsetMinutes?: number };
   recipient?: {
     taxId: string;
     legalName: string;

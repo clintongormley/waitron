@@ -86,7 +86,12 @@ export async function readTransactionReceipt(
       ? undefined
       : (
           await tx
-            .select({ sale: sales, code: invoiceSeries.code })
+            .select({
+              code: invoiceSeries.code,
+              invoiceNumber: sales.invoiceNumber,
+              issuedAt: sales.issuedAt,
+              issuedOffsetMinutes: sales.issuedOffsetMinutes,
+            })
             .from(sales)
             .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
             .where(eq(sales.id, sale.correctsSaleId))
@@ -156,9 +161,9 @@ export async function readTransactionReceipt(
       : {
           invoiceType: "R5",
           corrects: {
-            invoiceNumber: formatInvoiceNumber(corrected.code, corrected.sale.invoiceNumber),
-            issuedAt: new Date(corrected.sale.issuedAt).toISOString(),
-            issuedOffsetMinutes: corrected.sale.issuedOffsetMinutes,
+            invoiceNumber: formatInvoiceNumber(corrected.code, corrected.invoiceNumber),
+            issuedAt: new Date(corrected.issuedAt).toISOString(),
+            issuedOffsetMinutes: corrected.issuedOffsetMinutes,
           },
         }),
     ...(sale.counterpartyTaxId === null

@@ -279,7 +279,8 @@ export async function listOpenInvoiceCorrections(
 /**
  * Files the R5 of the open correction `correctionId` for the money its refunds have given back,
  * after the filing checks run again, and marks the correction filed. The one place a correction's
- * R5 is filed. With `paper`, the device a person asked from, its receipt printer prints the R5.
+ * R5 is filed. When a person asked (`asked`), the R5 prints on the receipt printer of `cfg`'s
+ * device; an automatic filing passes none and prints nothing.
  */
 export async function fileCorrectionIn(
   tx: Transaction,
@@ -289,8 +290,7 @@ export async function fileCorrectionIn(
   authz: RecordCorrectionInput["authz"],
   /** Null when filed automatically, with nobody asking. */
   endedBy: string | null,
-  expectedSplit?: readonly SplitLine[],
-  paper?: DeviceRequestConfig,
+  asked?: { expectedSplit?: readonly SplitLine[]; print: true },
 ): Promise<SaleId> {
   const correction = await openCorrection(tx, correctionId);
   const { completed } = await readSettledMoney(tx, correction);
@@ -300,7 +300,8 @@ export async function fileCorrectionIn(
     gross: centsToDecimal(completed),
     ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
   });
-  if (expectedSplit !== undefined) await refuseChangedSplit(tx, saleId, preview, expectedSplit);
+  if (asked?.expectedSplit !== undefined)
+    await refuseChangedSplit(tx, saleId, preview, asked.expectedSplit);
   if ((await deps.backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
 
@@ -335,12 +336,12 @@ export async function fileCorrectionIn(
     .returning({ id: invoiceCorrections.id });
   if (filed.length !== 1)
     throw new AppError("invoice_correction.not_open", { correctionId, state: correction.state });
-  if (paper !== undefined)
+  if (asked?.print)
     await optionalDocument(tx, "enqueueCorrectiveReceipt", correctiveSaleId, async () =>
       enqueueOriginalReceipt(
         tx,
-        paper,
-        await readTransactionReceipt(deps.backend, tx, paper, correctiveSaleId),
+        cfg,
+        await readTransactionReceipt(deps.backend, tx, cfg, correctiveSaleId),
         correctiveSaleId,
       ),
     );
@@ -359,16 +360,10 @@ export async function fileInvoiceCorrectionNow(
   request: { expectedSplit: readonly SplitLine[] },
   actor: { personId: string; authz: AuthzInput },
 ): Promise<InvoiceCorrectionView> {
-  await fileCorrectionIn(
-    tx,
-    deps,
-    cfg,
-    correctionId,
-    actor.authz,
-    actor.personId,
-    request.expectedSplit,
-    cfg,
-  );
+  await fileCorrectionIn(tx, deps, cfg, correctionId, actor.authz, actor.personId, {
+    expectedSplit: request.expectedSplit,
+    print: true,
+  });
   return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
 }
 
