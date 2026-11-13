@@ -1013,6 +1013,54 @@ for (const locale of ["en", "es"] as const) {
           },
         },
       ]);
+      const frozenTickets = new Set(
+        Object.values(expected[phase].tables.ticket_item_allergies!.rows).map(
+          (row) => row.ticket_item_id,
+        ),
+      );
+      expected[phase] = madridWithFoldedTables(expected[phase], [
+        {
+          from: "ticket_item_allergies",
+          into: "ticket_items",
+          match: { from: "ticket_item_id", into: "id" },
+          columns: { original_block: "allergy_original", current_block: "allergy_current" },
+        },
+      ]);
+      const tickets = expected[phase].tables.ticket_items!;
+      const allergyColumns = tickets.columns.splice(-2);
+      tickets.columns.splice(
+        tickets.columns.findIndex((column) => column.name === "note") + 1,
+        0,
+        { name: "allergy_frozen", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
+        ...allergyColumns,
+      );
+      for (const row of Object.values(tickets.rows))
+        row.allergy_frozen = frozenTickets.has(row.id) ? 1 : 0;
+      expected[phase] = madridWithDroppedColumns(expected[phase], {
+        ticket_items: ["node_id"],
+        routing_cell_periods: ["department_id"],
+      });
+      const notices = expected[phase].tables.kitchen_notices!;
+      notices.columns.splice(
+        notices.columns.findIndex((column) => column.name === "order_label"),
+        0,
+        { name: "ticket_item_id", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(notices.rows)) row.ticket_item_id = null;
+      notices.foreignKeys = [
+        {
+          id: 0,
+          seq: 0,
+          table: "ticket_items",
+          from: "ticket_item_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "SET NULL",
+          match: "NONE",
+        },
+        ...notices.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
+      ];
+      delete phases[phase]!.ticket_item_allergies;
       const memberKeys = expected[phase].tables.dining_tables!.foreignKeys;
       const zoneKey = memberKeys.find((key) => key.from === "zone_id")!;
       const mergeKey = memberKeys.find((key) => key.from === "merge_id")!;

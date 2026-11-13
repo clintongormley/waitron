@@ -1,12 +1,12 @@
 import { clearPartyAllergyForTest } from "@waitron/db/testing/seed.js";
 import { seedActivityActor } from "@waitron/db/testing/seed.js";
-import { asc, eq, getTableColumns } from "drizzle-orm";
+import { and, asc, eq, getTableColumns } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setStationToday, ticketItemAllergies } from "@waitron/venue-service";
+import { setStationToday } from "@waitron/venue-service";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -57,9 +57,13 @@ async function lines(tx: Transaction, orderId: string) {
 
 async function allergyCopies(tx: Transaction, ticketItemId: string) {
   return tx
-    .select()
-    .from(ticketItemAllergies)
-    .where(eq(ticketItemAllergies.ticketItemId, ticketItemId));
+    .select({
+      ticketItemId: ticketItems.id,
+      originalBlock: ticketItems.allergyOriginal,
+      currentBlock: ticketItems.allergyCurrent,
+    })
+    .from(ticketItems)
+    .where(and(eq(ticketItems.id, ticketItemId), eq(ticketItems.allergyFrozen, true)));
 }
 
 async function jobsAt(tx: Transaction, printerId: string) {
@@ -107,7 +111,7 @@ describe("A773 waiter request: tab send", () => {
       const afterFirst = await items(tx, venue.party.tabId);
       expect(afterFirst).toEqual([
         requested,
-        { ...held, requestedAt: LATER, firedAt: null, passControlled: true },
+        { ...held, requestedAt: LATER, firedAt: null, passControlled: true, allergyFrozen: true },
       ]);
       expect((await lines(tx, venue.party.tabId)).map((line) => line.sentAt)).toEqual([AT, LATER]);
       expect(await allergyCopies(tx, held!.id)).toHaveLength(1);

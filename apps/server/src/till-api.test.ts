@@ -3045,11 +3045,6 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       app.request(`/api/working-orders/${id}`, { method: "DELETE" }),
       // The prep surface.
       app.request(`/api/working-orders/${id}/place`, { method: "POST" }),
-      app.request(`/api/working-orders/${id}/prep`, {
-        method: "POST",
-        headers: json,
-        body: JSON.stringify({}),
-      }),
       app.request(`/api/working-orders/${id}/collect`, {
         method: "POST",
         headers: json,
@@ -3447,57 +3442,8 @@ describe("/api/working-orders/:id/place (send-to-prep placing)", () => {
   });
 });
 
-describe("/api/working-orders/:id/prep (Mode-P send-to-prep, KDS-1 ticket model)", () => {
-  // `sendToPrep` needs a SETTLED order, and settling one means a real fiscal write the stub backend
-  // cannot make — so the success path and the double-send collision live in
-  // `till-api.fiscal-sale-paths.test.ts`. This suite covers the refusal and the malformed-id screen.
-  it("POST on a still-OPEN (parked, unpaid) order is refused 409 working_order.not_settled, nothing fired", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
-    const id = randomUUID();
-    await park(app, cookie, {
-      id,
-      lines: [{ menuItemId: waterOfferId, quantity: "1" }],
-      label: "Mesa 5",
-    });
-
-    const sent = await app.request(`/api/working-orders/${id}/prep`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
-    });
-    expect(sent.status).toBe(409);
-    expect(await sent.json()).toMatchObject({
-      error: { code: "working_order.not_settled", params: { workingOrderId: id } },
-    });
-
-    // Refused BEFORE any write — no ticket item was fired for the order.
-    const fired = await suite.db.execute(
-      sql`select 1 from ticket_items where working_order_id = ${id}`,
-    );
-    expect(fired.rows).toHaveLength(0);
-  });
-
-  it("POST with a malformed id is 409 working_order.not_settled, not an opaque 500", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
-
-    const res = await app.request("/api/working-orders/not-a-uuid/prep", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "working_order.not_settled", params: { workingOrderId: "not-a-uuid" } },
-    });
-  });
-});
-
 // Station-display operate routes: GET /api/stations, GET /api/stations/:id/queue, POST
-// /api/ticket-items/:id/advance, POST /api/orders/:id/stations/:sid/advance. Under this suite's
+// Per-item preparation operations. Under this suite's
 // `prepay` cfg, `placeOrder`'s fire seeds ticket items with no fiscal write.
 describe("KDS-1 station-display operate routes", () => {
   /** The seeded default station "Cocina", read back through `GET /api/stations` (the picker's own read). */
@@ -3799,59 +3745,6 @@ describe("KDS-1 station-display operate routes", () => {
     });
   });
 
-  it("POST /api/orders/:id/stations/:sid/advance bumps the WHOLE ticket; a bad `to` is 400; a malformed id a 200 no-op", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
-    // Two lines → two ticket items at the default station, so the whole-ticket bump moves both together.
-    const id = randomUUID();
-    await park(app, cookie, {
-      id,
-      lines: [
-        { menuItemId: waterOfferId, quantity: "1" },
-        { menuItemId: waterOfferId, quantity: "1" },
-      ],
-      label: "Mesa 9",
-    });
-    await app.request(`/api/working-orders/${id}/place`, {
-      method: "POST",
-      headers: { cookie: `${cookie}; ${sessionDeviceCookie}` },
-    });
-    const kitchenStation = await defaultStation(app, cookie);
-
-    const advance = (order: string, station: string, to: string) =>
-      app.request(`/api/orders/${order}/stations/${station}/advance`, {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ to }),
-      });
-
-    // A non-{preparing,ready} target is a request-shape fault (advanceTicket has no target guard).
-    const bad = await advance(id, kitchenStation.id, "collected");
-    expect(bad.status).toBe(400);
-    expect(await bad.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "to" } },
-    });
-
-    // A malformed ORDER id, and a malformed STATION id, each name nothing — the SAME no-op advanceTicket
-    // makes for an unknown one, a clean 200.
-    expect((await advance("not-a-uuid", kitchenStation.id, "preparing")).status).toBe(200);
-    expect((await advance(id, "not-a-uuid", "preparing")).status).toBe(200);
-
-    // The real whole-ticket bump: both lines move queued → preparing → ready together.
-    expect((await advance(id, kitchenStation.id, "preparing")).status).toBe(200);
-    expect((await advance(id, kitchenStation.id, "ready")).status).toBe(200);
-    const q = await app.request(`/api/stations/${kitchenStation.id}/queue`, {
-      headers: { cookie },
-    });
-    const { items: groups } = (await q.json()) as {
-      items: { orderId: string; items: { state: string }[] }[];
-    };
-    const items = groups.find((g) => g.orderId === id)!.items;
-    expect(items).toHaveLength(2);
-    expect(items.every((i) => i.state === "ready")).toBe(true);
-  });
-
   it("a station's queue carries its unacknowledged kitchen notices, and acknowledging one clears it", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -3943,11 +3836,6 @@ describe("KDS-1 station-display operate routes", () => {
       app.request(`/api/stations/${someId}/queue`),
       app.request(`/api/kitchen-notices/${someId}/acknowledge`, { method: "POST" }),
       app.request(`/api/ticket-items/${someId}/advance`, {
-        method: "POST",
-        headers: j,
-        body: advanceBody,
-      }),
-      app.request(`/api/orders/${someId}/stations/${someId}/advance`, {
         method: "POST",
         headers: j,
         body: advanceBody,

@@ -50,7 +50,6 @@ import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
-  advanceTicket,
   advanceTicketItem,
   cancelPlacedOrder,
   getHeldOrder,
@@ -59,7 +58,6 @@ import {
   markCollected,
   parkOrder,
   paysAfterSending,
-  sendToPrep,
 } from "./working-order.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { readScopedPassBoard } from "./pass-board.js";
@@ -491,10 +489,6 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-/**
- * Run one of the tx-based KDS verbs (advanceTicketItem/advanceTicket/listStationQueue) in a
- * `withTransaction` scope — they run on a CALLER-supplied transaction.
- */
 async function asTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
     return fn(tx);
@@ -2339,10 +2333,10 @@ describe("prepare & collect — zone payment timing", () => {
 });
 
 // The ticket prep surface (KDS-1 §3c): the per-line advance state machine (`advanceTicketItem`), the
-// whole-ticket bump (`advanceTicket`) and the per-station queue read (`listStationQueue`) over
+
 // `ticket_items`. `payWorkingOrder` (Mode P, at payment) and `placeOrder` (Modes I/T) are the fires
-// that put items on the queue; `sendToPrep`'s settled-only guard is exercised here too.
-describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surface)", () => {
+
+describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready; a skip, a repeat, a backwards move and to='queued' are all refused", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
@@ -2387,42 +2381,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       params: { field: "to" },
     });
     expect(await ticketStateOf(id)).toBe("ready"); // every refusal left the item untouched
-  });
-
-  it("advanceTicket bumps every not-yet-`to` line of an order at a station together, leaving already-advanced lines alone", async () => {
-    const { cfg, coffee, water, zoneId } = await modeVenue("ticket_then_pay");
-    const id = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id,
-      zoneId,
-      lines: [
-        { menuItemId: coffee.menuItemId, quantity: "1" },
-        { menuItemId: water.menuItemId, quantity: "1" },
-      ],
-    });
-    await placeOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      id,
-      OPERATOR,
-    ); // fires two items → default station
-    const station = await defaultStationId();
-    const items = await ticketItemIdsFor(id);
-    expect(items).toHaveLength(2);
-
-    // Push item[0] all the way to `ready` first, so the whole-ticket bump must SKIP it (it is no longer
-    // at the `queued` predecessor).
-    await asTenant(async (tx) => {
-      await advanceTicketItem(tx, items[0]!, "preparing");
-      await advanceTicketItem(tx, items[0]!, "ready");
-    });
-
-    // Whole-ticket bump to `preparing`: only the still-queued item[1] advances; item[0] (ready) is untouched.
-    await asTenant((tx) => advanceTicket(tx, id, station, "preparing"));
-
-    const queue = await asTenant((tx) => listStationQueue(tx, station));
-    const group = queue.find((g) => g.orderId === id)!;
-    expect(group.items.map((i) => i.state).sort()).toEqual(["preparing", "ready"]);
   });
 
   it("listStationQueue lists this station's items grouped by order oldest-first, dropping collected and abandoned orders", async () => {
@@ -2545,67 +2503,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     expect(queueA.map((g) => g.orderId)).toEqual([idA, idB]);
     expect(queueB.map((g) => g.orderId)).toEqual([idA, idB]);
   });
-
-  it("sendToPrep stamps the settled order's lines sent as it fires them", async () => {
-    const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    const id = randomUUID();
-    // With the default station off, paying leaves the dish unsent; turning it back on before
-    // `sendToPrep` lets that call send the same stored dish.
-    await setDefaultStationActive(false);
-    await payWorkingOrder(
-      { admission: testTradingAdmission(), db: suite.db, backend, clock },
-      cfg,
-      {
-        id,
-        zoneId,
-        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      },
-      OPERATOR,
-    );
-    const sentAt = async () =>
-      (
-        await suite.db
-          .select({ sentAt: workingOrderLines.sentAt })
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, id))
-      ).map((row) => row.sentAt);
-    expect(await ticketStateOf(id)).toBeNull();
-    expect(await sentAt()).toEqual([null]);
-    await setDefaultStationActive(true);
-
-    await sendToPrep({ db: suite.db }, cfg, id);
-
-    expect(await ticketStateOf(id)).toBe("queued");
-    const [stamp] = await sentAt();
-    expect(stamp).not.toBeNull();
-  });
-
-  it("sendToPrep refuses to fire an order it may not (working_order.not_settled) — an open one and an absent id", async () => {
-    const { cfg, coffee, zoneId } = await modeVenue("prepay");
-
-    // OPEN — parked but never paid. `sendToPrep` is Mode P's own pickup (settle happens at ORDER via
-    // `payWorkingOrder`); an open order has never reached settlement, so nothing is fired.
-    const openId = randomUUID();
-    await parkOrder({ db: suite.db }, cfg, {
-      id: openId,
-      zoneId,
-      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
-    });
-    await expect(sendToPrep({ db: suite.db }, cfg, openId)).rejects.toMatchObject({
-      code: "working_order.not_settled",
-      params: { workingOrderId: openId },
-    });
-    expect(await ticketStateOf(openId)).toBeNull(); // the refused call fired nothing
-
-    // An ABSENT id — the existence+status guard catches it before any fire (never a raw FK 500).
-    const missing = randomUUID();
-    await expect(sendToPrep({ db: suite.db }, cfg, missing)).rejects.toMatchObject({
-      code: "working_order.not_settled",
-      params: { workingOrderId: missing },
-    });
-    expect(await ticketStateOf(missing)).toBeNull();
-  });
 });
 
 describe("the pass board — venue-wide", () => {
@@ -2659,12 +2556,6 @@ describe("the pass board — venue-wide", () => {
     expect(expoB).toEqual([idA, idB]);
   });
 });
-
-async function setDefaultStationActive(active: boolean): Promise<void> {
-  await suite.db.execute(sql`
-    update kitchen_stations set active = ${active ? 1 : 0}
-    where is_default`);
-}
 
 /** A printer on the venue's default station, so a fire there enqueues a kitchen ticket. */
 async function kitchenPrinter(): Promise<string> {

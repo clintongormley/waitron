@@ -658,7 +658,7 @@ describe("KDS-3 expo routes: the All stations board + whole-course ready", () =>
     });
 
     // `ready` does NOT existence-check (bumpCourseReady no-throws-on-empty): an unknown well-formed course
-    // updates zero rows and returns 200, the same convenience `advanceTicket` makes.
+
     const unknownReady = await app.request(`/api/orders/${orderId}/courses/${randomUUID()}/ready`, {
       method: "POST",
       headers: { cookie },

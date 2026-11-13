@@ -95,7 +95,6 @@ import {
 import { listTables, listZones } from "./tables.js";
 import {
   abandonHeldOrder,
-  advanceTicket,
   advanceTicketItem,
   bumpCourseReady,
   cancelPlacedOrder,
@@ -114,7 +113,6 @@ import {
   readBillLines,
   readTabLines,
   sendLines,
-  sendToPrep,
   setOrderInvoiceChoice,
   setOrderReceiptLanguage,
   setLineCourse,
@@ -2205,24 +2203,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.post("/api/working-orders/:id/prep", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "take-orders" });
-      const cfg = requestCfg(deps.cfg, session);
-      const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
-      await gateZones(deps, session, [{ orderId: id }]);
-      await sendToPrep(
-        { db: deps.db },
-        cfg,
-        id,
-        deps.attendance === undefined
-          ? undefined
-          : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
-      );
-      return c.body(null, 200);
-    }),
-  );
-
   app.get("/api/stations", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2281,35 +2261,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         await advanceTicketItem(
           tx,
           id,
-          to,
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
-        );
-      });
-      return c.body(null, 200);
-    }),
-  );
-
-  // Unlike the per-line verb, `advanceTicket` does not validate `to` and no-ops on an empty match,
-  // so the route screens `to`, and a malformed id gets the same no-op 200.
-  app.post("/api/orders/:id/stations/:sid/advance", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "prepare-orders" });
-      const orderId = c.req.param("id");
-      const stationId = c.req.param("sid");
-      const body = await readJsonBody<{ to?: string }>(c);
-      if (body.to !== "preparing" && body.to !== "ready") {
-        throw new AppError("management.request_invalid", { field: "to" });
-      }
-      // The narrowing above does not survive into the closure.
-      const to = body.to;
-      if (!isUuid(orderId) || !isUuid(stationId)) return c.body(null, 200);
-      await withTransaction(deps.db, async (tx) => {
-        await advanceTicket(
-          tx,
-          orderId,
-          stationId,
           to,
           deps.attendance === undefined
             ? undefined

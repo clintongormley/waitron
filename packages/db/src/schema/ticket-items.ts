@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { check, index, unique } from "drizzle-orm/sqlite-core";
 import {
   count,
@@ -6,6 +7,7 @@ import {
   flag,
   id,
   label,
+  json,
   newId,
   nowIso,
   quantity,
@@ -14,7 +16,8 @@ import {
 } from "./columns.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { kitchenStations } from "./kitchen-stations.js";
-import { nodes } from "./nodes.js";
+import { kitchenAllergyBlockCheck } from "./venue-service/kitchen-allergy.js";
+import type { KitchenAllergyBlock } from "@waitron/shared";
 import { workingOrderLines } from "./orders.js";
 
 /**
@@ -34,12 +37,6 @@ export const ticketItems = table(
   "ticket_items",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    // The node the prep happens on.
-    nodeId: id("node_id")
-      .notNull()
-      /* v8 ignore start */
-      .references(() => nodes.id),
-    /* v8 ignore stop */
     // Denormalised grouping key for the per-station display. No FK: the working_order_line_id FK
     // below carries the integrity.
     workingOrderId: id("working_order_id").notNull(),
@@ -68,6 +65,9 @@ export const ticketItems = table(
     // Explicit "leave to finish" survives disabling; an earlier manual station choice does not.
     stationRetainedAtRelease: flag("station_retained_at_release").notNull().default(false),
     note: label("note"),
+    allergyFrozen: flag("allergy_frozen").notNull().default(false),
+    allergyOriginal: json<KitchenAllergyBlock>("allergy_original"),
+    allergyCurrent: json<KitchenAllergyBlock>("allergy_current"),
     // The quantity fired. Null where an insert does not state it.
     quantity: quantity("quantity"),
     madeHere: flag("made_here").notNull().default(false),
@@ -84,5 +84,11 @@ export const ticketItems = table(
     index("ticket_items_course_idx").on(t.courseId),
     index("ticket_items_waiting_idx").on(t.stationId, t.state, t.firedAt),
     check("ticket_items_state_ck", enumCheck(t.state)),
+    check("ticket_items_allergy_original_ck", kitchenAllergyBlockCheck(t.allergyOriginal)),
+    check("ticket_items_allergy_current_ck", kitchenAllergyBlockCheck(t.allergyCurrent)),
+    check(
+      "ticket_items_allergy_frozen_ck",
+      sql`${t.allergyFrozen} = 1 or (${t.allergyOriginal} is null and ${t.allergyCurrent} is null)`,
+    ),
   ],
 );

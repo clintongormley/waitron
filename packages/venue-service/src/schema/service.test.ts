@@ -153,8 +153,13 @@ const EXPECTED: Record<
   },
   kitchen_notices: {
     table: kitchenNotices,
-    foreignKeys: ["kitchen_notices_station_fk", "kitchen_notices_order_fk"],
+    foreignKeys: [
+      "kitchen_notices_station_fk",
+      "kitchen_notices_order_fk",
+      "kitchen_notices_ticket_item_fk",
+    ],
     checks: [
+      "kitchen_notices_ticket_item_kind_ck",
       "kitchen_notices_kind_ck",
       "kitchen_notices_allergy_block_ck",
       "kitchen_notices_allergy_kind_ck",
@@ -166,7 +171,11 @@ const EXPECTED: Record<
       "kitchen_notices_direction_kind_ck",
       "kitchen_notices_cancelled_extra_kind_ck",
     ],
-    indexes: ["kitchen_notices_open_idx"],
+    indexes: [
+      "kitchen_notices_order_idx",
+      "kitchen_notices_ticket_item_idx",
+      "kitchen_notices_open_idx",
+    ],
     uniqueConstraints: [],
     primaryKeys: [],
   },
@@ -206,6 +215,7 @@ describe("venue-service schema", () => {
       ["departments_one_default_key", true],
       ["floor_zones_one_counter_default_key", true],
       ["floor_zones_name_key", true],
+      ["kitchen_notices_ticket_item_idx", false],
       ["kitchen_notices_open_idx", false],
       ["routing_cells_category_every_zone_key", true],
       ["routing_cells_category_zone_key", true],

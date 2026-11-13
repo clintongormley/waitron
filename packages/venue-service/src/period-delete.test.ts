@@ -297,18 +297,12 @@ describe("what deleting a period touches", () => {
       .insert(routingCells)
       .values({ stationId: v.stationId, noCategory: true })
       .returning({ id: routingCells.id });
-    await db.insert(routingCellPeriods).values({
-      cellId: cell!.id,
-      periodId: v.lunch,
-      departmentId: v.restaurant,
-      stationId: v.stationId,
-    });
-    await db.insert(routingCellPeriods).values({
-      cellId: cell!.id,
-      periodId: v.dinner,
-      departmentId: v.restaurant,
-      stationId: v.stationId,
-    });
+    await db
+      .insert(routingCellPeriods)
+      .values({ cellId: cell!.id, periodId: v.lunch, stationId: v.stationId });
+    await db
+      .insert(routingCellPeriods)
+      .values({ cellId: cell!.id, periodId: v.dinner, stationId: v.stationId });
 
     const impact = await scoped((tx) => periodDeleteImpact(tx, v.lunch, AT));
     const routing = await scoped((tx) => readRoutingUses(tx));
@@ -380,9 +374,7 @@ describe("deleting a period", () => {
     const noCategory = await cell({ noCategory: true });
     const cocktailsCell = await cell({ categoryId: cocktails!.id });
     const line = (cellId: string, periodId: string, stationId: string) =>
-      db
-        .insert(routingCellPeriods)
-        .values({ cellId, periodId, departmentId: v.restaurant, stationId });
+      db.insert(routingCellPeriods).values({ cellId, periodId, stationId });
     await line(noCategory, v.lunch, barStation!.id);
     await line(cocktailsCell, v.lunch, barStation!.id);
     await line(cocktailsCell, v.afternoon, v.stationId);

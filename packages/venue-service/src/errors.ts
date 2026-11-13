@@ -3,6 +3,7 @@ import type { BusinessDayClockConflict } from "@waitron/module";
 
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "ticket_item.not_found": { ticketItemId: string };
     "device.not_found": { deviceId: string };
     "device.unauthorized": Record<string, never>;
     "device_zones.invalid": {

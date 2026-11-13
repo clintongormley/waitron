@@ -445,7 +445,6 @@ export async function seedFiredLine(
     })
     .returning({ id: workingOrderLines.id });
   await db.insert(ticketItems).values({
-    nodeId: seed.nodeId,
     workingOrderId: opts.orderId,
     workingOrderLineId: line!.id,
     stationId: seed.stationId,

@@ -2192,9 +2192,8 @@ export async function enqueueMovedSlipsFor(
 
 /**
  * The names on each sent dish's latest paper, by ticket item, of the tables `before`'s places hold
- * now. That paper is its ticket, or its last MOVED notice, which is kept per bill, station and dish
- * name, so two dishes alike on one bill share it. Print jobs are not read: a station with no printer
- * has none. A paper names the tables the dish's sending party held when it printed
+ * now. That paper is its ticket, or its last MOVED notice, which names its ticket item and station.
+ * Print jobs are not read: a station with no printer has none. A paper names the tables the dish's sending party held when it printed
  * ({@link readTablesHeldOverTime}), a table that joined in the same millisecond counting as held and
  * one that left in it counting as gone, because a floor pass can write its slip in the same
  * millisecond as the leave and that slip sends the dish on from that table. A reprint counts for
@@ -2227,20 +2226,20 @@ export async function readNamesOnPaper(
     .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(inArray(ticketItems.workingOrderId, billIds));
-  const noticeKey = (billId: string, stationId: string, lineName: string) =>
-    JSON.stringify([billId, stationId, lineName]);
+  const noticeKey = (ticketItemId: string, stationId: string) =>
+    JSON.stringify([ticketItemId, stationId]);
   const lastNotice = new Map<string, number>();
   const notices = await tx
     .select({
-      billId: kitchenNotices.workingOrderId,
+      ticketItemId: kitchenNotices.ticketItemId,
       stationId: kitchenNotices.stationId,
-      lineName: kitchenNotices.lineName,
       createdAt: kitchenNotices.createdAt,
     })
     .from(kitchenNotices)
     .where(and(eq(kitchenNotices.kind, "moved"), inArray(kitchenNotices.workingOrderId, billIds)));
-  for (const { billId, stationId, lineName, createdAt } of notices) {
-    const key = noticeKey(billId, stationId, lineName);
+  for (const { ticketItemId, stationId, createdAt } of notices) {
+    if (ticketItemId === null) continue;
+    const key = noticeKey(ticketItemId, stationId);
     lastNotice.set(key, Math.max(lastNotice.get(key) ?? 0, Date.parse(createdAt)));
   }
   const tableIds = [
@@ -2265,7 +2264,7 @@ export async function readNamesOnPaper(
     }
     const printedAt = Math.max(
       Date.parse((item.firedAt ?? item.holdPrintedAt)!),
-      lastNotice.get(noticeKey(item.billId, item.stationId, kitchenPresentationName(item))) ?? 0,
+      lastNotice.get(noticeKey(item.id, item.stationId)) ?? 0,
     );
     const onItsPaper = heldAt(sentParty, printedAt);
     onPaper.set(

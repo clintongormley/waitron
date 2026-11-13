@@ -293,7 +293,7 @@ describe("the venue-service tables carry no tenant column", () => {
         primaryKey: ["id"],
         foreignKeys: [
           "(cell_id) -> routing_cells(id) on delete cascade",
-          "(period_id, department_id) -> menu_periods(id, department_id) on delete cascade",
+          "(period_id) -> menu_periods(id) on delete cascade",
           "(station_id) -> kitchen_stations(id)",
         ],
       },
@@ -317,6 +317,7 @@ describe("the venue-service tables carry no tenant column", () => {
         primaryKey: ["id"],
         foreignKeys: [
           "(station_id) -> kitchen_stations(id)",
+          "(ticket_item_id) -> ticket_items(id) on delete set null",
           "(working_order_id) -> working_orders(id) on delete cascade",
         ],
       },
@@ -616,12 +617,11 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
       values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
     const choice = (
-      over: { cell?: string; period?: string; department?: string; station?: string | null } = {},
+      over: { cell?: string; period?: string; station?: string | null } = {},
       noPreparation = 0,
     ) => sql`insert into routing_cell_periods
-      (id, cell_id, period_id, department_id, station_id, no_preparation)
+      (id, cell_id, period_id, station_id, no_preparation)
       values (${randomUUID()}, ${over.cell ?? cellId}, ${over.period ?? periodId},
-        ${over.department ?? v.departmentId},
         ${over.station === undefined ? station!.id : over.station}, ${noPreparation})`;
     const choices = async (where: ReturnType<typeof sql>) =>
       (
@@ -666,10 +666,9 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     expect(engineErrorMessage(error)).toContain("routing_cell_periods_target_ck");
   });
 
-  it("ties a period choice to its cell, its period's own department and a station", async () => {
+  it("ties a period choice to its cell, its period and a station", async () => {
     const r = await routedPeriod();
-    const other = await venue();
-    await refusal(r.choice({ department: other.departmentId }), "routing_cell_periods_period_fk");
+
     await refusal(r.choice({ period: randomUUID() }), "routing_cell_periods_period_fk");
     await refusal(r.choice({ cell: randomUUID() }), "routing_cell_periods_cell_fk");
     await refusal(r.choice({ station: randomUUID() }), "routing_cell_periods_station_fk");

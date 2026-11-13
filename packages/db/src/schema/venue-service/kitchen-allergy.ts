@@ -1,8 +1,4 @@
 import { sql, type AnyColumn } from "drizzle-orm";
-import { check, foreignKey } from "drizzle-orm/sqlite-core";
-import { id, json, table } from "../columns.js";
-import { ticketItems } from "../ticket-items.js";
-import type { KitchenAllergyBlock } from "@waitron/shared";
 
 export function kitchenAllergyBlockCheck(column: AnyColumn) {
   return sql`case when ${column} is null then 1
@@ -22,22 +18,3 @@ export function kitchenAllergyBlockCheck(column: AnyColumn) {
       and json_type(${column}, '$.labels.es.clashes') is 'array'
     end`;
 }
-
-export const ticketItemAllergies = table(
-  "ticket_item_allergies",
-  {
-    ticketItemId: id("ticket_item_id").primaryKey(),
-    // Row presence also freezes an unticked dish; an absent row has not been exposed yet.
-    originalBlock: json<KitchenAllergyBlock>("original_block"),
-    currentBlock: json<KitchenAllergyBlock>("current_block"),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.ticketItemId],
-      foreignColumns: [ticketItems.id],
-      name: "ticket_item_allergies_ticket_fk",
-    }).onDelete("cascade"),
-    check("ticket_item_allergies_original_ck", kitchenAllergyBlockCheck(t.originalBlock)),
-    check("ticket_item_allergies_current_ck", kitchenAllergyBlockCheck(t.currentBlock)),
-  ],
-);

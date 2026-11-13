@@ -63,8 +63,6 @@ afterEach(() => {
 const actions = [
   "ticket-preparing",
   "ticket-ready",
-  "station-preparing",
-  "station-ready",
   "group-fire",
   "course-ready",
   "group-ready",
@@ -125,7 +123,7 @@ async function prepare(action: Action) {
     .select()
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderLineId, line!.id));
-  if (action === "ticket-ready" || action === "station-ready")
+  if (action === "ticket-ready")
     await withTransaction(suite.db, (tx) => advanceTicketItem(tx, ticket!.id, "preparing"));
   if (action === "hand-over") {
     await placeOrder(
@@ -158,9 +156,6 @@ function command(app: Hono, action: Action, order: Awaited<ReturnType<typeof pre
   } else if (action.startsWith("ticket-")) {
     path = `/api/ticket-items/${order.ticketId}/advance`;
     body = { stationId, to: action.slice(7) };
-  } else if (action.startsWith("station-") && action !== "station-move") {
-    path = `/api/orders/${order.tabId}/stations/${stationId}/advance`;
-    body = { to: action.slice(8) };
   } else if (action.startsWith("course-")) {
     path = `/api/orders/${order.tabId}/courses/${courseId}/${action.slice(7)}`;
     body = {};

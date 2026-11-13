@@ -1787,7 +1787,6 @@ async function heldDishWithExtraApart() {
     groupId: dish!.groupId,
   });
   await db.insert(ticketItems).values({
-    nodeId: cfg.nodeId,
     workingOrderId: tabId,
     workingOrderLineId: extraId,
     stationId: sideId,

@@ -1,5 +1,86 @@
 # A1308 fk8 — kitchen tickets: the allergy snapshot on the ticket, MOVED notices that name their ticket, routing periods without a department copy: implementation plan
 
+## 2026-11-13 — CURRENT-MAIN PREFLIGHT
+
+**Claude reviewed in 213 seconds; findings folded in; watcher cleared 2026-11-13 19:54.** Base `4e930fd07c`;
+fk7 merged `9dbea6ba9e`, exact-merge CI `43482596862` succeeded (Runner receipt). Preserve the
+historical decisions/tests below. After fk8, allergy snapshots live on tickets, MOVED distinguishes
+alike dishes, routing periods derive their department, and tickets need no node column.
+
+**Authority/R2.** Sources: lane M's `reports/r1.md`, `reports/r2.md`; lane E's
+`archive/questions-to-2026-11-11.md` (17:00–17:22). Watcher 17:15:
+“Proposal 4 (delete recallLines, sendToPrep, advanceTicket, their routes and client methods) is
+cleared by the watcher: put it at the start of fk8's plan, after showing with a search and a test
+run that nothing calls them.” Watcher clearance, not new owner design approval. Proposal 1 landed
+in #2926 (`68b0463513`)/#2933 (`1a663dafee`): preserve
+`kitchenWork()`/`leftToServe()` (`apps/server/src/kitchen-print.ts:927-943`), callers and the
+bill/index choice in `working-order.ts:8277-8289`. Recall removal landed #2879 (`a9e8f379b7`).
+**Proposals 2/3/5 are outside this fk8 proposal and NEED watcher allocation:** immediate start/“from Grill”
+printing after a pass-wait move to a non-waiting station; one Ready per pass card, including
+counter/no-course, with server-enforced Runs the pass; undo Ready until served without a time
+limit (17:22). Recommend a separate bounded watcher-queued change before fk9; invent no item.
+Preserve served-dish/floor/split assertions.
+
+**First build step — remaining proposal 4 only.**
+`rg -n -w 'recallLines|sendToPrep|advanceTicket' apps packages -g '!*.test.*'` finds definitions,
+route imports/calls, client and stale error comments; no screen callers, `recallLines` or
+`advanceTicket` client. Runner's `apps/server` baseline, `pnpm exec vitest run
+src/kitchen-request.send.test.ts src/kitchen-request.move.test.ts`, passed 15 tests/2 files;
+nonexistent `src/kitchen-work.test.ts` supplied no evidence. Delete
+`working-order.ts`'s two exports, `till-api.ts`'s `/api/working-orders/:id/prep` and
+`/api/orders/:id/stations/:sid/advance`, and `apps/till/src/api/client.ts`'s `sendToPrep`.
+Audit stale comments/docs, including `errors.ts`; no product UI/guide edits.
+Port shared setup to real `fireLines`/payment/place paths and `advanceTicketItem`; retain supported
+send/attendance/refusal/queue assertions. Delete API-exclusive cases/inventory rows, never shared
+files. Focused suites under `apps/server/src/`:
+`working-order.test.ts`, `working-order.pay-and-dispatch.test.ts`, `kitchen-request.send.test.ts`,
+`kitchen-request.move.test.ts`, `counter-release.test.ts`, `attendance-final-order-paths.test.ts`,
+`attendance-kitchen-service.test.ts`, `till-api.test.ts`, `till-api.fiscal-sale-paths.test.ts`,
+`till-api.courses.test.ts`, `till-api.sell-published.test.ts`, `venue-settings-api.orders-open.test.ts`,
+`till-api.profile-actions.test.ts`, `till-api.profile-zones.test.ts`, `till-device-proof.test.ts`;
+also `apps/till/src/api/client.test.ts`. Re-run the name search and
+`rg -n 'working-orders/.*(/prep|/lines/recall)|orders/.*stations/.*advance' apps packages`,
+including tests; review every remaining hit. Add no permanent guard.
+
+**Storage ports and checks.** Service schema lives in `packages/db/src/schema/venue-service/`;
+`ticket-items.ts` stays in its parent. Remove the export from
+`packages/venue-service/src/index.ts`. Keep Tasks 1–5's schema, allergy, MOVED, routing and overdue
+tests; reuse `scripts/a1308/lib/fold-inserts.mjs` (fk0). fk7 replaced `station_printers`
+with `kitchen_stations.printer_ids`. Per slice-rules §9, port
+`apps/server/src/backup-verification-target.test.ts`'s policy pin by comparing serialized policies
+(only the removed allergy-table ownership), and `apps/server/src/configuration-transfer.test.ts`'s
+routing SQL via `menu_periods`, preserving assertions. Update strict lists
+in `scripts/schema-constraints.test.ts`, `packages/venue-service/src/schema/service.test.ts` and
+`packages/db/src/schema/venue-service/migrations.test.ts`; run them. Derive bundle version
+from main at build/rebase. Extend
+`apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` adapter for the four storage changes;
+frozen Madrid captures stay byte-for-byte unchanged. Exclude the adapter from the final bulk
+fixture-script pass, preserving historical source-table names; run both locale cases.
+
+**Protection forecast.** Runner's base list contains all 12 composition/database/phase
+entries (`receipts/fk8-kitchen-tickets/protection-before/protection-list.json` in lane E).
+`missing table ticket_item_allergies` includes its PK, cascading ticket FK and both
+`ticket_item_allergies_{original,current}_ck`; the implicit PK index and three change-feed triggers
+also disappear, without separate nested-removal lines. Keep the other forecast rows below.
+**Resolve before build:** `columns.ts:148` makes `flag()` a plain integer;
+the captured schema has no automatic flag CHECK. Claude/watcher must settle whether an explicit
+0/1 CHECK is intended; predict its name if so. Re-run list/compare after build; unpredicted
+differences stop work, never assume equality. Run TDD, the original finish line and
+`pass-lifetime.test.ts` and `station-outputs-down.test.ts` in `apps/server/src/`, unchanged.
+
+**Cleanup backlog / review.** Delete the finished whole-ticket-route entry in
+`docs/backlog/kitchen.md:181-187` and `docs/backlog/architecture.md:1518-1520`; reduce the latter
+bundle count from 21 to 20. Ask the watcher to confirm that its older “FULL review path” means
+the usual two Claude run-it reviews for this migration branch, with lane landing as below.
+
+**Size / stop.** Provisional counted additions: production ≈225, tests/ports ≈410,
+script/support ≈60, docs ≈105, total ≈800 (original ≈630). The plan refresh itself counts;
+seek the watcher's outside opinion on this forecast before build. Separately uncounted: pure deletions,
+generated migrations, committed fixture-script output; script source/manual ports count.
+Retain the original **20% outside-opinion stop at 756**: consult the watcher before exceeding it.
+No framework, new guard or permanent mutation
+test. Report `Sale-path read changed:` for affected reads; retain every original stop point.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. Every step also
 > follows [the A1308 slice rules](2026-11-08-a1308-slice-rules.md) ("rules").
@@ -28,6 +109,13 @@ reaches its department through `menu_periods` (appendix §1.21).
 this cannot be restored or imported."
 
 **Who lands:** the lane (rules §6: tickets and notices feed no fiscal value).
+
+## 2026-11-13 — named stop point 1 settled
+
+The watcher accepted the split-piece control changing from zero to one MOVED slip at 20:23
+(lane E questions.md). Join tables, move a multi-unit dish, split off a unit, then split the
+tables apart: the new ticket has no MOVED record and receives one redundant slip. Keep the planned
+ticket/station lookup; carry no paper-history record. List this new control's port in the PR.
 
 ## What it builds
 
@@ -191,6 +279,14 @@ B1, B3, B4 as in [fk1](2026-11-08-a1308-fk1-zone-service-rules.md#assumptions-ab
 
 | Where | Change | Design |
 | --- | --- | --- |
+| `apps/server/src/venue-settings-api.orders-open.test.ts` | Delete only `/prep` probes after receipt-language checks; retain language and sent/unsent-state checks; drop the late-send assertion, not replace it with a direct call | R2 proposal 4, watcher 2026-11-11 17:15 |
+| `apps/server/src/till-api.sell-published.test.ts`, `counter-release.test.ts` | Remove duplicate `/prep` probes; retain successful-sale, queued-item and surrounding assertions | same |
+| `apps/server/src/till-api.fiscal-sale-paths.test.ts` | Remove the retired `/prep` request/refusal probes at :1903-1911 and later in that case; keep sale and station-queue assertions at :1890-1901/:1913-1926; remove only the late-send describe at :3035-3126 | same |
+| `apps/server/src/attendance-final-order-paths.test.ts` | Remove only the three legacy-prep cases at :103-153 and their exclusive helper; retain all other attendance cases | same |
+| `apps/server/src/working-order.test.ts`, `working-order.pay-and-dispatch.test.ts`, `till-api.test.ts` | Remove checks exclusively of the two retired functions/routes; port setup to supported send/advance paths and preserve shared state/queue assertions | same |
+| `apps/server/src/kitchen-request.send.test.ts` | Remove the retired whole-ticket held no-op at :421; keep per-item held refusal and group-ready non-change checks | same |
+| `apps/server/src/attendance-kitchen-service.test.ts`, `till-api.profile-actions.test.ts`, `till-api.profile-zones.test.ts`, `till-device-proof.test.ts` | Remove only retired-route inventory rows/probes; retain supported per-item advance, attendance, profile and proof assertions | same |
+| `apps/till/src/api/client.test.ts` | Remove only the `sendToPrep` request-shape case with its deleted method | same |
 | `packages/db/src/schema/venue-service/migrations.test.ts:302-308` | `routing_cell_periods`' keys read `(period_id) -> menu_periods(id) on delete cascade` instead of the composite | §1.21, §5 |
 | same file `:326-331` | `kitchen_notices`' keys gain `(ticket_item_id) -> ticket_items(id) on delete set null` | design "Additions" (A1366) |
 | same file `:856` | the case that a period of another department is refused through the composite key goes: the database no longer holds the department copy; the writer's and the import's refusals (`routing-store.ts`, `configuration-transfer.ts:549-551`) still refuse it, proved by Task 5's test | §1.21, §6 |
@@ -355,3 +451,11 @@ case: a ticket under another box's `node_id`, still waiting, is shown.
 - [ ] Re-run `scripts/floor-kitchen-triggers.test.ts` (fk6); expect pass unchanged.
 - [ ] Protection list compare; paste and mark (with or without the † lines). Finish line;
   `/finish-branch`.
+
+## 2026-11-13 review and rebase decisions
+
+The watcher requires the missing-ticket refusal to stay (lane E questions.md, 21:04): the writer
+checks its skipped rows and throws `ticket_item.not_found` for an absent ticket. Restore the orphan
+case against that domain code. Duplicate ids get only a PR-thread note; no caller produces them
+according to the reviewed caller trace, and no extra guard is built. The 7f60fa9c7f rebase preserves
+A1002's access-role storage; this slice now raises configuration format 29 to 30 and regenerates core.

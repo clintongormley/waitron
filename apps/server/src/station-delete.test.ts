@@ -106,7 +106,6 @@ async function food(
       .returning();
     if (flags.ticket !== false)
       await tx.insert(ticketItems).values({
-        nodeId: v.cfg.nodeId,
         workingOrderId: order.id,
         workingOrderLineId: line!.id,
         stationId: id,

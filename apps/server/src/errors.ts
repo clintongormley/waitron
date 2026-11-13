@@ -546,13 +546,7 @@ declare module "@waitron/shared" {
      * reason is checked before the order's status is read, so the order's state is unknown here.
      */
     "working_order.reason_required": { workingOrderId: string };
-    /**
-     * A working order this caller tried to send to prep (`sendToPrep`, the pickup mode) is not
-     * `settled` (open, placed, abandoned, or absent — one code for all). A placed order enqueues its
-     * own prep at placing, so reaching here with one means the wrong path was called. Also
-     * `handOver`'s refusal (through `handOverOrder`) of an order it may not hand over: absent, open,
-     * abandoned, a table party's bill, or placed in a mode that takes payment before sending.
-     */
+
     "working_order.not_settled": { workingOrderId: string };
     /**
      * `handOver` (through `handOverOrder`) found the order ALREADY collected, or a move to another
@@ -1030,14 +1024,9 @@ declare module "@waitron/shared" {
      * repeat, or backwards). Its conditional UPDATE is the check: an illegal move matches no row.
      */
     "ticket.invalid_transition": { ticketItemId: string };
-    /** A ticket-item bump named an item that does not exist. */
-    "ticket_item.not_found": { ticketItemId: string };
+    // `ticket_item.not_found` is declared in @waitron/venue-service's errors.ts.
     "ticket.already_fired": { workingOrderId: string };
-    /**
-     * `handOver` (through `handOverOrder`) found an order that was never fired to the kitchen.
-     * Refused rather than stamped: a later `sendToPrep` would fire lines the station queue hides
-     * for a collected order.
-     */
+
     "ticket.not_fired": { workingOrderId: string };
     /**
      * A move named a line with no kitchen record: never sent, or a dish needing no preparation.

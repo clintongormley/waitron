@@ -1503,22 +1503,6 @@ describe("TillApi", () => {
     ).rejects.toMatchObject({ code: "ticket.invalid_transition" });
   });
 
-  it("sendToPrep POSTs an empty object (no `to`) to the addressed order's /prep route", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
-
-    await expect(new TillApi("", fetchStub).sendToPrep("wo1")).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/working-orders/wo1/prep",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
-      }),
-    );
-  });
-
   it("markCollected POSTs an empty object to the order's /collect route — the counter handover (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 

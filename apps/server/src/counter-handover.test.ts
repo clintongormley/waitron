@@ -938,9 +938,9 @@ describe("GET /api/orders/counter-waiting", () => {
     expect(stationOf.has(extra)).toBe(false);
     venue.db.run(
       sql`insert into ticket_items
-            (id, node_id, working_order_id, working_order_line_id, station_id, state, queued_at,
+            (id, working_order_id, working_order_line_id, station_id, state, queued_at,
              fired_at, quantity, made_here)
-          select ${randomUUID()}, node_id, working_order_id, ${extra}, station_id, 'queued',
+          select ${randomUUID()}, working_order_id, ${extra}, station_id, 'queued',
                  queued_at, fired_at, quantity, 0
           from ticket_items where working_order_line_id = ${queued}`,
     );

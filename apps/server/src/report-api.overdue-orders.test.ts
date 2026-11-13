@@ -83,7 +83,6 @@ async function seedFiredOrder(
   const firedAt = new Date();
   const queuedAt = new Date(firedAt.getTime() - opts.ageMinutes * 60_000);
   await db.insert(ticketItems).values({
-    nodeId,
     workingOrderId: orderId,
     workingOrderLineId: line!.id,
     stationId: opts.stationId,

@@ -2050,12 +2050,9 @@ describe("kitchen routing follows the period running when a dish goes on the ord
         .select({ id: routingCells.id })
         .from(routingCells)
         .where(eq(routingCells.categoryId, cocktails));
-      await tx.insert(routingCellPeriods).values({
-        cellId: cell!.id,
-        periodId: lunch.id,
-        departmentId: v.restaurant,
-        stationId: downstairs.stationId,
-      });
+      await tx
+        .insert(routingCellPeriods)
+        .values({ cellId: cell!.id, periodId: lunch.id, stationId: downstairs.stationId });
       const table = await createTable(tx, v.cfg, { label: "Cocktail table", zoneId: v.diningZone });
       return { offer, upstairs, downstairs, tableId: table.id };
     });

@@ -2926,7 +2926,8 @@ The release requires no outstanding pre-live kitchen work. The migrations retain
 but do not invent historical originals; reset a development venue with outstanding work before
 using this release. No real venue was reset during implementation.
 
-**A773-2 integration:** preserve the `ticket_item_allergies` child before rebuilding `ticket_items`.
+**A773-2 integration:** preserve `ticket_items.allergy_frozen`, `allergy_original` and
+`allergy_current` when rebuilding `ticket_items`.
 Keep original/current blocks across ticket replacement and financial splits. Freeze at the first
 kitchen exposure, including advance HOLD or future Requested visibility; a later pass release must
 not recapture. Carry the original block through station/pass projections and include allergy

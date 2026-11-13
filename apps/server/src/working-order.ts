@@ -1833,7 +1833,6 @@ export async function insertSplitExtras(
     });
     return [
       {
-        nodeId: cfg.nodeId,
         workingOrderId: orderId,
         workingOrderLineId: extra.id,
         stationId: decision.stationId,
@@ -2168,7 +2167,6 @@ export async function fireLines(
       return {
         initiated: courseFired,
         value: {
-          nodeId: cfg.nodeId,
           workingOrderId: orderId,
           workingOrderLineId: line.id,
           stationId,
@@ -7467,37 +7465,6 @@ async function cancelPlaced(
 }
 
 /**
- * Send a settled order's lines to the kitchen through `fireLines`, which refuses the send if any
- * line already has a ticket item.
- */
-export async function sendToPrep(
-  deps: WorkingOrderDeps,
-  cfg: TradingContext,
-  id: string,
-  attendance?: OrderAttendance & { personId: string },
-): Promise<void> {
-  return withTransaction(deps.db, async (tx) => {
-    const [order] = await tx
-      .select({ status: workingOrders.status })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id));
-    if (order === undefined || order.status !== "settled") {
-      throw new AppError("working_order.not_settled", { workingOrderId: id });
-    }
-
-    const firedLines = await tx
-      .select(fireableLineColumns)
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id))
-      .orderBy(workingOrderLines.lineNo);
-    // No sold-out check: a settled order's lines cannot be removed, so refusing would strand paid work.
-    await fireLines(tx, cfg, id, firedLines);
-    if (firedLines.length > 0)
-      await captureKitchenActivity(tx, attendance, attendance?.personId, [id]);
-  });
-}
-
-/**
  * Stamp a fired order as collected so it leaves the kitchen queue: a settled one, or a counter order
  * sent without payment in a mode that takes payment after the kitchen has it.
  */
@@ -7847,34 +7814,6 @@ export async function advanceTicketItem(
     attendance,
     attendance?.personId,
     updated.map((row) => row.orderId),
-  );
-}
-
-/** Advance the fired items of one order at one station; held items are skipped. */
-export async function advanceTicket(
-  tx: Transaction,
-  orderId: string,
-  stationId: string,
-  to: Exclude<TicketState, "queued">,
-  attendance?: OrderAttendance & { personId: string },
-): Promise<void> {
-  const changed = await tx
-    .update(ticketItems)
-    .set(advanceSet(to))
-    .where(
-      and(
-        eq(ticketItems.workingOrderId, orderId),
-        eq(ticketItems.stationId, stationId),
-        eq(ticketItems.state, TICKET_TRANSITIONS[to].from),
-        isNotNull(ticketItems.firedAt),
-      ),
-    )
-    .returning({ orderId: ticketItems.workingOrderId });
-  await captureKitchenActivity(
-    tx,
-    attendance,
-    attendance?.personId,
-    changed.map((row) => row.orderId),
   );
 }
 

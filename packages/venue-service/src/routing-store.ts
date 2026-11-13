@@ -341,7 +341,6 @@ export async function setRoutingCell(
       lines.map((line) => ({
         cellId,
         periodId: line.periodId,
-        departmentId: line.departmentId,
         ...storedTarget(line.target),
       })),
     );

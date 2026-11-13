@@ -88,7 +88,6 @@ export const routingCellPeriods = table(
     id: id("id").primaryKey().$defaultFn(newId),
     cellId: id("cell_id").notNull(),
     periodId: id("period_id").notNull(),
-    departmentId: id("department_id").notNull(),
     stationId: id("station_id"),
     noPreparation: flag("no_preparation").notNull().default(false),
   },
@@ -99,8 +98,8 @@ export const routingCellPeriods = table(
       name: "routing_cell_periods_cell_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.periodId, t.departmentId],
-      foreignColumns: [menuPeriods.id, menuPeriods.departmentId],
+      columns: [t.periodId],
+      foreignColumns: [menuPeriods.id],
       name: "routing_cell_periods_period_fk",
     }).onDelete("cascade"),
     foreignKey({

@@ -225,7 +225,6 @@ const ROUTES: readonly Row[] = [
   ordering("PUT", `/api/working-orders/${id}/receipt-language`),
   ordering("PUT", `/api/working-orders/${id}/label`),
   ordering("POST", `/api/working-orders/${id}/place`),
-  ordering("POST", `/api/working-orders/${id}/prep`),
   ordering("POST", `/api/working-orders/${id}/cancel`),
   ordering("PUT", `/api/working-orders/${id}/make-at`),
   ordering("POST", `/api/working-orders/${id}/lines/move-station`),
@@ -284,7 +283,6 @@ const ROUTES: readonly Row[] = [
   handingOver("POST", `/api/orders/${id}/collect`),
   ordering("POST", `/api/orders/${id}/reprint`),
   preparing("POST", `/api/ticket-items/${id}/advance`),
-  preparing("POST", `/api/orders/${id}/stations/${id}/advance`),
   preparing("POST", `/api/kitchen-notices/${id}/acknowledge`),
   ["POST", `/api/sales/${id}/receipt/retry`, "print-receipt", forbidden("receipt_retry"), {}],
   ["POST", `/api/sales/${id}/deliveries`, "print-receipt", forbidden("invoice_delivery"), {}],
@@ -973,7 +971,7 @@ describe("screens and actions are separate", () => {
     // No `show-station`, no `prepare-orders`: the till offers no station screen, and the route
     // behind it still refuses.
     const { cookie } = await signIn(["take-orders"]);
-    const advance = await send(cookie, "POST", `/api/orders/${id}/stations/${stationId}/advance`, {
+    const advance = await send(cookie, "POST", `/api/ticket-items/${id}/advance`, {
       to: "ready",
     });
     expect({ status: advance.status, error: advance.body.error }).toEqual(
@@ -988,10 +986,12 @@ describe("screens and actions are separate", () => {
 
   it("lets a profile prepare without showing the station screen: a screen is not the permission", async () => {
     const { cookie } = await signIn(["prepare-orders"]);
-    const advance = await send(cookie, "POST", `/api/orders/${id}/stations/${stationId}/advance`, {
-      to: "ready",
+    const advance = await send(cookie, "POST", `/api/ticket-items/${id}/advance`, {
+      to: "preparing",
+      stationId,
     });
-    expect(advance.status).toBe(200);
+    expect(advance.status).toBe(404);
+    expect(advance.body.error?.code).toBe("ticket_item.not_found");
   });
 });
 
@@ -1077,10 +1077,12 @@ describe("a shared kitchen display", () => {
     expect(pay.body.error).toEqual(forbidden("pay").error);
     const open = await send(cookie, "POST", "/api/drawer/open", {});
     expect(open.body.error).toEqual(forbidden("drawer_open").error);
-    const advance = await send(cookie, "POST", `/api/orders/${id}/stations/${stationId}/advance`, {
-      to: "ready",
+    const advance = await send(cookie, "POST", `/api/ticket-items/${id}/advance`, {
+      to: "preparing",
+      stationId,
     });
-    expect(advance.status).toBe(200);
+    expect(advance.status).toBe(404);
+    expect(advance.body.error?.code).toBe("ticket_item.not_found");
   });
 
   it("is refused taking orders when its stored list lacks them", async () => {

@@ -2726,13 +2726,9 @@ describe("the routing that names a period", () => {
           .returning({ id: routingCells.id })
       )[0]!.id;
     const line = (cellId: string, periodId: string, noPreparation = false) =>
-      db.insert(routingCellPeriods).values({
-        cellId,
-        periodId,
-        departmentId: v.restaurant,
-        stationId: noPreparation ? null : cocina!.id,
-        noPreparation,
-      });
+      db
+        .insert(routingCellPeriods)
+        .values({ cellId, periodId, stationId: noPreparation ? null : cocina!.id, noPreparation });
     const cocktailsEverywhere = await cell({ categoryId: cocktails!.id });
     await line(cocktailsEverywhere, periods.noches);
     await line(cocktailsEverywhere, periods.mediodia, true);
@@ -2829,12 +2825,9 @@ describe("the routing that names a period", () => {
         .insert(routingCells)
         .values({ stationId: cocina!.id, ...values })
         .returning({ id: routingCells.id });
-      await db.insert(routingCellPeriods).values({
-        cellId: cell!.id,
-        periodId: periods.noches,
-        departmentId: v.restaurant,
-        stationId: cocina!.id,
-      });
+      await db
+        .insert(routingCellPeriods)
+        .values({ cellId: cell!.id, periodId: periods.noches, stationId: cocina!.id });
     }
     const model = await scoped((tx) => readOpeningHoursModel(tx, AT));
     const noches = model.departments

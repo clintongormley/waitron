@@ -96,7 +96,6 @@ describe("A738 order previews", () => {
             .where(eq(workingOrders.id, id));
         if (i === 2)
           await tx.insert(ticketItems).values({
-            nodeId: venue.cfg.nodeId,
             workingOrderId: id,
             workingOrderLineId: dish!,
             stationId: station!.id,

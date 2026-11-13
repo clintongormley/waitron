@@ -668,7 +668,6 @@ describe("validateRoutingConfiguration", () => {
           id: randomUUID(),
           cell_id: spec.cell ?? terrace,
           period_id: spec.period ?? LUNCH,
-          department_id: spec.department ?? RESTAURANT,
           station_id: station,
           no_preparation: "noPrep" in spec ? spec.noPrep : station === null ? 1 : 0,
         };
@@ -701,9 +700,8 @@ describe("validateRoutingConfiguration", () => {
       choiceRefused({ period: BREAKFAST, department: DELI }, "routing_cell_periods.period_id");
     });
 
-    it("refuses a period the bundle does not hold, and a department that is not the period's", () => {
+    it("refuses a period the bundle does not hold", () => {
       choiceRefused({ period: "mp-missing" }, "routing_cell_periods.period_id");
-      choiceRefused({ department: DELI }, "routing_cell_periods.department_id");
     });
 
     it("refuses a second choice for one cell and period", () => {
