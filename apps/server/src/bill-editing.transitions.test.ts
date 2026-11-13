@@ -29,11 +29,14 @@ async function fixture() {
       invoiceLocales: ["en"],
       operationDescription: "Restaurant",
     });
-    const [ana, luis] = await seedPersons(tx, [{ displayName: "Anna" }, { displayName: "Lewis" }]);
-    const [party] = await tx.insert(parties).values({ openedBy: ana!.id }).returning();
+    const [anna, lewis] = await seedPersons(tx, [
+      { displayName: "Anna" },
+      { displayName: "Lewis" },
+    ]);
+    const [party] = await tx.insert(parties).values({ openedBy: anna!.id }).returning();
     const bill = await seedWorkingOrder(tx, { orderNumber: 1, partyId: party!.id });
     const other = await seedWorkingOrder(tx, { orderNumber: 2, partyId: party!.id });
-    return { bill: bill!, other: other!, party: party!, ana: ana!, luis: luis! };
+    return { bill: bill!, other: other!, party: party!, anna: anna!, lewis: lewis! };
   });
 }
 
@@ -44,7 +47,7 @@ const blank = (billId: string): BillEditExpected => ({
   draftRevision: null,
 });
 
-async function open(data: Awaited<ReturnType<typeof fixture>>, operatorId = data.ana.id) {
+async function open(data: Awaited<ReturnType<typeof fixture>>, operatorId = data.anna.id) {
   return inTx(async (tx) => {
     await editing.acquireBillEditor(tx, data.bill.id, operatorId, blank(data.bill.id));
     const [draft] = await tx
@@ -119,7 +122,7 @@ describe("bill editor lifecycle", () => {
     const { draft, edit } = await open(data);
     expect(edit).toEqual({
       billId: data.bill.id,
-      editorId: data.ana.id,
+      editorId: data.anna.id,
       editorName: "Anna",
       editorVersion: 1,
       draftId: draft.id,
@@ -131,7 +134,7 @@ describe("bill editor lifecycle", () => {
       editorName: null,
     });
     expect(await suite.db.select().from(billEditStates)).toEqual([
-      { billId: data.bill.id, editorId: data.ana.id, editorVersion: 1 },
+      { billId: data.bill.id, editorId: data.anna.id, editorVersion: 1 },
     ]);
   });
 
@@ -140,7 +143,7 @@ describe("bill editor lifecycle", () => {
     const { edit } = await open(data);
     const before = await rows();
     expect(
-      await inTx((tx) => editing.acquireBillEditor(tx, data.bill.id, data.ana.id, edit)),
+      await inTx((tx) => editing.acquireBillEditor(tx, data.bill.id, data.anna.id, edit)),
     ).toEqual(edit);
     expect(await rows()).toEqual(before);
   });
@@ -149,9 +152,9 @@ describe("bill editor lifecycle", () => {
     const data = await fixture();
     const { draft, edit } = await open(data);
     await refused(
-      (tx) => editing.acquireBillEditor(tx, data.bill.id, data.luis.id, blank(data.bill.id)),
+      (tx) => editing.acquireBillEditor(tx, data.bill.id, data.lewis.id, blank(data.bill.id)),
       "draft.taken_over",
-      { billId: data.bill.id, draftId: draft.id, ownerId: data.ana.id, ownerName: "Anna", edit },
+      { billId: data.bill.id, draftId: draft.id, ownerId: data.anna.id, ownerName: "Anna", edit },
     );
   });
 
@@ -161,7 +164,7 @@ describe("bill editor lifecycle", () => {
     const before = await rows();
     await expect(
       inTx(async (tx) => {
-        await editing.acquireBillEditor(tx, data.bill.id, data.ana.id, blank(data.bill.id));
+        await editing.acquireBillEditor(tx, data.bill.id, data.anna.id, blank(data.bill.id));
         throw stop;
       }),
     ).rejects.toBe(stop);
@@ -175,7 +178,7 @@ describe("bill editor lifecycle", () => {
       const { draft, line, edit } = await open(data);
       const released = await inTx(async (tx) => {
         await tx.delete(orderDraftLines).where(eq(orderDraftLines.id, line.id));
-        return editing.closeBillDraft(tx, data.bill.id, data.ana.id, edit, state);
+        return editing.closeBillDraft(tx, data.bill.id, data.anna.id, edit, state);
       });
       expect(released).toEqual({
         billId: data.bill.id,
@@ -189,7 +192,7 @@ describe("bill editor lifecycle", () => {
         .select()
         .from(orderDrafts)
         .where(eq(orderDrafts.id, draft.id));
-      expect(closed).toMatchObject({ id: draft.id, state, ownerId: data.ana.id, revision: 1 });
+      expect(closed).toMatchObject({ id: draft.id, state, ownerId: data.anna.id, revision: 1 });
       expect(await suite.db.select().from(billEditStates)).toEqual([
         { billId: data.bill.id, editorId: null, editorVersion: 2 },
       ]);
@@ -200,7 +203,7 @@ describe("bill editor lifecycle", () => {
     const data = await fixture();
     const { edit } = await open(data);
     await refused(
-      (tx) => editing.closeBillDraft(tx, data.bill.id, data.ana.id, edit, "discarded"),
+      (tx) => editing.closeBillDraft(tx, data.bill.id, data.anna.id, edit, "discarded"),
       "management.request_invalid",
       { field: "lines" },
     );
@@ -211,16 +214,16 @@ describe("bill editor lifecycle", () => {
     const first = await open(data);
     const released = await inTx(async (tx) => {
       await tx.delete(orderDraftLines).where(eq(orderDraftLines.id, first.line.id));
-      return editing.closeBillDraft(tx, data.bill.id, data.ana.id, first.edit, "discarded");
+      return editing.closeBillDraft(tx, data.bill.id, data.anna.id, first.edit, "discarded");
     });
     const next = await inTx(async (tx) => {
-      await editing.acquireBillEditor(tx, data.bill.id, data.luis.id, released);
+      await editing.acquireBillEditor(tx, data.bill.id, data.lewis.id, released);
       const [draft] = await tx
         .insert(orderDrafts)
         .values({
           billId: data.bill.id,
           partyId: data.party.id,
-          ownerId: data.luis.id,
+          ownerId: data.lewis.id,
         })
         .returning();
       return { draft: draft!, edit: await editing.readBillEditState(tx, data.bill.id) };
@@ -228,14 +231,14 @@ describe("bill editor lifecycle", () => {
     expect(next.draft.id).not.toBe(first.draft.id);
     expect(next.edit).toEqual({
       billId: data.bill.id,
-      editorId: data.luis.id,
+      editorId: data.lewis.id,
       editorName: "Lewis",
       editorVersion: 3,
       draftId: next.draft.id,
       draftRevision: 0,
     });
     await refused(
-      (tx) => editing.acquireBillEditor(tx, data.bill.id, data.luis.id, released),
+      (tx) => editing.acquireBillEditor(tx, data.bill.id, data.lewis.id, released),
       "draft.out_of_date",
       { billId: data.bill.id, draftId: next.draft.id, revision: 0, edit: next.edit },
     );
@@ -249,7 +252,7 @@ describe("bill editor lifecycle", () => {
     await expect(
       inTx(async (tx) => {
         await tx.delete(orderDraftLines).where(eq(orderDraftLines.id, line.id));
-        await editing.closeBillDraft(tx, data.bill.id, data.ana.id, edit, "submitted");
+        await editing.closeBillDraft(tx, data.bill.id, data.anna.id, edit, "submitted");
         throw stop;
       }),
     ).rejects.toBe(stop);
@@ -260,14 +263,14 @@ describe("bill editor lifecycle", () => {
     const data = await fixture();
     const { draft, edit } = await open(data);
     await addCharge(data);
-    await open({ ...data, bill: data.other }, data.luis.id);
+    await open({ ...data, bill: data.other }, data.lewis.id);
     const before = await rows();
     const transferred = await inTx((tx) =>
-      editing.transferBillEditor(tx, data.bill.id, data.luis.id, edit),
+      editing.transferBillEditor(tx, data.bill.id, data.lewis.id, edit),
     );
     expect(transferred).toEqual({
       billId: data.bill.id,
-      editorId: data.luis.id,
+      editorId: data.lewis.id,
       editorName: "Lewis",
       editorVersion: 2,
       draftId: draft.id,
@@ -284,7 +287,7 @@ describe("bill editor lifecycle", () => {
       before.drafts.filter((row) => row.billId === data.other.id),
     );
     expect(after.drafts.filter((row) => row.billId === data.bill.id)).toMatchObject([
-      { id: draft.id, ownerId: data.luis.id, state: "open", revision: 1 },
+      { id: draft.id, ownerId: data.lewis.id, state: "open", revision: 1 },
     ]);
   });
 
@@ -293,12 +296,12 @@ describe("bill editor lifecycle", () => {
     const { draft, edit } = await open(data);
     const before = await rows();
     expect(
-      await inTx((tx) => editing.transferBillEditor(tx, data.bill.id, data.ana.id, edit)),
+      await inTx((tx) => editing.transferBillEditor(tx, data.bill.id, data.anna.id, edit)),
     ).toEqual(edit);
     expect(await rows()).toEqual(before);
     await refused(
       (tx) =>
-        editing.transferBillEditor(tx, data.bill.id, data.ana.id, { ...edit, editorVersion: 0 }),
+        editing.transferBillEditor(tx, data.bill.id, data.anna.id, { ...edit, editorVersion: 0 }),
       "draft.out_of_date",
       { billId: data.bill.id, draftId: draft.id, revision: 0, edit },
     );
@@ -312,7 +315,7 @@ describe("bill editor lifecycle", () => {
     const data = await fixture();
     const { draft, edit } = await open(data);
     await refused(
-      (tx) => editing.transferBillEditor(tx, data.bill.id, data.luis.id, { ...edit, ...change }),
+      (tx) => editing.transferBillEditor(tx, data.bill.id, data.lewis.id, { ...edit, ...change }),
       "draft.out_of_date",
       { billId: data.bill.id, draftId: draft.id, revision: 0, edit },
     );
@@ -323,15 +326,15 @@ describe("bill editor lifecycle", () => {
     const { draft, line, edit } = await open(data);
     const current = await inTx(async (tx) => {
       await tx.delete(orderDraftLines).where(eq(orderDraftLines.id, line.id));
-      return editing.transferBillEditor(tx, data.bill.id, data.luis.id, edit);
+      return editing.transferBillEditor(tx, data.bill.id, data.lewis.id, edit);
     });
     await refused(
-      (tx) => editing.closeBillDraft(tx, data.bill.id, data.ana.id, edit, "discarded"),
+      (tx) => editing.closeBillDraft(tx, data.bill.id, data.anna.id, edit, "discarded"),
       "draft.taken_over",
       {
         billId: data.bill.id,
         draftId: draft.id,
-        ownerId: data.luis.id,
+        ownerId: data.lewis.id,
         ownerName: "Lewis",
         edit: current,
       },
@@ -349,10 +352,10 @@ describe("bill editor lifecycle", () => {
     expect(after.bills).toEqual(before.bills);
     expect(after.charges).toEqual(before.charges);
     expect(after.drafts).toMatchObject([
-      { id: draft.id, ownerId: data.ana.id, state: "open", revision: 1 },
+      { id: draft.id, ownerId: data.anna.id, state: "open", revision: 1 },
     ]);
     await refused(
-      (tx) => editing.acquireBillEditor(tx, data.bill.id, data.ana.id, edit),
+      (tx) => editing.acquireBillEditor(tx, data.bill.id, data.anna.id, edit),
       "draft.out_of_date",
       { billId: data.bill.id, draftId: draft.id, revision: 1, edit: moved },
     );
@@ -389,7 +392,7 @@ describe("bill editor lifecycle", () => {
       await expect(
         inTx(async (tx) => {
           if (kind === "transfer")
-            await editing.transferBillEditor(tx, data.bill.id, data.luis.id, edit);
+            await editing.transferBillEditor(tx, data.bill.id, data.lewis.id, edit);
           else await editing.relocateBillEditor(tx, data.bill.id, edit);
           throw stop;
         }),
@@ -398,11 +401,11 @@ describe("bill editor lifecycle", () => {
     },
   );
 
-  it.each(["ana", "luis"] as const)(
+  it.each(["anna", "lewis"] as const)(
     "admits one acquisition transaction (%s submits first)",
     async (first) => {
       const data = await fixture();
-      const second = first === "ana" ? "luis" : "ana";
+      const second = first === "anna" ? "lewis" : "anna";
       const results = await Promise.allSettled([
         open(data, data[first].id),
         open(data, data[second].id),
@@ -417,7 +420,7 @@ describe("bill editor lifecycle", () => {
         billId: data.bill.id,
         draftId: accepted.draft.id,
         ownerId: data[first].id,
-        ownerName: first === "ana" ? "Anna" : "Lewis",
+        ownerName: first === "anna" ? "Anna" : "Lewis",
         edit: accepted.edit,
       });
       expect(await suite.db.select().from(orderDrafts)).toEqual([accepted.draft]);
@@ -431,12 +434,12 @@ describe("bill editor lifecycle", () => {
   it("releases only the emptied bill while another editor still has unsent work", async () => {
     const data = await fixture();
     const first = await open(data);
-    const second = await open({ ...data, bill: data.other }, data.luis.id);
+    const second = await open({ ...data, bill: data.other }, data.lewis.id);
     const before = await rows();
     await expect(
       inTx(async (tx) => {
         await tx.delete(orderDraftLines).where(eq(orderDraftLines.id, first.line.id));
-        return editing.closeBillDraft(tx, data.bill.id, data.ana.id, first.edit, "submitted");
+        return editing.closeBillDraft(tx, data.bill.id, data.anna.id, first.edit, "submitted");
       }),
     ).resolves.toEqual({
       billId: data.bill.id,
@@ -463,11 +466,11 @@ describe("bill editor lifecycle", () => {
       await refused(
         (tx) => {
           if (kind === "acquire")
-            return editing.acquireBillEditor(tx, data.bill.id, data.ana.id, wrong);
+            return editing.acquireBillEditor(tx, data.bill.id, data.anna.id, wrong);
           if (kind === "close")
-            return editing.closeBillDraft(tx, data.bill.id, data.ana.id, wrong, "discarded");
+            return editing.closeBillDraft(tx, data.bill.id, data.anna.id, wrong, "discarded");
           if (kind === "transfer")
-            return editing.transferBillEditor(tx, data.bill.id, data.luis.id, wrong);
+            return editing.transferBillEditor(tx, data.bill.id, data.lewis.id, wrong);
           return editing.relocateBillEditor(tx, data.bill.id, wrong);
         },
         "management.request_invalid",
@@ -481,15 +484,15 @@ describe("bill editor lifecycle", () => {
     const { line, edit } = await open(data);
     const released = await inTx(async (tx) => {
       await tx.delete(orderDraftLines).where(eq(orderDraftLines.id, line.id));
-      return editing.closeBillDraft(tx, data.bill.id, data.ana.id, edit, "submitted");
+      return editing.closeBillDraft(tx, data.bill.id, data.anna.id, edit, "submitted");
     });
     const before = await rows();
     expect(
-      await inTx((tx) => editing.transferBillEditor(tx, data.bill.id, data.luis.id, released)),
+      await inTx((tx) => editing.transferBillEditor(tx, data.bill.id, data.lewis.id, released)),
     ).toEqual(released);
     expect(
       await inTx((tx) =>
-        editing.closeBillDraft(tx, data.bill.id, data.luis.id, released, "discarded"),
+        editing.closeBillDraft(tx, data.bill.id, data.lewis.id, released, "discarded"),
       ),
     ).toEqual(released);
     expect(await rows()).toEqual(before);
