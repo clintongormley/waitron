@@ -1,9 +1,9 @@
 import { AppError, type BusinessDayClock } from "@waitron/shared";
-import { asc, sql, inArray } from "drizzle-orm";
+import { asc, eq, sql, inArray } from "drizzle-orm";
 import "./errors.js";
 import type { Transaction } from "./client.js";
 import { dayCutoverChanges } from "./schema/day-cutover-changes.js";
-import { locations } from "./schema/tenants.js";
+import { locations, tenants } from "./schema/tenants.js";
 import { settings } from "./schema/settings.js";
 import { decodeSettingsRow, readSettings, saveSettings, type SettingsRead } from "./settings.js";
 import { VENUE_SETTINGS, BUSINESS_DAY_SETTINGS, type VenueSettings } from "./venue-settings.js";
@@ -58,6 +58,8 @@ export interface VenuePlace {
   holidayArea?: VenueSettings["holidayArea"];
   province: string | null;
   city: string | null;
+  /** The taxpayer's country; null when there is no taxpayer row. */
+  country?: string | null;
 }
 
 async function venueRow(tx: Transaction): Promise<{ id: string; venue: Venue }> {
@@ -108,6 +110,7 @@ async function clockRows(tx: Transaction) {
       id: locations.id,
       effectiveBusinessDay: dayCutoverChanges.effectiveBusinessDay,
       dayCutover: dayCutoverChanges.dayCutover,
+      country: tenants.country,
       document: {
         module: settings.module,
         version: settings.version,
@@ -118,6 +121,7 @@ async function clockRows(tx: Transaction) {
     .from(locations)
     .leftJoin(settings, inArray(settings.module, ["venue", "business_day"]))
     .leftJoin(dayCutoverChanges, sql`true`)
+    .leftJoin(tenants, eq(tenants.id, 1))
     .orderBy(asc(dayCutoverChanges.effectiveBusinessDay));
   const location = rows[0];
   if (location === undefined) throw new AppError("venue.not_found", {});
@@ -154,7 +158,12 @@ export async function readVenueClockAndPlace(
         dayCutover: storedCutover(row.dayCutover!),
       })),
     },
-    place: { province: doc.province, city: doc.city, holidayArea: doc.holidayArea },
+    place: {
+      province: doc.province,
+      city: doc.city,
+      holidayArea: doc.holidayArea,
+      country: first.country,
+    },
   };
 }
 

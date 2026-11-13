@@ -994,3 +994,54 @@ describe("a past day's range that misfits its own start", () => {
     expect(days.get("2026-10-20")!.ranges).toEqual([]);
   });
 });
+
+describe("readServiceDayPlan on a repeating date that follows a holiday's name", () => {
+  async function madridChristmas() {
+    await seedVenue(db, {
+      name: `House ${randomUUID()}`,
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+      province: "Madrid",
+      city: "Madrid",
+    });
+    const [day] = await db
+      .insert(specialDays)
+      .values({ name: "Christmas", repeatsYearly: true })
+      .returning({ id: specialDays.id });
+    await db.insert(specialDayDates).values({
+      specialDayId: day!.id,
+      date: "2025-12-25",
+      closedAllDay: true,
+      holidayName: "Natividad del Señor",
+    });
+    return day!.id;
+  }
+
+  it("finds the holiday's date in a later year from the place the clock read", async () => {
+    const id = await madridChristmas();
+    const prepared = await scoped((tx) =>
+      readServiceDayPlan(tx, new Date("2026-12-25T11:00:00Z")),
+    );
+    expect(prepared.plan!.special.get("2026-12-25")?.specialDayId).toBe(id);
+  });
+
+  it("reads the venue settings once and the tenant only with the clock", async () => {
+    await madridChristmas();
+    await scoped(async (tx) => {
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        await readServiceDayPlan(tx, new Date("2026-12-25T11:00:00Z"));
+        const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+        expect(texts.filter((text) => text.includes('from "tenants"'))).toEqual([]);
+        expect(texts.filter((text) => text.includes('"settings"'))).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+});

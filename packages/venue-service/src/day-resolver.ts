@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { readVenueClock, floorZones, type Transaction } from "@waitron/db";
+import { readVenueClockAndPlace, floorZones, type Transaction } from "@waitron/db";
 import type { PreparedServiceDay } from "@waitron/module";
 import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { layerPaint, layerZonePaint } from "./day-paint.js";
@@ -17,7 +17,7 @@ import {
   type ServiceMoment,
   type ServiceRange,
 } from "./service-day.js";
-import type { HolidayReads } from "./holidays.js";
+import { holidayReadsAt, type HolidayReads } from "./holidays.js";
 import { specialDayOccurrences, specialDaysOn, type SpecialDayOccurrence } from "./special-days.js";
 
 export interface ResolvedDepartmentDay {
@@ -148,7 +148,7 @@ export function momentAt(
 }
 
 async function serviceDayAt(tx: Transaction, at: Date, firstDay: 0 | -1): Promise<ServiceDay> {
-  const clock = await readVenueClock(tx);
+  const { clock, place } = await readVenueClockAndPlace(tx);
   const moment = serviceMomentAt(at, clock);
   if (moment === null) return { clock, at, moment };
   const days = firstDay === 0 ? [] : [addDays(moment.businessDay, firstDay)];
@@ -156,7 +156,12 @@ async function serviceDayAt(tx: Transaction, at: Date, firstDay: 0 | -1): Promis
     clock,
     at,
     moment,
-    plan: await readDayPlan(tx, [...days, moment.businessDay]),
+    plan: await readDayPlan(
+      tx,
+      [...days, moment.businessDay],
+      undefined,
+      holidayReadsAt(tx, place).dates,
+    ),
   };
 }
 
