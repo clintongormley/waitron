@@ -31,5 +31,4 @@ Exclude other R2 proposals, Fire changes, Undo, new tables/records/protocols and
 
 Claude reviewed the first draft in Lane I receipts/r2-kitchen-3-20261113/plan-review.md. The driver accepted its smaller route and corrections; the watcher cleared the corrected plan at 23:31 on 13 November 2026 (Lane I questions.md), including the device-profile reading of Runs the pass and two run-it reviews.
 
-
 **Review correction, watcher cleared 2026-11-14 00:06 (Lane I questions.md):** constrain the bill selector with existing `liveKitchenDish()` and its existing order/line joins. A real `serveLine` before Ready removes the served no-course water from the card; its ticket must remain unchanged. Add that one regression case. Keep one Ready on every In progress card, prune the stale hidden-dish claims and duplicate view case, fix the two test names, then take the one fresh fixes read. No group-writer change.

@@ -6958,6 +6958,7 @@ describe("bumpBillReady — pass card preparation without dispatch", () => {
       await serveLine(tx, cfg, orderId, 2);
       const before = byLine(await courseItemsFor(tx, orderId), water);
       expect(before.state).toBe("queued");
+      expect(before.firedAt).not.toBeNull();
       expect(before.courseId).toBeNull();
       const board = await readScopedPassBoard(tx, { stationIds: null, zoneIds: null });
       expect(board.inProgress.flatMap((card) => card.items.map((item) => item.id))).toEqual([
