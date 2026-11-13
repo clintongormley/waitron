@@ -57,7 +57,10 @@ export function prepared(body: ConflictRequest): unknown {
       value: {
         id: "comparison-1",
         clock: {
-          usable: [],
+          usable: [
+            { source: "box", lowerMs: Date.now(), upperMs: Date.now() },
+            { source: "internet", lowerMs: Date.now(), upperMs: Date.now() },
+          ],
           unavailable: [],
           secondClock: true,
           disagreement: false,

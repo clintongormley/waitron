@@ -4288,7 +4288,13 @@ after the box's internet time service says it is synchronised
 internet clock at the box's own time"; `packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
 synchronised time service carries on past a browser five minutes out"), or a second clock on
 another machine agrees within 30 seconds (the same file's "a name needs a second clock within 30
-seconds of the box"). AEAT's time is not read for it. A minute a name in the history it can read already holds is not taken: a
+seconds of the box"). AEAT's time is not read for it. Another machine's clock counts only once the
+person proved on that page confirms both times (**Confirm the time**) or sets the box's clock from
+it (**This device**); otherwise `select` is refused `sif.allocation_invalid`, reason
+`confirmation_required` (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a device's agreeing
+time selects only once the person confirms it"; owner, 2026-11-13: "we should never just accept
+another device's match automatically. instead, we should always ask for confirmation, and that
+confirmation should be protected"). A minute a name in the history it can read already holds is not taken: a
 restore's first choice is then refused with how long until the next free minute is taken and when
 to check again (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a name at
 the settle target in the surviving database"; `packages/fiscal-verifactu/src/hour-selection.test.ts`,

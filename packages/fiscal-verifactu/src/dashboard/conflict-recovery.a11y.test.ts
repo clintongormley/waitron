@@ -35,6 +35,7 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
           "key-refused",
           "rate-limited",
           "clock-refused",
+          "confirm-time",
           "not-primary",
           "connection-refused",
           "isolation-refused",
@@ -98,6 +99,24 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
                   },
                 },
               } as T;
+            if (mode === "confirm-time" && body.command.proposal.action === "compare-clocks")
+              return {
+                kind: "prepared",
+                value: {
+                  id: "comparison-1",
+                  clock: {
+                    usable: [
+                      { source: "box", lowerMs: Date.now(), upperMs: Date.now() },
+                      { source: "browser", lowerMs: Date.now(), upperMs: Date.now() },
+                    ],
+                    unavailable: [{ source: "internet", result: "unavailable", reason: "offline" }],
+                    secondClock: true,
+                    disagreement: false,
+                    releaseBlocked: false,
+                    rangeBlocked: false,
+                  },
+                },
+              } as T;
             return prepared(body) as T;
           };
           render(VERIFACTU_DASHBOARD.publicPages![0]!.create({ request, locale }).render(), host);
@@ -128,6 +147,7 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
                 "complete",
                 "uncertain",
                 "clock-refused",
+                "confirm-time",
                 "isolation-refused",
               ].includes(mode)
             ) {
@@ -140,6 +160,8 @@ describe.each(["light", "dark"] as const)("conflict recovery accessibility %s", 
                 await vi.waitFor(() =>
                   expect(screen.shadowRoot!.querySelector("[data-wait]")).not.toBeNull(),
                 );
+              else if (mode === "confirm-time")
+                await vi.waitFor(() => expect(q("confirm-time")).not.toBeNull());
               else if (mode === "clock-refused" || mode === "isolation-refused")
                 await vi.waitFor(() =>
                   expect(screen.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe(""),

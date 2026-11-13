@@ -23,6 +23,9 @@ export const CONFLICT_RECOVERY_STRINGS = {
     "conflict_recovery.confirm": "Confirm both isolation answers before continuing.",
     "conflict_recovery.compare": "Compare clocks",
     "conflict_recovery.switch": "Switch identity",
+    "conflict_recovery.confirm_why":
+      "The server could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
+    "conflict_recovery.confirm_time": "Confirm the time",
     "conflict_recovery.clock_disagrees":
       "The clocks do not agree. Check this box's clock and this device's clock, then compare again or choose Stop.",
     "conflict_recovery.clock_missing":
@@ -70,6 +73,9 @@ export const CONFLICT_RECOVERY_STRINGS = {
       "Confirma las dos respuestas sobre el aislamiento antes de continuar.",
     "conflict_recovery.compare": "Comparar relojes",
     "conflict_recovery.switch": "Cambiar identidad",
+    "conflict_recovery.confirm_why":
+      "El servidor no ha podido comprobar su hora por internet. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora.",
+    "conflict_recovery.confirm_time": "Confirmar la hora",
     "conflict_recovery.clock_disagrees":
       "Los relojes no coinciden. Comprueba el reloj de este servidor y el de este dispositivo y vuelve a compararlos, o elige Detener.",
     "conflict_recovery.clock_missing":
