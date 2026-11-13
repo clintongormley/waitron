@@ -887,50 +887,31 @@ reads its one clock after the order's lines. `apps/server/src/vat-class-at-line-
 copies its setup from `issuance-pass.test.ts`; a shared helper could absorb it. The till computes
 a basket VAT split (`vatBreakdown`, `apps/till/src/state/working-order.ts`) that no screen shows.
 
-## Nothing in the product can issue a corrective invoice (R5, _factura rectificativa_) for a VAT error on an issued simplified invoice
+## Correcting a paid invoice: what A802 left open
 
-`recordCorrection` exists
-(`packages/core/src/record-correction.ts`; the Verifactu backend corrects only an F2, as an R5);
-the whole-order cancel route calls it for a credit of the whole invoice. No route issues a
-correction for part of one. The owner also needs a way to
-correct an issued invoice when a customer spots an error after payment, regardless of the future
-Tabs · Bill choice (2026-10-04, A261 step 2 decision). **The owner's points for when this is
-designed (2026-09-29):** (1) the amount staff enter is what the customer gets back,
-VAT included — a €2.00 correction at 10% is €1.82 base plus €0.18 VAT; (2) whether a correction
-should instead cancel the original and issue a new invoice (`TipoRectificativa` "S", where
-today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
-asesor Q31 (2026-09-30), not decided.
+Staff correct part of a paid invoice from **Correct invoice** on a past receipt (A802, the
+[design](../superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md) and the
+[reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md); how it runs is the
+[owner's decision](#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12)). Left open by
+A802 slice 5b:
 
-- **A802: design approved 2026-10-21; staff can correct part of a paid invoice since slice 5b.** The
-  [design](../superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md)
-  covers paid-receipt corrections, their money-back workflow and A758's same-step correction.
-  The owner approved both permissions with explicit refund links and the proposed source-history
-  gates; the 2026-10-21 order, correction before connected refund, was replaced on 2026-11-12 by
-  filing once all money is back ([decision](#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12)). The
-  [build plan](../superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md) identifies
-  the protected-writer approval (granted 2026-10-22) and the exact-gross qualification
-  required before the dependent money workflow.
-  **2026-11-12:** the [reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md) replaces it
-  for the remaining work.
-  **2026-11-13:** staff can now correct part of a paid invoice at the till (slices 5a and 5b):
-  **Correct invoice** on a past receipt, beside Refund a payment, takes the money to give back, VAT
-  included, optionally the dishes, and a reason, and prints the corrective receipt when a person
-  files it; Find a bill lists the corrections under way. What the owner's 2026-10-18 scope still
-  leaves open:
-  - Picking how many of a dish to correct: the window ticks whole dishes.
-  - Counting an earlier ordinary refund towards a correction: the design's assignment of earlier
-    refunds is not built, so such a refund stays unrelated.
-  - Asesor Q31 (difference vs. substitution) changes only the filing type; build for differences.
-  - A758 §3.8 (revised 2026-10-19 for the owner's Q43 notes): a dish cancelled on a paid bill with
-    its Refund tick on is refunded through the ordinary refund, with no correction of its own.
-    Owner decision (Q43 e, 2026-10-18): once A802 lands, a refund of cancelled dishes files their
-    partial R5 in the same step. §3.8.1 there has a worked example: €5.50 back at 10% is an R5 of
-    −€5.50, base −€5.00, VAT −€0.50.
-  - Later fit: the bills-and-tables brainstorm (2026-10-17/18) moves order lines to one portion per
-    line; a correction then picks portions the same way staff pick dishes to move.
-  - The derived correction path, which works out VAT by rounding, checks almost nothing against the
-    invoice: a −12.00 corrective whose lines came to −12.10 was accepted (from `e56323007c`, #982;
-    the runs in the [A802 slice 3 plan](../superpowers/plans/2026-11-10-a802-correction-history.md)).
+- **Picking how many of a dish to correct:** the window ticks whole dishes. The bills-and-tables
+  brainstorm (2026-10-17/18) moves order lines to one portion per line; a correction then picks
+  portions the same way staff pick dishes to move.
+- **Counting an earlier ordinary refund towards a correction:** the design's assignment of earlier
+  refunds is not built, so such a refund stays unrelated.
+- **A refund of cancelled dishes files its corrective in the same step.** A758 §3.8 (revised
+  2026-10-19 for the owner's Q43 notes): a dish cancelled on a paid bill with its Refund tick on is
+  refunded through the ordinary refund, with no correction of its own. Owner decision (Q43 e,
+  2026-10-18): once A802 lands, a refund of cancelled dishes files their partial R5 in the same
+  step. §3.8.1 there has a worked example: €5.50 back at 10% is an R5 of −€5.50, base −€5.00, VAT
+  −€0.50.
+- **Asesor Q31** (correct by differences or by substitution, `TipoRectificativa` "I" or "S" in
+  `packages/fiscal-verifactu/src/backend.ts`) changes only the filing type; Waitron files by
+  differences.
+- **The derived correction path**, which works out VAT by rounding, checks almost nothing against
+  the invoice: a −12.00 corrective whose lines came to −12.10 was accepted (from `e56323007c`, #982;
+  the runs in the [A802 slice 3 plan](../superpowers/plans/2026-11-10-a802-correction-history.md)).
 
 ## Correct VAT without returning money
 
