@@ -4192,6 +4192,7 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
       id: workingOrderLines.id,
       parentLineId: workingOrderLines.parentLineId,
       quantity: workingOrderLines.quantity,
+      ownCancelledQuantity: lineServiceCancellations.quantity,
       priceQuantity: workingOrderLines.priceQuantity,
       unitPrecision: workingOrderLines.unitPrecision,
       unitPriceGross: workingOrderLines.unitPriceGross,
@@ -4221,6 +4222,7 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .leftJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
@@ -4246,6 +4248,13 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     tx,
     rows.map((row) => row.id),
   );
+  for (const row of rows)
+    if (
+      row.parentLineId !== null &&
+      lunches.has(row.parentLineId) &&
+      row.ownCancelledQuantity !== null
+    )
+      cancellations.set(row.id, row.ownCancelledQuantity);
   const heldExtras = dishesWithHeldExtra(
     rows.map((row) => ({
       parentLineId: row.parentLineId,
@@ -5320,6 +5329,7 @@ export interface OrderLinePatch {
 /** A stored line as the edit path reads it, with its ticket item's kitchen state. */
 interface EditableLine {
   id: string;
+  cancelledQuantity: number;
   lineNo: number;
   parentLineId: string | null;
   productId: string | null;
@@ -5560,6 +5570,7 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
       productId: workingOrderLines.productId,
       parentProductId: products.parentId,
       quantity: workingOrderLines.quantity,
+      cancelledQuantity: lineServiceCancellations.quantity,
       priceQuantity: workingOrderLines.priceQuantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
@@ -5589,6 +5600,7 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, orderId))
     .orderBy(workingOrderLines.lineNo);
   const lines: EditableLine[] = rows.map((row) => ({
@@ -5598,6 +5610,7 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
     productId: row.productId,
     parentProductId: row.parentProductId,
     quantity: thousandthsToDecimal(row.quantity),
+    cancelledQuantity: row.cancelledQuantity ?? 0,
     priceQuantity: thousandthsToDecimal(row.priceQuantity),
     unitPriceGross: centsToDecimal(row.unitPriceGross),
     unitPrecision: row.unitPrecision,
@@ -5948,7 +5961,11 @@ async function applyLineEdits(
             modifiers.extraProducts,
             intent.extras.set,
             {
-              children: parent.children,
+              children: parent.children.filter(
+                (child) =>
+                  !lunches.has(parent.id) ||
+                  child.cancelledQuantity < decimalToThousandths(child.quantity),
+              ),
               dishQuantity: parent.quantity,
             },
             defaultLanguage,

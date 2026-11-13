@@ -3242,11 +3242,7 @@ export class TillTableOrderScreen extends LitElement {
         );
         const unsentByCourse = new Map<string | null, TabLine[]>();
         for (const child of children) {
-          if (
-            child.sentAt !== null ||
-            Number(child.cancelledQuantity ?? "0") >= Number(child.quantity)
-          )
-            continue;
+          if (child.sentAt !== null) continue;
           unsentByCourse.set(child.courseId, [
             ...(unsentByCourse.get(child.courseId) ?? []),
             child,

@@ -1,5 +1,11 @@
 import { seedActivityActor } from "@waitron/db/testing/seed.js";
-import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
+import {
+  ensureOperator,
+  observedCancelItem,
+  cancelReasonId,
+  cancelItemForTest,
+  cancelLine,
+} from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
@@ -13,6 +19,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   printJobs,
+  lineServiceCancellations,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -41,6 +48,7 @@ import { OPERATOR } from "./testing/party-venue.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 import { readTabLines } from "./working-order.js";
+import { cancelItem } from "./line-cancel.js";
 import { fireGroup } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { placeGrouped } from "./testing/adjustment-venue.js";
@@ -998,16 +1006,34 @@ it.each([false, true])(
       expect(completed.find((row) => row.id === child.id)?.lineTotal).toBe(300);
       expect(completed.map((row) => row.lineTotal).sort((a, b) => a - b)).toEqual([0, 300, 1800]);
       expect((await state(tx, id)).items).toEqual(initialItems);
-      await cancelLine(
-        tx,
-        venue.cfg,
-        id,
-        completed.find((row) => row.id === child.id)!.lineNo,
-        undefined,
-        OPERATOR,
-      );
+      const childLineNo = completed.find((row) => row.id === child.id)!.lineNo;
+      if (initialMain) {
+        const { target, lineId, body } = await observedCancelItem(tx, id, childLineNo);
+        await cancelItem(
+          tx,
+          venue.cfg,
+          target,
+          lineId,
+          {
+            ...body,
+            outcome: "keep_charge",
+            admission: testTradingAdmission(),
+            reasonId: await cancelReasonId(tx),
+          },
+          await ensureOperator(tx, OPERATOR),
+        );
+      } else await cancelLine(tx, venue.cfg, id, childLineNo, undefined, OPERATOR);
       const currentParent = (await readTabLines(tx, id)).find((row) => row.id === parent.id);
       expect(currentParent).toBeDefined();
+      if (initialMain)
+        expect
+          .soft((await readTabLines(tx, id)).find((row) => row.id === child.id)?.cancelledQuantity)
+          .toBe("1.000");
+      const cancellationsBefore = (await slips(tx, venue.printers.fryer)).length;
+      expect(
+        (await tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, child.id)))[0]
+          ?.lineTotal,
+      ).toBe(initialMain ? 300 : undefined);
       await edit(tx, venue, currentParent!.lineNo, {
         portionLineNos: [],
         extras: [
@@ -1016,6 +1042,24 @@ it.each([false, true])(
         ],
       });
       const after = await readTabLines(tx, id);
+      expect(
+        (await tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, child.id)))[0]
+          ?.lineTotal,
+      ).toBe(initialMain ? 300 : undefined);
+      const billed = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id));
+      expect(billed.reduce((sum, row) => sum + row.lineTotal, 0)).toBe(initialMain ? 2100 : 1800);
+      expect((await slips(tx, venue.printers.fryer)).length).toBe(cancellationsBefore);
+      expect(
+        (
+          await tx
+            .select()
+            .from(lineServiceCancellations)
+            .where(eq(lineServiceCancellations.lineId, child.id))
+        )[0]?.quantity,
+      ).toBe(initialMain ? 1000 : undefined);
       expect(
         after
           .filter((row) => Number(row.quantity) > Number(row.cancelledQuantity ?? "0"))

@@ -1015,7 +1015,7 @@ export class TillModifierPicker extends LitElement {
       ${fields}
       <div slot="footer" class="picker-actions">
         ${this.refusal === nothing ? nothing : html`<p role="alert" class="request-refusal">${this.refusal}</p>`}
-        ${!this.readOnly && this.attempted && this.lineDetails && this.#quantityInvalid() ? html`<p slot="footer" role="alert">${t("form.fix_fields")}</p>` : nothing}
+        ${!this.readOnly && this.attempted && this.lineDetails && this.#quantityInvalid() ? html`<p role="alert">${t("form.fix_fields")}</p>` : nothing}
         <div class="picker-action-row">
           <wt-button
             class="cancel"
