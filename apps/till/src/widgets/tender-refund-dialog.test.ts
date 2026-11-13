@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent, page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { RefundableTender } from "../api/tender-refund-types.js";
 import type { AdjustmentReason } from "../api/client.js";
@@ -134,10 +135,7 @@ it.each([
     "en",
     "This refund is part of the invoice's correction. Once all its money is back, Waitron files the corrective invoice by itself when it can; otherwise Find a bill lists it under Corrections under way, with what is left to do.",
   ],
-  [
-    "es",
-    "Esta devolución forma parte de la rectificación de la factura. Cuando se haya devuelto todo su dinero, Waitron presenta la factura rectificativa por sí solo si puede; si no, Buscar cuenta la muestra en Rectificaciones en curso, con lo que queda por hacer.",
-  ],
+  ["es", es["tender_refund.correction_leg"]],
 ] as const)(
   "says in %s that a correction's card refund leads to its corrective invoice",
   async (locale, said) => {

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { AdjustmentReason } from "../api/client.js";
 import type { RefundableTender } from "../api/tender-refund-types.js";
@@ -1141,7 +1142,7 @@ describe("what an open correction files, and why it cannot", () => {
 
   it.each([
     ["en", "Refund a payment still gives money back."],
-    ["es", "Devolver un pago sigue permitiendo devolver dinero."],
+    ["es", es["invoice_correction.refund_still"]],
   ])(
     "adds Refund a payment's next step in %s before a correction is opened",
     async (locale, step) => {
