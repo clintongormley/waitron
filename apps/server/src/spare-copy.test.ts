@@ -370,6 +370,35 @@ describe("takeFirstCopy", () => {
     ]);
   });
 
+  it("makes no attempt while its hold is pending, and copies once it settles", async () => {
+    await writeKey();
+    const good = await fixture("good-held", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
+    const objectStore = await storeWithPointer(generation(1));
+    const restore = copyOf(good);
+    const readRecoveryKey = vi.fn(async () => loadRecoveryKey(await loadBoxEnv({}, stateDir)));
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => (release = resolve));
+    const r = run({ objectStore, restoreGeneration: restore, readRecoveryKey, hold });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(readRecoveryKey).not.toHaveBeenCalled();
+    expect(restore).not.toHaveBeenCalled();
+    release();
+    await expect(r.done).resolves.toBe("ready");
+    expect(restore).toHaveBeenCalledOnce();
+  });
+
+  it("stops while held once its signal aborts", async () => {
+    await writeKey();
+    const objectStore = await storeWithPointer(generation(1));
+    const restore = vi.fn();
+    const r = run({ objectStore, restoreGeneration: restore, hold: new Promise<void>(() => {}) });
+
+    r.controller.abort(new Error("stopped"));
+    await expect(r.done).rejects.toThrow("stopped");
+    expect(restore).not.toHaveBeenCalled();
+  });
+
   it("reads the key afresh on every attempt", async () => {
     const good = await fixture("good-fresh", [{ id: SPARE, publicKey: spareKeys.publicKey }]);
     const objectStore = await storeWithPointer(generation(1));

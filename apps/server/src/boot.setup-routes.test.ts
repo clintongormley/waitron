@@ -9,6 +9,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Hono } from "hono";
 import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { X509Certificate } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -51,7 +53,9 @@ import { venueModuleConfig } from "./provision.js";
 import { readModuleConfig } from "./module-config.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
-import { generateNodeKeyPair } from "@waitron/membership";
+import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
+import { MAIN_AUTHORITY } from "./testing/main-authority.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { encodeRecoveryKit, signPointer } from "@waitron/stream";
 import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
@@ -1854,6 +1858,132 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
       });
     } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("an adopt in the setup start restarts through the seam, not by signalling the process", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const primaryId = "44444444-4444-4444-8444-444444444444";
+    const primaryKeys = generateNodeKeyPair();
+    const primary = createHttpServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        const sent = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+          standbyNodeId: string;
+          standbyPublicKey: string;
+        };
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            designated: { nodeId: primaryId },
+            tenant: { country: "ES", taxId: "80000001K" },
+            primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
+            environment: "preproduction",
+            boxHostname: "waitron.local",
+            boxCaPem: MAIN_AUTHORITY.caCertPem,
+            ...PAIR_BUNDLE_FIELDS,
+            accountKey: Buffer.alloc(32, 9).toString("base64"),
+            reservedIdentity: {
+              modules: {},
+              series: [],
+              endorsement: endorseKey(
+                sent.standbyNodeId,
+                sent.standbyPublicKey,
+                primaryId,
+                primaryKeys.privateKey,
+              ),
+            },
+            moduleOverrides: { "fiscal-verifactu": false },
+            primaryPublicKey: primaryKeys.publicKey,
+            credentialsRing: { key: Buffer.alloc(32, 8).toString("base64"), version: 1 },
+            backupSettings: null,
+            boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
+          }),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
+    const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
+    let restarts = 0;
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, kills }) => {
+          const response = await post("/setup-api/adopt", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              primaryUrl,
+              credential: { personId: "33333333-3333-4333-8333-333333333333", password: "x" },
+            }),
+          });
+          expect(response.status).toBe(200);
+          await poll(() => (restarts > 0 ? restarts : undefined));
+          expect(restarts).toBe(1);
+          expect(kills).toEqual([]);
+        },
+        { seams: { restart: () => (restarts += 1) } },
+      );
+    } finally {
+      await new Promise((resolve) => primary.close(resolve));
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("a setup start's box-to-box call resolves a `.local` name through the injected lookup", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const name = "nothing-else-resolves-this.local";
+    const served = mintSelfSignedServerCert({
+      hostnames: [name],
+      ipAddresses: [],
+      now: new Date(),
+    });
+    const main = createHttpsServer(
+      { cert: served.serverCertPem, key: served.serverKeyPem },
+      (req, res) => {
+        if (req.url !== "/ca.crt") {
+          res.writeHead(404).end();
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/x-pem-file" });
+        res.end(MAIN_AUTHORITY.caCertPem);
+      },
+    );
+    await new Promise<void>((resolve) => main.listen(0, "127.0.0.1", resolve));
+    const port = (main.address() as AddressInfo).port;
+    const asked: string[] = [];
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post }) => {
+          const response = await post("/setup-api/primary-certificate", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ primaryUrl: `https://${name}:${port}` }),
+          });
+          expect(response.status).toBe(200);
+          expect(((await response.json()) as { fingerprint256: string }).fingerprint256).toBe(
+            new X509Certificate(MAIN_AUTHORITY.caCertPem).fingerprint256,
+          );
+          expect(asked).toEqual([name]);
+        },
+        {
+          seams: {
+            boxLookup: async (hostname) => {
+              asked.push(hostname);
+              return { addresses: ["127.0.0.1"], remembered: false };
+            },
+          },
+        },
+      );
+    } finally {
+      await new Promise((resolve) => main.close(resolve));
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
     }

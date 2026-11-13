@@ -32,6 +32,7 @@ import { finishInterruptedActivation } from "./handover-activation-repair.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { abandonHandover, type HandoverRefusal } from "./handover-store.js";
 import type { Logger } from "./logger.js";
+import type { BoxLookup } from "./mirror-bundle-fetch.js";
 import { saveVerifiedMembership } from "./node-membership-api.js";
 
 const START_CHECK_TIMEOUT_MS = 5000;
@@ -155,6 +156,7 @@ export interface StartPeerCheckDeps {
   log: Logger;
   timeoutMs?: number;
   fetch?: typeof fetch;
+  lookup?: BoxLookup;
 }
 
 export interface StartPeerCheckOutcome {
@@ -198,6 +200,7 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
         authorityOf: () => venueAuthority,
         onSilent: (id, reason) => askWhy.set(id, reason),
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+        lookup: deps.lookup,
         timeoutMs,
       })(peer);
       if (status?.heldMembership != null) charts.set(peer.nodeId, status.heldMembership);

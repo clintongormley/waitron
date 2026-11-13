@@ -26,7 +26,7 @@ import {
 } from "@waitron/membership";
 import { firstCodeInCauseChain, hasCode, isAppError } from "@waitron/shared";
 import { caCertPath } from "./box-secrets.js";
-import { boxExchange, CheckedAddressUnreached } from "./mirror-bundle-fetch.js";
+import { boxExchange, CheckedAddressUnreached, type BoxLookup } from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerQueryBody, PeerStatusBody } from "./peer-status-api.js";
 
 export type StartCheckResult = "proceed" | "superseded" | "wait";
@@ -278,6 +278,8 @@ export interface AskPeerStatusDeps {
   authorityOf?: (nodeId: string) => string | undefined;
   /** Replaces the box transport. */
   fetch?: typeof fetch;
+  /** Resolves a peer's name for the box transport; unset, `lookupBoxName`. */
+  lookup?: BoxLookup;
   onSilent?: (nodeId: string, reason: SilentReason) => void;
   nonce?: () => string;
   now?: () => number;
@@ -382,7 +384,7 @@ export async function readVenueAuthority(stateDir: string): Promise<string | und
 
 /** One signed exchange with another box, stopped at `timeoutMs`; a failure is thrown. */
 export async function postToBox(
-  deps: Pick<AskPeerStatusDeps, "fetch" | "authorityOf"> & { timeoutMs: number },
+  deps: Pick<AskPeerStatusDeps, "fetch" | "authorityOf" | "lookup"> & { timeoutMs: number },
   nodeId: string,
   url: string,
   body: string,
@@ -411,6 +413,7 @@ export async function postToBox(
         trust: { ca, rejectUnauthorized: true },
         signal,
         body,
+        lookup: deps.lookup,
         onConnected: () => {
           connected = true;
         },

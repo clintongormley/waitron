@@ -34,7 +34,7 @@ import {
 } from "./finish-adoption.js";
 import { freePorts } from "./testing/free-ports.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
-import { httpsVia } from "./testing/boot-harness.js";
+import { httpsVia, withMockedKill } from "./testing/boot-harness.js";
 import { writeTlsSet } from "./testing/box-tls.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
@@ -313,7 +313,8 @@ it("the pending-adoption start is handed a chart through its own route", async (
   }
 }, 60_000);
 
-it("joining finishes when the copy holds this box's row, and the next start is a mirror", async () => {
+/** A joining spare whose pair link serves its main box a store, as production shapes it. */
+async function seedJoiningSpare() {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
@@ -353,50 +354,64 @@ it("joining finishes when the copy holds this box's row, and the next start is a
     boxCaPem: "unused",
     originNodeId: PRIMARY,
   });
+  return { standby, keyEnv };
+}
+
+/** Lays out `scratch` for the joining start `seedJoiningSpare` describes. */
+async function joiningStartEnv(
+  scratch: string,
+  { standby, keyEnv }: Awaited<ReturnType<typeof seedJoiningSpare>>,
+) {
+  for (const [index, set] of manifestSets().entries())
+    await cp(migrations[index]!.migrationsFolder, join(scratch, "migrations", set.name), {
+      recursive: true,
+    });
+  await writeFile(
+    join(scratch, "modules.json"),
+    JSON.stringify({ modules: { "fiscal-verifactu": false } }),
+  );
+  await writePendingAdoption(scratch, {
+    originNodeId: PRIMARY,
+    standby: { nodeId: STANDBY, publicKey: standby.publicKey },
+    nodeName: "Spare",
+    filingModule: "none",
+    taxModule: "vat",
+    reserved: { modules: { "fiscal-none": {} }, series: [], endorsement: {} as never },
+  });
+  const tls = mintSelfSignedServerCert({
+    hostnames: ["waitron.local"],
+    ipAddresses: ["127.0.0.1"],
+    now: new Date(),
+  });
+  await writeTlsSet(scratch, tls);
+  const versitygw = join(scratch, "versitygw");
+  await writeFile(versitygw, "#!/bin/sh\nexec sleep 60\n", { mode: 0o700 });
+  const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+  const [port, loopbackPort, storePort] = await freePorts(3);
+  const env = {
+    ...keyEnv,
+    WAITRON_VERSITYGW_BIN: versitygw,
+    WAITRON_SPARE_STORE_LOOPBACK_PORT: String(loopbackPort),
+    WAITRON_SPARE_STORE_PORT: String(storePort),
+    WAITRON_VENUE_DIR: dirname(database),
+    WAITRON_STATE_DIR: scratch,
+    WAITRON_LOG_DIR: join(scratch, "logs"),
+    WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
+    WAITRON_HTTP_PORT: String(port),
+    WAITRON_HTTP_LANDING_PORT: "0",
+    WAITRON_NODE_ID: STANDBY,
+    WAITRON_ENV: "dev",
+  };
+  return { env, tls };
+}
+
+it("joining finishes when the copy holds this box's row, and the next start is a mirror", async () => {
+  const spare = await seedJoiningSpare();
   const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-finishes-"));
   let server: StartedServer | undefined;
   allocation.dependent = false;
   try {
-    for (const [index, set] of manifestSets().entries())
-      await cp(migrations[index]!.migrationsFolder, join(scratch, "migrations", set.name), {
-        recursive: true,
-      });
-    await writeFile(
-      join(scratch, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-verifactu": false } }),
-    );
-    await writePendingAdoption(scratch, {
-      originNodeId: PRIMARY,
-      standby: { nodeId: STANDBY, publicKey: standby.publicKey },
-      nodeName: "Spare",
-      filingModule: "none",
-      taxModule: "vat",
-      reserved: { modules: { "fiscal-none": {} }, series: [], endorsement: {} as never },
-    });
-    const tls = mintSelfSignedServerCert({
-      hostnames: ["waitron.local"],
-      ipAddresses: ["127.0.0.1"],
-      now: new Date(),
-    });
-    await writeTlsSet(scratch, tls);
-    const versitygw = join(scratch, "versitygw");
-    await writeFile(versitygw, "#!/bin/sh\nexec sleep 60\n", { mode: 0o700 });
-    const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-    const [port, loopbackPort, storePort] = await freePorts(3);
-    const env = {
-      ...keyEnv,
-      WAITRON_VERSITYGW_BIN: versitygw,
-      WAITRON_SPARE_STORE_LOOPBACK_PORT: String(loopbackPort),
-      WAITRON_SPARE_STORE_PORT: String(storePort),
-      WAITRON_VENUE_DIR: dirname(database),
-      WAITRON_STATE_DIR: scratch,
-      WAITRON_LOG_DIR: join(scratch, "logs"),
-      WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_HTTP_LANDING_PORT: "0",
-      WAITRON_NODE_ID: STANDBY,
-      WAITRON_ENV: "dev",
-    };
+    const { env, tls } = await joiningStartEnv(scratch, spare);
     let restarts = 0;
     server = await startServer(
       env,
@@ -417,6 +432,26 @@ it("joining finishes when the copy holds this box's row, and the next start is a
     } finally {
       await close();
     }
+  } finally {
+    allocation.dependent = true;
+    await server?.close();
+    await rm(scratch, { recursive: true, force: true });
+  }
+}, 60_000);
+
+it("the latch start finishes joining through the restart seam, not by signalling the process", async () => {
+  const spare = await seedJoiningSpare();
+  const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-restart-seam-"));
+  let server: StartedServer | undefined;
+  allocation.dependent = false;
+  try {
+    const { env } = await joiningStartEnv(scratch, spare);
+    let restarts = 0;
+    await withMockedKill(async (kills) => {
+      server = await startServer(env, {}, { restart: () => (restarts += 1) });
+      await vi.waitFor(() => expect(restarts).toBe(1));
+      expect(kills).toEqual([]);
+    });
   } finally {
     allocation.dependent = true;
     await server?.close();
