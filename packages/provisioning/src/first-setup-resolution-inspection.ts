@@ -21,7 +21,6 @@ import { lockVenueDatabase } from "@waitron/db";
 import { migrationSetsHolding, type WaitronModule } from "@waitron/module";
 import { executeTarget } from "./read-only-database.js";
 import { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
-import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-directories.js";
 import { hasOperationalVenue, readTenantIdentities } from "./tenant-guard.js";
 import { type FirstSetupStore } from "./first-setup-state.js";
@@ -38,7 +37,7 @@ export interface FirstSetupArtifact {
 export interface FirstSetupInspection {
   version: 2;
   inspectionId: string;
-  pair: "missing" | "partial" | "invalid" | "valid" | "repairable";
+  pair: "missing" | "partial" | "invalid" | "valid";
   database:
     "missing" | "unreadable" | "corrupt" | "partial" | "unknown" | "no-venue-rows" | "occupied";
   revision: number | null;
@@ -183,7 +182,7 @@ export function createFirstSetupResolutionInspection(
       };
       for (const file of inspection.artifacts) {
         if (file.name.startsWith("outside-") || file.name === "first-fiscal-documents") continue;
-        const venue = ["first-setup-claim.json", "venue.db", "venue.db-wal"].includes(file.name);
+        const venue = ["venue.db", "venue.db-wal"].includes(file.name);
         await capture(
           join(venue ? options.venueDir : options.stateDir, file.name),
           `${venue ? "venue" : "state"}/${file.name}`,
@@ -261,16 +260,15 @@ export function createFirstSetupResolutionInspection(
     async withVenueExclusion<T>(body: () => Promise<T>): Promise<T> {
       const hold = await lockVenueDatabase(options.venueDir);
       try {
-        await assertNoLegacyFirstSetupWorkspace(options);
         return await body();
       } finally {
         hold.release();
       }
     },
     async inspectFirstSetupResolution(): Promise<FirstSetupInspection> {
-      let repair: Awaited<ReturnType<FirstSetupStore["readForRepair"]>> | undefined;
+      let repair: Awaited<ReturnType<FirstSetupStore["readResumable"]>> | undefined;
       try {
-        repair = await options.store.readForRepair();
+        repair = await options.store.readResumable();
       } catch {
         repair = undefined;
       }
@@ -296,7 +294,6 @@ export function createFirstSetupResolutionInspection(
       ])
         artifacts.push(await artifact(options.stateDir, name));
       artifacts.push(await artifact(options.stateDir, TRADING_ENV_FILE, 65536, false));
-      artifacts.push(await artifact(options.venueDir, "first-setup-claim.json", 16384));
       for (const name of ["venue.db", "venue.db-wal"])
         artifacts.push(await artifact(options.venueDir, name, 128 * 1024 * 1024, false));
       const documents = join(options.stateDir, FIRST_FISCAL_DOCUMENTS_DIR);
@@ -357,17 +354,14 @@ export function createFirstSetupResolutionInspection(
         }
       }
       const stateFile = artifacts.find((a) => a.name === "first-setup.json")!;
-      const marker = artifacts.find((a) => a.name === "first-setup-claim.json")!;
       const pair: FirstSetupInspection["pair"] =
         repair === undefined
-          ? stateFile.status === "missing" || marker.status === "missing"
+          ? stateFile.status === "missing"
             ? "partial"
             : "invalid"
           : repair === null
             ? "missing"
-            : repair.repairMarker === null
-              ? "valid"
-              : "repairable";
+            : "valid";
       const result = {
         version: 2 as const,
         pair,

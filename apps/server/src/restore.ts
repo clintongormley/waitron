@@ -473,7 +473,7 @@ export async function writeValidated(
   let admissionDirectory: string | undefined;
   let admitted = validated;
   try {
-    await assertVenueFirstSetupAllowed(deps.venueDir);
+    await assertVenueFirstSetupAllowed(deps.venueDir, deps.stateDir);
     const check = deps.withModuleOperations?.checkBeforePlacement;
     if (!deps.skipSecrets && check !== undefined) {
       let directory = deps.venueDir;

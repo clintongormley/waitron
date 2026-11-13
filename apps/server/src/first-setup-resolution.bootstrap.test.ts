@@ -28,7 +28,7 @@ async function fixture(frozen: "production" | "preproduction" | null) {
     venueDir = join(root, "venue");
   await mkdir(stateDir);
   await mkdir(venueDir);
-  if (frozen === null) await writeFile(join(venueDir, "first-setup-claim.json"), "torn");
+  if (frozen === null) await writeFile(join(stateDir, "first-setup.json"), "torn");
   else {
     const host = createFirstSetupModuleHost({
       stateDir,
@@ -66,7 +66,6 @@ it.each([
   "repair bootstrap keeps frozen $frozen metadata despite ambient $ambient without opening a database",
   async ({ frozen, ambient, environment, developmentMode }) => {
     const f = await fixture(frozen);
-    const marker = await readFile(join(f.venueDir, "first-setup-claim.json"));
     const admitted = await resolveFirstSetupEntry(f, {
       WAITRON_ENV: ambient,
       WAITRON_SETUP_APP_DIR: "",
@@ -94,7 +93,6 @@ it.each([
     expect((await admitted.app.request("/setup-api/provision", { method: "POST" })).status).toBe(
       404,
     );
-    expect(await readFile(join(f.venueDir, "first-setup-claim.json"))).toEqual(marker);
     await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
   },
 );
@@ -130,7 +128,6 @@ it.each(["not JSON", "null"])(
   async (configuration) => {
     const f = await fixture(null);
     await writeFile(join(f.stateDir, "modules.json"), configuration);
-    const marker = await readFile(join(f.venueDir, "first-setup-claim.json"));
     const admitted = await resolveFirstSetupEntry(f, { WAITRON_ENV: "production" });
     expect(admitted.kind).toBe("resolution");
     if (admitted.kind !== "resolution") throw new Error("expected repair");
@@ -139,7 +136,6 @@ it.each(["not JSON", "null"])(
       404,
     );
     expect(await readFile(join(f.stateDir, "modules.json"), "utf8")).toBe(configuration);
-    expect(await readFile(join(f.venueDir, "first-setup-claim.json"))).toEqual(marker);
     await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
   },
 );

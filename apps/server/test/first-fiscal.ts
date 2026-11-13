@@ -1,5 +1,5 @@
 import { generateKeyPairSync, randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -46,6 +46,7 @@ export async function firstFiscalFixture(parent: string = tmpdir()) {
   try {
     const stateDir = join(root, "state");
     const venueDir = join(root, "venue");
+    await mkdir(venueDir);
     const coordinator = createFirstSetupCoordinator();
     const store = createFirstSetupStore({ stateDir, venueDir, coordinator });
     let context!: InitialSetupContext;

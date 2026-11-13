@@ -96,7 +96,7 @@ it("the repair entry no longer serves Finish setup", async () => {
   const venueDir = join(root, "venue");
   await mkdir(stateDir);
   await mkdir(venueDir);
-  await writeFile(join(venueDir, "first-setup-claim.json"), "retained torn claim");
+  await writeFile(join(stateDir, "first-setup.json"), "retained torn claim");
   const entry = await resolveFirstSetupEntry({ stateDir, venueDir }, {});
   if (entry.kind !== "resolution") throw new Error(`expected the repair entry, got ${entry.kind}`);
   const base = "/setup-api/first-setup/resolution";

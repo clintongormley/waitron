@@ -21,12 +21,8 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 
-/**
- * Takes a held setup to `complete` through the store with its claim mark left `active`, as power
- * lost between the two saves of the store's `persist` leaves it.
- */
 async function interruptedCompletion(f: Held): Promise<void> {
-  const mark = join(f.roots.venueDir, "first-setup-claim.json");
+  const mark = join(f.roots.stateDir, "first-setup.json");
   let state = (await f.host.store.read())!;
   state = await f.host.store.update(state.frozen.attemptId, state.revision, {
     kind: "publication",
@@ -58,11 +54,11 @@ function removeVenueRows(f: Pick<Held, "roots">) {
   }
 }
 
-it("a setup saved as complete whose claim mark was not is kept out of trading and sent to the repair page", async () => {
+it("a setup whose completion record was not saved is kept out of trading and sent to the repair page", async () => {
   const f = await heldSetup({ tradingSettings: true, certificate: true });
   await interruptedCompletion(f);
   const pair = await f.host.store.readResumable();
-  expect(pair?.state.status).toBe("complete");
+  expect(pair?.state.status).toBe("publication");
   expect(pair?.publicationComplete).toBe(false);
   const entry = await resolveFirstSetupEntry(f.roots, {});
   expect(entry.kind).toBe("resolution");
@@ -76,7 +72,7 @@ it("a setup saved as complete whose claim mark was not is kept out of trading an
   expect(config.node).toBeUndefined();
 });
 
-it("a setup saved as complete whose claim mark was not: Start again deletes it", async () => {
+it("a setup whose completion record was not saved: Start again deletes it", async () => {
   const f = await heldSetup({ tradingSettings: true, certificate: true });
   await interruptedCompletion(f);
   expect(await readSetupDatabase(f.roots, f.host.modules!)).toMatchObject({
@@ -90,7 +86,7 @@ it("a setup saved as complete whose claim mark was not: Start again deletes it",
   await noConfirmations(f);
 });
 
-it("a setup saved as complete whose claim mark was not, and with an invoice beside it, Start again refuses kept-records, and nothing changes", async () => {
+it("a setup whose completion record was not saved, and with an invoice beside it, Start again refuses kept-records, and nothing changes", async () => {
   const f = await heldSetup({ tradingSettings: true, certificate: true, invoices: 1 });
   await interruptedCompletion(f);
   await expectRefused(f, { code: "setup.start_again_refused", params: { cause: "kept-records" } });
@@ -101,7 +97,7 @@ it("a setup saved as complete whose claim mark was not, and with an invoice besi
   });
 });
 
-it("a setup saved as complete whose claim mark was not, with its database lost as well, is still refused setup.not_ready for the trading settings it cannot check, and nothing changes", async () => {
+it("a setup whose completion record was not saved, with its database lost as well, is still refused setup.not_ready for the trading settings it cannot check, and nothing changes", async () => {
   const f = await heldSetup({ tradingSettings: true, certificate: true });
   await interruptedCompletion(f);
   await loseVenueDatabase(f);
@@ -121,7 +117,7 @@ it("a setup saved as complete whose claim mark was not, with its database lost a
   });
 });
 
-it("a setup whose record and claim mark both say complete, with its venue rows gone, is still refused setup-finished, and nothing changes", async () => {
+it("a setup whose record says complete, with its venue rows gone, is still refused setup-finished, and nothing changes", async () => {
   const f = await heldSetup({ status: "complete", tradingSettings: true, certificate: true });
   removeVenueRows(f);
   expect(await f.host.resolution.inspectFirstSetupResolution()).toMatchObject({
@@ -135,7 +131,7 @@ it("a setup whose record and claim mark both say complete, with its venue rows g
   });
 });
 
-it("a setup whose record and claim mark both say complete, with its database missing, is still refused setup-finished, and nothing changes", async () => {
+it("a setup whose record says complete, with its database missing, is still refused setup-finished, and nothing changes", async () => {
   const f = await heldSetup({ status: "complete", tradingSettings: true, certificate: true });
   await loseVenueDatabase(f);
   await expectRefused(f, {

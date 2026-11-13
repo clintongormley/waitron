@@ -42,9 +42,6 @@ const PROBE = ".first-setup-set-aside-probe-";
 const LEFTOVER_PROBE =
   /^\.first-setup-set-aside-probe-\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MODE = 0o700;
-const VENUE_SET_ASIDE_DIR = "first-setup-set-aside";
-const setAsideName = (roots: Roots, root: string) =>
-  root === roots.stateDir ? START_AGAIN_SET_ASIDE_DIR : VENUE_SET_ASIDE_DIR;
 const RING = SECRETS_ENV_FILE;
 const RING_TEMP = ".secrets.env.set-aside-";
 const LEFTOVER_RING_TEMP =
@@ -79,12 +76,8 @@ const failed = (code: string, label: string) =>
  * What stands at a root's set-aside name when it is not a real folder: `symlink`, `file` or
  * `other`; null when nothing is there or a real folder is. A Move never puts files through one.
  */
-async function notASetAsideFolder(
-  roots: Roots,
-  root: string,
-  io: SetAsideIo,
-): Promise<string | null> {
-  return notAFolder(join(root, setAsideName(roots, root)), io);
+async function notASetAsideFolder(root: string, io: SetAsideIo): Promise<string | null> {
+  return notAFolder(join(root, START_AGAIN_SET_ASIDE_DIR), io);
 }
 
 async function notAFolder(path: string, io: SetAsideIo): Promise<string | null> {
@@ -99,52 +92,20 @@ async function notAFolder(path: string, io: SetAsideIo): Promise<string | null> 
   return info.isSymbolicLink() ? "symlink" : info.isFile() ? "file" : "other";
 }
 
-const setAsideLabel = (roots: Roots, root: string) =>
-  `${root === roots.stateDir ? "state" : "venue"}/${setAsideName(roots, root)}`;
-
-/**
- * Folders relative to their roots, for the choice record. Venue units go beside the state units
- * when both roots report one filesystem; otherwise into the venue folder's own set-aside folder,
- * whose path is the stem folder itself. `setAsideFolderPaths` tells the two apart by that last segment.
- * Takes canonical roots.
- */
-export async function setAsideDestinations(
-  roots: Roots,
-  stem: string,
-  io: SetAsideIo = defaultIo,
-): Promise<{ state: string; venue: string }> {
-  const one = (await io.lstat(roots.stateDir)).dev === (await io.lstat(roots.venueDir)).dev;
+export function setAsideDestinations(stem: string): { state: string; venue: string } {
   const folder = `${START_AGAIN_SET_ASIDE_DIR}/${stem}`;
-  return {
-    state: `${folder}/state`,
-    venue: one ? `${folder}/venue` : `${VENUE_SET_ASIDE_DIR}/${stem}`,
-  };
+  return { state: `${folder}/state`, venue: `${folder}/venue` };
 }
 
-const venueBesideState = (destinations: Destinations) =>
-  destinations.venue.split("/").at(-1) === "venue";
-
-/** The root folder each root's destination is under. */
-const destinationRoots = (roots: Roots, destinations: Destinations): Record<Root, string> => ({
-  state: roots.stateDir,
-  venue: venueBesideState(destinations) ? roots.stateDir : roots.venueDir,
-});
-
-/** The absolute destination folder for each root's units, from the record's relative ones. */
 export function setAsideFolderPaths(
   roots: Roots,
   destinations: Destinations,
 ): Record<Root, string> {
-  const under = destinationRoots(roots, destinations);
   return {
-    state: join(under.state, destinations.state),
-    venue: join(under.venue, destinations.venue),
+    state: join(roots.stateDir, destinations.state),
+    venue: join(roots.stateDir, destinations.venue),
   };
 }
-
-/** The `<stem>` folder a root's destination lives in: its parent, or itself under the venue root. */
-const stemFolderOf = (root: Root, folders: Record<Root, string>, destinations: Destinations) =>
-  root === "state" || venueBesideState(destinations) ? dirname(folders[root]) : folders[root];
 
 /**
  * Box-named empty probe folders a cut left, in each root and in any set-aside stem folder, and
@@ -164,8 +125,8 @@ async function removeLeftoverProbes(roots: Roots, io: SetAsideIo): Promise<void>
   const stemFolders: string[] = [];
   for (const root of [roots.stateDir, roots.venueDir]) {
     folders.push(root);
-    if ((await notASetAsideFolder(roots, root, io)) !== null) continue;
-    const base = join(root, setAsideName(roots, root));
+    if (root !== roots.stateDir || (await notASetAsideFolder(root, io)) !== null) continue;
+    const base = join(root, START_AGAIN_SET_ASIDE_DIR);
     for (const stem of await list(base)) {
       const stemFolder = join(base, stem);
       if ((await notAFolder(stemFolder, io)) !== null) continue;
@@ -208,7 +169,6 @@ export async function prepareSetAside(
   const used = (["state", "venue"] as const).filter((root) =>
     units.some((unit) => unit.root === root),
   );
-  const under = destinationRoots(roots, destinations);
   const parent = await notAFolder(join(roots.stateDir, RECORDS_DIR), io);
   if (parent !== null)
     throw new AppError(
@@ -216,13 +176,13 @@ export async function prepareSetAside(
       {},
       { reason: `set-aside failed: ${parent} state/${RECORDS_DIR}` },
     );
-  for (const root of used) {
-    const found = await notASetAsideFolder(roots, under[root], io);
+  if (used.length > 0) {
+    const found = await notASetAsideFolder(roots.stateDir, io);
     if (found !== null)
       throw new AppError(
         "setup.start_again_set_aside_unavailable",
         {},
-        { reason: `set-aside failed: ${found} ${setAsideLabel(roots, under[root])}` },
+        { reason: `set-aside failed: ${found} state/${START_AGAIN_SET_ASIDE_DIR}` },
       );
   }
   const made: string[] = [];
@@ -240,7 +200,7 @@ export async function prepareSetAside(
     if (!existed) made.push(records);
     await removeLeftoverProbes(roots, io);
     for (const root of used) {
-      const stemFolder = stemFolderOf(root, folders, destinations);
+      const stemFolder = dirname(folders[root]);
       const base = dirname(stemFolder);
       if ((await io.mkdir(base, { recursive: true, mode: MODE })) !== undefined) made.push(base);
       if (!made.includes(stemFolder)) {
@@ -258,7 +218,7 @@ export async function prepareSetAside(
       }
     }
     for (const root of used) {
-      const name = `${PROBE}${basename(stemFolderOf(root, folders, destinations))}`;
+      const name = `${PROBE}${basename(dirname(folders[root]))}`;
       const probe = join(rootDir(roots, root), name);
       await io.mkdir(probe, { mode: MODE });
       probeAt = probe;
@@ -298,19 +258,18 @@ export async function makeDestinationFolders(
   io: SetAsideIo,
 ): Promise<Record<Root, string>> {
   const folders = setAsideFolderPaths(roots, record.setAside);
-  const under = destinationRoots(roots, record.setAside);
   for (const root of ["state", "venue"] as const) {
     if (!record.listed.units.some((unit) => unit.root === root)) continue;
-    const at = under[root] === roots.stateDir ? "state" : "venue";
+    const at = "state";
     // A link there would take the pieces somewhere else.
-    for (const folder of chain(under[root], folders[root]).slice(1)) {
+    for (const folder of chain(roots.stateDir, folders[root]).slice(1)) {
       const found = await notAFolder(folder, io).catch((error: unknown) => codeOf(error));
-      if (found !== null) throw failed(found, `${at}/${relative(under[root], folder)}`);
+      if (found !== null) throw failed(found, `${at}/${relative(roots.stateDir, folder)}`);
     }
     try {
       // Made without a sync before the record; each folder's entry is synced before a piece lands.
       await io.mkdir(folders[root], { recursive: true, mode: MODE });
-      for (const folder of chain(under[root], folders[root])) await syncFolder(folder);
+      for (const folder of chain(roots.stateDir, folders[root])) await syncFolder(folder);
     } catch (error) {
       throw failed(codeOf(error), `${at}/${record.setAside[root]}`);
     }

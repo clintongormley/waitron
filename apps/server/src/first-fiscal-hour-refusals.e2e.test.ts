@@ -34,7 +34,6 @@ it.each([
       await host.store.update(claim.state.attemptId, claim.state.revision, {
         kind: "consumption-intent",
       });
-    const marker = await readFile(join(f.venueDir, "first-setup-claim.json"));
     const archive = join(f.root, "unopened-archive");
     await writeFile(archive, "retained-archive");
     const args =
@@ -109,7 +108,6 @@ it.each([
       expect(child.output()).toContain(code);
       expect(child.output()).not.toContain(PASSWORD);
       expect(child.output()).not.toContain("synthetic-archive-secret");
-      expect(await readFile(join(f.venueDir, "first-setup-claim.json"))).toEqual(marker);
       expect(await readFile(archive, "utf8")).toBe("retained-archive");
       await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
@@ -129,7 +127,7 @@ it.each([
   async ({ script, interrupted }) => {
     const f = await fixture();
     if (interrupted === "torn") {
-      await writeFile(join(f.venueDir, "first-setup-claim.json"), "torn-write");
+      await writeFile(join(f.stateDir, "first-setup.json"), "torn-write");
     } else {
       const host = createFirstSetupModuleHost({ ...f, modules: ALL_MODULES, environment: f.env });
       await host.owner.claimFirstSetup({ environment: "preproduction", request });
@@ -139,7 +137,6 @@ it.each([
     await mkdir(join(f.stateDir, "flows/restore"), { recursive: true });
     await writeFile(join(f.stateDir, "flows/restore/record.json"), "retained-restore");
     await writeFile(join(f.stateDir, "reset-request.json"), "retained-reset");
-    const marker = await readFile(join(f.venueDir, "first-setup-claim.json"));
     await ensureBoxSecrets({
       stateDir: f.stateDir,
       hostnames: ["localhost", "waitron.local"],
@@ -202,7 +199,6 @@ it.each([
       expect(refused.status).toBe(404);
       expect(await refused.text()).toBe("404 Not Found");
       await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
-      expect(await readFile(join(f.venueDir, "first-setup-claim.json"))).toEqual(marker);
       expect(await readFile(join(f.stateDir, "flows/restore/record.json"), "utf8")).toBe(
         "retained-restore",
       );

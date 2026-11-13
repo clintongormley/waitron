@@ -2,7 +2,6 @@ import { FIRST_SETUP_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import {
-  assertNoLegacyFirstSetupWorkspace,
   readFirstSetupRecoveryDeliverySnapshot,
   startAgainSummary,
   assertStartAgainAllowedOnDisk,
@@ -85,12 +84,11 @@ function assertHeldStartAgainOffered(
   if (!holdsRecords) unavailable("may-have-filed");
   if (finished) refused("setup-finished");
 }
-/**
- * A setup is finished only once its claim mark says so too: a record saved `complete` beside a
- * mark still `active` is a completion cut off between the store's two saves, and never traded.
- */
-function setupFinished(retained: { state: FirstSetupState; marker: { status: string } }): boolean {
-  return retained.state.status === "complete" && retained.marker.status === "complete";
+function setupFinished(retained: {
+  state: FirstSetupState;
+  publicationComplete: boolean;
+}): boolean {
+  return retained.state.status === "complete" && retained.publicationComplete;
 }
 function unused(state: FirstSetupState) {
   const attempts = [state, ...state.previous];
@@ -151,9 +149,7 @@ async function presentAttemptEligibility(
 ) {
   const noOtherHistory = inspection.artifacts.every(
     (artifact) =>
-      [FIRST_SETUP_FILE, "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
-        artifact.name,
-      ) ||
+      [FIRST_SETUP_FILE, "venue.db", "venue.db-wal"].includes(artifact.name) ||
       (!artifact.name.startsWith("outside-") && artifact.status === "missing"),
   );
   const emptyWorkspace = inspection.emptyDatabase && unused(state) && noOtherHistory;
@@ -256,10 +252,9 @@ export function createFirstSetupResolutionActions(
     /** A database that cannot be copied or read is left to the repair page to judge. */
     readFailureLeftToRepair = false,
   ) => {
-    await assertNoLegacyFirstSetupWorkspace(options);
     const inspection = await host.resolution.inspectFirstSetupResolution();
     matchesInspection(inspection, request);
-    const retained = await host.store.readForRepair();
+    const retained = await host.store.readResumable();
     if (retained === null) unavailable();
     const { state } = retained;
     const missing = inspection.database === "missing";

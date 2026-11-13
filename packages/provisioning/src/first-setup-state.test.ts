@@ -1,5 +1,15 @@
 import { randomUUID, createHash } from "node:crypto";
-import { mkdtemp, rm, readFile, writeFile, unlink, symlink, realpath } from "node:fs/promises";
+import {
+  mkdtemp,
+  rm,
+  readFile,
+  writeFile,
+  unlink,
+  symlink,
+  realpath,
+  readdir,
+  mkdir,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
@@ -9,7 +19,6 @@ import {
   createFirstSetupStore,
   assertOtherSetupAllowed,
   inspectFirstSetupMarker,
-  assertVenueFirstSetupAllowed,
   type FirstSetupFrozen,
   parseState,
 } from "./first-setup-state.js";
@@ -67,6 +76,7 @@ async function fixture() {
     venueDir: join(dir, "venue"),
     coordinator: createFirstSetupCoordinator(),
   };
+  await mkdir(options.venueDir);
   const store = createFirstSetupStore(options);
   const claim = (input = frozen()) => store.claim(input, verifier, digest("capability"));
   return {
@@ -75,7 +85,6 @@ async function fixture() {
     store,
     claim,
     statePath: join(options.stateDir, "first-setup.json"),
-    markerPath: join(options.venueDir, "first-setup-claim.json"),
   };
 }
 afterEach(async () => {
@@ -101,12 +110,12 @@ async function interruptedCompletion(f: Awaited<ReturnType<typeof fixture>>) {
   ).writeDurableHostJson;
   let calls = 0;
   vi.spyOn(durable, "writeDurableHostJson").mockImplementation(async (...args) => {
-    if (++calls === 2) throw new Error("completion-marker-fault");
+    if (++calls === 1) throw new Error("completion-record-fault");
     return original(...args);
   });
   await expect(
     f.store.update(state.frozen.attemptId, state.revision, { kind: "complete" }),
-  ).rejects.toThrow("completion-marker-fault");
+  ).rejects.toThrow("completion-record-fault");
   vi.restoreAllMocks();
   return (await f.store.readResumable())!.state;
 }
@@ -193,24 +202,13 @@ it.each([null, "es-ES", []])(
 it("does not read a bound venue replaced by a symlink after claiming", async () => {
   const f = await fixture();
   await f.claim();
-  const before = await readFile(f.markerPath);
+  const before = await readFile(f.statePath);
   const moved = join(f.dir, "relocated-venue");
   const filesystem = await import("node:fs/promises");
   await filesystem.rename(f.options.venueDir, moved);
   await symlink(moved, f.options.venueDir);
   await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  expect(await readFile(join(moved, "first-setup-claim.json"))).toEqual(before);
-});
-
-it("does not repair a marker with an unsupported version", async () => {
-  const f = await fixture();
-  await f.claim();
-  const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
-  marker.version = 2;
-  await writeFile(f.markerPath, JSON.stringify(marker));
-  const before = await readFile(f.markerPath);
-  await expect(f.store.readForRepair()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  expect(await readFile(f.markerPath)).toEqual(before);
+  expect(await readFile(f.statePath)).toEqual(before);
 });
 
 it("lets one simultaneous claim win and retains its exact identities across restart", async () => {
@@ -302,62 +300,49 @@ it("marks completion only after the actual commit and publication events", async
   }
   expect(state.status).toBe("complete");
   expect(() => assertOtherSetupAllowed(state)).not.toThrow();
-  expect(await inspectFirstSetupMarker(f.options.venueDir)).toMatchObject({ status: "complete" });
+  expect(await inspectFirstSetupMarker(f.options.venueDir, f.options.stateDir)).toMatchObject({
+    status: "complete",
+  });
   await expect(
     f.store.update(state.frozen.attemptId, state.revision, { kind: "consumption-intent" }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   await unlink(f.statePath);
-  await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect(await f.store.read()).toBeNull();
 });
 
-it.each([
-  "corrupt",
-  "version",
-  "oversize",
-  "symlink",
-  "missing-state",
-  "missing-marker",
-  "wrong-root",
-  "orphan-marker",
-])("refuses %s rather than starting over", async (kind) => {
-  const f = await fixture();
-  await f.claim();
-  if (kind === "corrupt") await writeFile(f.statePath, "{");
-  if (kind === "version") await writeFile(f.statePath, JSON.stringify({ version: 2 }));
-  if (kind === "oversize") await writeFile(f.statePath, " ".repeat(1024 * 1024 + 1));
-  if (kind === "symlink") {
-    await unlink(f.statePath);
-    await writeFile(join(f.dir, "target"), "{}");
-    await symlink(join(f.dir, "target"), f.statePath);
-  }
-  if (kind === "missing-state") await unlink(f.statePath);
-  if (kind === "missing-marker") await unlink(f.markerPath);
-  if (kind === "wrong-root") {
-    await expect(
-      inspectFirstSetupMarker(f.options.venueDir, join(f.dir, "wrong")),
-    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-    return;
-  }
-  if (kind === "orphan-marker") {
-    const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
-    marker.status = "claiming";
-    await writeFile(f.markerPath, JSON.stringify(marker));
-  }
-  await expect(createFirstSetupStore(f.options).read()).rejects.toMatchObject({
-    code: "setup.attempt_invalid",
-  });
-});
+it.each(["corrupt", "version", "oversize", "symlink", "wrong-root"])(
+  "refuses %s rather than starting over",
+  async (kind) => {
+    const f = await fixture();
+    await f.claim();
+    if (kind === "corrupt") await writeFile(f.statePath, "{");
+    if (kind === "version") await writeFile(f.statePath, JSON.stringify({ version: 2 }));
+    if (kind === "oversize") await writeFile(f.statePath, " ".repeat(1024 * 1024 + 1));
+    if (kind === "symlink") {
+      await unlink(f.statePath);
+      await writeFile(join(f.dir, "target"), "{}");
+      await symlink(join(f.dir, "target"), f.statePath);
+    }
+    if (kind === "wrong-root") {
+      const value = JSON.parse(await readFile(f.statePath, "utf8"));
+      value.stateDir = join(f.dir, "wrong");
+      await writeFile(f.statePath, JSON.stringify(value));
+    }
+    await expect(createFirstSetupStore(f.options).read()).rejects.toMatchObject({
+      code: "setup.attempt_invalid",
+    });
+  },
+);
 
-it("checks the fixed venue marker without an environment-selected state directory", async () => {
+it("inspects the setup record with its configured state directory", async () => {
   const f = await fixture();
   await f.claim();
-  const marker = await inspectFirstSetupMarker(f.options.venueDir);
+  const marker = await inspectFirstSetupMarker(f.options.venueDir, f.options.stateDir);
   expect(marker?.stateDir).toBe(await realpath(f.options.stateDir));
+  await writeFile(f.statePath, "{");
   await expect(
-    inspectFirstSetupMarker(f.options.venueDir, join(f.dir, "wrong-state")),
-  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  await writeFile(f.markerPath, "{");
-  await expect(inspectFirstSetupMarker(f.options.venueDir)).rejects.toMatchObject({
+    inspectFirstSetupMarker(f.options.venueDir, f.options.stateDir),
+  ).rejects.toMatchObject({
     code: "setup.attempt_invalid",
   });
 });
@@ -445,31 +430,22 @@ it("binds roots to their real paths and rejects replacing a bound directory with
   await symlink(away, f.options.stateDir);
   await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
 });
-it.each([1, 2, 3])(
-  "retains a refusal-only marker when claim persistence write %s is interrupted",
-  async (failAt) => {
-    const f = await fixture();
-    const original = (
-      await vi.importActual<typeof import("./durable-host-json.js")>("./durable-host-json.js")
-    ).writeDurableHostJson;
-    let calls = 0;
-    vi.spyOn(durable, "writeDurableHostJson").mockImplementation(async (...args) => {
-      calls++;
-      if (calls === failAt) throw new Error("synthetic write interruption");
-      return original(...args);
-    });
-    await expect(f.claim()).rejects.toThrow("synthetic write interruption");
-    vi.restoreAllMocks();
-    if (failAt === 1) expect(await f.store.read()).toBeNull();
-    else {
-      const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
-      expect(marker.status).toBe("claiming");
-      await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-      await expect(f.claim()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-    }
-  },
-);
-it.each([1, 2])(
+it.each([1])("retains no setup when its record write %s is interrupted", async (failAt) => {
+  const f = await fixture();
+  const original = (
+    await vi.importActual<typeof import("./durable-host-json.js")>("./durable-host-json.js")
+  ).writeDurableHostJson;
+  let calls = 0;
+  vi.spyOn(durable, "writeDurableHostJson").mockImplementation(async (...args) => {
+    calls++;
+    if (calls === failAt) throw new Error("synthetic write interruption");
+    return original(...args);
+  });
+  await expect(f.claim()).rejects.toThrow("synthetic write interruption");
+  vi.restoreAllMocks();
+  expect(await f.store.read()).toBeNull();
+});
+it.each([1])(
   "never reports completion after its persistence write %s is interrupted",
   async (failAt) => {
     const f = await fixture();
@@ -494,8 +470,7 @@ it.each([1, 2])(
       f.store.update(state.frozen.attemptId, state.revision, { kind: "complete" }),
     ).rejects.toThrow("synthetic write interruption");
     vi.restoreAllMocks();
-    if (failAt === 1) expect((await f.store.read())?.status).toBe("publication");
-    else await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    expect((await f.store.read())?.status).toBe("publication");
   },
 );
 
@@ -664,7 +639,13 @@ it("rejects duplicates and raw admin input rather than persisting them", async (
   });
   expect(await f.store.read()).toBeNull();
 });
-
+it("refuses an oversized first snapshot before saving the record", async () => {
+  const f = await fixture();
+  const input = frozen();
+  input.request.legalName = "a".repeat(1024 * 1024);
+  await expect(f.claim(input)).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  await expect(readFile(f.statePath)).rejects.toMatchObject({ code: "ENOENT" });
+});
 it("allows internal held mutations, rejecting non-public and unbounded nested inputs", async () => {
   const f = await fixture();
   const state = await f.options.coordinator.run(async (hold) =>
@@ -686,13 +667,7 @@ it("allows internal held mutations, rejecting non-public and unbounded nested in
       f.store.update(state.frozen.attemptId, 2, { kind: "input", module: "probe", input }),
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
 });
-it("refuses an oversized first snapshot before exposing a marker", async () => {
-  const f = await fixture();
-  const input = frozen();
-  input.request.legalName = "a".repeat(1024 * 1024);
-  await expect(f.claim(input)).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  await expect(readFile(f.markerPath)).rejects.toMatchObject({ code: "ENOENT" });
-});
+
 it.each(["verifier", "history-order", "history-kind", "history-consumption"])(
   "rejects inconsistent %s within the stored event",
   async (kind) => {
@@ -747,10 +722,10 @@ it("freezes a validated public request before consumption and admits only its fi
 it("keeps an interrupted completion out of trading", async () => {
   const f = await fixture();
   const state = await interruptedCompletion(f);
-  await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect((await f.store.read())?.status).toBe("publication");
   const pending = await f.store.readResumable();
   expect(pending?.publicationComplete).toBe(false);
-  expect(pending?.state.status).toBe("complete");
+  expect(pending?.state.status).toBe("publication");
   await expect(
     f.store.update(state.frozen.attemptId, state.revision, { kind: "publication" }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
@@ -835,77 +810,6 @@ it("retains the exact configuration import binding and refuses a changed digest 
   });
 });
 
-it.each(["claim", "abandon"])(
-  "reports a repairable %s marker without changing either file",
-  async (phase) => {
-    const f = await fixture();
-    const original = (
-      await vi.importActual<typeof import("./durable-host-json.js")>("./durable-host-json.js")
-    ).writeDurableHostJson;
-    const interrupt = (status: string) =>
-      vi.spyOn(durable, "writeDurableHostJson").mockImplementation(async (path, value, ...rest) => {
-        if (
-          path.endsWith("first-setup-claim.json") &&
-          (value as { status: string }).status === status
-        )
-          throw new Error("interrupted marker");
-        return original(path, value, ...rest);
-      });
-    if (phase === "claim") {
-      interrupt("active");
-      await expect(f.claim()).rejects.toThrow("interrupted marker");
-    } else {
-      const state = await f.claim();
-      interrupt("abandoned");
-      await expect(
-        f.store.update(state.frozen.attemptId, 1, { kind: "abandoned" }),
-      ).rejects.toThrow("interrupted marker");
-    }
-    vi.mocked(durable.writeDurableHostJson).mockImplementation(original);
-    const bytes = await readFile(f.statePath);
-    const markerBytes = await readFile(f.markerPath);
-    await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-    const inspection = await f.store.readForRepair();
-    expect(inspection?.repairMarker).toBe(phase === "claim" ? "active" : "abandoned");
-    expect(await readFile(f.statePath)).toEqual(bytes);
-    expect(await readFile(f.markerPath)).toEqual(markerBytes);
-  },
-);
-
-it.each([
-  "consumption",
-  "input",
-  "history",
-  "identity",
-  "missing-state",
-  "missing-marker",
-  "corrupt",
-  "root",
-])("refuses marker repair for %s", async (kind) => {
-  const f = await fixture();
-  const state = await f.claim();
-  if (kind === "consumption" || kind === "history") {
-    await f.store.update(state.frozen.attemptId, 1, { kind: "consumption-intent" });
-    if (kind === "history") await f.store.update(state.frozen.attemptId, 2, { kind: "abandoned" });
-  }
-  if (kind === "input")
-    await f.store.update(state.frozen.attemptId, 1, {
-      kind: "input",
-      module: "probe",
-      input: { public: "receipt" },
-    });
-  const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
-  marker.status = kind === "history" ? "active" : "claiming";
-  if (kind === "identity") marker.attemptId = randomUUID();
-  if (kind === "root") marker.stateDir = join(f.dir, "foreign");
-  await writeFile(f.markerPath, JSON.stringify(marker));
-  if (kind === "missing-state") await unlink(f.statePath);
-  if (kind === "missing-marker") await unlink(f.markerPath);
-  if (kind === "corrupt") await writeFile(f.statePath, "{");
-  await expect(f.store.readForRepair()).rejects.toMatchObject({
-    code: kind === "root" ? "setup.attempt_conflict" : "setup.attempt_invalid",
-  });
-});
 it.each([
   null,
   {},
@@ -923,35 +827,6 @@ it.each([
     await expect(readFile(f.statePath)).rejects.toMatchObject({ code: "ENOENT" });
   },
 );
-
-it("a retired root cannot be claimed again or accept a delayed state update", async () => {
-  const f = await fixture();
-  const state = await f.claim();
-  const abandoned = await f.store.update(state.frozen.attemptId, state.revision, {
-    kind: "abandoned",
-  });
-  await writeFile(join(f.options.venueDir, "first-setup-retirement.json"), "{}");
-  const before = await readFile(f.statePath);
-  await expect(f.claim()).rejects.toMatchObject({ code: "setup.workspace_unsupported" });
-  await expect(
-    f.store.update(abandoned.frozen.attemptId, abandoned.revision, {
-      kind: "consumption-intent",
-    }),
-  ).rejects.toMatchObject({ code: "setup.workspace_unsupported" });
-  expect(await readFile(f.statePath)).toEqual(before);
-});
-
-it("marker inspection and venue-only admission refuse an earlier Waitron's first-setup layout", async () => {
-  const f = await fixture();
-  await f.claim();
-  await writeFile(join(f.options.venueDir, "first-setup-selection.json"), "");
-  await expect(inspectFirstSetupMarker(f.options.venueDir)).rejects.toMatchObject({
-    code: "setup.workspace_unsupported",
-  });
-  await expect(assertVenueFirstSetupAllowed(f.options.venueDir)).rejects.toMatchObject({
-    code: "setup.workspace_unsupported",
-  });
-});
 
 it.each(["resume", "recover"])("refuses a record carrying a %s event", async (kind) => {
   const f = await fixture();
@@ -992,12 +867,39 @@ it.each(EVERY_CHANGE)("an abandoned attempt refuses a $kind change", async (chan
   expect((await f.store.read())?.status).toBe("abandoned");
 });
 
-it.each(EVERY_CHANGE)("an interrupted completion refuses a $kind change", async (change) => {
+it("a claim writes only the setup record", async () => {
   const f = await fixture();
-  const state = await interruptedCompletion(f);
-  const bytes = await readFile(f.statePath);
-  await expect(
-    f.store.update(state.frozen.attemptId, state.revision, change),
-  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  expect(await readFile(f.statePath)).toEqual(bytes);
+  const state = await f.claim();
+  expect(JSON.parse(await readFile(f.statePath, "utf8"))).toEqual(state);
+  const files = await readdir(f.options.venueDir).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  expect(files).toEqual([]);
+});
+
+it("reads an interrupted setup from its record without a venue claim", async () => {
+  const f = await fixture();
+  const state = await f.claim();
+  expect(await createFirstSetupStore(f.options).readResumable()).toEqual({
+    state,
+    publicationComplete: false,
+  });
+});
+
+it("reads publication complete from the setup record", async () => {
+  const f = await fixture();
+  let state = await f.claim();
+  for (const change of [
+    { kind: "consumption-intent" },
+    { kind: "activation-started" },
+    { kind: "committed", result: {} },
+    { kind: "publication" },
+    { kind: "complete" },
+  ] as const)
+    state = await f.store.update(state.frozen.attemptId, state.revision, change);
+  expect(await createFirstSetupStore(f.options).readResumable()).toEqual({
+    state,
+    publicationComplete: true,
+  });
 });

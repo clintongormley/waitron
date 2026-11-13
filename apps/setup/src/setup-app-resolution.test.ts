@@ -676,12 +676,9 @@ it("the unfinished-deletion message is the owner's words, in English and Spanish
     "Borrado interrumpido. Recarga la página para continuar.",
   );
 });
-
 it.each([
   ["setup.start_again_incomplete", "shell.first_setup.start_again_incomplete", "en-GB"],
   ["setup.start_again_incomplete", "shell.first_setup.start_again_incomplete", "es-ES"],
-  ["setup.workspace_unsupported", "shell.first_setup.workspace_unsupported", "en-GB"],
-  ["setup.workspace_unsupported", "shell.first_setup.workspace_unsupported", "es-ES"],
 ] as const)(
   "explains a refused Start again's %s (%s) on the repair page in %s",
   async (code, key, locale) => {

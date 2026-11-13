@@ -459,13 +459,12 @@ describe("a refusal while running", () => {
 
 describe("refusedAtStart", () => {
   const at = new Date("2026-10-25T10:00:00Z");
-
   it("records the code, the time and the recovery level, keeping the count", () => {
     const current: RecoveryState = { ...FRESH, failures: 1, clears: 2 };
-    expect(refusedAtStart(current, "setup.workspace_unsupported", at)).toStrictEqual({
+    expect(refusedAtStart(current, "setup.start_again_incomplete", at)).toStrictEqual({
       failures: 1,
       level: "recovery",
-      lastErrorCode: "setup.workspace_unsupported",
+      lastErrorCode: "setup.start_again_incomplete",
       lastFailureAt: at.toISOString(),
       clears: 2,
     });

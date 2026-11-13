@@ -36,7 +36,6 @@ import { AppError, isUuid } from "@waitron/shared";
 import { deleteBackupRoomNote } from "./backup-room-note-file.js";
 import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
 import { canonicalFirstSetupRoots } from "./first-setup-directories.js";
-import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { removeAndSync } from "./folder-sync.js";
 import { openImmutableWhenWalEmpty } from "./read-only-database.js";
 import { quoteIdent } from "./identifiers.js";
@@ -47,12 +46,6 @@ export const START_AGAIN_MARKER_LIMIT = 1024 * 1024;
 const MARKER_LIMIT = START_AGAIN_MARKER_LIMIT;
 const HASH = /^[a-f0-9]{64}$/;
 const RECORDS = "first-setup-resolutions";
-const LEGACY = [
-  "first-setup-workspaces",
-  "first-setup-selection.json",
-  "first-setup-retirement.json",
-  "first-setup-workspace.json",
-] as const;
 const DOCUMENTS = FIRST_FISCAL_DOCUMENTS_DIR;
 const STEP = /^step-\d{6}$/;
 const WAL_FILES = ["venue.db-wal", "node.db-wal"] as const;
@@ -74,19 +67,8 @@ const REFUSED = {
     RESET_REQUEST_FILE,
     MODULES_FILE,
     CLOUD_REPLACEMENT_FILE,
-    "first-setup-workspaces",
-    "first-setup-selection.json",
-    "first-setup-retirement.json",
-    "first-setup-workspace.json",
   ],
-  venue: [
-    ".venue.db-litestream",
-    RECORDS,
-    "first-setup-workspaces",
-    "first-setup-selection.json",
-    "first-setup-retirement.json",
-    "first-setup-workspace.json",
-  ],
+  venue: [".venue.db-litestream", RECORDS],
 } as const;
 
 type Root = "venue" | "state";
@@ -152,8 +134,7 @@ const entryName = (name: string) =>
 function listed(root: Root, name: string): boolean {
   const parts = name.split("/");
   if (!parts.every(entryName)) return false;
-  if (root === "venue")
-    return parts.length === 1 && ["venue.db", "node.db", "first-setup-claim.json"].includes(name);
+  if (root === "venue") return parts.length === 1 && ["venue.db", "node.db"].includes(name);
   if (parts.length === 1)
     return [
       MODULE_PREPARATION_STATE_FILE,
@@ -317,7 +298,6 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
     }
     items.push({ kind: "folder", path: join(roots.stateDir, RECORDS) });
   }
-  await file("venue", "first-setup-claim.json");
   await file("state", FIRST_SETUP_FILE);
   return items;
 }
@@ -506,16 +486,6 @@ export async function assertStartAgainAllowedOnDisk(
       throw notReady(`check failed: ${codeOf(error)} ${path}`, "unreadable");
     }
   };
-  if (Object.values(canonical).some(insideFirstSetupWorkspace))
-    throw new AppError("setup.workspace_unsupported", {}, { reason: "folder in a workspace" });
-  for (const root of ["state", "venue"] as const)
-    for (const name of LEGACY)
-      if (await exists(join(rootOf(root), name)))
-        throw new AppError(
-          "setup.workspace_unsupported",
-          {},
-          { reason: `earlier layout: ${root}/${name}` },
-        );
   for (const root of ["state", "venue"] as const)
     for (const name of await refusedNames(root, canonical.stateDir))
       if (

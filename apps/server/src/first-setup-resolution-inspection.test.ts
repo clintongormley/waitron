@@ -62,12 +62,7 @@ async function fixture(phase: "claim" | "abandon" | "active" = "claim") {
   const owner = createFirstSetupOwner(ownerOptions);
   const claim = await owner.claimFirstSetup({ environment: "production", request });
   if (phase === "abandon") await store.update(claim.state.attemptId, 1, { kind: "abandoned" });
-  const markerPath = join(roots.venueDir, "first-setup-claim.json");
-  if (phase !== "active") {
-    const marker = JSON.parse(await readFile(markerPath, "utf8"));
-    marker.status = phase === "claim" ? "claiming" : "active";
-    await writeFile(markerPath, JSON.stringify(marker));
-  }
+  await mkdir(roots.venueDir, { recursive: true });
   await suite.db.archiveTo(join(roots.venueDir, "venue.db"));
   const service = createFirstSetupResolutionInspection({ modules: ALL_MODULES, ...roots, store });
   return {
@@ -77,7 +72,6 @@ async function fixture(phase: "claim" | "abandon" | "active" = "claim") {
     coordinator,
     owner,
     claim,
-    markerPath,
     service,
   };
 }
@@ -113,7 +107,7 @@ it("Start again deletes a qualified unused attempt without a password, and first
   await f.actions.startAgainFirstSetup(await f.startRequest());
   await expectStartAgainDeleted(f);
   const { assertVenueFirstSetupAllowed } = await import("@waitron/provisioning");
-  await expect(assertVenueFirstSetupAllowed(f.venueDir)).resolves.toBeUndefined();
+  await expect(assertVenueFirstSetupAllowed(f.venueDir, f.stateDir)).resolves.toBeUndefined();
 });
 it("with an empty unused setup, the summary answers, and Start again deletes it with no owner", async () => {
   const f = await actionsFixture();
@@ -146,11 +140,6 @@ it.each<[string, (f: Awaited<ReturnType<typeof actionsFixture>>) => Promise<void
     },
     "setup.not_ready",
   ],
-  [
-    "a first-setup-workspaces folder in the state folder",
-    (f) => mkdir(join(f.stateDir, "first-setup-workspaces")),
-    "setup.workspace_unsupported",
-  ],
 ])(
   "%s: the summary and Start again are refused, and nothing changes",
   async (_label, arrange, code) => {
@@ -167,6 +156,7 @@ it.each<[string, (f: Awaited<ReturnType<typeof actionsFixture>>) => Promise<void
     expect(before.state["first-setup-start-again-confirmations/"]).toBeUndefined();
   },
 );
+
 it.each(["module-operation-public.json", "first-setup-node-key.json", "modules.json"])(
   "absence of a paper signer does not make %s history eligible for password-free reset",
   async (name) => {

@@ -129,7 +129,7 @@ export async function runStagedReset(
   }
   const hold = await lock(deps.venueDir);
   try {
-    await assertVenueFirstSetupAllowed(deps.venueDir);
+    await assertVenueFirstSetupAllowed(deps.venueDir, deps.stateDir);
     const reason = await refusal(deps, raw);
     if (reason !== null) {
       await rm(markerPath, { force: true });

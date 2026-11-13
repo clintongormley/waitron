@@ -116,12 +116,12 @@ function choiceOf(survey: Awaited<ReturnType<typeof surveyStartAgainLeftovers>>)
 async function prepared(
   roots: Roots,
   administratorId: string,
-  options: { io?: SetAsideIo; destinationsIo?: SetAsideIo; at?: string } = {},
+  options: { io?: SetAsideIo; at?: string } = {},
 ): Promise<StartAgainChoiceRecord> {
   const survey = choiceOf(await surveyStartAgainLeftovers(roots));
   const at = options.at ?? new Date().toISOString();
   const stem = startAgainChoiceStem({ at, attemptId: survey.attemptId });
-  const setAside = await setAsideDestinations(roots, stem, options.destinationsIo);
+  const setAside = setAsideDestinations(stem);
   await prepareSetAside(roots, survey.units, setAside, options.io);
   await writeStartAgainChoice(roots.stateDir, {
     at,
@@ -242,7 +242,7 @@ it("an existing stem folder refuses setup.attempt_conflict and moves nothing", a
   const stem = startAgainChoiceStem({ at: new Date().toISOString(), attemptId: survey.attemptId });
   await mkdir(join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, stem), { recursive: true });
   const before = await snapshot(base);
-  const setAside = await setAsideDestinations(roots, stem);
+  const setAside = setAsideDestinations(stem);
 
   await expect(prepareSetAside(roots, survey.units, setAside)).rejects.toMatchObject({
     code: "setup.attempt_conflict",
@@ -276,7 +276,7 @@ it("the probe's EXDEV refuses setup.start_again_set_aside_unavailable, removes o
   const before = await snapshot(base);
   const survey = choiceOf(await surveyStartAgainLeftovers(roots));
   const stem = startAgainChoiceStem({ at: new Date().toISOString(), attemptId: survey.attemptId });
-  const setAside = await setAsideDestinations(roots, stem);
+  const setAside = setAsideDestinations(stem);
   const probes: string[] = [];
   const io: SetAsideIo = {
     ...realIo,
@@ -302,7 +302,7 @@ it("any other probe failure removes the same folders and refuses with that error
   const before = await snapshot(base);
   const survey = choiceOf(await surveyStartAgainLeftovers(roots));
   const stem = startAgainChoiceStem({ at: new Date().toISOString(), attemptId: survey.attemptId });
-  const setAside = await setAsideDestinations(roots, stem);
+  const setAside = setAsideDestinations(stem);
   const io: SetAsideIo = {
     ...realIo,
     rename: async () => {
@@ -324,7 +324,7 @@ it("a probe whose rmdir fails after its rename is removed from where it went, wi
   const before = await snapshot(base);
   const survey = choiceOf(await surveyStartAgainLeftovers(roots));
   const stem = startAgainChoiceStem({ at: new Date().toISOString(), attemptId: survey.attemptId });
-  const setAside = await setAsideDestinations(roots, stem);
+  const setAside = setAsideDestinations(stem);
   let failed = false;
   const io: SetAsideIo = {
     ...realIo,
@@ -343,42 +343,19 @@ it("a probe whose rmdir fails after its rename is removed from where it went, wi
   expect(await snapshot(base)).toEqual(before);
 });
 
-it("on one filesystem venue units go under the state folder's set-aside folder; on two, under the venue folder's own", async () => {
+it("venue units are set aside under the state folder beside state units", async () => {
   const attempt = await startAgainAttempt(await scratch());
   const { roots } = attempt;
   await writeFile(join(roots.venueDir, "venue.db"), "found database");
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
-  const venueDev = (async (path: string, options?: unknown) => {
-    const info = await fs.lstat(path, options as never);
-    if (path === roots.venueDir)
-      Object.defineProperty(info, "dev", { value: Number(info.dev) + 1 });
-    return info;
-  }) as typeof fs.lstat;
-  const destinationsIo: SetAsideIo = { ...realIo, lstat: venueDev };
-  const stem = `${Date.now()}-${attempt.attemptId}`;
-  expect(await setAsideDestinations(roots, stem)).toEqual({
-    state: `${START_AGAIN_SET_ASIDE_DIR}/${stem}/state`,
-    venue: `${START_AGAIN_SET_ASIDE_DIR}/${stem}/venue`,
-  });
-  expect(await setAsideDestinations(roots, stem, destinationsIo)).toEqual({
-    state: `${START_AGAIN_SET_ASIDE_DIR}/${stem}/state`,
-    venue: `first-setup-set-aside/${stem}`,
-  });
-
-  const record = await prepared(roots, attempt.administratorId, { destinationsIo });
+  const record = await prepared(roots, attempt.administratorId);
+  const paths = setAsideFolderPaths(roots, record.setAside!);
   await moveStartAgainUnits(roots, record);
-
-  const stem2 = stemOf(record);
-  expect(
-    await readFile(join(roots.venueDir, "first-setup-set-aside", stem2, "venue.db"), "utf8"),
-  ).toBe("found database");
-  expect(
-    await readFile(
-      join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, stem2, "state", "trading.env"),
-      "utf8",
-    ),
-  ).toBe("X=1\n");
-  expect(await readdir(join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, stem2))).toEqual(["state"]);
+  expect(await readFile(join(paths.venue, "venue.db"), "utf8")).toBe("found database");
+  expect(await readFile(join(paths.state, "trading.env"), "utf8")).toBe("X=1\n");
+  expect(paths.venue).toBe(
+    join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, stemOf(record), "venue"),
+  );
 });
 
 it("a leftover probe folder from a cut is removed by the next prepare, and nothing else is", async () => {
@@ -392,14 +369,12 @@ it("a leftover probe folder from a cut is removed by the next prepare, and nothi
     join(roots.venueDir, `${PROBE}${old}`),
     join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, old, "state", `${PROBE}${old}`),
     join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, old, "venue", `${PROBE}${old}`),
-    join(roots.venueDir, "first-setup-set-aside", old, `${PROBE}${old}`),
   ];
   for (const path of leftovers) await mkdir(path, { recursive: true });
   const kept = [
     join(roots.stateDir, `${PROBE}not-a-stem`),
     join(roots.stateDir, "an-empty-folder"),
     join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, old, "state"),
-    join(roots.venueDir, "first-setup-set-aside", old),
   ];
   for (const path of kept) await mkdir(path, { recursive: true });
   const full = join(roots.venueDir, `${PROBE}1700000000001-${attempt.attemptId}`);
@@ -496,7 +471,7 @@ it("after a move, finishStartAgainDeletion deletes only the marked files", async
   await expect(lstat(join(roots.venueDir, "first-setup-deleting.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
-  for (const marked of ["node.db", "first-setup-claim.json"])
+  for (const marked of ["node.db"])
     await expect(lstat(join(roots.venueDir, marked))).rejects.toMatchObject({ code: "ENOENT" });
   await expect(lstat(join(roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
     code: "ENOENT",
@@ -560,7 +535,7 @@ it("a set-aside folder that cannot be listed, or a stem folder that cannot be ma
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
   const survey = choiceOf(await surveyStartAgainLeftovers(roots));
   const stem = startAgainChoiceStem({ at: new Date().toISOString(), attemptId: survey.attemptId });
-  const setAside = await setAsideDestinations(roots, stem);
+  const setAside = setAsideDestinations(stem);
   const before = await snapshot(base);
   const io: SetAsideIo = {
     ...realIo,
@@ -598,7 +573,7 @@ it("a leftover probe that cannot be removed for another reason refuses with that
   await mkdir(join(roots.stateDir, `${PROBE}1700000000000-${attempt.attemptId}`));
   const survey = choiceOf(await surveyStartAgainLeftovers(roots));
   const stem = startAgainChoiceStem({ at: new Date().toISOString(), attemptId: survey.attemptId });
-  const setAside = await setAsideDestinations(roots, stem);
+  const setAside = setAsideDestinations(stem);
   const io: SetAsideIo = {
     ...realIo,
     rmdir: (async () => {
@@ -645,7 +620,7 @@ it("a folder the clean-up cannot remove stays, and the refusal is still the prob
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
   const survey = choiceOf(await surveyStartAgainLeftovers(roots));
   const stem = startAgainChoiceStem({ at: new Date().toISOString(), attemptId: survey.attemptId });
-  const setAside = await setAsideDestinations(roots, stem);
+  const setAside = setAsideDestinations(stem);
   const io: SetAsideIo = {
     ...realIo,
     rename: async () => {
@@ -660,41 +635,6 @@ it("a folder the clean-up cannot remove stays, and the refusal is still the prob
     code: "setup.start_again_set_aside_unavailable",
   });
   expect(await readdir(join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, stem))).toEqual([]);
-});
-
-it("a venue destination in the venue folder that cannot be made refuses naming it there, and an error with no code names it unknown", async () => {
-  const attempt = await startAgainAttempt(await scratch());
-  const { roots } = attempt;
-  await writeFile(join(roots.venueDir, "venue.db"), "found database");
-  const destinationsIo: SetAsideIo = {
-    ...realIo,
-    lstat: (async (path: string, options?: unknown) => {
-      const info = await fs.lstat(path, options as never);
-      if (path === roots.venueDir)
-        Object.defineProperty(info, "dev", { value: Number(info.dev) + 1 });
-      return info;
-    }) as typeof fs.lstat,
-  };
-  const record = await prepared(roots, attempt.administratorId, { destinationsIo });
-  await expect(
-    moveStartAgainUnits(roots, record, {
-      ...realIo,
-      mkdir: (async () => {
-        throw errno("ENOSPC");
-      }) as typeof fs.mkdir,
-    }),
-  ).rejects.toMatchObject({
-    reason: `set-aside failed: ENOSPC venue/${record.setAside!.venue}`,
-  });
-  await expect(
-    moveStartAgainUnits(roots, record, {
-      ...realIo,
-      rename: async () => {
-        throw new Error("no code");
-      },
-    }),
-  ).rejects.toMatchObject({ reason: "set-aside failed: unknown venue/venue.db" });
-  expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
 });
 
 /** A rename that throws on its `n`th call, as a cut there would leave the folders. */
@@ -748,7 +688,7 @@ async function expectAllAside(
   expect(await readdir(join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR))).toEqual([stemOf(record)]);
 }
 
-it("setAsideFolderPaths resolves a record's folders: beside the state units on one filesystem, in the venue folder on two", () => {
+it("setAsideFolderPaths resolves both folders under state", () => {
   const roots = { stateDir: "/s", venueDir: "/v" };
   expect(
     setAsideFolderPaths(roots, {
@@ -758,15 +698,6 @@ it("setAsideFolderPaths resolves a record's folders: beside the state units on o
   ).toEqual({
     state: `/s/${START_AGAIN_SET_ASIDE_DIR}/1-x/state`,
     venue: `/s/${START_AGAIN_SET_ASIDE_DIR}/1-x/venue`,
-  });
-  expect(
-    setAsideFolderPaths(roots, {
-      state: `${START_AGAIN_SET_ASIDE_DIR}/1-x/state`,
-      venue: `${START_AGAIN_SET_ASIDE_DIR}/1-x`,
-    }),
-  ).toEqual({
-    state: `/s/${START_AGAIN_SET_ASIDE_DIR}/1-x/state`,
-    venue: `/v/${START_AGAIN_SET_ASIDE_DIR}/1-x`,
   });
 });
 
@@ -1522,40 +1453,6 @@ it("the ring's copy keeps the original's mode 0640 under a umask of 077", async 
   expect((await lstat(copy)).mode & 0o777).toBe(0o640);
 });
 
-it("on two filesystems the ring's copy is in the stem folder on the state root, even with no state unit to move", async () => {
-  const attempt = await startAgainAttempt(await scratch());
-  const { roots } = attempt;
-  await writeFile(join(roots.venueDir, "venue.db"), "found database");
-  await writeFile(join(roots.stateDir, "secrets.env"), RING, { mode: 0o600 });
-  const venueDev = (async (path: string, options?: unknown) => {
-    const info = await fs.lstat(path, options as never);
-    if (path === roots.venueDir)
-      Object.defineProperty(info, "dev", { value: Number(info.dev) + 1 });
-    return info;
-  }) as typeof fs.lstat;
-  const record = await prepared(roots, attempt.administratorId, {
-    destinationsIo: { ...realIo, lstat: venueDev },
-  });
-  expect(record.setAside!.venue).toBe(`first-setup-set-aside/${stemOf(record)}`);
-  // Only a venue unit: prepare made no stem folder on the state root.
-  await expect(lstat(stemFolderOnState(roots, record))).rejects.toMatchObject({ code: "ENOENT" });
-
-  await moveStartAgainUnits(roots, record);
-
-  expect(await readdir(stemFolderOnState(roots, record))).toEqual(["secrets.env"]);
-  expect((await lstat(stemFolderOnState(roots, record))).mode & 0o777).toBe(0o700);
-  expect(await readFile(join(stemFolderOnState(roots, record), "secrets.env"), "utf8")).toBe(RING);
-  expect(
-    await readFile(
-      join(roots.venueDir, "first-setup-set-aside", stemOf(record), "venue.db"),
-      "utf8",
-    ),
-  ).toBe("found database");
-  await expect(
-    lstat(join(roots.venueDir, "first-setup-set-aside", stemOf(record), "secrets.env")),
-  ).rejects.toMatchObject({ code: "ENOENT" });
-});
-
 it("a cut while writing the ring's copy leaves no copy and moves nothing; the resume removes the half-written file and makes the copy before any further rename", async () => {
   const attempt = await startAgainAttempt(await scratch());
   const { roots } = attempt;
@@ -1701,15 +1598,8 @@ it("a ring file that cannot be read, a copy that cannot be looked at, or a link 
   const { roots } = linked;
   await writeFile(join(roots.venueDir, "venue.db"), "found database");
   await writeFile(join(roots.stateDir, "secrets.env"), RING, { mode: 0o600 });
-  const venueDev = (async (path: string, options?: unknown) => {
-    const info = await fs.lstat(path, options as never);
-    if (path === roots.venueDir)
-      Object.defineProperty(info, "dev", { value: Number(info.dev) + 1 });
-    return info;
-  }) as typeof fs.lstat;
-  const third = await prepared(roots, linked.administratorId, {
-    destinationsIo: { ...realIo, lstat: venueDev },
-  });
+  const third = await prepared(roots, linked.administratorId);
+  await rm(stemFolderOnState(roots, third), { recursive: true });
   const elsewhere = await scratch();
   await mkdir(join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR), { recursive: true });
   await fs.symlink(elsewhere, stemFolderOnState(roots, third));

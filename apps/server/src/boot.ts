@@ -18,7 +18,6 @@ import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import {
   assertOtherFirstSetupAllowed,
-  assertNoLegacyFirstSetupWorkspace,
   assertNoStartAgainDeletion,
   readPrivacyContact,
   readTenantIdentities,
@@ -1160,8 +1159,6 @@ async function bootServer(
   if (config.setupAppDir !== undefined) {
     assertBuiltApp(config.setupAppDir, "WAITRON_SETUP_APP_DIR");
   }
-
-  await assertNoLegacyFirstSetupWorkspace({ venueDir: config.venueDir, stateDir: config.stateDir });
   await assertNoStartAgainDeletion(config.venueDir);
   const moduleConfig = await readModuleConfig(config.stateDir);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
@@ -1514,7 +1511,7 @@ async function bootServer(
         firstSetup,
         firstFiscal: firstSetupHost,
         devMode: config.devMode,
-        operations: createSetupOperationStore(config.stateDir, undefined, {
+        operations: createSetupOperationStore(config.stateDir, {
           coordinator: firstSetupCoordinator,
           guard: firstSetup.assertOtherAllowed,
         }),

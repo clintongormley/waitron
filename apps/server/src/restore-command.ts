@@ -341,8 +341,8 @@ async function resolveRestoreTarget(
     const phase = await readRestoreFlowPhase(stateDir);
     if (phase === "staged" || phase === "placing")
       throw new AppError("restore.request_waiting", {});
-    if ((await inspectFirstSetupMarker(venueDir)) !== null)
-      await assertVenueFirstSetupAllowed(venueDir);
+    if ((await inspectFirstSetupMarker(venueDir, stateDir)) !== null)
+      await assertVenueFirstSetupAllowed(venueDir, stateDir);
   } catch (error) {
     hold.release();
     setupRefusal(error);

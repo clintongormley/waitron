@@ -4,15 +4,11 @@ import { isFirstSetupHostPath } from "./first-setup-state.js";
 it("excludes setup authority and its children without excluding similarly named venue files", () => {
   for (const name of [
     "first-setup.json",
-    "first-setup-claim.json",
+
     "module-operation-public.json",
     "first-setup-node-key.json",
     "first-fiscal-documents",
     "first-setup-resolutions",
-    "first-setup-workspaces",
-    "first-setup-selection.json",
-    "first-setup-retirement.json",
-    "first-setup-workspace.json",
     "first-setup-deleting.json",
     "records",
   ]) {

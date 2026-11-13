@@ -1365,19 +1365,6 @@ describe("the full-disk page's free space and uncounted start", () => {
 describe("a start refused before it began", () => {
   const ROWS = [
     {
-      code: "setup.workspace_unsupported",
-      "en-GB": {
-        title:
-          "This box holds a setup from an older version of Waitron that this version cannot use.",
-        action: "Reinstall Waitron on this box to start fresh.",
-      },
-      "es-ES": {
-        title:
-          "Este equipo tiene una configuración de una versión anterior de Waitron que esta versión no puede usar.",
-        action: "Reinstala Waitron en este equipo para empezar de cero.",
-      },
-    },
-    {
       code: "setup.start_again_incomplete",
       "en-GB": {
         title:

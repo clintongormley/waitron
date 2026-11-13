@@ -259,7 +259,6 @@ const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.attempt_uncertain": "shell.first_setup.attempt_uncertain",
   "setup.attempt_invalid": "shell.first_setup.attempt_invalid",
   "setup.start_again_incomplete": "shell.first_setup.start_again_incomplete",
-  "setup.workspace_unsupported": "shell.first_setup.workspace_unsupported",
 };
 /** An attempt in one of these cannot be carried on from the page: only Start again or Recover remain. */
 const pastActivation = (state: FirstSetupState | undefined) =>

@@ -44,7 +44,6 @@ export async function firstSetupUnusedAssignment(
     return false;
   const allowed = new Set([
     "state/first-setup.json",
-    "venue/first-setup-claim.json",
     "venue/venue.db",
     "venue/venue.db-wal",
     "state/first-setup-node-key.json",

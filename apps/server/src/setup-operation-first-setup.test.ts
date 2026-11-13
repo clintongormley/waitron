@@ -22,7 +22,7 @@ it("holds the common coordinator through a legacy callback, then checks a queued
   const dir = await mkdtemp(join(tmpdir(), "first-race-"));
   dirs.push(dir);
   const coordinator = createFirstSetupCoordinator();
-  const operations = createSetupOperationStore(dir, "boot", { coordinator });
+  const operations = createSetupOperationStore(dir, { coordinator });
   const entered = barrier();
   const release = barrier();
   const effects: string[] = [];
@@ -50,7 +50,7 @@ it.each(["provision", "adopt", "restore", "import"] as const)(
     dirs.push(dir);
     const coordinator = createFirstSetupCoordinator();
     let claimed = false;
-    const operations = createSetupOperationStore(dir, "boot", {
+    const operations = createSetupOperationStore(dir, {
       coordinator,
       guard: async () => {
         if (claimed) throw new AppError("setup.attempt_conflict", {});
@@ -88,7 +88,7 @@ it("covers callbacks outside the progress store and passes the held context with
       if (claimed) throw new AppError("setup.attempt_conflict", {});
     },
   };
-  const operations = createSetupOperationStore(dir, "boot", {
+  const operations = createSetupOperationStore(dir, {
     coordinator,
     guard: firstSetup.assertOtherAllowed,
   });

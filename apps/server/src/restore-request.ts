@@ -435,8 +435,8 @@ export async function runStagedRestore(
   // Refused here, nothing is cleared, so the request stays staged.
   const hold = await lockRestoreTarget(deps.venueDir);
   try {
-    if ((await inspectFirstSetupMarker(deps.venueDir)) !== null)
-      await assertVenueFirstSetupAllowed(deps.venueDir);
+    if ((await inspectFirstSetupMarker(deps.venueDir, deps.stateDir)) !== null)
+      await assertVenueFirstSetupAllowed(deps.venueDir, deps.stateDir);
     return await runHeld(deps, flow, snapshot, restore, restoreStream);
   } finally {
     hold.release();

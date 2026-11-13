@@ -475,14 +475,12 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     const blocked = [...args];
     blocked[blocked.indexOf("--venue-dir") + 1] = claimed.venueDir;
     const claimedState = await readFile(join(claimed.stateDir, "first-setup.json"));
-    const marker = await readFile(join(claimed.venueDir, "first-setup-claim.json"));
     const ownState = await readFile(join(f.stateDir, "first-setup.json"));
     await expect(runCli(blocked, env)).rejects.toMatchObject({
       code: 1,
-      stderr: "setup.attempt_conflict {}\n",
+      stderr: "setup.attempt_invalid {}\n",
     });
     expect(await readFile(join(claimed.stateDir, "first-setup.json"))).toEqual(claimedState);
-    expect(await readFile(join(claimed.venueDir, "first-setup-claim.json"))).toEqual(marker);
     expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(ownState);
     await expect(readFile(join(claimed.venueDir, "venue.db"))).rejects.toMatchObject({
       code: "ENOENT",

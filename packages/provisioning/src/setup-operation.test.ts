@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdtemp, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -65,48 +65,6 @@ describe("setup operation store", () => {
     await first;
   });
 
-  it("reclaims a lock left by a dead process", async () => {
-    const dir = await stateDir();
-    await writeFile(
-      join(dir, "setup-operation.lock"),
-      JSON.stringify({ ownerId: "previous-container", token: "old-token" }),
-    );
-    const store = createSetupOperationStore(dir, "current-container");
-
-    await store.run("provision", "request-a", async () => {});
-
-    expect(JSON.parse(await readFile(join(dir, "setup-operation.json"), "utf8"))).toMatchObject({
-      phase: "started",
-    });
-  });
-
-  it("does not mistake an invalid lock for authorization to proceed", async () => {
-    const dir = await stateDir();
-    await writeFile(join(dir, "setup-operation.lock"), "not-json");
-
-    await expect(
-      createSetupOperationStore(dir).run("provision", "request-a", async () => {}),
-    ).rejects.toBeInstanceOf(AppError);
-  });
-
-  it("does not mistake a reused container PID for a live setup lock", async () => {
-    const dir = await stateDir();
-    await writeFile(
-      join(dir, "setup-operation.lock"),
-      JSON.stringify({ pid: process.pid, token: "previous-container" }),
-    );
-
-    await createSetupOperationStore(dir, "current-container").run(
-      "provision",
-      "request-a",
-      async () => {},
-    );
-
-    await expect(readFile(join(dir, "setup-operation.json"), "utf8")).resolves.toContain(
-      '"requestHash":"request-a"',
-    );
-  });
-
   it("discards validation failures so a corrected request can proceed", async () => {
     const store = createSetupOperationStore(await stateDir());
 
@@ -159,77 +117,6 @@ describe("setup operation store", () => {
     await expect(store.read()).rejects.toMatchObject({ code: "setup.operation_conflict" });
     await expect(store.run("provision", "request-a", async () => {})).rejects.toMatchObject({
       code: "setup.operation_conflict",
-    });
-  });
-
-  it("refuses to take a lock this same process already holds", async () => {
-    const dir = await stateDir();
-    const lock = JSON.stringify({ ownerId: "current-container", token: "earlier-token" });
-    await writeFile(join(dir, "setup-operation.lock"), lock);
-
-    await expect(
-      createSetupOperationStore(dir, "current-container").run(
-        "provision",
-        "request-a",
-        async () => {},
-      ),
-    ).rejects.toMatchObject({ code: "setup.already_provisioning" });
-    await expect(readFile(join(dir, "setup-operation.lock"), "utf8")).resolves.toBe(lock);
-  });
-
-  it.each([
-    ["no owner and no process id", { token: "t" }],
-    ["a zero process id", { pid: 0 }],
-    ["a negative process id", { pid: -5 }],
-    ["a fractional process id", { pid: 1.5 }],
-    ["a process id written as text", { pid: "123" }],
-  ])("leaves alone a lock with %s", async (_label, owner) => {
-    const dir = await stateDir();
-    const lock = JSON.stringify(owner);
-    await writeFile(join(dir, "setup-operation.lock"), lock);
-
-    await expect(
-      createSetupOperationStore(dir, "current-container").run(
-        "provision",
-        "request-a",
-        async () => {},
-      ),
-    ).rejects.toMatchObject({ code: "setup.already_provisioning" });
-    await expect(readFile(join(dir, "setup-operation.lock"), "utf8")).resolves.toBe(lock);
-  });
-
-  it("does not release a lock that another run has taken over in the meantime", async () => {
-    const dir = await stateDir();
-    const lockPath = join(dir, "setup-operation.lock");
-    const takenOver = JSON.stringify({ ownerId: "other-container", token: "other-token" });
-
-    await createSetupOperationStore(dir).run("provision", "request-a", async () => {
-      await writeFile(lockPath, takenOver);
-    });
-
-    await expect(readFile(lockPath, "utf8")).resolves.toBe(takenOver);
-  });
-
-  it("finishes normally when its lock has already disappeared", async () => {
-    const dir = await stateDir();
-    await expect(
-      createSetupOperationStore(dir).run("provision", "request-a", async () => {
-        await unlink(join(dir, "setup-operation.lock"));
-        return "done";
-      }),
-    ).resolves.toBe("done");
-  });
-
-  it("surfaces a lock that became unreadable while it was held", async () => {
-    const dir = await stateDir();
-    const store = createSetupOperationStore(dir);
-    await expect(
-      store.run("provision", "request-a", async () => {
-        await writeFile(join(dir, "setup-operation.lock"), "not-json");
-      }),
-    ).rejects.toThrow(SyntaxError);
-    await expect(store.run("provision", "request-a", async () => {})).rejects.toMatchObject({
-      code: "setup.already_provisioning",
     });
   });
 

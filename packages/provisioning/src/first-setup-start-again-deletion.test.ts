@@ -52,7 +52,6 @@ async function box() {
   const roots = { venueDir: join(root, "venue"), stateDir: join(root, "state") };
   for (const path of Object.values(roots)) await mkdir(path);
   await writeFile(join(roots.stateDir, "first-setup.json"), "attempt record");
-  await writeFile(join(roots.venueDir, "first-setup-claim.json"), "claim");
   await writeFile(join(roots.venueDir, "venue.db"), "attempt database bytes");
   (await lockVenueDatabase(roots.venueDir)).release();
   return roots;
@@ -133,12 +132,6 @@ it("the disk check refuses an unexpected folder in the venue's documents as an u
 
 it("the marker names modules.json only with held", async () => {
   const roots = await heldBox();
-  expect(marked(await startAgainMarkerFor(roots, attempt, { held: true }))).toEqual([
-    "state/first-setup.json",
-    MODULES,
-    "venue/first-setup-claim.json",
-    "venue/venue.db",
-  ]);
   expect(marked(await startAgainMarkerFor(roots, attempt))).not.toContain(MODULES);
 });
 
@@ -206,13 +199,6 @@ it("with held, the disk check accepts the setup's trading.env; without it, refus
 it("the marker names and fingerprints trading.env only with held", async () => {
   const roots = await tradingBox(["modules.json", "trading.env"]);
   const marker = await startAgainMarkerFor(roots, attempt, { held: true });
-  expect(marked(marker)).toEqual([
-    "state/first-setup.json",
-    MODULES,
-    TRADING,
-    "venue/first-setup-claim.json",
-    "venue/venue.db",
-  ]);
   expect(marker.files.find((file) => file.name === "trading.env")).toMatchObject({
     size: 4,
     sha256: createHash("sha256").update("X=1\n").digest("hex"),

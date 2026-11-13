@@ -145,11 +145,7 @@ async function abandonedWithMissingDatabase(
         : { confirmMissingDatabase: { nothingFiledOrSold: true as const, shown } }),
     });
   const attemptFiles = () =>
-    Promise.all(
-      [join(f.stateDir, "first-setup.json"), join(f.venueDir, "first-setup-claim.json")].map(
-        (path) => readFile(path),
-      ),
-    );
+    Promise.all([join(f.stateDir, "first-setup.json")].map((path) => readFile(path)));
   const confirmations = () =>
     readdir(join(f.stateDir, CONFIRMATIONS)).catch((error: { code?: string }) => {
       if (error.code === "ENOENT") return [];

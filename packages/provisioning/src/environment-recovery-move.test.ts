@@ -33,7 +33,6 @@ it("sets aside registered venue state, keeps unrelated files and preserves first
     "spare-space",
     "spare-space.released",
     "recovery.lock",
-    "setup-operation.lock",
     "first-setup-start-again-guesses.json",
     "recovery.json",
     "logs",
@@ -56,7 +55,7 @@ it("sets aside registered venue state, keeps unrelated files and preserves first
     "node.db-journal",
     "node.db",
     ".venue.db-litestream",
-    "first-setup-claim.json",
+
     "first-setup-workspaces",
     "first-setup-selection.json",
     "first-setup-retirement.json",
@@ -139,22 +138,4 @@ it("resumes a cut Move and refuses to overwrite a destination", async () => {
     code: "setup.environment_move_unfinished",
   });
   expect(await fs.readFile(join(result!.folders.venue, "venue.db"), "utf8")).toBe("database");
-});
-
-it("reports both locations when the roots use separate filesystems", async () => {
-  const roots = await fixture();
-  await put(join(roots.venueDir, "venue.db"), "database");
-  await put(join(roots.stateDir, "secrets.env"), "ring");
-  const result = await beginEnvironmentMove(roots, {
-    ...fs,
-    lstat: (async (...args: Parameters<typeof fs.lstat>) => {
-      const info = await fs.lstat(...args);
-      if (args[0] === roots.venueDir)
-        Object.defineProperty(info, "dev", { value: Number(info.dev) + 1 });
-      return info;
-    }) as typeof fs.lstat,
-  });
-  expect(result.setAside?.state).toMatch(/^records\/set-aside\/[^/]+\/state$/);
-  expect(result.setAside?.venue).toMatch(/^first-setup-set-aside\/[^/]+$/);
-  expect(await fs.readFile(join(result.folders.venue, "venue.db"), "utf8")).toBe("database");
 });

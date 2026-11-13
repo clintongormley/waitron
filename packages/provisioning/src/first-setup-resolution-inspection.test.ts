@@ -65,12 +65,7 @@ async function fixture(
   const owner = createFirstSetupOwner(ownerOptions);
   const claim = await owner.claimFirstSetup({ environment: "production", request });
   if (phase === "abandon") await store.update(claim.state.attemptId, 1, { kind: "abandoned" });
-  const markerPath = join(roots.venueDir, "first-setup-claim.json");
-  if (phase !== "active") {
-    const marker = JSON.parse(await readFile(markerPath, "utf8"));
-    marker.status = phase === "claim" ? "claiming" : "active";
-    await writeFile(markerPath, JSON.stringify(marker));
-  }
+  await mkdir(roots.venueDir, { recursive: true });
   await suite.db.archiveTo(join(roots.venueDir, "venue.db"));
   const service = createFirstSetupResolutionInspection({
     modules: ALL_MODULES,
@@ -85,7 +80,6 @@ async function fixture(
     coordinator,
     owner,
     claim,
-    markerPath,
     service,
   };
 }
@@ -94,24 +88,22 @@ it.each(["claim", "abandon"] as const)(
   async (phase) => {
     const f = await fixture(phase);
     const before = await readFile(join(f.stateDir, "first-setup.json"));
-    const marker = await readFile(f.markerPath);
     const db = await readFile(join(f.venueDir, "venue.db"));
     const entries = await readdir(f.venueDir);
-    await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    expect((await f.store.read())?.status).toBe(phase === "claim" ? "claimed" : "abandoned");
     const inspected = await f.service.inspectFirstSetupResolution();
     expect(inspected).toMatchObject({
       version: 2,
-      pair: "repairable",
+      pair: "valid",
       database: "no-venue-rows",
       revision: phase === "claim" ? 1 : 2,
       ownerGeneration: 1,
     });
     expect(inspected.inspectionId).toMatch(/^[a-f0-9]{64}$/);
     expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
-    expect(await readFile(f.markerPath)).toEqual(marker);
     expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(db);
     expect(await readdir(f.venueDir)).toEqual(entries);
-    await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    expect((await f.store.read())?.status).toBe(phase === "claim" ? "claimed" : "abandoned");
     expect(JSON.stringify(inspected)).not.toContain(PASSWORD);
     expect(JSON.stringify(inspected)).not.toContain("scrypt$");
   },
@@ -191,7 +183,7 @@ it.each(["missing", "corrupt", "wrong-root"] as const)(
       await writeFile(path, JSON.stringify(state));
     }
     const inspected = await f.service.inspectFirstSetupResolution();
-    expect(inspected.pair).toBe(why === "missing" ? "partial" : "invalid");
+    expect(inspected.pair).toBe(why === "missing" ? "missing" : "invalid");
     expect(inspected.revision).toBeNull();
     expect(inspected.ownerGeneration).toBeNull();
   },
@@ -233,15 +225,6 @@ it("does not treat an absent independently configured register as proof of no re
   });
   const result = await service.inspectFirstSetupResolution();
   expect(result.artifacts).toContainEqual({ name: "outside-evidence-0", status: "missing" });
-});
-it("venue exclusion refuses an earlier Waitron's first-setup layout before its body runs", async () => {
-  const f = await fixture();
-  await writeFile(join(f.stateDir, "first-setup-retirement.json"), "");
-  const body = vi.fn(async () => "ran");
-  await expect(f.service.withVenueExclusion(body)).rejects.toMatchObject({
-    code: "setup.workspace_unsupported",
-  });
-  expect(body).not.toHaveBeenCalled();
 });
 it("venue exclusion refuses a venue held by another process before its body runs", async () => {
   const f = await fixture("active");
@@ -335,10 +318,10 @@ it("reports a database carrying a taxpayer as occupied and leaves the marker unc
   const { seedTenant } = await import("@waitron/db/testing/seed.js");
   await seedTenant(suite.db);
   const f = await fixture();
-  const before = await readFile(f.markerPath);
+  const before = await readFile(join(f.stateDir, "first-setup.json"));
   const result = await f.service.inspectFirstSetupResolution();
   expect(result.database).toBe("occupied");
-  expect(await readFile(f.markerPath)).toEqual(before);
+  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
 });
 it.each(["symlink", "directory", "oversize", "array"] as const)(
   "retains an unreadable or invalid %s artifact as evidence",
@@ -636,10 +619,10 @@ it("leaves a damaged ownership record and its marker as they are when inspected"
   const path = join(f.stateDir, "first-setup.json");
   await writeFile(path, "{damaged setup state");
   const before = await readFile(path);
-  const marker = await readFile(f.markerPath);
+  const marker = await readFile(join(f.stateDir, "first-setup.json"));
   await f.service.inspectFirstSetupResolution();
   expect(await readFile(path)).toEqual(before);
-  expect(await readFile(f.markerPath)).toEqual(marker);
+  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(marker);
 });
 
 it("classifies a valid database above 128 MiB without treating the snapshot budget as unreadability", async () => {
@@ -670,15 +653,15 @@ it("inspects a pair whose database is over the snapshot budget and changes neith
   const f = await fixture("claim");
   await truncate(join(f.venueDir, "venue.db"), 128 * 1024 * 1024 + 4096);
   const before = await readFile(join(f.stateDir, "first-setup.json"));
-  const marker = await readFile(f.markerPath);
+  const marker = await readFile(join(f.stateDir, "first-setup.json"));
   const entries = (await readdir(f.stateDir)).sort();
   const inspected = await f.service.inspectFirstSetupResolution();
   expect(inspected).toMatchObject({
-    pair: "repairable",
+    pair: "valid",
     database: "no-venue-rows",
     emptyDatabase: true,
   });
   expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
-  expect(await readFile(f.markerPath)).toEqual(marker);
+  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(marker);
   expect((await readdir(f.stateDir)).sort()).toEqual(entries);
 });

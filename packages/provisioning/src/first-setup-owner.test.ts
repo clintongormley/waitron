@@ -180,7 +180,7 @@ it.each(["staged", "placing", "reset-request.json", "incomplete-operation"])(
     const f = await fixture();
     if (existing === "incomplete-operation") {
       const { createSetupOperationStore } = await import("./setup-operation.js");
-      await createSetupOperationStore(f.options.stateDir, "boot", {
+      await createSetupOperationStore(f.options.stateDir, {
         coordinator: f.options.coordinator,
       }).run("adopt", "old-request", async (operation) => {
         await operation.advance("venue_committed");
@@ -203,7 +203,7 @@ it.each(["staged", "placing", "reset-request.json", "incomplete-operation"])(
 it("permits a claim after an unrelated operation is durably complete", async () => {
   const f = await fixture();
   const { createSetupOperationStore } = await import("./setup-operation.js");
-  await createSetupOperationStore(f.options.stateDir, "boot", {
+  await createSetupOperationStore(f.options.stateDir, {
     coordinator: f.options.coordinator,
   }).run("import", "old-request", async (operation) => {
     await operation.complete();
@@ -274,63 +274,30 @@ it("an abandoned attempt refuses owner writes but still answers its status", asy
   await expect(f.owner.status(owner)).resolves.toMatchObject({ status: "abandoned" });
 });
 
-it.each(["complete", "interrupted-publication"])(
-  "keeps an attempt in phase %s out of a new activation",
-  async (phase) => {
-    const f = await fixture();
-    const claim = await f.claim();
-    let state = (await f.store.read())!;
-    for (const change of [
-      { kind: "consumption-intent" },
-      { kind: "activation-started" },
-      { kind: "committed", result: { retained: "original-result" } },
-      { kind: "publication" },
-      { kind: "complete" },
-    ] as const)
-      state = await f.store.update(state.frozen.attemptId, state.revision, change);
-    if (phase === "interrupted-publication") {
-      const path = join(f.dir, "venue", "first-setup-claim.json");
-      const marker = JSON.parse(await readFile(path, "utf8"));
-      marker.status = "active";
-      await writeFile(path, JSON.stringify(marker));
-    }
-    const bytes = await readFile(join(f.dir, "state", "first-setup.json"));
-    const refusal =
-      phase === "complete"
-        ? { owner: "setup.owner_required", store: "setup.attempt_conflict" }
-        : { owner: "setup.attempt_invalid", store: "setup.attempt_conflict" };
-    await expect(
-      f.owner.authorize({ ...claim.state, revision: state.revision, capability: claim.capability }),
-    ).rejects.toMatchObject({ code: refusal.owner });
-    await expect(
-      f.store.update(state.frozen.attemptId, state.revision, { kind: "activation-started" }),
-    ).rejects.toMatchObject({ code: refusal.store });
-    expect(await readFile(join(f.dir, "state", "first-setup.json"))).toEqual(bytes);
-    expect((await f.store.readResumable())?.state.result).toEqual({
-      retained: "original-result",
-    });
-  },
-);
-
-it("retirement refuses existing owner capabilities without rewriting the old state", async () => {
+it("keeps a completed attempt out of a new activation", async () => {
   const f = await fixture();
-  const claim = await f.owner.claimFirstSetup(payload);
-  const owner = {
-    attemptId: claim.state.attemptId,
-    revision: claim.state.revision,
-    ownerGeneration: claim.ownerGeneration,
-    capability: claim.capability,
-  };
-  const current = (await f.store.read())!;
-  await writeFile(join(current.venueDir, "first-setup-retirement.json"), "{}");
-  const before = await readFile(join(current.stateDir, "first-setup.json"));
-  await expect(f.owner.authorize(owner)).rejects.toMatchObject({
-    code: "setup.workspace_unsupported",
+  const claim = await f.claim();
+  let state = (await f.store.read())!;
+  for (const change of [
+    { kind: "consumption-intent" },
+    { kind: "activation-started" },
+    { kind: "committed", result: { retained: "original-result" } },
+    { kind: "publication" },
+    { kind: "complete" },
+  ] as const)
+    state = await f.store.update(state.frozen.attemptId, state.revision, change);
+  const bytes = await readFile(join(f.dir, "state", "first-setup.json"));
+  const refusal = { owner: "setup.owner_required", store: "setup.attempt_conflict" };
+  await expect(
+    f.owner.authorize({ ...claim.state, revision: state.revision, capability: claim.capability }),
+  ).rejects.toMatchObject({ code: refusal.owner });
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, { kind: "activation-started" }),
+  ).rejects.toMatchObject({ code: refusal.store });
+  expect(await readFile(join(f.dir, "state", "first-setup.json"))).toEqual(bytes);
+  expect((await f.store.readResumable())?.state.result).toEqual({
+    retained: "original-result",
   });
-  await expect(f.owner.status(owner)).rejects.toMatchObject({
-    code: "setup.workspace_unsupported",
-  });
-  expect(await readFile(join(current.stateDir, "first-setup.json"))).toEqual(before);
 });
 
 it("polls the latest revision with the current capability while refusing stale writes", async () => {
@@ -402,7 +369,6 @@ it("refuses ownership lookups without a claim and never invents one", async () =
   await expect(f.owner.status(owner)).rejects.toMatchObject({ code: "setup.owner_required" });
   expect(await f.store.read()).toBeNull();
 });
-
 it("rejects unsupported reconfirmation purposes and malformed one-use grants", async () => {
   const f = await fixture();
   const claim = await f.claim();

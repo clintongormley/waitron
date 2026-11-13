@@ -229,10 +229,19 @@ it("a unit holding venue.lock explains", async () => {
     "recovery.lock",
   ]) {
     const { roots } = await startAgainAttempt(await scratch());
-    await put(join(roots.stateDir, "first-setup-workspaces", "w1", "target", name), "");
+    await put(
+      join(
+        roots.stateDir,
+        "first-setup-resolutions",
+        "11111111-1111-4111-8111-111111111111",
+        "step-000001",
+        name,
+      ),
+      "",
+    );
     expect(await surveyStartAgainLeftovers(roots), name).toEqual({
       kind: "explain",
-      reason: `unit holds a lock file: state/first-setup-workspaces/w1/target/${name}`,
+      reason: `unit holds a lock file: state/first-setup-resolutions/11111111-1111-4111-8111-111111111111/step-000001/${name}`,
     });
   }
 });

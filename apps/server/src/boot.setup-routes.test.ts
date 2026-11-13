@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { publishRestoreFlow } from "./restore-flow.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -511,6 +511,42 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(stateDir, { recursive: true, force: true });
     }
   }
+
+  it("while setup mode runs, another process cannot take the venue lock", async () => {
+    const venue = await freshVenue();
+    const directory = venue.directory;
+    await venue.store.close();
+    try {
+      await withSetupBoot(directory, {}, async () => {
+        const child = spawnSync(
+          process.execPath,
+          [
+            "--import",
+            "tsx",
+            "--input-type=module",
+            "-e",
+            `
+          import { lockVenueDirectory, VenueInUseError } from "@waitron/store";
+          try {
+            const hold = await lockVenueDirectory(process.argv[1]);
+            hold.release();
+            process.stdout.write("acquired");
+          } catch (error) {
+            if (!(error instanceof VenueInUseError)) throw error;
+            process.stdout.write("refused");
+          }
+        `,
+            directory,
+          ],
+          { encoding: "utf8", timeout: 10000 },
+        );
+        expect(child.status, child.stderr).toBe(0);
+        expect(child.stdout).toBe("refused");
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
 
   it("A1251 closes the setup server when listener readiness refuses", async () => {
     beforeServerStarts();

@@ -477,7 +477,6 @@ it("boots real HTTPS first setup after Move and previews another backup", async 
 it("resumes a recorded Move before inspecting the old setup claim", async () => {
   const f = await recoveryFixture();
   await f.boot();
-  await writeFile(join(f.venueDir, "first-setup-claim.json"), "old claim");
   const hold = await lockVenueDatabase(f.venueDir);
   try {
     let moves = 0;
@@ -496,17 +495,7 @@ it("resumes a recorded Move before inspecting the old setup claim", async () => 
   }
   await f.boot();
   expect(f.startServer).toHaveBeenCalledOnce();
-  await expect(stat(join(f.venueDir, "first-setup-claim.json"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
   await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
-  const [stem] = await readdir(join(f.stateDir, "records/set-aside"));
-  expect(
-    await readFile(
-      join(f.stateDir, "records/set-aside", stem!, "venue/first-setup-claim.json"),
-      "utf8",
-    ),
-  ).toBe("old claim");
 });
 
 it("explains and logs an unavailable Move without moving the database", async () => {

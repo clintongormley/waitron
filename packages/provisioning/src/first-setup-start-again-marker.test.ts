@@ -44,7 +44,6 @@ const VENUE_FILES: Record<string, string> = {
   "venue.db": "main database",
   "node.db": "node database",
   "venue.db-shm": "shared memory",
-  "first-setup-claim.json": "{}",
 };
 const STATE_FILES: Record<string, string> = {
   "module-preparation-state.json": "{}",
@@ -156,7 +155,7 @@ it("a marker names every listed file, records the side files' state, and reads b
   expect(marker.stateDir).toBe(await fs.realpath(roots.stateDir));
   expect(marker.files.map((entry) => `${entry.root}:${entry.name}`).sort()).toEqual(
     [
-      ...["venue.db", "node.db", "first-setup-claim.json"].map((name) => `venue:${name}`),
+      ...["venue.db", "node.db"].map((name) => `venue:${name}`),
       ...Object.keys(STATE_FILES).map((name) => `state:${name}`),
     ].sort(),
   );
@@ -195,15 +194,9 @@ it.each([
 });
 
 it("an attempt that never chose a name is finished from the marker alone", async () => {
-  const roots = await attemptFolders(
-    { "first-setup-claim.json": "{}" },
-    { "first-setup.json": "state" },
-  );
+  const roots = await attemptFolders({}, { "first-setup.json": "state" });
   const marker = await marked(roots);
-  expect(marker.files.map((entry) => entry.name).sort()).toEqual([
-    "first-setup-claim.json",
-    "first-setup.json",
-  ]);
+  expect(marker.files.map((entry) => entry.name).sort()).toEqual(["first-setup.json"]);
   await finishStartAgainDeletion(roots);
   await expectOnlyKept(roots);
 });
@@ -226,10 +219,6 @@ it("a record folder with a step-000003/ subfolder is finished, subfolder first",
   expect(at(join(record, "step-000003"))).toBeLessThan(at(join(record, "000001.json")));
   expect(at(join(record, "000001.json"))).toBeLessThan(at(record));
   expect(at(record)).toBeLessThan(at(join(state, "first-setup-resolutions")));
-  expect(calls.slice(-2)).toEqual([
-    join(venue, "first-setup-claim.json"),
-    join(state, "first-setup.json"),
-  ]);
   await finishStartAgainDeletion(roots);
   await expectOnlyKept(roots);
 });
@@ -588,10 +577,7 @@ it.each([
 ])(
   "an attempt whose marker names no venue.db: a venue.db %s after the marker",
   async (_name, placed) => {
-    const roots = await attemptFolders(
-      { "first-setup-claim.json": "{}" },
-      { "first-setup.json": "state" },
-    );
+    const roots = await attemptFolders({}, { "first-setup.json": "state" });
     const marker = await marked(roots);
     expect(marker.files.some((entry) => entry.name === "venue.db")).toBe(false);
     if (!placed) {
@@ -674,7 +660,6 @@ async function startableFolders() {
   return roots;
 }
 const notReady = { code: "setup.not_ready", params: {} };
-const unsupported = { code: "setup.workspace_unsupported", params: {} };
 
 it("an attempt with an empty node.db may start again, and the folders come back canonical", async () => {
   const roots = await startableFolders();
@@ -692,7 +677,6 @@ it("an attempt with no node.db may start again, and none is created", async () =
   await assertStartAgainAllowedOnDisk(roots);
   await expect(stat(join(roots.venueDir, "node.db"))).rejects.toMatchObject({ code: "ENOENT" });
 });
-
 it.each<[string, object, (roots: { venueDir: string; stateDir: string }) => Promise<unknown>]>([
   ...[
     "trading.env",
@@ -760,22 +744,6 @@ it.each<[string, object, (roots: { venueDir: string; stateDir: string }) => Prom
     notReady,
     (roots) => writeFile(join(roots.venueDir, "node.db"), "not a database"),
   ],
-  ...(["state", "venue"] as const).flatMap((root) =>
-    [
-      "first-setup-workspaces",
-      "first-setup-selection.json",
-      "first-setup-retirement.json",
-      "first-setup-workspace.json",
-    ].map(
-      (
-        name,
-      ): [string, object, (roots: { venueDir: string; stateDir: string }) => Promise<unknown>] => [
-        `beside ${root}/${name} from an earlier Waitron`,
-        unsupported,
-        (roots) => writeFile(join(root === "state" ? roots.stateDir : roots.venueDir, name), "x"),
-      ],
-    ),
-  ),
   [
     "beside a pending deletion marker",
     incomplete,
@@ -787,27 +755,6 @@ it.each<[string, object, (roots: { venueDir: string; stateDir: string }) => Prom
   const before = await snapshot(roots);
   await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(code);
   expect(await snapshot(roots)).toEqual(before);
-});
-
-it("a venue folder inside an earlier Waitron's workspace is refused as unsupported", async () => {
-  const base = await stateDir();
-  const roots = {
-    stateDir: join(base, "state"),
-    venueDir: join(base, "state", "first-setup-workspaces", randomUUID(), "venue"),
-  };
-  await mkdir(roots.venueDir, { recursive: true });
-  await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(unsupported);
-});
-
-it("a state folder inside an earlier Waitron's workspace is refused as unsupported", async () => {
-  const base = await stateDir();
-  const roots = {
-    stateDir: join(base, "anchor", "first-setup-workspaces", randomUUID(), "state"),
-    venueDir: join(base, "venue"),
-  };
-  await mkdir(roots.venueDir, { recursive: true });
-  await mkdir(roots.stateDir, { recursive: true });
-  await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(unsupported);
 });
 
 it("a folder whose entries cannot be checked is refused, not read as absent", async () => {
@@ -923,7 +870,7 @@ it.each<[string, boolean, (f: Awaited<ReturnType<typeof pendingDeletion>>) => Pr
   [
     "the venue check restore, reset and provisioning call",
     true,
-    (f) => assertVenueFirstSetupAllowed(f.roots.venueDir),
+    (f) => assertVenueFirstSetupAllowed(f.roots.venueDir, f.roots.stateDir),
   ],
 ])(
   "while a deletion is pending, %s is refused and the marked files are unchanged",
