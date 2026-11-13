@@ -3,15 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Users, sign-in and the dashboard shell". This file holds
 their full text.
 
-## `setEmail` in `packages/identity/src/staff.ts`, unlike `updatePersonDetails`, never checks the new email against other people's pending emails
-
-- Identity code, found by #559: `setEmail` in `packages/identity/src/staff.ts`,
-  unlike `updatePersonDetails`, never checks the new email against other people's pending
-  emails; `manager-login.ts` reports an authenticator secret it cannot decrypt as a failed login
-  (`password.invalid`, logged with the reason `unreadable_secret` since C95), like a wrong code.
-  The `management_session.required` throw in `profile.ts`'s `ownSession`, as it stands since #554,
-  is reached by no test.
-
 ## Dashboard leftovers from the coverage branch
 
 **Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #538).** Each from
@@ -49,6 +40,9 @@ keys #426 dropped could be declared again — `sessions` to `persons`, and
 `management_sessions`, `totp_enrollments` and `google_oidc_states` to `persons` (`sessions`' key to
 `tills` went with that table in A238, and `sessions.device_id` holds one to `devices`). Doing so would
 change what deleting a person does.
+
+Review #559 also recorded no test reaching `management_session.required` in
+`packages/identity/src/profile.ts`'s `ownSession`; that coverage note has not been rechecked.
 
 ## Roles the admin can edit (A7)
 
@@ -117,6 +111,8 @@ and message behavior; keep domain-specific refusal clearing local. See the
   (right credentials, a role without the permission) and the adjustment approver's
   `adjustment.approval_required` for a right PIN whose role is too low; a signed-in person's
   re-check of their OWN password or code (`profile.ts`) still names the field. Still open:
+  - `manager-login.ts` reports an authenticator secret it cannot decrypt as a failed login
+    (`password.invalid`, logged with the reason `unreadable_secret` since C95), like a wrong code.
   - The membership route, the adjustment approver, the refund override and the manual-refund
     confirmer have no one-answer test case of their own.
   - Refusals thrown in `apps/server` itself (a malformed id or PIN) carry no `reason`.

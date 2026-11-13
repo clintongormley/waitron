@@ -1324,9 +1324,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   checks keep a second tab; say if it should go (about 25 cases then lose their subject) — plan
   A756 PR 8 Decision 10.
 
-- **`setEmail` in `packages/identity/src/staff.ts`, unlike `updatePersonDetails`, never checks the
-  new email against other people's pending emails**
-  [Detail](backlog/dashboard.md#setemail-in-packagesidentitysrcstaffts-unlike-updatepersondetails-never-checks-the-new-email-against-other-peoples-pending-emails)
 
 - **Wt dialog lifecycle** (remaining: caret keys, menu/modifier/media repeated-key checks, covered-dialog reinsertion, wrappers, modifier picker and coverage leftovers). [Detail](backlog/dashboard.md#bundle-wt-dialog-lifecycle)
 
