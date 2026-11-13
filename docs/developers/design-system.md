@@ -4459,6 +4459,13 @@ the normal, expected treatment there.
 | Field label | `--wt-font-size-sm`, normal weight, muted   | "Name"                                                                                                                                                                                                                      |
 | Field value | `--wt-font-size-md`, bold                   | "Clinton Gormley"                                                                                                                                                                                                           |
 
+For a dashboard or module page with an `<h1>`, import `pageTitleStyles` from `@waitron/ui`
+and put it after `baseStyles` in the screen's static styles. Keep local margins and wrapping;
+leave the title's size to the shared rule. Modal headings keep the LG role.
+`scripts/page-title-styles.test.ts` checks literal H1 templates and local CSS in dashboard/module
+screens, excluding fiscal-verifactu, staff, staff roles and the floor-plan editor modal. It reads
+text, so it does not check dynamically built headings, imported styles or the full CSS cascade.
+
 `wt-button` carries its own type sizing through its `size` property — these roles cover page text,
 not button labels.
 

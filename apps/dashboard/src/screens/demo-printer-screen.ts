@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import type { DashboardApi, DemoPrinterJob } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -11,6 +11,7 @@ import { PrintPaper, paperStyles } from "../widgets/print-paper.js";
 export class DemoPrinterScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     paperStyles,
     css`
       :host {
@@ -18,7 +19,6 @@ export class DemoPrinterScreen extends LitElement {
       }
       h1 {
         margin-top: 0;
-        font-size: var(--wt-font-size-lg);
       }
       .jobs {
         display: grid;

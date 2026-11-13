@@ -1,5 +1,5 @@
 import type { ContentLanguages } from "@waitron/shared";
-import { baseStyles, setContentLanguages, leaveCoordinatorFor } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, setContentLanguages, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.js";
 import { LitElement, css, html, nothing } from "lit";
@@ -46,6 +46,7 @@ function decimalMarker(locale: string): string {
 export class UnitsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;

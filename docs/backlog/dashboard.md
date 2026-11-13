@@ -334,11 +334,9 @@ The historical catalogue-only warning was not reproduced.
 
 The scale is 12 / 14 / 18 / 22px (sm / md / lg / xl) in the
 system font, for the dashboard, setup and the till (owner: _"yes for now, then we can revisit
-later"_). Open: page headings follow the Typography roles table in
-`docs/developers/design-system.md` (a page title at `--wt-font-size-xl`) only in part — setup's and
-some dashboard screens' headings (the content languages screen's, for one) take the browser's own
-`<h1>` size, 28px; approvals and email set theirs to `--wt-font-size-lg`; menus and modifiers to
-`--wt-font-size-xl`. Left alone on purpose, sized in `rem`: the till's enrolment number and setup's
+later"_). Open: setup headings and the excluded fiscal-verifactu, staff and staff-role
+screens still need checking against the Typography roles in `docs/developers/design-system.md`.
+The floor-plan editor's modal heading keeps the LG role. Left alone on purpose, sized in `rem`: the till's enrolment number and setup's
 cloud-recovery code. **Phone check, the
 owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is widely reported to
 zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,

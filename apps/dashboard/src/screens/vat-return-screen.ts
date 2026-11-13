@@ -2,7 +2,7 @@ import "../widgets/handover-report-warning.js";
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { capitaliseFirst } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, type ComboboxOption } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, focusFirstInvalid, type ComboboxOption } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -51,13 +51,13 @@ function periodOptions(): ComboboxOption[] {
 export class VatReturnScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
       }
       h1 {
         margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
       .intro {

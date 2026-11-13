@@ -7,6 +7,7 @@ import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/da
 import { formatMoney, languageDisplayName, searchBy, type DeleteImpact } from "@waitron/shared";
 import {
   baseStyles,
+  pageTitleStyles,
   ReorderController,
   reorder,
   type ReorderModel,
@@ -154,6 +155,7 @@ function languageName(code: string): string {
 export class AdjustmentReasonsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     ReorderController.styles,
     ReorderController.tableStyles,
     css`

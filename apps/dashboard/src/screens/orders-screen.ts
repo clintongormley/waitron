@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { UrlStateController, baseStyles, type DataTableColumn } from "@waitron/ui";
+import { UrlStateController, baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -49,6 +49,7 @@ const FIELD_OF: Record<string, { control: string; message: StringKey }> = {
 export class OrdersScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -63,7 +64,6 @@ export class OrdersScreen extends LitElement {
       }
       h1 {
         margin: 0;
-        font-size: var(--wt-font-size-lg);
       }
       .filters {
         display: flex;

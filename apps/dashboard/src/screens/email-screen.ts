@@ -1,7 +1,7 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "./email-settings-panel.js";
 import type { DashboardApi, EmailInbox, TestEmail, TestEmailAddress } from "../api/client.js";
@@ -17,13 +17,13 @@ const displayAddress = (address: TestEmailAddress): string =>
 export class EmailScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
       }
       h1 {
         margin-top: 0;
-        font-size: var(--wt-font-size-lg);
       }
       .status,
       .message,

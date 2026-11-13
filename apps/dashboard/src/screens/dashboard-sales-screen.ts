@@ -7,7 +7,7 @@ import { ContentLanguageController } from "@waitron/ui";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -67,6 +67,7 @@ export class SalesScreen extends LitElement {
 
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     departmentTakingsStyles,
     metricStyles,
     topSellersStyles,
@@ -76,7 +77,6 @@ export class SalesScreen extends LitElement {
       }
       h1 {
         margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
       h2 {

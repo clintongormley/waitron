@@ -5,6 +5,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { isPlainWebAddress } from "@waitron/shared";
 import {
   baseStyles,
+  pageTitleStyles,
   draftScopeFor,
   focusFirstInvalid,
   leaveCoordinatorFor,
@@ -165,6 +166,7 @@ const WEEKDAYS: { n: number; labelKey: Parameters<typeof t>[0] }[] = [
 export class BackupScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -178,7 +180,6 @@ export class BackupScreen extends LitElement {
       }
       .title {
         margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
       h2 {

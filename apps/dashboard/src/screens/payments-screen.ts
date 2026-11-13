@@ -4,6 +4,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  pageTitleStyles,
   focusFirstInvalid,
   submitOnEnter,
   draftScopeFor,
@@ -173,13 +174,13 @@ async function takeStatusSlot(): Promise<() => void> {
 export class PaymentsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
       }
       h1 {
         margin-top: 0;
-        font-size: var(--wt-font-size-lg);
       }
       a {
         color: var(--wt-color-primary-text);

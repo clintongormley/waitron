@@ -1,4 +1,4 @@
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query } from "lit/decorators.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -11,6 +11,7 @@ import type { CourseList } from "../widgets/course-list.js";
 export class CoursesScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;

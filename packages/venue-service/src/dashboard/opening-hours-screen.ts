@@ -10,6 +10,7 @@ import {
 } from "@waitron/dashboard-kit";
 import {
   baseStyles,
+  pageTitleStyles,
   decodePathSegment,
   leaveCoordinatorFor,
   UrlStateController,
@@ -106,6 +107,7 @@ class MonthWatch {
 export class OpeningHoursScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     segmentedStyles,
     css`
       :host {

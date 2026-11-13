@@ -17,6 +17,7 @@ import {
   formMessageStyles,
   submitOnEnter,
   baseStyles,
+  pageTitleStyles,
   navigationGuardFor,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -85,6 +86,7 @@ function actionEmailFromUrl(): string {
 export class LoginScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     formMessageStyles,
     css`
       :host {

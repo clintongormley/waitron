@@ -5,6 +5,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import {
   UrlStateController,
   baseStyles,
+  pageTitleStyles,
   setContentLanguages,
   type DataTableColumn,
 } from "@waitron/ui";
@@ -62,6 +63,7 @@ type Target = { kind: Kind; id: string; name: string };
 export class ModifiersScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -69,7 +71,6 @@ export class ModifiersScreen extends LitElement {
       }
       h1 {
         margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-xl);
       }
       .error {
         color: var(--wt-color-danger);

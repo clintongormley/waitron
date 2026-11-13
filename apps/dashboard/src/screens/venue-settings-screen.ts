@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, UrlStateController } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, UrlStateController } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-tabs.js";
 import { dashboardPath } from "../navigation.js";
 import { t } from "../i18n/t.js";
@@ -31,6 +31,7 @@ export interface VenueSettingsPanel {
 export class VenueSettingsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
