@@ -619,6 +619,8 @@ Files: `packages/fiscal-verifactu/src/drain.ts` (the claim hold's run test only,
 
 ## PR 3 — a synchronised restore names its series without AEAT (Q1)
 
+(2026-11-13: superseded for the build by `2026-11-13-a1420-restore-series-check.md`, after the owner's 2026-11-11 rule to stop reading AEAT's time.)
+
 ### Task 11: the comparison trusts a synchronised box (fiscal-verifactu)
 
 Files: `packages/fiscal-verifactu/src/hour-clock.ts`, `hour-clock.test.ts`, `hour-setup-clock.ts`, `hour-setup-clock.test.ts`, `errors.ts` (optional param on `sif.allocation_invalid`: `internet?: string`, for PR 4).
@@ -643,6 +645,8 @@ Files: `packages/module/src/operation-preparation.ts` (type), `packages/provisio
 - [ ] `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node src/hosted-hour-recovery.test.ts`, `pnpm --filter @waitron/server exec vitest run src/restore-request.test.ts src/hour-recovery-placement-2.test.ts src/hour-recovery-placement-3.test.ts`, `pnpm exec vitest run scripts/module-seams.test.ts scripts/claude-md-pointers.test.ts`, then the fiscal core command.
 
 ## PR 4 — the restore waits for the internet without counting, and the page names the cause
+
+(2026-11-13: superseded for the build by `2026-11-13-a1420-restore-series-check.md`, after the owner's 2026-11-11 rule to stop reading AEAT's time.)
 
 Asked for by the owner on 2026-11-07, through the watcher (D6, D7).
 
