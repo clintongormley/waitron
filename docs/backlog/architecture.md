@@ -771,7 +771,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 ## A974. Finish the remaining English names in general code.
 
 - **A974. Finish the remaining English names in general code.** Private bill/party bindings
-  remain in party-table-actions, till-api.table-actions and bill-editing.transitions.
+  remain in other suites, including party-table-actions, till-api.table-actions and bill-editing.transitions.
   Split-suite comments, shared helper consumers and file names also remain.
   Private drink bindings remain in `sale-till-source.receipt.test.ts`,
   `issuance-pass.fiscal-identity.test.ts`, `list-unit-price.fiscal-identity.test.ts` and

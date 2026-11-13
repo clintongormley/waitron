@@ -1604,7 +1604,7 @@ describe("two tills at once", () => {
       const lewisRead = await revisionOf(v, lewis.partyId);
       const toCounter = () =>
         inTx(v, (tx) => moveBill(tx, v.cfg, second, { counter: { zoneId: null } }, { ...read }));
-      const toLuis = () =>
+      const toLewis = () =>
         inTx(v, (tx) =>
           moveBill(
             tx,
@@ -1618,7 +1618,7 @@ describe("two tills at once", () => {
             },
           ),
         );
-      const [winner, loser] = first === "A" ? [toCounter, toLuis] : [toLuis, toCounter];
+      const [winner, loser] = first === "A" ? [toCounter, toLewis] : [toLewis, toCounter];
 
       await winner();
       const bills = [anna.tabId, lewis.tabId, second];
