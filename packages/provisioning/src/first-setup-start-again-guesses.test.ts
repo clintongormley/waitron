@@ -140,6 +140,7 @@ it("two tries sent at once are counted one after the other", async () => {
 
 it("a clock set back a year never makes a wait longer than 15 minutes", async () => {
   const stateDir = await scratch();
+  await mkdir(join(stateDir, "flows/setup"), { recursive: true });
   const attemptId = randomUUID();
   const yearAhead = at(365 * 24 * 60 * MINUTE).toISOString();
   await writeFile(
@@ -167,7 +168,7 @@ it.skipIf(process.getuid?.() === 0)("an unwritable counter refuses the try", asy
   const attemptId = randomUUID();
   const base = await scratch();
   const blocked = await scratch();
-  await mkdir(join(blocked, START_AGAIN_GUESSES_FILE));
+  await mkdir(join(blocked, START_AGAIN_GUESSES_FILE), { recursive: true });
   await chmod(base, 0o500);
   for (const stateDir of [join(base, "state"), blocked]) {
     let reached = false;
@@ -180,11 +181,16 @@ it.skipIf(process.getuid?.() === 0)("an unwritable counter refuses the try", asy
     expect(reached).toBe(false);
   }
   expect(await readdir(base)).toEqual([]);
-  expect(await readdir(blocked)).toEqual([START_AGAIN_GUESSES_FILE]);
+  expect((await readdir(blocked, { recursive: true })).sort()).toEqual([
+    "flows",
+    "flows/setup",
+    START_AGAIN_GUESSES_FILE,
+  ]);
 });
 
 it("a damaged counter reads as five failures", async () => {
   const stateDir = await scratch();
+  await mkdir(join(stateDir, "flows/setup"), { recursive: true });
   const attemptId = randomUUID();
   for (const damaged of [
     "{",
@@ -213,6 +219,7 @@ it("a damaged counter reads as five failures", async () => {
 
 it("another recovery form or setup attempt keeps the existing password wait", async () => {
   const stateDir = await scratch();
+  await mkdir(join(stateDir, "flows/setup"), { recursive: true });
   const attemptId = randomUUID();
   await writeFile(
     join(stateDir, START_AGAIN_GUESSES_FILE),
@@ -233,6 +240,7 @@ it("another recovery form or setup attempt keeps the existing password wait", as
 
 it("a counter written under the attempt id's upper-case spelling is the lower-case spelling's counter", async () => {
   const stateDir = await scratch();
+  await mkdir(join(stateDir, "flows/setup"), { recursive: true });
   const attemptId = randomUUID();
   await writeFile(
     join(stateDir, START_AGAIN_GUESSES_FILE),
@@ -280,6 +288,7 @@ it("a refused try with nothing to cap writes nothing", async () => {
 
 it("a capped refusal whose write fails still refuses password.throttled with the wait", async () => {
   const stateDir = await scratch();
+  await mkdir(join(stateDir, "flows/setup"), { recursive: true });
   const attemptId = randomUUID();
   const yearAhead = at(365 * 24 * 60 * MINUTE).toISOString();
   await writeFile(

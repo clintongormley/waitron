@@ -176,7 +176,7 @@ export function readFirstSetupRecoveryDeliverySnapshot(
   modules: readonly WaitronModule[],
 ) {
   const bytes = originals.find(
-    (entry) => entry.name === `state/first-fiscal-documents/${module}.recovery.json`,
+    (entry) => entry.name === `state/flows/setup/documents/${module}.recovery.json`,
   )?.bytes;
   if (bytes == null) return null;
   if (bytes.length > limit) refuse();

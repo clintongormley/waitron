@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -40,12 +40,13 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 });
 
 const failure = (code: string) => Object.assign(new Error(`simulated ${code}`), { code });
-const STATE = "setup-operation.json";
+const STATE = "flows/setup/operation.json";
 
 const dirs: string[] = [];
 async function stateDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "waitron-setup-operation-faults-"));
   dirs.push(dir);
+  await mkdir(join(dir, "flows/setup"), { recursive: true });
   return dir;
 }
 
@@ -60,7 +61,7 @@ describe("setup operation store under filesystem faults", () => {
     const store = createSetupOperationStore(dir);
     hooks.armed.push({
       op: "open",
-      file: basename(dir),
+      file: "setup",
       when: "before",
       run: () => Promise.reject(failure("EIO")),
     });
@@ -84,7 +85,7 @@ describe("setup operation store under filesystem faults", () => {
       store.run("provision", "request-a", async (operation) => {
         hooks.armed.push({
           op: "open",
-          file: basename(dir),
+          file: "setup",
           when: "before",
           run: () => Promise.reject(failure("EIO")),
         });
@@ -104,7 +105,7 @@ describe("setup operation store under filesystem faults", () => {
     const dir = await stateDir();
     hooks.armed.push({
       op: "unlink",
-      file: STATE,
+      file: basename(STATE),
       when: "before",
       run: () => Promise.reject(failure("EIO")),
     });

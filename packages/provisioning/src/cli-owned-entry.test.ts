@@ -172,7 +172,7 @@ syncBuiltinESMExports();\n`,
   expect(output).not.toContain("[no/yes/unknown]");
   expect(answered.size).toBe(0);
   expect(output).not.toContain("SYNTHETIC-owner-password");
-  const state = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+  const state = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
   expect(state).toMatchObject({ status: "claimed", consumptionIntent: false, inputs: {} });
   await expect(readFile(join(stateDir, "module-preparation-state.json"))).rejects.toMatchObject({
     code: "ENOENT",
@@ -284,7 +284,7 @@ it("the built preproduction command completes checked publication in one run", a
   expect(output).not.toContain("SYNTHETIC-owner-password");
   expect(output).toContain(WAIT_WORDS);
   expect(answered.get("Have you kept this recovery pack? [y/N]: ")).toBe(1);
-  const state = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+  const state = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
   expect(state.status).toBe("complete");
   expect(JSON.parse(await readFile(join(stateDir, "modules.json"), "utf8"))).toEqual({
     modules: { "fiscal-verifactu": true, "fiscal-none": false },
@@ -478,7 +478,7 @@ it("the built production command checks readiness and seals settings without sen
     errors: "",
     childError: undefined,
   });
-  const state = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+  const state = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
   expect(state.status).toBe("complete");
   expect(JSON.stringify(state)).not.toContain(certificate.passphrase);
   expect(output).not.toContain(certificate.passphrase);
@@ -669,7 +669,7 @@ it("the built production command runs a confirmed isolated test and refuses acti
   expect(output).toContain("Fiscal test: uncertain");
   expect(output).not.toContain(certificate.passphrase);
   expect(output).not.toContain(certificate.pfxBase64);
-  const state = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+  const state = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
   expect(state.status).toBe("consumption-intent");
   const stored = await openVenueDatabase(target);
   try {
@@ -701,7 +701,7 @@ it("the built production command runs a confirmed isolated test and refuses acti
   } finally {
     await sample.close();
   }
-  await expect(readFile(join(stateDir, "fiscal-readiness.json"))).rejects.toMatchObject({
+  await expect(readFile(join(stateDir, "flows/setup/readiness.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
 });

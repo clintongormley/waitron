@@ -60,7 +60,8 @@ async function onlyLockFiles(s: Server) {
     expect(
       (await readdir(dir)).filter((name) => !name.endsWith(".lock")),
       dir,
-    ).toEqual([]);
+    ).toEqual(dir === s.stateDir ? ["flows"] : []);
+  expect(await readdir(join(s.stateDir, "flows"))).toEqual([]);
 }
 
 const STOPPABLE: [string, () => Promise<Server>][] = [

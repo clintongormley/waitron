@@ -66,7 +66,7 @@ function frozenAttempt(passwordHash: string): FirstSetupFrozen {
 }
 
 /**
- * A first setup claimed through `createFirstSetupStore(...).claim(...)`, whose `first-setup.json`
+ * A first setup claimed through `createFirstSetupStore(...).claim(...)`, whose `flows/setup/record.json`
  * `parseFirstSetupState` accepts and whose `ownerVerifier` is `hashPassword(START_AGAIN_ADMIN_PASSWORD)`,
  * then A1042's marker over it: the box a cut left between the marker and the deletion. `before` runs
  * after the claim and before the marker, for files the attempt itself wrote (they are marked).

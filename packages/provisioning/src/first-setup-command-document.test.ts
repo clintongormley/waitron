@@ -138,7 +138,7 @@ it("saves the real module PDF privately and grants activation only for its exact
   expect((await stat(f.path)).mode & 0o777).toBe(0o600);
   const manifest = JSON.parse(
     await readFile(
-      join(f.options.stateDir, "first-fiscal-documents", `${MODULE}.recovery.json`),
+      join(f.options.stateDir, "flows/setup/documents", `${MODULE}.recovery.json`),
       "utf8",
     ),
   );
@@ -267,7 +267,7 @@ it.each([
     code: "setup.not_ready",
   });
   await expect(
-    readFile(join(f.options.stateDir, "first-setup-node-key.json")),
+    readFile(join(f.options.stateDir, "flows/setup/node-key.json")),
   ).rejects.toMatchObject({ code: "ENOENT" });
   expect(f.prompts).toEqual([]);
   expect(f.output).toEqual([
@@ -464,7 +464,7 @@ it("a wrong staging password creates no PDF or retained key", async () => {
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
   await expect(
-    readFile(join(f.options.stateDir, "first-setup-node-key.json")),
+    readFile(join(f.options.stateDir, "flows/setup/node-key.json")),
   ).rejects.toMatchObject({ code: "ENOENT" });
 });
 
@@ -477,7 +477,7 @@ it("a command without a document contribution refuses before staging any key", a
     f.runtime.commandDelivery.deliver(f.owner, f.io, f.path, "en"),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
   await expect(
-    readFile(join(f.options.stateDir, "first-setup-node-key.json")),
+    readFile(join(f.options.stateDir, "flows/setup/node-key.json")),
   ).rejects.toMatchObject({ code: "ENOENT" });
   expect(f.prompts).toEqual([]);
 });

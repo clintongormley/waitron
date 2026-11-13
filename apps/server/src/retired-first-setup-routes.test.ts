@@ -1,8 +1,8 @@
+import { dirname, join } from "node:path";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { afterEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
@@ -96,7 +96,8 @@ it("the repair entry no longer serves Finish setup", async () => {
   const venueDir = join(root, "venue");
   await mkdir(stateDir);
   await mkdir(venueDir);
-  await writeFile(join(stateDir, "first-setup.json"), "retained torn claim");
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
+  await writeFile(join(stateDir, "flows/setup/record.json"), "retained torn claim");
   const entry = await resolveFirstSetupEntry({ stateDir, venueDir }, {});
   if (entry.kind !== "resolution") throw new Error(`expected the repair entry, got ${entry.kind}`);
   const base = "/setup-api/first-setup/resolution";
@@ -129,7 +130,7 @@ it("no route takes the setup password to win the setup back", async () => {
     if (entry.kind !== "resolution")
       throw new Error(`expected the repair entry, got ${entry.kind}`);
     const inspection = await host.resolution.inspectFirstSetupResolution();
-    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
     const claim = {
       password: PASSWORD,
     };
@@ -161,7 +162,7 @@ it("no route takes the setup password to win the setup back", async () => {
           https,
         );
         expect([name, path, response.status]).toEqual([name, path, 404]);
-        expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+        expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
       }
   } finally {
     socket.destroy();

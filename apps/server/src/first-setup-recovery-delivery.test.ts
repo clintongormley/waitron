@@ -222,7 +222,7 @@ async function documentFixture() {
     statement,
     register,
     kept,
-    path: join(f.stateDir, "first-fiscal-documents", `${MODULE}.recovery.json`),
+    path: join(f.stateDir, "flows/setup/documents", `${MODULE}.recovery.json`),
   };
 }
 
@@ -272,7 +272,7 @@ it("kept confirmation installs the delivered verifier once, with only public met
     expect(Buffer.from(entry.bytes!).toString()).not.toContain(PASSWORD);
     expect(Buffer.from(entry.bytes!).toString()).not.toContain("%PDF-");
   }
-  expect(await readdir(join(f.stateDir, "first-fiscal-documents"))).toEqual([
+  expect(await readdir(join(f.stateDir, "flows/setup/documents"))).toEqual([
     `${MODULE}.recovery.json`,
   ]);
   await expect(f.activate()).rejects.toMatchObject({ code: "setup.owner_required" });
@@ -480,7 +480,7 @@ it("an empty never-activated setup deletes its recovery document when starting a
     ownerGeneration: inspection.ownerGeneration!,
   });
   await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
-  await expect(readdir(join(f.stateDir, "first-fiscal-documents"))).rejects.toMatchObject({
+  await expect(readdir(join(f.stateDir, "flows/setup/documents"))).rejects.toMatchObject({
     code: "ENOENT",
   });
   const next = createFirstSetupModuleHost({

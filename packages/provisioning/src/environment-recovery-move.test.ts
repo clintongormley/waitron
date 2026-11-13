@@ -33,7 +33,7 @@ it("sets aside registered venue state, keeps unrelated files and preserves first
     "spare-space",
     "spare-space.released",
     "recovery.lock",
-    "first-setup-start-again-guesses.json",
+    "flows/setup/start-again-guesses.json",
     "recovery.json",
     "logs",
     "tls",

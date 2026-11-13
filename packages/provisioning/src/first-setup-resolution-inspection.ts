@@ -181,7 +181,7 @@ export function createFirstSetupResolutionInspection(
         }
       };
       for (const file of inspection.artifacts) {
-        if (file.name.startsWith("outside-") || file.name === "first-fiscal-documents") continue;
+        if (file.name.startsWith("outside-") || file.name === "flows/setup/documents") continue;
         const venue = ["venue.db", "venue.db-wal"].includes(file.name);
         await capture(
           join(venue ? options.venueDir : options.stateDir, file.name),
@@ -227,10 +227,10 @@ export function createFirstSetupResolutionInspection(
       };
       await directory(
         join(options.stateDir, FIRST_FISCAL_DOCUMENTS_DIR),
-        "directory:state/first-fiscal-documents",
+        "directory:state/flows/setup/documents",
         FIRST_FISCAL_DOCUMENTS_DIR,
-        (name) => `state/first-fiscal-documents/${name}`,
-        (name) => `first-fiscal-documents/${name}`,
+        (name) => `state/flows/setup/documents/${name}`,
+        (name) => `flows/setup/documents/${name}`,
       );
       for (const [index, configured] of (options.publicEvidencePaths ?? []).entries()) {
         const path = join(
@@ -300,21 +300,21 @@ export function createFirstSetupResolutionInspection(
       try {
         const directory = await lstat(documents);
         if (!directory.isDirectory() || directory.isSymbolicLink())
-          artifacts.push({ name: "first-fiscal-documents", status: "unreadable" });
+          artifacts.push({ name: "flows/setup/documents", status: "unreadable" });
         else {
-          artifacts.push({ name: "first-fiscal-documents", status: "present" });
+          artifacts.push({ name: "flows/setup/documents", status: "present" });
           const names = await readdir(documents);
           if (names.length > 1024)
-            artifacts.push({ name: "first-fiscal-documents", status: "unreadable" });
+            artifacts.push({ name: "flows/setup/documents", status: "unreadable" });
           else
             for (const name of names.sort()) {
               const file = await artifact(documents, name, 48000);
-              artifacts.push({ ...file, name: `first-fiscal-documents/${name}` });
+              artifacts.push({ ...file, name: `flows/setup/documents/${name}` });
             }
         }
       } catch (error) {
         if (!missing(error))
-          artifacts.push({ name: "first-fiscal-documents", status: "unreadable" });
+          artifacts.push({ name: "flows/setup/documents", status: "unreadable" });
       }
       for (const [index, path] of (options.publicEvidencePaths ?? []).entries()) {
         try {
@@ -353,7 +353,7 @@ export function createFirstSetupResolutionInspection(
           artifacts.push({ name: label, status: missing(error) ? "missing" : "unreadable" });
         }
       }
-      const stateFile = artifacts.find((a) => a.name === "first-setup.json")!;
+      const stateFile = artifacts.find((a) => a.name === "flows/setup/record.json")!;
       const pair: FirstSetupInspection["pair"] =
         repair === undefined
           ? stateFile.status === "missing"

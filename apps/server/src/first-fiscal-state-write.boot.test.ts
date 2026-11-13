@@ -23,7 +23,7 @@ it("boots with the retained setup record after abandoning it", async () => {
     const root = await fs.realpath(f.root);
     const stateDir = join(root, "restart-state");
     const venueDir = join(root, "restart-venue");
-    const statePath = join(stateDir, "first-setup.json");
+    const statePath = join(stateDir, "flows/setup/record.json");
     const store = createFirstSetupStore({
       stateDir,
       venueDir,

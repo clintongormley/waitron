@@ -473,7 +473,7 @@ it("after a move, finishStartAgainDeletion deletes only the marked files", async
   });
   for (const marked of ["node.db"])
     await expect(lstat(join(roots.venueDir, marked))).rejects.toMatchObject({ code: "ENOENT" });
-  await expect(lstat(join(roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
+  await expect(lstat(join(roots.stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
   expect(await readFile(join(roots.stateDir, record.setAside!.state, "trading.env"), "utf8")).toBe(

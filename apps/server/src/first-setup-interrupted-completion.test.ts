@@ -22,7 +22,7 @@ import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 
 async function interruptedCompletion(f: Held): Promise<void> {
-  const mark = join(f.roots.stateDir, "first-setup.json");
+  const mark = join(f.roots.stateDir, "flows/setup/record.json");
   let state = (await f.host.store.read())!;
   state = await f.host.store.update(state.frozen.attemptId, state.revision, {
     kind: "publication",

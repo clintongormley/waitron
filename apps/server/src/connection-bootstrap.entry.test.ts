@@ -1,6 +1,6 @@
+import { dirname, join } from "node:path";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { request as httpsRequest, get as httpsGet } from "node:https";
 import { Hono } from "hono";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -172,7 +172,8 @@ it.each(["missing-key", "malformed", "mismatch", "missing-ca", "expired"] as con
 
 it("direct repair re-enters resolution on verified HTTPS and the returned handle closes it", async () => {
   const f = await fixture();
-  await writeFile(join(f.stateDir, "first-setup.json"), "torn claim");
+  await mkdir(dirname(join(f.stateDir, "flows/setup/record.json")), { recursive: true });
+  await writeFile(join(f.stateDir, "flows/setup/record.json"), "torn claim");
   const [port, landingPort] = (await freePorts(2)) as [number, number];
   const strict = vi.fn(async () => {
     throw new Error("strict start reached unresolved workspace");
@@ -203,7 +204,7 @@ it("direct repair re-enters resolution on verified HTTPS and the returned handle
   );
   expect(strict).not.toHaveBeenCalled();
   expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(material.caCertPem);
-  expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe("torn claim");
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe("torn claim");
   await expect(readFile(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
   await handle.close();
   await expect(get(port, "/")).rejects.toThrow();
@@ -223,8 +224,10 @@ it.each(
   "supervised $level transport repairs $damage before any staged work or recovery counter mutation",
   async ({ level, damage }) => {
     const f = await fixture(damage);
-    if (level === "resolution")
-      await writeFile(join(f.stateDir, "first-setup.json"), "retained torn claim");
+    if (level === "resolution") {
+      await mkdir(dirname(join(f.stateDir, "flows/setup/record.json")), { recursive: true });
+      await writeFile(join(f.stateDir, "flows/setup/record.json"), "retained torn claim");
+    }
     const [port] = (await freePorts(1)) as [number];
     const forbidden = vi.fn(async () => {
       throw new Error("protected work reached");

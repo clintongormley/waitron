@@ -1,7 +1,7 @@
+import { dirname, join } from "node:path";
 import { X509Certificate, createPrivateKey } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createSecureContext } from "node:tls";
 import forge from "node-forge";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -54,7 +54,9 @@ async function fixture(initial: SelfSignedMaterial | null = material) {
       await writeFile(join(stateDir, "tls", name), values[i]!);
   }
   await writeFile(join(stateDir, "secrets.env"), "retained-vault-key\n");
-  await writeFile(join(stateDir, "first-setup.json"), "retained-attempt\n");
+  await mkdir(join(stateDir, "flows/setup"), { recursive: true });
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
+  await writeFile(join(stateDir, "flows/setup/record.json"), "retained-attempt\n");
   return {
     stateDir,
     hostnames: names,
@@ -120,7 +122,9 @@ it("preserves a usable CA when the leaf is lost", async () => {
   expect(saved.manifest.absent).toContain("server.pem");
   await validInstalled(f.stateDir);
   expect(await readFile(join(f.stateDir, "secrets.env"), "utf8")).toBe("retained-vault-key\n");
-  expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe("retained-attempt\n");
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe(
+    "retained-attempt\n",
+  );
 });
 
 it.each(["missing-cert", "malformed", "expired", "mismatched", "wrong-host", "wrong-ip"])(
@@ -663,6 +667,7 @@ it("the first repair deletes every retired certificate file and older repair key
 
 it("flushes newly created flow parents before publishing its first record", async () => {
   const f = await fixture(null);
+  await rm(join(f.stateDir, "flows"), { recursive: true });
   const events = await syncsAndRenames(faults, () => repairBoxTls(f));
   const created = events.indexOf(`mkdir ${join(f.stateDir, "flows/tls-repair")}`);
   const published = events.findIndex(

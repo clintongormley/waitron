@@ -194,7 +194,7 @@ export async function ordinaryServer(
       },
       { incoming: { socket } },
     );
-  const record = () => readFile(join(stateDir, "first-setup.json"));
+  const record = () => readFile(join(stateDir, "flows/setup/record.json"));
   /** The owner's own tab, with the headers of the attempt as it stands now. */
   const ownerChange = async (action: string, body: unknown = {}) => {
     const state = (await host.store.readResumable())!.state;

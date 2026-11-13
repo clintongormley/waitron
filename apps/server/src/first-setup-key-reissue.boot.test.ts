@@ -58,12 +58,12 @@ it("reissues on the real setup HTTPS listener after a restart loses the raw key"
     expect(proof.status).toBe(200);
     const initial = await post("node-key", proof.body);
     expect(initial.status).toBe(200);
-    const keyPath = join(stateDir, "first-setup-node-key.json");
+    const keyPath = join(stateDir, "flows/setup/node-key.json");
     const original = JSON.parse(await readFile(keyPath, "utf8"));
     await server.close();
     server = undefined;
     server = await startServer(env);
-    const before = await readFile(join(stateDir, "first-setup.json"));
+    const before = await readFile(join(stateDir, "flows/setup/record.json"));
     const refused = await post("node-key-reissue", { password: "wrong password" });
     expect(refused.status).toBe(403);
     expect(refused.body.error.code).toBe("setup.owner_required");
@@ -75,7 +75,7 @@ it("reissues on the real setup HTTPS listener after a restart loses the raw key"
     expect(reissued.body.stage.stageId).not.toBe(initial.body.stage.stageId);
     expect(await verifySecretAsync(reissued.body.key.secret, replacement.verifier)).toBe(true);
     expect(await verifySecretAsync(initial.body.key.secret, replacement.verifier)).toBe(false);
-    expect(await readFile(join(stateDir, "first-setup.json"))).toEqual(before);
+    expect(await readFile(join(stateDir, "flows/setup/record.json"))).toEqual(before);
   } finally {
     await agent?.close();
     await server?.close();

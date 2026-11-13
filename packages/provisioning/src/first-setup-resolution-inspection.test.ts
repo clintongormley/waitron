@@ -1,3 +1,4 @@
+import { dirname, join } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
@@ -13,7 +14,6 @@ import {
   truncate,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS } from "@waitron/db";
@@ -87,7 +87,7 @@ it.each(["claim", "abandon"] as const)(
   "describes an interrupted %s without repairing it or weakening strict admission",
   async (phase) => {
     const f = await fixture(phase);
-    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
     const db = await readFile(join(f.venueDir, "venue.db"));
     const entries = await readdir(f.venueDir);
     expect((await f.store.read())?.status).toBe(phase === "claim" ? "claimed" : "abandoned");
@@ -100,7 +100,7 @@ it.each(["claim", "abandon"] as const)(
       ownerGeneration: 1,
     });
     expect(inspected.inspectionId).toMatch(/^[a-f0-9]{64}$/);
-    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
     expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(db);
     expect(await readdir(f.venueDir)).toEqual(entries);
     expect((await f.store.read())?.status).toBe(phase === "claim" ? "claimed" : "abandoned");
@@ -130,8 +130,14 @@ it.each(["missing", "corrupt", "partial", "symlink"] as const)(
     const f = await fixture();
     const path = join(f.venueDir, "venue.db");
     await rm(path);
-    if (kind === "corrupt") await writeFile(path, "not a SQLite file");
-    if (kind === "partial") await writeFile(path, Buffer.alloc(0));
+    if (kind === "corrupt") {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "not a SQLite file");
+    }
+    if (kind === "partial") {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, Buffer.alloc(0));
+    }
     if (kind === "symlink") await symlink(join(f.root, "missing.db"), path);
     const before = await readdir(f.venueDir);
     const result = await f.service.inspectFirstSetupResolution();
@@ -144,9 +150,9 @@ it.each(["missing", "corrupt", "partial", "symlink"] as const)(
 it.each([
   "flows/restore/record.json",
   "reset-request.json",
-  "setup-operation.json",
-  "first-setup-node-key.json",
-  "module-operation-public.json",
+  "flows/setup/operation.json",
+  "flows/setup/node-key.json",
+  "flows/setup/public-evidence.json",
 ])("does not call %s evidence empty", async (name) => {
   const f = await fixture();
   await mkdir(join(f.stateDir, name, ".."), { recursive: true });
@@ -156,14 +162,14 @@ it.each([
 });
 it("binds exact delivery chunks and retained outside evidence into the inspection ID", async () => {
   const f = await fixture("active");
-  const root = join(f.stateDir, "first-fiscal-documents");
+  const root = join(f.stateDir, "flows/setup/documents");
   await mkdir(root);
   const first = await f.service.inspectFirstSetupResolution();
   await writeFile(join(root, "orphan-0.json"), JSON.stringify({ data: "YQ==" }));
   const second = await f.service.inspectFirstSetupResolution();
   expect(second.inspectionId).not.toBe(first.inspectionId);
   expect(second.artifacts).toContainEqual(
-    expect.objectContaining({ name: "first-fiscal-documents/orphan-0.json", status: "present" }),
+    expect.objectContaining({ name: "flows/setup/documents/orphan-0.json", status: "present" }),
   );
   await writeFile(join(root, "orphan-0.json"), '{"data":"Yg=="}');
   expect((await f.service.inspectFirstSetupResolution()).inspectionId).not.toBe(
@@ -174,12 +180,15 @@ it.each(["missing", "corrupt", "wrong-root"] as const)(
   "reports %s retained ownership as an unusable pair with no revision",
   async (why) => {
     const f = await fixture();
-    const path = join(f.stateDir, "first-setup.json");
+    const path = join(f.stateDir, "flows/setup/record.json");
     if (why === "missing") await rm(path);
-    else if (why === "corrupt") await writeFile(path, "{broken");
-    else {
+    else if (why === "corrupt") {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "{broken");
+    } else {
       const state = JSON.parse(await readFile(path, "utf8"));
       state.venueDir = join(f.root, "other");
+      await mkdir(dirname(path), { recursive: true });
       await writeFile(path, JSON.stringify(state));
     }
     const inspected = await f.service.inspectFirstSetupResolution();
@@ -291,9 +300,9 @@ it("retains outside receipt filename identity when the same bytes move to a diff
 });
 it("retains an empty delivery directory as incomplete evidence", async () => {
   const f = await fixture();
-  await mkdir(join(f.stateDir, "first-fiscal-documents"));
+  await mkdir(join(f.stateDir, "flows/setup/documents"));
   const result = await f.service.inspectFirstSetupResolution();
-  expect(result.artifacts).toContainEqual({ name: "first-fiscal-documents", status: "present" });
+  expect(result.artifacts).toContainEqual({ name: "flows/setup/documents", status: "present" });
 });
 it("describes absent roots without creating a workspace", async () => {
   const root = await mkdtemp(join(tmpdir(), "first-resolution-empty-"));
@@ -318,24 +327,30 @@ it("reports a database carrying a taxpayer as occupied and leaves the marker unc
   const { seedTenant } = await import("@waitron/db/testing/seed.js");
   await seedTenant(suite.db);
   const f = await fixture();
-  const before = await readFile(join(f.stateDir, "first-setup.json"));
+  const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
   const result = await f.service.inspectFirstSetupResolution();
   expect(result.database).toBe("occupied");
-  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
 });
 it.each(["symlink", "directory", "oversize", "array"] as const)(
   "retains an unreadable or invalid %s artifact as evidence",
   async (kind) => {
     const f = await fixture();
-    const path = join(f.stateDir, "first-setup-node-key.json");
+    const path = join(f.stateDir, "flows/setup/node-key.json");
     if (kind === "symlink") await symlink(join(f.root, "lost.json"), path);
     if (kind === "directory") await mkdir(path);
-    if (kind === "oversize") await writeFile(path, "x".repeat(1024 * 1024 + 1));
-    if (kind === "array") await writeFile(path, "[]");
+    if (kind === "oversize") {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "x".repeat(1024 * 1024 + 1));
+    }
+    if (kind === "array") {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "[]");
+    }
     const inspected = await f.service.inspectFirstSetupResolution();
     expect(inspected.artifacts).toContainEqual(
       expect.objectContaining({
-        name: "first-setup-node-key.json",
+        name: "flows/setup/node-key.json",
         status: kind === "array" ? "invalid" : "unreadable",
       }),
     );
@@ -346,9 +361,9 @@ it("does not follow a symlinked delivery directory", async () => {
   const outside = join(f.root, "outside");
   await mkdir(outside);
   await writeFile(join(outside, "hidden.json"), "{}");
-  await symlink(outside, join(f.stateDir, "first-fiscal-documents"));
+  await symlink(outside, join(f.stateDir, "flows/setup/documents"));
   const result = await f.service.inspectFirstSetupResolution();
-  expect(result.artifacts).toContainEqual({ name: "first-fiscal-documents", status: "unreadable" });
+  expect(result.artifacts).toContainEqual({ name: "flows/setup/documents", status: "unreadable" });
   expect(JSON.stringify(result)).not.toContain("hidden.json");
 });
 it.each(["missing", "symlink", "invalid-file"] as const)(
@@ -399,7 +414,7 @@ it.each(["delivery", "outside"] as const)(
   async (kind) => {
     const f = await fixture();
     const directory =
-      kind === "delivery" ? join(f.stateDir, "first-fiscal-documents") : join(f.root, "receipts");
+      kind === "delivery" ? join(f.stateDir, "flows/setup/documents") : join(f.root, "receipts");
     await mkdir(directory);
     await Promise.all(
       Array.from({ length: 1025 }, (_, i) => writeFile(join(directory, `${i}.json`), "{}")),
@@ -413,7 +428,7 @@ it.each(["delivery", "outside"] as const)(
     });
     const result = await service.inspectFirstSetupResolution();
     expect(result.artifacts).toContainEqual({
-      name: kind === "delivery" ? "first-fiscal-documents" : "outside-receipts-0",
+      name: kind === "delivery" ? "flows/setup/documents" : "outside-receipts-0",
       status: "unreadable",
     });
   },
@@ -423,7 +438,7 @@ it("captures exact configured evidence once and retains missing sources explicit
   const f = await fixture("active");
   const evidence = join(f.root, "public.json");
   const receipts = join(f.root, "receipts");
-  const delivery = join(f.stateDir, "first-fiscal-documents");
+  const delivery = join(f.stateDir, "flows/setup/documents");
   await writeFile(evidence, '{"public":42}');
   await mkdir(receipts);
   await writeFile(join(receipts, "one.json"), '{"receipt":1}');
@@ -450,7 +465,7 @@ it("captures exact configured evidence once and retains missing sources explicit
     bytes: Buffer.from('{"receipt":1}'),
   });
   expect(captured.originals).toContainEqual({
-    name: "state/first-fiscal-documents/one.json",
+    name: "state/flows/setup/documents/one.json",
     bytes: Buffer.from('{"delivery":1}'),
   });
   expect(captured.inspection.inspectionId).toBe(
@@ -511,7 +526,10 @@ it.each(["file", "symlink"] as const)(
       store,
     });
     const inspected = await service.inspectFirstSetupResolution();
-    expect(inspected.artifacts).toContainEqual({ name: "first-setup.json", status: "unreadable" });
+    expect(inspected.artifacts).toContainEqual({
+      name: "flows/setup/record.json",
+      status: "unreadable",
+    });
     expect(inspected.revision).toBeNull();
     expect(inspected.ownerGeneration).toBeNull();
   },
@@ -521,7 +539,8 @@ it.each(["directory", "oversize", "removed"])(
   "does not archive a state artifact replaced by %s after inspection",
   async (fault) => {
     const f = await fixture("active");
-    const path = join(f.stateDir, "module-operation-public.json");
+    const path = join(f.stateDir, "flows/setup/public-evidence.json");
+    await mkdir(dirname(path), { recursive: true });
     await writeFile(path, '{"retained":true}');
     const inspect = f.service.inspectFirstSetupResolution.bind(f.service);
     let changed = false;
@@ -537,12 +556,12 @@ it.each(["directory", "oversize", "removed"])(
       }
       return result;
     };
-    const state = await readFile(join(f.stateDir, "first-setup.json"));
+    const state = await readFile(join(f.stateDir, "flows/setup/record.json"));
     await expect(f.service.captureFirstSetupOriginals()).rejects.toMatchObject({
       code: fault === "removed" ? "setup.attempt_conflict" : "setup.not_ready",
     });
     expect(changed).toBe(true);
-    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(state);
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(state);
   },
 );
 
@@ -550,15 +569,17 @@ it.each(["file", "overflow"])(
   "does not archive a delivery directory replaced by %s after inspection",
   async (fault) => {
     const f = await fixture("active");
-    const directory = join(f.stateDir, "first-fiscal-documents");
+    const directory = join(f.stateDir, "flows/setup/documents");
     const inspect = f.service.inspectFirstSetupResolution.bind(f.service);
     let changed = false;
     f.service.inspectFirstSetupResolution = async () => {
       const result = await inspect();
       if (!changed) {
         changed = true;
-        if (fault === "file") await writeFile(directory, "not a directory");
-        else {
+        if (fault === "file") {
+          await mkdir(dirname(directory), { recursive: true });
+          await writeFile(directory, "not a directory");
+        } else {
           await mkdir(directory);
           await Promise.all(
             Array.from({ length: 1025 }, (_, i) => writeFile(join(directory, `${i}.json`), "{}")),
@@ -567,12 +588,12 @@ it.each(["file", "overflow"])(
       }
       return result;
     };
-    const state = await readFile(join(f.stateDir, "first-setup.json"));
+    const state = await readFile(join(f.stateDir, "flows/setup/record.json"));
     await expect(f.service.captureFirstSetupOriginals()).rejects.toMatchObject({
       code: "setup.not_ready",
     });
     expect(changed).toBe(true);
-    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(state);
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(state);
   },
 );
 
@@ -583,8 +604,9 @@ it.each([
   ["a delivery folder over the file count", "too-large"],
 ] as const)("names the cause when %s after inspection", async (fault, cause) => {
   const f = await fixture("active");
-  const artifact = join(f.stateDir, "module-operation-public.json");
-  const delivery = join(f.stateDir, "first-fiscal-documents");
+  const artifact = join(f.stateDir, "flows/setup/public-evidence.json");
+  const delivery = join(f.stateDir, "flows/setup/documents");
+  await mkdir(dirname(artifact), { recursive: true });
   await writeFile(artifact, '{"retained":true}');
   const inspect = f.service.inspectFirstSetupResolution.bind(f.service);
   let changed = false;
@@ -597,8 +619,10 @@ it.each([
         await mkdir(artifact);
       } else if (fault === "a state artifact over the size limit")
         await truncate(artifact, 128 * 1024 * 1024 + 1);
-      else if (fault === "a delivery folder made a file") await writeFile(delivery, "not a folder");
-      else {
+      else if (fault === "a delivery folder made a file") {
+        await mkdir(dirname(delivery), { recursive: true });
+        await writeFile(delivery, "not a folder");
+      } else {
         await mkdir(delivery);
         await Promise.all(
           Array.from({ length: 1025 }, (_, i) => writeFile(join(delivery, `${i}.json`), "{}")),
@@ -616,13 +640,14 @@ it.each([
 
 it("leaves a damaged ownership record and its marker as they are when inspected", async () => {
   const f = await fixture("active");
-  const path = join(f.stateDir, "first-setup.json");
+  const path = join(f.stateDir, "flows/setup/record.json");
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, "{damaged setup state");
   const before = await readFile(path);
-  const marker = await readFile(join(f.stateDir, "first-setup.json"));
+  const marker = await readFile(join(f.stateDir, "flows/setup/record.json"));
   await f.service.inspectFirstSetupResolution();
   expect(await readFile(path)).toEqual(before);
-  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(marker);
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(marker);
 });
 
 it("classifies a valid database above 128 MiB without treating the snapshot budget as unreadability", async () => {
@@ -652,8 +677,8 @@ it.each(["directory", "fifo"] as const)("rejects a %s before SQLite admission", 
 it("inspects a pair whose database is over the snapshot budget and changes neither record", async () => {
   const f = await fixture("claim");
   await truncate(join(f.venueDir, "venue.db"), 128 * 1024 * 1024 + 4096);
-  const before = await readFile(join(f.stateDir, "first-setup.json"));
-  const marker = await readFile(join(f.stateDir, "first-setup.json"));
+  const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
+  const marker = await readFile(join(f.stateDir, "flows/setup/record.json"));
   const entries = (await readdir(f.stateDir)).sort();
   const inspected = await f.service.inspectFirstSetupResolution();
   expect(inspected).toMatchObject({
@@ -661,7 +686,7 @@ it("inspects a pair whose database is over the snapshot budget and changes neith
     database: "no-venue-rows",
     emptyDatabase: true,
   });
-  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
-  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(marker);
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(marker);
   expect((await readdir(f.stateDir)).sort()).toEqual(entries);
 });

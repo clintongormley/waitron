@@ -1,8 +1,8 @@
+import { dirname, join } from "node:path";
 import * as fs from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { configurationBundle } from "../test/configuration-bundle.js";
@@ -51,14 +51,14 @@ it("keeps the exact artifact and decrypts its passphrase after restart and key r
   const held = await readStagedConfigurationImport(root, rotated);
   expect(held).toEqual({ bundle, artifact, passphrase });
   expect(await readStagedConfigurationImport(root, ring)).toEqual(held);
-  const wrapped = await readFile(join(root, "configuration-import.key"), "utf8");
+  const wrapped = await readFile(join(root, "flows/setup/import/key"), "utf8");
   expect(wrapped).not.toContain(passphrase);
-  for (const name of ["artifact", "key", "json"])
-    expect((await stat(join(root, `configuration-import.${name}`))).mode & 0o777).toBe(0o600);
+  for (const name of ["artifact", "key", "marker.json"])
+    expect((await stat(join(root, `flows/setup/import/${name}`))).mode & 0o777).toBe(0o600);
   await clearStagedConfigurationImport(root);
   expect(await readStagedConfigurationImport(root, ring)).toBeNull();
-  for (const name of ["artifact", "key", "json"])
-    await expect(stat(join(root, `configuration-import.${name}`))).rejects.toMatchObject({
+  for (const name of ["artifact", "key", "marker.json"])
+    await expect(stat(join(root, `flows/setup/import/${name}`))).rejects.toMatchObject({
       code: "ENOENT",
     });
   await clearStagedConfigurationImport(root);
@@ -84,13 +84,17 @@ it("preserves a usable staged import when replacement validation refuses", async
 
 it("ignores an incomplete stage until its publication marker exists", async () => {
   const root = await directory();
-  await writeFile(join(root, "configuration-import.key"), "unfinished");
+  await mkdir(join(root, "flows/setup/import"), { recursive: true });
+  await mkdir(dirname(join(root, "flows/setup/import/key")), { recursive: true });
+  await writeFile(join(root, "flows/setup/import/key"), "unfinished");
   expect(await readStagedConfigurationImport(root, ring)).toBeNull();
-  await writeFile(join(root, "configuration-import.json"), JSON.stringify({ version: 2 }));
+  await mkdir(dirname(join(root, "flows/setup/import/marker.json")), { recursive: true });
+  await writeFile(join(root, "flows/setup/import/marker.json"), JSON.stringify({ version: 2 }));
   await expect(readStagedConfigurationImport(root, ring)).rejects.toThrow(
     "invalid staged configuration import",
   );
-  await writeFile(join(root, "configuration-import.json"), "{");
+  await mkdir(dirname(join(root, "flows/setup/import/marker.json")), { recursive: true });
+  await writeFile(join(root, "flows/setup/import/marker.json"), "{");
   await expect(readStagedConfigurationImport(root, ring)).rejects.toBeInstanceOf(SyntaxError);
 });
 
@@ -103,9 +107,10 @@ it.each([
   ["tag", Buffer.alloc(16).toString("base64")],
 ] as const)("refuses a changed wrapped key %s=%s", async (field, value) => {
   const { root } = await staged();
-  const path = join(root, "configuration-import.key");
+  const path = join(root, "flows/setup/import/key");
   const wrapped = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
   wrapped[field] = value;
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(wrapped));
   await expect(readStagedConfigurationImport(root, ring)).rejects.toThrow(
     "invalid staged configuration import key",
@@ -121,7 +126,8 @@ it("refuses a replacement key with the same version and a changed encrypted arti
   ).rejects.toThrow("invalid staged configuration import key");
   const damaged = Buffer.from(artifact);
   damaged[damaged.length - 1]! ^= 1;
-  await writeFile(join(root, "configuration-import.artifact"), damaged);
+  await mkdir(dirname(join(root, "flows/setup/import/artifact")), { recursive: true });
+  await writeFile(join(root, "flows/setup/import/artifact"), damaged);
   await expect(readStagedConfigurationImport(root, ring)).rejects.toMatchObject({
     code: "recovery.passphrase_invalid",
   });
@@ -143,7 +149,10 @@ it("disarms an import whose publication failed at folder sync", async () => {
   const artifact = encodeConfigurationBundle(configurationBundle(), passphrase);
   const actual = await vi.importActual<typeof fs>("node:fs/promises");
   vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
-    if (String(args[0]) === root && existsSync(join(root, "configuration-import.json")))
+    if (
+      String(args[0]) === join(root, "flows/setup/import") &&
+      existsSync(join(root, "flows/setup/import/marker.json"))
+    )
       throw Object.assign(new Error("folder sync failed"), { code: "EIO" });
     return actual.open(...args);
   });

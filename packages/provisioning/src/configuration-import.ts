@@ -5,9 +5,9 @@ import {
 } from "@waitron/store";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { KeyRing } from "@waitron/credentials";
-import { writeFileDurable } from "./fs-atomic.js";
+import { mkdirDurable, writeFileDurable } from "./fs-atomic.js";
 import { decodeConfigurationBundle, type ConfigurationBundle } from "./configuration-transfer.js";
 
 const ARTIFACT = CONFIGURATION_IMPORT_ARTIFACT;
@@ -84,6 +84,7 @@ export async function stageConfigurationImport(
       .filter(([, rows]) => rows.length > 0)
       .map(([name, rows]) => [name, rows.length]),
   );
+  await mkdirDurable(dirname(join(stateDir, MARKER)), 0o700);
   await rm(join(stateDir, MARKER), { force: true });
   try {
     await writeFileDurable(join(stateDir, ARTIFACT), artifact, 0o600);

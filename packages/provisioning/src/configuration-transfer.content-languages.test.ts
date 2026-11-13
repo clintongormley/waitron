@@ -109,9 +109,9 @@ describe("required languages before configuration replacement", () => {
     const artifact = encodeConfigurationBundle(valid, passphrase);
     await stageConfigurationImport(root, ring, artifact, passphrase, validate);
     const files = [
-      "configuration-import.artifact",
-      "configuration-import.key",
-      "configuration-import.json",
+      "flows/setup/import/artifact",
+      "flows/setup/import/key",
+      "flows/setup/import/marker.json",
     ];
     const before = await Promise.all(files.map((name) => readFile(join(root, name))));
     const replacement = bundleFor("ES", "Barcelona", ["en", "es"]);

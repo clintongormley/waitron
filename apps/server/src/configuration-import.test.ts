@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { Hono } from "hono";
@@ -222,10 +222,11 @@ describe("staged configuration import", () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     dirs.push(stateDir);
     for (const name of [
-      "configuration-import.artifact",
-      "configuration-import.key",
-      "configuration-import.json",
+      "flows/setup/import/artifact",
+      "flows/setup/import/key",
+      "flows/setup/import/marker.json",
     ]) {
+      await mkdir(dirname(join(stateDir, name)), { recursive: true });
       await writeFile(join(stateDir, name), `retained ${name}`);
     }
     const app = new Hono();
@@ -257,19 +258,22 @@ describe("staged configuration import", () => {
           ? { code: "setup.configuration_newer", params: {} }
           : { code: "setup.configuration_outdated", params: {} },
     });
-    expect((await readdir(stateDir)).sort()).toEqual([
-      "configuration-import.artifact",
-      "configuration-import.json",
-      "configuration-import.key",
+    expect((await readdir(join(stateDir, "flows/setup/import"))).sort()).toEqual([
+      "artifact",
+      "key",
+      "marker.json",
     ]);
-    for (const name of await readdir(stateDir))
-      expect(await readFile(join(stateDir, name), "utf8")).toBe(`retained ${name}`);
+    for (const name of await readdir(join(stateDir, "flows/setup/import")))
+      expect(await readFile(join(stateDir, "flows/setup/import", name), "utf8")).toBe(
+        `retained flows/setup/import/${name}`,
+      );
   });
 
   it("answers an export running other parts with both lists, before replacing staged files", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     dirs.push(stateDir);
-    await writeFile(join(stateDir, "configuration-import.json"), "retained");
+    await mkdir(dirname(join(stateDir, "flows/setup/import/marker.json")), { recursive: true });
+    await writeFile(join(stateDir, "flows/setup/import/marker.json"), "retained");
     const app = new Hono();
     mountSetup(
       app,
@@ -299,7 +303,7 @@ describe("staged configuration import", () => {
         params: { exportOnly: ["bookings", "fiscal-verifactu"], serverOnly: ["core"] },
       },
     });
-    expect(await readdir(stateDir)).toEqual(["configuration-import.json"]);
+    expect(await readdir(join(stateDir, "flows/setup/import"))).toEqual(["marker.json"]);
   });
 
   it.each([
@@ -311,11 +315,14 @@ describe("staged configuration import", () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     dirs.push(stateDir);
     const names = [
-      "configuration-import.artifact",
-      "configuration-import.key",
-      "configuration-import.json",
+      "flows/setup/import/artifact",
+      "flows/setup/import/key",
+      "flows/setup/import/marker.json",
     ];
-    for (const name of names) await writeFile(join(stateDir, name), `retained ${name}`);
+    for (const name of names) {
+      await mkdir(dirname(join(stateDir, name)), { recursive: true });
+      await writeFile(join(stateDir, name), `retained ${name}`);
+    }
     const serviceModule = {
       ...modules[0],
       name: "venue-service",
@@ -358,7 +365,11 @@ describe("staged configuration import", () => {
     expect(await response.json()).toEqual({
       error: { code: "setup.request_invalid", params: { field: `${table}.order_start` } },
     });
-    expect((await readdir(stateDir)).sort()).toEqual([...names].sort());
+    expect((await readdir(join(stateDir, "flows/setup/import"))).sort()).toEqual([
+      "artifact",
+      "key",
+      "marker.json",
+    ]);
     for (const name of names)
       expect(await readFile(join(stateDir, name), "utf8")).toBe(`retained ${name}`);
   });
@@ -372,11 +383,14 @@ describe("staged configuration import", () => {
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
       dirs.push(stateDir);
       const names = [
-        "configuration-import.artifact",
-        "configuration-import.key",
-        "configuration-import.json",
+        "flows/setup/import/artifact",
+        "flows/setup/import/key",
+        "flows/setup/import/marker.json",
       ];
-      for (const name of names) await writeFile(join(stateDir, name), `retained ${name}`);
+      for (const name of names) {
+        await mkdir(dirname(join(stateDir, name)), { recursive: true });
+        await writeFile(join(stateDir, name), `retained ${name}`);
+      }
       const candidate: ConfigurationBundle = {
         ...bundle,
         privacyContact: { ...bundle.privacyContact, [field]: value },
@@ -403,7 +417,11 @@ describe("staged configuration import", () => {
       expect(await response.json()).toEqual({
         error: { code: "venue.detail_invalid", params: { field, reason } },
       });
-      expect((await readdir(stateDir)).sort()).toEqual([...names].sort());
+      expect((await readdir(join(stateDir, "flows/setup/import"))).sort()).toEqual([
+        "artifact",
+        "key",
+        "marker.json",
+      ]);
       for (const name of names)
         expect(await readFile(join(stateDir, name), "utf8")).toBe(`retained ${name}`);
     },
@@ -423,18 +441,18 @@ describe("staged configuration import", () => {
     await expect(readStagedConfigurationImport(stateDir, ring)).resolves.toEqual(
       expect.objectContaining({ bundle, passphrase: "a strong passphrase" }),
     );
-    await expect(
-      readFile(join(stateDir, "configuration-import.key"), "utf8"),
-    ).resolves.not.toContain("a strong passphrase");
+    await expect(readFile(join(stateDir, "flows/setup/import/key"), "utf8")).resolves.not.toContain(
+      "a strong passphrase",
+    );
     for (const name of [
-      "configuration-import.artifact",
-      "configuration-import.key",
-      "configuration-import.json",
+      "flows/setup/import/artifact",
+      "flows/setup/import/key",
+      "flows/setup/import/marker.json",
     ]) {
       expect((await stat(join(stateDir, name))).mode & 0o777).toBe(0o600);
     }
     await clearStagedConfigurationImport(stateDir);
-    await expect(readFile(join(stateDir, "configuration-import.json"))).rejects.toMatchObject({
+    await expect(readFile(join(stateDir, "flows/setup/import/marker.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   });
@@ -446,7 +464,7 @@ describe("staged configuration import", () => {
     await expect(
       stageConfigurationImport(stateDir, ring, artifact, "wrong passphrase", validate),
     ).rejects.toMatchObject({ code: "recovery.passphrase_invalid" });
-    await expect(readFile(join(stateDir, "configuration-import.json"))).rejects.toMatchObject({
+    await expect(readFile(join(stateDir, "flows/setup/import/marker.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   });
@@ -461,7 +479,7 @@ describe("staged configuration import", () => {
     await expect(
       stageConfigurationImport(stateDir, ring, artifact, "a strong passphrase", validate),
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "tables" } });
-    await expect(readFile(join(stateDir, "configuration-import.json"))).rejects.toMatchObject({
+    await expect(readFile(join(stateDir, "flows/setup/import/marker.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   });
@@ -530,7 +548,7 @@ describe("staged configuration import", () => {
       code: "setup.request_invalid",
       params: { field: "tables" },
     });
-    await expect(readFile(join(stateDir, "configuration-import.json"))).rejects.toMatchObject({
+    await expect(readFile(join(stateDir, "flows/setup/import/marker.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   });
@@ -551,7 +569,11 @@ describe("staged configuration import", () => {
 
   it("refuses a staging marker written in another format version", async () => {
     const stateDir = await stagedDir();
-    await writeFile(join(stateDir, "configuration-import.json"), JSON.stringify({ version: 2 }));
+    await mkdir(dirname(join(stateDir, "flows/setup/import/marker.json")), { recursive: true });
+    await writeFile(
+      join(stateDir, "flows/setup/import/marker.json"),
+      JSON.stringify({ version: 2 }),
+    );
     await expect(readStagedConfigurationImport(stateDir, ring)).rejects.toThrow(
       "invalid staged configuration import",
     );
@@ -559,7 +581,8 @@ describe("staged configuration import", () => {
 
   it("surfaces an unreadable staging marker rather than treating it as nothing staged", async () => {
     const stateDir = await stagedDir();
-    await writeFile(join(stateDir, "configuration-import.json"), "not json");
+    await mkdir(dirname(join(stateDir, "flows/setup/import/marker.json")), { recursive: true });
+    await writeFile(join(stateDir, "flows/setup/import/marker.json"), "not json");
     await expect(readStagedConfigurationImport(stateDir, ring)).rejects.toThrow(SyntaxError);
   });
 
@@ -594,8 +617,9 @@ describe("staged configuration import", () => {
     ["no ciphertext", { ciphertext: undefined }],
   ])("refuses a wrapped passphrase with %s", async (_label, change) => {
     const stateDir = await stagedDir();
-    const keyPath = join(stateDir, "configuration-import.key");
+    const keyPath = join(stateDir, "flows/setup/import/key");
     const wrapped = JSON.parse(await readFile(keyPath, "utf8")) as Record<string, unknown>;
+    await mkdir(dirname(keyPath), { recursive: true });
     await writeFile(keyPath, JSON.stringify({ ...wrapped, ...change }));
     await expect(readStagedConfigurationImport(stateDir, ring)).rejects.toThrow(
       "invalid staged configuration import key",
@@ -604,10 +628,11 @@ describe("staged configuration import", () => {
 
   it("refuses a wrapped passphrase whose authentication tag does not match", async () => {
     const stateDir = await stagedDir();
-    const keyPath = join(stateDir, "configuration-import.key");
+    const keyPath = join(stateDir, "flows/setup/import/key");
     const wrapped = JSON.parse(await readFile(keyPath, "utf8")) as { tag: string };
     const tag = Buffer.from(wrapped.tag, "base64");
     tag[0] = tag[0]! ^ 0xff;
+    await mkdir(dirname(keyPath), { recursive: true });
     await writeFile(keyPath, JSON.stringify({ ...wrapped, tag: tag.toString("base64") }));
     await expect(readStagedConfigurationImport(stateDir, ring)).rejects.toThrow(
       "invalid staged configuration import key",
@@ -951,10 +976,10 @@ describe("routing cells in a staged import", () => {
     expect(bundle.modules.core).toBe(versions.core);
     const { stateDir, result } = await staged(bundle, versions);
     await expect(result).resolves.toMatchObject({ counts: { routing_cells: 2 } });
-    expect((await readdir(stateDir)).sort()).toEqual([
-      "configuration-import.artifact",
-      "configuration-import.json",
-      "configuration-import.key",
+    expect((await readdir(join(stateDir, "flows/setup/import"))).sort()).toEqual([
+      "artifact",
+      "key",
+      "marker.json",
     ]);
   });
 });

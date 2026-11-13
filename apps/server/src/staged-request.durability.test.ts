@@ -1,7 +1,7 @@
+import { dirname, join } from "node:path";
 import * as fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { stageRestoreRequest } from "./restore-request.js";
 import { stageResetRequest } from "./reset-request.js";
@@ -27,7 +27,8 @@ it.each([
 ] as const)("disarms %s when its publication fails at folder sync", async (marker, stage) => {
   const dir = await fs.mkdtemp(join(tmpdir(), "staged-request-durability-"));
   dirs.push(dir);
-  await fs.writeFile(join(dir, "setup-operation.json"), "existing progress");
+  await fs.mkdir(dirname(join(dir, "flows/setup/operation.json")), { recursive: true });
+  await fs.writeFile(join(dir, "flows/setup/operation.json"), "existing progress");
   const actual = await vi.importActual<typeof fs>("node:fs/promises");
   vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
     if (
@@ -39,7 +40,9 @@ it.each([
   });
   await expect(stage(dir)).rejects.toMatchObject({ code: "EIO" });
   await expect(fs.readFile(join(dir, marker))).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await fs.readFile(join(dir, "setup-operation.json"), "utf8")).toBe("existing progress");
+  expect(await fs.readFile(join(dir, "flows/setup/operation.json"), "utf8")).toBe(
+    "existing progress",
+  );
 });
 
 it("refuses publication when the downloaded stream database cannot be flushed", async () => {

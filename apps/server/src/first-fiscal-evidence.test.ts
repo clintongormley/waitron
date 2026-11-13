@@ -1,5 +1,5 @@
-import { readFile, writeFile, rm, symlink } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { mkdir, readFile, writeFile, rm, symlink } from "node:fs/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import { firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fiscal.js";
 import { historicalFirstFiscalDocuments } from "../test/historical-first-fiscal.js";
@@ -27,7 +27,7 @@ async function fixture() {
     evidence,
     enrol,
     confirm,
-    path: join(f.stateDir, "module-operation-public.json"),
+    path: join(f.stateDir, "flows/setup/public-evidence.json"),
   };
 }
 afterEach(async () => {
@@ -303,12 +303,13 @@ it.each(["absent", "version", "seat", "unselected"])(
 it("does not create an activation grant before consumption intent", async () => {
   const f = await fixture();
   await f.enrol();
-  const path = join(f.stateDir, "first-setup.json");
+  const path = join(f.stateDir, "flows/setup/record.json");
   const saved = JSON.parse(await readFile(path, "utf8"));
   saved.history.pop();
   saved.revision--;
   saved.status = "claimed";
   saved.consumptionIntent = false;
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(saved));
   const owner = { ...f.ownerAttempt, revision: saved.revision };
   const token = await f.owner.reconfirm(owner, PASSWORD, "activation");
@@ -338,9 +339,10 @@ it.each(["wrong binding", "changed input", "abandoned", "uncertain", "complete"]
     let binding = f.context.binding;
     if (why === "wrong binding") binding = { ...binding, targetNodeId: "another-node" };
     if (why === "changed input") {
-      const path = join(f.stateDir, "first-setup.json");
+      const path = join(f.stateDir, "flows/setup/record.json");
       const state = JSON.parse(await readFile(path, "utf8"));
       state.inputs[MODULE].approval.incidentEvidence = "other";
+      await mkdir(dirname(path), { recursive: true });
       await writeFile(path, JSON.stringify(state));
     }
     if (["abandoned", "uncertain", "complete"].includes(why)) {

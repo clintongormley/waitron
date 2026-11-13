@@ -1,10 +1,10 @@
+import { dirname, join, resolve } from "node:path";
+import { mkdir, cp, readFile, readdir, writeFile } from "node:fs/promises";
 import { resultFacts } from "./testing/restore-result-facts.js";
 import { spawn, spawnSync } from "node:child_process";
 import { emptyScratch } from "./scratch.js";
 import { firstStartPending } from "./restore-flow.js";
 import { syncBuiltinESMExports } from "node:module";
-import { cp, readFile, readdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { openVenueDatabase, readStandardSeriesId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -63,7 +63,8 @@ it.each([
     const previousIdentity = `# the original box\nWAITRON_NODE_ID=${f.node.nodeId}\nWAITRON_ENV=preproduction\n`;
     await writeFile(join(f.stateDir, "trading.env"), previousIdentity);
     await f.seedDestination();
-    await writeFile(join(f.stateDir, "setup-operation.json"), "pending operation");
+    await mkdir(dirname(join(f.stateDir, "flows/setup/operation.json")), { recursive: true });
+    await writeFile(join(f.stateDir, "flows/setup/operation.json"), "pending operation");
     if (kind === "archive") {
       const old = await openVenueDatabase(f.venueDir);
       try {
@@ -94,7 +95,7 @@ it.each([
     await killRestore(f, phase);
     const committed = await f.snapshot();
     if (phase === "before-completion")
-      await expect(readFile(join(f.stateDir, "setup-operation.json"))).rejects.toMatchObject({
+      await expect(readFile(join(f.stateDir, "flows/setup/operation.json"))).rejects.toMatchObject({
         code: "ENOENT",
       });
     expect(committed.records).toEqual(f.originalRecords);
@@ -184,9 +185,8 @@ syncBuiltinESMExports();
     entry,
     `
 import nativeFs from "node:fs/promises";
-
-import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
+import { syncBuiltinESMExports } from "node:module";
 import { writeSync } from "node:fs";
 import { runStagedRestore, stageRestoreRequest } from ${JSON.stringify(resolve("src/restore-request.ts"))};
 import { endRestoreFlow } from ${JSON.stringify(resolve("src/restore-flow.ts"))};

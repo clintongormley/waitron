@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -65,20 +65,23 @@ it.each([
 ])(
   "the repair app's answer to whether the next start deletes old logs says it does below the floor, with the log folder %s",
   async (_where, logDir) => {
-    writeFileSync(join(stateDir, "first-setup.json"), "opaque retained attempt");
+    mkdirSync(join(stateDir, "flows/setup"), { recursive: true });
+    writeFileSync(join(stateDir, "flows/setup/record.json"), "opaque retained attempt");
     const repair = await restartDeletesLogsIn(logDir());
     expect(await repair.ask()).toBe(true);
   },
 );
 
 it("the repair app's answer to whether the next start deletes old logs cannot say when the disk reads as having room, where the next start deletes no log", async () => {
-  writeFileSync(join(stateDir, "first-setup.json"), "opaque retained attempt");
+  mkdirSync(join(stateDir, "flows/setup"), { recursive: true });
+  writeFileSync(join(stateDir, "flows/setup/record.json"), "opaque retained attempt");
   const repair = await restartDeletesLogsIn(join(root, "logs"), { statfs: freeIs(512 * MiB) });
   expect(await repair.ask()).toBeUndefined();
 });
 
 it("the repair app's answer to whether the next start deletes old logs cannot say when free space cannot be read", async () => {
-  writeFileSync(join(stateDir, "first-setup.json"), "opaque retained attempt");
+  mkdirSync(join(stateDir, "flows/setup"), { recursive: true });
+  writeFileSync(join(stateDir, "flows/setup/record.json"), "opaque retained attempt");
   const repair = await restartDeletesLogsIn(join(root, "logs"), {
     statfs: () => Promise.reject(new Error("EIO")),
   });

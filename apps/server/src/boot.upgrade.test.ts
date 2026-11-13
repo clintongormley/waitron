@@ -1,3 +1,4 @@
+import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Socket } from "node:net";
 import * as childProcess from "node:child_process";
@@ -6,7 +7,6 @@ import { mkdtemp, mkdir, writeFile, rm, readdir, symlink } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
-import { join, resolve } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -365,13 +365,17 @@ describe("contained upgrade data checks", () => {
 
   it.each([
     { name: "first-setup-deleting.json", code: "setup.start_again_incomplete" },
-    { name: "first-setup.json", code: "setup.attempt_invalid" },
+    { name: "flows/setup/record.json", code: "setup.attempt_invalid" },
   ])(
     "keeps an unfinished setup in $name refused without changing the copy",
     async ({ name, code }) => {
       const { checkUpgradeData } = await import("./upgrade-checks.js");
       const { config, env } = await copiedConfig();
-      const marker = join(name === "first-setup.json" ? config.stateDir : config.venueDir, name);
+      const marker = join(
+        name === "flows/setup/record.json" ? config.stateDir : config.venueDir,
+        name,
+      );
+      await mkdir(dirname(marker), { recursive: true });
       await writeFile(marker, "{}");
       const before = await readdir(config.venueDir);
       await expect(checkUpgradeData(config, env)).rejects.toMatchObject({ code });

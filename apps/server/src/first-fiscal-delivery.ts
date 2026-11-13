@@ -162,7 +162,7 @@ export async function readFirstFiscalDeliverySnapshot(
 ): Promise<unknown | undefined> {
   const read = async (name: string) => {
     const bytes = originals.find(
-      (entry) => entry.name === `state/first-fiscal-documents/${name}`,
+      (entry) => entry.name === `state/flows/setup/documents/${name}`,
     )?.bytes;
     if (bytes == null) return null;
     if (bytes.length > 48000) invalid();
@@ -176,7 +176,7 @@ export async function readFirstFiscalDeliverySnapshot(
   if (manifest === null) {
     if (
       originals.some(
-        (entry) => entry.name.startsWith("state/first-fiscal-documents/") && entry.bytes !== null,
+        (entry) => entry.name.startsWith("state/flows/setup/documents/") && entry.bytes !== null,
       )
     )
       invalid();

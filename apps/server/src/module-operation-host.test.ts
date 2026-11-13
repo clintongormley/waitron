@@ -96,7 +96,7 @@ it("the bound runtime retains its recovery document after restart and prepares o
     expect(
       JSON.parse(
         await readFile(
-          join(f.stateDir, "first-fiscal-documents", `${f.module}.recovery.json`),
+          join(f.stateDir, "flows/setup/documents", `${f.module}.recovery.json`),
           "utf8",
         ),
       ),

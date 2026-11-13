@@ -1,3 +1,5 @@
+import { dirname, join } from "node:path";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { STARTER_PROFILE_NAMES } from "@waitron/provisioning";
 import { personStaffRoles, staffRoles } from "@waitron/db";
 import { canUseDeviceProfile } from "@waitron/identity";
@@ -48,9 +50,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { loadKeyRing } from "@waitron/credentials";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
@@ -6998,11 +6998,14 @@ describe("a deleted printer in a configuration transfer", () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     try {
       const names = [
-        "configuration-import.artifact",
-        "configuration-import.key",
-        "configuration-import.json",
+        "flows/setup/import/artifact",
+        "flows/setup/import/key",
+        "flows/setup/import/marker.json",
       ];
-      for (const name of names) await writeFile(join(stateDir, name), `retained ${name}`);
+      for (const name of names) {
+        await mkdir(dirname(join(stateDir, name)), { recursive: true });
+        await writeFile(join(stateDir, name), `retained ${name}`);
+      }
       const ring = loadKeyRing({
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 17).toString("base64"),
       });
@@ -7015,7 +7018,11 @@ describe("a deleted printer in a configuration transfer", () => {
           async (decoded) => validateConfigurationBundle(decoded, ALL_MODULES, versions),
         ),
       ).rejects.toMatchObject(refusal);
-      expect((await readdir(stateDir)).sort()).toEqual([...names].sort());
+      expect((await readdir(join(stateDir, "flows/setup/import"))).sort()).toEqual([
+        "artifact",
+        "key",
+        "marker.json",
+      ]);
       for (const name of names)
         expect(await readFile(join(stateDir, name), "utf8")).toBe(`retained ${name}`);
     } finally {

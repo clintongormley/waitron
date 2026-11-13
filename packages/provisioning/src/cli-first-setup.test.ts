@@ -1406,7 +1406,7 @@ it("--yes does not send a fiscal test when its separate confirmation is declined
     expect(f.drain).not.toHaveBeenCalled();
     expect(await readDeploymentEnvironment(venue.db)).toBeNull();
     expect(await readTenantIdentities(venue.db)).toEqual([]);
-    await expect(readFile(join(f.root, "state/fiscal-readiness.json"))).rejects.toMatchObject({
+    await expect(readFile(join(f.root, "state/flows/setup/readiness.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   } finally {
@@ -1431,7 +1431,9 @@ it.each(["rejected", "uncertain"] as const)(
       expect(f.drain).toHaveBeenCalledOnce();
       expect(await readDeploymentEnvironment(venue.db)).toBeNull();
       expect(await readTenantIdentities(venue.db)).toEqual([]);
-      await expect(readFile(join(f.root, "state/fiscal-readiness.json"))).rejects.toMatchObject({
+      await expect(
+        readFile(join(f.root, "state/flows/setup/readiness.json")),
+      ).rejects.toMatchObject({
         code: "ENOENT",
       });
     } finally {

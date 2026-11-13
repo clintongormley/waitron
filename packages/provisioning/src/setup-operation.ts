@@ -1,10 +1,10 @@
 import { SETUP_OPERATION_FILE } from "@waitron/store";
 import type { FirstSetupCoordinator, FirstSetupHold } from "./first-setup-state.js";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, unlink } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { AppError } from "@waitron/shared";
-import { failedAtFolderSync, writeFileDurable } from "./fs-atomic.js";
+import { failedAtFolderSync, mkdirDurable, writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
 
 export type SetupOperationKind = "provision" | "adopt" | "restore" | "import";
@@ -106,7 +106,7 @@ export function createSetupOperationStore(
         if (active) throw new AppError("setup.already_provisioning", {});
         active = true;
         try {
-          await mkdir(stateDir, { recursive: true });
+          await mkdirDurable(dirname(statePath), 0o700);
           const existing = await read();
           if (
             existing !== null &&

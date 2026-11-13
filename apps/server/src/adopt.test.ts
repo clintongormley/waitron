@@ -839,7 +839,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
 
     // Control: a join stopped before its first write leaves no marker, and no record past "started",
     // so the reset route offers no reset.
-    await rm(join(stateDir, "setup-operation.json"), { force: true });
+    await rm(join(stateDir, "flows/setup/operation.json"), { force: true });
     const own = "WAITRON_CREDENTIALS_KEY=b3du\nWAITRON_CREDENTIALS_KEY_VERSION=1\n";
     await writeFile(join(stateDir, "secrets.env"), own, { mode: 0o600 });
     const control = await joinAndStage(true);

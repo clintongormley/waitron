@@ -1,5 +1,5 @@
+import { dirname, join } from "node:path";
 import * as fs from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFirstSetupCoordinator, type FirstSetupHold } from "./index.js";
@@ -232,14 +232,17 @@ it("does not acknowledge a renamed ledger whose directory sync fails", async () 
 it("a successor preparation state keeps spent module history in the attempt's own folders", async () => {
   const f = await fixture();
   await f.store.withState(binding, async (state) => state.replace({ identities: ["06RB"] }));
-  await fs.writeFile(join(f.stateDir, "first-setup.json"), "original state");
+  await fs.mkdir(dirname(join(f.stateDir, "flows/setup/record.json")), { recursive: true });
+  await fs.writeFile(join(f.stateDir, "flows/setup/record.json"), "original state");
   const successor = createModulePreparationState({ ...f.options });
   await successor.withState({ ...binding, eventId: "successor" }, async (state) => {
     expect(state.value).toEqual({ identities: ["06RB"] });
     await state.replace({ identities: ["06RB", "06RC"] });
   });
   expect(JSON.parse(await fs.readFile(f.path, "utf8")).revisions).toHaveLength(2);
-  expect(await fs.readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe("original state");
+  expect(await fs.readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe(
+    "original state",
+  );
 });
 
 it("a temporary-file sync refusal preserves the previous committed revision", async () => {

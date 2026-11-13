@@ -67,7 +67,7 @@ it.each([
     expect(await answer.json()).toMatchObject({ message: { kind } });
     expect(f.changes()).toBe(0);
     await expect(
-      stat(join(f.stateDir, "first-setup-start-again-guesses.json")),
+      stat(join(f.stateDir, "flows/setup/start-again-guesses.json")),
     ).rejects.toMatchObject({ code: "ENOENT" });
   },
 );
@@ -76,7 +76,7 @@ it("Stop leaves the action and password counters untouched", async () => {
   expect(await (await f.post("choice=keep")).json()).toMatchObject({ stopped: true });
   expect(f.changes()).toBe(0);
   await expect(
-    stat(join(f.stateDir, "first-setup-start-again-guesses.json")),
+    stat(join(f.stateDir, "flows/setup/start-again-guesses.json")),
   ).rejects.toMatchObject({ code: "ENOENT" });
 });
 it("verifies saved hashes and refuses another action after completion", async () => {

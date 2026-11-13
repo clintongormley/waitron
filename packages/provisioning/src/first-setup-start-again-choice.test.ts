@@ -215,11 +215,12 @@ it("a marker naming the choices folder, the set-aside folder or the counter is r
 
 it("isFirstSetupHostPath names the records parent and the counter", () => {
   expect(START_AGAIN_SET_ASIDE_DIR).toBe("records/set-aside");
-  for (const name of ["records", START_AGAIN_GUESSES_FILE]) {
+  for (const name of ["records", "flows"]) {
     expect(isFirstSetupHostPath(name), name).toBe(true);
     expect(isFirstSetupHostPath(`${name}/retained/entry.json`), name).toBe(true);
     expect(isFirstSetupHostPath(`${name}-venue-copy`), name).toBe(false);
   }
+  expect(isFirstSetupHostPath(START_AGAIN_GUESSES_FILE)).toBe(true);
 });
 
 it("a choices folder that is not a folder refuses both the write and the read", async () => {

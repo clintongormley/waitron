@@ -257,7 +257,7 @@ describe("setup provision email credential", () => {
         },
       });
       expect((await operations.read())?.phase).toBe("secret_sealed");
-      const persisted = readFileSync(join(dir, "setup-operation.json"), "utf8");
+      const persisted = readFileSync(join(dir, "flows/setup/operation.json"), "utf8");
       for (const secret of [email.password, email.user, email.server, "fiscal-fixture"])
         expect(persisted).not.toContain(secret);
       const next = mount({ operations: createSetupOperationStore(dir) });

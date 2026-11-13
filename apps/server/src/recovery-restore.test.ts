@@ -1,3 +1,4 @@
+import { dirname, join } from "node:path";
 import { BOX_LEAF_HOSTNAMES } from "./box-name.js";
 import { runEntry } from "./node-entry.js";
 import { loadBoxEnv } from "./box-env.js";
@@ -12,7 +13,6 @@ import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { hashPassword } from "@waitron/identity";
 import { recoveryApp } from "./recovery-surface.js";
@@ -111,14 +111,17 @@ it.each(["placing", "first-start", "unreadable"] as const)(
   "removes partial databases and configuration at %s, keeping trusted TLS",
   async (phase) => {
     const f = await fixture(phase);
+    await mkdir(join(f.stateDir, "flows/setup"), { recursive: true });
     for (const name of [
       "trading.env.replaced",
       "backup.env",
       "modules.json",
       "backup-room-note.json",
-      "setup-operation.json",
-    ])
+      "flows/setup/operation.json",
+    ]) {
+      await mkdir(dirname(join(f.stateDir, name)), { recursive: true });
       await writeFile(join(f.stateDir, name), "partial");
+    }
     for (const name of ["node.db", "venue.db.incoming", "venue.db-wal", "node.db-shm"])
       await writeFile(join(f.venueDir, name), "partial");
     await mkdir(join(f.venueDir, ".venue.db-litestream"));
@@ -135,7 +138,7 @@ it.each(["placing", "first-start", "unreadable"] as const)(
       "backup.env",
       "modules.json",
       "backup-room-note.json",
-      "setup-operation.json",
+      "flows/setup/operation.json",
       "flows/restore",
     ])
       await expect(stat(join(f.stateDir, name)), name).rejects.toMatchObject({ code: "ENOENT" });

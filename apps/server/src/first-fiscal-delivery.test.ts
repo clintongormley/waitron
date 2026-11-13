@@ -1,5 +1,5 @@
-import { readFile, readdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { vi } from "vitest";
 import { declaredFirstFiscalFixture, publicDigest } from "../test/declared-first-fiscal.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
@@ -84,10 +84,10 @@ it("requires registration and explicit kept confirmation before issuing one boun
   await f.kept();
   expect(await f.delivery.read(f.context.binding)).toEqual({ trust: null, current: f.statement });
   await expect(f.delivery.read(f.context.binding)).rejects.toMatchObject(missing);
-  const files = await readdir(join(f.stateDir, "first-fiscal-documents"));
+  const files = await readdir(join(f.stateDir, "flows/setup/documents"));
   const data = (
     await Promise.all(
-      files.map((p) => readFile(join(f.stateDir, "first-fiscal-documents", p), "utf8")),
+      files.map((p) => readFile(join(f.stateDir, "flows/setup/documents", p), "utf8")),
     )
   ).join("");
   expect(data).not.toContain(f.staged.key.secret);
@@ -165,9 +165,10 @@ it("a changed public history or stage on disk invalidates the grant", async () =
   const f = await fixture();
   await f.register();
   await f.kept();
-  const path = join(f.stateDir, "first-setup-node-key.json"),
+  const path = join(f.stateDir, "flows/setup/node-key.json"),
     stage = JSON.parse(await readFile(path, "utf8"));
   stage.name = "2026-10-16 · 3333";
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(stage));
   await expect(f.delivery.read(f.context.binding)).rejects.toMatchObject(missing);
 });
@@ -185,7 +186,7 @@ it("rereads finalized public chunks and refuses tampering", async () => {
   const f = await fixture();
   await f.register();
   await f.kept();
-  const root = join(f.stateDir, "first-fiscal-documents");
+  const root = join(f.stateDir, "flows/setup/documents");
   const file = (await readdir(root)).find((p) => p.endsWith("-0.json"))!;
   const path = join(root, file),
     chunk = JSON.parse(await readFile(path, "utf8"));
@@ -194,6 +195,7 @@ it("rereads finalized public chunks and refuses tampering", async () => {
   expect(changed).not.toBe(original);
   expect(Buffer.byteLength(changed)).toBe(Buffer.byteLength(original));
   chunk.data = Buffer.from(changed).toString("base64");
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(chunk));
   await expect(f.delivery.read(f.context.binding)).rejects.toMatchObject({
     code: expect.stringMatching(/setup.attempt_invalid|sif.allocation_invalid/),
@@ -245,7 +247,7 @@ it("duplicate confirmation consumes its password grant rather than creating anot
 it("an interrupted public-chunk write cannot publish or grant an incomplete history", async () => {
   const f = await fixture();
   await f.register();
-  const folder = join(f.stateDir, "first-fiscal-documents");
+  const folder = join(f.stateDir, "flows/setup/documents");
   const manifest = join(folder, `${f.module}.json`);
   const data = JSON.parse(await readFile(manifest, "utf8"));
   data.chunks++;
@@ -317,9 +319,10 @@ it("keeps a public history larger than the legacy grant file in separately bound
     delivery: { ...f.statement.delivery, historyDigest },
   };
   // This fixture imports a larger valid input before the immutable delivery is registered.
-  const path = join(f.stateDir, "first-setup.json");
+  const path = join(f.stateDir, "flows/setup/record.json");
   const saved = JSON.parse(await readFile(path, "utf8"));
   saved.inputs[f.module] = input;
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(saved));
   const deliveryInput = { ...f.input, statement, inputDigest: publicDigest(input), historyDigest };
   await f.delivery.registerFirstFiscalDelivery(f.ownerAttempt, deliveryInput);
@@ -332,18 +335,20 @@ it("keeps a public history larger than the legacy grant file in separately bound
   );
   const result = await f.delivery.read(f.context.binding);
   expect(result).toEqual({ trust: null, current: statement });
-  const root = join(f.stateDir, "first-fiscal-documents");
+  const root = join(f.stateDir, "flows/setup/documents");
   const files = await readdir(root);
   expect(files.filter((p) => /-\d+\.json$/.test(p)).length).toBeGreaterThan(1);
   for (const path of files)
     expect(Buffer.byteLength(await readFile(join(root, path), "utf8"))).toBeLessThanOrEqual(48000);
-  await expect(readFile(join(f.stateDir, "module-operation-public.json"))).rejects.toMatchObject({
+  await expect(
+    readFile(join(f.stateDir, "flows/setup/public-evidence.json")),
+  ).rejects.toMatchObject({
     code: "ENOENT",
   });
 });
 it("cannot register a successor before the durable consumption intent", async () => {
   const f = await fixture();
-  const path = join(f.stateDir, "first-setup.json"),
+  const path = join(f.stateDir, "flows/setup/record.json"),
     saved = JSON.parse(await readFile(path, "utf8"));
   saved.history = saved.history.filter(
     (event: { kind: string }) => event.kind !== "consumption-intent" && event.kind !== "import",
@@ -352,6 +357,7 @@ it("cannot register a successor before the durable consumption intent", async ()
   saved.status = "claimed";
   saved.consumptionIntent = false;
   saved.inputs = {};
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(saved));
   await expect(
     f.delivery.registerFirstFiscalDelivery(
@@ -393,9 +399,10 @@ it.each(["secret", "privateKey", "nodeKeys"])(
         },
       },
     };
-    const path = join(f.stateDir, "first-setup.json"),
+    const path = join(f.stateDir, "flows/setup/record.json"),
       saved = JSON.parse(await readFile(path, "utf8"));
     saved.inputs[f.module] = input;
+    await mkdir(dirname(path), { recursive: true });
     await writeFile(path, JSON.stringify(saved));
     const statement = {
       ...f.statement,
@@ -411,7 +418,7 @@ it.each(["secret", "privateKey", "nodeKeys"])(
         statement,
       }),
     ).rejects.toMatchObject({ code: "sif.allocation_invalid" });
-    await expect(readdir(join(f.stateDir, "first-fiscal-documents"))).rejects.toMatchObject({
+    await expect(readdir(join(f.stateDir, "flows/setup/documents"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   },

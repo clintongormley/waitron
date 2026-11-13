@@ -1,3 +1,4 @@
+import { errnoOf } from "./errno.js";
 import { listAdminHolders } from "@waitron/identity";
 import {
   openBackupQuery,
@@ -20,6 +21,7 @@ import {
   rename,
   rm,
   stat,
+  unlink,
 } from "node:fs/promises";
 import {
   VENUE_FILE,
@@ -611,8 +613,15 @@ async function runHeld(
   const managedCloud = marker.managedCloud as { requestId: string; pointId: string } | undefined;
   await run();
   if (managedCloud) await deps.onManagedCloudRestored?.(managedCloud);
-  await rm(join(deps.stateDir, SETUP_OPERATION), { force: true });
-  await syncFolderHolding(join(deps.stateDir, SETUP_OPERATION));
+  const operationPath = join(deps.stateDir, SETUP_OPERATION);
+  const removed = await unlink(operationPath).then(
+    () => true,
+    (error: unknown) => {
+      if (errnoOf(error) === "ENOENT") return false;
+      throw error;
+    },
+  );
+  if (removed) await syncFolderHolding(operationPath);
   await saveRecord({
     version: 1,
     phase: "first-start",

@@ -529,7 +529,7 @@ it("rechecks a corrected saved environment before moving the installed database"
   expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(f.original);
   expect(f.exit).not.toHaveBeenCalled();
   await expect(
-    stat(join(f.stateDir, "first-setup-start-again-guesses.json")),
+    stat(join(f.stateDir, "flows/setup/start-again-guesses.json")),
   ).rejects.toMatchObject({ code: "ENOENT" });
 });
 

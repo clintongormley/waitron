@@ -1,7 +1,7 @@
+import { dirname, join } from "node:path";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import nativeFs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { firstStartPending, readRestoreFlow, updateRestoreFlow } from "./restore-flow.js";
@@ -27,6 +27,29 @@ afterEach(async () => {
 });
 
 describe("staged restore requests", () => {
+  it("finishes a fresh restore when no setup-operation parent exists", async () => {
+    const stateDir = await fresh();
+    await stageRestoreRequest(stateDir, {
+      artifact: Uint8Array.from([1]),
+      recoveryKey: "synthetic",
+      environment: "preproduction",
+    });
+    await expect(stat(join(stateDir, "flows/setup"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(
+      runStagedRestore(
+        {
+          stateDir,
+          venueDir: join(stateDir, "venue"),
+          migrationsRoot: null,
+          log: () => {},
+        },
+        async () => {},
+      ),
+    ).resolves.toBe(true);
+    expect(await readRestoreFlow(stateDir)).toMatchObject({ phase: "first-start" });
+    await expect(stat(join(stateDir, "flows/setup"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("persists a managed Cloud marker and passes it only to that cold restore", async () => {
     const stateDir = await fresh();
     const managedCloud = {
@@ -210,7 +233,8 @@ describe("staged restore requests", () => {
       recoveryKey: "recovery",
       environment: "preproduction",
     });
-    await writeFile(join(stateDir, "setup-operation.json"), "restore receipt");
+    await mkdir(dirname(join(stateDir, "flows/setup/operation.json")), { recursive: true });
+    await writeFile(join(stateDir, "flows/setup/operation.json"), "restore receipt");
     const restore = vi.fn(async () => {});
     const onManagedCloudRestored = vi.fn(async () => {});
     expect(
@@ -234,7 +258,7 @@ describe("staged restore requests", () => {
         venueDir: join(stateDir, "venue"),
       }),
     );
-    await expect(readFile(join(stateDir, "setup-operation.json"))).rejects.toMatchObject({
+    await expect(readFile(join(stateDir, "flows/setup/operation.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
     expect(await firstStartPending(stateDir)).toEqual({ source: "archive" });
@@ -274,7 +298,8 @@ describe("staged restore requests", () => {
       recoveryKey: "recovery",
       environment: "production",
     });
-    await writeFile(join(stateDir, "setup-operation.json"), "restore receipt");
+    await mkdir(dirname(join(stateDir, "flows/setup/operation.json")), { recursive: true });
+    await writeFile(join(stateDir, "flows/setup/operation.json"), "restore receipt");
     await expect(
       runStagedRestore(
         {
@@ -299,7 +324,9 @@ describe("staged restore requests", () => {
       version: 1,
       environment: "production",
     });
-    expect(await readFile(join(stateDir, "setup-operation.json"), "utf8")).toBe("restore receipt");
+    expect(await readFile(join(stateDir, "flows/setup/operation.json"), "utf8")).toBe(
+      "restore receipt",
+    );
   });
 
   it("refuses an unreadable restore flow without starting the box", async () => {
@@ -479,7 +506,8 @@ describe("staged restore requests from the bucket", () => {
   it("runs the bucket source through its own restore, never the archive's, and clears it", async () => {
     const stateDir = await fresh();
     await staged(stateDir);
-    await writeFile(join(stateDir, "setup-operation.json"), "restore receipt");
+    await mkdir(dirname(join(stateDir, "flows/setup/operation.json")), { recursive: true });
+    await writeFile(join(stateDir, "flows/setup/operation.json"), "restore receipt");
     const archive = vi.fn(async () => {});
     const stream = vi.fn(async () => {});
     expect(
@@ -509,7 +537,7 @@ describe("staged restore requests from the bucket", () => {
     expect(await firstStartPending(stateDir)).toEqual({ source: "stream" });
     for (const name of [
       ...STREAM_FILES.filter((name) => !name.endsWith("record.json")),
-      "setup-operation.json",
+      "flows/setup/operation.json",
     ]) {
       await expect(readFile(join(stateDir, name))).rejects.toMatchObject({ code: "ENOENT" });
     }

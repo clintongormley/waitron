@@ -1,5 +1,5 @@
+import { dirname, join } from "node:path";
 import { mkdtemp, rm, readFile, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
@@ -106,7 +106,7 @@ it("binds normalized planned identity, hashing both secrets and returning no ver
   expect(claimed.state).not.toHaveProperty("ownerVerifier");
   expect(claimed.state).not.toHaveProperty("inputs");
   expect(claimed.state).not.toHaveProperty("request.admin.passwordHash");
-  const persisted = await readFile(join(f.dir, "state", "first-setup.json"), "utf8");
+  const persisted = await readFile(join(f.dir, "state", "flows/setup/record.json"), "utf8");
   for (const secret of [payload.request.admin.password, claimed.capability])
     expect(persisted).not.toContain(secret);
 });
@@ -286,7 +286,7 @@ it("keeps a completed attempt out of a new activation", async () => {
     { kind: "complete" },
   ] as const)
     state = await f.store.update(state.frozen.attemptId, state.revision, change);
-  const bytes = await readFile(join(f.dir, "state", "first-setup.json"));
+  const bytes = await readFile(join(f.dir, "state", "flows/setup/record.json"));
   const refusal = { owner: "setup.owner_required", store: "setup.attempt_conflict" };
   await expect(
     f.owner.authorize({ ...claim.state, revision: state.revision, capability: claim.capability }),
@@ -294,7 +294,7 @@ it("keeps a completed attempt out of a new activation", async () => {
   await expect(
     f.store.update(state.frozen.attemptId, state.revision, { kind: "activation-started" }),
   ).rejects.toMatchObject({ code: refusal.store });
-  expect(await readFile(join(f.dir, "state", "first-setup.json"))).toEqual(bytes);
+  expect(await readFile(join(f.dir, "state", "flows/setup/record.json"))).toEqual(bytes);
   expect((await f.store.readResumable())?.state.result).toEqual({
     retained: "original-result",
   });
@@ -385,10 +385,12 @@ it("rejects unsupported reconfirmation purposes and malformed one-use grants", a
 it("does not claim over an unreadable operation or filesystem entry", async () => {
   const f = await fixture();
   await mkdir(f.options.stateDir);
-  const operation = join(f.options.stateDir, "setup-operation.json");
+  const operation = join(f.options.stateDir, "flows/setup/operation.json");
+  await mkdir(dirname(operation), { recursive: true });
   await writeFile(operation, "not JSON");
   await expect(f.claim()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   await rm(operation);
+  await mkdir(dirname(operation), { recursive: true });
   await writeFile(operation, "{}");
   const spy = vi.spyOn(filesystem, "lstat").mockRejectedValueOnce(new Error("unreadable state"));
   try {

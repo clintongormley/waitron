@@ -1,6 +1,6 @@
+import { dirname, join } from "node:path";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Agent } from "undici";
 import { Hono } from "hono";
@@ -281,11 +281,12 @@ it.each([
       if (change === "replacement") {
         const replaced = decodeConfigurationBundle(artifact, "import passphrase");
         replaced.createdAt = "2026-10-16T12:00:00.000Z";
+        await mkdir(dirname(join(stateDir, "flows/setup/import/artifact")), { recursive: true });
         await writeFile(
-          join(stateDir, "configuration-import.artifact"),
+          join(stateDir, "flows/setup/import/artifact"),
           encodeConfigurationBundle(replaced, "import passphrase"),
         );
-      } else if (change === "missing") await rm(join(stateDir, "configuration-import.json"));
+      } else if (change === "missing") await rm(join(stateDir, "flows/setup/import/marker.json"));
       const response = await transport(`${base}/setup-api/provision`, {
         method: "POST",
         headers: owned.headers,
@@ -353,14 +354,16 @@ it.each([
       } finally {
         disk.close();
       }
-      const saved = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+      const saved = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
       expect(saved.status).toBe(change === "none" ? "complete" : "consumption-intent");
       expect(saved.frozen.configurationImport).toEqual({
         digest: expect.stringMatching(/^[a-f0-9]{64}$/),
         newTaxpayer,
       });
       if (change === "none") {
-        await expect(readFile(join(stateDir, "configuration-import.json"))).rejects.toMatchObject({
+        await expect(
+          readFile(join(stateDir, "flows/setup/import/marker.json")),
+        ).rejects.toMatchObject({
           code: "ENOENT",
         });
         server = await startServer(await loadBoxEnv(env, stateDir), env, { testClock });
@@ -368,7 +371,9 @@ it.each([
         expect((await transport(`${base}/setup-api/first-setup/status`)).status).toBe(404);
         await server.close();
         server = undefined;
-        const restarted = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+        const restarted = JSON.parse(
+          await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
+        );
         expect(restarted.frozen).toEqual(saved.frozen);
         expect(restarted.result).toEqual(saved.result);
       }

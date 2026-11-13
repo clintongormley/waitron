@@ -16,6 +16,7 @@ export const RESET_REQUEST_FILE = "reset-request.json";
 export const PENDING_ADOPTION_FILE = "pending-adoption.json";
 export const RECOVERY_LOCK_FILE = "recovery.lock";
 export const FLOWS_DIR = "flows";
+export const SETUP_FLOW_DIR = "flows/setup";
 export const RESTORE_FLOW_DIR = "flows/restore";
 export const SCRATCH_DIR = "scratch";
 export const RESTORE_STAGING_DIR = "scratch/restore";
@@ -23,7 +24,7 @@ export const BACKUP_STAGING_DIR = "scratch/backup";
 export const STREAM_RESTORE_PREFIX = "stream-restore-";
 export const RESTORE_ENTRY_PREFIX = "restore-entry-";
 export const ENVIRONMENT_RECOVERY_MOVE_FILE = "environment-recovery-move.json";
-export const START_AGAIN_GUESSES_FILE = "first-setup-start-again-guesses.json";
+export const START_AGAIN_GUESSES_FILE = "flows/setup/start-again-guesses.json";
 export const SECRETS_ENV_FILE = "secrets.env";
 export const TRADING_ENV_FILE = "trading.env";
 export const BACKUP_ENV_FILE = "backup.env";
@@ -32,16 +33,16 @@ export const RECOVERY_STATE_FILE = "recovery.json";
 export const MODULES_FILE = "modules.json";
 export const MODULE_PREPARATION_STATE_FILE = "module-preparation-state.json";
 export const MODULE_EVIDENCE_DIR = "module-evidence";
-export const MODULE_OPERATION_PUBLIC_FILE = "module-operation-public.json";
-export const FIRST_FISCAL_DOCUMENTS_DIR = "first-fiscal-documents";
-export const FIRST_SETUP_FILE = "first-setup.json";
-export const FIRST_SETUP_NODE_KEY_FILE = "first-setup-node-key.json";
-export const FISCAL_READINESS_FILE = "fiscal-readiness.json";
-export const SETUP_OPERATION_FILE = "setup-operation.json";
+export const MODULE_OPERATION_PUBLIC_FILE = "flows/setup/public-evidence.json";
+export const FIRST_FISCAL_DOCUMENTS_DIR = "flows/setup/documents";
+export const FIRST_SETUP_FILE = "flows/setup/record.json";
+export const FIRST_SETUP_NODE_KEY_FILE = "flows/setup/node-key.json";
+export const FISCAL_READINESS_FILE = "flows/setup/readiness.json";
+export const SETUP_OPERATION_FILE = "flows/setup/operation.json";
 export const SETUP_CLOCK_STEP_FILE = "setup-clock-step.json";
-export const CONFIGURATION_IMPORT_FILE = "configuration-import.json";
-export const CONFIGURATION_IMPORT_ARTIFACT = "configuration-import.artifact";
-export const CONFIGURATION_IMPORT_KEY = "configuration-import.key";
+export const CONFIGURATION_IMPORT_FILE = "flows/setup/import/marker.json";
+export const CONFIGURATION_IMPORT_ARTIFACT = "flows/setup/import/artifact";
+export const CONFIGURATION_IMPORT_KEY = "flows/setup/import/key";
 export const STREAM_DIR = "stream";
 export const HANDOVER_DIR = "handover";
 export const PAIR_STORE_DIR = "pair-store";
@@ -125,12 +126,6 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
   },
   { name: SCRATCH_DIR, kind: "folder", reset: "deleted", why: "Temporary working copies." },
   {
-    name: START_AGAIN_GUESSES_FILE,
-    kind: "file",
-    reset: "deleted",
-    why: "Password attempt limits survive a restart.",
-  },
-  {
     name: SETUP_CLOCK_STEP_FILE,
     kind: "file",
     reset: "deleted",
@@ -183,60 +178,6 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "folder",
     reset: "deleted",
     why: "Holds setup evidence outside the venue database.",
-  },
-  {
-    name: MODULE_OPERATION_PUBLIC_FILE,
-    kind: "file",
-    reset: "deleted",
-    why: "Public setup progress is needed before opening the database.",
-  },
-  {
-    name: FIRST_FISCAL_DOCUMENTS_DIR,
-    kind: "folder",
-    reset: "deleted",
-    why: "Setup documents must survive a restart.",
-  },
-  {
-    name: FIRST_SETUP_FILE,
-    kind: "file",
-    reset: "deleted",
-    why: "Setup state is needed before opening the database.",
-  },
-  {
-    name: FIRST_SETUP_NODE_KEY_FILE,
-    kind: "file",
-    reset: "deleted",
-    why: "Setup signing secrets stay outside database backups.",
-  },
-  {
-    name: FISCAL_READINESS_FILE,
-    kind: "file",
-    reset: "deleted",
-    why: "Setup readiness is read before activation.",
-  },
-  {
-    name: SETUP_OPERATION_FILE,
-    kind: "file",
-    reset: "deleted",
-    why: "Setup ownership must survive a restart.",
-  },
-  {
-    name: CONFIGURATION_IMPORT_FILE,
-    kind: "file",
-    reset: "deleted",
-    why: "Hands a configuration import to the next start.",
-  },
-  {
-    name: CONFIGURATION_IMPORT_ARTIFACT,
-    kind: "file",
-    reset: "deleted",
-    why: "Staged configuration import attachment.",
-  },
-  {
-    name: CONFIGURATION_IMPORT_KEY,
-    kind: "file",
-    reset: "deleted",
-    why: "Import secrets stay outside database backups.",
   },
   { name: STREAM_DIR, kind: "folder", reset: "deleted", why: "Owned by Litestream." },
   {

@@ -1,7 +1,7 @@
+import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
@@ -355,7 +355,7 @@ it.each(["activation-started", "uncertain"] as const)(
 it("a command cut off before its stamp, beside an earlier attempt that had begun activation: Start again refuses and deletes nothing", async () => {
   const f = await cutOffSetup("uncertain");
   // Stands in for an earlier attempt kept in the record: this attempt as it is, past activation.
-  const path = join(f.folders.stateDir, "first-setup.json");
+  const path = join(f.folders.stateDir, "flows/setup/record.json");
   const record = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown> & {
     previous: unknown[];
   };
@@ -370,6 +370,7 @@ it("a command cut off before its stamp, beside an earlier attempt that had begun
   void _venueDir;
   void _stateDir;
   record.previous = [...previous, attempt];
+  await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(record), { mode: 0o600 });
   expect((await f.host.store.read())!.previous.at(-1)!.status).toBe("uncertain");
   await expectBothRefused(f, { code: "setup.not_ready", params: {} }, undefined);
@@ -392,12 +393,7 @@ async function files(dir: string, prefix = ""): Promise<Record<string, string>> 
   return result;
 }
 
-/**
- * The four things a setup leaves before activation that Start again keeps (watcher, 2026-11-09
- * 12:20), each made by its real writer except the readiness database, which only its migration
- * step makes: its full run files a test invoice with AEAT.
- */
-async function keptBeforeActivation(stateDir: string) {
+async function filesBeforeActivation(stateDir: string) {
   const ring = loadKeyRing(environment);
   const readiness: FiscalReadinessInput = {
     requirement: "accepted-test-submission",
@@ -466,17 +462,17 @@ async function keptBeforeActivation(stateDir: string) {
 }
 
 it.each(["activation-started", "uncertain"] as const)(
-  "a command cut off at %s: Start again keeps exactly the readiness receipt, the readiness database, the staged import and the recovery pack, unchanged, and the next command run completes",
+  "a command cut off at %s: Start again removes readiness and import, keeps the readiness database and recovery pack unchanged, and the next command run completes",
   async (cutOff) => {
     const f = await cutOffSetup(cutOff);
-    await keptBeforeActivation(f.folders.stateDir);
+    await filesBeforeActivation(f.folders.stateDir);
     const kept = await files(f.folders.stateDir);
-    expect(Object.keys(kept).filter((name) => !name.includes("/"))).toEqual(
+    expect(Object.keys(kept)).toEqual(
       expect.arrayContaining([
-        "fiscal-readiness.json",
-        "configuration-import.artifact",
-        "configuration-import.key",
-        "configuration-import.json",
+        "flows/setup/readiness.json",
+        "flows/setup/import/artifact",
+        "flows/setup/import/key",
+        "flows/setup/import/marker.json",
       ]),
     );
     expect(Object.keys(kept).some((name) => name.startsWith("fiscal-readiness-db-"))).toBe(true);
@@ -491,13 +487,12 @@ it.each(["activation-started", "uncertain"] as const)(
     expect(left).toEqual(
       Object.fromEntries(
         Object.entries(kept).filter(
-          ([name]) =>
-            name === "fiscal-readiness.json" ||
-            name.startsWith("fiscal-readiness-db-") ||
-            name.startsWith("configuration-import."),
+          ([name]) => name === "flows/" || name.startsWith("fiscal-readiness-db-"),
         ),
       ),
     );
+    for (const name of ["flows/setup/", "flows/setup/readiness.json", "flows/setup/import/"])
+      expect(left[name], name).toBeUndefined();
     expect(await files(f.folders.venueDir)).toEqual({});
     expect(
       createHash("sha256")

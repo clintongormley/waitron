@@ -109,7 +109,7 @@ describe("hour recovery document route", () => {
     expect(
       JSON.parse(
         await readFile(
-          join(f.stateDir, "first-fiscal-documents", `${f.module}.recovery.json`),
+          join(f.stateDir, "flows/setup/documents", `${f.module}.recovery.json`),
           "utf8",
         ),
       ),

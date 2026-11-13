@@ -1,9 +1,9 @@
+import { dirname, join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { X509Certificate, createPrivateKey } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeAll, expect, it } from "vitest";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 
@@ -28,7 +28,9 @@ async function fixture() {
   await writeFile(join(stateDir, "tls/ca.key"), material.caKeyPem);
   await writeFile(join(stateDir, "tls/server.pem"), material.serverCertPem);
   await writeFile(join(stateDir, "secrets.env"), "unchanged synthetic vault");
-  await writeFile(join(stateDir, "first-setup.json"), "unchanged synthetic attempt");
+  await mkdir(join(stateDir, "flows/setup"), { recursive: true });
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
+  await writeFile(join(stateDir, "flows/setup/record.json"), "unchanged synthetic attempt");
   const script = join(root, "repair.mts");
   await writeFile(
     script,
@@ -111,7 +113,7 @@ it.each([
     expect(await readFile(join(f.stateDir, "secrets.env"), "utf8")).toBe(
       "unchanged synthetic vault",
     );
-    expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe(
       "unchanged synthetic attempt",
     );
     if (candidate !== null) expect(await readdir(archiveRoot)).toEqual(before);

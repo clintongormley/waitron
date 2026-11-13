@@ -53,7 +53,8 @@ async function fixture() {
   const stateDir = join(root, "state");
   await mkdir(venueDir);
   await mkdir(stateDir);
-  await writeFile(join(stateDir, "first-setup.json"), "{}");
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
+  await writeFile(join(stateDir, "flows/setup/record.json"), "{}");
   return { root, venueDir, stateDir };
 }
 afterEach(async () => {
@@ -149,7 +150,7 @@ it.each(["restore", "reset"])(
     );
   },
 );
-it.each(["first-setup.json", "module-operation-public.json"])(
+it.each(["flows/setup/record.json", "flows/setup/public-evidence.json"])(
   "does not accept %s from an authenticated restore source",
   async (name) => {
     const f = await fixture();
@@ -183,7 +184,7 @@ it.each(["first-setup.json", "module-operation-public.json"])(
 it("does not import host claim or enrolment files through the generic state-secrets writer", async () => {
   const f = await fixture();
   const { unpackStateFiles } = await import("./state-secrets.js");
-  for (const name of ["first-setup.json", "module-operation-public.json"]) {
+  for (const name of ["flows/setup/record.json", "flows/setup/public-evidence.json"]) {
     await expect(
       unpackStateFiles({ "trading.env": "SHOULD-NOT-WRITE", [name]: "{}" }, f.stateDir),
     ).rejects.toMatchObject({ code: "recovery.archive_path_unsafe", params: {} });
@@ -295,7 +296,7 @@ async function abandonedConsumedClaim(kind = "consumed-abandoned") {
     await import("@waitron/provisioning");
   const { hashPassword, hashPin } = await import("@waitron/identity");
   const f = await fixture();
-  await rm(join(f.stateDir, "first-setup.json"));
+  await rm(join(f.stateDir, "flows/setup/record.json"));
   const coordinator = createFirstSetupCoordinator();
   const store = createFirstSetupStore({ ...f, coordinator });
   const attemptId = randomUUID();
@@ -427,10 +428,11 @@ it.each(["pre-consumption-abandoned", "complete"])(
 );
 
 it.each([
-  "first-setup-node-key.json",
-  "first-fiscal-documents/manifest.json",
-  "first-fiscal-documents/0-0.json",
-  "first-setup-resolutions/id/000001.json",
+  "flows/restore/record.json",
+  "flows/setup/node-key.json",
+  "flows/setup/documents/manifest.json",
+  "flows/setup/documents/0-0.json",
+  "flows/setup/record.json",
   "first-setup-deleting.json",
   "records/choices/x.json",
 ])("cannot import retirement or current setup authority through %s", async (name) => {
@@ -476,7 +478,8 @@ async function markedDeletion() {
   const stateDir = join(root, "state");
   await mkdir(venueDir);
   await mkdir(stateDir);
-  await writeFile(join(stateDir, "first-setup.json"), '{"synthetic":"attempt"}');
+  await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
+  await writeFile(join(stateDir, "flows/setup/record.json"), '{"synthetic":"attempt"}');
   const roots = { venueDir, stateDir };
   await writeStartAgainMarker(
     roots,
@@ -493,21 +496,22 @@ it("an interrupted Start again is finished and setup is served", async () => {
   const f = await markedDeletion();
   const entry = await resolveFirstSetupEntry(f, {});
   expect(entry.kind).toBe("normal");
-  await gone(join(f.stateDir, "first-setup.json"));
+  await gone(join(f.stateDir, "flows/setup/record.json"));
   await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
 });
 
 it("an unfinishable deletion is refused setup.start_again_incomplete and nothing is deleted", async () => {
   const f = await markedDeletion();
-  await writeFile(join(f.stateDir, "first-setup.json"), '{"changed":"after the marker"}');
+  await mkdir(dirname(join(f.stateDir, "flows/setup/record.json")), { recursive: true });
+  await writeFile(join(f.stateDir, "flows/setup/record.json"), '{"changed":"after the marker"}');
   const entry = await resolveFirstSetupEntry(f, {});
   expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_incomplete" });
   if (entry.kind !== "refused") throw new Error("expected a refused start");
   expect(entry.error).toMatchObject({
     code: "setup.start_again_incomplete",
-    reason: "size or hash differs: state/first-setup.json",
+    reason: "size or hash differs: state/flows/setup/record.json",
   });
-  expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe(
     '{"changed":"after the marker"}',
   );
   expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
@@ -521,7 +525,7 @@ it("folders reached through a symbolic link still finish an interrupted Start ag
   const links = { venueDir: join(link, "venue"), stateDir: join(link, "state") };
   const entry = await resolveFirstSetupEntry(links, {});
   expect(entry.kind).toBe("normal");
-  await gone(join(f.stateDir, "first-setup.json"));
+  await gone(join(f.stateDir, "flows/setup/record.json"));
   await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
 });
 
@@ -548,7 +552,7 @@ it("folders that cannot be put in canonical form fall through to today's path", 
   const entry = await resolveFirstSetupEntry({ venueDir: linked, stateDir: f.stateDir }, {});
   expect(entry.kind).toBe("normal");
   expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
-  expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe(
     '{"synthetic":"attempt"}',
   );
 });
@@ -644,7 +648,7 @@ it("a keep record for the marker is refused setup.start_again_kept even after th
   if (entry.kind !== "refused") throw new Error("expected a refused start");
   expect(entry.survey).toBeUndefined();
   expect(await boxTree(f)).toEqual(before);
-  expect(await stat(join(f.stateDir, "first-setup.json"))).toBeTruthy();
+  expect(await stat(join(f.stateDir, "flows/setup/record.json"))).toBeTruthy();
   expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
 });
 
@@ -653,7 +657,7 @@ it("a move record with every unit still in place is resumed and setup is served"
   const entry = await resolveFirstSetupEntry(f.roots, {});
   expect(entry.kind).toBe("normal");
   await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
-  await gone(join(f.stateDir, "first-setup.json"));
+  await gone(join(f.stateDir, "flows/setup/record.json"));
   await gone(join(f.venueDir, "venue.db"));
   expect(await readFile(join(f.folders.venue, "venue.db"), "utf8")).toBe("found database");
 });
@@ -669,7 +673,7 @@ it("a move record whose resume rename fails is refused setup.start_again_move_un
     expect(entry.survey).toBeUndefined();
     expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("found database");
     expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
-    expect(await stat(join(f.stateDir, "first-setup.json"))).toBeTruthy();
+    expect(await stat(join(f.stateDir, "flows/setup/record.json"))).toBeTruthy();
   } finally {
     await chmod(f.folders.venue, 0o700);
   }

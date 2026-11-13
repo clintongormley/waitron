@@ -1,3 +1,4 @@
+import { dirname, join, resolve } from "node:path";
 import { request as httpsRequest } from "node:https";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { build } from "esbuild";
@@ -5,7 +6,6 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { cp, mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 import {
   retainHttpListener,
   retainedHttpPreload,
@@ -35,7 +35,8 @@ it.each(["bin.ts", "node-entry.ts"])(
       }))
         await writeFile(join(stateDir, "tls", name), value);
       await mkdir(venueDir);
-      await writeFile(join(stateDir, "first-setup.json"), "{}");
+      await mkdir(dirname(join(stateDir, "flows/setup/record.json")), { recursive: true });
+      await writeFile(join(stateDir, "flows/setup/record.json"), "{}");
       await cp(resolve("src/assets"), join(root, "assets"), { recursive: true });
       await symlink(resolve("node_modules"), join(root, "node_modules"));
       const entry = join(root, "direct.mjs");
