@@ -445,7 +445,7 @@ it("once the series are made, the page's one button is gone", async () => {
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=compare]")).toBeNull();
 });
-it("asks no last-hour question and offers no clock confirmation", async () => {
+it("asks no last-hour question and offers no clock confirmation while the internet time service vouches for the clock", async () => {
   const { el } = await mount();
   await ready(el);
   expect(el.shadowRoot!.querySelectorAll('input[type="radio"]')).toHaveLength(0);
@@ -2600,6 +2600,29 @@ it("when only this device agrees, Confirm the time compares again and selects wi
   await vi.waitFor(() =>
     expect(selects(prepare)).toEqual([
       { action: "select", comparisonId: "comparison-2", confirmed: true },
+    ]),
+  );
+  await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+});
+it("Compare the clocks again with no internet time, once the clocks agree, offers Confirm the time and sends no select until it is pressed", async () => {
+  const { el, prepare, state } = await pressed(undefined, differing);
+  await vi.waitFor(() => expect(action(el)).toBe("Compare the clocks again"));
+  state.decision = {
+    ...clock,
+    usable: clock.usable.filter((r) => r.source !== "internet"),
+    unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
+  };
+  await userEvent.click(button(el, "compare"));
+  await vi.waitFor(() =>
+    expect(button(el, "confirm-time").textContent?.trim()).toBe("Confirm the time"),
+  );
+  expect(detailRows(el, "clock-times")).toHaveLength(2);
+  expect(action(el)).toBeUndefined();
+  expect(selects(prepare)).toHaveLength(0);
+  await userEvent.click(button(el, "confirm-time"));
+  await vi.waitFor(() =>
+    expect(selects(prepare)).toEqual([
+      { action: "select", comparisonId: "comparison-3", confirmed: true },
     ]),
   );
   await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());

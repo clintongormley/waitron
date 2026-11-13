@@ -29,7 +29,7 @@ the second clock"). While the time service is synchronised it carries on, whatev
 browser five minutes out"). Otherwise the box's clock must be within 30 seconds of the device's,
 ahead or behind, and there is no confirmation to get past it (the same file's "a name needs a
 second clock within 30 seconds of the box"). There is no "last hour" question: the page has no such field
-(`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation").
+(`packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts`, "asks no last-hour question and offers no clock confirmation while the internet time service vouches for the clock").
 
 Tick "These details are correct.", then press **Proceed**; once
 the clocks agree, the page asks the box for the invoice series
@@ -94,7 +94,9 @@ zero with a fresh wait makes the series by itself at that wait's zero"). If it s
 else, such as clocks that differ or only this device's clock agreeing with the box's (both times
 then show above **Proceed**), it needs the tick and **Proceed** (the same file's "a reload's
 wait that stops at zero on clocks that differ needs the tick and Proceed, even after Compare the
-clocks again waits for a second clock"). Changing the tick, or the page being taken off the screen,
+clocks again waits for a second clock" and "a wait the box recorded before the page loaded that ends
+with only this device agreeing shows the times with Proceed and sends nothing; Proceed then confirms
+them"). Changing the tick, or the page being taken off the screen,
 ends that carrying-on for good (the same file's "a reload's wait ends for good once the tick
 changes, so nothing more is asked without Proceed", "a reload's wait ends when the page is taken
 off the screen" and "a recorded wait the load's preview shows only after the tick changed does not
@@ -117,8 +119,10 @@ recorded"). What the page shows when it cannot go ahead, and what it asks for:
   It does not retry by itself; press **Compare the clocks again**, which after **Proceed** carries on
   to the series once the clocks agree, except that when the box cannot check its time over the
   internet it shows both times above **Proceed** and waits for **Proceed** again (`first-hour.browser.test.ts`, "a clock refusal shows each
-  clock's reading and no countdown, and waits for Compare the clocks again" and "Compare the clocks again
-  after Proceed carries on to the series once the clocks agree").
+  clock's reading and no countdown, and waits for Compare the clocks again", "Compare the clocks again
+  after Proceed carries on to the series once the clocks agree" and "Compare the clocks again with no
+  internet time, once the clocks agree, shows both times with Proceed and sends nothing until
+  Proceed").
 - **The minute this box would use is already taken**: the page says "This invoice series code has
   already been used. Waitron creates a new one by itself when the countdown ends." and "New invoice series in
   03:00", counting down in minutes and seconds to the next free minute with no button

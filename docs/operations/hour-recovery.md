@@ -113,7 +113,7 @@ page goes back to choosing the backup and sends nothing"). Once the series are m
 read.
 
 There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last-hour question and
-offers no clock confirmation"). Enter the server key, tick both statements and "These details are correct.", in any order, and
+offers no clock confirmation while the internet time service vouches for the clock"). Enter the server key, tick both statements and "These details are correct.", in any order, and
 press **Proceed**. The invoice series is the code at the start of every invoice number; recovery
 creates new ones so the box never repeats the old box's. Until **Proceed** the page sends nothing
 to the box; while the button reads **Proceed** it says "When you press Proceed, Waitron creates new invoice series for this box, so
@@ -123,7 +123,7 @@ does"). After **Proceed** the box asks its internet time service whether it is s
 compares its own clock with the clock of the device showing the page (AEAT's time is not read for
 it), and when the time service is synchronised the page asks the box for the invoice series, all by
 itself; when only the two clocks agree it shows both times and asks for the series once the person
-presses **Confirm the time** or sets the box's clock with **This device**; nobody types a time (`recovery-hour.browser.test.ts`, "decodes the printed key and sends
+presses **Confirm the time**; nobody types a time (`recovery-hour.browser.test.ts`, "decodes the printed key and sends
 independent recovery declarations before selecting"). Changing or clearing the key, either
 statement or the details tick stops it, and putting it back sends nothing until **Proceed** is
 pressed again (the same file's "an edit to a declaration stops the wait, and putting it back sends
@@ -191,8 +191,10 @@ button is gone"). What the page shows when it cannot go ahead, and what it asks 
   retry by itself; press **Compare the clocks again**, which
   carries on to the invoice series once the clocks agree, except that when the box cannot check its
   time over the internet it shows both times and waits for **Confirm the time** (`recovery-hour.browser.test.ts`, "a clock
-  refusal shows each clock's reading and no countdown, and waits for Compare the clocks again" and
-  "Compare the clocks again after Proceed carries on to the series once the clocks agree").
+  refusal shows each clock's reading and no countdown, and waits for Compare the clocks again",
+  "Compare the clocks again after Proceed carries on to the series once the clocks agree" and
+  "Compare the clocks again with no internet time, once the clocks agree, offers Confirm the time and
+  sends no select until it is pressed").
 - **The minute this box would use is already taken**: the page says "This invoice series code has already been used. Waitron creates a
   new one by itself when the countdown ends." and "New invoice series in 03:00", counting down in minutes and
   seconds to the next free minute with no button to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`recovery-hour.browser.test.ts`,

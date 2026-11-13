@@ -6347,11 +6347,13 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   on by itself, and AEAT's time is not read for it (owner, 2026-11-11: "Instead we rely on NTP";
   2026-11-13: "b", AEAT no longer counts); another machine's clock counts only once the person
   proved on that page (the setup password on setup, the backup's node recovery key on restore, a
-  `node.manage` sign-in on handover, the box's current recovery key on the conflict switch) confirms
+  `node.manage` sign-in on promotion, the box's current recovery key on the conflict switch) confirms
   both times or sets the box's clock from that machine (owner, 2026-11-13: "we should never just
   accept another device's match automatically. instead, we should always ask for confirmation, and
-  that confirmation should be protected"; This device and the list of proofs are the watcher's 09:49
-  proposal, which the owner agreed to at 09:52: "i agree with the rest"); a minute whose name is already in a
+  that confirmation should be protected"; This device and the list of proofs follow the watcher's
+  09:49 proposal, which the owner agreed to at 09:52: "i agree with the rest", except the conflict
+  switch, which it gave as an administrator sign-in and whose page checks the box's current
+  recovery key); a minute whose name is already in a
   history the box reads is not taken (the box waits for the next free one if it starts within 150
   seconds, and otherwise refuses with when it can; the setup and restore pages count that down and
   check again by themselves; owner, 2026-10-30, A1207), and no other name or record refuses or moves

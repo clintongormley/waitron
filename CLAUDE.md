@@ -1013,14 +1013,15 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   clock agrees within 30 seconds. The box's internet time service saying it is synchronised carries
   on by itself, and AEAT's time is not read for it (owner, 2026-11-11: "Instead we rely on NTP");
   another machine's clock counts only once the person proved on that page (the setup password on
-  setup, the backup's node recovery key on restore, a `node.manage` sign-in on handover, the box's
+  setup, the backup's node recovery key on restore, a `node.manage` sign-in on promotion, the box's
   current recovery key on the conflict switch) confirms both times or sets the box's clock from that
   machine (owner, 2026-11-13: "we should never just accept another
   device's match automatically. instead, we should always ask for confirmation, and that
-  confirmation should be protected"; This device and the list of proofs are the watcher's 09:49
-  proposal, which the owner agreed to at 09:52: "i agree with the rest"). A minute whose name is
-  already in a history the box reads is not taken. Its waits, its other refusals and when a name can
-  repeat:
+  confirmation should be protected"; This device and the list of proofs follow the watcher's 09:49
+  proposal, which the owner agreed to at 09:52: "i agree with the rest", except the conflict switch,
+  which it gave as an administrator sign-in and whose page checks the box's current recovery key). A
+  minute whose name is already in a history the box reads is not taken. Its waits, its other
+  refusals and when a name can repeat:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
   preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.
   Restore takes one source; working-time chain continues from its head. Guards:
