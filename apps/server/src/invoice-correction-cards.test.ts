@@ -347,4 +347,30 @@ describe("a correction's connected card legs", () => {
       { ...leg, state: "completed", completedAt: expect.any(String) },
     ]);
   });
+
+  it("answers a repeated card leg with its refund after the leg has filed the correction", async () => {
+    const t = await cashAndReader();
+    const { correction } = await open(t.saleId, "24.20");
+    await cash(correction.id, "14.20");
+    const submissionId = randomUUID();
+    const request = {
+      submissionId,
+      tenderId: t.cardTenderId,
+      appliedAmount: "10.00",
+      tipAmount: "0.00",
+      reason: "Goodwill",
+      invoiceCorrection: { id: correction.id, requestId: submissionId },
+    };
+    const leg = await refundSettledTender(v.deps, v.cfg, t.saleId, request, v.operator);
+    expect(leg).toMatchObject({ state: "completed" });
+    expect(await read(correction.id)).toMatchObject({ state: "filed" });
+    const refundsBefore = await v.db.select().from(tenderRefunds);
+    const salesBefore = salesCount();
+
+    await expect(
+      refundSettledTender(v.deps, v.cfg, t.saleId, request, v.operator),
+    ).resolves.toEqual(leg);
+    expect(await v.db.select().from(tenderRefunds)).toEqual(refundsBefore);
+    expect(salesCount()).toBe(salesBefore);
+  });
 });
