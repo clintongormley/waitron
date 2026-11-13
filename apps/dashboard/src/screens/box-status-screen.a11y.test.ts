@@ -239,6 +239,50 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
       expect(el.shadowRoot!.querySelector(`[data-test=${drawn}]`)).not.toBeNull();
       await expectNoA11yViolations(host);
     });
+
+    it.each([
+      ["its host answering", true, null, "clock-check"],
+      ["its host silent", false, null, "clock-confirm-help"],
+      [
+        "a refused confirmation",
+        true,
+        { code: "clock.set_refused", params: { reason: "not_stopped" } },
+        "clock-confirm-refused",
+      ],
+    ] as const)(
+      "renders a start waiting for its time accessibly with %s",
+      async (_name, hostAnswers, refusal, drawn) => {
+        const waiting = health({
+          clock: {
+            ...health().clock,
+            sync: {
+              synced: false,
+              source: hostAnswers ? "timedatectl" : "unavailable",
+              warn: true,
+            },
+            waiting: { boxAt: "2026-10-22T19:45:00.000Z", agreed: 1, hostAnswers },
+          },
+        });
+        const api = Object.assign(stubApi(waiting), {
+          clockChallenge: challenged(),
+          clockConfirm: vi.fn().mockRejectedValue(refusal),
+        });
+        const { el, host } = await mountWidget<BoxStatusScreen>(
+          "dashboard-box-status-screen",
+          { api, canOpen: () => true, canCheckClock: true },
+          theme,
+        );
+        await flush(el);
+        if (refusal !== null) {
+          await userEvent.click(
+            el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-confirm]")!,
+          );
+          await flush(el);
+        }
+        expect(el.shadowRoot!.querySelector(`[data-test=${drawn}]`)).not.toBeNull();
+        await expectNoA11yViolations(host);
+      },
+    );
   });
 
   describe("the restart of the box", () => {

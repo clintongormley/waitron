@@ -130,6 +130,23 @@ describe("collectBoxHealth", () => {
     });
   });
 
+  it("answers a waiting start with the box's time, the devices agreeing and whether its host answers", async () => {
+    const health = await collectBoxHealth(
+      suite.db,
+      stubReaders({ startClock: () => ({ agreed: 1, hostAnswers: false }) }),
+    );
+    expect(health.clock.waiting).toEqual({
+      boxAt: NOW.toISOString(),
+      agreed: 1,
+      hostAnswers: false,
+    });
+  });
+
+  it("leaves the wait out once the start is confirmed", async () => {
+    const health = await collectBoxHealth(suite.db, stubReaders({ startClock: () => null }));
+    expect(health.clock).not.toHaveProperty("waiting");
+  });
+
   it("reports the latest sale by when it was issued, not by its id", async () => {
     await seedSales([
       { id: "00000000-0000-4000-8000-000000000003", at: "2026-10-20T12:00:00.000Z" },

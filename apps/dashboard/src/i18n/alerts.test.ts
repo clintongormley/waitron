@@ -139,6 +139,7 @@ it("explains dishes waiting for the pass at a closed station in English and Span
 // Slots shown as the param is. Never money: an amount is written `{name:money}`.
 const UNMARKED_SLOTS: readonly string[] = [
   "agent",
+  "agreed",
   "anchorAgeSeconds",
   "codigo",
   "count",
@@ -777,6 +778,28 @@ describe("the box's time service not keeping its clock right", () => {
     expect(text).not.toContain("not_a_reason");
     expect(text).toBe(
       "The box's clock is not being kept right. Check its date and time on the Box status page.",
+    );
+  });
+});
+
+describe("the box waiting for its start's time", () => {
+  const WAITING_EN =
+    "The box has not confirmed its time since it started, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time (1 of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.";
+  const SILENT_EN =
+    "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start.";
+
+  it("says what the box waits for, with the count, and adds why only when its host is silent", () => {
+    expect(alertMessage("clock.unconfirmed", { agreed: 1, hostSilent: false }, "en")).toBe(
+      WAITING_EN,
+    );
+    expect(alertMessage("clock.unconfirmed", { agreed: 1, hostSilent: true }, "en")).toBe(
+      `${WAITING_EN} ${SILENT_EN}`,
+    );
+  });
+
+  it("says the same in Spanish", () => {
+    expect(alertMessage("clock.unconfirmed", { agreed: 0, hostSilent: true }, "es")).toBe(
+      "El equipo no ha confirmado su hora desde que arrancó, así que no acepta cobros. Está esperando a que se conecten terminales y coincidan con su hora (0 de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del equipo; el personal puede usar «Comprobar la hora» en un terminal. No puede ver su hora de internet porque la parte del equipo que la lee no responde, así que espera así en cada arranque.",
     );
   });
 });

@@ -4073,6 +4073,14 @@ export const en = {
     "Compared with the tax agency at {time} · the box was {seconds} s behind",
   "box_status.clock.synced": "Kept in time over the internet",
   "box_status.clock.not_synced": "Not kept in time over the internet",
+  "box_status.clock.waiting":
+    "Waiting for devices to connect and agree with the box's time ({agreed} of 2 so far): no payments are taken. The box's clock says {boxAt}.",
+  "box_status.clock.waiting_host_silent":
+    "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start.",
+  "box_status.clock.confirm": "The date and time are right",
+  "box_status.clock.confirm_help":
+    "Press this only if the date and time above match a clock you trust. If they do not, use “Check with this device's time”.",
+  "box_status.clock.admin.confirmed": "This device agrees, so the box's time is confirmed.",
   "box_status.clock.admin.open": "Check with this device's time",
   "box_status.clock.admin.sign_in_hint":
     "Only an administrator can check the box's clock with this device's time. Signing in as one signs you out here first.",
@@ -4098,6 +4106,8 @@ export const en = {
     "This screen is the box itself, so its clock is the box's own. Use your phone or another computer.",
   "box_status.clock.admin.set.refused.not_stopped":
     "The box's clock no longer needs setting. See the Clock row.",
+  "box_status.clock.admin.set.refused.stopped":
+    "The box's clock reads a date before 28 October 2024, so it cannot be kept as it is. See the Clock row.",
   "box_status.clock.admin.set.failed.refused":
     "The box could not set its clock. Close this and check again.",
   "box_status.clock.admin.set.failed.unverified":
@@ -8295,6 +8305,15 @@ export const es: Record<StringKey, string> = {
     "Comparado con Hacienda el {time} · el servidor iba {seconds} s atrasado",
   "box_status.clock.synced": "Se pone en hora por internet",
   "box_status.clock.not_synced": "No se pone en hora por internet",
+  "box_status.clock.waiting":
+    "Esperando a que se conecten dispositivos y coincidan con la hora del equipo ({agreed} de 2 por ahora): no se aceptan cobros. El reloj del equipo indica {boxAt}.",
+  "box_status.clock.waiting_host_silent":
+    "No puede ver su hora de internet porque la parte del equipo que la lee no responde, así que espera así en cada arranque.",
+  "box_status.clock.confirm": "La fecha y la hora son correctas",
+  "box_status.clock.confirm_help":
+    "Pulsa esto solo si la fecha y la hora de arriba coinciden con un reloj de confianza. Si no, usa «Comprobar con la hora de este dispositivo».",
+  "box_status.clock.admin.confirmed":
+    "Este dispositivo coincide, así que la hora del equipo queda confirmada.",
   "box_status.clock.admin.open": "Comprobar con la hora de este dispositivo",
   "box_status.clock.admin.sign_in_hint":
     "Solo un administrador puede comprobar la hora del servidor con la de este dispositivo. Iniciar sesión como administrador cierra primero tu sesión aquí.",
@@ -8321,6 +8340,8 @@ export const es: Record<StringKey, string> = {
     "Esta pantalla es el propio servidor, así que su hora es la del servidor. Usa tu móvil u otro ordenador.",
   "box_status.clock.admin.set.refused.not_stopped":
     "El reloj del servidor ya no necesita ponerse en hora. Mira la fila Reloj.",
+  "box_status.clock.admin.set.refused.stopped":
+    "El reloj del servidor marca una fecha anterior al 28 de octubre de 2024, así que no se puede mantener como está. Mira la fila Reloj.",
   "box_status.clock.admin.set.failed.refused":
     "El servidor no ha podido poner su reloj en hora. Cierra esto y vuelve a comprobarlo.",
   "box_status.clock.admin.set.failed.unverified":

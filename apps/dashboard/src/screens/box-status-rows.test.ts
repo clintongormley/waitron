@@ -691,3 +691,47 @@ describe("spare copy row", () => {
     expect(copy.line).toBe("Update pending");
   });
 });
+
+describe("the Clock row while the start waits for its time", () => {
+  const BOX_AT = "2026-10-22T19:45:00.000Z";
+  const UNCONFIRMED = alert("clock.unconfirmed", "box", {
+    severity: "error",
+    params: { agreed: 1, hostSilent: false },
+  });
+  const waitingHealth = (hostAnswers: boolean) =>
+    quietHealth({
+      clock: { ...quietHealth().clock, waiting: { boxAt: BOX_AT, agreed: 1, hostAnswers } },
+    });
+
+  it("stops the row with what it waits for and the box's date and time, in place of the bell's sentence", () => {
+    const { rows, other } = boxStatusRows(waitingHealth(true), [UNCONFIRMED]);
+    expect(row(rows, "clock")).toMatchObject({
+      state: "stopped",
+      line: `Waiting for devices to connect and agree with the box's time (1 of 2 so far): no payments are taken. The box's clock says ${formatIsoMinute(BOX_AT)}.`,
+      alerts: [],
+    });
+    expect(other).toBe(0);
+  });
+
+  it("adds why when the box's clock service does not answer", () => {
+    expect(row(boxStatusRows(waitingHealth(false), []).rows, "clock").line).toBe(
+      `${fill("box_status.clock.waiting", { agreed: "1", boxAt: formatIsoMinute(BOX_AT) })} ${t("box_status.clock.waiting_host_silent")}`,
+    );
+    expect(t("box_status.clock.waiting_host_silent")).toBe(
+      "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start.",
+    );
+  });
+
+  it("words the wait in Spanish", () => {
+    setLocale("es");
+    expect(row(boxStatusRows(waitingHealth(false), []).rows, "clock").line).toBe(
+      `${es["box_status.clock.waiting"].replace("{agreed}", "1").replace("{boxAt}", formatIsoMinute(BOX_AT))} ${es["box_status.clock.waiting_host_silent"]}`,
+    );
+  });
+
+  it("reads as correct once the start is confirmed", () => {
+    const clock = row(boxStatusRows(quietHealth(), []).rows, "clock");
+    expect(clock.state).toBe("ok");
+    expect(clock.line).toBe(t("box_status.clock.ok"));
+  });
+});
