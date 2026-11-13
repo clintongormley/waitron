@@ -162,7 +162,7 @@ async function setupVenue(): Promise<{
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -227,7 +227,7 @@ async function setupVenue(): Promise<{
     // A staff person with a KNOWN PIN ("5555"), so the login route can verify their credential and
     // the sale is attributed to them.
     const [person] = await seedPersons(tx, {
-      displayName: "Cajera",
+      displayName: "Cashier",
       pinHash: hashPin("5555"),
       role: "staff",
     });
@@ -3303,7 +3303,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     async (method) => {
       const { cfg, each, app } = await venueWithTill();
       const [supervisor] = await seedPersons(suite.db, {
-        displayName: "Responsable",
+        displayName: "Supervisor",
         pinHash: hashPin("5555"),
         role: "supervisor",
       });

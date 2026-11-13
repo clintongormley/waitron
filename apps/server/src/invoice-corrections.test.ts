@@ -111,7 +111,7 @@ useVenueDb({
       const offers = await offerProducts(tx, venue.cfg, { zone: { zoneId: venue.zoneId } });
       offerOf = (name) => offers.offerFor(ids.get(name)!);
       const [manager] = await seedPersons(tx, {
-        displayName: "Marta",
+        displayName: "Martha",
         pinHash: hashPin("8888"),
         role: "manager",
       });
