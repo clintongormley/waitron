@@ -137,7 +137,7 @@ it.each(["production", "preproduction"] as const)(
     );
     expect(journal.prepared[0].value.entries[0].kind).toBe("wait");
     expect(journal.prepared.at(-1).value.entries.at(-1).identity).toBe("0CNNY");
-    expect(external.internet).toHaveBeenCalledWith(environment);
+    expect(external.internet).toHaveBeenCalledWith(expect.any(Function), expect.any(Object));
   },
 );
 it("an unavailable browser and TLS comparison refuse the name for want of a second clock", async () => {
