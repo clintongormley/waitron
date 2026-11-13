@@ -207,7 +207,7 @@ const en = {
   "fiscal_filing.history.identity.none": "The fiscal identity has not changed without a handover.",
   "fiscal_filing.cases.none": "No case needs a decision.",
   "fiscal_filing.cases.bounded": "The newest {shown} of {total}",
-  "fiscal_filing.cases.no_correction": "Waitron cannot correct these records yet.",
+  "fiscal_filing.cases.no_correction": "Open a case to see whether Waitron can put it right.",
   "fiscal_filing.cases.range": "{from}–{to} of {total}",
   "fiscal_filing.cases.previous": "Previous page",
   "fiscal_filing.cases.next": "Next page",
@@ -219,6 +219,42 @@ const en = {
   "fiscal_filing.column.actions": "Actions",
   "fiscal_filing.view": "View",
   "fiscal_filing.close": "Close",
+  "fiscal_filing.put_right.heading": "Correct the description",
+  "fiscal_filing.put_right.intro":
+    "AEAT refused this record's operation description. Write it again and send a correction record: the invoice keeps its number and amounts.",
+  "fiscal_filing.put_right.aeat": "AEAT said",
+  "fiscal_filing.put_right.description": "Operation description",
+  "fiscal_filing.put_right.description_required": "Write the operation description.",
+  "fiscal_filing.put_right.description_too_long": "Keep the description to 500 characters.",
+  "fiscal_filing.put_right.fix_fields": "Correct the field marked above.",
+  "fiscal_filing.put_right.send": "Send the correction",
+  "fiscal_filing.put_right.sending": "Sending…",
+  "fiscal_filing.put_right.stop": "Stop",
+  "fiscal_filing.put_right.sign_in": "Sign in as an administrator to put this right",
+  "fiscal_filing.put_right.none.not-yet":
+    "Waitron cannot put this one right yet. The case stays open.",
+  "fiscal_filing.put_right.none.full-invoice":
+    "Waitron cannot put this one right yet: a full invoice needs a corrective invoice Waitron cannot issue yet.",
+  "fiscal_filing.refused.signed_out": "You are signed out. Sign in again, then send again.",
+  "fiscal_filing.refused.admin":
+    "Only an administrator can put this right. Sign in as one with the button below.",
+  "fiscal_filing.refused.fresh_sign_in":
+    "Waitron needs you to sign in again before sending this. Send again to be asked.",
+  "fiscal_filing.refused.clock_unconfirmed":
+    "The server is waiting for its time to be confirmed. Confirm it on a till or on the Box status page, then send again.",
+  "fiscal_filing.refused.clock_behind":
+    "The server's clock reads earlier than its newest invoice, so nothing was sent. Confirm the time on the Box status page, then send again.",
+  "fiscal_filing.refused.clock_unusable":
+    "The server's clock is wrong, so nothing was sent. With the internet the server puts it right by itself; otherwise set it on the Box status page, then send again.",
+  "fiscal_filing.refused.time_zone":
+    "The venue's time zone is not ready, so nothing was sent. Check it in Venue settings, then send again.",
+  "fiscal_filing.refused.not_main":
+    "This server no longer files the venue's invoices. Open this page on the server that does.",
+  "fiscal_filing.refused.changed":
+    "This case changed since the page was read, so nothing was sent. The page has been read again.",
+  "fiscal_filing.refused.not_sent": "Waitron could not send this correction. Nothing was sent.",
+  "fiscal_filing.refused.disk_full":
+    "The server's disk is full, so nothing was sent. Follow the disk alert, then send again.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Refused",
   "fiscal_filing.cause.fiscal.aceptado_con_errores": "Accepted with errors",
   "fiscal_filing.cause.fiscal.anulacion_retenida": "Cancellation set aside",
@@ -489,7 +525,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.history.identity.none": "La identidad fiscal no ha cambiado sin un traspaso.",
   "fiscal_filing.cases.none": "Ningún caso necesita una decisión.",
   "fiscal_filing.cases.bounded": "Los {shown} más recientes de {total}",
-  "fiscal_filing.cases.no_correction": "Waitron todavía no puede corregir estos registros.",
+  "fiscal_filing.cases.no_correction": "Abre un caso para ver si Waitron puede corregirlo.",
   "fiscal_filing.cases.range": "{from}–{to} de {total}",
   "fiscal_filing.cases.previous": "Página anterior",
   "fiscal_filing.cases.next": "Página siguiente",
@@ -501,6 +537,45 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.column.actions": "Acciones",
   "fiscal_filing.view": "Ver",
   "fiscal_filing.close": "Cerrar",
+  "fiscal_filing.put_right.heading": "Corregir la descripción",
+  "fiscal_filing.put_right.intro":
+    "La AEAT rechazó la descripción de la operación de este registro. Escríbela de nuevo y envía un registro de subsanación: la factura conserva su número y sus importes.",
+  "fiscal_filing.put_right.aeat": "La AEAT dijo",
+  "fiscal_filing.put_right.description": "Descripción de la operación",
+  "fiscal_filing.put_right.description_required": "Escribe la descripción de la operación.",
+  "fiscal_filing.put_right.description_too_long":
+    "La descripción no puede pasar de 500 caracteres.",
+  "fiscal_filing.put_right.fix_fields": "Corrige el campo marcado arriba.",
+  "fiscal_filing.put_right.send": "Enviar la subsanación",
+  "fiscal_filing.put_right.sending": "Enviando…",
+  "fiscal_filing.put_right.stop": "Parar",
+  "fiscal_filing.put_right.sign_in": "Inicia sesión como administrador para corregirlo",
+  "fiscal_filing.put_right.none.not-yet":
+    "Waitron todavía no puede corregir este caso. El caso sigue abierto.",
+  "fiscal_filing.put_right.none.full-invoice":
+    "Waitron todavía no puede corregir este caso: una factura completa necesita una factura rectificativa que Waitron todavía no puede emitir.",
+  "fiscal_filing.refused.signed_out":
+    "Se ha cerrado tu sesión. Vuelve a iniciarla y envía de nuevo.",
+  "fiscal_filing.refused.admin":
+    "Solo un administrador puede corregirlo. Inicia sesión como administrador con el botón de abajo.",
+  "fiscal_filing.refused.fresh_sign_in":
+    "Waitron necesita que vuelvas a iniciar sesión antes de enviarlo. Envía de nuevo para que te lo pida.",
+  "fiscal_filing.refused.clock_unconfirmed":
+    "El servidor está esperando a que se confirme su hora. Confírmala en una caja o en Estado del equipo y envía de nuevo.",
+  "fiscal_filing.refused.clock_behind":
+    "La hora del servidor es anterior a su última factura, así que no se ha enviado nada. Confirma la hora en Estado del equipo y envía de nuevo.",
+  "fiscal_filing.refused.clock_unusable":
+    "La hora del servidor es incorrecta, así que no se ha enviado nada. Con internet, el servidor la corrige solo; si no, ponla en hora en Estado del equipo y envía de nuevo.",
+  "fiscal_filing.refused.time_zone":
+    "La zona horaria del local no está lista, así que no se ha enviado nada. Revísala en los ajustes del local y envía de nuevo.",
+  "fiscal_filing.refused.not_main":
+    "Este servidor ya no presenta las facturas del local. Abre esta página en el servidor que las presenta.",
+  "fiscal_filing.refused.changed":
+    "Este caso ha cambiado desde que se leyó la página, así que no se ha enviado nada. La página se ha vuelto a leer.",
+  "fiscal_filing.refused.not_sent":
+    "Waitron no ha podido enviar esta subsanación. No se ha enviado nada.",
+  "fiscal_filing.refused.disk_full":
+    "El disco del servidor está lleno, así que no se ha enviado nada. Sigue el aviso del disco y envía de nuevo.",
   "fiscal_filing.cause.fiscal.registro_rechazado": "Rechazado",
   "fiscal_filing.cause.fiscal.aceptado_con_errores": "Aceptado con errores",
   "fiscal_filing.cause.fiscal.anulacion_retenida": "Anulación apartada",

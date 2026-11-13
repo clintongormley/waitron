@@ -39,6 +39,11 @@ para ver qué es el registro, en qué punto está, la respuesta de la AEAT con s
 **Qué pasa ahora**. Los códigos y las huellas que puede pedirte tu asesor fiscal están en
 **Detalles técnicos**.
 
+Cuando la AEAT rechazó un registro por su descripción de la operación, el caso muestra el mensaje de
+la AEAT junto a la descripción: corrígela ahí y elige **Enviar la subsanación**. Solo un
+administrador puede enviarla; cualquier otra persona puede iniciar sesión como administrador desde
+el caso.
+
 La tabla muestra los 200 casos más recientes. Si hay más, indica cuántos; expórtalos para verlos
 todos.
 

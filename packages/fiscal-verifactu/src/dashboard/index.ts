@@ -22,7 +22,11 @@ export const VERIFACTU_DASHBOARD: DashboardContribution = {
       create(ctx) {
         const client = new FiscalFilingClient(ctx.request);
         return {
-          render: () => html`<vf-fiscal-filing-screen .client=${client}></vf-fiscal-filing-screen>`,
+          render: () =>
+            html`<vf-fiscal-filing-screen
+              .client=${client}
+              .permissionContinuation=${ctx.permissionContinuation}
+            ></vf-fiscal-filing-screen>`,
         };
       },
     },

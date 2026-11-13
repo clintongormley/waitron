@@ -17,30 +17,12 @@ import { applyAbsentOriginalCancellation } from "./record-remedy-absent.js";
 import { releaseHeldCancellation } from "./record-remedy-held.js";
 import { applyCorrectiveInvoiceRequest } from "./record-remedy-corrective-http.js";
 import { releaseRecordBrake } from "./record-remedy-brake.js";
+import { REMEDY_REFUSALS } from "./remedy-refusals.js";
 
 // Legal enablement belongs to server policy; a client request cannot grant it.
 const ENABLED_REMEDIES: ReadonlySet<RemedyKind> = new Set(["record-correction"]);
 
-const run = createErrorBoundary(
-  {
-    "management_session.required": 401,
-    "management_session.expired": 401,
-    "person.suspended": 403,
-    "authorization.not_permitted": 403,
-    "fiscal.remedy_disabled": 409,
-    "fiscal.remedy_invalid": 400,
-    "filing_case.action_mismatch": 409,
-    "filing_case.already_resolved": 409,
-    "fiscal.record_already_corrected": 409,
-    "fiscal.chain_handed_over": 409,
-    "node.read_only": 409,
-    "clock.behind_chain": 409,
-    "clock.unconfirmed": 409,
-    "clock.unusable": 409,
-    "venue.time_zone_not_ready": 409,
-  },
-  "fiscal-remedy.failed",
-);
+const run = createErrorBoundary(REMEDY_REFUSALS, "fiscal-remedy.failed");
 
 export function mountRecordRemedies(
   app: Hono,

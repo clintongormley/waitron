@@ -1,4 +1,5 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
+import { readFile } from "node:fs/promises";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 
@@ -14,6 +15,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { REMEDY_KINDS } from "./record-remedy.js";
+import { REMEDY_REFUSALS } from "./remedy-refusals.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let token: string;
@@ -173,4 +175,23 @@ it("refuses clock.unconfirmed before writing while the start's time check holds"
   expect(await confirmed.json()).toMatchObject({
     error: { code: "management_session.proof_required" },
   });
+});
+
+it("lists every code the correction record's files throw among the refusals the page words", async () => {
+  // Reads `throw new AppError("…")` literals as text, in the files the correction record runs
+  // through; a code a called helper throws (a session or clock check) is listed by hand.
+  const thrown = new Set<string>();
+  for (const file of ["record-remedy-routes.ts", "record-remedy.ts", "record-remedy-http.ts"]) {
+    const source = await readFile(new URL(`./${file}`, import.meta.url), "utf8");
+    for (const [, code] of source.matchAll(/throw new AppError\(\s*"([^"]+)"/g)) thrown.add(code!);
+  }
+  expect(thrown.size).toBeGreaterThan(5);
+  const listed = new Set(Object.keys(REMEDY_REFUSALS));
+  expect([...thrown].filter((code) => !listed.has(code))).toEqual([]);
+});
+
+it("answers a refusal with the status the refusal list gives it", async () => {
+  const res = await send({ kind: "not-a-kind" });
+  expect(res.status).toBe(REMEDY_REFUSALS["fiscal.remedy_request_invalid"]);
+  expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_request_invalid" } });
 });

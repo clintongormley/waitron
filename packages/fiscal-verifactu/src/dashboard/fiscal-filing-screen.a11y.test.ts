@@ -1,13 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "lit";
-import { currentLocale, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import {
+  currentLocale,
+  setLocale,
+  type DashboardPermissionContinuation,
+  type DashboardRequest,
+} from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed, type Theme } from "@waitron/ui/src/a11y-helpers.js";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { FiscalFilingScreen } from "./fiscal-filing-screen.js";
 import type { FilingOverviewAnswer } from "../filing-overview-types.js";
-import { overview } from "../../test/fiscal-filing-browser-fixture.js";
+import { conflictCase, overview } from "../../test/fiscal-filing-browser-fixture.js";
 
 const size = { width: window.innerWidth, height: window.innerHeight };
 const locale = currentLocale();
@@ -26,12 +31,47 @@ const EMPTY = overview({
   missingHistory: { notIssuedHere: [], identityChanges: [] },
 });
 
-async function show(answer: FilingOverviewAnswer, theme: Theme): Promise<FiscalFilingScreen> {
+const MESSAGE = "Valor o tipo incorrecto del campo: DescripcionOperacion";
+const base = conflictCase("rec-1", "2026-11-03T11:02:00.000Z");
+/** A case AEAT refused for its operation description, which the dialog offers to correct. */
+const DESCRIPTION = overview({
+  cases: [
+    {
+      ...base,
+      cause: "fiscal.registro_rechazado",
+      evidence: { codigo: 1100, mensaje: MESSAGE, csv: null },
+      submission: { ...base.submission!, codigoError: "1100", mensajeError: MESSAGE },
+      conflicts: [],
+    },
+  ],
+  totalCases: 1,
+});
+
+function continuation(permissions: string[]): DashboardPermissionContinuation {
+  return {
+    snapshot: () => ({ accountGeneration: 1, authenticated: true, permissions }),
+    subscribe: () => () => {},
+    signIn: async () => "stopped",
+  };
+}
+
+async function show(
+  answer: FilingOverviewAnswer,
+  theme: Theme,
+  permissions = ["report.export", "fiscal.remedy"],
+): Promise<FiscalFilingScreen> {
   setLocale("en");
   await mountThemed("<div></div>", theme);
   const entry = VERIFACTU_DASHBOARD.moreScreens!.find((s) => s.screen.id === "fiscal-filing")!;
-  const request = (async () => answer) as unknown as DashboardRequest;
-  render(entry.create({ request }).render(), host);
+  const request = (async (path: string) => {
+    if (path.endsWith("/remedy"))
+      throw Object.assign(new Error("clock.unconfirmed"), { code: "clock.unconfirmed" });
+    return answer;
+  }) as unknown as DashboardRequest;
+  render(
+    entry.create({ request, permissionContinuation: continuation(permissions) }).render(),
+    host,
+  );
   const screen = host.querySelector("vf-fiscal-filing-screen") as FiscalFilingScreen;
   await vi.waitFor(() =>
     expect(screen.shadowRoot?.querySelector("[data-state=read]")).not.toBeNull(),
@@ -85,7 +125,40 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
     await fold.whenSettled();
     await expectNoA11yViolations(host);
   });
+
+  it("draws the description correction, then a refusal under its actions", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show(DESCRIPTION, theme);
+    const details = await refuseOnce(screen);
+    await expectNoA11yViolations(host);
+    expect(details.querySelector("wt-textarea[name=operationDescription]")).not.toBeNull();
+  });
+
+  it("draws the administrator's sign-in in place of Send", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show(DESCRIPTION, theme, ["report.export"]);
+    const details = await openDetails(screen);
+    expect(details.querySelector("[data-test=put-right]")!.textContent).toContain("Sign in");
+    await expectNoA11yViolations(host);
+  });
 });
+
+/** Opens the case, edits its description and sends it, which the server refuses. */
+async function refuseOnce(screen: FiscalFilingScreen): Promise<HTMLElement> {
+  const details = await openDetails(screen);
+  await expectNoA11yViolations(host);
+  const area = details
+    .querySelector("wt-textarea")!
+    .shadowRoot!.querySelector("textarea") as HTMLTextAreaElement;
+  area.value = "Servicio de restauración";
+  area.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await screen.updateComplete;
+  (details.querySelector("[data-test=put-right]") as HTMLElement).click();
+  const actions = details.querySelector("wt-form-actions") as HTMLElement & { error: string };
+  await vi.waitFor(() => expect(actions.error).not.toBe(""));
+  await screen.updateComplete;
+  return details;
+}
 
 it("draws the full page and a case's details at phone width", async () => {
   await page.viewport(390, 1000);
@@ -95,4 +168,12 @@ it("draws the full page and a case's details at phone width", async () => {
 
   await openDetails(screen);
   await expectNoA11yViolations(host);
+});
+
+it("draws the description correction and its refusal at phone width", async () => {
+  await page.viewport(390, 1000);
+  const screen = await show(DESCRIPTION, "light");
+  const details = await refuseOnce(screen);
+  await expectNoA11yViolations(host);
+  expect(details.scrollWidth).toBeLessThanOrEqual(details.clientWidth);
 });

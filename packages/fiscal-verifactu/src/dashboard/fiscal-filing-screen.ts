@@ -1,9 +1,21 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  draftScopeFor,
+  focusFirstInvalid,
+  saveActionState,
+  type DataTableColumn,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-textarea.js";
+import type { WtModal } from "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-notice.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -13,6 +25,7 @@ import {
   currentLocale,
   formatIsoMinute,
   subscribeLocale,
+  type DashboardPermissionContinuation,
 } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import type { EnvioState } from "../filing-states.js";
@@ -24,11 +37,26 @@ import type {
   MissingHistory,
   NotIssuedHereView,
 } from "../filing-overview-types.js";
+import { putRightFor } from "../put-right.js";
 import type { FiscalFilingClient } from "./fiscal-filing-client.js";
+import { refusalKey } from "./put-right-words.js";
 import { t } from "./strings.js";
 
 const RECOVERY_PATH = "/manage/recovery/fiscal-conflict";
 const PAGE_SIZE = 50;
+/** AEAT's `TextMax500Type`. */
+const DESCRIPTION_MAX = 500;
+const CASE_CHANGED: ReadonlySet<string> = new Set([
+  "fiscal.remedy_invalid",
+  "filing_case.not_found",
+  "filing_case.action_mismatch",
+  "filing_case.already_resolved",
+  "fiscal.record_already_corrected",
+]);
+const NEEDS_ADMIN: ReadonlySet<string> = new Set([
+  "authorization.not_permitted",
+  "person.suspended",
+]);
 
 /** The sending states in the order the screen lists them. */
 const STATES: readonly EnvioState[] = [
@@ -357,7 +385,8 @@ function missingHistory({ notIssuedHere, identityChanges }: MissingHistory): Tem
   </section>`;
 }
 
-/** Reads how this box's invoice records are being sent to AEAT. It changes nothing. */
+/** Reads how this box's invoice records are being sent to AEAT, and sends a correction record for a
+ * case `putRightFor` offers one. */
 @customElement("vf-fiscal-filing-screen")
 export class FiscalFilingScreen extends LitElement {
   static override styles = [
@@ -465,6 +494,17 @@ export class FiscalFilingScreen extends LitElement {
         display: flex;
         justify-content: end;
       }
+      .put-right {
+        display: grid;
+        gap: var(--wt-space-3);
+        margin-top: var(--wt-space-4);
+      }
+      .put-right h3 {
+        margin: 0;
+      }
+      .put-right-none {
+        margin-top: var(--wt-space-4);
+      }
       .counts {
         display: flex;
         flex-wrap: wrap;
@@ -485,6 +525,7 @@ export class FiscalFilingScreen extends LitElement {
   ];
 
   @property({ attribute: false }) client!: FiscalFilingClient;
+  @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
 
   @state() private overview: FilingOverviewAnswer | null = null;
   @state() private loading = true;
@@ -493,20 +534,223 @@ export class FiscalFilingScreen extends LitElement {
   @state() private exporting = false;
   @state() private page = 0;
   @state() private viewing: FilingCaseView | null = null;
+  @state() private description = "";
+  @state() private attempted = false;
+  @state() private sending = false;
+  @state() private refusal = "";
 
   #generation = 0;
   #unsubscribeLocale?: () => void;
+  #unsubscribeAccount?: () => void;
+  #actionKey = "";
+  #scope?: DraftScope<string>;
+  #leave?: LeaveCoordinator;
+  #login?: AbortController;
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.#unsubscribeLocale = subscribeLocale(() => this.requestUpdate());
+    this.#unsubscribeAccount = this.permissionContinuation?.subscribe(() => this.requestUpdate());
     void this.#read();
   }
 
   override disconnectedCallback(): void {
     this.#generation += 1;
     this.#unsubscribeLocale?.();
+    this.#unsubscribeAccount?.();
+    this.#forget();
     super.disconnectedCallback();
+  }
+
+  #open(row: FilingCaseView): void {
+    this.#forget();
+    this.viewing = row;
+    if (putRightFor(row).kind !== "record-correction") return;
+    this.description = row.record.descripcionOperacion ?? "";
+    this.#actionKey = crypto.randomUUID();
+    const { scope, coordinator } = draftScopeFor(this, {
+      id: {},
+      current: () => this.description,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.description = value;
+      },
+    });
+    this.#scope = scope;
+    this.#leave = coordinator;
+    scope.commit(this.description);
+  }
+
+  #forget(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    this.#login?.abort();
+    this.attempted = false;
+    this.sending = false;
+    this.refusal = "";
+  }
+
+  #close(): void {
+    this.#forget();
+    this.viewing = null;
+  }
+
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (!this.#scope || !this.#leave) return true;
+    const outcome = await this.#leave.request({ scopes: [this.#scope.id], reason, proceed() {} });
+    return this.isConnected && outcome === "proceeded";
+  };
+
+  #descriptionError(): string {
+    if (!this.attempted) return "";
+    if (this.description.trim() === "") return t("fiscal_filing.put_right.description_required");
+    return this.description.length > DESCRIPTION_MAX
+      ? t("fiscal_filing.put_right.description_too_long")
+      : "";
+  }
+
+  #bottom(): string {
+    const key = this.refusal === "" ? undefined : refusalKey(this.refusal);
+    const said = this.refusal === "" ? "" : key ? t(key) : codeMessage(this.refusal);
+    const fix = this.#descriptionError() === "" ? "" : t("fiscal_filing.put_right.fix_fields");
+    return [said, fix].filter((part) => part !== "").join(" ");
+  }
+
+  #needsAdmin(): boolean {
+    const access = this.permissionContinuation?.snapshot();
+    return (
+      access !== undefined &&
+      (!access.permissions.includes("fiscal.remedy") || NEEDS_ADMIN.has(this.refusal))
+    );
+  }
+
+  async #signIn(): Promise<void> {
+    if (!this.permissionContinuation || this.#login) return;
+    const login = (this.#login = new AbortController());
+    this.requestUpdate();
+    try {
+      const outcome = await this.permissionContinuation.signIn({
+        permission: "fiscal.remedy",
+        signal: login.signal,
+      });
+      if (outcome === "signed-in" && !login.signal.aborted) this.refusal = "";
+    } catch {
+      // Stopped or failed: the button stays for another try.
+    } finally {
+      if (this.#login === login) this.#login = undefined;
+      this.requestUpdate();
+    }
+  }
+
+  async #send(found: FilingCaseView): Promise<void> {
+    if (this.sending || saveActionState(this.#scope).unchanged) return;
+    this.attempted = true;
+    if (this.#descriptionError() !== "") {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      return;
+    }
+    this.sending = true;
+    this.refusal = "";
+    try {
+      await this.client.putRight({
+        kind: "record-correction",
+        registroId: found.registroId,
+        actionKey: this.#actionKey,
+        reason: `AEAT refused the record with code ${found.evidence.codigo}; its operation description is corrected.`,
+        facts: { description: this.description },
+      });
+    } catch (error) {
+      if (this.viewing !== found) return;
+      this.sending = false;
+      this.refusal = codeOf(error);
+      if (CASE_CHANGED.has(this.refusal)) void this.#read();
+      return;
+    }
+    if (this.viewing !== found) return;
+    this.#scope?.commit(this.description);
+    this.#close();
+    void this.#read();
+  }
+
+  #putRight(found: FilingCaseView): TemplateResult {
+    const fix = putRightFor(found);
+    if (fix.kind === "none")
+      return html`<p class="put-right-none" data-test="put-right-none">
+        ${t(`fiscal_filing.put_right.none.${fix.why}`)}
+      </p>`;
+    const said = aeatWords(found.submission?.mensajeError ?? found.evidence.mensaje);
+    const error = this.#descriptionError();
+    return html`<section class="put-right" aria-labelledby="fiscal-filing-put-right">
+      <h3 id="fiscal-filing-put-right" data-test="put-right-heading">
+        ${t("fiscal_filing.put_right.heading")}
+      </h3>
+      <p>${t("fiscal_filing.put_right.intro")}</p>
+      ${
+        said === null
+          ? nothing
+          : html`<p data-test="aeat-message">
+              <span class="muted">${t("fiscal_filing.put_right.aeat")}:</span> ${said}
+            </p>`
+      }
+      <wt-textarea
+        name="operationDescription"
+        label=${t("fiscal_filing.put_right.description")}
+        required
+        maxlength=${DESCRIPTION_MAX}
+        .value=${this.description}
+        .error=${error}
+        ?invalid=${error !== ""}
+        ?disabled=${this.sending}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.description = event.detail.value;
+          this.#scope?.changed();
+        }}
+      ></wt-textarea>
+    </section>`;
+  }
+
+  #putRightActions(found: FilingCaseView): TemplateResult {
+    const action = saveActionState(this.#scope);
+    const stop = () =>
+      void this.shadowRoot!.querySelector<WtModal>(
+        "wt-modal[data-test=case-details]",
+      )!.requestClose("cancel");
+    return html`<wt-form-actions slot="footer" .error=${this.#bottom()}>
+      <wt-button
+        slot="cancel"
+        variant="secondary"
+        data-test="stop"
+        ?disabled=${this.sending}
+        @click=${stop}
+        >${t("fiscal_filing.put_right.stop")}</wt-button
+      >
+      ${
+        this.#needsAdmin()
+          ? html`<wt-button
+              data-test="put-right"
+              variant="primary"
+              ?loading=${this.#login !== undefined}
+              @click=${() => void this.#signIn()}
+              >${t("fiscal_filing.put_right.sign_in")}</wt-button
+            >`
+          : html`<wt-button
+              data-test="put-right"
+              variant=${action.variant}
+              ?disabled=${
+                action.unchanged ||
+                this.sending ||
+                (this.attempted && this.#descriptionError() !== "")
+              }
+              @click=${() => void this.#send(found)}
+              >${t(
+                this.sending ? "fiscal_filing.put_right.sending" : "fiscal_filing.put_right.send",
+              )}</wt-button
+            >`
+      }
+    </wt-form-actions>`;
   }
 
   async #read(): Promise<void> {
@@ -584,7 +828,7 @@ export class FiscalFilingScreen extends LitElement {
               align="start"
               variant="secondary"
               data-test=${`view-${row.registroId}`}
-              @click=${() => (this.viewing = row)}
+              @click=${() => this.#open(row)}
               >${t("fiscal_filing.view")}</wt-button
             ></wt-row-actions
           >`,
@@ -635,23 +879,32 @@ export class FiscalFilingScreen extends LitElement {
 
   #details(): TemplateResult {
     const found = this.viewing;
-    const close = () => (this.viewing = null);
+    const close = () => this.#close();
     return html`<wt-modal
       size="compact"
       data-test="case-details"
       .open=${found !== null}
       heading=${found === null ? "" : t(`fiscal_filing.cause.${found.cause}`)}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         close();
       }}
     >
-      ${found === null ? nothing : caseDetails(found, this.overview?.activeConflicts ?? [])}
-      <div slot="footer" class="footer">
-        <wt-button variant="secondary" data-test="close" @click=${close}
-          >${t("fiscal_filing.close")}</wt-button
-        >
-      </div>
+      ${
+        found === null
+          ? nothing
+          : html`${caseDetails(found, this.overview?.activeConflicts ?? [])}${this.#putRight(found)}`
+      }
+      ${
+        found !== null && this.#scope
+          ? this.#putRightActions(found)
+          : html`<div slot="footer" class="footer">
+              <wt-button variant="secondary" data-test="close" @click=${close}
+                >${t("fiscal_filing.close")}</wt-button
+              >
+            </div>`
+      }
     </wt-modal>`;
   }
 
