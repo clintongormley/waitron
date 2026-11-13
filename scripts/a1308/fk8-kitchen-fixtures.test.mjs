@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { expect, it } from "vitest";
+import { dropObsoleteFields } from "./fk8-kitchen-fixtures.mjs";
 
 it("folds frozen snapshots and drops obsolete insert fields idempotently", () => {
   const directory = mkdtempSync(join(tmpdir(), "fk8-fixtures-"));
@@ -34,4 +35,22 @@ await db.insert(routingCellPeriods).values([{ cellId: X, periodId: P, department
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+it("drops only the obsolete keys from literal rows and preserves other insert shapes", () => {
+  const source = `
+await db.insert(ticketItems).values({ id: T, nodeId: N, note: "keep" });
+await db.insert(routingCellPeriods).values([{ cellId: C, departmentId: D, periodId: P }, opaqueRow]);
+await db.insert(otherTable).values({ nodeId: N, departmentId: D });
+await db.insert(ticketItems).values(rows);
+await somethingElse().values({ nodeId: N });
+`;
+  const result = dropObsoleteFields(source, "sample.test.ts");
+  expect(result.reports).toEqual([]);
+  expect(result.text).toContain('values({ id: T, note: "keep" })');
+  expect(result.text).toContain("values([{ cellId: C, periodId: P }, opaqueRow])");
+  expect(result.text).toContain("otherTable).values({ nodeId: N, departmentId: D })");
+  expect(result.text).toContain("ticketItems).values(rows)");
+  expect(result.text).toContain("somethingElse().values({ nodeId: N })");
+  expect(dropObsoleteFields(result.text, "sample.test.ts")).toEqual(result);
 });

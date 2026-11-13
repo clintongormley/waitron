@@ -13,7 +13,7 @@ const rules = [
   },
 ];
 
-function dropObsoleteFields(source, path) {
+export function dropObsoleteFields(source, path) {
   const tree = parse(source, path),
     edits = [];
   const visit = (node) => {
