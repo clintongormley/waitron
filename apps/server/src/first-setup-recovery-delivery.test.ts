@@ -1,3 +1,4 @@
+import { readSetupFlowRecord, updateSetupFlowSection } from "@waitron/provisioning";
 import { mkdtemp, rm, readFile, readdir, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -222,7 +223,7 @@ async function documentFixture() {
     statement,
     register,
     kept,
-    path: join(f.stateDir, "flows/setup/documents", `${MODULE}.recovery.json`),
+    path: join(f.stateDir, "flows/setup/record.json"),
   };
 }
 
@@ -250,7 +251,7 @@ it.each(["scope", "node", "key-name", "taxpayer-name", "venue-name", "secret"])(
       code: "sif.allocation_invalid",
       params: { reason: "outside_confirmation_missing" },
     });
-    await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[MODULE]).toBeUndefined();
     expect(f.counts()).toEqual({ activations: 0, publications: 0 });
   },
 );
@@ -266,15 +267,16 @@ it("kept confirmation installs the delivered verifier once, with only public met
   expect(await verifySecretAsync(f.staged.key.secret, verifier!)).toBe(true);
   const snapshot = await f.host.resolution.captureFirstSetupOriginals();
   const originals = snapshot.originals.filter((entry) => entry.bytes !== null);
-  expect(originals.some((entry) => entry.name.endsWith(`${MODULE}.recovery.json`))).toBe(true);
+  expect(originals.some((entry) => entry.name === "state/flows/setup/record.json")).toBe(true);
   for (const entry of originals) {
     expect(Buffer.from(entry.bytes!).toString()).not.toContain(f.staged.key.secret);
     expect(Buffer.from(entry.bytes!).toString()).not.toContain(PASSWORD);
     expect(Buffer.from(entry.bytes!).toString()).not.toContain("%PDF-");
   }
-  expect(await readdir(join(f.stateDir, "flows/setup/documents"))).toEqual([
-    `${MODULE}.recovery.json`,
-  ]);
+  expect((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[MODULE]).toMatchObject(f.ref);
+  await expect(readdir(join(f.stateDir, "flows/setup/documents"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
   await expect(f.activate()).rejects.toMatchObject({ code: "setup.owner_required" });
   expect(f.counts()).toEqual({ activations: 1, publications: 1 });
 });
@@ -367,7 +369,7 @@ it("an edited public statement cannot reuse the original document binding", asyn
   await expect(
     f.register({ ...f.ref, statement: { ...f.statement, createdAt: "2026-10-16T11:41:00.000Z" } }),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
-  await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[MODULE]).toBeUndefined();
   expect(f.counts()).toEqual({ activations: 0, publications: 0 });
 });
 
@@ -379,7 +381,7 @@ it.each(["stageId", "inputDigest"] as const)(
     await expect(
       f.register({ ...f.ref, [field]: value, statement: f.statement }),
     ).rejects.toMatchObject({ code: "setup.not_ready" });
-    await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[MODULE]).toBeUndefined();
   },
 );
 
@@ -420,9 +422,10 @@ it("a replaced manifest invalidates the kept grant before any fiscal write", asy
   const f = await documentFixture();
   await f.register();
   await f.kept();
-  const manifest = JSON.parse(await readFile(f.path, "utf8"));
-  manifest.documentDigest = "b".repeat(64);
-  await writeFile(f.path, JSON.stringify(manifest));
+  await updateSetupFlowSection(f.stateDir, "recoveryManifests", (current) => ({
+    ...current,
+    [MODULE]: { ...(current![MODULE] as object), documentDigest: "b".repeat(64) },
+  }));
   await expect(f.activate()).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(f.counts()).toEqual({ activations: 0, publications: 0 });
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
@@ -479,7 +482,7 @@ it("an empty never-activated setup deletes its recovery document when starting a
     revision: inspection.revision!,
     ownerGeneration: inspection.ownerGeneration!,
   });
-  await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[MODULE]).toBeUndefined();
   await expect(readdir(join(f.stateDir, "flows/setup/documents"))).rejects.toMatchObject({
     code: "ENOENT",
   });
@@ -518,7 +521,7 @@ it("reissues an unfinished key without another hour selection and requires a new
   await expect(f.host.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });
-  expect(JSON.parse(await readFile(f.path, "utf8")).stage).not.toEqual(
+  expect(JSON.parse(await readFile(f.path, "utf8")).recoveryManifests[MODULE].stage).not.toEqual(
     await f.host.keys.readStage(f.owner),
   );
   const statement = {
@@ -551,4 +554,14 @@ it("reissues an unfinished key without another hour selection and requires a new
   expect(await f.host.store.read()).toEqual(state);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(fiscalBefore);
   expect(f.counts()).toEqual({ activations: 0, publications: 0 });
+});
+
+it("stores the recovery manifest inside the setup record", async () => {
+  const f = await documentFixture();
+  await f.register();
+  expect((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[MODULE]).toMatchObject({
+    version: 1,
+    kind: "recovery-key-delivery",
+    stageId: f.ref.stageId,
+  });
 });

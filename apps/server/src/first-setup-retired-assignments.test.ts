@@ -1,3 +1,4 @@
+import { readSetupFlowRecord, updateSetupFlowSection } from "@waitron/provisioning";
 import { dirname, join } from "node:path";
 import { mkdir, lstat, mkdtemp, readFile, writeFile, unlink, rm, realpath } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -175,7 +176,7 @@ async function fixture(
     history?: unknown;
     previousIndex?: number;
     document?: boolean;
-    damage?: "missing-original" | "syntax" | "binding" | "digest";
+    damage?: "missing-original" | "section-type" | "binding" | "digest";
     source?: "local" | "outside";
     outsideChange?: "replace" | "remove";
   },
@@ -228,46 +229,49 @@ async function fixture(
   old = await oldHost.preparation.import(oldOwner, MODULE, input);
   if (retained?.document) {
     await keepHourRecoveryDocument(oldHost, ownerFor(old, oldClaim.capability), PASSWORD);
-    const path = join(anchor.stateDir, "flows/setup/documents", `${MODULE}.recovery.json`);
-    if (retained.damage === "missing-original") await unlink(path);
-    if (retained.damage === "syntax") {
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, "{damaged recovery document");
-    }
+    const manifest = JSON.parse(
+      JSON.stringify((await readSetupFlowRecord(anchor.stateDir))?.recoveryManifests?.[MODULE]),
+    );
+    if (retained.damage === "missing-original")
+      await updateSetupFlowSection(anchor.stateDir, "recoveryManifests", (current) => {
+        const { [MODULE]: removed, ...remaining } = current!;
+        void removed;
+        return remaining;
+      });
+    if (retained.damage === "section-type")
+      await updateSetupFlowSection(anchor.stateDir, "recoveryManifests", () => ({
+        [MODULE]: "{damaged recovery document",
+      }));
     if (retained.damage === "binding" || retained.damage === "digest") {
-      const manifest = JSON.parse(await readFile(path, "utf8"));
       if (retained.damage === "binding") manifest.attemptId = randomUUID();
       else manifest.statement.createdAt = "2025-10-16T11:40:00.000Z";
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, JSON.stringify(manifest));
+      await updateSetupFlowSection(anchor.stateDir, "recoveryManifests", () => ({
+        [MODULE]: manifest,
+      }));
     }
   }
-  const publicPath =
-    retained?.source === "outside"
-      ? outsidePath
-      : join(anchor.stateDir, "flows/setup/public-evidence.json");
+  const publicPath = outsidePath;
   if (retained?.history !== undefined) {
-    await mkdir(dirname(publicPath), { recursive: true });
-    await writeFile(
-      publicPath,
-      JSON.stringify(
-        retained.source === "outside"
-          ? retained.history
-          : {
-              version: 1,
-              modules: {},
-              history: [
-                {
-                  attemptId: old.frozen.attemptId,
-                  revision: old.revision,
-                  ownerGeneration: old.ownerGeneration,
-                  module: MODULE,
-                  current: retained.history,
-                },
-              ],
-            },
-      ),
-    );
+    const value =
+      retained.source === "outside"
+        ? retained.history
+        : {
+            version: 1,
+            modules: {},
+            history: [
+              {
+                attemptId: old.frozen.attemptId,
+                revision: old.revision,
+                ownerGeneration: old.ownerGeneration,
+                module: MODULE,
+                current: retained.history,
+              },
+            ],
+          };
+    if (retained.source === "outside") {
+      await mkdir(dirname(publicPath), { recursive: true });
+      await writeFile(publicPath, JSON.stringify(value));
+    } else await updateSetupFlowSection(anchor.stateDir, "publicEvidence", () => value);
   }
   if (retained?.outsideChange === "replace") {
     await mkdir(dirname(publicPath), { recursive: true });
@@ -352,7 +356,7 @@ it("Start again starts an unused named replacement again in the same folders", a
   });
   await expectStartAgainDeleted(f.state);
 });
-it.each(["syntax", "binding", "digest"] as const)(
+it.each(["section-type", "binding", "digest"] as const)(
   "a damaged recovery document %s is treated as missing, and the summary says so",
   async (damage) => {
     const f = await fixture(43, request.taxId, "production", false, 42, { document: true, damage });

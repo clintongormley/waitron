@@ -61,3 +61,22 @@ it.each(["claimed", "abandoned"] as const)(
     expect(await readdir(join(folders.stateDir, "flows"))).toEqual([]);
   },
 );
+
+it("a claimed attempt with public evidence is not an empty workspace", async () => {
+  const { updateSetupFlowSection } = await import("@waitron/provisioning");
+  const { folders, host } = await repairable("claimed");
+  await updateSetupFlowSection(folders.stateDir, "publicEvidence", () => ({
+    version: 1,
+    modules: {},
+    history: [],
+  }));
+  const inspected = await host.resolution.inspectFirstSetupResolution();
+  const actions = createFirstSetupResolutionActions({ ...folders, host });
+  await expect(
+    actions.startAgainSummary({
+      inspectionId: inspected.inspectionId,
+      revision: inspected.revision!,
+      ownerGeneration: inspected.ownerGeneration!,
+    }),
+  ).rejects.toMatchObject({ code: "setup.not_ready", params: { cause: "may-have-filed" } });
+});

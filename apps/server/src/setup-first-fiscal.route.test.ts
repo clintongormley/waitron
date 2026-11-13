@@ -686,12 +686,7 @@ it.each(["input", "document"])(
     const fileIo = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
     let injected = false;
     vi.spyOn(filesystem, "rename").mockImplementation(async (from, to) => {
-      if (
-        !injected &&
-        String(to).endsWith(
-          point === "document" ? `/${MODULE}.recovery.json` : "/flows/setup/record.json",
-        )
-      ) {
+      if (!injected && String(to).endsWith("/flows/setup/record.json")) {
         injected = true;
         throw new Error("synthetic persistence refusal");
       }

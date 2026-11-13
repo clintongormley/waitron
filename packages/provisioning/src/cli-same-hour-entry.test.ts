@@ -177,7 +177,9 @@ it("the built command waits and takes its name in the same run, and completes th
     "Waiting to confirm the time, so no invoice series is ever repeated.\nWaiting until 2026-10-18T11:40:00.000Z; it carries on by itself, so keep the command running.\n",
   );
   expect(result.output).not.toContain("SYNTHETIC-owner-password");
-  const after = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
+  const after = JSON.parse(
+    await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
+  ).attempt;
   expect(after.status).toBe("complete");
   expect(after.ownerGeneration).toBe(1);
   await expect(readFile(pdfPath)).resolves.toBeInstanceOf(Buffer);
@@ -217,7 +219,9 @@ it("the built command waits and takes its name in the same run, and a run after 
   expect(confirmations(first.output.slice(0, waitAt))).toBe(1);
   expect(first.output.slice(waitAt)).toContain("box: 2026-10-18T11:40:01.000Z");
   expect(confirmations(first.output.slice(waitAt))).toBe(2);
-  const before = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
+  const before = JSON.parse(
+    await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
+  ).attempt;
   expect(before.status).toBe("consumption-intent");
   const pdf = await readFile(pdfPath);
   const empty = await openVenueDatabase(target);
@@ -242,9 +246,9 @@ it("the built command waits and takes its name in the same run, and a run after 
     childError: undefined,
   });
   expect(second.output).not.toContain("Confirm setup password: ");
-  expect(JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"))).toEqual(
-    before,
-  );
+  expect(
+    JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8")).attempt,
+  ).toEqual(before);
   expect(await readFile(pdfPath)).toEqual(pdf);
   const stored = await openVenueDatabase(target);
   try {

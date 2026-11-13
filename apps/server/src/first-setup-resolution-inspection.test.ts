@@ -157,7 +157,7 @@ it.each<[string, (f: Awaited<ReturnType<typeof actionsFixture>>) => Promise<void
   },
 );
 
-it.each(["flows/setup/public-evidence.json", "flows/setup/node-key.json", "modules.json"])(
+it.each(["modules.json"])(
   "absence of a paper signer does not make %s history eligible for password-free reset",
   async (name) => {
     const f = await actionsFixture();

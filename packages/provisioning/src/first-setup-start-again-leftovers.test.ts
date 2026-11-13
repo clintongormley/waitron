@@ -377,16 +377,16 @@ it("moving every unit by hand leaves the finisher nothing to refuse", async () =
     before: async ({ venueDir, stateDir }) => {
       await writeFile(join(venueDir, "venue.db"), "attempt database");
       await writeFile(join(venueDir, "node.db"), "attempt node");
-      await mkdir(dirname(join(stateDir, "flows/setup/node-key.json")), { recursive: true });
-      await writeFile(join(stateDir, "flows/setup/node-key.json"), "{}");
+      await mkdir(dirname(join(stateDir, "flows/setup/key.json")), { recursive: true });
+      await writeFile(join(stateDir, "flows/setup/key.json"), "{}");
       await put(join(stateDir, marked, "record.json"), "{}");
     },
   });
   const found = `${RECORDS}/${randomUUID()}`;
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
   await put(join(roots.venueDir, ".venue.db-litestream", "a.wal"), "one");
-  await mkdir(dirname(join(roots.stateDir, "flows/setup/node-key.json")), { recursive: true });
-  await writeFile(join(roots.stateDir, "flows/setup/node-key.json"), '{"changed":true}');
+  await mkdir(dirname(join(roots.stateDir, "flows/setup/key.json")), { recursive: true });
+  await writeFile(join(roots.stateDir, "flows/setup/key.json"), '{"changed":true}');
   await writeFile(join(roots.venueDir, "venue.db"), "a changed database");
   await writeFile(join(roots.venueDir, "venue.db-wal"), "pages");
   await writeFile(join(roots.venueDir, "venue.db-shm"), "index");
@@ -400,7 +400,7 @@ it("moving every unit by hand leaves the finisher nothing to refuse", async () =
   expect(survey.units.map((unit) => `${unit.root}/${unit.path}`)).toEqual([
     ...[`state/${marked}/later.json`, `state/${found}`].sort(order),
     "state/flows/setup/documents/extra.json",
-    "state/flows/setup/node-key.json",
+    "state/flows/setup/key.json",
     "state/trading.env",
     "venue/.venue.db-litestream",
     "venue/node.db",
@@ -422,7 +422,7 @@ it("moving every unit by hand leaves the finisher nothing to refuse", async () =
   expect(await files(aside)).toEqual(
     [
       "state/flows/setup/documents/extra.json",
-      "state/flows/setup/node-key.json",
+      "state/flows/setup/key.json",
       `state/${found}/step-000001/step.json`,
       `state/${marked}/later.json`,
       "state/trading.env",
@@ -584,4 +584,17 @@ it("a -wal with no main file makes a not-created database unit", async () => {
   expect(survey.units.map((unit) => [unit.root, unit.path, unit.why, unit.pieces])).toEqual([
     ["venue", "venue.db", "not-created", ["venue.db-wal"]],
   ]);
+});
+
+it("Start again leaves a retained readiness database alone", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const name = `fiscal-readiness-db-${"a".repeat(64)}`;
+  await put(join(attempt.roots.stateDir, name, "venue.db"), "isolated chain sentinel");
+  await expect(finishStartAgainDeletion(attempt.roots)).resolves.toBeUndefined();
+  expect(await readFile(join(attempt.roots.stateDir, name, "venue.db"), "utf8")).toBe(
+    "isolated chain sentinel",
+  );
+  await expect(
+    fs.lstat(join(attempt.roots.stateDir, "flows/setup/record.json")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
 });

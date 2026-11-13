@@ -1,3 +1,4 @@
+import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
 import { dirname, join } from "node:path";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -591,9 +592,7 @@ it("the command runtime retains public delivery bindings but requires a fresh ke
   await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });
-  const manifest = JSON.parse(
-    await readFile(join(f.root, "state/flows/setup/documents", `${MODULE}.recovery.json`), "utf8"),
-  );
+  const manifest = (await readSetupFlowRecord(join(f.root, "state")))?.recoveryManifests?.[MODULE];
   expect(manifest).toMatchObject({
     ...f.reference,
     statement: f.statement,
@@ -654,7 +653,7 @@ it("a restarted command runtime reads the staged verifier but has no delivery gr
       await runtime.owner.reconfirm(f.owner, PASSWORD, "block-use"),
     ),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  expect(await readFile(join(f.root, "state/flows/setup/node-key.json"), "utf8")).not.toContain(
+  expect(await readFile(join(f.root, "state/flows/setup/record.json"), "utf8")).not.toContain(
     f.staged.key.secret,
   );
 });
@@ -713,12 +712,11 @@ it("an expired kept grant cannot authorize resumption", async () => {
 
 it("a changed staged key cannot authorize resumption with the original kept document", async () => {
   const f = await resumptionFixture();
-  const { writeFile } = await import("node:fs/promises");
-  const path = join(f.root, "state/flows/setup/node-key.json");
-  const stage = JSON.parse(await readFile(path, "utf8"));
+  const path = join(f.root, "state/flows/setup/record.json");
+  const stage = JSON.parse(await readFile(path, "utf8")).nodeKey;
   stage.name = stage.name.endsWith("AAAA") ? "2026-10-16 · CCCC" : "2026-10-16 · AAAA";
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(stage));
+  await updateSetupFlowSection(join(f.root, "state"), "nodeKey", () => stage);
   await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });

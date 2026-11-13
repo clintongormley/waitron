@@ -296,7 +296,7 @@ it.each(["trading", "completion-state"])(
           target.endsWith("/flows/setup/record.json")
         ) {
           const value = JSON.parse(await fileIo.readFile(from, "utf8"));
-          if (value.status === "complete") {
+          if (value.attempt.status === "complete") {
             injected = true;
             throw new Error("before " + point);
           }
@@ -312,7 +312,7 @@ it.each(["trading", "completion-state"])(
       const persisted = JSON.parse(
         await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
       );
-      expect(persisted.status).toBe(
+      expect(persisted.attempt.status).toBe(
         point === "trading"
           ? "committed"
           : point === "completion-state"
@@ -408,7 +408,7 @@ it.each(["trading", "completion-state"])(
       expect(ownerStatus.status).toBe(200);
       expect((await ownerStatus.json()).state.attemptId).toBe(claim.body.state.attemptId);
       expect(
-        JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8")).frozen
+        JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8")).attempt.frozen
           .attemptId,
       ).toBe(claim.body.state.attemptId);
       await server.close();

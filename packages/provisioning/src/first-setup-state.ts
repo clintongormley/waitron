@@ -1,11 +1,10 @@
-import { FIRST_SETUP_FILE } from "@waitron/store";
 import { lstat, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 import { AppError, isUuid } from "@waitron/shared";
 import type { DeploymentEnvironment } from "@waitron/db";
 import { VENUE_FIELDS, type VenueRequest } from "./venue-plan.js";
-import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
 import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import { FLOWS_DIR, RECORDS_DIR } from "@waitron/store";
 import "./errors.js";
@@ -375,8 +374,8 @@ export async function readFirstSetupRecord(
   venueDir: string,
   stateDir: string,
 ): Promise<FirstSetupState | null> {
-  const value = await readDurableHostJson(join(stateDir, FIRST_SETUP_FILE), STATE_LIMIT);
-  return value === null ? null : parseState(value, venueDir, stateDir);
+  const value = await readSetupFlowRecord(stateDir);
+  return value === null ? null : parseState(value.attempt, venueDir, stateDir);
 }
 
 export function parseState(value: unknown, venueDir: string, stateDir: string): FirstSetupState {
@@ -468,13 +467,11 @@ export function createFirstSetupStore(options: {
 }): FirstSetupStore {
   let venueDir = resolve(options.venueDir);
   let stateDir = resolve(options.stateDir);
-  let statePath = join(stateDir, FIRST_SETUP_FILE);
   let roots: Promise<void> | undefined;
   const bindRoots = async () => {
     await (roots ??= (async () => {
       venueDir = await canonicalDirectory(options.venueDir);
       stateDir = await canonicalDirectory(options.stateDir);
-      statePath = join(stateDir, FIRST_SETUP_FILE);
     })());
   };
   const read = async () => {
@@ -495,7 +492,7 @@ export function createFirstSetupStore(options: {
   const persist = async (state: FirstSetupState) => {
     await assertNoStartAgainDeletion(venueDir);
     parseState(state, venueDir, stateDir);
-    await writeDurableHostJson(statePath, state, STATE_LIMIT);
+    await updateSetupFlowSection(stateDir, "attempt", () => state);
     return structuredClone(state);
   };
   return {

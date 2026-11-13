@@ -749,6 +749,8 @@ Task 5 and the branch remain incomplete until their remaining qualification is r
 
 ## Key-only recovery delivery and retained fixtures, 2026-10-17
 
+**2026-11-13, A1308 fl8b:** the staged verifier and recovery-delivery metadata now live in the `nodeKey` and `recoveryManifests` sections of `flows/setup/record.json`. The account below records the earlier file layout.
+
 You keep one A4 recovery PDF whose attachment contains the recovery key and its context. The new
 browser units render and read that document; the old node-key codec remains unchanged. Download
 and Print reuse one transient byte buffer. Disposal releases its references and Blob URL, and

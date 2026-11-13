@@ -105,8 +105,8 @@ async function flowBox() {
     "import/key",
     "import/marker.json",
     "readiness.json",
-    "node-key.json",
-    "public-evidence.json",
+    "key.json",
+    "public.json",
   ]) {
     await mkdir(dirname(join(roots.stateDir, "flows/setup", name)), { recursive: true });
     await writeFile(join(roots.stateDir, "flows/setup", name), name);
@@ -131,7 +131,7 @@ it("Start again removes flows/setup with its import, readiness and guesses", asy
   expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
 });
 
-it.each(["documents/probe.json", "node-key.json"])(
+it.each(["documents/probe.json", "key.json"])(
   "a deletion cut before %s finishes at the next start and clears its crash record",
   async (cutAt) => {
     const roots = await flowBox();

@@ -1,8 +1,9 @@
+import { updateSetupFlowSection } from "@waitron/provisioning";
 import { heldSetup } from "./held-setup-database.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { access, rm, writeFile } from "node:fs/promises";
+import { access, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { getTableName } from "drizzle-orm";
@@ -148,10 +149,10 @@ const LEFT_VENUE = /^(venue|recovery|migrations)\.lock(-journal)?$|^venue\.holde
 
 /** Leaves the fiscal module's recovery-key record unreadable, as a damaged disk would. */
 const damageRecoveryRecord = (f: Held) =>
-  writeFile(
-    join(f.roots.stateDir, "flows/setup/documents", "fiscal-verifactu.recovery.json"),
-    "{}",
-  );
+  updateSetupFlowSection(f.roots.stateDir, "recoveryManifests", (current) => ({
+    ...current,
+    "fiscal-verifactu": {},
+  }));
 
 /** Start again sent with only the inspection ids, for a setup whose summary is refused. */
 async function handMade(f: Held) {

@@ -235,7 +235,7 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
     await server.close();
     server = undefined;
     const completed = await readFile(join(stateDir, "flows/setup/record.json"), "utf8");
-    expect(JSON.parse(completed).status).toBe("complete");
+    expect(JSON.parse(completed).attempt.status).toBe("complete");
 
     const databasePath = join(venueDir, "venue.db");
     const before = (await stat(databasePath)).size;

@@ -356,9 +356,8 @@ it("a command cut off before its stamp, beside an earlier attempt that had begun
   const f = await cutOffSetup("uncertain");
   // Stands in for an earlier attempt kept in the record: this attempt as it is, past activation.
   const path = join(f.folders.stateDir, "flows/setup/record.json");
-  const record = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown> & {
-    previous: unknown[];
-  };
+  const envelope = JSON.parse(await readFile(path, "utf8"));
+  const record = envelope.attempt as Record<string, unknown> & { previous: unknown[] };
   const {
     version: _version,
     venueDir: _venueDir,
@@ -371,7 +370,7 @@ it("a command cut off before its stamp, beside an earlier attempt that had begun
   void _stateDir;
   record.previous = [...previous, attempt];
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(record), { mode: 0o600 });
+  await writeFile(path, JSON.stringify(envelope), { mode: 0o600 });
   expect((await f.host.store.read())!.previous.at(-1)!.status).toBe("uncertain");
   await expectBothRefused(f, { code: "setup.not_ready", params: {} }, undefined);
 });

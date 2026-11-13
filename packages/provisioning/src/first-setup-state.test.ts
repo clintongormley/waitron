@@ -325,7 +325,7 @@ it.each(["corrupt", "version", "oversize", "symlink", "wrong-root"])(
     }
     if (kind === "wrong-root") {
       const value = JSON.parse(await readFile(f.statePath, "utf8"));
-      value.stateDir = join(f.dir, "wrong");
+      value.attempt.stateDir = join(f.dir, "wrong");
       await writeFile(f.statePath, JSON.stringify(value));
     }
     await expect(createFirstSetupStore(f.options).read()).rejects.toMatchObject({
@@ -408,13 +408,14 @@ it.each(["taxpayer", "bases", "admin", "modules", "environment"])(
   async (field) => {
     const f = await fixture();
     await f.claim();
-    const disk = JSON.parse(await readFile(f.statePath, "utf8"));
+    const envelope = JSON.parse(await readFile(f.statePath, "utf8"));
+    const disk = envelope.attempt;
     if (field === "taxpayer") disk.frozen.request.taxId = "B99999999";
     if (field === "bases") disk.frozen.modules[0].request.bases = ["S000002-W1-A"];
     if (field === "admin") disk.frozen.request.admin.email = "another@example.test";
     if (field === "modules") disk.frozen.modules = [];
     if (field === "environment") disk.frozen.environment = "preproduction";
-    await writeFile(f.statePath, JSON.stringify(disk));
+    await writeFile(f.statePath, JSON.stringify(envelope));
     await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   },
 );
@@ -574,17 +575,19 @@ it.each([
 ])("refuses malformed durable %s", async (field, value) => {
   const f = await fixture();
   await f.claim();
-  const disk = JSON.parse(await readFile(f.statePath, "utf8"));
+  const envelope = JSON.parse(await readFile(f.statePath, "utf8"));
+  const disk = envelope.attempt;
   disk[field as string] = value;
-  await writeFile(f.statePath, JSON.stringify(disk));
+  await writeFile(f.statePath, JSON.stringify(envelope));
   await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
 });
 it("refuses a saved record that still carries the retired claim nonce hash", async () => {
   const f = await fixture();
   await f.claim();
-  const disk = JSON.parse(await readFile(f.statePath, "utf8"));
+  const envelope = JSON.parse(await readFile(f.statePath, "utf8"));
+  const disk = envelope.attempt;
   disk.claimNonceHash = digest("client-nonce");
-  await writeFile(f.statePath, JSON.stringify(disk));
+  await writeFile(f.statePath, JSON.stringify(envelope));
   await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
 });
 it("refuses a previous attempt that still carries the retired claim nonce hash", async () => {
@@ -592,15 +595,18 @@ it("refuses a previous attempt that still carries the retired claim nonce hash",
   const first = await f.claim();
   await f.store.update(first.frozen.attemptId, first.revision, { kind: "abandoned" });
   await f.claim();
-  const disk = JSON.parse(await readFile(f.statePath, "utf8"));
+  const envelope = JSON.parse(await readFile(f.statePath, "utf8"));
+  const disk = envelope.attempt;
   disk.previous[0].claimNonceHash = digest("x");
-  await writeFile(f.statePath, JSON.stringify(disk));
+  await writeFile(f.statePath, JSON.stringify(envelope));
   await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
 });
 it("writes no claim nonce hash when a setup is claimed", async () => {
   const f = await fixture();
   expect(await f.claim()).not.toHaveProperty("claimNonceHash");
-  expect(JSON.parse(await readFile(f.statePath, "utf8"))).not.toHaveProperty("claimNonceHash");
+  expect(JSON.parse(await readFile(f.statePath, "utf8")).attempt).not.toHaveProperty(
+    "claimNonceHash",
+  );
 });
 it.each([
   { attemptId: "not-a-uuid" },
@@ -673,12 +679,13 @@ it.each(["verifier", "history-order", "history-kind", "history-consumption"])(
   async (kind) => {
     const f = await fixture();
     await f.claim();
-    const disk = JSON.parse(await readFile(f.statePath, "utf8"));
+    const envelope = JSON.parse(await readFile(f.statePath, "utf8"));
+    const disk = envelope.attempt;
     if (kind === "verifier") disk.ownerVerifier = hashPassword("different-owner");
     if (kind === "history-order") disk.history[0].revision = 2;
     if (kind === "history-kind") disk.history[0].kind = "input";
     if (kind === "history-consumption") disk.consumptionIntent = true;
-    await writeFile(f.statePath, JSON.stringify(disk));
+    await writeFile(f.statePath, JSON.stringify(envelope));
     await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   },
 );
@@ -802,9 +809,10 @@ it("retains the exact configuration import binding and refuses a changed digest 
     digest: "a".repeat(64),
     newTaxpayer: true,
   });
-  const disk = JSON.parse(await readFile(f.statePath, "utf8"));
+  const envelope = JSON.parse(await readFile(f.statePath, "utf8"));
+  const disk = envelope.attempt;
   disk.frozen.configurationImport.digest = "b".repeat(64);
-  await writeFile(f.statePath, JSON.stringify(disk));
+  await writeFile(f.statePath, JSON.stringify(envelope));
   await expect(createFirstSetupStore(f.options).read()).rejects.toMatchObject({
     code: "setup.attempt_invalid",
   });
@@ -832,8 +840,8 @@ it.each(["resume", "recover"])("refuses a record carrying a %s event", async (ki
   const f = await fixture();
   await f.claim();
   const record = JSON.parse(await readFile(f.statePath, "utf8"));
-  record.revision = 2;
-  record.history.push({ kind, revision: 2, ownerGeneration: 1 });
+  record.attempt.revision = 2;
+  record.attempt.history.push({ kind, revision: 2, ownerGeneration: 1 });
   await writeFile(f.statePath, JSON.stringify(record));
   await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
 });
@@ -870,7 +878,7 @@ it.each(EVERY_CHANGE)("an abandoned attempt refuses a $kind change", async (chan
 it("a claim writes only the setup record", async () => {
   const f = await fixture();
   const state = await f.claim();
-  expect(JSON.parse(await readFile(f.statePath, "utf8"))).toEqual(state);
+  expect(JSON.parse(await readFile(f.statePath, "utf8")).attempt).toEqual(state);
   const files = await readdir(f.options.venueDir).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return [];
     throw error;
@@ -902,4 +910,10 @@ it("reads publication complete from the setup record", async () => {
     state,
     publicationComplete: true,
   });
+});
+
+it("stores the attempt inside the flow record", async () => {
+  const f = await fixture();
+  const state = await f.claim();
+  expect(JSON.parse(await readFile(f.statePath, "utf8"))).toEqual({ version: 1, attempt: state });
 });

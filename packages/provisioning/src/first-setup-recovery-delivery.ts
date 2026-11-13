@@ -1,10 +1,12 @@
-import { FIRST_FISCAL_DOCUMENTS_DIR } from "@waitron/store";
 import { isDeepStrictEqual as equal } from "node:util";
-import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
 import type { VenueAndNodeHandles } from "@waitron/node-db";
-import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import {
+  readSetupFlowRecord,
+  updateSetupFlowSection,
+  type SetupFlowRecord,
+} from "./setup-flow-record.js";
 import type {
   FirstSetupState,
   FirstSetupHold,
@@ -175,23 +177,22 @@ export function readFirstSetupRecoveryDeliverySnapshot(
   originals: readonly { name: string; bytes: Uint8Array | null }[],
   modules: readonly WaitronModule[],
 ) {
-  const bytes = originals.find(
-    (entry) => entry.name === `state/flows/setup/documents/${module}.recovery.json`,
-  )?.bytes;
+  const bytes = originals.find((entry) => entry.name === "state/flows/setup/record.json")?.bytes;
   if (bytes == null) return null;
-  if (bytes.length > limit) refuse();
+  if (bytes.length > 1024 * 1024) refuse();
   let value: unknown;
   try {
-    value = JSON.parse(Buffer.from(bytes).toString("utf8"));
+    value = (JSON.parse(Buffer.from(bytes).toString("utf8")) as SetupFlowRecord)
+      .recoveryManifests?.[module];
   } catch {
     return refuse();
   }
+  if (value === undefined) return null;
+  if (Buffer.byteLength(JSON.stringify(value)) > limit) refuse();
   return readManifest(value, state, module, modules);
 }
 export function createFirstSetupRecoveryDelivery(options: Options) {
   const grants = new Map<string, { manifest: Manifest; expires: number }>();
-  const path = (module: string) =>
-    join(options.stateDir, FIRST_FISCAL_DOCUMENTS_DIR, `${module}.recovery.json`);
   const inside = <T>(
     hold: FirstSetupHold | undefined,
     run: (held: FirstSetupHold) => Promise<T>,
@@ -199,8 +200,12 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
     hold === undefined
       ? options.coordinator.run(run)
       : options.coordinator.held(hold, () => run(hold));
-  const read = async (state: FirstSetupState, module: string) =>
-    readManifest(await readDurableHostJson(path(module), limit), state, module, options.modules);
+  const read = async (state: FirstSetupState, module: string) => {
+    const value = (await readSetupFlowRecord(options.stateDir))?.recoveryManifests?.[module];
+    if (value !== undefined && Buffer.byteLength(JSON.stringify(value)) > limit)
+      throw new AppError("setup.attempt_invalid", {});
+    return readManifest(value === undefined ? null : value, state, module, options.modules);
+  };
   const sameReference = (manifest: Manifest, value: RecoveryDeliveryReference) =>
     ["module", "stageId", "inputDigest", "bindingDigest", "documentDigest"].every(
       (key) => manifest[key as keyof Manifest] === value[key as keyof RecoveryDeliveryReference],
@@ -268,7 +273,10 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
           )
         )
           refuse();
-        await writeDurableHostJson(path(supplied.module), manifest, limit);
+        await updateSetupFlowSection(options.stateDir, "recoveryManifests", (current) => ({
+          ...current,
+          [supplied.module]: manifest,
+        }));
       });
     },
     confirmRecoveryDocumentKept(

@@ -1,3 +1,4 @@
+import { readSetupFlowRecord } from "@waitron/provisioning";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -58,24 +59,23 @@ it("reissues on the real setup HTTPS listener after a restart loses the raw key"
     expect(proof.status).toBe(200);
     const initial = await post("node-key", proof.body);
     expect(initial.status).toBe(200);
-    const keyPath = join(stateDir, "flows/setup/node-key.json");
-    const original = JSON.parse(await readFile(keyPath, "utf8"));
+    const original = (await readSetupFlowRecord(stateDir))?.nodeKey;
     await server.close();
     server = undefined;
     server = await startServer(env);
-    const before = await readFile(join(stateDir, "flows/setup/record.json"));
+    const before = (await readSetupFlowRecord(stateDir))?.attempt;
     const refused = await post("node-key-reissue", { password: "wrong password" });
     expect(refused.status).toBe(403);
     expect(refused.body.error.code).toBe("setup.owner_required");
-    expect(JSON.parse(await readFile(keyPath, "utf8"))).toEqual(original);
+    expect((await readSetupFlowRecord(stateDir))?.nodeKey).toEqual(original);
     const reissued = await post("node-key-reissue", { password: PASSWORD });
     expect(reissued.status).toBe(200);
     expect(reissued.headers.get("cache-control")).toBe("no-store");
-    const replacement = JSON.parse(await readFile(keyPath, "utf8"));
+    const replacement = (await readSetupFlowRecord(stateDir))?.nodeKey as { verifier: string };
     expect(reissued.body.stage.stageId).not.toBe(initial.body.stage.stageId);
     expect(await verifySecretAsync(reissued.body.key.secret, replacement.verifier)).toBe(true);
     expect(await verifySecretAsync(initial.body.key.secret, replacement.verifier)).toBe(false);
-    expect(await readFile(join(stateDir, "flows/setup/record.json"))).toEqual(before);
+    expect((await readSetupFlowRecord(stateDir))?.attempt).toEqual(before);
   } finally {
     await agent?.close();
     await server?.close();

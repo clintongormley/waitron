@@ -1,4 +1,5 @@
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { readSetupFlowRecord, updateSetupFlowSection } from "@waitron/provisioning";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CORE_MIGRATIONS, stampDeployment, withNodeTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -33,7 +34,7 @@ async function fixture() {
       f.ownerAttempt,
       await f.owner.reconfirm(f.ownerAttempt, PASSWORD, "block-use"),
     );
-  return { ...f, keys, stage, options, path: join(f.stateDir, "flows/setup/node-key.json") };
+  return { ...f, keys, stage, options, path: join(f.stateDir, "flows/setup/record.json") };
 }
 async function committed(f: Awaited<ReturnType<typeof fixture>>) {
   let state = (await f.store.read())!;
@@ -58,7 +59,7 @@ it("stages 192 random bits without installing or persisting the raw node key", a
   expect(persisted).not.toContain(PASSWORD);
   const metadata = await f.keys.readStage(f.ownerAttempt);
   expect(await verifySecretAsync(result.key.secret, metadata.verifier)).toBe(true);
-  expect(await readdir(join(f.stateDir, "flows/setup"))).toContain("node-key.json");
+  expect((await readSetupFlowRecord(f.stateDir))?.nodeKey).toEqual(result.stage);
 });
 it("same-visit delivery returns exactly the same key and stage", async () => {
   const f = await fixture();
@@ -150,12 +151,15 @@ it.each(["extra secret", "wrong verifier", "wrong binding", "bad stage"])(
   async (why) => {
     const f = await fixture();
     await f.stage();
-    const saved = JSON.parse(await readFile(f.path, "utf8"));
+    const saved = structuredClone((await readSetupFlowRecord(f.stateDir))!.nodeKey) as Record<
+      string,
+      unknown
+    >;
     if (why === "extra secret") saved.secret = "must-never-be-stored";
     if (why === "wrong verifier") saved.verifier = "not-a-verifier";
     if (why === "wrong binding") saved.frozenDigest = "f".repeat(64);
     if (why === "bad stage") saved.stageId = "../other";
-    await writeFile(f.path, JSON.stringify(saved));
+    await updateSetupFlowSection(f.stateDir, "nodeKey", () => saved);
     await expect(f.keys.readStage(f.ownerAttempt)).rejects.toMatchObject({
       code: "setup.attempt_invalid",
     });

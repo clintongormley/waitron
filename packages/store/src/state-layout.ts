@@ -33,10 +33,8 @@ export const RECOVERY_STATE_FILE = "recovery.json";
 export const MODULES_FILE = "modules.json";
 export const MODULE_PREPARATION_STATE_FILE = "module-preparation-state.json";
 export const MODULE_EVIDENCE_DIR = "module-evidence";
-export const MODULE_OPERATION_PUBLIC_FILE = "flows/setup/public-evidence.json";
 export const FIRST_FISCAL_DOCUMENTS_DIR = "flows/setup/documents";
 export const FIRST_SETUP_FILE = "flows/setup/record.json";
-export const FIRST_SETUP_NODE_KEY_FILE = "flows/setup/node-key.json";
 export const FISCAL_READINESS_FILE = "flows/setup/readiness.json";
 export const SETUP_OPERATION_FILE = "flows/setup/operation.json";
 export const SETUP_CLOCK_STEP_FILE = "setup-clock-step.json";
@@ -71,6 +69,12 @@ export const START_AGAIN_SET_ASIDE_DIR = "records/set-aside";
 export const TRADING_ENV_REPLACED_SUFFIX = ".replaced";
 
 export const STATE_LAYOUT: readonly StateEntry[] = [
+  {
+    name: "fiscal-readiness-db-",
+    kind: "prefix",
+    reset: "deleted",
+    why: "An isolated preproduction fiscal test retains its chain across restarts.",
+  },
   {
     name: FLOWS_DIR,
     kind: "folder",

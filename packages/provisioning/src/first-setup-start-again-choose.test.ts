@@ -374,7 +374,7 @@ it("checks the password against the setup record's own verifier", async () => {
   const record = JSON.parse(
     await readFile(join(f.roots.stateDir, "flows/setup/record.json"), "utf8"),
   );
-  expect(verify).toHaveBeenCalledWith("typed", record.ownerVerifier);
+  expect(verify).toHaveBeenCalledWith("typed", record.attempt.ownerVerifier);
 });
 
 it("a box whose setup record changed refuses setup.not_ready", async () => {
@@ -426,7 +426,14 @@ it("a setup record for another attempt, written after the survey, refuses setup.
   afterSurvey = async () =>
     writeFile(
       join(f.roots.stateDir, "flows/setup/record.json"),
-      JSON.stringify({ ...record, venueDir: f.roots.venueDir, stateDir: f.roots.stateDir }),
+      JSON.stringify({
+        ...record,
+        attempt: {
+          ...(record.attempt as object),
+          venueDir: f.roots.venueDir,
+          stateDir: f.roots.stateDir,
+        },
+      }),
     );
   await expect(
     chooseStartAgainLeftovers({
@@ -599,7 +606,7 @@ it("Keep writes one record with who, when, what and which files, and moves nothi
       markerSha256: survey.markerSha256,
       choice: "keep",
       administrator: { administratorId: f.administratorId, ...START_AGAIN_ADMIN },
-      ownerGeneration: state.ownerGeneration,
+      ownerGeneration: state.attempt.ownerGeneration,
       listed: { digest: survey.digest, units: survey.units },
       setAside: null,
     },

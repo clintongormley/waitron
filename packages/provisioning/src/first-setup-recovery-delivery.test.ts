@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -94,9 +95,12 @@ async function fixture() {
     ...reference,
     statement,
   });
-  const path = join(options.stateDir, "flows/setup/documents", `${MODULE}.recovery.json`);
+  const path = join(options.stateDir, "flows/setup/record.json");
   const bytes = await readFile(path);
-  const manifest = JSON.parse(bytes.toString()) as Record<string, unknown>;
+  const manifest = JSON.parse(bytes.toString()).recoveryManifests[MODULE] as Record<
+    string,
+    unknown
+  >;
   const state = (await runtime.store.read())!;
   const snapshot = (value: unknown = manifest, modules = runtime.modules) =>
     readFirstSetupRecoveryDeliverySnapshot(
@@ -104,8 +108,10 @@ async function fixture() {
       state,
       [
         {
-          name: `state/flows/setup/documents/${MODULE}.recovery.json`,
-          bytes: Buffer.from(JSON.stringify(value)),
+          name: "state/flows/setup/record.json",
+          bytes: Buffer.from(
+            JSON.stringify({ version: 1, attempt: state, recoveryManifests: { [MODULE]: value } }),
+          ),
         },
       ],
       modules,
@@ -135,7 +141,9 @@ async function fixture() {
 it("recovers the exact public delivery from retained bytes without granting activation", async () => {
   const f = await fixture();
   expect(f.snapshot()).toEqual(f.manifest);
-  expect(JSON.parse(await readFile(f.path, "utf8"))).toMatchObject({
+  expect(
+    (await readSetupFlowRecord(f.options.stateDir))?.recoveryManifests?.[MODULE],
+  ).toMatchObject({
     ...f.reference,
     statement: f.statement,
   });
@@ -186,7 +194,7 @@ it("refuses replacement bytes for an already registered stage and preserves its 
 
 it("refuses installation when the delivery record is absent", async () => {
   const f = await fixture();
-  await unlink(f.path);
+  await updateSetupFlowSection(f.options.stateDir, "recoveryManifests", () => ({}));
   await expect(
     f.runtime.coordinator.run((hold) =>
       f.runtime.recoveryDelivery.install(
@@ -227,11 +235,13 @@ it("compares a module's rebuilt statement with retained and newly supplied state
     owner: f.runtime.owner,
     keys: f.runtime.keys,
   });
-  await unlink(f.path);
+  await updateSetupFlowSection(f.options.stateDir, "recoveryManifests", () => ({}));
   await expect(
     delivery.registerRecoveryDocumentDelivery(f.owner, { ...f.reference, statement: f.statement }),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
-  await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(
+    (await readSetupFlowRecord(f.options.stateDir))?.recoveryManifests?.[MODULE],
+  ).toBeUndefined();
   await writeFile(f.path, f.bytes);
   expect(f.snapshot()).toEqual(f.manifest);
 });
@@ -322,10 +332,10 @@ it("distinguishes absent snapshot bytes from malformed or oversized delivery", a
   const f = await fixture();
   const read = (originals: { name: string; bytes: Uint8Array | null }[]) =>
     readFirstSetupRecoveryDeliverySnapshot(MODULE, f.state, originals, f.runtime.modules);
-  const name = `state/flows/setup/documents/${MODULE}.recovery.json`;
+  const name = "state/flows/setup/record.json";
   expect(read([])).toBeNull();
   expect(read([{ name, bytes: null }])).toBeNull();
-  expect(read([{ name: "state/other.recovery.json", bytes: f.bytes }])).toBeNull();
+  expect(read([{ name: "state/other.json", bytes: f.bytes }])).toBeNull();
   for (const bytes of [Buffer.from("{"), Buffer.alloc(16385, 32)])
     expect(() => read([{ name, bytes }])).toThrow(
       expect.objectContaining({ code: "setup.not_ready" }),
@@ -367,7 +377,9 @@ it("invalidates only the matching attempt's kept confirmation", async () => {
 it("consume refuses a changed delivery after kept confirmation", async () => {
   const f = await fixture();
   await f.kept();
-  await writeFile(f.path, JSON.stringify({ ...f.manifest, documentDigest: "b".repeat(64) }));
+  await updateSetupFlowSection(f.options.stateDir, "recoveryManifests", () => ({
+    [MODULE]: { ...f.manifest, documentDigest: "b".repeat(64) },
+  }));
   await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });

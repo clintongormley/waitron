@@ -1,12 +1,10 @@
-import { MODULE_OPERATION_PUBLIC_FILE } from "@waitron/store";
-import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor, type OperationBinding, type WaitronModule } from "@waitron/module";
 import {
   firstSetupModuleContext,
-  readDurableHostJson,
-  writeDurableHostJson,
+  readSetupFlowRecord,
+  updateSetupFlowSection,
   type FirstSetupCoordinator,
   type FirstSetupHold,
   type FirstSetupState,
@@ -83,7 +81,6 @@ function wellFormedHistoryEntry(entry: unknown): entry is PublicEvidenceFile["hi
 }
 
 export function createFirstFiscalEvidence(options: EvidenceOptions) {
-  const path = join(options.stateDir, MODULE_OPERATION_PUBLIC_FILE);
   const grants = new Map<
     string,
     {
@@ -116,8 +113,10 @@ export function createFirstFiscalEvidence(options: EvidenceOptions) {
     return contribution;
   };
   const readFile = async (): Promise<PublicEvidenceFile | null> => {
-    const value = await readDurableHostJson(path, 64 * 1024);
-    return value === null ? null : parsePublicEvidenceFile(value);
+    const value = (await readSetupFlowRecord(options.stateDir))?.publicEvidence;
+    if (value !== undefined && Buffer.byteLength(JSON.stringify(value)) > 64 * 1024)
+      throw new AppError("setup.attempt_invalid", {});
+    return value === undefined ? null : parsePublicEvidenceFile(value);
   };
   const enrolledTrust = (state: FirstSetupState, name: string, entry: Enrolled | undefined) => {
     if (entry === undefined || entry.attemptId !== state.frozen.attemptId) refuse();
@@ -153,7 +152,7 @@ export function createFirstFiscalEvidence(options: EvidenceOptions) {
           comparison,
           trust,
         });
-        await writeDurableHostJson(path, file, 64 * 1024);
+        await updateSetupFlowSection(options.stateDir, "publicEvidence", () => file);
       });
     },
     confirm(
@@ -182,7 +181,7 @@ export function createFirstFiscalEvidence(options: EvidenceOptions) {
           module: name,
           current,
         });
-        await writeDurableHostJson(path, file, 64 * 1024);
+        await updateSetupFlowSection(options.stateDir, "publicEvidence", () => file);
         grants.set(name, {
           attemptId: owner.attemptId,
           revision: state.revision,

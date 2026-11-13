@@ -2,9 +2,7 @@ import {
   CLOUD_REPLACEMENT_FILE,
   TRADING_ENV_FILE,
   FIRST_SETUP_FILE,
-  FIRST_SETUP_NODE_KEY_FILE,
   MODULES_FILE,
-  MODULE_OPERATION_PUBLIC_FILE,
   RESET_REQUEST_FILE,
   RESTORE_FLOW_DIR,
   SETUP_OPERATION_FILE,
@@ -284,8 +282,6 @@ export function createFirstSetupResolutionInspection(
       const physicalSources: (string | null)[] = [];
       for (const name of [
         FIRST_SETUP_FILE,
-        MODULE_OPERATION_PUBLIC_FILE,
-        FIRST_SETUP_NODE_KEY_FILE,
         SETUP_OPERATION_FILE,
         join(RESTORE_FLOW_DIR, "record.json"),
         RESET_REQUEST_FILE,

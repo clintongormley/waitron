@@ -1,8 +1,6 @@
-import { FIRST_SETUP_NODE_KEY_FILE } from "@waitron/store";
 import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { hashSecret } from "@waitron/identity";
 import {
@@ -15,7 +13,7 @@ import {
 import { readRecoveryKey, setRecoveryKeyTx, type VenueAndNodeHandles } from "@waitron/node-db";
 import { generatePassword } from "./identifiers.js";
 import { newBreakGlassKeyName } from "./server-key-name.js";
-import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
+import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
 import type {
   FirstSetupCoordinator,
   FirstSetupHold,
@@ -70,7 +68,6 @@ export function readFirstSetupStagedKey(value: unknown, state: FirstSetupState):
   return Object.freeze({ ...v }) as unknown as StagedNodeKey;
 }
 export function createFirstSetupNodeKeys(options: Options) {
-  const path = join(options.stateDir, FIRST_SETUP_NODE_KEY_FILE);
   let transient:
     | {
         stage: StagedNodeKey;
@@ -86,8 +83,9 @@ export function createFirstSetupNodeKeys(options: Options) {
       ? options.coordinator.run(run)
       : options.coordinator.held(hold, () => run(hold));
   const read = async (state: FirstSetupState) => {
-    const data = await readDurableHostJson(path, 4096);
-    return data === null ? null : readFirstSetupStagedKey(data, state);
+    const data = (await readSetupFlowRecord(options.stateDir))?.nodeKey;
+    if (data !== undefined && Buffer.byteLength(JSON.stringify(data)) > 4096) invalid();
+    return data === undefined ? null : readFirstSetupStagedKey(data, state);
   };
   const generate = async (state: FirstSetupState, prior?: StagedNodeKey) => {
     const secret = generatePassword();
@@ -104,7 +102,7 @@ export function createFirstSetupNodeKeys(options: Options) {
       name,
       verifier: hashSecret(secret),
     };
-    await writeDurableHostJson(path, stage, 4096);
+    await updateSetupFlowSection(options.stateDir, "nodeKey", () => stage);
     transient = {
       stage,
       key: { nodeId: stage.nodeId, name, secret },

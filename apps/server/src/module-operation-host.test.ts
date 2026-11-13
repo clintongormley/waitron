@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readSetupFlowRecord } from "@waitron/provisioning";
 import { afterEach, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
@@ -93,14 +92,10 @@ it("the bound runtime retains its recovery document after restart and prepares o
         );
       });
     const restarted = make();
-    expect(
-      JSON.parse(
-        await readFile(
-          join(f.stateDir, "flows/setup/documents", `${f.module}.recovery.json`),
-          "utf8",
-        ),
-      ),
-    ).toMatchObject({ ...f.staged.ref, statement: f.staged.statement });
+    expect((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[f.module]).toMatchObject({
+      ...f.staged.ref,
+      statement: f.staged.statement,
+    });
     expect(await restarted.keys.readStage(f.ownerAttempt)).toEqual(f.staged.stage);
     await expect(attempt(restarted)).rejects.toMatchObject({ code: "setup.not_ready", params: {} });
     const fresh = await restarted.owner.reconfirm(f.ownerAttempt, f.password, "activation");

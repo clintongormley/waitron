@@ -1,3 +1,4 @@
+import { readSetupFlowRecord } from "./setup-flow-record.js";
 import { createHash } from "node:crypto";
 import {
   chmod,
@@ -137,10 +138,7 @@ it("saves the real module PDF privately and grants activation only for its exact
   expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
   expect((await stat(f.path)).mode & 0o777).toBe(0o600);
   const manifest = JSON.parse(
-    await readFile(
-      join(f.options.stateDir, "flows/setup/documents", `${MODULE}.recovery.json`),
-      "utf8",
-    ),
+    JSON.stringify((await readSetupFlowRecord(f.options.stateDir))?.recoveryManifests?.[MODULE]),
   );
   expect(manifest).toMatchObject({
     module: MODULE,
@@ -266,9 +264,7 @@ it.each([
   await expect(f.runtime.commandDelivery.deliver(f.owner, f.io, path, "en")).rejects.toMatchObject({
     code: "setup.not_ready",
   });
-  await expect(
-    readFile(join(f.options.stateDir, "flows/setup/node-key.json")),
-  ).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await readSetupFlowRecord(f.options.stateDir))?.nodeKey).toBeUndefined();
   expect(f.prompts).toEqual([]);
   expect(f.output).toEqual([
     words(path),
@@ -463,9 +459,7 @@ it("a wrong staging password creates no PDF or retained key", async () => {
     f.runtime.commandDelivery.deliver(f.owner, f.io, f.path, "en"),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
-  await expect(
-    readFile(join(f.options.stateDir, "flows/setup/node-key.json")),
-  ).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await readSetupFlowRecord(f.options.stateDir))?.nodeKey).toBeUndefined();
 });
 
 it("a command without a document contribution refuses before staging any key", async () => {
@@ -476,9 +470,7 @@ it("a command without a document contribution refuses before staging any key", a
   await expect(
     f.runtime.commandDelivery.deliver(f.owner, f.io, f.path, "en"),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
-  await expect(
-    readFile(join(f.options.stateDir, "flows/setup/node-key.json")),
-  ).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await readSetupFlowRecord(f.options.stateDir))?.nodeKey).toBeUndefined();
   expect(f.prompts).toEqual([]);
 });
 
