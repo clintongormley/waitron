@@ -1235,8 +1235,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const recorded = new Set<string>();
         for (const refund of refunds) {
           const ref = refund.providerRefundRef;
+          if (ref === null)
+            throw new AppError("payment.outcome_unknown", {
+              paymentId,
+              reason: "refund_reference_missing",
+            });
           if (
-            ref === null ||
             recorded.has(ref) ||
             !byRef.has(ref) ||
             compareDecimal(byRef.get(ref)!.amount, centsToDecimal(refund.amount)) !== 0

@@ -2246,7 +2246,6 @@ export interface ReaderStatusView {
   pairingStatus?: "processing" | "paired";
 }
 
-/** An open order's card payment that nothing is driving any more, typically after a restart. */
 export interface PartialRefundView {
   paymentId: string;
   captured: string;

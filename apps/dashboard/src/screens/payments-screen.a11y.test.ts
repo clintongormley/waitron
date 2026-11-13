@@ -134,19 +134,17 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
         "dashboard-payments-screen",
         {
           api: stubApi({
-            listStuckPayments: vi
-              .fn()
-              .mockResolvedValue([
-                {
-                  ...STUCK[0]!,
-                  partialRefund: {
-                    paymentId: "pay-1",
-                    captured: "12.50",
-                    refunded: "4.00",
-                    remaining: "8.50",
-                  },
+            listStuckPayments: vi.fn().mockResolvedValue([
+              {
+                ...STUCK[0]!,
+                partialRefund: {
+                  paymentId: "pay-1",
+                  captured: "12.50",
+                  refunded: "4.00",
+                  remaining: "8.50",
                 },
-              ]),
+              },
+            ]),
           }),
           panels: PANELS,
         },
@@ -158,6 +156,12 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=release-partial-pay-1]")!.click();
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=partial-refund-dialog]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-partial-refund]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=stuck-result]")!.getAttribute("role")).toBe(
+        "alert",
+      );
       await expectNoA11yViolations(host);
     },
   );

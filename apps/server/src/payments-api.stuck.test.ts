@@ -1,3 +1,4 @@
+import { CARD_PROVIDERS } from "@waitron/composition";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
@@ -81,7 +82,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { systemClock } from "./till-backend.js";
-import { createOpenOrder } from "./working-order.js";
+import { setWorkingOrderLabel, createOpenOrder } from "./working-order.js";
 import { ordersWithUnfiledPayment } from "./till-sale.js";
 import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -2862,6 +2863,7 @@ describe("provider-confirmed partial-refund release", () => {
       placed?: boolean;
       mark?: boolean;
       unidentified?: boolean;
+      supported?: boolean;
     } = {},
   ) {
     const evidence = {
@@ -2877,7 +2879,7 @@ describe("provider-confirmed partial-refund release", () => {
     const provider = Object.assign(new FakePaymentProvider(suite.db), {
       lookupCompletedRefunds: lookup,
     });
-    const v = await setup({ extra: provider, partialRefundRelease: true });
+    const v = await setup({ extra: provider, partialRefundRelease: options.supported ?? true });
     const orderId = await openOrder(v);
     const bill = options.bill ? await strandBillPayment(v, orderId, { kind: "captured" }) : null;
     const key = { provider: provider.provider, paymentRef: randomUUID() };
@@ -2984,6 +2986,25 @@ describe("provider-confirmed partial-refund release", () => {
       expect(replay.status).toBe(200);
       expect(await replay.json()).toEqual({ outcome: "released" });
       expect(lookup).toHaveBeenCalledTimes(1);
+      if (!options.placed) {
+        const [order] = await suite.db
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, orderId));
+        await setWorkingOrderLabel(suite.db, orderId, {
+          label: "Released order",
+          revision: order!.revision,
+          operatorId: v.managerId,
+          expectedEdit: null,
+        });
+        expect(
+          await suite.db
+            .select({ label: workingOrders.label })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, orderId)),
+        ).toEqual([{ label: "Released order" }]);
+      }
+
       expect(
         await suite.db
           .select()
@@ -3024,7 +3045,10 @@ describe("provider-confirmed partial-refund release", () => {
     }
     const result = await send(v, "POST", releasePath(payment.id));
     expect(result.status).toBe(409);
-    expect((await errorOf(result)).code).toBe("payment.outcome_unknown");
+    const error = await errorOf(result);
+    expect(error.code).toBe("payment.outcome_unknown");
+    if (problem === "unidentified")
+      expect(error.params).toMatchObject({ reason: "refund_reference_missing" });
     expect(await suite.db.select().from(payments).where(eq(payments.id, payment.id))).toEqual([
       payment,
     ]);
@@ -3072,6 +3096,32 @@ describe("provider-confirmed partial-refund release", () => {
     expect((await paymentRow(payment.id)).state).toBe("partially_refunded");
     expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
   });
+
+  it("uses the production SumUp contribution to enable the manager release", async () => {
+    const { v, payment } = await partial({
+      supported:
+        CARD_PROVIDERS.find((p) => p.providerId === "sumup")?.partialRefundRelease ?? false,
+    });
+    expect((await send(v, "POST", releasePath(payment.id))).status).toBe(200);
+    expect((await paymentRow(payment.id)).state).toBe("refunded");
+  });
+
+  it.each([undefined, "failed"] as const)(
+    "leaves an unflagged provider's %s payment out of release",
+    async (bill) => {
+      const { v, payment, lookup } = await partial({ supported: false, bill });
+      const list = await send(
+        v,
+        "GET",
+        bill ? "/management-api/payments/bill-payments" : "/management-api/payments/stuck",
+      );
+      expect(await list.json()).toEqual([]);
+      const result = await send(v, "POST", releasePath(payment.id));
+      expect(result.status).toBe(409);
+      expect((await errorOf(result)).code).toBe("payment.not_stuck");
+      expect(lookup).not.toHaveBeenCalled();
+    },
+  );
 
   it("rolls refunds and the order mark back together when releasing the mark fails", async () => {
     const { v, payment } = await partial({ mark: true });

@@ -2029,22 +2029,26 @@ export class PaymentsScreen extends LitElement {
     if (!row || this.billBusy) return;
     this.confirmingPartial = null;
     this.billBusy = true;
-    this.billResult = null;
+    const showResult = (result: { text: string; refused: boolean } | null) => {
+      if ("billPaymentId" in row) this.billResult = result;
+      else this.stuckResult = result;
+    };
+    showResult(null);
     const operation = (this.#billOperation = {});
     const current = () => this.isConnected && this.#billOperation === operation;
     try {
       await this.api.releasePartialRefund(row.partialRefund!.paymentId);
       if (!current()) return;
-      this.billResult = {
+      showResult({
         text: `${this.#billOrder(row)}: ${t("payments.partial.released")}`,
         refused: false,
-      };
+      });
     } catch (error) {
       if (!current()) return;
-      this.billResult = {
-        text: `${this.#billOrder(row)}: ${codeOf(error) === "payment.outcome_unknown" ? t("payments.partial.unconfirmed") : stuckRefusalText(error)}`,
+      showResult({
+        text: `${this.#billOrder(row)}: ${codeOf(error) === "payment.outcome_unknown" ? ((error as { params?: { reason?: unknown } }).params?.reason === "refund_reference_missing" ? t("payments.partial.reference_missing") : t("payments.partial.unconfirmed")) : stuckRefusalText(error)}`,
         refused: true,
-      };
+      });
     }
     try {
       await this.#loadBillRecovery(true);

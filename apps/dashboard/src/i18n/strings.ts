@@ -2857,6 +2857,8 @@ export const en = {
   "payments.partial.confirm": "Confirm full refund",
   "payments.partial.instructions":
     "Refund the remaining {remaining} in {provider} first. Then confirm here: Waitron checks the provider’s record and releases this payment only when the full charge has been refunded. This sends no refund and records no sale.",
+  "payments.partial.reference_missing":
+    "Waitron recorded a refund without the provider’s refund number. This payment cannot be released here.",
   "payments.partial.released":
     "Payment fully refunded. You can continue with the order once its other payments are resolved.",
   "payments.partial.unconfirmed":
@@ -2885,8 +2887,7 @@ export const en = {
   "payments.tender.reference": "Provider payment reference",
   "payments.tender.intro": "This returns money; the original invoice stays unchanged.",
   "payments.bill.heading": "Bill payments and refunds awaiting a card provider",
-  "payments.bill.intro":
-    "Check with the card provider before recording an outcome. A manager may record only the outcome the provider confirms, with a note and their PIN.",
+  "payments.bill.intro": "Check with the card provider before recording an outcome.",
   "payments.bill.payments": "Bill payments",
   "payments.bill.refunds": "Refunds",
   "payments.bill.no_payments": "No bill payments need attention.",
@@ -6844,6 +6845,8 @@ export const es: Record<StringKey, string> = {
   "payments.partial.confirm": "Confirmar devolución completa",
   "payments.partial.instructions":
     "Devuelve primero los {remaining} restantes en {provider}. Después confirma aquí: Waitron consulta el registro del proveedor y libera este pago solo cuando se ha devuelto el cobro completo. Esto no envía ninguna devolución ni registra ninguna venta.",
+  "payments.partial.reference_missing":
+    "Waitron registró una devolución sin el número de devolución del proveedor. Este pago no se puede liberar aquí.",
   "payments.partial.released":
     "Pago devuelto por completo. Puedes continuar con el pedido cuando se hayan resuelto sus demás pagos.",
   "payments.partial.unconfirmed":
@@ -6872,8 +6875,7 @@ export const es: Record<StringKey, string> = {
   "payments.tender.reference": "Referencia del pago del proveedor",
   "payments.tender.intro": "Esta acción devuelve dinero; la factura original no cambia.",
   "payments.bill.heading": "Pagos de cuentas y devoluciones pendientes del proveedor de tarjetas",
-  "payments.bill.intro":
-    "Consulta al proveedor de pagos antes de registrar un resultado. Un gerente solo puede registrar el resultado que confirme el proveedor, con una nota y su PIN.",
+  "payments.bill.intro": "Consulta al proveedor de pagos antes de registrar un resultado.",
   "payments.bill.payments": "Pagos de cuentas",
   "payments.bill.refunds": "Devoluciones",
   "payments.bill.no_payments": "No hay pagos de cuentas pendientes.",
