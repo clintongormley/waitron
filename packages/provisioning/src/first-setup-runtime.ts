@@ -81,6 +81,7 @@ export function createFirstSetupRuntime(options: {
   assertClaimAllowed?: (hold: FirstSetupHold) => Promise<void>;
   readPublicEvidence?: ModuleOperationHost["readPublicEvidence"];
   testClock?: ModuleOperationHost["testClock"];
+  timeServiceSynchronised?: ModuleOperationHost["timeServiceSynchronised"];
   /** Set only by a test: the clock that expires the owner's password grants. */
   grantClock?: () => number;
   /** Sets the box's clock for the setup page, `person` naming the administrator reserved at claim. */
@@ -121,6 +122,7 @@ export function createFirstSetupRuntime(options: {
               };
             }),
         }),
+    timeServiceSynchronised: options.timeServiceSynchronised,
     readSetupFacts: async (binding) => {
       if (preparation.current === undefined) throw new AppError("setup.not_ready", {});
       return preparation.current.readSetupFacts(binding);

@@ -10,8 +10,8 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { historicalFirstFiscalDocuments } from "../test/historical-first-fiscal.js";
 import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => {
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => {
     const now = Date.now(),
       mono = performance.now();
     return {

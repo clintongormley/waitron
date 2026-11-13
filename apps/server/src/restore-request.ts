@@ -369,6 +369,8 @@ export interface StagedRestoreDeps {
   recoverySecret?: unknown;
   recoveryOperationPath?: string;
   onManagedCloudRestored?: (binding: { requestId: string; pointId: string }) => Promise<void>;
+  /** Absent, the restore's series check asks the box's host service. */
+  timeServiceSynchronised?: () => Promise<boolean>;
 }
 
 type Restore = (deps: RestoreFileDeps) => Promise<void>;
@@ -579,6 +581,7 @@ async function runHeld(
         operation,
         secret,
         context,
+        timeServiceSynchronised: deps.timeServiceSynchronised,
       });
     } finally {
       await copy.discard();

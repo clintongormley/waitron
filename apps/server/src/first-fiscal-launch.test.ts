@@ -55,8 +55,8 @@ vi.mock("@waitron/composition", async (original) => {
   };
 });
 
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => {
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => {
     const now = Date.now(),
       mono = performance.now();
     return {
@@ -363,19 +363,15 @@ it("the built owned CLI refuses JSON authority, prints why it waits and until wh
   const clock = join(f.root, "clock.mjs");
   await writeFile(
     clock,
-    `import https from "node:https";
+    `import childProcess from "node:child_process";
 import timers from "node:timers/promises";
-import { EventEmitter } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
 timers.setTimeout = () =>
   new Promise(() => process.stdout.write("", () => process.kill(process.pid, "SIGINT")));
 const RealDate = Date;
-const date = new RealDate("2026-10-16T11:40:00Z").toUTCString();
-https.request = (_url, _options, respond) => {
-  const request = new EventEmitter();
-  request.end = () => queueMicrotask(() => respond({ statusCode: 200, headers: { date }, destroy() {} }));
-  return request;
-};
+const execFile = childProcess.execFile;
+childProcess.execFile = (file, args, options, callback) =>
+  file === "timedatectl" ? queueMicrotask(() => callback(null, "yes\\n", "")) : execFile(file, args, options, callback);
 syncBuiltinESMExports();
 globalThis.Date = class extends RealDate {
   constructor(...args) { super(...(args.length ? args : ["2026-10-16T11:40:00Z"])); }

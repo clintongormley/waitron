@@ -23,8 +23,8 @@ import { AppError } from "@waitron/shared";
 
 vi.mock("./module-config.js", { spy: true });
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
     source: "internet",
     result: "usable",
     instantMs: Date.now(),

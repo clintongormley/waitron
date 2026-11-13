@@ -200,12 +200,10 @@ export function createHostedHourPreparation(
     },
     compareClocks(
       binding: ModuleOperationInput["binding"],
-      browser: Parameters<typeof clocks.compare>[2],
-      client: Parameters<typeof clocks.compare>[3],
+      browser: Parameters<typeof clocks.compare>[1],
+      client: Parameters<typeof clocks.compare>[2],
     ) {
-      return withFacts(binding, (facts) =>
-        clocks.compare(facts.contextKey, facts.context.environment, browser, client),
-      );
+      return withFacts(binding, (facts) => clocks.compare(facts.contextKey, browser, client));
     },
   };
 }

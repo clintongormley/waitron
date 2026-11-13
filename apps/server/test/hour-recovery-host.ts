@@ -80,8 +80,8 @@ import {
 
 const mocked = vi.hoisted(() => ({ internet: vi.fn(), realSecretChecks: vi.fn() }));
 export const external: { internet: Mock } = mocked;
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: mocked.internet,
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: mocked.internet,
 }));
 export const realSecretChecks: Mock<(secret: string, stored: string) => Promise<boolean>> =
   mocked.realSecretChecks;

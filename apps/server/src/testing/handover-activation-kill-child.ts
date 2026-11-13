@@ -31,13 +31,13 @@ globalThis.Date = class extends Date {
 } as DateConstructor;
 Object.defineProperty(performance, "now", { value: () => 0 });
 
-const internet = `export async function authenticatedHourHead() { throw new Error("this child makes no network request"); } export async function observeInternetHourClock() { return { source: "internet", result: "usable", instantMs: Date.now(), uncertaintyMs: 0, wallStartedMs: Date.now(), wallFinishedMs: Date.now(), monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() }; }`;
+const internet = `export async function observeTimeServiceHourClock() { return { source: "internet", result: "usable", instantMs: Date.now(), uncertaintyMs: 0, wallStartedMs: Date.now(), wallFinishedMs: Date.now(), monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() }; }`;
 // Holds the child for over a second of real time, once, between its clock reading and the re-check,
 // so a child whose wall and elapsed-time clocks disagree is refused on every run.
 const release = `let held = false; export function readHourRelease() { if (!held) { held = true; const end = process.hrtime.bigint() + 1_100_000_000n; while (process.hrtime.bigint() < end); } return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
 registerHooks({
   resolve(specifier, context, next) {
-    const replacement = specifier.endsWith("/hour-clock-internet.js")
+    const replacement = specifier.endsWith("/hour-clock-time-service.js")
       ? internet
       : specifier.endsWith("/hour-release.js")
         ? release

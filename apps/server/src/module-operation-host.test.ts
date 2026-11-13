@@ -1,5 +1,8 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { readSetupFlowRecord } from "@waitron/provisioning";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
@@ -10,11 +13,28 @@ import {
   type ModuleOperationPreparation,
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { createModuleOperationHost } from "./module-operation-host.js";
+import { createFirstSetupModuleHost, createModuleOperationHost } from "./module-operation-host.js";
 import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
+import { clockServiceAnswer } from "./testing/synchronised-box-host.js";
+import type { BoxHostClient, ClockServiceStatus } from "./box-host-client.js";
+import { createFirstSetupCoordinator } from "@waitron/provisioning";
+import { createNodeOperationPreparation } from "./node-operation-preparation.js";
+import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
+import { timeServiceReader } from "./clock-service-reading.js";
+import type { NodeId } from "@waitron/shared";
 const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+const boxHost = vi.hoisted(() => ({
+  status: vi.fn<() => Promise<unknown>>(),
+}));
+vi.mock("./box-host-client.js", async (actual) => ({
+  ...(await actual<typeof import("./box-host-client.js")>()),
+  boxHostClient: (): BoxHostClient => ({
+    clockStatus: () => boxHost.status() as Promise<ClockServiceStatus>,
+    setClock: async () => ({ available: false, reason: "missing" }),
+  }),
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
     source: "internet",
     result: "usable",
     instantMs: time.clock.wall(),
@@ -266,4 +286,110 @@ it("exposes the configured opaque preparation store to a module without interpre
     await state.replace({ public: "opaque" });
   });
   expect(retained).toEqual({ public: "opaque" });
+});
+
+describe("every host the server builds asks the box's time service, afresh at each reading", () => {
+  const binding = {
+    module: "captured",
+    action: "restore",
+    eventId: "event",
+    sourceId: "source",
+    targetNodeId: "node",
+  };
+  const capturing = () => {
+    const seen: { host?: ModuleOperationHost } = {};
+    const module = fakeModule("captured", {
+      operations: {
+        prepare: async (operation, run) => run(operation),
+        configure: (bound) => {
+          seen.host = bound;
+          return { prepare: async (operation, run) => run(operation) };
+        },
+      },
+    });
+    return { module, read: () => seen.host!.timeServiceSynchronised!() };
+  };
+  let scratch: string;
+  beforeEach(async () => {
+    scratch = await mkdtemp(join(tmpdir(), "time-service-host-"));
+    boxHost.status.mockReset();
+  });
+  afterEach(() => rm(scratch, { recursive: true, force: true }));
+  const builders = {
+    "the first setup's": (module: ReturnType<typeof capturing>["module"]) =>
+      createFirstSetupModuleHost({
+        environment: {},
+        stateDir: join(scratch, "state"),
+        venueDir: join(scratch, "venue"),
+        modules: [module],
+      }),
+    "a live operation's (handover, conflict switch, promotion)": (
+      module: ReturnType<typeof capturing>["module"],
+    ) =>
+      createNodeOperationPreparation({
+        stateDir: join(scratch, "state"),
+        venueDir: join(scratch, "venue"),
+        db: venue.db,
+        nodeDb: venue.node,
+        node: { nodeId: "node" as NodeId },
+        modules: [module],
+        coordinator: createFirstSetupCoordinator(),
+        environment: {},
+      }),
+    "a restore's (its page, its start and the restore command)": (
+      module: ReturnType<typeof capturing>["module"],
+    ) =>
+      createSelectedRecoveryPreparation({
+        stateDir: join(scratch, "state"),
+        venueDir: join(scratch, "venue"),
+        coordinator: createFirstSetupCoordinator(),
+        modules: [module],
+        binding,
+        node: { nodeId: "node" as NodeId },
+        secret: "secret",
+        database: () => venue.db,
+        nodeDatabase: () => venue.node,
+        selected: {} as Parameters<typeof createSelectedRecoveryPreparation>[0]["selected"],
+        readIsolation: async () => ({
+          oldMachineAbsent: false,
+          oldMachineOffline: true,
+          noParallelRecovery: true,
+        }),
+      }),
+  };
+  it.each(Object.entries(builders))("%s host reads the box's host service", async (_, build) => {
+    const { module, read } = capturing();
+    build(module);
+    boxHost.status.mockResolvedValueOnce(clockServiceAnswer(true));
+    expect(await read()).toBe(true);
+    boxHost.status.mockResolvedValueOnce(clockServiceAnswer(false));
+    expect(await read()).toBe(false);
+    expect(boxHost.status).toHaveBeenCalledTimes(2);
+  });
+  it.each(Object.entries(builders))(
+    "%s host answers not synchronised when the host service fails",
+    async (_, build) => {
+      const { module, read } = capturing();
+      build(module);
+      boxHost.status.mockResolvedValueOnce({ available: false, reason: "missing" });
+      expect(await read()).toBe(false);
+      boxHost.status.mockRejectedValueOnce(new Error("socket gone"));
+      expect(await read()).toBe(false);
+    },
+  );
+  it("a host handed a reader asks that reader, not the default host service", async () => {
+    const { module, read } = capturing();
+    const handed = { clockStatus: vi.fn(async () => clockServiceAnswer(true)) };
+    createFirstSetupModuleHost({
+      environment: {},
+      stateDir: join(scratch, "state"),
+      venueDir: join(scratch, "venue"),
+      modules: [module],
+      timeServiceSynchronised: timeServiceReader(handed),
+    });
+    expect(await read()).toBe(true);
+    expect(await read()).toBe(true);
+    expect(handed.clockStatus).toHaveBeenCalledTimes(2);
+    expect(boxHost.status).not.toHaveBeenCalled();
+  });
 });

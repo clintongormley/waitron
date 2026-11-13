@@ -1,4 +1,4 @@
-import type { BoxHostClient, ClockServiceStatus } from "./box-host-client.js";
+import { boxHostClient, type BoxHostClient, type ClockServiceStatus } from "./box-host-client.js";
 import { createTtlCache } from "./ttl-cache.js";
 
 /** One read of the host's clock service a minute, shared by every reader of it: systemd starts
@@ -37,4 +37,12 @@ export async function clockServiceSynchronised(
   status: () => Promise<ClockServiceStatus>,
 ): Promise<boolean> {
   return answersSynchronised(await clockServiceAnswerOf(status));
+}
+
+/** The series check's reader of the box's time service: it asks `host` at every call, never
+ * through {@link sharedClockServiceReading}'s minute-long cache. */
+export function timeServiceReader(
+  host: Pick<BoxHostClient, "clockStatus"> = boxHostClient(),
+): () => Promise<boolean> {
+  return () => clockServiceSynchronised(() => host.clockStatus());
 }

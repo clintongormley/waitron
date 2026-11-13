@@ -16,8 +16,8 @@ import {
 import { useBuiltServer } from "./testing/built-server.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
     source: "internet",
     result: "usable",
     instantMs: Date.now(),

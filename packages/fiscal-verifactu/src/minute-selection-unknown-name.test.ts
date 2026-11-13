@@ -161,7 +161,7 @@ async function restore(c: Row): Promise<Outcome> {
       c.browser === null
         ? null
         : { challengeId: challenge.id, instantMs: (c.browser ?? c.box) + elapsed };
-    const comparison = await clocks.compare(KEY, scope.environment, browser, {
+    const comparison = await clocks.compare(KEY, browser, {
       onBox: c.onBox ?? false,
     });
     return withOperationAuthority(operation.binding, operation.operator, (authority) =>

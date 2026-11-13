@@ -48,6 +48,7 @@ export async function createRecoveryEntryRunner(options: {
   operation: RecoveryOperationInput;
   secret: unknown;
   context: RecoveryEntryContext;
+  timeServiceSynchronised?: () => Promise<boolean>;
 }): Promise<RestoreOperationRunner> {
   await assertNoStartAgainDeletion(options.venueDir);
   const { operation, copy, context } = options;
@@ -63,6 +64,7 @@ export async function createRecoveryEntryRunner(options: {
     binding: operation.binding,
     node,
     selected,
+    timeServiceSynchronised: options.timeServiceSynchronised,
     database() {
       throw new AppError("module.operation_invalid", { module: operation.binding.module });
     },

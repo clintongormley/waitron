@@ -54,21 +54,17 @@ const SETTLE = "2026-10-18T11:40:00Z";
  * wait pass by moving that clock forward instead of sleeping.
  */
 function clockPreload(instant: string, extra = "") {
-  return `import https from "node:https";
+  return `import childProcess from "node:child_process";
 import timers from "node:timers/promises";
-import { EventEmitter } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
 let passed = 0;
 timers.setTimeout = async (ms, value) => {
   passed += ms;
   return value;
 };
-https.request = (_url, _options, respond) => {
-  const request = new EventEmitter();
-  const date = new Date().toUTCString();
-  request.end = () => queueMicrotask(() => respond({ statusCode: 200, headers: { date }, destroy() {} }));
-  return request;
-};
+const execFile = childProcess.execFile;
+childProcess.execFile = (file, args, options, callback) =>
+  file === "timedatectl" ? queueMicrotask(() => callback(null, "yes\\n", "")) : execFile(file, args, options, callback);
 ${extra}syncBuiltinESMExports();
 const RealDate = Date;
 globalThis.Date = class extends RealDate {
@@ -92,9 +88,11 @@ it("with no network the built venue command explains, asks nothing and spends no
   const offline = join(directory!, "offline.mjs");
   await writeFile(
     offline,
-    `import https from "node:https";
+    `import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
-https.request = () => { throw new Error("synthetic offline clock"); };
+const execFile = childProcess.execFile;
+childProcess.execFile = (file, args, options, callback) =>
+  file === "timedatectl" ? queueMicrotask(() => callback(null, "no\\n", "")) : execFile(file, args, options, callback);
 syncBuiltinESMExports();\n`,
   );
   const values = {

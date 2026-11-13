@@ -58,9 +58,8 @@ async function builtCommand(name: string) {
     const preload = join(directory!, name, `clock-${instant.replaceAll(":", "")}.mjs`);
     await writeFile(
       preload,
-      `import https from "node:https";
+      `import childProcess from "node:child_process";
 import timers from "node:timers/promises";
-import { EventEmitter } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
 let passed = 0;
 timers.setTimeout = async (ms, value) => {
@@ -68,12 +67,9 @@ timers.setTimeout = async (ms, value) => {
   return value;
 };
 const RealDate = Date;
-https.request = (_url, _options, respond) => {
-  const request = new EventEmitter();
-  const date = new Date().toUTCString();
-  request.end = () => queueMicrotask(() => respond({ statusCode: 200, headers: { date }, destroy() {} }));
-  return request;
-};
+const execFile = childProcess.execFile;
+childProcess.execFile = (file, args, options, callback) =>
+  file === "timedatectl" ? queueMicrotask(() => callback(null, "yes\\n", "")) : execFile(file, args, options, callback);
 syncBuiltinESMExports();
 globalThis.Date = class extends RealDate {
   constructor(...args) { super(...(args.length ? args : [RealDate.parse(${JSON.stringify(instant)}) + passed])); }

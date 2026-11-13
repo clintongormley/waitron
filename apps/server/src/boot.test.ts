@@ -1820,8 +1820,8 @@ describe("startServer, against a migrated venue directory", () => {
         generatorSha256: "b".repeat(64),
       });
       const testClock = createHourTestClock(Date.now());
-      const clocks = await import("@waitron/fiscal-verifactu/src/hour-clock-internet.js");
-      vi.spyOn(clocks, "observeInternetHourClock").mockImplementation(async () => ({
+      const clocks = await import("@waitron/fiscal-verifactu/src/hour-clock-time-service.js");
+      vi.spyOn(clocks, "observeTimeServiceHourClock").mockImplementation(async () => ({
         source: "internet",
         result: "usable",
         instantMs: testClock.wall(),
@@ -1945,7 +1945,7 @@ describe("startServer, against a migrated venue directory", () => {
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-no-seams-state-"));
       const venue = await freshVenue();
       const release = await import("@waitron/fiscal-verifactu/src/hour-release.js");
-      const clocks = await import("@waitron/fiscal-verifactu/src/hour-clock-internet.js");
+      const clocks = await import("@waitron/fiscal-verifactu/src/hour-clock-time-service.js");
       const spies = [
         vi.spyOn(release, "readHourRelease").mockReturnValue({
           instantMs: Date.parse("2026-10-15T00:00:00Z"),
@@ -1954,7 +1954,7 @@ describe("startServer, against a migrated venue directory", () => {
           generator: "scripts/generate-hour-release.mjs:v1",
           generatorSha256: "b".repeat(64),
         }),
-        vi.spyOn(clocks, "observeInternetHourClock").mockImplementation(async () => {
+        vi.spyOn(clocks, "observeTimeServiceHourClock").mockImplementation(async () => {
           if (internet === "unavailable")
             return { source: "internet", result: "unavailable", reason: "timeout" };
           const mono = performance.now(),

@@ -449,7 +449,7 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { mountBoxHostApi } from "./box-host-api.js";
 import { collectBoxHealth } from "./box-health.js";
-import { sharedClockServiceReading } from "./clock-service-reading.js";
+import { sharedClockServiceReading, timeServiceReader } from "./clock-service-reading.js";
 import { CLOCK_WATCH_MS, createClockWatch, clockWatchJob } from "./clock-watch.js";
 import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
 import { startClockCheck, startClockState } from "./start-clock-check.js";
@@ -1203,6 +1203,8 @@ async function bootServer(
   }
   await assertNoStartAgainDeletion(config.venueDir);
   let moduleConfig: import("@waitron/module").ModuleConfig = { overrides: new Map() };
+  const boxHost = seams.boxHost ?? boxHostClient();
+  const timeServiceSynchronised = timeServiceReader(boxHost);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
   // Built in setup mode, once the log exists, before any setup route is mounted.
   let setupClockSet: ReturnType<typeof createSetupClockSet> | undefined;
@@ -1211,6 +1213,7 @@ async function bootServer(
     ...(config.node === undefined
       ? { setBoxClock: (request, person) => setupClockSet!(request, person) }
       : {}),
+    timeServiceSynchronised,
     database: () => db,
     environment: env,
     stateDir: config.stateDir,
@@ -1572,7 +1575,7 @@ async function bootServer(
     const testClock = seams.testClock;
     const setupClock = createSetupClockSet({
       stateDir: config.stateDir,
-      host: seams.boxHost ?? boxHostClient(),
+      host: boxHost,
       log,
       // The steady clock the module measured the device on.
       ...(testClock === undefined
@@ -1583,6 +1586,7 @@ async function bootServer(
     const recoveryPreparation = createSetupRecoveryPreparation({
       testClock: seams.testClock,
       setBoxClock: setupClock,
+      timeServiceSynchronised,
       stateDir: config.stateDir,
       venueDir: config.venueDir,
       stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
@@ -2751,7 +2755,6 @@ async function bootServer(
       captureAlerts: { raise: recordIncidentOnce, handle: markIncidentHandled },
     });
   const tillClock = systemClock();
-  const boxHost = seams.boxHost ?? boxHostClient();
   const localHostRequests = seams.boxHostRequests ?? boxHostRequests();
   const clockService = sharedClockServiceReading(boxHost, now);
   const readClockService = clockService.read;
@@ -3282,6 +3285,7 @@ async function bootServer(
   const nodePreparation = createNodeOperationPreparation({
     testClock: seams.testClock,
     clockCorrection: correction,
+    timeServiceSynchronised,
     db,
     nodeDb: store.node,
     node: { nodeId: tradingContext.nodeId },

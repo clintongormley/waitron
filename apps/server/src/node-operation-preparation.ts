@@ -42,6 +42,7 @@ import {
 } from "./operation-authentication.js";
 import type { RecoveryOperationInput } from "./recovery-module-operation.js";
 import type { PromotionOperationRunner } from "./promote.js";
+import { timeServiceReader } from "./clock-service-reading.js";
 
 interface Context {
   readonly oldNodeNeutralised?: unknown;
@@ -61,6 +62,7 @@ export function createNodeOperationPreparation(options: {
   coordinator: FirstSetupCoordinator;
   environment: Readonly<Record<string, string | undefined>>;
   testClock?: ModuleOperationHost["testClock"];
+  timeServiceSynchronised?: ModuleOperationHost["timeServiceSynchronised"];
   isLiveWritable?: () => boolean;
   /** Boot's setter, behind the module host's `setBoxClock`. */
   clockCorrection?: Pick<ReturnType<typeof clockCorrection>, "set" | "steps">;
@@ -183,6 +185,7 @@ export function createNodeOperationPreparation(options: {
     createModuleOperationHost(options.environment, {
       ...scoped,
       testClock: options.testClock,
+      timeServiceSynchronised: options.timeServiceSynchronised ?? timeServiceReader(),
       ...(setBoxClock === undefined ? {} : { setBoxClock }),
     }),
   );

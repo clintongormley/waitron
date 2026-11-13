@@ -18,6 +18,7 @@ import { modulesSettings, serializeModuleConfig, type ModuleConfig } from "@wait
 import { AppError, isAppError } from "@waitron/shared";
 import { createFirstSetupCommandDeployment } from "./first-setup-command-deployment.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
+import { timedatectlSynchronised } from "./time-service-command.js";
 import { formatAppError, runCli } from "./cli.js";
 import { readTaxpayerIdentities } from "./taxpayer-guard.js";
 import { applyVenue } from "./venue-apply.js";
@@ -66,6 +67,7 @@ async function main(): Promise<number> {
           venueDir,
           modules: ALL_MODULES,
           database: () => database,
+          timeServiceSynchronised: timedatectlSynchronised(),
         });
       },
       writeModuleConfig: writeModuleConfigTo(() => database),

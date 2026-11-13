@@ -18,8 +18,8 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
 const time = vi.hoisted(() => ({ clock: undefined as unknown as HourTestClock }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
     source: "internet",
     result: "usable",
     instantMs: time.clock.wall(),

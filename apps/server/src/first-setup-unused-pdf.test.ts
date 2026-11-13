@@ -15,8 +15,8 @@ import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
     source: "internet",
     result: "usable",
     instantMs: Date.now(),

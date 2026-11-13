@@ -10,8 +10,8 @@ import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 
 import { START_AGAIN_ROUTES } from "./setup-first-fiscal-api.js";
 
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
     source: "internet",
     result: "usable",
     instantMs: Date.now(),

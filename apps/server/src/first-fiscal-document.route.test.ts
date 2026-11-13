@@ -8,8 +8,8 @@ import { declaredFirstFiscalFixture, publicDigest } from "../test/declared-first
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { mountSetup } from "./setup-api.js";
 import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => {
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => {
     const now = Date.now(),
       mono = performance.now();
     return {

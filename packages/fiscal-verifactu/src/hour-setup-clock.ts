@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { DeploymentEnvironment } from "@waitron/db";
 import type {
   ModuleClockSetAnswer,
   ModuleClockSetRequest,
@@ -162,12 +161,7 @@ export function createSetupHourClock(deps: ClockDependencies = {}) {
         },
       };
     },
-    async compare(
-      key: string,
-      _environment: DeploymentEnvironment,
-      browser: SetupBrowserClockSample | null,
-      client: SetupClockClient,
-    ) {
+    async compare(key: string, browser: SetupBrowserClockSample | null, client: SetupClockClient) {
       const state = session(key);
       const { challenge, received, elapsed, timed } =
         browser === null

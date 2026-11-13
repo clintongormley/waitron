@@ -28,8 +28,8 @@ const internet = vi.hoisted(() => ({
   offsetMs: 0,
   clock: undefined as unknown as HourTestClock,
 }));
-vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => {
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => {
     if (internet.offline) return { source: "internet", result: "unavailable", reason: "offline" };
     const wall = internet.clock.wall() + internet.offsetMs,
       monotonic = internet.clock.monotonic();
