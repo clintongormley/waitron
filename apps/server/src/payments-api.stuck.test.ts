@@ -2875,7 +2875,7 @@ describe("provider-confirmed partial-refund release", () => {
         { providerRefundRef: "rest", amount: decimal("1.10") },
       ],
     };
-    const lookup = vi.fn(async (_ref: string) => evidence);
+    const lookup = vi.fn<(processorRef: string) => Promise<typeof evidence>>(async () => evidence);
     const provider = Object.assign(new FakePaymentProvider(suite.db), {
       lookupCompletedRefunds: lookup,
     });
