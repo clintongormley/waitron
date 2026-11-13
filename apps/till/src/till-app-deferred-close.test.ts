@@ -1161,16 +1161,14 @@ it.each([false, true])(
         retrieveWorkingOrder: vi
           .fn()
           .mockRejectedValue({ code: "working_order.not_found", status: 404 }),
-        getBillBalance: vi
-          .fn()
-          .mockResolvedValue(
-            balanceOf({
-              workingOrderId: "wo-9",
-              status: "placed",
-              total: "30.00",
-              outstanding: "30.00",
-            }),
-          ),
+        getBillBalance: vi.fn().mockResolvedValue(
+          balanceOf({
+            workingOrderId: "wo-9",
+            status: "placed",
+            total: "30.00",
+            outstanding: "30.00",
+          }),
+        ),
         listCounterWaiting: vi
           .fn()
           .mockResolvedValue([
