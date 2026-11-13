@@ -16,12 +16,15 @@ import {
   diningTables,
   parties,
   partyTables,
+  persons,
+  personStaffRoles,
   withTransaction,
   workingOrderLines,
   workingOrders,
   venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
+import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { planVenue } from "@waitron/provisioning";
@@ -141,6 +144,13 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
   };
   const { tables, counter, productIds } = await withTransaction(db, async (tx) => {
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    await tx
+      .insert(personStaffRoles)
+      .values({ personId: admin!.id, staffRoleId: await ensureFixtureJobRole(tx) });
     const cat = await createCatalogue(tx, { name: `Party menu ${venueId}` });
     const platos = await createCategory(tx, { name: "Platos" });
     for (const product of MENU) {
