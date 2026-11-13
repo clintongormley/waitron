@@ -2232,7 +2232,7 @@ it.each(["", "E1"])(
     expect(detailRows(el, "venue-review")).toContainEqual(["Country", country]);
   },
 );
-it("clocks that differ show one time per clock and ask which is correct; neither answer sends anything", async () => {
+it("clocks that differ show one time per clock and ask which is correct; The server and Both times are wrong send nothing", async () => {
   const decision = {
     ...clock,
     usable: [

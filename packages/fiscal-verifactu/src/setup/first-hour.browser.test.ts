@@ -2398,7 +2398,7 @@ it.each([
   },
 );
 it.each(["en", "es"] as const)(
-  "%s: clocks that differ show one time per clock, ask which is correct, and neither answer sends anything",
+  "%s: clocks that differ show one time per clock, ask which is correct; The server and Both times are wrong send nothing",
   async (locale) => {
     const decision = {
       ...clock,

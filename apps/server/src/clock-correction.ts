@@ -67,7 +67,7 @@ export interface ClockSetInput {
   /** `steps()` when the caller measured. */
   stepsSeen: number;
   witnesses: readonly ClockWitness[];
-  /** For `admin` and `staff`; for `staff`, with `role: "staff"`. */
+  /** For `admin` and `staff`, and `setup` on first setup; for `staff`, with `role: "staff"`. */
   admin?: ClockAdminConfirm;
   /** How close, uncertainty included, a person's offset counts as agreeing; a minute when absent. */
   agreesWithinMs?: number;

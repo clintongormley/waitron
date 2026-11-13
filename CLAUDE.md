@@ -959,12 +959,13 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   a `node.manage` holder), when that person chooses **This device** (owner, 2026-11-10: "yes";
   2026-11-12: "add \"This device\" to #2693 now"), or AEAT only inside the clock-behind stop — never from devices alone and never while it
   keeps time over the internet — and every step it verifies, or sees move the clock by over a second,
-  is alerted and emailed (a step made before the venue exists, at its first full start)** (owner,
+  is alerted and emailed (a step made before the venue exists, at its first full start, if one comes before a reset)** (owner,
   2026-11-10: "we rely on NTP only, we don't bother about AEAT").
   Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
-  `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
-  rule. [Detail](docs/developers/conventions-data.md#the-box-sets-its-own-clock).
+  `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`,
+  `apps/server/src/setup-clock-set.test.ts`, `apps/server/src/boot.box-emails.test.ts`, weaker than
+  the rule. [Detail](docs/developers/conventions-data.md#the-box-sets-its-own-clock).
 - **Never put our own metadata into a hash.** `entorno` must not enter `computeHuella`;
   differing only in it must leave hashes identical.
 - **The producer's tax number does not change before A993 lands** (owner, 2026-11-06): a
@@ -978,8 +979,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion
   use five symbols for the box's UTC minute, after another machine's clock agrees within 30 seconds
   (no confirmation); a device that has just set the box's clock from that page is that machine
-  (owner, 2026-11-11: "if somebody has confirmed the time on their device, then we trust that time
-  and move forward"); a minute whose name is already in a history the box reads is not taken. Its
+  (A1482 plan, cleared by the watcher 2026-11-12 18:33; not owner-approved); a minute whose name is already in a history the box reads is not taken. Its
   waits, its other refusals and when a name can repeat:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
   preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.

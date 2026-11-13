@@ -418,8 +418,9 @@ declare module "@waitron/shared" {
 
     /**
      * Recorded, never thrown, by `recordCorrected` (./clock-stop-incidents.ts) for each step of the
-     * box's clock. `confirmationId` is the step's confirmation, null when the step was not verified
-     * (`verified` false, `unverified` true). `person` is the administrator's or staff member's
+     * box's clock, and for a `setup` step by the server at the venue's first full start.
+     * `confirmationId` is the step's confirmation, null when the step was not verified (`verified`
+     * false, `unverified` true) or its source is `setup`. `person` is the administrator's or staff member's
      * display name, and `deviceId` and `device` the till's id and label when the reading came from
      * one, else null. `before` and `after` are ISO 8601 instants, each with its own offset;
      * `stepMs` the measured step, `direction` its sign. `byAdmin` and `byStaff` say which person

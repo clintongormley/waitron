@@ -4835,11 +4835,13 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
   `<state>/setup-clock-step.json` (`reset: "deleted"`), one entry per step. At the first full start
   that is neither a mirror nor fenced, `raiseSetupClockSteps` makes each entry a `clock.corrected`
   alert under its id, each later one marking the earlier handled as on a running box, hands each to
-  the email duty, then deletes the note; an id already present is not inserted again. A step on a
-  setup or restore that never fully starts, or one made before an environment-mismatch Move sets the
+  the email duty, then deletes the note; an id already present is not inserted again. A step whose
+  box never fully starts before a reset, or one made before an environment-mismatch Move sets the
   note aside with the other `reset: "deleted"` entries
-  (`packages/provisioning/src/environment-recovery-move.ts`), is never alerted: the host's journal
-  line and Waitron's `clock_correction.stepped` log line are its only record. An entry that could
+  (`packages/provisioning/src/environment-recovery-move.ts`), is never alerted or emailed: the host's
+  journal line and Waitron's `clock_correction.stepped` log line are its only record. Start again
+  keeps the note, so a step from an abandoned attempt is alerted at the next attempt's first full
+  start, naming the administrator of the attempt that made it. An entry that could
   not be written stays in the process, under one id across retries: the next **This device** press
   writes it before setting anything, and every finish that restarts into the full start (the first
   setup's activation, `apps/server/src/first-fiscal-activation.ts`, and each setup operation,
@@ -4849,7 +4851,8 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
 
 Never from devices alone, never while the host says the clock is synchronised, and never when the
 host service does not answer. A person's set hands the correction no witnesses: what set the clock
-is that person's device, stored as their reading.
+is that person's device, stored as their reading; a setup or restore set stores no reading, only
+the before and after times in the note, and a restore set names nobody.
 
 **The order** (`setInTurn`). Every set, and every confirmation that can lift or close a stop (the
 watch's `confirm` and `closeWaiting`, `POST /api/box/clock-confirm`, a till's agreeing check), runs
@@ -5051,7 +5054,9 @@ Guards: `apps/server/src/clock-correction.test.ts`, `clock-watch.correction.test
 Nothing checks that a new caller takes the turn outside its transaction, or that a new job comparing
 a stored time with the clock is in the table below.
 The page's **This device** (A1482): `apps/server/src/setup-clock-set.test.ts`, weaker than its name:
-a stub host, and it calls `raiseSetupClockSteps` directly rather than through a start;
+a stub host, and it calls `raiseSetupClockSteps` directly rather than through a start; "boot raises
+and emails each clock step the setup page noted, then deletes the note" in
+`apps/server/src/boot.box-emails.test.ts`, which goes through a start;
 `packages/fiscal-verifactu/src/clock-step.setup-source.test.ts`, that the regime's step refuses a
 `setup` source whatever person it names, and nothing else; and "a clock step made while the
 handover page is open" in `apps/server/src/handover-activation.test.ts`, which writes the alert with
@@ -6504,9 +6509,13 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   unguarded. **The box's internet time service keeps its clock; Waitron sets it only through the host
   service, from a till's time (a staff member's while the start waits for its time, or during a stop
   until the internet confirms that start or during start-up; a Box administration holder's at any time), a
-  Box administration holder's own device, or AEAT only inside the clock-behind stop — never from devices alone
+  Box administration holder's own device, the device showing the clock step of the setup page (under its
+  owner's pass), the restore page (under its recovery key or kit) or the handover page (signed in as
+  a `node.manage` holder), when that person chooses **This device** (owner, 2026-11-10: "yes";
+  2026-11-12: "add \"This device\" to #2693 now"), or AEAT only inside the clock-behind stop — never from devices alone
   and never while it keeps time over the internet — and every step it verifies, or sees move the
-  clock by over a second, is alerted and emailed** (owner, 2026-11-10: "we rely on NTP only, we
+  clock by over a second, is alerted and emailed (a step made before the venue exists, at its first
+  full start, if one comes before a reset)** (owner, 2026-11-10: "we rely on NTP only, we
   don't bother about AEAT"). Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
@@ -6517,7 +6526,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 - **Restore and promotion start a new chain under a new installation name.**
   Setup/restore/promotion use five symbols for the box's UTC minute, after another machine's clock
-  agrees within 30 seconds (no confirmation); a minute whose name is already in a history the box
+  agrees within 30 seconds (no confirmation); a device that has just set the box's clock from that
+  page is that machine (A1482 plan, cleared by the watcher 2026-11-12 18:33; not owner-approved); a
+  minute whose name is already in a history the box
   reads is not taken (the box waits for the next free one if it starts within 150 seconds, and
   otherwise refuses with when it can; the setup and restore pages count that down and check again by
   themselves; owner, 2026-10-30, A1207), and no other name or record

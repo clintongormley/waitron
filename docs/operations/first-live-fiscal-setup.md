@@ -53,7 +53,7 @@ an "Internet" row when the internet was read), each one time to the minute (with
 row when another clock reads the server's minute), then **The server**, **This device** and
 **Both times are wrong**. **The server** and **Both times are wrong** send nothing and say to correct
 this device's time and reconnect (the same file's "%s: clocks that differ show one time per clock,
-ask which is correct, and neither answer sends anything"). **This device** sets the box's clock
+ask which is correct; The server and Both times are wrong send nothing"). **This device** sets the box's clock
 from the device showing the page, under the owner's pass, and the page then makes the series with
 nobody pressing (the same file's "after Proceed on clocks that differ, This device sets the server's
 clock and the series are made with nobody pressing"); a refusal says what happened and what to do
@@ -61,8 +61,8 @@ clock and the series are made with nobody pressing"); a refusal says what happen
 keeps the choices"). It is not offered when the internet's time agrees with the box's (the same
 file's "offers no This device when the internet's time agrees with the server's"). Each step
 becomes an alert, handed to the managers' email duty, at the venue's first full start
-(`apps/server/src/setup-clock-set.test.ts`, "gives each entry its own alert under its id, emails
-each, and deletes the note"). **Edit these details** sends nothing and asks the setup app for the venue step; while
+(`apps/server/src/boot.box-emails.test.ts`, "boot raises and emails each clock step the setup
+page noted, then deletes the note"). **Edit these details** sends nothing and asks the setup app for the venue step; while
 the attempt is claimed the app shows its page saying the details are frozen, with **Start again**
 (`apps/setup/src/setup-app-first-fiscal.test.ts`, "Edit these details on the series page asks for
 the venue step, which a claimed attempt answers with its frozen-details page"). Once the series are

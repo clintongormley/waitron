@@ -28,6 +28,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
+import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -597,7 +598,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             ),
           ).toEqual({ status: "refused", reason: "stale" });
           expect(boxHost.setClock).not.toHaveBeenCalled();
-          await expect(readFile(join(stateDir, "setup-clock-step.json"))).rejects.toMatchObject({
+          await expect(readFile(join(stateDir, SETUP_CLOCK_STEP_FILE))).rejects.toMatchObject({
             code: "ENOENT",
           });
         },
@@ -640,7 +641,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         venue.directory,
         {},
         async ({ post, kills, stateDir }) => {
-          const notePath = join(stateDir, "setup-clock-step.json");
+          const notePath = join(stateDir, SETUP_CLOCK_STEP_FILE);
           // A folder where the note goes, so writing it fails.
           await mkdir(notePath);
           expect(
@@ -700,7 +701,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         { WAITRON_ENV: "dev" },
         async ({ post, kills, stateDir, testClock }) => {
           server.clock = testClock;
-          const notePath = join(stateDir, "setup-clock-step.json");
+          const notePath = join(stateDir, SETUP_CLOCK_STEP_FILE);
           await mkdir(notePath);
           // A step a little over a second, so the hour setup's own clocks still agree.
           expect(
