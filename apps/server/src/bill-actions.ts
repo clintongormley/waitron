@@ -18,7 +18,7 @@ import type { BillEditExpected } from "./order-drafts.js";
 import {
   carryMergeInvoice,
   checkMergeInvoice,
-  parseChoice,
+  parseMergeInvoiceChoice,
   type MergeInvoices,
 } from "./merge-invoice.js";
 import { moveDraftsToBill } from "./order-drafts.js";
@@ -252,7 +252,7 @@ async function checkMoveInvoice(
   invoiceChoice: unknown,
 ): Promise<MergeInvoices | null> {
   if (empties) return checkMergeInvoice(tx, intoBillId, fromBillId, invoiceChoice);
-  if (parseChoice(invoiceChoice) !== undefined) {
+  if (parseMergeInvoiceChoice(invoiceChoice) !== undefined) {
     throw new AppError("bill.merge_invoice_choice_required", {
       workingOrderId: fromBillId,
       intoWorkingOrderId: intoBillId,

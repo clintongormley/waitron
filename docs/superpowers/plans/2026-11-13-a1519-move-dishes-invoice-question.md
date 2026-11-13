@@ -96,9 +96,9 @@ move (a `kind: "merge" | "move"` on `mergeInvoiceAsk`). Titles are merge's
 
 On `bill.merge_invoice_choice_required` from a move, the till re-reads the bill's dishes and the
 party's bills; if the move still takes every dish and the question applies to the fresh read it
-opens it at once, otherwise it shows `table.move_invoice_changed`, as `#onMergeBills` does (`till-app.ts:17186-17191`). Look at the
-three move forms in both themes and at phone width; screenshots are shown to the owner, never
-committed.
+opens it at once, otherwise it shows `table.move_invoice_changed`, as `#onMergeBills` does for
+the bills. Look at the three move forms in both themes and at phone width; screenshots are shown
+to the owner, never committed.
 
 ## Guide and backlog
 
@@ -134,6 +134,11 @@ to a shared testing file only if both files need it):
 10. "moves every dish of a full-invoice bill over the simplified limit onto a simplified bill once
     its invoice is kept" (a venue with `simplifiedInvoiceLimit` set; every other test venue has it
     null, so only this case fails if the carry runs after the dishes move).
+
+As built, these names carry the file's `A1519 move dishes:` prefix, and review added two cases: a
+badly formed choice is `management.request_invalid` whether or not the move empties the bill, and
+(till) a refusal after another dish joined the bill asks nothing and shows
+`table.move_invoice_changed`.
 
 Route, `till-api.bill-actions.test.ts` (or the file holding the move-dishes route cases): the
 choice travels, and the refusal answers 409 with the code. Filing,

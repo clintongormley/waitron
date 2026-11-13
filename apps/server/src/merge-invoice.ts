@@ -10,10 +10,11 @@ export interface InvoiceIdentity {
   identifierCountryCode: string | null;
 }
 
-/** Which bill's invoice a merged bill keeps, and each bill's customer as the till saw it. */
+/** Which bill's invoice a merged bill, or the bill every dish moves to, keeps, and each bill's
+ * customer as the till saw it. */
 export interface MergeInvoiceChoice {
   keep: "into" | "from";
-  /** Null: the receiving bill was simplified. */
+  /** Null: the receiving bill was simplified or new. */
   into: InvoiceIdentity | null;
   from: InvoiceIdentity;
 }
@@ -66,7 +67,7 @@ function requireIdentity(value: unknown): InvoiceIdentity {
 }
 
 /** Refuses a malformed `value` as `management.request_invalid`; undefined when none was sent. */
-export function parseChoice(value: unknown): MergeInvoiceChoice | undefined {
+export function parseMergeInvoiceChoice(value: unknown): MergeInvoiceChoice | undefined {
   if (value === undefined) return undefined;
   if (!isObject(value) || (value.keep !== "into" && value.keep !== "from")) invalid();
   const into = value.into === null ? null : requireIdentity(value.into);
@@ -108,10 +109,11 @@ async function readMergeInvoices(
 }
 
 /**
- * Refuses `bill.merge_invoice_choice_required` when merging `fromBillId` away would change which
- * customer is invoiced and `rawChoice` does not say which to keep, or names either bill's customer
- * other than as it stands now. A hand change of a bill's invoice moves neither the party's revision
- * nor the bill-edit state, so this comparison is the only check that sees one.
+ * Refuses `bill.merge_invoice_choice_required` when merging `fromBillId` away, or moving every dish
+ * off it, would change which customer is invoiced and `rawChoice` does not say which to keep, or
+ * names either bill's customer other than as it stands now. A hand change of a bill's invoice moves
+ * neither the party's revision nor the bill-edit state, so this comparison is the only check that
+ * sees one.
  */
 export async function checkMergeInvoice(
   tx: Transaction,
@@ -119,7 +121,7 @@ export async function checkMergeInvoice(
   fromBillId: string,
   rawChoice: unknown,
 ): Promise<MergeInvoices> {
-  const choice = parseChoice(rawChoice);
+  const choice = parseMergeInvoiceChoice(rawChoice);
   const bills = await readMergeInvoices(tx, intoBillId, fromBillId);
   const into = identityOf(bills.into);
   const from = identityOf(bills.from);
