@@ -535,9 +535,13 @@ A1424's live qualification was added on 7 November 2026.
   with the published server snapshot (watcher, 2026-11-09 10:01), except that idle positive
   server capacity needs no hosted read (watcher, 2026-11-12 20:47). A1454 now follows the renewed
   measured-family-size and memory-admission ask (12 November); the watcher cleared sixteen
-  identifiers, eight per host, preserving six large guests (13 November 01:54). Its installed
-  mixed-job trial and wait/duration comparison remain open. The matched recipes and
-  controller are [installed with independent readback](https://github.com/waitron-io/waitron-cloud/pull/1198#issuecomment-6842611690). A1461 reduces run sizes. Per-job
+  identifiers, eight per host, preserving six large guests (13 November 01:54). The trial
+  completed forty disposable-runner jobs successfully, with eight guests per host, but hosted
+  jobs queued while the server had admissible room. The previous release is
+  [restored under a fresh twelve-slot generation](https://github.com/waitron-io/waitron-cloud/pull/1198#issuecomment-6843575516).
+  The routing diagnosis remains open; no new memory-profile trial is cleared. The timing
+  comparison is unqualified because the trial's slowest checkout took 33 seconds.
+  A qualified wait/duration comparison remains open. A1461 reduces run sizes. Per-job
   overflow, the remaining workflows and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day
   no-avoidable-wait target. Never drain other lanes' work for a drill.
