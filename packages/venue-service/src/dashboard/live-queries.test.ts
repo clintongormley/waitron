@@ -103,7 +103,9 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
   (interest) => {
     expect(QUERY_DEPENDENCIES[interest]).toEqual([
       "floor_zones",
+      "floor_zones.today",
       "dining_tables",
+      "dining_tables.today",
       "floor_plans",
       "floor_plan_tables",
       "floor_reset_tables",
@@ -171,7 +173,12 @@ it.each(["opening-hours", "operations", "routing", "named-days"] as const)(
 
 it("refreshes a station's delete impact when a table or group is named for today", () => {
   expect(QUERY_DEPENDENCIES["station-delete-impact"]).toEqual(
-    expect.arrayContaining(["dining_tables", "floor_today_join_tables", "floor_today_joins"]),
+    expect.arrayContaining([
+      "dining_tables",
+      "dining_tables.today",
+      "floor_today_join_tables",
+      "floor_today_joins",
+    ]),
   );
 });
 

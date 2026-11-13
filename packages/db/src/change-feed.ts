@@ -46,8 +46,9 @@ function identitySql(
   type: string,
   hasId: boolean,
   suffixColumn?: string,
+  typeSql?: string,
 ): string {
-  const literal = quoteLiteral(type);
+  const literal = typeSql ?? quoteLiteral(type);
   if (suffixColumn !== undefined)
     return `json_object('type', ${literal} || '.' || ${row}."${suffixColumn}")`;
   if (!hasId) return `json_object('type', ${literal})`;
@@ -66,7 +67,12 @@ function identitySql(
  * ARRAY rather than as a string — SQLite's JSON functions carry a subtype that `json_object`
  * honours.
  */
-function resourcesSql(row: "new" | "old", source: ChangeSource, hasId: boolean): string {
+function resourcesSql(
+  row: "new" | "old",
+  source: ChangeSource,
+  hasId: boolean,
+  typeSql?: string,
+): string {
   const related = (source.related ?? []).map((relation) => {
     const column = plainName("column", relation.column);
     const object =
@@ -74,14 +80,19 @@ function resourcesSql(row: "new" | "old", source: ChangeSource, hasId: boolean):
       `'id', cast(${row}."${column}" as text))`;
     return ` || case when ${row}."${column}" is not null then ',' || ${object} else '' end`;
   });
-  return `json('[' || ${identitySql(row, source.type, hasId, source.typeSuffixColumn)}${related.join("")} || ']')`;
+  return `json('[' || ${identitySql(row, source.type, hasId, source.typeSuffixColumn, typeSql)}${related.join("")} || ']')`;
 }
 
 /** One change row, written into the caller's own transaction. */
-function recordSql(row: "new" | "old", source: ChangeSource, hasId: boolean): string {
+function recordSql(
+  row: "new" | "old",
+  source: ChangeSource,
+  hasId: boolean,
+  typeSql?: string,
+): string {
   return (
     `insert into "change_log" ("id", "payload") values (${NEW_ID_SQL}, ` +
-    `json_object('resources', ${resourcesSql(row, source, hasId)}));`
+    `json_object('resources', ${resourcesSql(row, source, hasId, typeSql)}));`
   );
 }
 
@@ -127,11 +138,28 @@ export async function installChangeFeed(
         throw new Error(`change feed: no column named ${suffix} on ${table}`);
       if (!column.notnull) throw new Error(`change feed: ${table}.${suffix} may be null`);
     }
+    const quietColumns = new Set(
+      source.quiet?.columns.map((name) => {
+        const column = plainName("column", name);
+        if (!columns.includes(column))
+          throw new Error(`change feed: no column named ${column} on ${table}`);
+        return column;
+      }),
+    );
+    const baseChanged = columns
+      .filter((column) => !quietColumns.has(column))
+      .map((column) => `new."${column}" is not old."${column}"`)
+      .join(" or ");
+    const updateType =
+      source.quiet === undefined
+        ? undefined
+        : `case when ${baseChanged || "0"} then ${quoteLiteral(source.type)} else ${quoteLiteral(source.quiet.type)} end`;
     const hasId = columns.includes("id");
     const changed = columns.map((column) => `new."${column}" is not old."${column}"`).join(" or ");
     const bodies = {
       insert: recordSql("new", source, hasId),
-      update: recordSql("old", source, hasId) + recordSql("new", source, hasId),
+      update:
+        recordSql("old", source, hasId, updateType) + recordSql("new", source, hasId, updateType),
       delete: recordSql("old", source, hasId),
     } as const;
     for (const [event, body] of Object.entries(bodies)) {

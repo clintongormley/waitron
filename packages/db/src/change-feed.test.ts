@@ -208,6 +208,106 @@ describe("database change feed", () => {
   });
 });
 
+describe("today-only changes", () => {
+  const source = {
+    table: "live_today_probe",
+    type: "dining_tables",
+    quiet: { type: "dining_tables.today", columns: ["today_x"] },
+  };
+  const suite = useVenueDb({
+    migrations: [CORE_MIGRATIONS],
+    setup: async (db) => {
+      db.run(
+        sql.raw("create table live_today_probe (id text primary key, label text, today_x integer)"),
+      );
+      await installChangeFeed(db, [source]);
+    },
+  });
+  const resources = () =>
+    suite.db
+      .execute<{ payload: string }>(sql`select payload from change_log`)
+      .rows.map(({ payload }) => (JSON.parse(payload) as ResourceChange).resources);
+
+  it.each([
+    ["today_x only", sql`update live_today_probe set today_x = 1`, "dining_tables.today"],
+    ["today_x to null", sql`update live_today_probe set today_x = null`, "dining_tables.today"],
+    ["label only", sql`update live_today_probe set label = 'Changed'`, "dining_tables"],
+    [
+      "mixed values",
+      sql`update live_today_probe set today_x = 1, label = 'Changed'`,
+      "dining_tables",
+    ],
+    [
+      "unchanged label",
+      sql`update live_today_probe set today_x = 1, label = label`,
+      "dining_tables.today",
+    ],
+  ])("routes actual changes in %s", (_name, statement, type) => {
+    suite.db.run(sql.raw("insert into live_today_probe values ('table-1', 'Table 1', 0)"));
+    suite.db.run(sql`delete from change_log`);
+    suite.db.run(statement);
+    expect(resources()).toEqual([[{ type, id: "table-1" }], [{ type, id: "table-1" }]]);
+  });
+  it.each([null, "Changed"])(
+    "routes a saved field changing to %s through the base type",
+    (label) => {
+      suite.db.run(
+        sql`insert into live_today_probe values ('table-1', ${label === null ? "Table 1" : null}, 0)`,
+      );
+      suite.db.run(sql`delete from change_log`);
+      suite.db.run(sql`update live_today_probe set label = ${label}`);
+      expect(resources()).toEqual([
+        [{ type: "dining_tables", id: "table-1" }],
+        [{ type: "dining_tables", id: "table-1" }],
+      ]);
+    },
+  );
+  it("retains insert/delete identities and silences unchanged values", () => {
+    suite.db.run(sql.raw("insert into live_today_probe values ('table-1', 'Table 1', null)"));
+    expect(resources()).toEqual([[{ type: "dining_tables", id: "table-1" }]]);
+    suite.db.run(sql`delete from change_log`);
+    suite.db.run(sql.raw("update live_today_probe set today_x = null, label = label"));
+    expect(resources()).toEqual([]);
+    suite.db.run(sql.raw("delete from live_today_probe"));
+    expect(resources()).toEqual([[{ type: "dining_tables", id: "table-1" }]]);
+  });
+  it.each([
+    ["missing", "no column named missing"],
+    ['a"b', "not a plain column name"],
+  ])(
+    "refuses invalid quiet column %s before replacing the installed feed",
+    async (column, message) => {
+      await expect(
+        installChangeFeed(suite.db, [{ ...source, quiet: { type: "quiet", columns: [column!] } }]),
+      ).rejects.toThrow(message);
+      suite.db.run(sql.raw("insert into live_today_probe values ('table-1', 'Table 1', 0)"));
+      suite.db.run(sql`delete from change_log`);
+      suite.db.run(sql.raw("update live_today_probe set today_x = 1"));
+      expect(resources()).toEqual([
+        [{ type: "dining_tables.today", id: "table-1" }],
+        [{ type: "dining_tables.today", id: "table-1" }],
+      ]);
+    },
+  );
+  it("replaces an existing base-only feed with quiet routing", async () => {
+    await installChangeFeed(suite.db, [{ table: source.table, type: source.type }]);
+    suite.db.run(sql.raw("insert into live_today_probe values ('table-1', 'Table 1', 0)"));
+    suite.db.run(sql`delete from change_log`);
+    suite.db.run(sql.raw("update live_today_probe set today_x = 1"));
+    expect(resources()).toEqual([
+      [{ type: "dining_tables", id: "table-1" }],
+      [{ type: "dining_tables", id: "table-1" }],
+    ]);
+    await installChangeFeed(suite.db, [source]);
+    suite.db.run(sql`delete from change_log`);
+    suite.db.run(sql.raw("update live_today_probe set today_x = 2"));
+    expect(resources()).toEqual([
+      [{ type: "dining_tables.today", id: "table-1" }],
+      [{ type: "dining_tables.today", id: "table-1" }],
+    ]);
+  });
+});
+
 describe("removing the change feed", () => {
   const suite = useVenueDb({
     migrations: [CORE_MIGRATIONS],

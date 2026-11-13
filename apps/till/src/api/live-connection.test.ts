@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { TillLiveConnection } from "./live-connection.js";
+import { TillLiveConnection, TILL_LIVE_TYPES } from "./live-connection.js";
 import { TillApi } from "./client.js";
 
 const connections: TillLiveConnection[] = [];
@@ -145,4 +145,16 @@ it("reads the shared stream with the device proof and no signed-in person, forwa
     ["keepalive", "{}"],
     ["change", '[{"type":"devices"}]'],
   ]);
+});
+
+it("keeps floor and kitchen live on today events without adding them to timed readers", () => {
+  const { connection, reads } = setup();
+  connection.addInterests("floor", TILL_LIVE_TYPES.floor!);
+  expect(reads.at(-1)!.types).toContain("dining_tables.today");
+  expect(reads.at(-1)!.types).toContain("floor_zones.today");
+  expect(TILL_LIVE_TYPES.station).toContain("dining_tables.today");
+  expect(TILL_LIVE_TYPES.pass).toContain("dining_tables.today");
+  for (const name of ["transfers", "menu", "billDraft", "allergy"]) {
+    expect(TILL_LIVE_TYPES[name]!.filter((type) => type.endsWith(".today"))).toEqual([]);
+  }
 });

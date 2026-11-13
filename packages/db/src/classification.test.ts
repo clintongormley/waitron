@@ -43,6 +43,34 @@ describe("CORE_CLASSIFICATION", () => {
 });
 
 describe("CORE_CHANGE_SOURCES", () => {
+  it("declares the complete today-only groups without quieting saved fields", () => {
+    expect(CORE_CHANGE_SOURCES.find((source) => source.table === "dining_tables")?.quiet).toEqual({
+      type: "dining_tables.today",
+      columns: [
+        "on_floor",
+        "today_seats",
+        "today_fixed",
+        "today_x",
+        "today_y",
+        "today_width",
+        "today_height",
+        "today_shape",
+        "today_rotation",
+        "taken_off",
+        "today_name",
+      ],
+    });
+    expect(CORE_CHANGE_SOURCES.find((source) => source.table === "floor_zones")?.quiet).toEqual({
+      type: "floor_zones.today",
+      columns: [
+        "today_business_day",
+        "today_revision",
+        "today_set_id",
+        "today_layout_revision",
+        "today_occurrence",
+      ],
+    });
+  });
   it("declares settings changes by module", () => {
     expect(CORE_CHANGE_SOURCES).toContainEqual({
       table: "settings",

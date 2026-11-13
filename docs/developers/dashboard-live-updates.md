@@ -73,6 +73,13 @@ server resources; behavioral tests must still check that your query lists every 
 module's `changes` declaration identifies its tables and any related objects a write affects. The
 server installs those declarations at trading boot, including on mirrors.
 
+A change source can declare a `quiet` column group. Updates confined to that group emit its type;
+mixed updates, inserts and deletes emit the base type. Keep both interests when your read uses
+today's state and saved fields. The table and room groups are `dining_tables.today` and
+`floor_zones.today`; saved-configuration reads keep only their base interests. Transfers and the
+menu tick's room-layout status retain their 15-second polls for today-only changes. When you add
+a today's-state column, update its source's quiet list and the readers that show it together.
+
 Keep form drafts separate from query snapshots. Update list rows and report values in the observer;
 do not call a loader that resets a modal or performs a mutation. An observer may take one narrow
 action a first load would have taken, when the screen still lacks its result: the Backups screen's
