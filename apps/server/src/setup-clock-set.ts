@@ -161,7 +161,13 @@ export function createSetupClockSet(deps: {
     } catch (cause) {
       const full = diskFullIn(cause) || errnoOf(cause) === "ENOSPC";
       throw Object.assign(
-        full ? new AppError("storage.disk_full", {}) : new AppError("setup.clock_step_unsaved", {}),
+        full
+          ? new AppError("storage.disk_full", {})
+          : new AppError(
+              "setup.clock_step_unsaved",
+              {},
+              { reason: errnoOf(cause) ?? codeOf(cause) },
+            ),
         { cause },
       );
     }
@@ -169,8 +175,9 @@ export function createSetupClockSet(deps: {
   return Object.assign(set, { writePending });
 }
 
-/** At the venue's first full start: one `clock.corrected` per noted step under the step's id, each
- * marking the open one before it handled as a running box's steps do, all handed to the email duty;
+/** At a full start that is neither a mirror nor fenced (the caller decides): one `clock.corrected`
+ * per noted step under the step's id, each marking the open one before it handled as a running
+ * box's steps do, all handed to the email duty;
  * then the note is deleted. An id already present is not inserted again; a failure leaves the note
  * for the next start. */
 export async function raiseSetupClockSteps(deps: {

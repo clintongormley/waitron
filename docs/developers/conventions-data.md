@@ -5063,9 +5063,13 @@ handover page is open" in `apps/server/src/handover-activation.test.ts`, which w
 `recordCorrected` rather than through the page's set, at `filing_assumed` and `emergency_declared`
 only, and checks it stays open through activation and its restart and that the box, then primary,
 queues its email; and the two "while a clock step's note cannot be written" cases in
-`apps/server/src/boot.setup-routes.test.ts`, which refuse one restore and one live first setup,
-then on the next try write the note (the first setup then restarts; the restore goes on to refuse
-the copy for its own reason), not an adopt or the other restores.
+`apps/server/src/boot.setup-routes.test.ts`, which refuse one restore and one live provision sent
+without the setup owner's pass, then on the next try write the note (the provision then
+restarts; the restore goes on to refuse the copy for its own reason), not an adopt or the other
+restores; and "refuses activation while the This device clock-step note cannot be written, then activates once it can" in
+`apps/server/src/first-fiscal-interruption.test.ts`, which sends the first setup's activation with
+the setup owner's pass and a stand-in note writer that fails once, and checks that the refused try
+provisions nothing and asks for no restart and that the next try activates.
 
 #### Jobs that compare a stored time with the clock, across a step of days
 

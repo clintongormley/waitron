@@ -231,6 +231,7 @@ describe("setting the box's clock from the setup and restore pages", () => {
     expect(await h.setter(h.request(), async () => null)).toEqual({ status: "set" });
     await expect(h.setter.writePending()).rejects.toMatchObject({
       code: "setup.clock_step_unsaved",
+      reason: "ENOENT",
       cause: { code: "ENOENT" },
     });
     expect(await note(h.dir)).toBeNull();
