@@ -27,7 +27,8 @@ new helper/framework, exclusion, threshold change, migration or weakened asserti
    statements 97.74%, functions 97.81%; configuration-transfer.ts:921–942 is uncovered.
    These cases already check the exporting operator's jobs, all visible jobs when none are held,
    and the target's translated starter job when the source is empty, with activity and no mail.
-   Reuse bundle.modules in place of server-only schemaVersionsByModule. No fourth case or second
+   Use the migrations API to measure source versions in place of the server-only helper,
+   and pass those measured versions to the import as the original test did. No fourth case or second
    copy of these tests. Prove them with the membership block deleted in a disposable copy,
    restore and run the focused file, then package coverage. Run the changed server test file.
    If this does not restore the bar, inspect the remaining gap and ask before expanding.

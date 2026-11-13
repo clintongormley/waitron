@@ -62,7 +62,7 @@ for (const mode of [true, false, "empty"] as const) {
     await applyVenue(planVenue(venue("B42086431"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, bundle.modules),
+      beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
     });
     const held = targetSuite.db.all<{
       id: string;
