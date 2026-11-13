@@ -33,6 +33,8 @@ export class HandoverReportWarning extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @state() private status: "unconfirmed" | "empty" | "unavailable" = "empty";
   @state() private loading = false;
+  @state() private hasEmergencyHandover = false;
+  @state() private hasReturnedInvoices = false;
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("api")) {
@@ -42,8 +44,11 @@ export class HandoverReportWarning extends LitElement {
   async #load(): Promise<void> {
     this.loading = true;
     try {
-      const { hasEmergencyHandover } = await this.api.getHandoverWarning();
-      this.status = hasEmergencyHandover ? "unconfirmed" : "empty";
+      const result = await this.api.getHandoverWarning();
+      this.hasEmergencyHandover = result.hasEmergencyHandover;
+      this.hasReturnedInvoices = result.hasReturnedInvoices;
+      this.status =
+        result.hasEmergencyHandover || result.hasReturnedInvoices ? "unconfirmed" : "empty";
     } catch {
       this.status = "unavailable";
     } finally {
@@ -56,7 +61,12 @@ export class HandoverReportWarning extends LitElement {
         this.status === "empty"
           ? nothing
           : html`<div class="notice">
-              <span>${t(`handover_warning.${this.status}`)}</span>
+              ${
+                this.status === "unavailable"
+                  ? html`<span>${t("handover_warning.unavailable")}</span>`
+                  : html`${this.hasEmergencyHandover ? html`<span>${t("handover_warning.unconfirmed")}</span>` : nothing}
+                    ${this.hasReturnedInvoices ? html`<span>${t("handover_warning.returned")}</span>` : nothing}`
+              }
               ${this.status === "unconfirmed" ? html`<a href="/manage/handover-intervals">${t("handover_warning.check")}</a>` : nothing}
               <wt-button .disabled=${this.loading} @click=${() => void this.#load()}
                 >${t("handover_warning.refresh")}</wt-button

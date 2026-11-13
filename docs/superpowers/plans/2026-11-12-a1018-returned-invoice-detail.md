@@ -1,5 +1,10 @@
 # A1018: read-only returned-invoice detail
 
+**2026-11-13 update:** the [report-marker plan](2026-11-13-a1018-report-return-markers.md)
+adds a general report notice while any returned invoice is recorded; it does not identify individual
+invoices or affected report periods. Tracking and duplicate limits remain; the notice adds no
+amounts to report totals.
+
 **FISCAL; the owner lands it.** Separate Sol/high draft, driver source-check at `524fffc93860`, Claude plan read (312 seconds, CHANGE) and one corrections read (154 seconds, wording changes incorporated; no further read requested). Watcher clearance: Lane J `questions.md`, 12 November 23:44, “CLEARED by the watcher with three changes; build”. All three are incorporated. The watcher ruled H2 is not reached by this additive wrapper/table work; this is not owner approval of the new cut. This bounded part follows [Slice 12a](2026-11-02-a1018-handover-build.md#slice-12a--the-reconciliation-list-and-lines-beside-the-reports), with the later [returned-fact decision](../../backlog/replication-cloud.md#returned-originals-and-their-recorded-facts-a1342-2026-11-10). Source inspection only; no tests run.
 
 **Finish line.** With `report.view`, you can inspect newly returned invoice records below Reporting → Handover intervals: source box name/id, generating installation/chain, record/sale ids, invoice series/number, stored issue date, kind/corrected-record reference, recorded taxable/gross/tax amounts and first receipt time. Corrections/cancellations stay separate; absent amounts say “Not recorded”. Explain that tracking starts with this change. This does not say business history is missing: A1342 already retains sale headers/payment facts.

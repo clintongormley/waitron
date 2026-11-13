@@ -21,7 +21,10 @@ it.each([
     setLocale(language);
     const { el } = await mountWidget<HandoverReportWarning>("dashboard-handover-report-warning", {
       api: {
-        getHandoverWarning: async () => ({ hasEmergencyHandover: true }),
+        getHandoverWarning: async () => ({
+          hasEmergencyHandover: true,
+          hasReturnedInvoices: false,
+        }),
         listHandoverIntervals: async () => {
           throw new Error("A report load must not run the full read");
         },
@@ -59,11 +62,12 @@ it("hides the first check and retains warning or failure while Refresh runs", as
   expect(region).not.toBeNull();
   expect(region!.textContent!.trim()).toBe("");
   expect(el.shadowRoot!.querySelector(".notice")).toBeNull();
-  answer({ hasEmergencyHandover: true });
+  answer({ hasEmergencyHandover: true, hasReturnedInvoices: true });
   await vi.waitFor(() => expect(el.shadowRoot?.querySelector("a")).toBeTruthy());
   expect(el.shadowRoot!.querySelector("[role=status]")).toBe(region);
   await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);
   expect(el.shadowRoot!.textContent).toContain(en["handover_warning.unconfirmed"]);
+  expect(el.shadowRoot!.textContent).toContain(en["handover_warning.returned"]);
   expect(el.shadowRoot!.querySelector("a")).not.toBeNull();
   expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(true);
   refuse({ code: "report.failed" });
@@ -74,8 +78,36 @@ it("hides the first check and retains warning or failure while Refresh runs", as
   await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);
   expect(el.shadowRoot!.textContent).toContain(en["handover_warning.unavailable"]);
   expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(true);
-  answer({ hasEmergencyHandover: false });
+  answer({ hasEmergencyHandover: false, hasReturnedInvoices: false });
   await vi.waitFor(() => expect(el.shadowRoot?.querySelector(".notice")).toBeNull());
   expect(el.shadowRoot!.querySelector("[role=status]")).toBe(region);
   expect(el.shadowRoot!.textContent!.trim()).toBe("");
 });
+
+it.each([
+  ["en-GB", en],
+  ["es-ES", es],
+] as const)(
+  "shows returned invoices alone or alongside emergency history with shared controls (%s)",
+  async (language, words) => {
+    setLocale(language);
+    for (const hasEmergencyHandover of [false, true]) {
+      const { el } = await mountWidget<HandoverReportWarning>("dashboard-handover-report-warning", {
+        api: {
+          getHandoverWarning: async () => ({ hasEmergencyHandover, hasReturnedInvoices: true }),
+        } as unknown as DashboardApi,
+      });
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.textContent).toContain(words["handover_warning.returned"]),
+      );
+      expect(el.shadowRoot!.textContent!.includes(words["handover_warning.unconfirmed"])).toBe(
+        hasEmergencyHandover,
+      );
+      expect(el.shadowRoot!.querySelectorAll("a")).toHaveLength(1);
+      expect(el.shadowRoot!.querySelector("a")!.getAttribute("href")).toBe(
+        "/manage/handover-intervals",
+      );
+      expect(el.shadowRoot!.querySelectorAll("wt-button")).toHaveLength(1);
+    }
+  },
+);

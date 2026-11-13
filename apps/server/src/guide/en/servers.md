@@ -132,8 +132,12 @@ readable kind beside their original type code. Corrections and cancellations app
 read more; **Refresh invoices** returns to the first page.
 
 Tracking starts with this feature. Invoices already held in a copy are not added, so an empty
-list is not a complete history of earlier returns. The list does not identify duplicates or
-mark invoices in other reports.
+list is not a complete history of earlier returns. The list does not identify duplicates.
+
+The report notice also tells you when returned invoices are recorded, independently of the dates
+you select. Follow the notice’s **Check handover intervals** link; **Returned invoices** is below
+the intervals. Check the invoices’ original issue dates. Use the figures displayed in each report;
+do not add the list’s amounts to report totals.
 
 ## When a box is waiting for another box {#waiting}
 

@@ -3416,10 +3416,15 @@ it("automatic interval GET is passive and returns its rows and venue zone", asyn
 });
 
 it("reads the warning through a passive existence GET", async () => {
-  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ hasEmergencyHandover: true }));
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(jsonResponse({ hasEmergencyHandover: true, hasReturnedInvoices: true }));
   const active = vi.fn();
   const api = new DashboardApi("", fetchImpl, undefined, active);
-  expect(await api.getHandoverWarning()).toEqual({ hasEmergencyHandover: true });
+  expect(await api.getHandoverWarning()).toEqual({
+    hasEmergencyHandover: true,
+    hasReturnedInvoices: true,
+  });
   const [path, init] = fetchImpl.mock.calls[0]!;
   expect(new URL(path, "http://localhost").pathname).toBe(
     "/management-api/reports/handover-warning",

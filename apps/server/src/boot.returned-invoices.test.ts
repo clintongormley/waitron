@@ -69,6 +69,15 @@ it("serves a real returned invoice through the booted fiscal backend and report 
       WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
       WAITRON_ENV: "preproduction",
     });
+    const warning = await fetch(
+      `http://127.0.0.1:${httpPort()}/management-api/reports/handover-warning`,
+      { headers: { cookie: venue.managerCookie } },
+    );
+    expect(warning.status).toBe(200);
+    expect(await warning.json()).toEqual({
+      hasEmergencyHandover: false,
+      hasReturnedInvoices: true,
+    });
     const response = await fetch(
       `http://127.0.0.1:${httpPort()}/management-api/reports/returned-invoices`,
       { headers: { cookie: venue.managerCookie } },

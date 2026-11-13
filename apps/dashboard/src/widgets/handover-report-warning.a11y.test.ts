@@ -28,7 +28,7 @@ describe.each(["light", "dark"] as const)("handover report warning (%s)", (theme
       },
       theme,
     );
-    answer({ hasEmergencyHandover: true });
+    answer({ hasEmergencyHandover: true, hasReturnedInvoices: false });
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("a")).not.toBeNull());
     await expectNoA11yViolations(host);
     await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);
@@ -41,4 +41,22 @@ describe.each(["light", "dark"] as const)("handover report warning (%s)", (theme
     expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(false);
     await expectNoA11yViolations(host);
   });
+  it.each([false, true])(
+    "keeps returned invoices accessible with emergency history %s",
+    async (hasEmergencyHandover) => {
+      const { el, host } = await mountWidget<HandoverReportWarning>(
+        "dashboard-handover-report-warning",
+        {
+          api: {
+            getHandoverWarning: async () => ({ hasEmergencyHandover, hasReturnedInvoices: true }),
+          } as unknown as DashboardApi,
+        },
+        theme,
+      );
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.textContent).toContain(t("handover_warning.returned")),
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
 });

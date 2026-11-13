@@ -25,6 +25,15 @@ export async function markReturnedInvoices(
     where id in (select value from json_each(${JSON.stringify(ids)}))`);
 }
 
+export async function hasReturnedInvoices(tx: Transaction): Promise<boolean> {
+  return (
+    tx.get(sql`select 1 from returned_invoice_records m
+    join registros_facturacion r on r.id = m.record_id
+    join nodes n on n.id = r.node_id join registro_sif s on s.id = r.sif_id
+    limit 1`) !== undefined
+  );
+}
+
 export async function returnedInvoices(
   tx: Transaction,
   page: { offset: number; limit: number },

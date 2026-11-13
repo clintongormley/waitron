@@ -12,7 +12,7 @@ import {
   receiveReturnedOriginals,
   type ReturnRow,
 } from "./handover-return.js";
-import { returnedInvoices, storedBases } from "./returned-invoices.js";
+import { hasReturnedInvoices, returnedInvoices, storedBases } from "./returned-invoices.js";
 import { VERIFACTU_HANDOVER } from "./handover-summary.js";
 
 const source = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -279,3 +279,17 @@ it.each(["[{}]", '[{"BaseImponibleOimporteNoSujeto":7}]'])(
     expect(storedBases(breakdown)).toBeNull();
   },
 );
+
+it("reports whether any newly returned invoice is recorded", async () => {
+  const exists = () => withTransaction(receiver.db, (tx) => hasReturnedInvoices(tx));
+  const node = await fixture();
+  await append(node, 1);
+  const batch = await inventory(node);
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, node.nodeId, batch, receivedAt),
+  );
+  expect(await exists()).toBe(false);
+  await append(node, 2);
+  await receive(node, await inventory(node));
+  expect(await exists()).toBe(true);
+});

@@ -67,6 +67,7 @@ import type { Logger } from "./logger.js";
  * mirror's own id. Per-node reports use it; venue-wide reports read every node.
  */
 export interface ReportApiDeps {
+  hasReturnedInvoices?: FiscalBackend["hasReturnedInvoices"];
   returnedInvoices?: FiscalBackend["returnedInvoices"];
   db: Database;
   cfg: { nodeId: string };
@@ -228,15 +229,20 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
   app.get("/management-api/reports/handover-warning", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const [activation] = await gated(sessionId, REPORT_VIEW_PERMISSION, (tx) =>
-        tx
+      const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
+        const [activation] = await tx
           .select({ operationId: handoverActivations.operationId })
           .from(handoverActivations)
           .where(eq(handoverActivations.scenario, "emergency"))
-          .limit(1),
-      );
+          .limit(1);
+        const hasReturnedInvoices = (await deps.hasReturnedInvoices?.(tx)) ?? false;
+        return {
+          hasEmergencyHandover: activation !== undefined,
+          hasReturnedInvoices,
+        };
+      });
       c.header("Cache-Control", "no-store");
-      return c.json({ hasEmergencyHandover: activation !== undefined });
+      return c.json(result);
     }),
   );
 

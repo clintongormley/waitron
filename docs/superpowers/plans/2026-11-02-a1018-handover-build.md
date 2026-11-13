@@ -3855,6 +3855,11 @@ item's evidence.
 
 #### Task 12a.5: Lines beside the daily close and the cash-up
 
+**2026-11-13 update:** the [returned-invoice report-marker plan](2026-11-13-a1018-report-return-markers.md),
+cleared by the watcher after Claude review, supersedes this task’s missing-money/gap-line model.
+The implementation uses the existing report notice and returned-invoice list, with no new gap store
+or change to totals, frozen closes, cash-up or filing.
+
 **Files:** Create `packages/reporting/src/handover-gap-lines.ts` (`handoverGapLines(tx, day)`:
 "Invoices returned from the old box" with counts and taxable, tax and gross for the day, and
 "Unknown: the old box's records from {from} are missing" for a day an open interval covers), read

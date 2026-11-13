@@ -13,7 +13,9 @@ const FILE = new Blob([new Uint8Array([0x4e, 0xd1, 0x0a])]);
 function stubApi(download: () => Promise<Blob> = () => Promise.resolve(FILE)): DashboardApi {
   return {
     downloadVatReturnFile: vi.fn(download),
-    getHandoverWarning: vi.fn().mockResolvedValue({ hasEmergencyHandover: false }),
+    getHandoverWarning: vi
+      .fn()
+      .mockResolvedValue({ hasEmergencyHandover: false, hasReturnedInvoices: false }),
   } as unknown as DashboardApi;
 }
 
@@ -282,4 +284,19 @@ it("places the handover status beside VAT controls", async () => {
   );
   expect(notice).not.toBeNull();
   expect(notice!.api).toBe(api);
+});
+
+it("keeps the returned-invoice notice independent of the selected VAT period", async () => {
+  const api = stubApi();
+  vi.mocked(api.getHandoverWarning).mockResolvedValue({
+    hasEmergencyHandover: false,
+    hasReturnedInvoices: true,
+  });
+  const el = await mount(api);
+  const notice = el.shadowRoot!.querySelector("dashboard-handover-report-warning")!;
+  await vi.waitFor(() => expect(notice.shadowRoot!.querySelector("a")).not.toBeNull());
+  await chooseOption(field(el, "period"), "01");
+  await flush(el);
+  expect(api.getHandoverWarning).toHaveBeenCalledTimes(1);
+  expect(notice.shadowRoot!.textContent).toContain(t("handover_warning.returned"));
 });
