@@ -5,6 +5,8 @@ const cli = `${node} /opt/waitron-host/box/upgrades/cli.mjs`;
 const shell = "bash /opt/waitron-host/waitron.sh";
 const quote = (text) => `'${text.replaceAll("'", "'\\''")}'`;
 const run = (text) => `${node} --input-type=module -e ${quote(text)}`;
+export const stayedUpCheck = `import fs from "node:fs";const until=Date.now()+180000;let last="not read";function poll(){try{last=fs.readFileSync("/var/lib/docker/volumes/waitron_state/_data/recovery.json","utf8");const state=JSON.parse(last);if(state.failures===0&&state.level==="normal"){console.log("B3_STAYED_UP:"+JSON.stringify(state));return;}}catch(e){last=e.message;}if(Date.now()>=until)throw Error("startup counter did not clear: "+last);setTimeout(poll,250);}poll();`;
+const stayed = run(stayedUpCheck);
 const fingerprint = run(`
 import {DatabaseSync} from 'node:sqlite'; import {createHash} from 'node:crypto';
 const db=new DatabaseSync('/var/lib/docker/volumes/waitron_state/_data/venue/venue.db',{readOnly:true});
@@ -20,10 +22,12 @@ for attempt in $(seq 1 180); do
 done
 test "$(timedatectl show -p NTPSynchronized --value)" = yes
 /usr/local/sbin/waitron-dev-start
+${stayed}
 [ -f /opt/waitron/before.json ] || ${fingerprint} >/opt/waitron/before.json
 jq -e '.sales.count==1 and .registros_facturacion.count==1 and .working_orders.count==1' /opt/waitron/before.json
 `;
-const compare = `${fingerprint} >/opt/waitron/after.json
+const compare = `${stayed}
+${fingerprint} >/opt/waitron/after.json
 cmp /opt/waitron/before.json /opt/waitron/after.json
 docker inspect $(docker compose --project-directory /opt/waitron -f /opt/waitron/compose.yml ps -q) | jq -e 'all(.[]; .HostConfig.RestartPolicy.Name=="unless-stopped")'
 `;

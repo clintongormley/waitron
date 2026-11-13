@@ -71,3 +71,43 @@ it.each(["restore", "keep"])(
     }
   },
 );
+
+it("waits for the source's completed stable start before comparing or stopping it", () => {
+  const root = mkdtempSync(join(tmpdir(), "upgrade-stayed-"));
+  try {
+    const box = join(root, "box"),
+      bin = join(root, "bin"),
+      nodeBin = `${box}-host/node-v26.7.0/bin`;
+    for (const folder of [box, bin, nodeBin]) mkdirSync(folder, { recursive: true });
+    writeFileSync(join(box, "before.json"), '{"checksum":"original"}\n');
+    writeFileSync(
+      join(nodeBin, "node"),
+      `#!/bin/sh
+case "$*" in
+ *'startup counter did not clear'*) [ ! -e "$START_PENDING" ] || rm "$START_PENDING" ;;
+ *) [ ! -f "$START_PENDING" ] || exit 1; printf '%s\\n' '{"checksum":"original"}' ;;
+esac
+`,
+      { mode: 0o700 },
+    );
+    for (const name of ["jq", "docker"])
+      writeFileSync(join(bin, name), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    writeFileSync(join(bin, "start"), '#!/bin/sh\ntouch "$START_PENDING"\n', { mode: 0o700 });
+    writeFileSync(join(bin, "timedatectl"), "#!/bin/sh\necho yes\n", { mode: 0o700 });
+    const payload = upgradePayload("reopened")
+      .replaceAll("/opt/waitron", box)
+      .replaceAll("/usr/local/sbin/waitron-dev-start", join(bin, "start"));
+    const result = spawnSync("bash", ["-c", payload], {
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`,
+        START_PENDING: join(root, "pending"),
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    expect(result.status, result.stderr).toBe(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
