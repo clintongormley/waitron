@@ -749,10 +749,12 @@ const BATTERY_CHECK_LIMIT_MS = 45_000;
 
 /**
  * The card-reader alert source: a reader its provider reports offline, and a low battery. A reader
- * whose provider reports no battery raises no battery alert, and a status the provider could not
- * read, whether it threw, ran out of time or answered `unreachable`, raises
- * `reader.status_unavailable` alone. Status answers are cached per reader id so a
- * polling dashboard does not call the provider every time.
+ * whose provider reports no battery raises no battery alert. A status the provider could not read,
+ * whether it threw, ran out of time or answered `unreachable`, raises `reader.status_unavailable`
+ * and no offline or battery alert; when no reader's status could be read, the area's
+ * `alert.source_unavailable` is raised as well. Readable status answers are cached per reader id so
+ * a polling dashboard does not call the provider every time; a read that threw or answered
+ * `unreachable` is not kept, so the next read asks the provider again.
  */
 export function batteryAlertSource(deps: {
   providers: readonly CardProviderContribution[];
@@ -784,12 +786,13 @@ export function batteryAlertSource(deps: {
           const seat = cardProviderById(deps.providers, r.provider);
           return Promise.race([
             deps.cache
-              .get(r.id, () => seat.readers.status(deps.runtimeDeps(), r.ref))
+              .get(r.id, async () => {
+                const status = await seat.readers.status(deps.runtimeDeps(), r.ref);
+                if (status.unreachable === true) throw new Error("reader status unreachable");
+                return status;
+              })
               .then(
-                (status) =>
-                  status.unreachable === true
-                    ? { kind: "unavailable" as const }
-                    : { kind: "reading" as const, status },
+                (status) => ({ kind: "reading" as const, status }),
                 () => ({ kind: "unavailable" as const }),
               ),
             deadline.then(() => ({ kind: "unavailable" as const })),

@@ -1467,6 +1467,32 @@ describe("batteryAlertSource", () => {
     ]);
   });
 
+  it("asks the provider again on the next read after an unreachable answer", async () => {
+    await seedTenant(batterySuite.db);
+    const terraceId = await seedReader({ providerRef: "terrace", name: "Terrace" });
+    let clock = NOW;
+    const answers: ReaderStatus[] = [
+      { online: false, unreachable: true },
+      { online: true, batteryPercent: 80 },
+    ];
+    const calls = { n: 0 };
+    const provider = stubProvider({ battery: () => undefined, calls });
+    provider.readers.status = async () => answers[calls.n++]!;
+    const source = batteryAlertSource({
+      providers: [provider],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<ReaderStatus>({ ttlMs: 5 * 60_000, now: () => clock }),
+    });
+
+    expect((await readBattery(source, clock)).map((alert) => alert.key)).toEqual([
+      `reader.status_unavailable:${terraceId}`,
+      "alert.source_unavailable:card_reader",
+    ]);
+    clock = new Date(NOW.getTime() + 60_000);
+    expect(await readBattery(source, clock)).toEqual([]);
+    expect(calls.n).toBe(2);
+  });
+
   it("reads the status once for both checks within five minutes", async () => {
     await seedTenant(batterySuite.db);
     await seedReader({ providerRef: "counter", name: "Counter" });
