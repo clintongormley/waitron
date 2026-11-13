@@ -404,6 +404,20 @@ export class RecoveryHourEntry extends LitElement {
       }
     }
   }
+  /** Sets the box's clock from this device, then compares the clocks again by itself. */
+  async #setClock(): Promise<void> {
+    if (!this.#confirmed || this.busy) return;
+    const { call, current } = this.#begin();
+    let again = false;
+    try {
+      again = await this.#wait.setFromDevice(call);
+    } catch (cause) {
+      if (current()) this.#wait.settle(cause, false, (error) => this.#failed(error));
+    } finally {
+      if (current()) this.busy = false;
+    }
+    if (again && current()) await this.#run(true);
+  }
   override render() {
     const en = this.locale === "en";
     const context = this.context;
@@ -543,7 +557,13 @@ export class RecoveryHourEntry extends LitElement {
         <p id="details-error" class="error">
           ${this.attempted && !this.draft.detailsCorrect ? words.detailsCorrect : ""}
         </p>
-        ${this.#wait.renderProblem(words, clock, this.locale, displayZone)}
+        ${this.#wait.renderProblem(
+          words,
+          clock,
+          this.locale,
+          displayZone,
+          () => void this.#setClock(),
+        )}
         ${this.#wait.counting ? this.#wait.renderWait(words) : nothing}
         ${action === "proceed" && !sending ? html`<p data-test="series-line">${words.seriesLine}</p>` : nothing}
       </div>

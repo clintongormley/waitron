@@ -2363,3 +2363,126 @@ it("series that arrive while the person is in another field leave focus in that 
   await el.updateComplete;
   expect(document.activeElement).toBe(elsewhere);
 });
+
+const deviceAhead = {
+  ...clock,
+  usable: [
+    { source: "box", lowerMs: instant, upperMs: instant },
+    { source: "browser", lowerMs: instant + 5 * 60_000, upperMs: instant + 5 * 60_000 },
+  ],
+  disagreement: true,
+};
+/** The clocks differ until `set-clock` answers `set`, then agree; `select` answers `selectWith`. */
+function settable(answer: unknown, selectWith: () => unknown = () => selected) {
+  let set = false;
+  return (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "set-clock") {
+      set = (answer as { status?: string }).status === "set";
+      return answer;
+    }
+    if (action === "compare-clocks") return { id: "comparison", clock: set ? clock : deviceAhead };
+    if (action === "select") return selectWith();
+    throw new Error("unexpected proposal");
+  };
+}
+const choices = (el: LitElement) =>
+  [...el.shadowRoot!.querySelectorAll("[data-test=clock-refused] wt-button")].map((b) =>
+    b.textContent!.trim(),
+  );
+const deviceLine = (el: LitElement) =>
+  el.shadowRoot!.querySelector("[data-test=device-clock]")?.textContent?.trim();
+it("a restore on clocks that differ sets the server's clock from This device and makes the series with nobody pressing", async () => {
+  const answer = settable({ status: "set" });
+  const prepare = vi.fn(async (request: { proposal: unknown }) => answer(request.proposal));
+  const { el } = await mount(prepare);
+  await ready(el);
+  await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
+  expect(choices(el)).toEqual(["The server", "This device", "Both times are wrong"]);
+  const before = prepare.mock.calls.length;
+  await userEvent.click(button(el, "device-correct"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
+  );
+  expect(actionsOf(prepare).slice(before)).toEqual([
+    "clock-challenge",
+    "set-clock",
+    "clock-challenge",
+    "compare-clocks",
+    "select",
+  ]);
+  const sent = prepare.mock.calls[before + 1]![0] as {
+    binding: unknown;
+    nodeRecoverySecret: string;
+    proposal: { browser: { challengeId: string; instantMs: number } };
+  };
+  expect(sent.binding).toEqual(binding);
+  expect(sent.nodeRecoverySecret).toBeTruthy();
+  expect(sent.proposal.browser.challengeId).toBe("challenge");
+  expect(Number.isSafeInteger(sent.proposal.browser.instantMs)).toBe(true);
+});
+it.each([
+  [
+    "witnessed",
+    "The server has the tax agency's time and sets its clock from it by itself. If the times still differ in a minute, press This device again.",
+  ],
+  [
+    "later",
+    "The server's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+  ],
+  [
+    "unverified",
+    "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
+  ],
+])("a restore's refusal for %s says what happened and what to do", async (reason, line) => {
+  const answer = settable({ status: "refused", reason });
+  const prepare = vi.fn(async (request: { proposal: unknown }) => answer(request.proposal));
+  const { el } = await mount(prepare);
+  await ready(el);
+  await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+  const before = prepare.mock.calls.length;
+  await userEvent.click(button(el, "device-correct"));
+  await vi.waitFor(() => expect(deviceLine(el)).toBe(line));
+  expect(actionsOf(prepare).slice(before)).toEqual(["clock-challenge", "set-clock"]);
+  expect(choices(el)).toHaveLength(3);
+  expect(action(el)).toBe("Compare the clocks again");
+});
+it("a restore's later minute after the set says this device's time is probably wrong", async () => {
+  const answer = settable({ status: "set" }, () => {
+    throw { code: "sif.allocation_invalid", params: { reason: "minute_not_later" } };
+  });
+  const prepare = vi.fn(async (request: { proposal: unknown }) => answer(request.proposal));
+  const { el } = await mount(prepare);
+  await ready(el);
+  await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+  await userEvent.click(button(el, "device-correct"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=minute-not-later]")?.textContent?.trim()).toBe(
+      "The invoice series cannot be created: the server's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+    ),
+  );
+  expect(deviceLine(el)).toBe("The server's time is now set from this device.");
+});
+it("a handover start sets the spare's clock from This device and carries on to the series", async () => {
+  const answer = settable({ status: "set" }, () => promotionSelected);
+  const prepare = vi.fn(async (proposal: unknown) => answer(proposal));
+  const el = await mountPromotion(prepare);
+  check(el, "recovery-details-confirmed");
+  await el.updateComplete;
+  await proceed(el);
+  await vi.waitFor(() => expect(choices(el)).toHaveLength(3));
+  await userEvent.click(button(el, "device-correct"));
+  await vi.waitFor(() =>
+    expect(el.readOperation()).toEqual({ binding: promotionBinding, input: selected.input }),
+  );
+  expect(promotionActions(prepare)).toEqual([
+    "clock-challenge",
+    "compare-clocks",
+    "clock-challenge",
+    "set-clock",
+    "clock-challenge",
+    "compare-clocks",
+    "select",
+  ]);
+});

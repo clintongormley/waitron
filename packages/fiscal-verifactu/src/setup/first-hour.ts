@@ -336,6 +336,25 @@ export class FirstSetupHour extends LitElement {
       }
     }
   }
+  /** Sets the box's clock from this device, then compares the clocks again by itself. */
+  async #setClock(): Promise<void> {
+    if (!this.api?.preparation || this.busy) return;
+    const { current, send } = this.#begin();
+    this.busy = true;
+    this.error = false;
+    let again = false;
+    try {
+      again = await this.#wait.setFromDevice(send);
+    } catch (error) {
+      if (current())
+        this.#wait.settle(error, false, () => {
+          this.error = true;
+        });
+    } finally {
+      if (current()) this.busy = false;
+    }
+    if (again && current()) await this.#run(true);
+  }
   async #preparePdf(replace = false): Promise<void> {
     const result = this.#wait.result;
     if (
@@ -595,6 +614,7 @@ export class FirstSetupHour extends LitElement {
         clock,
         this.locale,
         venue.timeZone,
+        () => void this.#setClock(),
       )}
       ${this.#wait.counting ? this.#wait.renderWait(t) : nothing} ${failure}`;
   }
