@@ -940,7 +940,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **Every start of a box that files records writes no fiscal record and moves no money until its
   time is confirmed: by the box's internet time service being synchronised, by two enrolled devices
   at different addresses reading within 5 seconds of it, or by a person confirming or correcting the
-  date and time on a till; AEAT is not asked, and orders still reach the kitchen** (owner,
+  date and time on a till or on Box status; AEAT is not asked, and orders still reach the kitchen** (owner,
   2026-11-10). Guards:
   `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-unconfirmed-gate.test.ts` and
   `apps/server/src/boot.start-clock-gate.test.ts`, weaker than the rule.

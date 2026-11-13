@@ -306,6 +306,28 @@ Dos cajas o terminales que coinciden con el servidor confirman su hora tras un a
 El arranque termina en cuanto el servidor ve que el reloj ya no para los cobros. Desde entonces, en cuanto
 internet ha confirmado la hora del servidor, un empleado ya no puede poner la hora desde una caja.
 
+## Cuando los cobros esperan la hora del servidor {#clock-waiting}
+
+Tras un arranque, el servidor no acepta cobros hasta que se confirma su hora. Los pedidos siguen
+llegando a cocina. La fila **Reloj** dice entonces **Esperando a que se conecten dispositivos y
+coincidan con la hora del servidor**, con la fecha y la hora del servidor, y la campana muestra un aviso
+que lo dice.
+
+El servidor confirma su hora solo en cuanto llega a internet, o en cuanto dos cajas o terminales
+encendidos y conectados coinciden con su reloj, aunque estén en la pantalla de inicio de sesión.
+
+Un administrador puede confirmarla antes en esta página:
+
+- Si la fecha y la hora que muestra la fila **Reloj** son correctas, pulsa **La fecha y la hora son
+  correctas**.
+- O pulsa **Comprobar con la hora de este dispositivo**. Si tu dispositivo está a menos de un minuto
+  del servidor, eso confirma la hora del servidor. Si la diferencia es mayor, el diálogo ofrece **Usar
+  esta hora**, que pone el reloj del servidor a la hora de tu dispositivo y la confirma.
+
+Mientras no responda la parte del servidor que lee su hora de internet, la fila **Reloj** lo dice y el
+servidor espera así en cada arranque. Su hora se puede confirmar entonces, pero no corregir, hasta que
+esa parte responda.
+
 ## El servicio de hora del servidor {#clock-service}
 
 El servidor tiene un servicio de hora que mantiene su reloj en hora por internet. Cuando el servidor

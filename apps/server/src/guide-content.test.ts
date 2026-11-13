@@ -86,6 +86,7 @@ describe("the user guides", () => {
       "restart",
       "clock-own-device",
       "clock-at-start",
+      "clock-waiting",
       "clock-service",
       "clock-witnesses",
       "emails",
