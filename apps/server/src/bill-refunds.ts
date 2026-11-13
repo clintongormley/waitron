@@ -5,12 +5,7 @@ import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
 import { IssuanceRefusedError } from "@waitron/fiscal";
-import {
-  authorize,
-  roleHasPermission,
-  verifyThrottledCredential,
-  type PinAttempts,
-} from "@waitron/identity";
+import { authorize, holds, verifyThrottledCredential, type PinAttempts } from "@waitron/identity";
 import type { Override } from "@waitron/identity";
 import {
   MANUAL_PROVIDER,
@@ -793,7 +788,7 @@ export async function refundBillPayment(
               operator.attempts,
               override.checked,
             );
-            if (!roleHasPermission(confirmer.role, "sale.refund")) {
+            if (!holds(confirmer.authority, "sale.refund")) {
               throw new AppError("authorization.not_permitted", { permission: "sale.refund" });
             }
             confirmedBy = override.personId;

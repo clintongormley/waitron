@@ -34,10 +34,9 @@ import { insertInChunks, orderGroups, ticketItems, workingOrderLines } from "@wa
 import type { Transaction } from "@waitron/db";
 import {
   persons,
-  permissionsForRole,
+  readPersonAuthority,
   verifyPersonCredential,
   verifyThrottledCredential,
-  type PersonRoleValue,
   type PinAttempts,
   type SecretCheck,
 } from "@waitron/identity";
@@ -1025,11 +1024,11 @@ export async function planAdjustment(
     throw new AppError("adjustment.no_reduction", { workingOrderId: orderId });
   }
   const [actor] = await tx
-    .select({ role: persons.role, locale: persons.locale })
+    .select({ locale: persons.locale })
     .from(persons)
     .where(eq(persons.id, ask.operatorId));
   if (actor === undefined) throw new AppError("person.not_found", { personId: ask.operatorId });
-  const actorPermissions = new Set(permissionsForRole(actor.role as PersonRoleValue));
+  const actorPermissions = (await readPersonAuthority(tx, ask.operatorId)).permissions;
   const isDish = await serviceDishPredicate(tx, view);
   const stageLines =
     line === null
@@ -1265,10 +1264,10 @@ async function approvedBy(
   const refused = () => new AppError("adjustment.approval_required", { approval: approval.by });
   if (approver === undefined) throw refused();
   const { personId, pin, checked } = approver;
-  const { role } = await (attempts === undefined
+  const { authority } = await (attempts === undefined
     ? verifyPersonCredential(tx, personId, pin, checked)
     : verifyThrottledCredential(tx, personId, pin, attempts, checked));
-  if (!approves(approval, new Set(permissionsForRole(role)))) throw refused();
+  if (!approves(approval, authority.permissions)) throw refused();
   return approver.personId;
 }
 

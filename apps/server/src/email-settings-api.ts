@@ -6,7 +6,7 @@ import {
   authorizeManager,
   persons,
   requireFreshManagementSignIn,
-  roleHasPermission,
+  holds,
   type Permission,
 } from "@waitron/identity";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
@@ -54,7 +54,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
     run(c, log, () =>
       withTransaction(deps.db, async (tx) => {
         const actor = await authorize(tx, c);
-        const canEdit = editable && roleHasPermission(actor.role, "system.box_admin");
+        const canEdit = editable && holds(actor.authority, "system.box_admin");
         if (!editable) return c.json({ mode: "local_capture", editable: false, settings: null });
         const saved = await readSavedSmtp(tx, deps.ring);
         const delivery = await resolveEmailDeliveryIn(tx, deps.ring, false);

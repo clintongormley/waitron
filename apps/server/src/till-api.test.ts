@@ -50,10 +50,10 @@ import {
   hashPin,
   hashSessionToken,
   loginWithPin,
-  permissionsForRole,
   persons,
   startManagementSession,
 } from "@waitron/identity";
+import { permissionsForRole } from "@waitron/identity/src/permissions.js";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import {
   assignCatalogueToVenue,

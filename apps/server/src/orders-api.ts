@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { currentBusinessDay } from "@waitron/reporting";
-import { authorizeManager, resolveManagementSession, roleHasPermission } from "@waitron/identity";
+import { authorizeManager, resolveManagementSession, holds } from "@waitron/identity";
 import {
   codeOf,
   createErrorBoundary,
@@ -145,11 +145,11 @@ export interface OrdersApiDeps {
 
 export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): void {
   const orderScope = (
-    role: Parameters<typeof roleHasPermission>[0],
+    authority: Parameters<typeof holds>[0],
     clock: Awaited<ReturnType<typeof resolveVenueClock>>,
   ): OrderListFilter["scope"] => {
     const today = currentBusinessDay(clock);
-    return roleHasPermission(role, "report.view")
+    return holds(authority, "report.view")
       ? "all"
       : { today: { from: today, to: today, ...clock } };
   };
@@ -160,8 +160,8 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
     sessionId: string,
     id: string,
   ): Promise<string> => {
-    const { personId, role } = await resolveManagementSession(tx, sessionId);
-    if (!roleHasPermission(role, "report.view")) {
+    const { personId, authority } = await resolveManagementSession(tx, sessionId);
+    if (!holds(authority, "report.view")) {
       const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
       const { rows } = await listOrders(tx, {
         status: "all",
@@ -169,7 +169,7 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
         credited: false,
         limit: 1,
         only: id,
-        scope: orderScope(role, clock),
+        scope: orderScope(authority, clock),
       });
       if (rows.length === 0) throw new AppError("working_order.not_found", { workingOrderId: id });
     }
@@ -211,9 +211,9 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
     ) => Promise<T>,
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
-      const { role } = await resolveManagementSession(tx, sessionId);
+      const { authority } = await resolveManagementSession(tx, sessionId);
       const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
-      return fn(tx, orderScope(role, clock), clock);
+      return fn(tx, orderScope(authority, clock), clock);
     });
 
   app.get("/management-api/orders", (c) =>

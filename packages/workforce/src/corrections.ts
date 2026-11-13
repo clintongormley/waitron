@@ -1,4 +1,4 @@
-import { roleHasPermission, type PersonRoleValue } from "@waitron/identity";
+import { holds, readPersonAuthority, type PersonRoleValue } from "@waitron/identity";
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError, jobOrigin, type Origin } from "@waitron/shared";
@@ -45,16 +45,11 @@ export async function maySelfApproveAttendance(
   tx: Transaction,
   personId: string,
 ): Promise<boolean> {
-  const role = await roleOf(tx, personId);
-  return (
-    role !== undefined &&
-    roleHasPermission(role, "workforce.self_approve") &&
-    roleHasPermission(role, "workforce.correct")
-  );
+  const authority = await readPersonAuthority(tx, personId);
+  return holds(authority, "workforce.self_approve") && holds(authority, "workforce.correct");
 }
 async function mayCorrectAttendance(tx: Transaction, personId: string): Promise<boolean> {
-  const role = await roleOf(tx, personId);
-  return role !== undefined && roleHasPermission(role, "workforce.correct");
+  return holds(await readPersonAuthority(tx, personId), "workforce.correct");
 }
 export async function authorKindFor(
   tx: Transaction,

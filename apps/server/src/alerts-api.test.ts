@@ -61,8 +61,18 @@ vi.mock("@waitron/identity", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/identity")>();
   return {
     ...actual,
-    permissionsForRole: (role: Parameters<typeof actual.permissionsForRole>[0]) =>
-      roleOverride.get(role) ?? actual.permissionsForRole(role),
+    resolveManagementSession: async (
+      ...args: Parameters<typeof actual.resolveManagementSession>
+    ) => {
+      const session = await actual.resolveManagementSession(...args);
+      const override = roleOverride.get(session.role);
+      return override === undefined
+        ? session
+        : {
+            ...session,
+            authority: { ...session.authority, permissions: new Set(override) },
+          };
+    },
   };
 });
 afterEach(() => {

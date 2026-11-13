@@ -87,6 +87,7 @@ describe("management session lifecycle", () => {
       sessionRowId: row!.id,
       personId,
       role: "manager",
+      authority: { personId, admin: false, permissions: expect.any(Set) },
       email: null,
       displayName: person!.display_name,
       locale: null,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { registerModulePermissions, roleHasPermission } from "@waitron/identity";
+import { registerModulePermissions } from "@waitron/identity";
+import { roleHasPermission } from "@waitron/identity/src/permissions.js";
 import { STAFFING_PERMISSIONS } from "./permissions.js";
 
 describe("STAFFING_PERMISSIONS", () => {

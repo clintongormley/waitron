@@ -42,7 +42,6 @@ import {
   listActiveStaff,
   listStaffAdmittedTo,
   loginWithPin,
-  permissionsForRole,
   setPersonLocale,
   sessions,
 } from "@waitron/identity";
@@ -1419,7 +1418,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       // nothing.
       return c.json({
         personId: session.personId,
-        permissions: permissionsForRole(session.role),
+        permissions: [...session.authority.permissions],
         locale: session.locale,
       });
     }),

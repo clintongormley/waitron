@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import { and, desc, eq, gte, isNull } from "drizzle-orm";
 import { incidents, type Database } from "@waitron/db";
-import { permissionsForRole, resolveManagementSession } from "@waitron/identity";
+import { holds, resolveManagementSession } from "@waitron/identity";
 import { createErrorBoundary, requireManagementSession, type Logger } from "@waitron/server-kit";
 import { claimFor, type AlertRegistry } from "./alerts.js";
 import type { DiskFullState } from "./disk-full-state.js";
@@ -43,7 +43,7 @@ export function mountDiskStopApi(app: Hono, deps: DiskStopApiDeps, log: Logger):
         const stopped = deps.disk.since() !== null;
         const { permission } = claimFor(deps.registry, DELETION_CODE);
         const deleted =
-          stopped && permissionsForRole(session.role).includes(permission)
+          stopped && holds(session.authority, permission)
             ? await recentDeletion(deps.db, deps.now())
             : null;
         return { stopped, deleted };

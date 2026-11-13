@@ -915,6 +915,11 @@ watcher 04:06 cleared forecast 465 changed lines and the next outside-opinion st
 **Outcome:** every permission check reads a person's authority instead of a level. Behaviour
 unchanged for the four levels. **Depends on:** PR 1, PR 2. **Risk trigger:** auth.
 
+**Build note, 2026-11-13:** the watcher cleared bringing only task10.1's `holdsInCopy`, its
+handover comparison caller and their tests into PR9 (Lane K questions.md, 04:48). Removing
+`roleHasPermission` from the public exports otherwise strands that caller between PR9 and PR10.
+All other PR10 tasks stay there.
+
 ### Task 9.1: `PersonAuthority`
 
 **Files:** Create `packages/identity/src/authority.ts`; modify `packages/identity/src/{authorize,credential,management-session,manager-login,login,staff,index}.ts`.
@@ -958,6 +963,10 @@ screens by permission and knows a person is signed in from their id. Behaviour u
 **Depends on:** PR 9. **Risk trigger:** auth.
 
 ### Task 10.1: Level readers behind identity
+
+**Build note, 2026-11-13:** `holdsInCopy` and its handover comparison caller/tests moved to PR9
+under the watcher's 04:48 clearance. The remaining readers below stay in PR10.
+
 
 **Files:** `packages/identity/src/authority.ts` (new readers); `apps/server/src/recovery-environment.ts:133`,
 `packages/provisioning/src/recover-provisioned-venue.ts:49`, `packages/provisioning/src/venue-apply.ts`

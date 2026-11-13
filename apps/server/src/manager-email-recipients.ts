@@ -1,6 +1,6 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { persons, roleHasPermission } from "@waitron/identity";
+import { persons, holds, readPersonAuthority } from "@waitron/identity";
 
 export interface ManagerEmailRecipient {
   readonly personId: string;
@@ -18,7 +18,6 @@ async function recipients(
       id: persons.id,
       email: persons.email,
       locale: persons.locale,
-      role: persons.role,
     })
     .from(persons)
     .where(
@@ -29,18 +28,20 @@ async function recipients(
         sql`length(trim(${persons.email})) > 0`,
       ),
     );
-  return people
-    .filter((person) => roleHasPermission(person.role, "system.manage"))
-    .map((person) => ({
-      personId: person.id,
-      email: person.email!.trim(),
-      language:
-        person.locale === "es-ES"
-          ? ("es" as const)
-          : person.locale === "en-GB"
-            ? ("en" as const)
-            : venueLanguage,
-    }));
+  const admitted = [];
+  for (const person of people) {
+    if (holds(await readPersonAuthority(tx, person.id), "system.manage")) admitted.push(person);
+  }
+  return admitted.map((person) => ({
+    personId: person.id,
+    email: person.email!.trim(),
+    language:
+      person.locale === "es-ES"
+        ? ("es" as const)
+        : person.locale === "en-GB"
+          ? ("en" as const)
+          : venueLanguage,
+  }));
 }
 
 export function readManagerEmailRecipients(

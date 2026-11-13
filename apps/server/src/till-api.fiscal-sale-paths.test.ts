@@ -40,7 +40,8 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, loginWithPin, permissionsForRole } from "@waitron/identity";
+import { hashPassword, hashPin, loginWithPin } from "@waitron/identity";
+import { permissionsForRole } from "@waitron/identity/src/permissions.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";

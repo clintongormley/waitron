@@ -1,7 +1,7 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
 import { deviceInvoiceRevisions, invoiceSeries, pagePrinters, printers, sales } from "@waitron/db";
-import { persons, sessions, resolveManagementSession, roleHasPermission } from "@waitron/identity";
+import { persons, sessions, resolveManagementSession, holds } from "@waitron/identity";
 import { readPrinterEquipment } from "@waitron/layouts";
 import { formatInvoiceNumber } from "@waitron/core";
 import { currentBusinessDay, resolveVenueClock } from "@waitron/reporting";
@@ -69,7 +69,7 @@ export async function authorizeDocumentDelivery(
       touch: false,
     });
     personId = session.personId;
-    seesHistory = roleHasPermission(session.role, "report.view");
+    seesHistory = holds(session.authority, "report.view");
   }
   const [sale] = await tx
     .select({ id: sales.id, workingOrderId: sales.workingOrderId })
@@ -183,7 +183,7 @@ export async function readDocumentOffers(
     const session = await resolveManagementSession(tx, authority.managementSessionId, {
       touch: false,
     });
-    emailAllowed = emailAllowed && roleHasPermission(session.role, "report.export");
+    emailAllowed = emailAllowed && holds(session.authority, "report.export");
   }
   if (full) await expireInvoiceDeliveryClaims(tx);
   const state = full

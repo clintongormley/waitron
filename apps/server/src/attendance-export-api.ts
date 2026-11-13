@@ -2,12 +2,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
-import {
-  authorizeManager,
-  persons,
-  resolveManagementSession,
-  roleHasPermission,
-} from "@waitron/identity";
+import { authorizeManager, persons, resolveManagementSession, holds } from "@waitron/identity";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
@@ -50,7 +45,7 @@ export function mountAttendanceExportApi(app: Hono, deps: ExportDeps, log: Logge
       const result = await withTransaction(deps.db, async (tx) => {
         const viewer = await resolveManagementSession(tx, token, { touch: false });
         parseAttendanceExportOptions(new URL(c.req.url).searchParams);
-        const canExportAll = roleHasPermission(viewer.role, "report.export");
+        const canExportAll = holds(viewer.authority, "report.export");
         return { available: deps.exporter !== undefined, canExportAll };
       });
       c.header("Cache-Control", "no-store");

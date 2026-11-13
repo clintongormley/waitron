@@ -1,4 +1,5 @@
 import "./errors.js";
+import { readPersonAuthority } from "./authority.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@waitron/shared";
 import { nowIso, managementSessions, persons } from "@waitron/db";
@@ -84,6 +85,7 @@ export async function resolveManagementSession(
     sessionRowId: row.sessionRowId,
     personId: row.personId,
     role: row.role as PersonRoleValue,
+    authority: await readPersonAuthority(tx, row.personId),
     email: row.email,
     displayName: row.displayName,
     locale: row.locale,

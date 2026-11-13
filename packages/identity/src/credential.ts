@@ -1,4 +1,5 @@
 import "./errors.js";
+import { readPersonAuthority, type PersonAuthority } from "./authority.js";
 import { eq } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
@@ -39,7 +40,7 @@ export async function verifyPersonCredential(
   personId: string,
   pin: string,
   checked?: SecretCheck,
-): Promise<{ role: PersonRoleValue; locale: string | null }> {
+): Promise<{ role: PersonRoleValue; authority: PersonAuthority; locale: string | null }> {
   const [person] = await tx
     .select({
       role: persons.role,
@@ -67,7 +68,11 @@ export async function verifyPersonCredential(
   if (!matches) {
     throw new AppError("pin.invalid", {}, { reason: "wrong_pin" });
   }
-  return { role: person.role as PersonRoleValue, locale: person.locale };
+  return {
+    role: person.role as PersonRoleValue,
+    authority: await readPersonAuthority(tx, personId),
+    locale: person.locale,
+  };
 }
 
 /** The wrong-PIN limit a PIN check counts against, and the bucket (`slot`) it counts in. */
@@ -86,7 +91,7 @@ export async function verifyThrottledCredential(
   pin: string,
   attempts: PinAttempts,
   checked?: SecretCheck,
-): Promise<{ role: PersonRoleValue; locale: string | null }> {
+): Promise<{ role: PersonRoleValue; authority: PersonAuthority; locale: string | null }> {
   const { throttle, slot } = attempts;
   throttle.check(slot, personId);
   let cred;

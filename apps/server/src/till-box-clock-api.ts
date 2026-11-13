@@ -15,8 +15,8 @@ import {
   authorize,
   canUseDeviceProfile,
   persons,
-  roleHasPermission,
-  type PersonRoleValue,
+  holds,
+  readPersonAuthority,
   type PinAttempts,
 } from "@waitron/identity";
 import { codeOf, createErrorBoundary, readJsonBody, readRawJsonBody } from "@waitron/server-kit";
@@ -166,11 +166,11 @@ export function mountTillBoxClockApi(
 
   async function holdsAdmin(tx: Transaction, personId: string): Promise<boolean> {
     const [person] = await tx
-      .select({ role: persons.role })
+      .select({ id: persons.id })
       .from(persons)
       .where(eq(persons.id, personId));
     return (
-      person !== undefined && roleHasPermission(person.role as PersonRoleValue, "system.box_admin")
+      person !== undefined && holds(await readPersonAuthority(tx, personId), "system.box_admin")
     );
   }
 
