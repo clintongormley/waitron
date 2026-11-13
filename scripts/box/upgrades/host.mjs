@@ -8,6 +8,7 @@ import { createServer, createConnection } from "node:net";
 import { once } from "node:events";
 
 const execute = promisify(execFile);
+const composeFor = (box) => ["compose", "--project-directory", box, "-f", join(box, "compose.yml")];
 const command = (file, args, input) => {
   const result = execute(file, args, { maxBuffer: 4 * 1024 * 1024 });
   if (input !== undefined) result.child.stdin.end(input);
@@ -59,13 +60,7 @@ export async function createUpgradeHost({
   prepareCandidate,
   run = command,
 }) {
-  const compose = [
-    "compose",
-    "--project-directory",
-    boxDirectory,
-    "-f",
-    join(boxDirectory, "compose.yml"),
-  ];
+  const compose = composeFor(boxDirectory);
   const config = await composeConfig(boxDirectory, run);
   let rawCandidate = typeof candidate === "string" ? candidate : JSON.stringify(candidate);
   const paths = [];
@@ -130,6 +125,13 @@ export async function createUpgradeHost({
   return {
     paths,
     host: {
+      async abortPreparation() {
+        try {
+          await restoreRestartPolicies(boxDirectory, run);
+        } finally {
+          await Promise.allSettled(tags.splice(0).map((tag) => removeImageTag(tag, run)));
+        }
+      },
       async prepareImages() {
         try {
           pinnedCompose(await fs.readFile(join(boxDirectory, "compose.yml"), "utf8"), old);
@@ -168,7 +170,7 @@ export async function createUpgradeHost({
           if (ids.length > 0) await run("docker", ["update", "--restart=no", ...ids]);
           return { old, candidate: next };
         } catch (error) {
-          await Promise.allSettled(tags.map((tag) => removeImageTag(tag, run)));
+          await Promise.allSettled(tags.splice(0).map((tag) => removeImageTag(tag, run)));
           throw error;
         }
       },
@@ -187,7 +189,7 @@ export async function createUpgradeHost({
         await pins(images);
         releaseState?.();
         releaseState = undefined;
-        await reopenImages(compose, images, run);
+        await reopenImages(boxDirectory, images, run);
       },
       async cleanup() {
         for (const tag of tags) await removeImageTag(tag, run);
@@ -234,13 +236,7 @@ export async function recoverInstalledUpgrade({
     )
       throw new Error("Docker must be stopped before offline recovery");
   }
-  const compose = [
-    "compose",
-    "--project-directory",
-    boxDirectory,
-    "-f",
-    join(boxDirectory, "compose.yml"),
-  ];
+  const compose = composeFor(boxDirectory);
   const recorded = await upgradeStatus(directory);
   let releaseState;
   let marker;
@@ -270,7 +266,7 @@ export async function recoverInstalledUpgrade({
           if (offline) return false;
           releaseState?.();
           releaseState = undefined;
-          await reopenImages(compose, images, run);
+          await reopenImages(boxDirectory, images, run);
         },
         async cleanup(images) {
           for (const [kind, services] of Object.entries(images))
@@ -475,8 +471,9 @@ async function composeConfig(boxDirectory, run, input) {
   );
 }
 
-async function reopenImages(compose, images, run) {
-  await run("docker", [
+async function reopenImages(boxDirectory, images, run) {
+  const compose = composeFor(boxDirectory);
+  const up = [
     ...compose,
     ...(images.tunnel === undefined ? [] : ["--profile", "staff-tunnel"]),
     "up",
@@ -484,10 +481,14 @@ async function reopenImages(compose, images, run) {
     "--pull",
     "never",
     "--remove-orphans",
-    "--wait",
-    "--wait-timeout",
-    "180",
-  ]);
+  ];
+  await run("docker", up);
+  await restoreRestartPolicies(boxDirectory, run);
+  await run("docker", [...up, "--wait", "--wait-timeout", "180"]);
+}
+
+export async function restoreRestartPolicies(boxDirectory, run = command) {
+  const compose = composeFor(boxDirectory);
   const config = JSON.parse(
     (await run("docker", [...compose, "--profile", "*", "config", "--format", "json"])).stdout,
   );

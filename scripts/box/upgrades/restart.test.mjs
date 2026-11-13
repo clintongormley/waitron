@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, expect, it } from "vitest";
@@ -33,8 +33,12 @@ function invoke(mode, { held = false, runtime = true, ...knobs } = {}) {
     mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
     mkdirSync(join(host, "box/upgrades"), { recursive: true });
     writeFileSync(
+      join(host, "box/upgrades/host.mjs"),
+      `import fs from 'node:fs/promises'; export async function restoreRestartPolicies(box) { await fs.writeFile(box+'/policies',box); }`,
+    );
+    writeFileSync(
       join(host, "node-v26.7.0/bin/node"),
-      `#!/bin/bash\nprintf 'node %s\\n' "$*" >> "$CALLS"\n`,
+      `#!/bin/bash\nprintf 'node %s\\n' "$*" >> "$CALLS"\nif [ "$1" = --input-type=module ]; then exec '${process.execPath}' "$@"; fi\n`,
       { mode: 0o700 },
     );
   }
@@ -93,6 +97,8 @@ it("opens under the lock and returns without a persistent monitor or stopping ot
   expect(result.calls).not.toContain("docker wait");
   expect(result.calls).not.toContain("--profile staff-tunnel");
   expect(result.calls).not.toContain(" stop ");
+  expect(existsSync(join(result.box, "policies"))).toBe(true);
+  expect(readFileSync(join(result.box, "policies"), "utf8")).toBe(result.box);
 });
 
 it("uses Docker's default profile if the custom profile cannot load", () => {

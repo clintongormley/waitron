@@ -30,6 +30,7 @@ async function fixture() {
   const directory = join(root, "attempt");
   const events = [];
   const host = {
+    abortPreparation: async () => undefined,
     async prepareImages() {
       events.push("pin images");
       return { old: { app: "sha256:old" }, candidate: { app: "sha256:new" } };
@@ -550,3 +551,26 @@ it("retains copies and image pins when boot recovery defers reopening until Dock
   expect(await fs.readdir(f.directory)).toEqual(["attempt.json"]);
   expect(f.events.at(-1)[0]).toBe("cleanup");
 });
+
+it.each(["prepare", "marker"])(
+  "repairs policies without stopping writers after a pre-marker %s failure",
+  async (where) => {
+    const f = await fixture();
+    const prepare = f.host.prepareImages;
+    f.host.prepareImages = async () => {
+      const images = await prepare();
+      if (where === "prepare") throw new Error("partial policy update");
+      await fs.symlink(join(f.root, "missing", "marker"), join(f.directory, "attempt.json.tmp"));
+      return images;
+    };
+    f.host.abortPreparation = async () => {
+      f.events.push("restore policies");
+    };
+    await expect(applyUpgrade({ ...f.input, mode: "manual" })).rejects.toMatchObject(
+      where === "prepare" ? { message: "partial policy update" } : { code: "ENOENT" },
+    );
+    expect(f.events).toEqual(["pin images", "restore policies"]);
+    expect(await fs.readFile(join(f.state, "venue.db"), "utf8")).toBe("old venue");
+    await expect(fs.stat(f.directory)).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);

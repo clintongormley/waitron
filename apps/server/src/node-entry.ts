@@ -625,6 +625,7 @@ async function runAdmittedEntry(
               },
             }),
         logDir,
+        // The exit is the whole retry: Docker's restart policy performs the restart.
         onRetry: async () => {
           await persistState(deps, cleared);
           exit(0);

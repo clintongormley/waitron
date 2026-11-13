@@ -115,24 +115,28 @@ export async function applyUpgrade({ directory, paths, mode, host }) {
   validateInputs({ mode, paths });
   await fs.mkdir(directory, { mode: 0o700 });
   await syncDirectory(dirname(directory));
-  let images;
+  let images, marker;
   try {
     images = await host.prepareImages();
     validateMarker({ mode, paths, images, phase: "copying", copied: false });
+    marker = await record(directory, {
+      mode,
+      phase: "copying",
+      copied: false,
+      paths,
+      images,
+      checks: null,
+      failure: null,
+    });
   } catch (error) {
+    // Stop follows the first marker; only that marker's own files are removed on abort.
+    for (const file of ["attempt.json.tmp", "attempt.json"])
+      await fs.rm(join(directory, file), { force: true });
     await fs.rmdir(directory);
     await syncDirectory(dirname(directory));
+    await host.abortPreparation();
     throw error;
   }
-  let marker = await record(directory, {
-    mode,
-    phase: "copying",
-    copied: false,
-    paths,
-    images,
-    checks: null,
-    failure: null,
-  });
   try {
     await host.stop();
   } catch (error) {

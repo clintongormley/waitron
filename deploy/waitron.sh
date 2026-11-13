@@ -591,14 +591,17 @@ print_image_versions() {
 }
 
 cmd_status() {
+  local result=0
   if [ -x "$WAITRON_HOST_DIR/node-v26.7.0/bin/node" ]; then
-    upgrade_cli status || echo "waitron.sh: retain ${WAITRON_DIR}.upgrades for inspection" >&2
+    upgrade_cli status || { echo "waitron.sh: retain ${WAITRON_DIR}.upgrades for inspection" >&2; result=1; }
   elif upgrade_pending; then
     echo "waitron.sh: upgrade pending; the retained host runtime is unavailable" >&2
+    result=1
   fi
   [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
   cd "$WAITRON_DIR"
   print_image_versions
+  return "$result"
 }
 
 # Show the ready banner on stdout, and — on a headless box wired to a monitor — also on the physical

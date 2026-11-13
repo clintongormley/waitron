@@ -742,6 +742,9 @@ it.each([false, true])(
     expect(t.calls).toContainEqual(["docker", "update", "--restart=unless-stopped", "agent-id"]);
     expect(t.calls).toContainEqual(["docker", "update", "--restart=unless-stopped", "tunnel-id"]);
     expect(t.calls.findLast((args) => args.includes("up"))).not.toContain("staff-tunnel");
+    expect(t.calls.findIndex((args) => args.includes("--restart=unless-stopped"))).toBeLessThan(
+      t.calls.findLastIndex((args) => args.includes("--wait")),
+    );
     const resolved = JSON.parse(
       (await t.run("docker", ["compose", "-f", path, "config", "--format", "json"])).stdout,
     );

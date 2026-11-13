@@ -20,7 +20,7 @@ for attempt in $(seq 1 180); do
 done
 test "$(timedatectl show -p NTPSynchronized --value)" = yes
 /usr/local/sbin/waitron-dev-start
-${fingerprint} >/opt/waitron/before.json
+[ -f /opt/waitron/before.json ] || ${fingerprint} >/opt/waitron/before.json
 jq -e '.sales.count==1 and .registros_facturacion.count==1 and .working_orders.count==1' /opt/waitron/before.json
 `;
 const compare = `${fingerprint} >/opt/waitron/after.json

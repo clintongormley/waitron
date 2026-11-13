@@ -730,7 +730,7 @@ describe("waitron.sh recovery owner", () => {
     copyFileSync(HOST_NODE_STUB, join(host, "node-v26.7.0/bin/node"));
     mkdirSync(`${sb.boxDir}.upgrades/unreadable`, { recursive: true });
     const result = run(sb, ["status"], { WT_HOST_ERROR: "1" });
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
     expect(loggedCalls(sb).some((line) => line.startsWith("docker inspect"))).toBe(true);
     expect(result.stderr).toContain("unreadable attempt");
   });

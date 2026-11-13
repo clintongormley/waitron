@@ -28,3 +28,5 @@ else
   export WAITRON_PRINT_AGENT_APPARMOR=docker-default
 fi
 docker compose up -d --pull never
+"$node" --input-type=module -e 'const {restoreRestartPolicies}=await import(process.argv[1]);await restoreRestartPolicies(process.argv[2]);' "$host/box/upgrades/host.mjs" "$box"
+docker compose up -d --pull never
