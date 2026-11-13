@@ -1009,6 +1009,9 @@ it("A725 paints the station dot token and translates a retained chooser", async 
 
 it("A725 ignores an event from the departed station chooser", async () => {
   const el = await mount();
+  await setTiming(el, "warmAfterMinutes", "0");
+  await save(el);
+  expect(timingField(el, "warmAfterMinutes").error).not.toBe("");
   const previous = $<WtColourChooser>(el, "wt-colour-chooser[name=colour]")!;
   el.open = false;
   await el.updateComplete;
@@ -1020,6 +1023,8 @@ it("A725 ignores an event from the departed station chooser", async () => {
   expect($<WtColourChooser>(el, "wt-colour-chooser[name=colour]")!.value).toBe("blue");
   expect(el.dirty).toBe(false);
   expect(saveButton(el).disabled).toBe(true);
+  await rename(el, "");
+  expect(nameField(el).error).toBe("");
 });
 
 it("sends a typed ready warning, and nothing for 03 over a stored 3", async () => {
