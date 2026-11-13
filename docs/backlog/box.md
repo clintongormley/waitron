@@ -417,7 +417,7 @@ should that page also say the disk is full and show the free space?
 ## Guide replacement address settings after a cold restore.
 
 Replace manual configuration of
-the advertised origin and dashboard origin/passkey domain with a recovery step that checks they
+the public management address and passkey domain with a recovery step that checks they
 match the replacement's address. Local certificate repair and authenticated restore entry already
 have surfaces; Cloud tunnel and staff-certificate installation remain under the Cloud integration
 loose ends below. Coordinate naming with A917 and failover addressing with A947.

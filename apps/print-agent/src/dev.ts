@@ -42,7 +42,7 @@ export async function waitForDevServer(port = 8080, timeoutMs = 120_000): Promis
 export async function prepareDevEnv(env: NodeJS.ProcessEnv): Promise<NodeJS.ProcessEnv> {
   const boxState = resolve(env.WAITRON_STATE_DIR?.trim() || DEFAULT_SERVER_STATE);
   const stateDir = join(boxState, "print-agent");
-  const configuredUrl = env.WAITRON_SERVER_URL?.trim();
+  const configuredUrl = env.WAITRON_PRINT_AGENT_SERVER_URL?.trim();
   if (configuredUrl) return { ...env, WAITRON_STATE_DIR: stateDir };
 
   const tlsDir = join(boxState, "tls");
@@ -55,6 +55,6 @@ export async function prepareDevEnv(env: NodeJS.ProcessEnv): Promise<NodeJS.Proc
   return {
     ...env,
     WAITRON_STATE_DIR: stateDir,
-    WAITRON_SERVER_URL: `${hasLeaf ? "https" : "http"}://127.0.0.1:${devServerPort(env)}`,
+    WAITRON_PRINT_AGENT_SERVER_URL: `${hasLeaf ? "https" : "http"}://127.0.0.1:${devServerPort(env)}`,
   };
 }

@@ -12,6 +12,9 @@ qualify automatic renewal or a physical reboot on the managed public demo.
 
 ## Steps exercised on 2026-10-22
 
+2026-11-12, env2: the public address now comes only from `WAITRON_MANAGEMENT_ORIGIN`. The audit
+below retains its original separate-origin configuration checks.
+
 This audit ran the existing tests at commit `2c46e869bd01d0eafab257abff3c27b54e60a229`, with
 Node `v26.11.1` and Vitest `4.1.12`. It changed no implementation, fixture or assertion.
 
@@ -46,8 +49,8 @@ runs skipped 16 and 195 cases respectively. They do not represent their full sui
 ## Operator work that remains
 
 **Replacement addresses still require configuration.** `loadConfig` in
-[`config.ts`](../../apps/server/src/config.ts) reads `WAITRON_MANAGEMENT_ORIGIN`,
-`WAITRON_MANAGEMENT_RP_ID` and `WAITRON_ADVERTISED_ORIGIN`; the last falls back to the first.
+[`config.ts`](../../apps/server/src/config.ts) reads `WAITRON_MANAGEMENT_ORIGIN` and
+`WAITRON_MANAGEMENT_RP_ID`.
 The first trading start consumes that origin when it rewrites membership. The deployment's
 [`compose.yml`](../../deploy/compose.yml) exposes the management settings, and
 [`deploy/README.md`](../../deploy/README.md) documents them. A guided recovery step should check

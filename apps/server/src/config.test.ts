@@ -102,7 +102,6 @@ describe("loadConfig", () => {
       tillApp: EXPECTED_TILL_APP,
       managementRpId: "localhost",
       managementOrigin: "http://localhost:5191",
-      advertisedOrigin: "http://localhost:5191",
       tenantDomain: undefined,
       // No SPA is served: dev uses the Vite dev servers.
       tillAppDir: undefined,
@@ -366,23 +365,14 @@ describe("loadConfig", () => {
     expect(config.managementOrigin).toBe("https://staging.example.com");
   });
 
-  // The management origin is deliberately NOT the loopback default, so "fell back to
-  // managementOrigin" and "took DEFAULT_MANAGEMENT_ORIGIN" cannot print the same value.
-  it("defaults advertisedOrigin to managementOrigin when WAITRON_ADVERTISED_ORIGIN is unset or empty", () => {
-    const managed = { ...MIN_ENV, WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com" };
-    const unset = loadConfig(managed, ROOT, STATE_ROOT);
-    expect(unset.advertisedOrigin).toBe("https://dashboard.example.com");
-    const empty = loadConfig({ ...managed, WAITRON_ADVERTISED_ORIGIN: "" }, ROOT, STATE_ROOT);
-    expect(empty.advertisedOrigin).toBe("https://dashboard.example.com");
-  });
-
-  it("honours a configured bare WAITRON_ADVERTISED_ORIGIN", () => {
+  it("advertises the management origin", () => {
     const config = loadConfig(
-      { ...MIN_ENV, WAITRON_ADVERTISED_ORIGIN: "https://box.deli.waitron.app" },
+      { ...MIN_ENV, WAITRON_MANAGEMENT_ORIGIN: "https://box.example:3443" },
       ROOT,
       STATE_ROOT,
     );
-    expect(config.advertisedOrigin).toBe("https://box.deli.waitron.app");
+    expect(config.managementOrigin).toBe("https://box.example:3443");
+    expect("advertisedOrigin" in config).toBe(false);
   });
 
   // Lower-cased for the case-insensitive host comparison `cookieDomainFor` makes.
@@ -428,28 +418,9 @@ describe("loadConfig", () => {
     "ws://box.deli.waitron.app",
     // Not a URL in any reading.
     "not a url",
-  ])("refuses WAITRON_ADVERTISED_ORIGIN=%s, which is not a bare origin", async (bad) => {
+  ])("refuses WAITRON_MANAGEMENT_ORIGIN=%s, which is not a bare origin", async (bad) => {
     const error = await captureError(() =>
-      Promise.resolve(loadConfig({ ...MIN_ENV, WAITRON_ADVERTISED_ORIGIN: bad }, ROOT, STATE_ROOT)),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_ADVERTISED_ORIGIN",
-      reason: "not_an_origin",
-    });
-  });
-
-  // WebAuthn compares a ceremony's `Origin` header to it byte-for-byte, so it is validated under
-  // its own name whether or not the fallback is taken.
-  it("refuses a WAITRON_MANAGEMENT_ORIGIN that is not a bare origin, naming that variable", async () => {
-    const error = await captureError(() =>
-      Promise.resolve(
-        loadConfig(
-          { ...MIN_ENV, WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com/" },
-          ROOT,
-          STATE_ROOT,
-        ),
-      ),
+      Promise.resolve(loadConfig({ ...MIN_ENV, WAITRON_MANAGEMENT_ORIGIN: bad }, ROOT, STATE_ROOT)),
     );
     expect(codeOf(error)).toBe("server.config_invalid");
     expect(isAppError(error) && error.params).toEqual({
@@ -458,15 +429,11 @@ describe("loadConfig", () => {
     });
   });
 
-  it("refuses a malformed WAITRON_MANAGEMENT_ORIGIN even when WAITRON_ADVERTISED_ORIGIN is set and bare", async () => {
+  it("refuses a WAITRON_MANAGEMENT_ORIGIN that is not a bare origin, naming that variable", async () => {
     const error = await captureError(() =>
       Promise.resolve(
         loadConfig(
-          {
-            ...MIN_ENV,
-            WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com/",
-            WAITRON_ADVERTISED_ORIGIN: "https://box.deli.waitron.app",
-          },
+          { ...MIN_ENV, WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com/" },
           ROOT,
           STATE_ROOT,
         ),

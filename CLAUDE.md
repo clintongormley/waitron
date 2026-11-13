@@ -719,7 +719,7 @@ passed while proving nothing.
   skip locally and fail CI. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: text reads
   accept commented or disabled setup.
 - **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
-  needs `WAITRON_FULL_DISK_DIR`, otherwise skips locally and fails CI. Guard:
+  needs `WAITRON_FULL_DISK_ROOT`, holding one small filesystem per test file, otherwise skips locally and fails CI. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
   [Separate filesystems and variables](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).
 - **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the
@@ -779,7 +779,7 @@ passed while proving nothing.
 - **A test's timeout must exceed the SUM of its waits plus untimed work.** Guard:
   `scripts/spawn-timeout-budget.test.ts`, weaker than its name.
 - **A `spawnSync` timeout must clear the child's own worst case, retries included.**
-  Cut the wait (`WAITRON_SH_HEALTH_DELAY`), not retries. Nothing guards this generally.
+  Cut the wait (`WAITRON_TEST_HEALTH_DELAY`), not retries. Nothing guards this generally.
 - **Stop a finished command's leftover workers on `exit`, not on its output pipes' `close`;
   bound pipe draining too.** Guard: `scripts/run-with-deadline.test.mjs`. Cost and receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#a-browser-shard-reports-before-its-job-limit).

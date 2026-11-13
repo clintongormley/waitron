@@ -3,7 +3,7 @@
 // frozen with SIGSTOP for stage 8b. Install both binaries with
 // `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. Without them this case
 // is reported SKIPPED, with the reason in its note. With CI=true (GitHub sets it on every job) or
-// WAITRON_REQUIRE_STREAM_BINARIES=1, a missing binary FAILS the case instead.
+// WAITRON_REQUIRE_TEST_TOOLS=1, a missing binary FAILS the case instead.
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,7 +30,7 @@ import {
 } from "./testing/stream-loop-scenario.js";
 
 const INSTALL = "node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs";
-const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
+const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_TEST_TOOLS === "1";
 
 // The helper enforces the S3 server's start; the scenario's own waits are in its sum.
 const LOOP_TIMEOUT_MS = S3_READY_MS + STREAM_LOOP_SCENARIO_MS;

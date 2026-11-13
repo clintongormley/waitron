@@ -64,7 +64,7 @@ case "$1" in
   set-time)
     if [ -n "\${WB_SETTIME_REACHED}" ]; then : > "\${WB_SETTIME_REACHED}"; sleep "\${WB_SETTIME_SLEEP:-1}"; fi
     [ "\${WB_SETTIME_FAIL}" = 1 ] && { echo "Failed to set time" >&2; exit 1; }
-    [ -n "\${WB_MARKER_SEEN}" ] && cat "\${WAITRON_BOX_STATE_DIR}"/stopped.* > "\${WB_LOG}.marker"
+    [ -n "\${WB_MARKER_SEEN}" ] && cat "\${WAITRON_TEST_HOST_ROOT}/run/waitron-box-state"/stopped.* > "\${WB_LOG}.marker"
     t="\${2#@}"; printf '%s' "\${t/./}" > "\${WB_LOG}.now" ;;
 esac
 exit 0
@@ -79,7 +79,7 @@ case "$1" in
     for a in \${WB_ACTIVE}; do [ "$a" = "$u" ] && exit 0; done
     exit 3 ;;
   start) [ "\${WB_START_FAIL}" = 1 ] && exit 1 ;;
-  stop) [ -n "\${WB_UPTIME_AFTER_STOP}" ] && printf '%s 1.00\\n' "\${WB_UPTIME_AFTER_STOP}" > "\${WAITRON_BOX_UPTIME}" ;;
+  stop) [ -n "\${WB_UPTIME_AFTER_STOP}" ] && printf '%s 1.00\\n' "\${WB_UPTIME_AFTER_STOP}" > "\${WAITRON_TEST_HOST_ROOT}/proc/uptime" ;;
 esac
 exit 0
 `,
@@ -98,33 +98,39 @@ stub("touch", `case " $* " in *" -d "*) exit 0 ;; esac; exec "${REAL_TOUCH}" "$@
 function sandbox(extra = {}) {
   const dir = mkdtempSync(join(tmpdir(), "waitron-box-case-"));
   dirs.push(dir);
-  const units = join(dir, "ntp-units.d");
-  mkdirSync(units);
-  writeFileSync(join(units, "50-chrony.list"), "# the time service\nchrony.service\n");
+  const paths = {
+    ntpUnits: join(dir, "etc/systemd/ntp-units.d"),
+    uptime: join(dir, "proc/uptime"),
+    clock: join(dir, "var/lib/systemd/timesync/clock"),
+    synchronized: join(dir, "run/systemd/timesync/synchronized"),
+    state: join(dir, "run/waitron-box-state"),
+    tagHost: join(dir, "opt/waitron-host/box/name-tag-host.mjs"),
+    networkHost: join(dir, "opt/waitron-host/box/network-host.mjs"),
+  };
+  for (const path of Object.values(paths)) mkdirSync(dirname(path), { recursive: true });
+  mkdirSync(paths.ntpUnits);
+  mkdirSync(paths.state);
+  writeFileSync(join(paths.ntpUnits, "50-chrony.list"), "# the time service\nchrony.service\n");
   const log = join(dir, "calls.log");
   writeFileSync(log, "");
   logs.push(log);
-  writeFileSync(join(dir, "uptime"), "100.00 200.00\n");
-  writeFileSync(join(dir, "clock"), "");
-  const synchronized = join(dir, "synchronized");
-  writeFileSync(synchronized, "");
+  writeFileSync(paths.uptime, "100.00 200.00\n");
+  writeFileSync(paths.clock, "");
+  writeFileSync(paths.synchronized, "");
   const env = {
     PATH: `${STUB_BIN}${delimiter}${process.env.PATH}`,
     HOME: dir,
     WB_LOG: log,
     WB_ACTIVE: "chrony.service",
     WB_MTIME_MS: "1793425000123",
-    WAITRON_BOX_NTP_UNITS_DIRS: units,
-    WAITRON_BOX_UPTIME: join(dir, "uptime"),
-    WAITRON_BOX_TIMESYNC_CLOCK: join(dir, "clock"),
-    WAITRON_BOX_TIMESYNC_SYNCHRONIZED: synchronized,
-    WAITRON_BOX_STATE_DIR: join(dir, "state"),
+    WAITRON_TEST_HOST_ROOT: dir,
     ...extra,
   };
   return {
     dir,
     env,
-    state: join(dir, "state"),
+    paths,
+    state: paths.state,
     calls: () =>
       readFileSync(log, "utf8")
         .split("\n")
@@ -181,18 +187,32 @@ describe("waitron-box.sh clock.status", () => {
     expect(answer(sb, "clock.status").lastSyncAt).toBeNull();
   });
 
+  it.each([
+    "etc/systemd/ntp-units.d",
+    "run/systemd/ntp-units.d",
+    "usr/local/lib/systemd/ntp-units.d",
+    "usr/lib/systemd/ntp-units.d",
+  ])("reads %s inside the host root", (folder) => {
+    const sb = sandbox({ WB_ACTIVE: "fixture-only.service" });
+    rmSync(join(sb.paths.ntpUnits, "50-chrony.list"));
+    const units = join(sb.dir, folder);
+    mkdirSync(units, { recursive: true });
+    writeFileSync(join(units, "fixture.list"), "fixture-only.service\n");
+    expect(answer(sb, "clock.status")).toMatchObject({
+      service: "on",
+      unit: "fixture-only.service",
+    });
+  });
+
   it("reads a list line with whitespace around the unit's name", () => {
     const sb = sandbox();
-    writeFileSync(
-      join(sb.env.WAITRON_BOX_NTP_UNITS_DIRS, "50-chrony.list"),
-      "  chrony.service \t\n",
-    );
+    writeFileSync(join(sb.paths.ntpUnits, "50-chrony.list"), "  chrony.service \t\n");
     expect(answer(sb, "clock.status")).toMatchObject({ service: "on", unit: "chrony.service" });
   });
 
   it("answers a null last synchronisation when the time service never wrote its file", () => {
     const sb = sandbox();
-    rmSync(sb.env.WAITRON_BOX_TIMESYNC_SYNCHRONIZED);
+    rmSync(sb.paths.synchronized);
     expect(answer(sb, "clock.status").lastSyncAt).toBeNull();
   });
 });
@@ -301,7 +321,7 @@ describe("waitron-box.sh reads one bounded line", () => {
     ["a request with no end of line", "clock.status"],
   ]) {
     it(`answers request_invalid when ${name} arrives within the limit`, async () => {
-      const sb = sandbox({ WAITRON_BOX_READ_SECONDS: "1" });
+      const sb = sandbox({ WAITRON_TEST_READ_SECONDS: "1" });
       const started = performance.now();
       const child = spawn("bash", [HANDLER, "7-100-0"], { env: sb.env });
       if (partial) child.stdin.write(partial);
@@ -352,7 +372,7 @@ describe("waitron-box.sh clock.set", () => {
       ["logger", "-t", "waitron-box", `clock.set target=${OK_TARGET} requester=${REQUESTER}`],
       ["systemctl", "stop", "chrony.service"],
       ["timedatectl", "set-time", "@1793425531.620"],
-      ["touch", "-d", "@1793425531.620", sb.env.WAITRON_BOX_TIMESYNC_CLOCK],
+      ["touch", "-d", "@1793425531.620", sb.paths.clock],
       ["systemctl", "start", "chrony.service"],
     ]);
     expect(existsSync(join(sb.state, "stopped.7-100-0"))).toBe(false);
@@ -422,7 +442,7 @@ describe("waitron-box.sh clock.set", () => {
 describe("waitron-box.sh --restore", () => {
   it("starts the unit a marker names when it is listed, then removes the marker", () => {
     const sb = sandbox();
-    mkdirSync(sb.state);
+    mkdirSync(sb.state, { recursive: true });
     writeFileSync(join(sb.state, "stopped.7-100-0"), "chrony.service\n");
     const r = ask(sb, "", ["--restore", "7-100-0"]);
     expect(r.status).toBe(0);
@@ -433,7 +453,7 @@ describe("waitron-box.sh --restore", () => {
 
   it("starts nothing a marker names that is not a listed time service", () => {
     const sb = sandbox();
-    mkdirSync(sb.state);
+    mkdirSync(sb.state, { recursive: true });
     writeFileSync(join(sb.state, "stopped.7-100-0"), "ssh.service\n");
     expect(ask(sb, "", ["--restore", "7-100-0"]).status).toBe(0);
     expect(sb.calls()).toEqual([]);
@@ -442,7 +462,7 @@ describe("waitron-box.sh --restore", () => {
 
   it("keeps the marker naming a unit that would not start, so the stop step tries again", () => {
     const sb = sandbox({ WB_START_FAIL: "1" });
-    mkdirSync(sb.state);
+    mkdirSync(sb.state, { recursive: true });
     writeFileSync(join(sb.state, "stopped.7-100-0"), "chrony.service\n");
     expect(ask(sb, "", ["--restore", "7-100-0"]).status).toBe(0);
     expect(sb.calls()).toEqual([["systemctl", "start", "chrony.service"]]);
@@ -502,13 +522,12 @@ describe("the box's systemd units", () => {
 
 it("forwards a complete tag over 700 characters while keeping its host lock", () => {
   const sb = sandbox();
-  const host = join(sb.dir, "tag-host.mjs");
+  const host = sb.paths.tagHost;
   const received = join(sb.dir, "received");
   writeFileSync(
     host,
     `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(received)}, fs.readFileSync(0)); console.log('{"ok":true,"tag":"written"}');`,
   );
-  sb.env.WAITRON_BOX_TAG_HOST = host;
   const line =
     'tag.write {"tag":{"name":"' +
     "\\ud83d\\ude00".repeat(256) +
@@ -522,9 +541,8 @@ it("forwards a complete tag over 700 characters while keeping its host lock", ()
 
 it("refuses a competing tag writer before starting the adapter", () => {
   const sb = sandbox({ WB_FLOCK_RC: "1" });
-  const host = join(sb.dir, "tag-host.mjs");
+  const host = sb.paths.tagHost;
   writeFileSync(host, `throw new Error('must not run');`);
-  sb.env.WAITRON_BOX_TAG_HOST = host;
   expect(answer(sb, 'tag.write {"tag":null,"actor":{"source":"server"}}')).toEqual({
     ok: false,
     reason: "busy",
@@ -533,9 +551,8 @@ it("refuses a competing tag writer before starting the adapter", () => {
 
 it("answers one host_failed line when the tag adapter crashes before a reply", () => {
   const sb = sandbox();
-  const host = join(sb.dir, "tag-host.mjs");
+  const host = sb.paths.tagHost;
   writeFileSync(host, `process.exit(3);`);
-  sb.env.WAITRON_BOX_TAG_HOST = host;
   expect(answer(sb, 'tag.write {"tag":null,"actor":{"source":"server"}}')).toEqual({
     ok: false,
     reason: "host_failed",
@@ -544,18 +561,17 @@ it("answers one host_failed line when the tag adapter crashes before a reply", (
 
 it("forwards a network read without a write lock, retaining unknown_request when absent", () => {
   const sb = sandbox();
-  const host = join(sb.dir, "network-host.mjs");
+  const host = sb.paths.networkHost;
   const received = join(sb.dir, "received");
   writeFileSync(
     host,
     `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(received)}, fs.readFileSync(0)); console.log('{"ok":true}');`,
   );
-  sb.env.WAITRON_BOX_NETWORK_HOST = host;
   const line = 'network.read {"actor":{"source":"server"}}';
   expect(answer(sb, line)).toEqual({ ok: true });
   expect(readFileSync(received, "utf8")).toBe(line);
   expect(sb.calls().some((call) => call[0] === "flock")).toBe(false);
   expect(touchesClock(sb.calls())).toEqual([]);
-  sb.env.WAITRON_BOX_NETWORK_HOST = join(sb.dir, "absent.mjs");
+  rmSync(host);
   expect(answer(sb, line)).toEqual({ ok: false, reason: "unknown_request" });
 });

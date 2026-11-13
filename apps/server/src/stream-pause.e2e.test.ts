@@ -2,7 +2,7 @@
 // pinned Litestream against a real S3-compatible server: versitygw, frozen with SIGSTOP.
 //
 // Binaries as in `stream-loop.e2e.test.ts`: without them this case is reported SKIPPED; with
-// CI=true or WAITRON_REQUIRE_STREAM_BINARIES=1 a missing binary FAILS it.
+// CI=true or WAITRON_REQUIRE_TEST_TOOLS=1 a missing binary FAILS it.
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,7 +23,7 @@ import {
 } from "./testing/stream-pause-scenario.js";
 
 const INSTALL = "node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs";
-const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
+const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_TEST_TOOLS === "1";
 
 // The helper enforces the S3 server's start; the scenario's own waits are in its sum.
 const PAUSE_TIMEOUT_MS = S3_READY_MS + STREAM_PAUSE_SCENARIO_MS;

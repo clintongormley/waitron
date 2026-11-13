@@ -424,7 +424,7 @@ jobs:
           set -euo pipefail
           # The whole point of the compose wiring: the agent process is running (the read-only /dev
           # mount, not a hard `devices:` line, is what lets it start on this printer-less runner), its
-          # setup page answers on 9110, and it received WAITRON_SERVER_URL=https://127.0.0.1 from
+          # setup page answers on 9110, and it received WAITRON_PRINT_AGENT_SERVER_URL=https://127.0.0.1 from
           # compose. A failed CA fetch would still leave the page answering, so this asserts the
           # wiring, and the live box check (plan Task 9) asserts the join.
           agent=$(docker compose ps -q print-agent)

@@ -1337,7 +1337,7 @@ async function bootServer(
   app.use("*", handoverGate.middleware);
   // Used by the full, waiting and restricted starts, so all three answer the same origins.
   const allowOrigin = createOriginAllowlist({
-    advertisedOrigin: config.advertisedOrigin,
+    advertisedOrigin: config.managementOrigin,
     readMembership: () => readNodeMembership(db),
     devMode: config.devMode,
     vitePorts: {
@@ -1682,7 +1682,7 @@ async function bootServer(
               persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
               persistBackupSettings: (s) => replaceBackupSettings(config.stateDir, s),
               fetchBundle: fetchMirrorBundle,
-              advertisedOrigin: config.advertisedOrigin,
+              advertisedOrigin: config.managementOrigin,
               spareStorePort: config.spareStorePort,
               environment: config.environment,
               persistTrading,
@@ -1700,7 +1700,7 @@ async function bootServer(
         establishIdentity: (nodeId) =>
           establishNodeIdentity({ ownerDb: db, node: store.node, ring }, nodeId),
         seedMembership: (nodeId) =>
-          seedTermZeroMembership({ db, node: store.node, ring }, nodeId, config.advertisedOrigin),
+          seedTermZeroMembership({ db, node: store.node, ring }, nodeId, config.managementOrigin),
         // Handed to the fiscal contribution's `provisioningSecret.seal` seat, so boot imports no
         // regime package.
         db,
@@ -1994,7 +1994,7 @@ async function bootServer(
             node: store.node,
             ring,
             nodeId: node.nodeId,
-            advertisedOrigin: config.advertisedOrigin,
+            advertisedOrigin: config.managementOrigin,
             log,
           })
         : seams.peerCheck();
@@ -2183,7 +2183,7 @@ async function bootServer(
         node: store.node,
         ring,
         nodeId: config.node.nodeId,
-        advertisedOrigin: config.advertisedOrigin,
+        advertisedOrigin: config.managementOrigin,
         hostnames: leafHostnames,
         listIpv4: boxAddresses,
         now,
@@ -2828,7 +2828,7 @@ async function bootServer(
     );
     mountJoinApi(
       app,
-      { db, cfg: tradingContext, pairingMode, deviceAddress: config.advertisedOrigin },
+      { db, cfg: tradingContext, pairingMode, deviceAddress: config.managementOrigin },
       log,
     );
     mountPrintApi(
@@ -3702,7 +3702,7 @@ async function bootServer(
         ring,
         stateDir: config.stateDir,
         boxHostname: BOX_HOSTNAME,
-        advertisedOrigin: config.advertisedOrigin,
+        advertisedOrigin: config.managementOrigin,
         designated: config.node,
         accountKey: accountKey.toString("base64"),
         credentialKeyRing: totpKeyRing,
@@ -3849,7 +3849,7 @@ async function bootServer(
       ...peerDeps,
       stateDir: config.stateDir,
       migrationsRoot: config.migrationsRoot,
-      advertisedOrigin: config.advertisedOrigin,
+      advertisedOrigin: config.managementOrigin,
       venueCanPromote: nodePreparation.hasRecoveryOperation,
       gate: handoverGate,
       stepDownAfterOffer: async (c, binding) => {

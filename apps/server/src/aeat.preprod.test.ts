@@ -4,10 +4,10 @@ import { mtlsFetch } from "@waitron/fiscal-verifactu/src/aeat-transport.js";
 
 // Supplied by the operator at run time, never committed and never defaulted. Absent means the
 // suite has nothing to prove, so it skips rather than inventing material.
-const pfxBase64 = process.env.WAITRON_PREPROD_PFX_BASE64;
-const passphrase = process.env.WAITRON_PREPROD_PFX_PASSPHRASE;
-const nif = process.env.WAITRON_PREPROD_NIF;
-const nombre = process.env.WAITRON_PREPROD_NOMBRE;
+const pfxBase64 = process.env.WAITRON_CERT_CHECK_PFX_BASE64;
+const passphrase = process.env.WAITRON_CERT_CHECK_PASSPHRASE;
+const nif = process.env.WAITRON_CERT_CHECK_NIF;
+const nombre = process.env.WAITRON_CERT_CHECK_LEGAL_NAME;
 
 const configured =
   pfxBase64 !== undefined && passphrase !== undefined && nif !== undefined && nombre !== undefined;

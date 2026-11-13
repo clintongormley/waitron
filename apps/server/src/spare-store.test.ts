@@ -1,6 +1,6 @@
 // The fake-spawn cases always run. The real-binary case needs the pinned versitygw: install it with
 // `node scripts/setup-s3-test-server.mjs`. Without it that case is reported SKIPPED, with the reason
-// in its note. With CI=true (GitHub sets it on every job) or WAITRON_REQUIRE_STREAM_BINARIES=1, a
+// in its note. With CI=true (GitHub sets it on every job) or WAITRON_REQUIRE_TEST_TOOLS=1, a
 // missing binary FAILS the case instead.
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -20,7 +20,7 @@ import { freePorts } from "./testing/free-ports.js";
 import { resolveVersitygw } from "./testing/s3-test-server.js";
 
 const INSTALL = "node scripts/setup-s3-test-server.mjs";
-const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
+const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_TEST_TOOLS === "1";
 const READY_MS = 10_000;
 
 const ACCESS_KEY_ID = "waitron0123456789abcdef";

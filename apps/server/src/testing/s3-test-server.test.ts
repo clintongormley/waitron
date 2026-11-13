@@ -1,5 +1,5 @@
 // The cases that start the real pinned versitygw are reported SKIPPED without it; with CI=true or
-// WAITRON_REQUIRE_STREAM_BINARIES=1 a missing binary FAILS them, as in `stream-loop.e2e.test.ts`.
+// WAITRON_REQUIRE_TEST_TOOLS=1 a missing binary FAILS them, as in `stream-loop.e2e.test.ts`.
 // The cases that start a stub, or Node itself, in its place run everywhere.
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,7 +23,7 @@ vi.mock("./free-ports.js", async (importOriginal) => {
 });
 
 const INSTALL = "node scripts/setup-s3-test-server.mjs";
-const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
+const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_TEST_TOOLS === "1";
 /** Far above a listing from a running server on loopback, which takes milliseconds. */
 const UNANSWERED_MS = 1_000;
 

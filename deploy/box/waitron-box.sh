@@ -9,14 +9,15 @@
 set -u
 export LC_ALL=C
 
-STATE_DIR="${WAITRON_BOX_STATE_DIR:-/run/waitron-box-state}"
-NTP_UNITS_DIRS="${WAITRON_BOX_NTP_UNITS_DIRS:-/etc/systemd/ntp-units.d /run/systemd/ntp-units.d /usr/local/lib/systemd/ntp-units.d /usr/lib/systemd/ntp-units.d}"
-UPTIME_FILE="${WAITRON_BOX_UPTIME:-/proc/uptime}"
-TIMESYNC_CLOCK="${WAITRON_BOX_TIMESYNC_CLOCK:-/var/lib/systemd/timesync/clock}"
-TIMESYNC_SYNCHRONIZED="${WAITRON_BOX_TIMESYNC_SYNCHRONIZED:-/run/systemd/timesync/synchronized}"
-READ_SECONDS="${WAITRON_BOX_READ_SECONDS:-5}"
-TAG_HOST="${WAITRON_BOX_TAG_HOST:-/opt/waitron-host/box/name-tag-host.mjs}"
-NETWORK_HOST="${WAITRON_BOX_NETWORK_HOST:-/opt/waitron-host/box/network-host.mjs}"
+# The prefix is a test folder and is empty on a box.
+STATE_DIR="${WAITRON_TEST_HOST_ROOT:-}/run/waitron-box-state"
+NTP_UNITS_DIRS="${WAITRON_TEST_HOST_ROOT:-}/etc/systemd/ntp-units.d ${WAITRON_TEST_HOST_ROOT:-}/run/systemd/ntp-units.d ${WAITRON_TEST_HOST_ROOT:-}/usr/local/lib/systemd/ntp-units.d ${WAITRON_TEST_HOST_ROOT:-}/usr/lib/systemd/ntp-units.d"
+UPTIME_FILE="${WAITRON_TEST_HOST_ROOT:-}/proc/uptime"
+TIMESYNC_CLOCK="${WAITRON_TEST_HOST_ROOT:-}/var/lib/systemd/timesync/clock"
+TIMESYNC_SYNCHRONIZED="${WAITRON_TEST_HOST_ROOT:-}/run/systemd/timesync/synchronized"
+READ_SECONDS="${WAITRON_TEST_READ_SECONDS:-5}"
+TAG_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/name-tag-host.mjs"
+NETWORK_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/network-host.mjs"
 
 # 2024-10-28T00:00:00Z and 2100-01-01T00:00:00Z, in milliseconds.
 FIRST_TARGET_MS=1730073600000

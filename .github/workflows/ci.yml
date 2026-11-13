@@ -1381,27 +1381,27 @@ jobs:
       - name: Mount small filesystems for the full-disk tests
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/full-disk"
-          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk"
-          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk"
-          mkdir -p "$RUNNER_TEMP/full-disk-start-again"
-          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-start-again"
-          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-start-again"
-          mkdir -p "$RUNNER_TEMP/full-disk-from-spare"
-          sudo mount -t tmpfs -o size=48m tmpfs "$RUNNER_TEMP/full-disk-from-spare"
-          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-from-spare"
-          mkdir -p "$RUNNER_TEMP/full-disk-backup-room"
-          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-backup-room"
-          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-backup-room"
-          mkdir -p "$RUNNER_TEMP/full-disk-handover"
-          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-handover"
-          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-handover"
-          mkdir -p "$RUNNER_TEMP/full-disk-placement"
-          sudo mount -t tmpfs -o size=64m tmpfs "$RUNNER_TEMP/full-disk-placement"
-          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-placement"
-          mkdir -p "$RUNNER_TEMP/full-disk-restore"
-          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-restore"
-          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-restore"
+          mkdir -p "$RUNNER_TEMP/full-disk/start"
+          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk/start"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk/start"
+          mkdir -p "$RUNNER_TEMP/full-disk/start-again"
+          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk/start-again"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk/start-again"
+          mkdir -p "$RUNNER_TEMP/full-disk/from-spare"
+          sudo mount -t tmpfs -o size=48m tmpfs "$RUNNER_TEMP/full-disk/from-spare"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk/from-spare"
+          mkdir -p "$RUNNER_TEMP/full-disk/backup-room"
+          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk/backup-room"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk/backup-room"
+          mkdir -p "$RUNNER_TEMP/full-disk/handover"
+          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk/handover"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk/handover"
+          mkdir -p "$RUNNER_TEMP/full-disk/placement"
+          sudo mount -t tmpfs -o size=64m tmpfs "$RUNNER_TEMP/full-disk/placement"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk/placement"
+          mkdir -p "$RUNNER_TEMP/full-disk/restore"
+          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk/restore"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk/restore"
 
       # Not named "Run the … shard": scripts/ci-workflow.test.mjs would count @waitron/server twice.
       # TMPDIR in memory: in a probe reproducing a main failure, a stall on the runner's disk held one
@@ -1409,14 +1409,8 @@ jobs:
       # "In CI their temporary files are in memory").
       - name: Run the tests that need Litestream, versitygw or a small filesystem
         env:
+          WAITRON_FULL_DISK_ROOT: ${{ runner.temp }}/full-disk
           TMPDIR: /dev/shm
-          WAITRON_FULL_DISK_DIR: ${{ runner.temp }}/full-disk
-          WAITRON_FULL_DISK_DIR_START_AGAIN: ${{ runner.temp }}/full-disk-start-again
-          WAITRON_FULL_DISK_DIR_FROM_SPARE: ${{ runner.temp }}/full-disk-from-spare
-          WAITRON_FULL_DISK_DIR_BACKUP_ROOM: ${{ runner.temp }}/full-disk-backup-room
-          WAITRON_FULL_DISK_DIR_HANDOVER: ${{ runner.temp }}/full-disk-handover
-          WAITRON_FULL_DISK_DIR_PLACEMENT: ${{ runner.temp }}/full-disk-placement
-          WAITRON_FULL_DISK_DIR_RESTORE: ${{ runner.temp }}/full-disk-restore
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" ls --depth -1 --json \

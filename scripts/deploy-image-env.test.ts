@@ -955,15 +955,15 @@ describe("the waitron.sh box command", () => {
   // case, so no behaviour anywhere would notice a typo. Closing braces are part of both patterns —
   // without them `:-5` matches `:-50` and `:-36` matches `:-360`.
   it("ships a health wait of 36 tries, five seconds apart", () => {
-    expect(WAITRON_SH).toMatch(/WAITRON_SH_MAX_HEALTH_TRIES:-36\}/);
-    expect(WAITRON_SH).toMatch(/WAITRON_SH_HEALTH_DELAY:-5\}/);
+    expect(WAITRON_SH).toMatch(/WAITRON_TEST_HEALTH_TRIES:-36\}/);
+    expect(WAITRON_SH).toMatch(/WAITRON_TEST_HEALTH_DELAY:-5\}/);
   });
 
   // `scripts/waitron-sh.test.mjs` points the drop-in inside each case's own directory, so no
   // behaviour there would notice a typo in the path a box gets.
   it("ships the Bluetooth drop-in to systemd's folder for bluetooth.service", () => {
     expect(WAITRON_SH).toContain(
-      "WAITRON_SH_BLUETOOTH_DROPIN:-/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf}",
+      "${WAITRON_TEST_HOST_ROOT:-}/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf",
     );
   });
 
@@ -1041,8 +1041,8 @@ describe("the app's mount of the box's clock socket", () => {
 
   it("installs the handler where the units run it, and names the folder the socket listens in", () => {
     const unit = (name: string) => read(`deploy/box/${name}`);
-    const lib = /BOX_LIB_DIR="\$\{WAITRON_SH_BOX_LIB_DIR:-([^}]+)\}"/.exec(WAITRON_SH)?.[1];
-    const units = /BOX_UNIT_DIR="\$\{WAITRON_SH_BOX_UNIT_DIR:-([^}]+)\}"/.exec(WAITRON_SH)?.[1];
+    const lib = /BOX_LIB_DIR="\$\{WAITRON_TEST_HOST_ROOT:-\}([^"]+)"/.exec(WAITRON_SH)?.[1];
+    const units = /BOX_UNIT_DIR="\$\{WAITRON_TEST_HOST_ROOT:-\}([^"]+)"/.exec(WAITRON_SH)?.[1];
     const named = /env_set WAITRON_BOX_SOCKET_DIR (\S+)/.exec(WAITRON_SH)?.[1];
     expect(units).toBe("/etc/systemd/system");
     expect(unit("waitron-box@.service")).toContain(`ExecStart=${lib}/waitron-box.sh %i`);

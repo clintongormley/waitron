@@ -372,6 +372,8 @@ starts, which teardown cancels. The abort scenario's "no unfinished upload" chec
 (`ownedUploads`), which lists the bucket's unfinished uploads under a prefix this run issued, or a
 path below one, and refuses any other prefix.
 
+2026-11-12, env2: current runs use `WAITRON_REQUIRE_TEST_TOOLS=1`; the dated run below keeps its original command.
+
 **Against versitygw.** The same scenarios run against versitygw in
 `apps/server/src/s3-rehearsal-scenarios.e2e.test.ts` (CI's `test-server-stream` job). Run on
 2026-10-14 on a Mac with versitygw 1.8.0

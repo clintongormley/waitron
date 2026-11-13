@@ -1,6 +1,6 @@
-// Needs its own filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_DIR_RESTORE names, or on
+// Needs its own filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_ROOT/restore names, or on
 // macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case
-// is reported SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md,
+// is reported SKIPPED; with CI=true or WAITRON_REQUIRE_TEST_TOOLS=1 it FAILS instead (testing-guide.md,
 // "The full-disk start tests run on a small filesystem").
 import { existsSync, realpathSync } from "node:fs";
 import nativeFs, { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -67,7 +67,7 @@ let disk: SmallDisk | undefined;
 let stagingDir: string | undefined;
 
 beforeAll(() => {
-  opened = openSmallDisk("WAITRON_FULL_DISK_DIR_RESTORE", 32);
+  opened = openSmallDisk("restore", 32);
   if (opened.ok) disk = opened.disk;
   else if (!REQUIRE_FULL_DISK) console.warn(`restore full-disk tests SKIPPED: ${opened.reason}`);
 });

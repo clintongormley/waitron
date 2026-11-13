@@ -126,7 +126,7 @@ Object.defineProperty(performance, "now", { value: () => passed });
           WAITRON_ADMIN_PIN: "4826",
           WAITRON_ADMIN_PASSWORD: "SYNTHETIC-owner-password",
           WAITRON_INITIAL_VENUE_INPUT: "",
-          WAITRON_ADVERTISED_ORIGIN: origin,
+          WAITRON_MANAGEMENT_ORIGIN: origin,
           WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
           WAITRON_CREDENTIALS_KEY_VERSION: "1",
         },

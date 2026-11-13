@@ -1,6 +1,6 @@
-// Needs its own filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_DIR_START_AGAIN names, or on
+// Needs its own filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_ROOT/start-again names, or on
 // macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case
-// is reported SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md,
+// is reported SKIPPED; with CI=true or WAITRON_REQUIRE_TEST_TOOLS=1 it FAILS instead (testing-guide.md,
 // "The full-disk start tests run on a small filesystem").
 import { realpathSync } from "node:fs";
 import { readdir, stat, writeFile } from "node:fs/promises";
@@ -31,7 +31,7 @@ let disk: SmallDisk | undefined;
 // Runs after useVenueDb's own beforeAll, registered when the fixture is imported, so the suite's
 // database stays off the small disk and only each case's folders land on it.
 beforeAll(() => {
-  opened = openSmallDisk("WAITRON_FULL_DISK_DIR_START_AGAIN", 32);
+  opened = openSmallDisk("start-again", 32);
   if (!opened.ok) {
     if (!REQUIRE_FULL_DISK) console.warn(`start-again-full-disk tests SKIPPED: ${opened.reason}`);
     return;

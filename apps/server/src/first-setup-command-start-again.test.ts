@@ -60,7 +60,7 @@ afterEach(async () => {
 });
 
 const environment = {
-  WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
+  WAITRON_MANAGEMENT_ORIGIN: "https://olivo.example.test:3443",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
 };
 

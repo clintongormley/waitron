@@ -25,8 +25,7 @@ services:
       # or Docker Desktop, whose "host" network is the Linux VM's). Empty = advertise the default-route
       # interface only, the on-prem default (Docker bridges are excluded automatically).
       WAITRON_BOX_ADDRESSES: ${WAITRON_BOX_ADDRESSES:-}
-      # The passkey relying party, and the origin every till is handed (advertisedOrigin defaults to
-      # it). The image bakes waitron.local, which is right for an on-prem box and WRONG for any
+      # The passkey relying party and the origin every till is handed. The image bakes waitron.local, which is right for an on-prem box and WRONG for any
       # deployment reached at another name — config.ts requires both in production precisely so a
       # live box cannot run with the wrong relying party. They are passed HERE because the image's
       # own ENV beats trading.env (box-env.ts merges the process environment last), so .env is the
@@ -104,7 +103,7 @@ services:
 
   # The box-local bridge between the server and USB/network/Bluetooth printers (print-agent spec
   # 2026-09-10). On by default: the single-box venue is the common case, and the same-box agent joins
-  # with nothing typed because WAITRON_SERVER_URL is the box's own loopback leaf, whose CA the agent
+  # with nothing typed because WAITRON_PRINT_AGENT_SERVER_URL is the box's own loopback leaf, whose CA the agent
   # fetches from the landing listener's /ca.crt.
   print-agent:
     image: ${WAITRON_PRINT_AGENT_IMAGE:-ghcr.io/clintongormley/waitron-print-agent:main}
@@ -123,9 +122,9 @@ services:
     environment:
       # The box's own origin; the agent trusts its self-signed leaf via the fetched CA. Overridable
       # for an agent that runs on a separate Pi and must name the box's LAN address instead.
-      WAITRON_SERVER_URL: ${WAITRON_PRINT_AGENT_SERVER_URL:-https://127.0.0.1}
+      WAITRON_PRINT_AGENT_SERVER_URL: ${WAITRON_PRINT_AGENT_SERVER_URL:-https://127.0.0.1}
       WAITRON_BOX_ADDRESSES: ${WAITRON_BOX_ADDRESSES:-}
-      WAITRON_SETUP_URL: ${WAITRON_PRINT_AGENT_SETUP_URL:-}
+      WAITRON_PRINT_AGENT_SETUP_URL: ${WAITRON_PRINT_AGENT_SETUP_URL:-}
     # Docker's default AppArmor profile refuses the system bus, so bluetoothctl cannot reach BlueZ;
     # deploy/apparmor/waitron-print-agent allows it. waitron.sh names that profile in .env only after
     # loading it, because Docker refuses to start a container naming a profile the host has not loaded

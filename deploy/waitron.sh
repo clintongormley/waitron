@@ -245,10 +245,8 @@ load_print_agent_apparmor() {
 #     failure never stops the install. It reads ExecStart from the unit file alone, so writing ours
 #     beside another drop-in that sets ExecStart could discard that drop-in's command; then nothing
 #     is changed, not even a drop-in of ours already there.
-# WAITRON_SH_BLUETOOTH_DROPIN is a test override: scripts/waitron-sh.test.mjs points it inside each
-# case's own directory, so no test can see the shipped path — it is pinned as text by
-# scripts/deploy-image-env.test.ts instead.
-BLUETOOTH_DROPIN="${WAITRON_SH_BLUETOOTH_DROPIN:-/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf}"
+# The prefix is a test folder and is empty on a box.
+BLUETOOTH_DROPIN="${WAITRON_TEST_HOST_ROOT:-}/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf"
 disable_bluetooth_autopair() {
   local unit exec_start tmp dropins dropin other="" unreadable=""
   unit="$(systemctl show -p FragmentPath --value bluetooth.service 2>/dev/null || true)"
@@ -341,11 +339,10 @@ enable_time_sync() {
 #     A group of another name holding that number, or that name with another number, is never
 #     used, since its members could then set the clock. .env names the socket's folder only once the socket has started, so compose
 #     mounts it only then; otherwise the app finds no socket and cannot set the clock.
-# WAITRON_SH_SYSTEMD_DIR, WAITRON_SH_BOX_LIB_DIR and WAITRON_SH_BOX_UNIT_DIR are test overrides, as
-# WAITRON_SH_BLUETOOTH_DROPIN is.
-SYSTEMD_RUN_DIR="${WAITRON_SH_SYSTEMD_DIR:-/run/systemd/system}"
-BOX_LIB_DIR="${WAITRON_SH_BOX_LIB_DIR:-/usr/local/lib/waitron}"
-BOX_UNIT_DIR="${WAITRON_SH_BOX_UNIT_DIR:-/etc/systemd/system}"
+# The prefix is a test folder and is empty on a box.
+SYSTEMD_RUN_DIR="${WAITRON_TEST_HOST_ROOT:-}/run/systemd/system"
+BOX_LIB_DIR="${WAITRON_TEST_HOST_ROOT:-}/usr/local/lib/waitron"
+BOX_UNIT_DIR="${WAITRON_TEST_HOST_ROOT:-}/etc/systemd/system"
 BOX_GROUP=waitron-box
 BOX_GID=10001
 box_group_refusal() {
@@ -478,9 +475,8 @@ ensure_images_present() {
 # The box's IPv4 addresses, one per line, by the same interface choice as the server's listBoxIpv4
 # (apps/server/src/box-reach.ts). It applies neither WAITRON_BOX_ADDRESSES nor the server's
 # private-range filter. Prints nothing, and still succeeds, when `ip` is missing or fails.
-# WAITRON_SH_PROC_NET_ROUTE is a test override for the route file.
 box_own_ipv4() {
-  local route_file="${WAITRON_SH_PROC_NET_ROUTE:-/proc/net/route}" uplink="" best=""
+  local route_file="${WAITRON_TEST_HOST_ROOT:-}/proc/net/route" uplink="" best=""
   local iface dest metric mask family cidr addr listing
   if [ -r "$route_file" ]; then
     while read -r iface dest _ _ _ _ metric mask _; do
@@ -713,14 +709,14 @@ is_production() {
 
 # ~3 minutes for the app container to report healthy (setup mode is healthy on /setup-api/status).
 # Two test overrides, because a suite cannot afford either term of that product:
-# WAITRON_SH_MAX_HEALTH_TRIES cuts the try count, and WAITRON_SH_HEALTH_DELAY cuts the wait between
+# WAITRON_TEST_HEALTH_TRIES cuts the try count, and WAITRON_TEST_HEALTH_DELAY cuts the wait between
 # tries, so a test can keep the RETRYING and still finish in seconds. The DELAY is overridden in every
 # case of scripts/waitron-sh.test.mjs, so no test can see the shipped 5 — it is pinned as text by
 # scripts/deploy-image-env.test.ts instead. The try count is left alone by most cases and two of them
 # assert the probe count, so a typo in it fails behaviourally as well as textually.
 wait_healthy() {
-  local tries="${WAITRON_SH_MAX_HEALTH_TRIES:-36}"
-  local delay="${WAITRON_SH_HEALTH_DELAY:-5}"
+  local tries="${WAITRON_TEST_HEALTH_TRIES:-36}"
+  local delay="${WAITRON_TEST_HEALTH_DELAY:-5}"
   while [ "$tries" -gt 0 ]; do
     # -qx matches the WHOLE line: `.Health` prints one status word, and a bare `grep healthy` would
     # also match "unhealthy" (it contains the substring) and report a failed container as ready.

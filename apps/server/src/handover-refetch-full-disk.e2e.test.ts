@@ -1,6 +1,6 @@
-// Needs its own filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_DIR_HANDOVER names, or on
+// Needs its own filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_ROOT/handover names, or on
 // macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case
-// is reported SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md,
+// is reported SKIPPED; with CI=true or WAITRON_REQUIRE_TEST_TOOLS=1 it FAILS instead (testing-guide.md,
 // "The full-disk start tests run on a small filesystem").
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -52,7 +52,7 @@ let disk: SmallDisk | undefined;
 const closers: (() => Promise<unknown>)[] = [];
 
 beforeAll(() => {
-  opened = openSmallDisk("WAITRON_FULL_DISK_DIR_HANDOVER", 32);
+  opened = openSmallDisk("handover", 32);
   if (opened.ok) disk = opened.disk;
   else if (!REQUIRE_FULL_DISK) console.warn(`handover full-disk tests SKIPPED: ${opened.reason}`);
 });

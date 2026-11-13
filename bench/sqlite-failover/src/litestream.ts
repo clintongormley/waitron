@@ -92,7 +92,7 @@ const FAST_COMPACTION = [
  * results attributed to a version that never ran.
  */
 export async function resolveLitestream(): Promise<{ bin: string; version: string } | null> {
-  const candidates = [process.env.LITESTREAM_BIN, BUNDLED_BIN, "litestream"];
+  const candidates = [process.env.WAITRON_LITESTREAM_BIN, BUNDLED_BIN, "litestream"];
   for (const bin of candidates) {
     if (!bin) continue;
     // A short bound of its own: a candidate that does not answer `version` promptly is not the

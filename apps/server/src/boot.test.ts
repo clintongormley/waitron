@@ -1646,9 +1646,7 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
           WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
-          // Distinct from the `managementOrigin` default (`http://localhost:5191`), so the contactUrl
-          // assertion below tells the two apart.
-          WAITRON_ADVERTISED_ORIGIN: "https://box.deli.test",
+          WAITRON_MANAGEMENT_ORIGIN: "https://box.deli.test",
         });
         const ca = await readFile(join(stateDir, "tls", "ca.crt"));
         const { via, close } = httpsVia(ca);
@@ -1691,8 +1689,6 @@ describe("startServer, against a migrated venue directory", () => {
           expect(Object.keys(trust)).toHaveLength(1);
           expect(Object.values(trust)[0]).toMatch(/.+/);
 
-          // The term-0 document names this primary at `config.advertisedOrigin`, the origin tills
-          // route on, not `managementOrigin`.
           const held = await readNodeMembership(check);
           expect(held?.body.nodes).toEqual([
             {
@@ -2532,8 +2528,6 @@ describe("startServer, against a migrated venue directory", () => {
 
       // CORS covers the media surface too, even though it sits outside `/api/*`: a cross-origin
       // fetch from the venue's own advertised origin gets the Allow-Origin echo, a stranger gets none.
-      // `config.advertisedOrigin` falls back to `WAITRON_MANAGEMENT_ORIGIN` here (KEY_ENV), so that is
-      // the venue's own origin for this boot.
       const own = "https://dashboard.example.com";
       const corsSelf = await fetch(`http://127.0.0.1:${httpPort()}/media/${imageName}`, {
         headers: { origin: own },

@@ -432,7 +432,7 @@ that slice 3 has to restore:
   can see a finished standby, nothing will free such an entry. A `sell-only` former primary keeps
   its place until that box retires itself (`apps/server/src/retire.ts` marks it `evicted`).
   Re-admission must retire, not add.
-- **Chart hygiene:** a post-setup change to `WAITRON_ADVERTISED_ORIGIN` is never re-published, and a
+- **Chart hygiene:** a post-setup change to `WAITRON_MANAGEMENT_ORIGIN` is never re-published, and a
   node that promotes while absent from the chart appends itself address-less, which `routableServers`
   drops.
 - **Resume-at-restore marker** — a persisted wiped-state marker to tell a wiped-mid-restore box from

@@ -5,7 +5,6 @@ import { isIPv4 } from "node:net";
 export interface EnvConfig {
   /** The venue server's origin, or undefined when the operator must enter it on the setup page. */
   serverUrl?: string;
-  /** The agent's display name; undefined lets the Host fall back to a saved name. */
   name?: string;
   stateDir: string;
   setupPort: number;
@@ -23,7 +22,7 @@ function value(raw: string | undefined): string | undefined {
 }
 
 export function readEnv(env: NodeJS.ProcessEnv, hostname: string): EnvConfig {
-  const rawUrl = value(env.WAITRON_SERVER_URL);
+  const rawUrl = value(env.WAITRON_PRINT_AGENT_SERVER_URL);
   let serverUrl: string | undefined;
   if (rawUrl !== undefined) {
     let parsed: URL | undefined;
@@ -33,7 +32,7 @@ export function readEnv(env: NodeJS.ProcessEnv, hostname: string): EnvConfig {
       parsed = undefined;
     }
     if (parsed === undefined || (parsed.protocol !== "http:" && parsed.protocol !== "https:")) {
-      throw new Error(`WAITRON_SERVER_URL is not an http(s) origin: ${rawUrl}`);
+      throw new Error(`WAITRON_PRINT_AGENT_SERVER_URL is not an http(s) origin: ${rawUrl}`);
     }
     serverUrl = parsed.origin;
   }
@@ -48,7 +47,7 @@ export function readEnv(env: NodeJS.ProcessEnv, hostname: string): EnvConfig {
     setupPort = parsed;
   }
 
-  const rawSetupUrl = value(env.WAITRON_SETUP_URL);
+  const rawSetupUrl = value(env.WAITRON_PRINT_AGENT_SETUP_URL);
   const rawAddresses = value(env.WAITRON_BOX_ADDRESSES);
   let setupUrl: string | undefined;
   if (rawSetupUrl !== undefined) {
@@ -56,7 +55,7 @@ export function readEnv(env: NodeJS.ProcessEnv, hostname: string): EnvConfig {
     try {
       parsed = new URL(rawSetupUrl);
     } catch {
-      throw new Error("WAITRON_SETUP_URL must be a browser-facing http(s) origin");
+      throw new Error("WAITRON_PRINT_AGENT_SETUP_URL must be a browser-facing http(s) origin");
     }
     if (
       !["http:", "https:"].includes(parsed.protocol) ||
@@ -68,7 +67,7 @@ export function readEnv(env: NodeJS.ProcessEnv, hostname: string): EnvConfig {
       ["localhost", "0.0.0.0", "[::]", "[::1]"].includes(parsed.hostname) ||
       parsed.hostname.startsWith("127.")
     ) {
-      throw new Error("WAITRON_SETUP_URL must be a browser-facing http(s) origin");
+      throw new Error("WAITRON_PRINT_AGENT_SETUP_URL must be a browser-facing http(s) origin");
     }
     setupUrl = parsed.origin;
   } else if (rawAddresses !== undefined) {
@@ -85,7 +84,7 @@ export function readEnv(env: NodeJS.ProcessEnv, hostname: string): EnvConfig {
 
   return {
     serverUrl,
-    name: value(env.WAITRON_AGENT_NAME) ?? hostname,
+    name: hostname,
     stateDir: value(env.WAITRON_STATE_DIR) ?? DEFAULT_STATE_DIR,
     setupPort,
     ...(setupUrl === undefined ? {} : { setupUrl }),

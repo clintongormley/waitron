@@ -68,13 +68,16 @@ export async function shellBoxHost(): Promise<{ path: string; stderr(): string }
   const path = tempSocketPath();
   const stateDir = mkdtempSync(join(tmpdir(), "box-host-state-"));
   dirs.add(stateDir);
-  const uptime = join(stateDir, "uptime");
+  mkdirSync(join(stateDir, "proc"), { recursive: true });
+  const uptime = join(stateDir, "proc/uptime");
   writeFileSync(uptime, "12345.67 0\n");
-  const ntpUnits = join(stateDir, "ntp-units.d");
-  mkdirSync(ntpUnits);
-  const timesyncClock = join(stateDir, "clock");
+  const ntpUnits = join(stateDir, "etc/systemd/ntp-units.d");
+  mkdirSync(ntpUnits, { recursive: true });
+  mkdirSync(join(stateDir, "var/lib/systemd/timesync"), { recursive: true });
+  const timesyncClock = join(stateDir, "var/lib/systemd/timesync/clock");
   writeFileSync(timesyncClock, "");
-  const synchronized = join(stateDir, "synchronized");
+  mkdirSync(join(stateDir, "run/systemd/timesync"), { recursive: true });
+  const synchronized = join(stateDir, "run/systemd/timesync/synchronized");
   writeFileSync(synchronized, "");
   let stderr = "";
   const server = createServer({ pauseOnConnect: true }, (socket) => {
@@ -84,11 +87,7 @@ export async function shellBoxHost(): Promise<{ path: string; stderr(): string }
       stdio: [socket, socket, "pipe"],
       env: {
         ...process.env,
-        WAITRON_BOX_UPTIME: uptime,
-        WAITRON_BOX_STATE_DIR: stateDir,
-        WAITRON_BOX_NTP_UNITS_DIRS: ntpUnits,
-        WAITRON_BOX_TIMESYNC_CLOCK: timesyncClock,
-        WAITRON_BOX_TIMESYNC_SYNCHRONIZED: synchronized,
+        WAITRON_TEST_HOST_ROOT: stateDir,
       },
     });
     children.add(child);

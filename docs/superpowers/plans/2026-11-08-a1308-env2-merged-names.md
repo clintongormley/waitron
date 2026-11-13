@@ -31,6 +31,25 @@ variable is set nowhere outside tests, environment.md §3). Read, not run.
 
 **No venue reset.**
 
+## Current-base corrections, 2026-11-12
+
+The watcher cleared these corrections in Lane H's questions.md at 22:44 and 23:31:
+include the newer tag and network host helpers under `WAITRON_TEST_HOST_ROOT`; preserve dated
+receipts and update only current instructions, with dated pointers; omit `first-setup-publication.ts`,
+removed by #2638, and update all eight current `boot.ts` readers; run the print-agent checks against
+`@waitron/print-agent-app`, the application package. The role-named receiving parameters stay. At 23:40 the watcher also cleared retaining
+`EnvConfig.name?: string` so the host's saved-name and final fallback checks remain unchanged;
+`readEnv` always supplies the hostname.
+The retired-name check uses `git grep -w` because a positive control with `git grep -E` and `\b`
+matched nothing on this Mac.
+At 23:53 the watcher cleared the CLI shared-name correction found in review: when a membership
+row uses the shared `waitron.local` origin, it records that box's own name, as the server does.
+The test root keeps its fixed-folder contract without extra filesystem-device or missing-folder recovery.
+At 00:02 on 13 November, the watcher cleared folding the newer `WAITRON_SH_PROC_NET_ROUTE`
+into that same root and checking each of the four NTP list folders with the existing fixtures.
+Historical grep exceptions are the dated retry-budget, full-disk and versitygw measurements in
+`testing-guide.md`, `conventions-data.md` and `aws-backup-rehearsal.md`; current instructions use the new names.
+
 ## Global Constraints
 
 - An empty value counts as unset (`isUnset`, `apps/server/src/env-value.ts:5-7`); the print agent's
@@ -47,7 +66,7 @@ variable is set nowhere outside tests, environment.md §3). Read, not run.
 1. `WAITRON_TEST_HOST_ROOT` unset must give exactly today's paths; `deploy-image-env.test.ts`
    extracts the shipped paths from the script text (`:786-795`, `:872-873`), and its regexes must
    still find them.
-2. A prefix that is set must reach every one of the nine paths it replaces; a path left un-prefixed
+2. A prefix that is set must reach every listed path it replaces; a path left un-prefixed
    would make the host-script suites write into the real `/etc` of the machine running them.
    Task 3's sandbox cases fail if any path escapes the sandbox (the stubs log every touched path).
 3. The print agent on a separate machine sets `WAITRON_PRINT_AGENT_SERVER_URL` in `.env`; compose
@@ -69,7 +88,7 @@ variable is set nowhere outside tests, environment.md §3). Read, not run.
 | `WAITRON_AGENT_NAME` | (none: the host name) | hand (Task 2) |
 | `LITESTREAM_BIN` (bench) | `WAITRON_LITESTREAM_BIN` | script |
 | `WAITRON_SH_HEALTH_DELAY`, `WAITRON_SH_MAX_HEALTH_TRIES`, `WAITRON_BOX_READ_SECONDS` | `WAITRON_TEST_HEALTH_DELAY`, `WAITRON_TEST_HEALTH_TRIES`, `WAITRON_TEST_READ_SECONDS` | script |
-| `WAITRON_SH_SYSTEMD_DIR`, `WAITRON_SH_BOX_LIB_DIR`, `WAITRON_SH_BOX_UNIT_DIR`, `WAITRON_SH_BLUETOOTH_DROPIN`, `WAITRON_BOX_STATE_DIR`, `WAITRON_BOX_NTP_UNITS_DIRS`, `WAITRON_BOX_UPTIME`, `WAITRON_BOX_TIMESYNC_CLOCK`, `WAITRON_BOX_TIMESYNC_SYNCHRONIZED` | `WAITRON_TEST_HOST_ROOT` | hand (Task 3) |
+| `WAITRON_SH_SYSTEMD_DIR`, `WAITRON_SH_BOX_LIB_DIR`, `WAITRON_SH_BOX_UNIT_DIR`, `WAITRON_SH_BLUETOOTH_DROPIN`, `WAITRON_SH_PROC_NET_ROUTE`, `WAITRON_BOX_STATE_DIR`, `WAITRON_BOX_NTP_UNITS_DIRS`, `WAITRON_BOX_UPTIME`, `WAITRON_BOX_TIMESYNC_CLOCK`, `WAITRON_BOX_TIMESYNC_SYNCHRONIZED`, `WAITRON_BOX_TAG_HOST`, `WAITRON_BOX_NETWORK_HOST` | `WAITRON_TEST_HOST_ROOT` | hand (Task 3) |
 | `WAITRON_REQUIRE_STREAM_BINARIES`, `WAITRON_REQUIRE_FULL_DISK` | `WAITRON_REQUIRE_TEST_TOOLS` | script |
 | `WAITRON_FULL_DISK_DIR`, `…_START_AGAIN`, `…_FROM_SPARE`, `…_BACKUP_ROOM`, `…_HANDOVER`, `…_PLACEMENT`, `…_RESTORE` (seven at this base; the design counted four) | `WAITRON_FULL_DISK_ROOT` + fixed folder names | hand (Task 4) |
 | `WAITRON_PREPROD_PFX_BASE64`, `_PFX_PASSPHRASE`, `_NIF`, `_NOMBRE` | `WAITRON_CERT_CHECK_PFX_BASE64`, `_PASSPHRASE`, `_NIF`, `_LEGAL_NAME` | script |
@@ -105,8 +124,8 @@ The folder each test file uses: `start-full-disk.e2e.test.ts` → `start`,
 
 Host scripts: `WAITRON_TEST_HOST_ROOT` (default empty) is put in front of each of these, and nothing
 else: `deploy/waitron.sh` `BLUETOOTH_DROPIN` (`:246`), `SYSTEMD_RUN_DIR`, `BOX_LIB_DIR`,
-`BOX_UNIT_DIR` (`:341-343`); `deploy/box/waitron-box.sh` `STATE_DIR`, each entry of
-`NTP_UNITS_DIRS`, `UPTIME_FILE`, `TIMESYNC_CLOCK`, `TIMESYNC_SYNCHRONIZED` (`:13-17`). Example:
+`BOX_UNIT_DIR` (`:341-343`), and `box_own_ipv4`'s route file (`/proc/net/route`); `deploy/box/waitron-box.sh` `STATE_DIR`, each entry of
+`NTP_UNITS_DIRS`, `UPTIME_FILE`, `TIMESYNC_CLOCK`, `TIMESYNC_SYNCHRONIZED`, `TAG_HOST` and `NETWORK_HOST` (`:13-19`). Example:
 `BOX_LIB_DIR="${WAITRON_TEST_HOST_ROOT:-}/usr/local/lib/waitron"`. The two counts:
 `tries="${WAITRON_TEST_HEALTH_TRIES:-36}"`, `delay="${WAITRON_TEST_HEALTH_DELAY:-5}"`
 (`waitron.sh:661-662`); `READ_SECONDS="${WAITRON_TEST_READ_SECONDS:-5}"` (`waitron-box.sh:18`).
@@ -140,7 +159,7 @@ output (about 120 lines across 40 files) and pure deletions. About 3 hours.
 
 1. `node scripts/a1308/env2-renames.mjs && git diff --exit-code` (the script is idempotent on its
    own output).
-2. `git grep -n -E "WAITRON_(ADVERTISED_ORIGIN|SERVER_URL|SETUP_URL|AGENT_NAME|SH_(HEALTH_DELAY|MAX_HEALTH_TRIES|SYSTEMD_DIR|BOX_LIB_DIR|BOX_UNIT_DIR|BLUETOOTH_DROPIN)|BOX_(STATE_DIR|NTP_UNITS_DIRS|UPTIME|TIMESYNC_CLOCK|TIMESYNC_SYNCHRONIZED|READ_SECONDS)|REQUIRE_(STREAM_BINARIES|FULL_DISK)|FULL_DISK_DIR|PREPROD_)\b" -- . ':!docs/superpowers' ':!scripts/a1308'`
+2. `git grep -n -w -E "WAITRON_(ADVERTISED_ORIGIN|SERVER_URL|SETUP_URL|AGENT_NAME|SH_(HEALTH_DELAY|MAX_HEALTH_TRIES|SYSTEMD_DIR|BOX_LIB_DIR|BOX_UNIT_DIR|BLUETOOTH_DROPIN|PROC_NET_ROUTE)|BOX_(STATE_DIR|NTP_UNITS_DIRS|UPTIME|TIMESYNC_CLOCK|TIMESYNC_SYNCHRONIZED|READ_SECONDS|TAG_HOST|NETWORK_HOST)|REQUIRE_(STREAM_BINARIES|FULL_DISK)|FULL_DISK_DIR|PREPROD_)" -- . ':!docs/superpowers' ':!scripts/a1308'`
    prints nothing, apart from `apps/print-agent/src/config.test.ts`, whose Task 2 case passes
    `WAITRON_AGENT_NAME` on purpose to prove it is ignored (rerun with `':!apps/print-agent/src/config.test.ts'`
    added and it prints nothing); and `git grep -n -w LITESTREAM_BIN -- bench` prints nothing.

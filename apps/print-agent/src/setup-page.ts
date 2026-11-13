@@ -9,7 +9,7 @@ export interface SetupDeps {
   configure: (input: { serverUrl: string; name: string }) => Promise<boolean>;
   beginNetworkReset: () => Promise<boolean>;
   cancelNetworkReset: () => Promise<boolean>;
-  /** True when `WAITRON_SERVER_URL` pins the address: the form is read-only and POST is refused. */
+  /** True when `WAITRON_PRINT_AGENT_SERVER_URL` pins the address: the form is read-only and POST is refused. */
   envLocked: boolean;
   defaultName: string;
   now: () => number;
