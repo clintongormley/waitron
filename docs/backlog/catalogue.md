@@ -683,8 +683,8 @@ The manager’s guest preview reads the published menu, with guest/default/inter
 separately priced sizes/extras and declarations. It adds no public link or printing.
 
 Remaining work follows the watcher-cleared [build plan](../superpowers/plans/2026-11-13-a670-guest-menu-build.md):
-sharing of the existing default menu; both Cloud delivery routes under lane G’s A670-CLOUD
-contract; then fixed A4 presets with browser Print / Save as PDF. The watcher cleared paper
+sharing of the existing default menu; delivery/confirmation of Cloud’s hosted copy under lane G’s
+A670-CLOUD contract; then fixed A4 presets with browser Print / Save as PDF. The watcher cleared paper
 work before the Cloud integration if its contract is still waiting. Cloud readiness remains
 unverified; ordering is separate.
 
@@ -693,6 +693,8 @@ forwarding to the box with a hosted published read-only copy when unreachable, f
 before blocks/uploads, and name fallback through guest language, venue default, then internal
 name, never kitchen. The watcher’s 23:28 clearance chooses default-menu-only sharing, box-local
 non-transferring preferences, browser printing and a written key with inline words as an alternative.
+The watcher’s 14 November 00:22 amendment narrows read-only Cloud work to the hosted copy,
+with live forwarding reserved for ordering (A509); slices 1, 2 and 4 stay unchanged.
 These are watcher-cleared plan decisions, not owner approval of the plan. The
 [online](../superpowers/specs/2026-11-13-a670-online-go-live-study.md) and
 [paper](../superpowers/specs/2026-11-13-a670-printed-template-study.md) studies retain their dated proposals.

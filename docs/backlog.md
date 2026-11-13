@@ -483,7 +483,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/catalogue.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
 
 - **A670 — read-only online menu, then fixed A4 presets (owner decisions, 2026-11-13).**
-  Forward guest reads to the box, with a Cloud-hosted published copy when it is unreachable.
+  Serve read-only guests from Cloud’s last delivered published copy; live forwarding stays with ordering.
   Customer names fall back through guest language, venue default, then internal name; never kitchen.
   Managers can preview a published menu in guest languages. The watcher cleared the
   [build plan](superpowers/plans/2026-11-13-a670-guest-menu-build.md), including browser Print / Save as PDF.
