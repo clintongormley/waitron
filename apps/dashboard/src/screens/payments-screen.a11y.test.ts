@@ -11,7 +11,7 @@ import type {
 } from "../api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./payments-screen.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 
 afterEach(cleanupWidgets);
@@ -126,6 +126,53 @@ async function flush(el: PaymentsScreen): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (theme) => {
+  it.each(["en", "es-ES"])(
+    "shows partial-refund amounts and confirmation accessibly (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const { el, host } = await mountWidget<PaymentsScreen>(
+        "dashboard-payments-screen",
+        {
+          api: stubApi({
+            releasePartialRefund: vi.fn().mockRejectedValue({
+              code: "payment.outcome_unknown",
+              params: { reason: "refund_reference_missing" },
+            }),
+            listStuckPayments: vi.fn().mockResolvedValue([
+              {
+                ...STUCK[0]!,
+                partialRefund: {
+                  paymentId: "pay-1",
+                  captured: "12.50",
+                  refunded: "4.00",
+                  remaining: "8.50",
+                },
+              },
+            ]),
+          }),
+          panels: PANELS,
+        },
+        theme,
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=partial-refund-pay-1]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=release-partial-pay-1]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=partial-refund-dialog]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-partial-refund]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=stuck-result]")!.getAttribute("role")).toBe(
+        "alert",
+      );
+      expect(el.shadowRoot!.querySelector("[data-test=stuck-result]")!.textContent).toContain(
+        t("payments.partial.reference_missing"),
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it.each([
     { locale: "en", automatic: false },
     { locale: "en", automatic: true },

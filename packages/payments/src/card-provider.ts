@@ -39,6 +39,7 @@ export interface AddReaderResult {
 export interface CardProviderContribution {
   readonly providerId: string;
   readonly credentialPurpose: Purpose;
+  readonly partialRefundRelease?: boolean;
   /** Parse captured credentials offline; never construct a client or contact the provider. */
   readonly verifyBackupCredential?: (
     payload: Readonly<Record<string, string>>,

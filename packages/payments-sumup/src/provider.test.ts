@@ -846,6 +846,69 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
     },
   );
 
+  it("reads completed refunds without changing the stored capture or refund history", async () => {
+    const { fake, provider, transactionId, row, params } = await refundable();
+    const captured = await row(fake.lastCreate!.foreignTransactionId);
+    const event = {
+      id: "refund-first",
+      status: "REFUNDED",
+      amount: decimal("4.00"),
+      timestamp: "2026-09-27T10:00:00Z",
+    };
+    fake.addRefundEvent(transactionId, event);
+    fake.addRefundEvent(transactionId, event);
+    expect(await provider.lookupCompletedRefunds(transactionId)).toEqual({
+      kind: "known",
+      processorRef: transactionId,
+      captured: params.amount,
+      refunds: [{ providerRefundRef: "refund-first", amount: decimal("4.00") }],
+    });
+    expect(await row(fake.lastCreate!.foreignTransactionId)).toEqual(captured);
+    fake.addRefundEvent(transactionId, { ...event, id: "refund-rest", amount: decimal("8.50") });
+    expect(await provider.lookupCompletedRefunds(transactionId)).toEqual({
+      kind: "known",
+      processorRef: transactionId,
+      captured: decimal("12.50"),
+      refunds: [
+        { providerRefundRef: "refund-first", amount: decimal("4.00") },
+        { providerRefundRef: "refund-rest", amount: decimal("8.50") },
+      ],
+    });
+  });
+
+  it.each(["PENDING", "conflict", "excess", "invalid", "missing", "unreachable"])(
+    "keeps completed-refund evidence unknown for %s",
+    async (problem) => {
+      const { fake, provider, transactionId } = await refundable();
+      const event = {
+        id: "refund-first",
+        status: "REFUNDED",
+        amount: decimal("4.00"),
+        timestamp: "2026-09-27T10:00:00Z",
+      };
+      fake.addRefundEvent(transactionId, event);
+      if (problem === "unreachable") fake.throwOnFindNext();
+      else if (problem === "missing")
+        return expect(await provider.lookupCompletedRefunds("missing")).toEqual({
+          kind: "unknown",
+        });
+      else if (problem === "invalid") {
+        const read = fake.findTransaction.bind(fake);
+        vi.spyOn(fake, "findTransaction").mockImplementation(async (query) => ({
+          ...(await read(query))!,
+          refundEvidenceInvalid: true,
+        }));
+      } else
+        fake.addRefundEvent(transactionId, {
+          ...event,
+          id: problem === "conflict" ? event.id : "refund-other",
+          status: problem === "PENDING" ? "PENDING" : "REFUNDED",
+          amount: decimal(problem === "excess" ? "12.50" : "5.00"),
+        });
+      expect(await provider.lookupCompletedRefunds(transactionId)).toEqual({ kind: "unknown" });
+    },
+  );
+
   it("reads the ids of every refund event of the transaction, of any status and amount", async () => {
     const { fake, provider, transactionId } = await refundable();
     REFUNDED_AT(fake, transactionId)("2026-09-27T09:00:00.000Z", "701", "1.00");

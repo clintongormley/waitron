@@ -2839,9 +2839,9 @@ export const en = {
   "payments.reader_status_loading": "Checking…",
   "payments.reader_status_unknown": "Unknown",
   "payments.reader_pairing_processing": "Pairing…",
-  "payments.stuck.heading": "Card payments stuck after a restart",
+  "payments.stuck.heading": "Card payments needing attention",
   "payments.stuck.intro":
-    "Nothing is finishing these card payments any more, usually because the server restarted while they were in progress. Each order stays locked until you check with the card provider what happened.",
+    "Check these card payments before charging again. Use the action beside each payment to check its outcome or confirm that its full charge has been refunded.",
   "payments.stuck.order": "Order {number}",
   "payments.stuck.device": "Device",
   "payments.stuck.provider": "Provider",
@@ -2853,6 +2853,16 @@ export const en = {
     "Waitron will ask {provider} what happened to this {amount} payment ({order}). If it went through, the sale is recorded. If it did not, Waitron cancels it at {provider} where it can still be cancelled, and unlocks the order so it can be paid again, unless another card payment on the order is still unresolved.",
   "payments.stuck.confirm": "Check now",
   "payments.stuck.partial": "Payment recorded. The rest is still due.",
+  "payments.partial.amounts": "Charged {captured} · Refunded {refunded} · Still held {remaining}",
+  "payments.partial.confirm": "Confirm full refund",
+  "payments.partial.instructions":
+    "Refund the remaining {remaining} in {provider} first. Then confirm here: Waitron checks the provider’s record and releases this payment only when the full charge has been refunded. This sends no refund and records no sale.",
+  "payments.partial.reference_missing":
+    "Waitron recorded a refund without the provider’s refund number. This payment cannot be released here.",
+  "payments.partial.released":
+    "Payment fully refunded. You can continue with the order once its other payments are resolved.",
+  "payments.partial.unconfirmed":
+    "The provider could not confirm a full refund. The payment stays held. Check its refunds at the provider and try again.",
   "payments.stuck.filed": "Payment went through — the sale has been recorded.",
   "payments.stuck.not_charged_unlocked":
     "Payment did not go through — nothing was charged, and the order is unlocked.",
@@ -2877,8 +2887,7 @@ export const en = {
   "payments.tender.reference": "Provider payment reference",
   "payments.tender.intro": "This returns money; the original invoice stays unchanged.",
   "payments.bill.heading": "Bill payments and refunds awaiting a card provider",
-  "payments.bill.intro":
-    "Check with the card provider before recording an outcome. A manager may record only the outcome the provider confirms, with a note and their PIN.",
+  "payments.bill.intro": "Check with the card provider before recording an outcome.",
   "payments.bill.payments": "Bill payments",
   "payments.bill.refunds": "Refunds",
   "payments.bill.no_payments": "No bill payments need attention.",
@@ -6818,9 +6827,9 @@ export const es: Record<StringKey, string> = {
   "payments.reader_status_loading": "Comprobando…",
   "payments.reader_status_unknown": "Desconocido",
   "payments.reader_pairing_processing": "Emparejando…",
-  "payments.stuck.heading": "Cobros con tarjeta sin resolver tras un reinicio",
+  "payments.stuck.heading": "Cobros con tarjeta pendientes de revisión",
   "payments.stuck.intro":
-    "Ya nada está completando estos cobros con tarjeta, normalmente porque el servidor se reinició mientras estaban en curso. Cada pedido sigue bloqueado hasta que consultes con el proveedor de pagos qué pasó.",
+    "Revisa estos cobros con tarjeta antes de volver a cobrar. Usa la acción junto a cada pago para consultar su resultado o confirmar que se ha devuelto el cobro completo.",
   "payments.stuck.order": "Pedido {number}",
   "payments.stuck.device": "Dispositivo",
   "payments.stuck.provider": "Proveedor",
@@ -6832,6 +6841,16 @@ export const es: Record<StringKey, string> = {
     "Waitron preguntará a {provider} qué pasó con este cobro de {amount} ({order}). Si se completó, se registra la venta. Si no, Waitron lo cancela en {provider} si todavía se puede cancelar, y desbloquea el pedido para poder cobrarlo de nuevo, salvo que otro pago con tarjeta del pedido siga sin resolver.",
   "payments.stuck.confirm": "Consultar ahora",
   "payments.stuck.partial": "Pago registrado. Queda parte de la cuenta por cobrar.",
+  "payments.partial.amounts": "Cobrado {captured} · Devuelto {refunded} · Aún retenido {remaining}",
+  "payments.partial.confirm": "Confirmar devolución completa",
+  "payments.partial.instructions":
+    "Devuelve primero los {remaining} restantes en {provider}. Después confirma aquí: Waitron consulta el registro del proveedor y libera este pago solo cuando se ha devuelto el cobro completo. Esto no envía ninguna devolución ni registra ninguna venta.",
+  "payments.partial.reference_missing":
+    "Waitron registró una devolución sin el número de devolución del proveedor. Este pago no se puede liberar aquí.",
+  "payments.partial.released":
+    "Pago devuelto por completo. Puedes continuar con el pedido cuando se hayan resuelto sus demás pagos.",
+  "payments.partial.unconfirmed":
+    "El proveedor no ha podido confirmar una devolución completa. El pago sigue retenido. Comprueba sus devoluciones en el proveedor e inténtalo de nuevo.",
   "payments.stuck.filed": "El pago se completó: la venta ha quedado registrada.",
   "payments.stuck.not_charged_unlocked":
     "El pago no se completó: no se ha cobrado nada y el pedido está desbloqueado.",
@@ -6856,8 +6875,7 @@ export const es: Record<StringKey, string> = {
   "payments.tender.reference": "Referencia del pago del proveedor",
   "payments.tender.intro": "Esta acción devuelve dinero; la factura original no cambia.",
   "payments.bill.heading": "Pagos de cuentas y devoluciones pendientes del proveedor de tarjetas",
-  "payments.bill.intro":
-    "Consulta al proveedor de pagos antes de registrar un resultado. Un gerente solo puede registrar el resultado que confirme el proveedor, con una nota y su PIN.",
+  "payments.bill.intro": "Consulta al proveedor de pagos antes de registrar un resultado.",
   "payments.bill.payments": "Pagos de cuentas",
   "payments.bill.refunds": "Devoluciones",
   "payments.bill.no_payments": "No hay pagos de cuentas pendientes.",

@@ -426,11 +426,9 @@ declare module "@waitron/shared" {
     "payment.not_stuck": { paymentId: string };
     "stuck_payment.not_found": { paymentId: string };
     "payment.resolve_unsupported": { providerId: string };
-    /** The processor could not say what became of the payment; the row and the order's mark are
-     * left as they were. */
     "payment.outcome_unknown": {
       paymentId: string;
-      reason: "unreachable" | "ambiguous";
+      reason: "unreachable" | "ambiguous" | "refund_reference_missing";
       providerStatus?: string;
     };
     /** No card reader with this id. `id` is the reader uuid the caller already holds, not a secret. */

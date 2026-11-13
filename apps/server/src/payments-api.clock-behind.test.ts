@@ -142,6 +142,11 @@ const ROUTES: {
   next: { status: number; code: string };
 }[] = [
   {
+    name: "partial refund release",
+    path: (id) => `/management-api/payments/partial-refunds/${id}/release`,
+    next: { status: 409, code: "payment.not_stuck" },
+  },
+  {
     name: "stuck resolve",
     path: (id) => `/management-api/payments/stuck/${id}/resolve`,
     next: { status: 404, code: "stuck_payment.not_found" },

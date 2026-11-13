@@ -1,3 +1,4 @@
+import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { withIssuanceTransaction } from "@waitron/core";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 // Side-effect only: loads this host's errors.ts augmentation for the codes these routes throw.
@@ -6,11 +7,19 @@ import "./errors.js";
 import { profileAllows } from "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { isFencedStanding, standingOf } from "@waitron/membership";
 import { isReadableChart } from "./membership-trust.js";
 import { readTakenOverFrom } from "./handover-collection.js";
-import { AppError, centsToDecimal, isAppError } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  compareDecimal,
+  decimal,
+  isAppError,
+  subtractDecimal,
+  sumDecimals,
+} from "@waitron/shared";
 import {
   billPaymentRefunds,
   billPayments,
@@ -41,6 +50,7 @@ import {
   paymentHoldOutcome,
   paymentHoldOutcomes,
   paymentHolds,
+  recordRefund,
   payments,
   recordHoldOutcome,
   refreshHeldAlert,
@@ -1133,12 +1143,144 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
+  const refundReleaseProviders = deps.providers
+    .filter((p) => p.partialRefundRelease)
+    .map((p) => p.providerId);
+  const partialRefundEligible = (replay = false) =>
+    and(
+      inArray(payments.provider, refundReleaseProviders),
+      inArray(payments.state, replay ? ["partially_refunded", "refunded"] : ["partially_refunded"]),
+      isNull(payments.saleId),
+      inArray(workingOrders.status, ["open", "placed"]),
+      or(isNull(billPayments.id), ne(billPayments.state, "received")),
+    )!;
+  const refundFacts = async (tx: Transaction, paymentId: string, amount: number) => {
+    const refunds = await tx
+      .select()
+      .from(paymentRefunds)
+      .where(and(eq(paymentRefunds.paymentId, paymentId), eq(paymentRefunds.state, "succeeded")));
+    const captured = centsToDecimal(amount);
+    const refunded = sumDecimals(refunds.map((r) => centsToDecimal(r.amount)));
+    return {
+      refunds,
+      partialRefund: {
+        paymentId,
+        captured,
+        refunded,
+        remaining: subtractDecimal(captured, refunded),
+      },
+    };
+  };
+
+  app.post("/management-api/payments/partial-refunds/:id/release", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const paymentId = requireUuidParam(c.req.param("id"), "PaymentId");
+      const read = async (tx: Transaction) => {
+        await refuseWhileClockBehind(tx);
+        const [row] = await tx
+          .select({
+            payment: payments,
+            mark: workingOrders.paymentAttemptAt,
+            billState: billPayments.state,
+          })
+          .from(payments)
+          .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
+          .leftJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
+          .where(
+            and(eq(payments.id, paymentId), partialRefundEligible(true), await collectionScope(tx)),
+          );
+        if (
+          !row ||
+          paymentAttemptIsLive(deps.db, row.payment.workingOrderId) ||
+          (row.payment.billPaymentId !== null &&
+            billPaymentIsLive(deps.db, row.payment.billPaymentId))
+        )
+          throw new AppError("payment.not_stuck", { paymentId });
+        const refunds =
+          row.payment.state === "partially_refunded"
+            ? (await refundFacts(tx, paymentId, row.payment.amount)).refunds
+            : [];
+        if (refunds.some((refund) => refund.providerRefundRef === null))
+          throw new AppError("payment.outcome_unknown", {
+            paymentId,
+            reason: "refund_reference_missing",
+          });
+        return { ...row, refunds };
+      };
+      const before = await gated(sessionId, read);
+      if (before.payment.state === "refunded") return c.json({ outcome: "released" });
+      const seat = cardProviderById(deps.providers, before.payment.provider);
+      await gated(sessionId, (tx) => requireConnected(tx, seat));
+      const provider = await deps.pool.get(before.payment.provider);
+      if (!provider.lookupCompletedRefunds)
+        throw new AppError("payment.resolve_unsupported", { providerId: before.payment.provider });
+      const evidence =
+        before.payment.externalRef === null
+          ? { kind: "unknown" as const }
+          : await provider.lookupCompletedRefunds(before.payment.externalRef);
+      await gated(sessionId, async (tx, personId) => {
+        const { payment, mark, billState, refunds } = await read(tx);
+        if (payment.state === "refunded") return;
+        const unknown = () =>
+          new AppError("payment.outcome_unknown", { paymentId, reason: "ambiguous" });
+        if (
+          evidence.kind !== "known" ||
+          evidence.processorRef !== payment.externalRef ||
+          compareDecimal(evidence.captured, centsToDecimal(payment.amount)) !== 0 ||
+          compareDecimal(sumDecimals(evidence.refunds.map((r) => r.amount)), evidence.captured) !==
+            0
+        )
+          throw unknown();
+        const byRef = new Map(evidence.refunds.map((r) => [r.providerRefundRef, r]));
+        if (
+          byRef.size !== evidence.refunds.length ||
+          evidence.refunds.some(
+            (r) => !r.providerRefundRef || compareDecimal(r.amount, decimal("0")) <= 0,
+          )
+        )
+          throw unknown();
+        const recorded = new Set<string>();
+        for (const refund of refunds) {
+          const ref = refund.providerRefundRef;
+          if (ref === null)
+            throw new AppError("payment.outcome_unknown", {
+              paymentId,
+              reason: "refund_reference_missing",
+            });
+          if (
+            recorded.has(ref) ||
+            !byRef.has(ref) ||
+            compareDecimal(byRef.get(ref)!.amount, centsToDecimal(refund.amount)) !== 0
+          )
+            throw unknown();
+          recorded.add(ref);
+        }
+        for (const refund of evidence.refunds)
+          if (!recorded.has(refund.providerRefundRef)) {
+            // The manager confirms the provider's refund here; this does not identify its original sender.
+            await recordRefund(tx, {
+              provider: payment.provider,
+              paymentRef: payment.paymentRef,
+              ...refund,
+              authorizedBy: personId,
+            });
+          }
+        if (payment.billPaymentId !== null && billState === "pending")
+          await settleFromProviderRow(tx, fiscal, payment.billPaymentId, deps.clock.now().instant);
+        if (mark !== null) await clearPaymentAttemptMark(tx, payment.workingOrderId, mark);
+      });
+      return c.json({ outcome: "released" });
+    }),
+  );
+
   app.get("/management-api/payments/stuck", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, async (tx) =>
-        tx
+      const rows = await gated(sessionId, async (tx) => {
+        const rows = await tx
           .select({
+            partial: partialRefundEligible(),
             paymentId: payments.id,
             workingOrderId: workingOrders.id,
             orderNumber: workingOrders.orderNumber,
@@ -1152,21 +1294,39 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           })
           .from(payments)
           .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
+          .leftJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
           // No `active` filter: a device revoked since it started the payment is still named.
           .leftJoin(devices, eq(devices.id, payments.deviceId))
           .where(
             and(
-              eq(payments.state, "attempting"),
               isNull(payments.billPaymentId),
               or(
-                and(eq(workingOrders.status, "open"), isNotNull(workingOrders.paymentAttemptAt)),
-                eq(workingOrders.status, "placed"),
+                partialRefundEligible(),
+                and(
+                  eq(payments.state, "attempting"),
+                  or(
+                    and(
+                      eq(workingOrders.status, "open"),
+                      isNotNull(workingOrders.paymentAttemptAt),
+                    ),
+                    eq(workingOrders.status, "placed"),
+                  ),
+                ),
               ),
               await collectionScope(tx),
             ),
           )
-          .orderBy(payments.createdAt, sql`${payments}.rowid`),
-      );
+          .orderBy(payments.createdAt, sql`${payments}.rowid`);
+        const result = [];
+        for (const { partial, ...row } of rows)
+          result.push({
+            ...row,
+            ...(partial
+              ? { partialRefund: (await refundFacts(tx, row.paymentId, row.amount)).partialRefund }
+              : {}),
+          });
+        return result;
+      });
       return c.json(
         rows
           .filter((row) => !paymentAttemptIsLive(deps.db, row.workingOrderId))
@@ -1316,9 +1476,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   app.get("/management-api/payments/bill-payments", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, async (tx) =>
-        tx
+      const rows = await gated(sessionId, async (tx) => {
+        const rows = await tx
           .select({
+            partial: partialRefundEligible(),
+            providerPaymentId: payments.id,
+            providerAmount: payments.amount,
             billPaymentId: billPayments.id,
             workingOrderId: billPayments.workingOrderId,
             orderNumber: workingOrders.orderNumber,
@@ -1337,9 +1500,26 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
           .leftJoin(devices, eq(devices.id, billPayments.deviceId))
           .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
-          .where(and(eq(billPayments.state, "pending"), await collectionScope(tx)))
-          .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`),
-      );
+          .where(
+            and(
+              or(eq(billPayments.state, "pending"), partialRefundEligible()),
+              await collectionScope(tx),
+            ),
+          )
+          .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`);
+        const result = [];
+        for (const { partial, providerPaymentId, providerAmount, ...row } of rows)
+          result.push({
+            ...row,
+            ...(partial && providerPaymentId !== null && providerAmount !== null
+              ? {
+                  partialRefund: (await refundFacts(tx, providerPaymentId, providerAmount))
+                    .partialRefund,
+                }
+              : {}),
+          });
+        return result;
+      });
       return c.json(
         rows
           .filter((row) => !billPaymentIsLive(deps.db, row.billPaymentId))
@@ -1429,6 +1609,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // A provider row still `attempting` can yet be charged, so no outcome is recorded over it;
         // one that shows the card charged contradicts a failure.
         const provided = await findPaymentByBillPayment(tx, id);
+        if (provided?.state === "partially_refunded") {
+          throw new AppError("bill.attestation_contradicted", { id, evidence: "captured" });
+        }
         if (provided?.state === "attempting") {
           throw new AppError("bill.payment_outcome_unconfirmed", {
             paymentId: id,

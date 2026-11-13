@@ -375,9 +375,12 @@ for one.
 ## Switch bills {#bill-switcher}
 
 If a payment was partly returned before its invoice was recorded, do not charge again.
-The order stays held. Check the payment and its refunds in SumUp's dashboard before deciding
-what the guest still owes.
-Checking SumUp does not release the hold. Waitron cannot release this hold yet.
+The order stays held. In **Card payments**, check the charged, refunded and still-held amounts.
+Refund the remainder in SumUp's dashboard, then choose **Confirm full refund** in Waitron.
+Waitron checks SumUp's record before releasing this payment. If it cannot confirm the full refund,
+check the refunds in SumUp and try again. Once released, reopen the order to continue.
+Review the other payments named by the shared refund alert before marking that alert handled;
+later payments may not be listed there.
 
 Guests often pay separately: two couples at one table, or one guest who pays for their own drinks.
 Each of them gets a bill of their own at the table. The bill switcher, at the top of the table

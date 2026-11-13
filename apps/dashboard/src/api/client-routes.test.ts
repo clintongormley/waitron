@@ -881,6 +881,15 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("confirms a partial refund without a PIN or a browser-supplied balance", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ outcome: "released" }));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.releasePartialRefund("pay-1")).resolves.toEqual({ outcome: "released" });
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/payments/partial-refunds/pay-1/release", "POST", undefined],
+    ]);
+  });
+
   it("lists held card payments and sends an outcome, leaving out a note that was not given", async () => {
     const held = [{ holdId: "h-1", orderNumber: 57 }];
     const fetchImpl = vi

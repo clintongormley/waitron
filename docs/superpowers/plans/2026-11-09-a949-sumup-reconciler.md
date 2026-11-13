@@ -1,5 +1,7 @@
 # A949: recover SumUp payments and record refunds truthfully
 
+_13 November: the [manager-release slice](2026-11-13-a949-partial-refund-release.md) supersedes this first slice’s unreleased-hold limit after SumUp confirms a full refund. Retained-money allocation remains unavailable._
+
 **Outcome:** recover lost replies, fall back after an explicit partner-key refusal, and record refunds while protecting any retained charge. **Three-hour target; 896 estimated changed lines including deletions: code 385, tests 474, docs 37, generated 0; 34 files.** Build awaits approval below.
 
 **Authority:** WATCHER 2026-11-09 18:46: “Uncertain refunds stay pending and are checked again”; “completed or partial refunds get a truthful local money state and a refund-specific incident reason, never status SUCCESSFUL.” 18:48: “OWNER said YES, it may be public”; “a sale is never blocked by it.” 18:49: “ONE named value in ONE file.” OAuth remains a preference. Both Claude reads are complete; no third read.

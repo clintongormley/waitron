@@ -1246,9 +1246,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   durable reversal attempts (W44) and the owner's backup-machine matching contract. The November
   results now include cross-account affiliate acceptance, pending/paid references, REFUNDED events
   and unpaid cancellation. The first recovery slice supplies Waitron's partner key and records
-  identified refunds; manager release of a partial-refund hold, report audit, orphan self-heal,
-  durable reversals and backup-machine
-  matching remain to build.
+  identified refunds. Retained-money allocation after a partial refund, report audit, orphan self-heal,
+  durable reversals and backup-machine matching remain to build.
   [Detail](backlog/payments.md#the-sumup-reconciler)
 
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have

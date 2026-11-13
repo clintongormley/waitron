@@ -113,6 +113,7 @@ function pairingStatus(raw: string): AddReaderResult["status"] {
 export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
   providerId: PROVIDER_ID,
   credentialPurpose: CREDENTIAL_PURPOSE,
+  partialRefundRelease: true,
   verifyBackupCredential(payload) {
     try {
       validatePayload(CREDENTIAL_PURPOSE, payload);

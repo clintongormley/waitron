@@ -399,9 +399,12 @@ dará, y deja escribirlos cuando eliges nombres personalizados; **Añadir mesa u
 ## Cambiar de cuenta {#bill-switcher}
 
 Si se devolvió parte de un pago antes de registrar su factura, no vuelvas a cobrar.
-El pedido sigue bloqueado. Comprueba el pago y sus devoluciones en el panel de SumUp antes
-de decidir cuánto queda por cobrar al cliente.
-Comprobarlo en SumUp no desbloquea el pedido. Waitron aún no permite liberar este bloqueo.
+El pedido sigue bloqueado. En **Pagos con tarjeta**, comprueba los importes cobrados, devueltos
+y aún retenidos. Devuelve el resto en el panel de SumUp y elige **Confirmar devolución completa**
+en Waitron. Waitron consulta el registro de SumUp antes de liberar este pago. Si no puede confirmar
+la devolución completa, comprueba las devoluciones en SumUp e inténtalo de nuevo. Una vez liberado,
+vuelve a abrir el pedido para continuar. Revisa los demás pagos del aviso de devolución compartido
+antes de marcarlo como atendido; puede que los pagos posteriores no aparezcan en él.
 
 Es habitual que los clientes paguen por separado: dos parejas en una misma mesa, o alguien que paga
 sus propias bebidas. Cada uno tiene entonces su propia cuenta en la mesa. El selector de cuentas,

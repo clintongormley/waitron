@@ -169,10 +169,9 @@ that fallback is not live-qualified. A lost fallback reply has no supplied refer
 
 Recovery records the gross capture and identified completed refunds together. Uncertain refund
 evidence stays attempting for another check; a failed refund alone leaves the charge. A partly
-refunded unfiled charge keeps the order held and needs review in SumUp's dashboard before another
-charge. A manager action to release that partial-refund hold remains within A949: checking SumUp does
-not release it. Report audit, orphan self-heal, durable reversal attempts and all three backup-machine
-cases remain open, along with signature handling.
+refunded unfiled charge keeps the order held. Retaining and allocating the remaining charge after
+a partial refund is still unavailable. Report audit, orphan self-heal, durable reversal attempts
+and all three backup-machine cases remain open, along with signature handling.
 
 Settlement-report audit and orphan self-heal remain to build. The original transaction can stay
 `SUCCESSFUL` while identified `REFUND` events in `events` and `transaction_events` show money
