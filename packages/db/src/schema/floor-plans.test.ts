@@ -8,7 +8,6 @@ import { checkFailed, refusalOn } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { withTransaction } from "../tenancy.js";
-import { venueLocationId } from "../venue.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { seedVenue, seedZone } from "../testing/seed.js";
@@ -26,7 +25,6 @@ import {
 import { floorZones } from "./floor-zones.js";
 import { parties } from "./parties.js";
 
-let LOCATION: string;
 let DEPARTMENT: string;
 const ZONE = "bbbbbbbb-0000-4000-8000-000000000001";
 const OTHER_ZONE = "bbbbbbbb-0000-4000-8000-000000000002";
@@ -54,7 +52,6 @@ describe("floor plan tables", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    LOCATION = await venueLocationId(db);
     DEPARTMENT = (await seedZone(db, { id: ZONE, name: "Dining room" })).departmentId;
     await seedZone(db, { id: OTHER_ZONE, name: "Terrace" });
     await db
