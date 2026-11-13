@@ -68,6 +68,25 @@ const PRODUCTS: SeedSalesProduct[] = [
   },
 ];
 
+// Prices whose VAT taken as base × rate rounds a cent away from gross − base: 5.00 at 10% has base
+// 4.55 and VAT 0.46, 2.10 at 21% has base 1.74 and VAT 0.37.
+const CENT_SPLIT_PRODUCTS: SeedSalesProduct[] = [
+  {
+    id: "p-reduced-split",
+    name: "Tostada",
+    customerName: { [LOCALE]: "Tostada" },
+    unitPrice: "5.00",
+    vatClass: "reduced",
+  },
+  {
+    id: "p-general-split",
+    name: "Refresco",
+    customerName: { [LOCALE]: "Refresco" },
+    unitPrice: "2.10",
+    vatClass: "general",
+  },
+];
+
 // Reading a preview stamps nothing, so no clock is ever asked.
 const PREVIEW_CLOCK: TrustedClock = {
   now: () => {
@@ -211,7 +230,7 @@ describe("seedSales", () => {
       venue: venueFor(venue),
       invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
       days: 2,
-      products: PRODUCTS,
+      products: CENT_SPLIT_PRODUCTS,
     });
     expect(count).toBeGreaterThan(0);
 
