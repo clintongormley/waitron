@@ -14,7 +14,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedNode } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -76,6 +76,7 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+import { setMadeHereStations } from "./made-here.js";
 
 describe("counter handover timing", () => {
   it("never treats the retired invoice-first mode as pay-after-sending", () => {
@@ -2421,6 +2422,46 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
     });
     expect(await ticketStateOf(collected)).toBe("ready");
     expect(await readyAtOf(collected)).toBe(collectedReadyAt);
+  });
+
+  it("advanceTicketItem refuses to put a made-here item back to preparing", async () => {
+    const { cfg, coffee, zoneId } = await modeVenue("prepay");
+    const station = await defaultStationId();
+    const deviceId = await asTenant(async (tx) => {
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Bar till",
+        formFactor: "till",
+        capabilities: [],
+      });
+      const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Bar till" });
+      await setMadeHereStations(tx, deviceId, [station]);
+      return deviceId;
+    });
+    const id = randomUUID();
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      { ...cfg, sendingDeviceId: deviceId },
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    const [item] = await ticketItemIdsFor(id);
+    const { rows } = await suite.db.execute<{ made_here: number }>(sql`
+      select made_here from ticket_items where id = ${item}`);
+    expect(rows[0]!.made_here).toBe(1);
+    expect(await ticketStateOf(id)).toBe("ready");
+    const readyAt = await readyAtOf(id);
+    expect(readyAt).toEqual(expect.any(String));
+
+    await expect(asTenant((tx) => advanceTicketItem(tx, item!, "preparing"))).rejects.toMatchObject(
+      { code: "ticket.invalid_transition", params: { ticketItemId: item } },
+    );
+    expect(await ticketStateOf(id)).toBe("ready");
+    expect(await readyAtOf(id)).toBe(readyAt);
   });
 
   it("advanceTicketItem refuses to put a Ready item back to preparing once its order is cancelled", async () => {
