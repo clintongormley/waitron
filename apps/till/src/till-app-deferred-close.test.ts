@@ -961,3 +961,81 @@ it("Cancel after a Counter close with no answer reads the order again instead of
   expect(payDialog(el)).toBeNull();
   expect(vi.mocked(api.retrieveWorkingOrder).mock.calls.length).toBeGreaterThan(reads);
 });
+
+const basket = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!.store;
+const orderGone = (api: ReturnType<typeof deferredApi>) =>
+  vi
+    .mocked(api.retrieveWorkingOrder)
+    .mockRejectedValue({ code: "working_order.not_found", status: 404 });
+/** The Counter order's closure as the server reads it back, made under `submissionId`. */
+const counterClosure = (submissionId: string) =>
+  vi.fn(async (billId: string) => ({
+    closure: {
+      ...closedAs("not_applicable"),
+      submissionId,
+      workingOrderId: billId,
+      total: "30.00",
+    },
+  }));
+const cancel = async (el: TillApp) => {
+  closing(el)!.shadowRoot!.querySelector<HTMLElement>("[data-deferred-close-cancel]")!.click();
+  await flush(el, 8);
+};
+
+it("a refused Counter close of an order another till closed lets the order go and reads the held list again", async () => {
+  const { api, el, id } = await counterPay({
+    closeDeferred: vi.fn().mockRejectedValue({ code: "deferred_close.conflict", status: 409 }),
+    getDeferredClosure: counterClosure("another-till"),
+  });
+  deferredButton(el)!.click();
+  await flush(el);
+  orderGone(api);
+  const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+  await confirm(el);
+  expect(closing(el)).toBeNull();
+  expect(documents(el)).toBeNull();
+  expect(basket(el).id).not.toBe(id());
+  expect(basket(el).lines).toEqual([]);
+  expect(text(el.shadowRoot!.querySelector(".error"))).toContain(t("held.stale"));
+  expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(heldReads);
+});
+
+it("Cancel after an unanswered Counter close, on an order gone with no closure of this window, lets the order go", async () => {
+  const { api, el, id } = await counterPay({
+    closeDeferred: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    getDeferredClosure: vi.fn().mockResolvedValue({ closure: null }),
+  });
+  deferredButton(el)!.click();
+  await flush(el);
+  await confirm(el);
+  orderGone(api);
+  const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+  await cancel(el);
+  expect(closing(el)).toBeNull();
+  expect(documents(el)).toBeNull();
+  expect(basket(el).id).not.toBe(id());
+  expect(basket(el).lines).toEqual([]);
+  expect(text(el.shadowRoot!.querySelector(".error"))).toContain(t("held.stale"));
+  expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(heldReads);
+});
+
+it("Cancel after an unanswered Counter close that went through opens the documents window, sending nothing again", async () => {
+  let made = "";
+  const { api, el, id } = await counterPay({
+    closeDeferred: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    getDeferredClosure: vi.fn((billId: string) => counterClosure(made)(billId)),
+  });
+  deferredButton(el)!.click();
+  await flush(el);
+  await confirm(el);
+  made = firstSent(api).toUpperCase();
+  orderGone(api);
+  await cancel(el);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(api.getDeferredClosure).toHaveBeenCalledWith(id());
+  expect(api.getFiledTicket).toHaveBeenCalledExactlyOnceWith(id());
+  expect(closing(el)).toBeNull();
+  expect(documents(el)).not.toBeNull();
+  expect(text(el.shadowRoot!.querySelector(".error"))).not.toContain(t("held.stale"));
+});

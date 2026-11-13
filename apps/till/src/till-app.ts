@@ -11282,7 +11282,7 @@ export class TillApp extends LitElement {
     this.deferredClosing = null;
     if (open.from === "counter") {
       if (this.#hasLeftCounterOrder(open.billId, open.visit)) return;
-      if (open.reread) void this.#reloadCounterOrder(open.billId, open.visit);
+      if (open.reread) void this.#rereadCounterDeferred(open, this.#deferredSend(open));
       else
         void this.#openBillPaying(
           "whole",
@@ -11396,21 +11396,10 @@ export class TillApp extends LitElement {
     const asked = this.deferredClosing;
     if (asked === null || asked.busy) return;
     let open: DeferredClosing = asked;
-    const { id, billId, visit } = asked;
-    const api = this.api;
-    const session = this.#operatorSession;
-    const same = () => this.isConnected && this.api === api && this.#operatorSession === session;
+    const { id, billId } = asked;
     const counter = asked.from === "counter";
-    const live = () =>
-      same() &&
-      !(counter ? this.#hasLeftCounterOrder(billId, visit) : this.#hasLeftOrder(billId, visit));
-    const send: DeferredSend = {
-      api,
-      party: counter ? null : this.orderParty,
-      sent: this.#sentNow(),
-      same,
-      live,
-    };
+    const send = this.#deferredSend(asked);
+    const { live } = send;
     if (!live()) {
       this.deferredClosing = null;
       return;
@@ -11459,6 +11448,24 @@ export class TillApp extends LitElement {
       return;
     }
     await this.#sendDeferred(id, request, send);
+  }
+
+  /** What a confirm or Cancel of window `open` acts with, and whether the till is still there. */
+  #deferredSend(open: DeferredClosing): DeferredSend {
+    const { billId, visit } = open;
+    const api = this.api;
+    const session = this.#operatorSession;
+    const same = () => this.isConnected && this.api === api && this.#operatorSession === session;
+    const counter = open.from === "counter";
+    return {
+      api,
+      party: counter ? null : this.orderParty,
+      sent: this.#sentNow(),
+      same,
+      live: () =>
+        same() &&
+        !(counter ? this.#hasLeftCounterOrder(billId, visit) : this.#hasLeftOrder(billId, visit)),
+    };
   }
 
   /** The Counter's close: a simplified invoice, no party, and the basket's own expected edit. A
@@ -11560,6 +11567,28 @@ export class TillApp extends LitElement {
   }
 
   /**
+   * Reads window `open`'s Counter order again. When it is gone, its closure is read: a close this
+   * window sent is taken as the answer it never got; otherwise the basket lets the order go, the
+   * screen saying it is no longer available.
+   */
+  async #rereadCounterDeferred(open: DeferredClosing, send: DeferredSend): Promise<void> {
+    if ((await this.#reloadCounterOrder(open.billId, open.visit)) !== "gone" || !send.live())
+      return;
+    let closure: CloseDeferredResult | null = null;
+    try {
+      ({ closure } = await send.api.getDeferredClosure(open.billId));
+    } catch {
+      // The order is gone either way.
+    }
+    if (!send.live()) return;
+    if (closure !== null && open.sent.includes(closure.submissionId.toLowerCase())) {
+      this.errorKey = undefined;
+      return await this.#onCounterDeferredClosed(open, send);
+    }
+    this.#releaseCounterOrder(open.billId);
+  }
+
+  /**
    * The bill re-read for window `id` is closed as a deferred payment. Its closure is read: a close
    * this window sent is taken as the answer it never got; any other, or a closure that cannot be
    * read, closes the window saying the bill is already closed. Nothing is sent again.
@@ -11596,10 +11625,10 @@ export class TillApp extends LitElement {
     const open = this.#deferredNow(id);
     if (open?.from === "counter") {
       // The Counter's bill is not read back into the window: it closes, the screen says why, and
-      // the basket is read again.
+      // the basket is read again ({@link #rereadCounterDeferred}).
       this.deferredClosing = null;
       this.errorKey = reason === undefined ? { code } : { code, reason };
-      await this.#reloadCounterOrder(open.billId, open.visit);
+      await this.#rereadCounterDeferred(open, send);
       return;
     }
     const shown = await this.#rereadDeferred(id, said);
