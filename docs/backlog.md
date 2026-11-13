@@ -482,11 +482,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A885. Say that lines already on an open order keep their VAT class after a republish.**
   [Detail](backlog/catalogue.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
 
-- **A670 — guest-menu studies; build waits for the owner's design review (2026-11-13).** The
-  [read-only online go-live scope](superpowers/specs/2026-11-13-a670-online-go-live-study.md) and
-  [printed-template comparison](superpowers/specs/2026-11-13-a670-printed-template-study.md) answer
-  the owner's later direction. Delivery route, template flexibility, key placement and PDF method
-  remain choices; no product build is cleared.
+- **A670 — read-only online menu, then fixed A4 presets (owner decisions, 2026-11-13).**
+  Forward guest reads to the box, with a Cloud-hosted published copy when it is unreachable.
+  Customer names fall back through guest language, venue default, then internal name; never kitchen.
+  The [build plan](superpowers/plans/2026-11-13-a670-guest-menu-build.md) awaits review and watcher
+  clearance. Cloud delivery, printing and PDF-method acceptance remain unfinished; no ordering.
   [Detail](backlog/catalogue.md#a670--printed-menus-owner-2026-10-14-open-not-designed)
 
 - **wt-data-table: heading wrap, long names, odds and ends** (bundle of 10, size M). Holds A1318, A543. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)

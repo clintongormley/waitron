@@ -1,5 +1,10 @@
 # A670: an online menu from day one
 
+**13 November decision pointer:** WATCHER 22:31 in Lane D `questions.md` records the owner's
+choice of Cloud forwarding to the box with a hosted published read-only copy when unreachable,
+and customer-name fallback through guest language, venue default, then internal name, never kitchen.
+See the [build plan](../plans/2026-11-13-a670-guest-menu-build.md), awaiting Claude's read and watcher clearance.
+
 **Design study, 13 November 2026. Proposal for the owner to see, not an approved design or a
 build plan.** The owner’s request, quoted in Lane D `questions.md`, WATCHER 12 November 20:45:
 “The online menu could be simpler, but it needs to be available pretty much from go live anyway”.

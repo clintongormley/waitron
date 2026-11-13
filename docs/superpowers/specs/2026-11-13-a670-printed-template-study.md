@@ -1,5 +1,9 @@
 # A670: printed menus that look like your restaurant
 
+**13 November decision pointer:** WATCHER 22:31 in Lane D `questions.md` records the owner's
+"Presets first (Recommended)": fixed A4 presets, without blocks or uploads in the first build.
+See the [build plan](../plans/2026-11-13-a670-guest-menu-build.md), awaiting Claude's read and watcher clearance.
+
 **One-page comparison, 13 November 2026. Proposal, not a build plan.** The owner, quoted in
 Lane D `questions.md`, WATCHER 12 November 20:45: “usually restaurants have custom layouts for
 their menus”. The watcher’s 13 November 19:31 request asks for options, studies and a recommendation.

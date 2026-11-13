@@ -697,6 +697,14 @@ compares presets, blocks and uploaded artwork with live areas. Both are proposal
 the earlier paper-first recommendation and per-page-key default are not settled build decisions.
 Mock-ups remain local; no build, push or landing before the owner sees the studies.
 
+**13 November 22:31 owner decisions, relayed by the watcher in Lane D `questions.md`:**
+Cloud forwards guest requests to the box and serves its hosted published read-only copy when
+that box is unreachable; ordering remains outside this first build. Fixed A4 presets come first,
+without blocks or uploads. Customer names fall back from guest language to venue default to
+internal name, never kitchen. The [build plan](../superpowers/plans/2026-11-13-a670-guest-menu-build.md)
+awaits Claude's read and watcher clearance. Cloud readiness and printed-output delivery are
+not established. These decisions supersede the open delivery/template/name choices above.
+
 ## The products' made-at read has no screen since A655
 
 **The products' made-at read has no screen since A655** — `GET /management-api/products/made-at`,
