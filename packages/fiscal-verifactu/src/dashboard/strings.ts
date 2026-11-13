@@ -193,7 +193,7 @@ const en = {
   "fiscal_filing.history": "Possibly missing history",
   "fiscal_filing.history.not_issued": "Invoices AEAT holds that this box did not issue",
   "fiscal_filing.history.not_issued.line":
-    "AEAT holds invoice {number} of {date}; this box did not issue it.",
+    "AEAT holds invoice {number} ({date}); this box did not issue it.",
   "fiscal_filing.history.not_issued.series": "Series {series}",
   "fiscal_filing.history.not_issued.system": "Invoicing system (as AEAT holds it)",
   "fiscal_filing.history.not_issued.none": "None found.",
@@ -475,7 +475,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.history": "Historial que puede faltar",
   "fiscal_filing.history.not_issued": "Facturas que la AEAT tiene y este equipo no emitió",
   "fiscal_filing.history.not_issued.line":
-    "La AEAT tiene la factura {number} del {date}; este equipo no la emitió.",
+    "La AEAT tiene la factura {number} ({date}); este equipo no la emitió.",
   "fiscal_filing.history.not_issued.series": "Serie {series}",
   "fiscal_filing.history.not_issued.system": "Sistema informático según la AEAT",
   "fiscal_filing.history.not_issued.none": "No se ha encontrado ninguna.",

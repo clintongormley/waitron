@@ -270,12 +270,12 @@ describe("vf-fiscal-filing-screen", () => {
     const notIssued = [...screen.shadowRoot!.querySelectorAll("[data-test=not-issued-here] li")];
     expect(notIssued).toHaveLength(2);
     expect(unfolded(notIssued[0]!)).toBe(
-      `AEAT holds invoice T0/12 of 2026-10-28; this box did not issue it. Series T0 · Found ${formatIsoMinute("2026-11-04T10:15:00.000Z")}`,
+      `AEAT holds invoice T0/12 (2026-10-28); this box did not issue it. Series T0 · Found ${formatIsoMinute("2026-11-04T10:15:00.000Z")}`,
     );
     const evidence = flat(notIssued[0]!.querySelector("wt-disclosure[data-test=technical]"));
     for (const shown of ["Correcto", THEIRS, "B87654321", "XX", "ELSEWHERE-7"])
       expect(evidence).toContain(shown);
-    expect(unfolded(notIssued[1]!)).toContain("AEAT holds invoice T9/3 of 2026-10-28");
+    expect(unfolded(notIssued[1]!)).toContain("AEAT holds invoice T9/3 (2026-10-28)");
     const change = text(screen, "[data-test=identity-changes] li");
     expect(change).toBe(
       "The fiscal identity changed from BOX-01 to BOX-02 without a handover. The last invoice this box holds under BOX-01 is T1/40 (2026-11-02). Invoices under BOX-01 that this box does not hold may exist. " +
@@ -289,7 +289,7 @@ describe("vf-fiscal-filing-screen", () => {
     const spanish = await mount(vi.fn(answer));
     expect(
       unfolded(spanish.screen.shadowRoot!.querySelector("[data-test=not-issued-here] li")!),
-    ).toContain("La AEAT tiene la factura T0/12 del 2026-10-28; este equipo no la emitió.");
+    ).toContain("La AEAT tiene la factura T0/12 (2026-10-28); este equipo no la emitió.");
     expect(text(spanish.screen, "[data-test=identity-changes] li")).toContain(
       "La identidad fiscal cambió de BOX-01 a BOX-02 sin un traspaso. La última factura que este equipo tiene bajo BOX-01 es la T1/40 (2026-11-02). Puede haber facturas bajo BOX-01 que este equipo no tiene.",
     );

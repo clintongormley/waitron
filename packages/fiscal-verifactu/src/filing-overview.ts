@@ -222,7 +222,7 @@ async function readIdentityChanges(
     join identities e on e.position = c.earlier
     left join registros_facturacion r on r.id = (
       select l.id from registros_facturacion l
-      -- an identity's records are appended by the node it belongs to
+      -- appendToChain and receiveReturnedOriginals refuse an identity of another node
       where l.node_id = e.node_id and l.sif_id = e.id and l.entorno = ${environment}
       order by l.secuencia desc limit 1
     )
