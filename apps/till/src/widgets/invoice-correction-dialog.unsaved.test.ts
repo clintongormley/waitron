@@ -35,12 +35,14 @@ const api: InvoiceCorrectionApi = {
   }),
   getRefundableTenders: async () => [],
   listAdjustmentReasons: async () => [reason],
-  previewInvoiceCorrection: async (_saleId, request) => ({
-    gross: request.gross,
-    vatBreakdown: [{ rate: "21.00", base: "5.00", tax: "1.05" }],
-    moneyRefundable: "12.10",
-  }),
+  previewInvoiceCorrection: (saleId, request) => preview(saleId, request),
 };
+const answered: InvoiceCorrectionApi["previewInvoiceCorrection"] = async (_saleId, request) => ({
+  gross: request.gross,
+  vatBreakdown: [{ rate: "21.00", base: "5.00", tax: "1.05" }],
+  moneyRefundable: "12.10",
+});
+let preview = answered;
 
 class InvoiceCorrectionLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
@@ -59,7 +61,10 @@ class InvoiceCorrectionLeaveApp extends LitElement {
   }
 }
 customElements.define("invoice-correction-leave-test-app", InvoiceCorrectionLeaveApp);
-beforeEach(() => setLocale("en"));
+beforeEach(() => {
+  setLocale("en");
+  preview = answered;
+});
 afterEach(cleanupWidgets);
 
 async function mount() {
@@ -157,4 +162,64 @@ it("disconnect drops a pending question; reconnect keeps the draft unsaved", asy
   await form.updateComplete;
   expect(gross(form).value).toBe("6.05");
   expect(unload()).toBe(true);
+});
+
+it("a correction discarded while its preview is asked again is never confirmed", async () => {
+  const calls: Array<() => void> = [];
+  preview = vi.fn(async (saleId, request) => {
+    if (calls.length === 0) {
+      calls.push(() => {});
+      throw new TypeError("Failed to fetch");
+    }
+    await new Promise<void>((resolve) => calls.push(resolve));
+    return answered(saleId, request);
+  });
+  const { app, form } = await mount();
+  await type(form, "6.05");
+  form.shadowRoot!.querySelector("wt-combobox[name=reason]")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "overcharged" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await form.updateComplete;
+
+  form.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+  await vi.waitFor(() => expect(calls).toHaveLength(2));
+  await userEvent.keyboard("{Escape}");
+  const closed = closing(form);
+  (await question(app)).shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await closed;
+  calls[1]!();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(app.closes).toBe(1);
+  expect(app.confirms).toBe(0);
+});
+
+it("a correction whose window is taken away while its preview is asked again is never confirmed", async () => {
+  let release!: () => void;
+  let calls = 0;
+  preview = vi.fn(async (saleId, request) => {
+    if (++calls === 1) throw new TypeError("Failed to fetch");
+    await new Promise<void>((resolve) => (release = resolve));
+    return answered(saleId, request);
+  });
+  const { app, form } = await mount();
+  await type(form, "6.05");
+  form.shadowRoot!.querySelector("wt-combobox[name=reason]")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "overcharged" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await form.updateComplete;
+
+  form.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+  await vi.waitFor(() => expect(calls).toBe(2));
+  form.remove();
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(app.confirms).toBe(0);
 });

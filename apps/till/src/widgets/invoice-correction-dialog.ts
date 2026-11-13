@@ -244,6 +244,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
       this.confirming = true;
       await this.#preview();
       this.confirming = false;
+      if (!this.isConnected || !this.active || this.busy) return;
     }
     const answer = this.#answer();
     if (answer === null || this.#errors().size > 0) return;
