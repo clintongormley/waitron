@@ -4,6 +4,7 @@
 import { randomUUID, X509Certificate } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { isIP, Socket } from "node:net";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { eq } from "drizzle-orm";
@@ -30,7 +31,7 @@ import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { readPairLink } from "@waitron/node-db";
 import { nodeId as brandNodeId, PERSON_HEADER } from "@waitron/shared";
 import { createS3ObjectStore, readPointer, type BucketConfig } from "@waitron/stream";
-import { BOX_HOSTNAME, ownContactUrl } from "../box-name.js";
+import { BOX_HOSTNAME, boxHostnameFor, ownContactUrl } from "../box-name.js";
 import { loadBoxEnv } from "../box-env.js";
 import { startServer, type StartServerSeams, type StartedServer } from "../boot.js";
 import { DEVICE_COOKIE } from "../device-session.js";
@@ -73,7 +74,8 @@ const STAFF_PIN = "5555";
 // A caller's timeout adds this sum (CLAUDE.md §4). BOOT_MS, per start, and UNTIMED_MS, for
 // migrations, provisioning and closes, are budgets nothing here enforces; the health wait is
 // `fetchHealthOk`'s poll budget. S starts four times: setup, the latch start that takes the copy,
-// the start that places it and finishes joining, and the mirror's.
+// the start that places it and finishes joining, and the mirror's; M starts three times: first, in
+// the middle of S's join, and for the start check.
 const BOOT_MS = 30_000;
 const HEALTH_MS = POLL_TRIES * POLL_INTERVAL_MS;
 const UNTIMED_MS = 60_000;
@@ -84,8 +86,8 @@ const COPY_WAIT_MS = 120_000;
 const MIRROR_WAIT_MS = 60_000;
 const WAIT_POLL_MS = 250;
 export const SPARE_JOIN_SCENARIO_MS =
-  5 * BOOT_MS +
-  HEALTH_MS +
+  7 * BOOT_MS +
+  3 * HEALTH_MS +
   POINTER_WAIT_MS +
   LINK_WAIT_MS +
   COPY_WAIT_MS +
@@ -97,7 +99,10 @@ export const SPARE_JOIN_PHASES = [
   "spare-refused",
   "bucket-stopped",
   "spare-join",
+  "main-restart-mid-join",
   "spare-copy",
+  "start-check",
+  "loopback-only",
 ] as const;
 export type SpareJoinPhase = (typeof SPARE_JOIN_PHASES)[number];
 export type SpareJoinEvent = StageEvent<SpareJoinPhase>;
@@ -119,6 +124,38 @@ const loopbackLookup: BoxLookup = async (hostname) => {
   return { addresses: ["127.0.0.1"], remembered: false };
 };
 
+function isLoopback(address: string): boolean {
+  return address === "::1" || address.startsWith("127.") || address.startsWith("::ffff:127.");
+}
+
+/**
+ * Every address a socket in this process was asked to reach, resolved or connected to, until
+ * `stop`. A socket given a name records the address its lookup answered.
+ */
+function watchConnections(): { addresses: Set<string>; stop(): void } {
+  const original = Socket.prototype.connect;
+  const addresses = new Set<string>();
+  Socket.prototype.connect = function (this: Socket, ...args: unknown[]) {
+    const first = Array.isArray(args[0]) ? (args[0] as unknown[])[0] : args[0];
+    const host =
+      typeof first === "object" && first !== null ? (first as { host?: unknown }).host : args[1];
+    if (typeof host === "string" && isIP(host) !== 0) addresses.add(host);
+    this.once("lookup", (error: Error | null, address: string) => {
+      if (error === null && typeof address === "string") addresses.add(address);
+    });
+    this.once("connect", () => {
+      if (this.remoteAddress !== undefined) addresses.add(this.remoteAddress);
+    });
+    return (original as (...a: unknown[]) => Socket).apply(this, args);
+  } as typeof original;
+  return {
+    addresses,
+    stop: () => {
+      Socket.prototype.connect = original;
+    },
+  };
+}
+
 class ClosedWhileStarting extends Error {}
 
 /**
@@ -127,8 +164,10 @@ class ClosedWhileStarting extends Error {}
  */
 class TestBox {
   server: StartedServer | undefined;
-  /** How many restarts the box asked for. */
+  /** How many restarts the box asked for, or the test asked of it. */
   restarts = 0;
+  /** Every name this box's servers asked the injected lookup for, in order. */
+  readonly lookups: string[] = [];
   private restarting: Promise<void> | undefined;
   private restartFailure: unknown;
   private closed = false;
@@ -150,8 +189,11 @@ class TestBox {
       {},
       {
         ...this.seams,
-        boxLookup: loopbackLookup,
-        restart: () => this.restart(),
+        boxLookup: (hostname, ask) => {
+          this.lookups.push(hostname);
+          return loopbackLookup(hostname, ask);
+        },
+        restart: () => void this.restart(),
       },
     );
     // A close that began while this start ran found no server to close.
@@ -162,9 +204,10 @@ class TestBox {
     this.server = server;
   }
 
-  private restart(): void {
+  /** Settles once this restart, and every one asked for before it, has finished. */
+  restart(): Promise<void> {
     // As production's restart does nothing once shutdown is under way.
-    if (this.closed) return;
+    if (this.closed) return Promise.resolve();
     this.restarts += 1;
     const previous = this.restarting ?? Promise.resolve();
     this.restarting = previous.then(async () => {
@@ -178,6 +221,16 @@ class TestBox {
         if (!(error instanceof ClosedWhileStarting)) this.restartFailure ??= error;
       }
     });
+    return this.restarting;
+  }
+
+  /** Restarts the box as its own restart seam would, and throws what the restart failed with. */
+  async restartNow(): Promise<void> {
+    await this.restart();
+    const failure = this.restartFailure;
+    this.restartFailure = undefined;
+    if (failure !== undefined) throw failure;
+    if (this.server === undefined) throw new Error(`the box on port ${this.port} did not start`);
   }
 
   /** Settles a pending restart, then closes; returns what failed, the restart's failure first. */
@@ -299,6 +352,16 @@ async function joinState(venueDir: string, nodeId: string): Promise<unknown> {
   }
 }
 
+/** The chart body `venue.db` holds, read from outside the box's server. */
+async function readNodeMembershipOf(venueDir: string) {
+  const store = await openVenueDatabase(venueDir, { exclusive: false });
+  try {
+    return (await readNodeMembership(store.venue))?.body;
+  } finally {
+    await store.close();
+  }
+}
+
 /** Reads M's pair link, from outside M's server. */
 async function pairLinkOf(venueDir: string, nodeId: string) {
   const store = await openVenueDatabase(venueDir, { exclusive: false });
@@ -361,10 +424,21 @@ function captureLog(): { lines: LogLine[]; stop(): void } {
   };
 }
 
+function describeError(error: unknown): string {
+  const cause = (error as { cause?: { code?: unknown; message?: unknown } }).cause;
+  const detail = cause === undefined ? "" : ` (${String(cause.code ?? cause.message)})`;
+  return `${String(error)}${detail}`;
+}
+
 export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<void> {
   const { bucket, scratch, signal } = fixture;
   const clock = stageClock(fixture.record, signal);
   const log = captureLog();
+  const sockets = watchConnections();
+  let releaseCopy = (): void => {};
+  const copyHold = new Promise<void>((resolve) => {
+    releaseCopy = resolve;
+  });
   const boxes: TestBox[] = [];
   const agents: Agent[] = [];
   const closeAll = async (): Promise<unknown[]> => {
@@ -380,6 +454,8 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
   const failures: unknown[] = [];
   const wait = <T>(what: string, ms: number, probe: () => Promise<T | undefined>) =>
     waitUntil(what, ms, probe, signal, WAIT_POLL_MS);
+  /** The log's lines from `from` on, so a line written before a phase cannot satisfy it. */
+  const linesSince = (from: number): LogLine[] => log.lines.slice(from);
   try {
     clock.begin("probe");
     const { migrationsRoot, fromSource } = await copyMigrations(scratch);
@@ -460,7 +536,8 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
         WAITRON_SPARE_STORE_PORT: String(storeS),
         WAITRON_SPARE_STORE_LOOPBACK_PORT: String(storeLoopbackS),
       },
-      {},
+      // S's copy attempts wait until M has restarted in the middle of S's join.
+      { spareCopy: { hold: copyHold } },
     );
     boxes.push(boxS);
     await boxS.start();
@@ -544,6 +621,8 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     expect(stoppedView.configured).toBe(false);
 
     clock.begin("spare-join");
+    const restartsBeforeJoin = boxS.restarts;
+    const logAtJoin = log.lines.length;
     const joined = await adopt();
     expect(joined.status, JSON.stringify(joined.body)).toBe(200);
     expect(joined.body).toMatchObject({ adopted: true, restarting: true });
@@ -554,37 +633,87 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     expect(link.role).toBe("streams");
     const nodeIdS = link.peerNodeId;
 
+    clock.begin("main-restart-mid-join");
+    // Adopt's: S is in its latch start, its copy attempts held.
+    expect(boxS.restarts - restartsBeforeJoin).toBe(1);
+    const serverBeforeRestart = boxM.server;
+    const restartsM = boxM.restarts;
+    await boxM.restartNow();
+    expect(boxM.restarts - restartsM).toBe(1);
+    expect(boxM.server).not.toBe(serverBeforeRestart);
+    await fetchHealthOk(`${urlM}/health`, { dispatcher: viaM } as RequestInit);
+    expect(linesSince(logAtJoin).filter((line) => line.event === "spare.first_copy_ready")).toEqual(
+      [],
+    );
+    releaseCopy();
+
     clock.begin("spare-copy");
+    const restartsBeforeCopy = boxS.restarts;
+    const logAtCopy = log.lines.length;
     const ready = await wait("S's spare.first_copy_ready", COPY_WAIT_MS, async () =>
-      log.lines.find((line) => line.event === "spare.first_copy_ready"),
+      linesSince(logAtCopy).find((line) => line.event === "spare.first_copy_ready"),
     );
     console.log(`spare join: first copy ${String(ready.bytes)} bytes, ${String(ready.ms)} ms`);
+    let lastFetchError: unknown;
     await wait("S to start as a mirror", MIRROR_WAIT_MS, async () => {
       if (existsSync(join(dirsS.state, PENDING_ADOPTION_FILE))) return undefined;
       try {
         const page = await fetch(`${urlS}/`, { dispatcher: viaM } as RequestInit);
         const text = await page.text();
         return text.includes("Restaurant screens are closed here") ? true : undefined;
-      } catch {
-        // S is between starts.
+      } catch (error) {
+        // S is between starts, or answers under an authority M's does not verify.
+        lastFetchError = error;
         return undefined;
       }
+    }).catch((error: unknown) => {
+      if (lastFetchError === undefined) throw error;
+      throw new Error(
+        `${String(error)}; S's last fetch failed with ${describeError(lastFetchError)}`,
+        {
+          cause: error,
+        },
+      );
     });
     const node = await fetch(`${urlS}/api/node`, { dispatcher: viaM } as RequestInit);
     expect(await node.json()).toMatchObject({ acceptingSales: false });
     for (const event of ["spare.first_copy_placed", "adoption.established"])
-      expect(log.lines.map((line) => line.event)).toContain(event);
-    // Adopt's, the first copy's and finishing joining's.
-    expect(boxS.restarts).toBe(3);
+      expect(linesSince(logAtCopy).map((line) => line.event)).toContain(event);
+    // The first copy's and finishing joining's.
+    expect(boxS.restarts - restartsBeforeCopy).toBe(2);
     const venueS = join(dirsS.venue, "venue.db");
     expect(saleOf(venueS, workingOrderId)).toBe(true);
     expect(nodeKeyIn(venueS, nodeIdS)).toBe(link.peerPublicKey);
     expect(nodeKeyIn(join(dirsM.venue, "venue.db"), nodeIdS)).toBe(link.peerPublicKey);
+
+    clock.begin("start-check");
+    const logAtCheck = log.lines.length;
+    const lookupsAtCheck = boxM.lookups.length;
+    await boxM.restartNow();
+    await fetchHealthOk(`${urlM}/health`, { dispatcher: viaM } as RequestInit);
+    const chartM = await readNodeMembershipOf(dirsM.venue);
+    const entryS = chartM?.nodes.find((entry) => entry.nodeId === nodeIdS);
+    expect(entryS === undefined ? undefined : new URL(entryS.contactUrl).hostname).toBe(
+      boxHostnameFor(nodeIdS),
+    );
+    const checks = linesSince(logAtCheck).filter((line) => line.event === "handover.start_check");
+    expect(checks.map(({ result, peers }) => ({ result, peers }))).toEqual([
+      { result: "proceed", peers: [{ nodeId: nodeIdS, answer: "=", counted: true }] },
+    ]);
+    expect(boxM.lookups.slice(lookupsAtCheck)).toContain(boxHostnameFor(nodeIdS));
+
+    clock.begin("loopback-only");
+    sockets.stop();
+    console.log(`spare join: addresses reached ${JSON.stringify([...sockets.addresses])}`);
+    expect([...sockets.addresses].filter((address) => !isLoopback(address))).toEqual([]);
+    expect(sockets.addresses.size).toBeGreaterThan(0);
     clock.end("ok");
   } catch (error) {
     clock.end("failed");
     failures.push(error);
   } finally {
+    sockets.stop();
+    releaseCopy();
     signal?.removeEventListener("abort", onAbort);
     if (abortClose !== undefined) failures.push(...(await abortClose));
     failures.push(...(await closeAll()));
