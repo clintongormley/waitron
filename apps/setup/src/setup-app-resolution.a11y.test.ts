@@ -70,13 +70,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
-      for (const state of [
-        "normal",
-        "confirmation",
-        "unreadable",
-        "missing",
-        "repairable",
-      ] as const)
+      for (const state of ["normal", "confirmation", "unreadable", "missing"] as const)
         it(`${locale} ${theme} ${width} ${state}: accessible interrupted setup`, async () => {
           const previous = [innerWidth, innerHeight];
           try {
@@ -90,12 +84,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                   return Response.json({
                     version: 2,
                     inspectionId: "a".repeat(64),
-                    pair:
-                      state === "repairable"
-                        ? "repairable"
-                        : state === "unreadable"
-                          ? "invalid"
-                          : "valid",
+                    pair: state === "unreadable" ? "invalid" : "valid",
                     database: state === "missing" ? "missing" : "no-venue-rows",
                     emptyDatabase: !["missing", "unreadable"].includes(state),
                     revision: state === "unreadable" ? null : 1,

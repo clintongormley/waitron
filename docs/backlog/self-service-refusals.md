@@ -708,17 +708,14 @@ changes take their required review and existing protected-writer approvals.
 
 **Setup state refusals need a usable next step.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
 
-#### A1158: a damaged setup record or claim marker still dead-ends Start again
+#### A1158: a damaged setup record still dead-ends Start again
 
-Left open by A1099. When an abandoned first setup's own record (`state/first-setup.json`) or its
-claim marker (`venue/first-setup-claim.json`) is damaged, Start again is refused before any warning
-can be shown. With the venue database present the box refuses `setup.attempt_conflict` (A1099 plan,
-PROBE 2/3, re-run on `b8a06f203`). With it missing, since A1131bc slice 2 the box reads no revision,
-the page offers no Start again and says it cannot confirm that deleting is safe (read, not run:
-`wipeOffered`, `apps/setup/src/setup-app.ts`), and the summary and
-Start again sent with the page's last revision both answer `setup.attempt_conflict` and change
-nothing (a scratch case on the slice's branch, 2026-10-31, not committed). Wanted: the same kind of warned way out A1042 gives a
-damaged recovery-key record.
+Left open by A1099. When an abandoned first setup's own record (`state/first-setup.json`)
+is damaged, Start again is refused before any warning can be shown. The claim marker was removed
+by A1308 fl7 (2026-11-13). The current repair-page case “a record that cannot be read offers
+neither, and says why” (`apps/setup/src/setup-app-resolution.test.ts`) checks an invalid inspection
+with no revision: both recovery actions stay disabled and send no request. Wanted: the same kind
+of warned way out A1042 gives a damaged recovery-key record.
 
 #### A1159: some setup databases the box cannot read still refuse Start again
 

@@ -784,25 +784,6 @@ describe("mountStartAgainChoice", () => {
     });
   });
 
-  it("Move across two disks names both set-aside folders", async () => {
-    const { app, render } = mounted({
-      choose: () =>
-        Promise.resolve({
-          choice: "move" as const,
-          setAside: { state: "records/set-aside/s1/state", venue: "first-setup-set-aside/s1" },
-        }),
-    });
-    await post(app, { ...FORM, choice: "move" });
-    expect(render).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        message: {
-          kind: "moved",
-          folder: "state/records/set-aside/s1/state, venue/first-setup-set-aside/s1",
-        },
-      }),
-    );
-  });
-
   it("Move restarts only after the answer is written", async () => {
     const outgoing = new EventEmitter();
     const { app, onFinished } = mounted({

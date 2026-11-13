@@ -406,11 +406,9 @@ function logChoiceFailed(error: unknown, deps: StartAgainDeps, log?: Logger): vo
   });
 }
 
-/** Each root's folder named as the found-files list names it: `state/...` or `venue/...`. */
 export function movedFolder(setAside: { state: string; venue: string }): string {
   const parent = setAside.state.slice(0, setAside.state.lastIndexOf("/"));
-  if (setAside.venue === `${parent}/venue`) return `state/${parent}`;
-  return `state/${setAside.state}, venue/${setAside.venue}`;
+  return `state/${parent}`;
 }
 
 /** Drawn without the page's `render`, for a recorded Move whose answer page failed to draw. */

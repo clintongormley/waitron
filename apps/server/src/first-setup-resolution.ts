@@ -370,7 +370,6 @@ export function createFirstSetupResolutionActions(
       return host.resolution.withVenueExclusion(() =>
         host.coordinator.run(async (hold) => {
           exactKeys(request, ["inspectionId", "revision", "ownerGeneration"]);
-          // Not `read()`: it refuses a record saved complete whose mark still says active.
           const pair = await host.store.readResumable();
           if (pair === null) conflict();
           const { status } = pair.state;

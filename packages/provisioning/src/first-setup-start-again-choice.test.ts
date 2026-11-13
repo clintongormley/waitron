@@ -328,6 +328,7 @@ it("paths in a record stay inside their folders", async () => {
     { setAside: { state: "records/set-aside/../x", venue: "records/set-aside/1" } },
     { setAside: { state: "records/set-aside", venue: "records/set-aside/1" } },
     { setAside: { state: "records/set-aside/1", venue: "elsewhere/1" } },
+    { setAside: { state: "records/set-aside/1", venue: "first-setup-set-aside/1" } },
     ...[
       { ...unit!, path: "../x" },
       { ...unit!, path: "/abs" },

@@ -1251,20 +1251,6 @@ it("a connection check refused storage.disk_full keeps the connection-failure wo
   expect(q(app, "screen-first-owner")).toBeNull();
 });
 
-it("a record whose claim mark needs repair offers Start again and Recover from backup", async () => {
-  const { app, requests } = await presentDatabase({ inspection: { pair: "repairable" } });
-  expect(q<WtButton>(app, "start-again").disabled).toBe(false);
-  expect(q<WtButton>(app, "recover-backup").disabled).toBe(false);
-  expect(app.shadowRoot!.querySelector("[data-test=start-again-refused]")).toBeNull();
-  await openStartAgain(app);
-  expect(summaryRequests(requests)).toHaveLength(1);
-  await click(app, "cancel-start-again");
-  await expect.poll(() => q<WtButton>(app, "recover-backup")?.disabled).toBe(false);
-  await click(app, "recover-backup");
-  await expect.poll(() => q(app, "confirm-recover")).not.toBeNull();
-  expect(startAgainRequests(requests)).toEqual([]);
-});
-
 it("a record that cannot be read offers neither, and says why", async () => {
   const t = initialOwnerStrings.en;
   const { app, requests } = await mount({

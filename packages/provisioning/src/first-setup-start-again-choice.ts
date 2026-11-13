@@ -143,10 +143,7 @@ function parseChoice(value: unknown): StartAgainChoiceRecord {
       ? setAside !== null
       : !exactKeys(setAside, ["state", "venue"]) ||
         !setAsidePath(setAside.state) ||
-        !(
-          setAsidePath(setAside.venue) ||
-          (relative(setAside.venue) && setAside.venue.startsWith("first-setup-set-aside/"))
-        ))
+        !setAsidePath(setAside.venue))
   )
     return damaged();
   return {

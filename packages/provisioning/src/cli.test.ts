@@ -1047,6 +1047,28 @@ it("opens an unclaimed venue through the real store opener", async () => {
   }
 });
 
+it("leaves the venue folder untouched when refusing an interrupted setup record", async () => {
+  const root = await mkdtemp(join(tmpdir(), "cli-interrupted-setup-"));
+  const venueDir = join(root, "venue");
+  const stateDir = join(root, "state");
+  try {
+    await mkdir(venueDir);
+    await mkdir(stateDir);
+    await writeFile(join(stateDir, "first-setup.json"), "{}");
+    const h = harness({
+      env: { ...VENUE_ENV, WAITRON_STATE_DIR: stateDir },
+      openVenue: openVenueDatabase,
+    });
+    const args = VENUE_ARGS.map((value) => (value === VENUE_DIR ? venueDir : value));
+    expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
+    expect(h.lines).toContain("setup.attempt_invalid {}");
+    expect(await readdir(venueDir)).toEqual([]);
+    expect(h.applyVenue).not.toHaveBeenCalled();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it("rechecks a claim that appears while the store is opening", async () => {
   const root = await mkdtemp(join(tmpdir(), "cli-claim-during-open-"));
   const venueDir = join(root, "venue");

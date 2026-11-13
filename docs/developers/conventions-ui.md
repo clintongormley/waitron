@@ -1334,8 +1334,8 @@ not the design's «borrado», because the page's never-wipe check (`NEVER_WIPE_E
 however the page was reached, because a start whose failure is classified `storage.disk_full`
 deletes the same leftovers, whatever the free space, before it records the failure.
 
-A start `runEntry` refuses before it begins (`setup.workspace_unsupported`,
-`setup.start_again_incomplete`, `setup.start_again_files_found`, `setup.start_again_kept`,
+A start `runEntry` refuses before it begins (`setup.start_again_incomplete`,
+`setup.start_again_files_found`, `setup.start_again_kept`,
 `setup.start_again_move_unfinished`; `START_REFUSALS`, `apps/server/src/first-setup-entry.ts`) is
 not counted either: its status line reads "Level: recovery.
 This start was refused before it began, and was not counted." («Nivel: recovery. Este arranque se

@@ -2306,7 +2306,7 @@ The bell's new area for the box is
   boxes «equipo» («este equipo», «el de reserva», «los dos equipos») and its guide
   (`apps/server/src/guide/es/servers.md`) says «equipo de reserva», while the same screen's
   `servers.intro` says «servidor en espera» and the handover page and the setup app say «servidor»
-  (A1466), except the setup app's start-up messages `shell.first_setup.workspace_unsupported`,
+  (A1466), except the setup app's start-up messages
   `disk_full` and `disk_full_restart_unknown` and its configuration-import messages
   `shell.configuration.outdated` and `shell.configuration.privacy_*`
   (`apps/setup/src/i18n/strings/shell.ts`), which still say «equipo».
