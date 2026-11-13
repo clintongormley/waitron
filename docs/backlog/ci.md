@@ -536,9 +536,7 @@ A1424's live qualification was added on 7 November 2026.
   with the published server snapshot (watcher, 2026-11-09 10:01), except that idle positive
   server capacity needs no hosted read (watcher, 2026-11-12 20:47).
   The measured-memory pool is retained under the [13 November decision](#decisions-and-deliberate-limits).
-  New free-room code stays held until a real eligible case
-  is measured after source refusals and recorded turns are excluded; reverse movement remains
-  open (watcher, 13 November 07:02). A1461 reduces run sizes. Per-job
+  A1461 reduces run sizes. Per-job
   overflow, the remaining workflows and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day
   no-avoidable-wait target. Never drain other lanes' work for a drill.
@@ -677,6 +675,8 @@ A1424's live qualification was added on 7 November 2026.
   (#916). [Detail](till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
 ## Decisions and deliberate limits
+
+- **A1473 point 4 and reverse movement were dropped by the owner on 13 November 2026.** Reopen only after a measured stall leaves a job waiting with free room for a reason other than a refusal or a recorded turn (watcher, 09:55).
 
 - **A1454: retain measured-family memory admission (watcher, 2026-11-13 08:39).**
   The sixteen-identifier pool is the running setup. The bounded third watch reached fifteen
