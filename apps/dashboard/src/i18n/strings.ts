@@ -2707,13 +2707,7 @@ export const en = {
   "device_profiles.starting_zone_hint": "Where a device opens for each new person",
   "device_profiles.who_heading": "Who can sign in",
   "device_profiles.roles": "Job roles that can sign in",
-  "device_profiles.admitted_people": "Can sign in now: {names}",
   "device_profiles.admitted_nobody": "Nobody can sign in on devices with this profile.",
-  "device_profiles.people": "Rules for one person",
-  "device_profiles.people_none": "None specified",
-  "device_profiles.person_follows_role": "Follows their role",
-  "device_profiles.person_allowed": "Can always sign in",
-  "device_profiles.person_refused": "Can never sign in",
   "device_profiles.actions": "What it can do",
   "device_profiles.actions_hint":
     "A device on this profile can do only what is switched on here. A new profile starts with nothing switched on.",
@@ -6667,14 +6661,8 @@ export const es: Record<StringKey, string> = {
   "device_profiles.starting_zone_hint": "Dónde se abre un dispositivo para cada persona nueva",
   "device_profiles.who_heading": "Quién puede iniciar sesión",
   "device_profiles.roles": "Puestos que pueden iniciar sesión",
-  "device_profiles.admitted_people": "Pueden iniciar sesión ahora: {names}",
   "device_profiles.admitted_nobody":
     "Nadie puede iniciar sesión en los dispositivos con este perfil.",
-  "device_profiles.people": "Reglas para una persona",
-  "device_profiles.people_none": "Sin especificar",
-  "device_profiles.person_follows_role": "Según su rol",
-  "device_profiles.person_allowed": "Siempre puede iniciar sesión",
-  "device_profiles.person_refused": "Nunca puede iniciar sesión",
   "device_profiles.actions": "Qué puede hacer",
   "device_profiles.actions_hint":
     "Un dispositivo con este perfil solo puede hacer lo que esté activado aquí. Un perfil nuevo empieza sin nada activado.",

@@ -158,7 +158,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
         holds: "tu nombre, tus datos de contacto, tu idioma, tu rol y el estado de tu cuenta.",
         use: "Sirve para gestionar el local, contactarte y decidir qué puedes hacer.",
         sentTo: [
-          "Un gerente o un administrador puede descargar una exportación de la configuración que contiene tu nombre, tus datos de contacto, tu idioma, tu rol, el estado de tu cuenta, también después de que te vayas; la protege con una contraseña que elige esa persona.",
+          "Un gerente o un administrador puede descargar una exportación de la configuración que contiene tu nombre, tus datos de contacto, tu idioma, tu rol y el estado de tu cuenta, también después de que te vayas; la protege con una contraseña que elige esa persona.",
         ],
         kept: [
           "Tu perfil se queda en el servidor Waitron del local después de que se deshabilite tu cuenta: nada en el servidor lo borra.",

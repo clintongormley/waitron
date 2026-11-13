@@ -8,6 +8,7 @@ import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
 import type {
   DeviceProfile,
   DashboardApi,
+  JobRole,
   PersonRole,
   PersonSummary,
   PagePrinterRow,
@@ -2016,11 +2017,11 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
   });
 
   it("waits for job choices before creating a profile", async () => {
-    let deliver!: (roles: { id: string; name: string; holderIds: string[] }[]) => void;
+    let deliver!: (roles: JobRole[]) => void;
     const api = stubApi({
       listJobRoles: vi.fn(
         () =>
-          new Promise((resolve) => {
+          new Promise<JobRole[]>((resolve) => {
             deliver = resolve;
           }),
       ),
