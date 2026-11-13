@@ -2043,6 +2043,35 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
+        "The primary server has no backup key yet. Nothing was changed. Open Backups on the primary server, choose Turn on backups, then press Connect again.",
+      ],
+      [
+        "es-ES",
+        "El servidor principal aún no tiene clave de copia de seguridad. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal, elige «Activar las copias» y vuelve a pulsar Conectar.",
+      ],
+    ] as const)(
+      "shows the no-key refusal and leaves Connect working (%s)",
+      async (locale, sentence) => {
+        try {
+          const { el, adopt, connect, control } = await refusedJoin(
+            "backup.recovery_key_missing",
+            locale,
+          );
+          expect(await bottomOf(connect)).toBe(sentence);
+          expect(control("connect")!.disabled).toBe(false);
+          adopt.mockResolvedValue({ adopted: true, restarting: true });
+          control("connect")!.click();
+          await flush(el);
+          expect(adopt).toHaveBeenCalledTimes(2);
+        } finally {
+          setLocale("en-GB");
+        }
+      },
+    );
+
+    it.each([
+      [
+        "en-GB",
         "The restaurant files its invoices with Veri*Factu, and this version of Waitron cannot yet add a standby server to a restaurant that does. Nothing was changed on either server, and the primary keeps working as before. Choose Back to set this server up another way, or leave it switched off and join it after an update that adds this.",
       ],
       [
