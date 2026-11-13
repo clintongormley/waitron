@@ -17,7 +17,7 @@ export const declaracionesResponsables = table(
   (t) => [
     check(
       "declaraciones_responsables_version_ck",
-      sql`${t.version} glob '[0-9]*.[0-9]*.[0-9]*' and ${t.version} not glob '*[^0-9.]*' and ${t.version} not glob '*..*' and ${t.version} not glob '.*' and ${t.version} not glob '*.' and length(${t.version}) - length(replace(${t.version}, '.', '')) = 2`,
+      sql`${t.version} glob '[0-9]*.[0-9]*.[0-9]*' and ${t.version} not glob '*[^0-9.]*' and length(${t.version}) - length(replace(${t.version}, '.', '')) = 2 and ${t.version} not glob '0[0-9]*' and ${t.version} not glob '*.0[0-9]*'`,
     ),
   ],
 );

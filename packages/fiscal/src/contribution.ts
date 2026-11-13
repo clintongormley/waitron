@@ -162,7 +162,7 @@ export interface FiscalOutboxSeat {
 }
 
 export interface FiscalDeclarationsSeat {
-  /** Stores the running release's declaration unless its version is already kept. */
+  /** Stores the declaration of `entry.version` unless that version is already kept. */
   keep(tx: Transaction, entry: { version: string; text: string; at: Date }): Promise<void>;
   /** Every kept version, in no particular order. */
   versions(tx: Transaction): Promise<string[]>;
