@@ -476,11 +476,14 @@ export interface StoredSpecialDayDate {
 export interface SpecialDaySummary {
   id: string;
   name: string;
-  repeatsYearly: boolean;
-  dates: StoredSpecialDayDate[];
+  latestDate: LocalDate | null;
 }
 
-export interface SpecialDayDetail extends SpecialDaySummary {
+export interface SpecialDayDetail {
+  id: string;
+  name: string;
+  repeatsYearly: boolean;
+  dates: StoredSpecialDayDate[];
   paint: { departmentId: string; date: LocalDate; ranges: PaintRange[] }[];
   zonePaint: { zoneId: string; date: LocalDate; ranges: ZonePaint[] }[];
 }
@@ -812,35 +815,18 @@ const storedDate = (row: {
   ...(row.holidayName === null ? {} : { holidayName: row.holidayName }),
 });
 
-/** Every special day of the venue with its dates, by name then id; no paint. */
+/** Every special day of the venue with its latest date, by name then id. */
 export async function listSpecialDays(tx: Transaction): Promise<SpecialDaySummary[]> {
-  const days = await tx
+  return tx
     .select({
       id: specialDays.id,
       name: specialDays.name,
-      repeatsYearly: specialDays.repeatsYearly,
+      latestDate: sql<LocalDate | null>`max(${specialDayDates.date})`,
     })
     .from(specialDays)
+    .leftJoin(specialDayDates, eq(specialDayDates.specialDayId, specialDays.id))
+    .groupBy(specialDays.id)
     .orderBy(asc(specialDays.name), asc(specialDays.id));
-  if (days.length === 0) return [];
-  const dates = await tx
-    .select({
-      specialDayId: specialDayDates.specialDayId,
-      date: specialDayDates.date,
-      closedAllDay: specialDayDates.closedAllDay,
-      holidayName: specialDayDates.holidayName,
-    })
-    .from(specialDayDates)
-    .where(
-      inArray(
-        specialDayDates.specialDayId,
-        days.map((day) => day.id),
-      ),
-    )
-    .orderBy(asc(specialDayDates.date));
-  const byDay = new Map(days.map((day) => [day.id, [] as StoredSpecialDayDate[]]));
-  for (const row of dates) byDay.get(row.specialDayId)!.push(storedDate(row));
-  return days.map((day) => ({ ...day, dates: byDay.get(day.id)! }));
 }
 
 export async function readSpecialDay(tx: Transaction, id: string): Promise<SpecialDayDetail> {

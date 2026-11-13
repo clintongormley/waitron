@@ -667,7 +667,7 @@ describe("opened on a public holiday", () => {
       date: "2026-12-25",
       holidays: navidad,
       days: {},
-      list: [{ id: "sd9", name: "Navidad", repeatsYearly: false, dates: [] }],
+      list: [{ id: "sd9", name: "Navidad", latestDate: null }],
     });
     await listed(painter, lists);
     part(painter, "add-to")!.click();

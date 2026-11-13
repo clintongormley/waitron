@@ -200,8 +200,40 @@ describe("reading a special day gives each date's stored holiday name", () => {
     ];
     expect((await scoped((tx) => readSpecialDay(tx, day.id))).dates).toEqual(expected);
     expect(await scoped((tx) => listSpecialDays(tx))).toEqual([
-      { id: day.id, name: "Semana Santa", repeatsYearly: false, dates: expected },
+      { id: day.id, name: "Semana Santa", latestDate: "2026-04-04" },
     ]);
+  });
+});
+
+describe("the special-day list offers each day's name and latest date", () => {
+  it("answers every day by name then id in one statement, with no latest date for a day without dates", async () => {
+    await venue();
+    const holy = await save({
+      name: "Semana Santa",
+      repeatsYearly: false,
+      dates: dates(["2026-04-03", "2026-04-05", "2026-04-04"]),
+    });
+    const [empty] = await db
+      .insert(specialDays)
+      .values({ name: "Annual closure", repeatsYearly: false })
+      .returning({ id: specialDays.id });
+    const fair = await save({ name: "Fair", repeatsYearly: true, dates: dates(["2026-09-10"]) });
+    await scoped(async (tx) => {
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        expect(await listSpecialDays(tx)).toEqual([
+          { id: empty!.id, name: "Annual closure", latestDate: null },
+          { id: fair.id, name: "Fair", latestDate: "2026-09-10" },
+          { id: holy.id, name: "Semana Santa", latestDate: "2026-04-05" },
+        ]);
+        expect(spy).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
   });
 });
 

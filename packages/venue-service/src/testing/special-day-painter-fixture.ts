@@ -10,6 +10,12 @@ import { painterModel, type Write } from "./season-painter-fixture.js";
 
 export { painterModel, type Write };
 
+/** What the special-day list answers for a stored day. */
+export function summaryOf(day: Pick<SpecialDayDetail, "id" | "name" | "dates">): SpecialDaySummary {
+  const dates = day.dates.map(({ date }) => date).sort();
+  return { id: day.id, name: day.name, latestDate: dates.at(-1) ?? null };
+}
+
 /** Two ordinary December dates and Christmas Day, stored on the public holiday "Navidad". */
 export function storedDay(over: Partial<SpecialDayDetail> = {}): SpecialDayDetail {
   return {
@@ -103,7 +109,7 @@ export function specialDayApi(writes: Write[] = [], answers: SpecialDayAnswers =
         if (/\/special-days$/.test(url)) {
           await answers.listAfter;
           if (answers.failingList) throw { code: "server.internal" };
-          return structuredClone(answers.list ?? Object.values(answers.days ?? {}));
+          return structuredClone(answers.list ?? Object.values(answers.days ?? {}).map(summaryOf));
         }
         const day = /\/special-days\/([^/?]+)$/.exec(url);
         if (day) {
