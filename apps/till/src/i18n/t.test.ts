@@ -206,10 +206,12 @@ it.each([
   "words the waiting start's notice, with its count, and its payment refusals, a bill payment's own (%s)",
   (locale, notice, refused, charged, billCharged) => {
     setLocale(locale);
-    expect(staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1 } }).main).toBe(notice);
-    expect(staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 0 } }).main).toBe(
-      notice.replace("(1 ", "(0 "),
-    );
+    expect(
+      staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1, cause: "start" } }).main,
+    ).toBe(notice);
+    expect(
+      staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 0, cause: "start" } }).main,
+    ).toBe(notice.replace("(1 ", "(0 "));
     expect(refusalText({ code: "clock.unconfirmed" })).toBe(refused);
     const chargedRefusal = { code: "sale.charged_not_recorded", reason: "clock_unconfirmed" };
     expect(refusalText(chargedRefusal)).toBe(charged);

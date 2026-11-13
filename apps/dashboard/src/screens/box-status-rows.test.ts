@@ -698,9 +698,12 @@ describe("the Clock row while the start waits for its time", () => {
     severity: "error",
     params: { agreed: 1, hostSilent: false },
   });
-  const waitingHealth = (hostAnswers: boolean) =>
+  const waitingHealth = (hostAnswers: boolean, cause: "start" | "clock_jumped" = "start") =>
     quietHealth({
-      clock: { ...quietHealth().clock, waiting: { boxAt: BOX_AT, agreed: 1, hostAnswers } },
+      clock: {
+        ...quietHealth().clock,
+        waiting: { boxAt: BOX_AT, agreed: 1, hostAnswers, cause },
+      },
     });
 
   it("stops the row with what it waits for and the box's date and time, in place of the bell's sentence", () => {
@@ -711,6 +714,17 @@ describe("the Clock row while the start waits for its time", () => {
       alerts: [],
     });
     expect(other).toBe(0);
+  });
+
+  it("says the clock jumped when that is why it waits, and adds no every-start sentence", () => {
+    const line = `The box's clock jumped and it cannot check the time over the internet. Waiting for devices to connect and agree with the box's time (1 of 2 so far): no payments are taken. The box's clock says ${formatIsoMinute(BOX_AT)}.`;
+    for (const hostAnswers of [true, false])
+      expect(
+        row(boxStatusRows(waitingHealth(hostAnswers, "clock_jumped"), []).rows, "clock"),
+      ).toMatchObject({
+        state: "stopped",
+        line,
+      });
   });
 
   it("tells the Sales row that payments wait, pointing at the Clock row", () => {

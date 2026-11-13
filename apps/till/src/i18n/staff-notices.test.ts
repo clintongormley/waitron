@@ -36,13 +36,37 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     );
   });
 
-  it.each([{}, { agreed: 2 }, { agreed: -1 }, { agreed: 0.5 }, { agreed: "1" }])(
-    "words the waiting start as unknown when its count is %o",
-    (params) => {
+  it.each([
+    {},
+    { agreed: 2, cause: "start" },
+    { agreed: -1, cause: "start" },
+    { agreed: 0.5, cause: "start" },
+    { agreed: "1", cause: "start" },
+  ])("words the waiting start as unknown when its count is %o", (params) => {
+    setLocale(locale);
+    expect(staffNoticeText({ code: "clock.unconfirmed", params }).main).toBe(
+      words["staff_notice.unknown"],
+    );
+  });
+
+  it.each([
+    ["start", "staff_notice.clock.unconfirmed"],
+    ["clock_jumped", "staff_notice.clock.unconfirmed_jumped"],
+  ] as const)("words the wait by its cause %s, with its count", (cause, key) => {
+    setLocale(locale);
+    expect(staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1, cause } })).toEqual({
+      main: words[key].replace("{agreed}", "1"),
+      hint: words["staff_notice.tell_manager"],
+    });
+  });
+
+  it.each([undefined, "future_date_refused", "later_cause", 1])(
+    "words the wait as unknown when its cause is %o",
+    (cause) => {
       setLocale(locale);
-      expect(staffNoticeText({ code: "clock.unconfirmed", params }).main).toBe(
-        words["staff_notice.unknown"],
-      );
+      expect(
+        staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1, cause } }).main,
+      ).toBe(words["staff_notice.unknown"]);
     },
   );
 
@@ -184,9 +208,10 @@ describe.each(LANGUAGES)(
 
     it("gives the waiting start the Check the time words as its hint", () => {
       setLocale(locale);
-      expect(staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1 } }, true).hint).toBe(
-        words["staff_notice.check_time"],
-      );
+      expect(
+        staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1, cause: "start" } }, true)
+          .hint,
+      ).toBe(words["staff_notice.check_time"]);
     });
 
     it("leaves every other notice's hint as it is", () => {

@@ -2006,6 +2006,8 @@ export const en = {
   "staff_notice.clock.check_time": "The server's time needs checking",
   "staff_notice.clock.unconfirmed":
     "Payments wait: the server is waiting for devices to connect and agree with its time ({agreed} of 2 so far)",
+  "staff_notice.clock.unconfirmed_jumped":
+    "Payments wait: the server's clock jumped and it cannot check the time over the internet. Waiting for devices to agree with its time ({agreed} of 2 so far)",
   "staff_notice.fiscal.records_unsent": "{n} sales not yet sent to the tax agency",
   "staff_notice.fiscal.records_unsent_one": "1 sale not yet sent to the tax agency",
   "staff_notice.printer.jobs_waiting": "Printer “{printer}” not printing",
@@ -4049,6 +4051,8 @@ export const es: Record<StringKey, string> = {
   "staff_notice.clock.check_time": "Hay que comprobar la hora del servidor",
   "staff_notice.clock.unconfirmed":
     "Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora ({agreed} de 2 por ahora)",
+  "staff_notice.clock.unconfirmed_jumped":
+    "Los cobros esperan: el reloj del servidor ha saltado y no puede comprobar la hora por internet. Esperando a que los dispositivos coincidan con su hora ({agreed} de 2 por ahora)",
   "staff_notice.fiscal.records_unsent": "{n} ventas sin enviar a Hacienda",
   "staff_notice.fiscal.records_unsent_one": "1 venta sin enviar a Hacienda",
   "staff_notice.printer.jobs_waiting": "Impresora «{printer}» no imprime",

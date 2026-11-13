@@ -495,7 +495,7 @@ const UNCONFIRMED: StaffNotice = {
   key: "clock.unconfirmed",
   code: "clock.unconfirmed",
   severity: "error",
-  params: { agreed: 1 },
+  params: { agreed: 1, cause: "start" },
 };
 
 function clockLine(el: TillApp): string | null {

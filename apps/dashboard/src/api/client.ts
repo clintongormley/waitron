@@ -1955,7 +1955,13 @@ export interface BoxHealth {
       { state: "unknown" } | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
     sync: { synced: boolean; source: "timedatectl" | "unavailable"; warn: boolean };
     /** Present only while the box files records and its start waits for its time. */
-    waiting?: { boxAt: string; agreed: number; hostAnswers: boolean };
+    waiting?: {
+      boxAt: string;
+      agreed: number;
+      hostAnswers: boolean;
+      /** Never null while the box waits. */
+      cause: "start" | "future_date_refused" | "clock_jumped" | null;
+    };
   };
   printers: { id: string; name: string }[];
   /** Null when the payments module is off. */

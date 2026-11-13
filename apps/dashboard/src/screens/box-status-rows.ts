@@ -154,11 +154,15 @@ function lineOf(
   if (words !== undefined) return t(STOPPED_WORDS[words.code]!);
   const waiting = id === "clock" ? health.clock.waiting : undefined;
   if (waiting !== undefined) {
-    const line = fill("box_status.clock.waiting", {
+    const jumped = waiting.cause === "clock_jumped";
+    const line = fill(jumped ? "box_status.clock.waiting_jumped" : "box_status.clock.waiting", {
       agreed: String(waiting.agreed),
       boxAt: formatIsoMinute(waiting.boxAt),
     });
-    return waiting.hostAnswers ? line : `${line} ${t("box_status.clock.waiting_host_silent")}`;
+    // The silent-host sentence says the box waits like this at every start, which a jump is not.
+    return waiting.hostAnswers || jumped
+      ? line
+      : `${line} ${t("box_status.clock.waiting_host_silent")}`;
   }
   const first = alerts[0];
   if (notices.length === 0 && first !== undefined)

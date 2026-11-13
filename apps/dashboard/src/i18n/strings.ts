@@ -4077,6 +4077,8 @@ export const en = {
   "box_status.clock.not_synced": "Not kept in time over the internet",
   "box_status.clock.waiting":
     "Waiting for devices to connect and agree with the box's time ({agreed} of 2 so far): no payments are taken. The box's clock says {boxAt}.",
+  "box_status.clock.waiting_jumped":
+    "The box's clock jumped and it cannot check the time over the internet. Waiting for devices to connect and agree with the box's time ({agreed} of 2 so far): no payments are taken. The box's clock says {boxAt}.",
   "box_status.clock.waiting_host_silent":
     "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start.",
   "box_status.clock.confirm": "The date and time are right",
@@ -8319,6 +8321,8 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.not_synced": "No se pone en hora por internet",
   "box_status.clock.waiting":
     "Esperando a que se conecten dispositivos y coincidan con la hora del servidor ({agreed} de 2 por ahora): no se aceptan cobros. El reloj del servidor indica {boxAt}.",
+  "box_status.clock.waiting_jumped":
+    "El reloj del servidor ha saltado y no puede comprobar la hora por internet. Esperando a que se conecten dispositivos y coincidan con la hora del servidor ({agreed} de 2 por ahora): no se aceptan cobros. El reloj del servidor indica {boxAt}.",
   "box_status.clock.waiting_host_silent":
     "No puede ver su hora de internet porque la parte del servidor que la lee no responde, así que espera así en cada arranque.",
   "box_status.clock.confirm": "La fecha y la hora son correctas",
