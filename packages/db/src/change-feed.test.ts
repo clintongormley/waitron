@@ -229,17 +229,39 @@ describe("today-only changes", () => {
       .rows.map(({ payload }) => (JSON.parse(payload) as ResourceChange).resources);
 
   it.each([
-    ["today_x = 1", "dining_tables.today"],
-    ["today_x = null", "dining_tables.today"],
-    ["label = 'Changed'", "dining_tables"],
-    ["today_x = 1, label = 'Changed'", "dining_tables"],
-    ["today_x = 1, label = label", "dining_tables.today"],
-  ])("routes actual changes in %s to %s", (assignment, type) => {
+    ["today_x only", sql`update live_today_probe set today_x = 1`, "dining_tables.today"],
+    ["today_x to null", sql`update live_today_probe set today_x = null`, "dining_tables.today"],
+    ["label only", sql`update live_today_probe set label = 'Changed'`, "dining_tables"],
+    [
+      "mixed values",
+      sql`update live_today_probe set today_x = 1, label = 'Changed'`,
+      "dining_tables",
+    ],
+    [
+      "unchanged label",
+      sql`update live_today_probe set today_x = 1, label = label`,
+      "dining_tables.today",
+    ],
+  ])("routes actual changes in %s", (_name, statement, type) => {
     suite.db.run(sql.raw("insert into live_today_probe values ('table-1', 'Table 1', 0)"));
     suite.db.run(sql`delete from change_log`);
-    suite.db.run(sql.raw(`update live_today_probe set ${assignment}`));
+    suite.db.run(statement);
     expect(resources()).toEqual([[{ type, id: "table-1" }], [{ type, id: "table-1" }]]);
   });
+  it.each([null, "Changed"])(
+    "routes a saved field changing to %s through the base type",
+    (label) => {
+      suite.db.run(
+        sql`insert into live_today_probe values ('table-1', ${label === null ? "Table 1" : null}, 0)`,
+      );
+      suite.db.run(sql`delete from change_log`);
+      suite.db.run(sql`update live_today_probe set label = ${label}`);
+      expect(resources()).toEqual([
+        [{ type: "dining_tables", id: "table-1" }],
+        [{ type: "dining_tables", id: "table-1" }],
+      ]);
+    },
+  );
   it("retains insert/delete identities and silences unchanged values", () => {
     suite.db.run(sql.raw("insert into live_today_probe values ('table-1', 'Table 1', null)"));
     expect(resources()).toEqual([[{ type: "dining_tables", id: "table-1" }]]);

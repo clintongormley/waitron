@@ -1,7 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { QUERY_DEPENDENCIES as dashboard } from "../../../dashboard/src/api/live-queries.js";
-import { TILL_LIVE_TYPES as till } from "../../../till/src/api/live-connection.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -251,12 +249,22 @@ try {
       }
     })();
     revision = Number(moved.revision);
+    const { QUERY_DEPENDENCIES: dashboard } = (await import(
+      new URL("../../../dashboard/src/api/live-queries.ts", import.meta.url).href
+    )) as { QUERY_DEPENDENCIES: Record<string, readonly string[]> };
+    const { TILL_LIVE_TYPES: till } = (await import(
+      new URL("../../../till/src/api/live-connection.ts", import.meta.url).href
+    )) as { TILL_LIVE_TYPES: Record<string, readonly string[]> };
     const groups: Record<string, Record<string, readonly string[]>> = { dashboard, till };
     const packages = fileURLToPath(new URL("../../../../packages/", import.meta.url));
     for (const name of readdirSync(packages)) {
       const file = join(packages, name, "src/dashboard/live-queries.ts");
       if (existsSync(file))
-        groups[name] = (await import(pathToFileURL(file).href)).QUERY_DEPENDENCIES;
+        groups[name] = (
+          (await import(pathToFileURL(file).href)) as {
+            QUERY_DEPENDENCIES: Record<string, readonly string[]>;
+          }
+        ).QUERY_DEPENDENCIES;
     }
     const readers = Object.entries(groups)
       .flatMap(([group, queries]) =>
