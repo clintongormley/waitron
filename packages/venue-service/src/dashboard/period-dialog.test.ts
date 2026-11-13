@@ -224,6 +224,25 @@ it("marks every missing required field after submission and rechecks until corre
   expect(save(el).disabled).toBe(false);
 });
 
+it("reopens Edit quietly after Add was refused by its own checks", async () => {
+  const el = await mount();
+  await change(el, "colour", { value: "green" });
+  save(el).click();
+  await el.updateComplete;
+  expect(field(el, "name").error).toBe("Enter a name.");
+  el.open = false;
+  await el.updateComplete;
+  el.period = structuredClone(period);
+  el.open = true;
+  await el.updateComplete;
+  await change(el, "name", { value: "" });
+  expect(field(el, "name").error).toBe("");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+      .error,
+  ).toBe("");
+});
+
 it.each(["name", "colour", "menuId", "staffMenuIds"])(
   "places a server refusal under %s and keeps retry enabled",
   async (name) => {

@@ -71,3 +71,8 @@ first. No speculative helper tests, rewritten assertions or moved test files.
 **Forecast:** production about **+26/−23 lines**; tests about **+25/−0**; support/generated **0**;
 docs separately approximately **75 lines**. Stop and return to the watcher at
 **1.5× forecast growth** or a material scope change.
+
+**13 November build-review correction:** Claude's deletion probe found Period's reopen
+reset had no caller assertion. This batch adds that case as well as the Floor-plan
+checks; the sentence above about all other callers was too broad. The same one-line
+reset remains in production. No extra source change or helper redesign.

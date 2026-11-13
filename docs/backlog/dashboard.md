@@ -92,12 +92,12 @@ printer keys.
 
 Move repeated bottom-message assembly, attempt, refusal-dismissal and render-before-focus
 plumbing in the remaining dashboard editors, Voids and comps (`packages/adjustments`),
-Departments and zones, routing cells, stations, special-day painting and ranges, and the till's forms onto
+Departments and zones, routing cells, stations, venue-service special-day painting and ranges, and the till's forms onto
 `FormFeedback` in `@waitron/ui`. Inventory each
 later batch before migrating it; leave single-job forms local. Preserve each form's field mapping
 and message behavior; keep domain-specific refusal clearing local. See the
 [second-slice inventory](../superpowers/plans/2026-11-12-d-form-plumbing-2.md) and the
-[inventory of the remaining forms](../superpowers/plans/2026-11-13-d-form-plumbing-venue-batch.md).
+[inventory of the remaining venue forms](../superpowers/plans/2026-11-13-d-form-plumbing-venue-batch.md).
 
 ## What C47 part 2 found and did not fix
 
