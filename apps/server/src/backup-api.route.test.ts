@@ -553,6 +553,28 @@ describe("backup admin routes", () => {
     }
   });
 
+  it("a relative backup folder is a field refusal and saves nothing", async () => {
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const app = buildApp(makeSupervisor(sc), sc.stateDir);
+    const cookie = await login(app);
+    const before = await readArchiveSettings(suite.db, RING);
+    const response = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinations: [{ kind: "local-fs", dir: "backups" }],
+        recoveryKey: KEY_1,
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "backup.request_invalid", params: { field: "dir", reason: "relative" } },
+    });
+    expect(await readArchiveSettings(suite.db, RING)).toEqual(before);
+  });
+
   it("apply enables backups and hot-reloads (no restart), then reports enabled", async () => {
     const dest = makeDestDir();
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };

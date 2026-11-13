@@ -1527,15 +1527,6 @@ once released. Belongs with A1016.
 - **The recovery page says the start "deleted what it could make again"; the Box status page says
   "files the box no longer needs".** One wording for the same set. Left open by A798-B slice 7.
 
-## Bundle: Refuse folders that cannot be safe
-
-1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
-
-- **A relative backup folder is accepted.** The Backups screen's hint asks for a full path, but
-  the server resolves whatever it is given (`resolveArchiveChoice`, `apps/server/src/archive-settings.ts`),
-  so `backups-relative` saved as a folder under the server's working directory (seen on the dev
-  stack during A538-6's visual check). That line came in with #1628 (A538-4).
-
 ## Decisions and deliberate limits
 
 ### The bucket client's limits (A44, #676)

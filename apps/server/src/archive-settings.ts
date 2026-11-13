@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import {
   getCredential,
   putCredential,
@@ -456,9 +456,11 @@ export function resolveArchiveChoice(
     case "local-fs": {
       if (!hasExactKeys(destination, ["kind", "dir"])) throw requestInvalid("destination");
       const { dir } = destination;
-      // `resolve("")` is the working directory (CLAUDE.md §3).
       if (typeof dir !== "string" || dir.trim() === "" || CONTROL.test(dir)) {
         throw requestInvalid("dir");
+      }
+      if (!isAbsolute(dir)) {
+        throw new AppError("backup.request_invalid", { field: "dir", reason: "relative" });
       }
       return { kind: "local-fs", id: LOCAL_ID, dir: resolve(dir) };
     }
