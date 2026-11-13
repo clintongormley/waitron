@@ -36,6 +36,7 @@ import {
 } from "./day-resolver.js";
 import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
 import { configureZone, createDepartment, menuState, readZoneClosingStates } from "./operations.js";
+import { holidayReadsAt } from "./holidays.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { closedZoneIdsAt, replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { englishSeasonName } from "./testing/starter-seasons.js";
@@ -1010,11 +1011,14 @@ describe("readServiceDayPlan on a repeating date that follows a holiday's name",
       .insert(specialDays)
       .values({ name: "Christmas", repeatsYearly: true })
       .returning({ id: specialDays.id });
+    const holidays = await scoped((tx) => holidayReadsAt(tx).dates(2026, 2026));
+    const christmas = [...(holidays.get(2026) ?? [])].filter(([, date]) => date === "2026-12-25");
+    expect(christmas).toHaveLength(1);
     await db.insert(specialDayDates).values({
       specialDayId: day!.id,
       date: "2025-12-25",
       closedAllDay: true,
-      holidayName: "Natividad del Señor",
+      holidayName: christmas[0]![0],
     });
     return day!.id;
   }
