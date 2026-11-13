@@ -1974,7 +1974,7 @@ export type StringKey = keyof typeof en;
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
   "lunch.choose_later": "Elegir más tarde",
-  "lunch.choices": "Platos del menú del día",
+  "lunch.choices": "Elegir platos",
   "recovery.open": "Abrir recuperación",
   "recovery.issuance_stopped":
     "La emisión de facturas está detenida. Abre la recuperación con la clave de recuperación actual de este servidor.",

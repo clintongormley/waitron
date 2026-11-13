@@ -13,7 +13,7 @@ Añade un menú por comensal y elige los platos que quiera ahora. **Elegir más 
 un pase que aún no ha elegido. Cada menú queda separado para que puedas volver a él más tarde.
 
 Para retener pases ya elegidos, envía el pedido retenido. En el panel de ese menú, usa **Enviar a cocina**
-para el pase que quieras enviar ahora. Abre **Platos del menú del día** cuando el comensal elija
+para el pase que quieras enviar ahora. Abre **Elegir platos** cuando el comensal elija
 otro pase, guarda y envía ese pase. Puedes cambiar una opción hasta enviarla; los platos ya enviados
 se mantienen.
 
