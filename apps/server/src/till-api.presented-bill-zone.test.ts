@@ -162,7 +162,6 @@ async function indoorContext() {
   return { zoneId: indoor, departmentId: indoorDepartment, serviceMode: context.serviceMode };
 }
 
-/** Ana's party on the terrace, with `names` split off the bill made at her seating and presented. */
 async function presentedSplit(...names: string[]) {
   const anna = await seatedWith(venue, "Caña", ...names);
   const split = await post(
