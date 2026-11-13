@@ -1,6 +1,6 @@
 # Nutrition icons
 
-The shared paths in `packages/ui/src/nutrition-icons.ts` use the sources below. Register
+The shared paths in `packages/ui-core/src/nutrition-icons.ts` use the sources below. Register
 `NUTRITION_ICONS` with `registerIcons` and draw, for example,
 `<wt-icon name="allergen-eggs"></wt-icon>` beside the translated allergen name.
 Names use `allergen-` followed by the allergen code, or `diet-` followed by the diet

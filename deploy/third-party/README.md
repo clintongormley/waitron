@@ -89,7 +89,8 @@ adapted from Google's Material Symbols icon set (<https://fonts.google.com/icons
 Google, licensed under the Apache License, Version 2.0: some of the dashboard's icons in
 `apps/dashboard/src/icons.ts`, and the dropdown's `check` icon in `DROPDOWN_ICONS`
 (`packages/ui/src/components/wt-combobox.ts`), which all three apps register, and the `allergies`
-mark in `packages/ui/src/nutrition-icons.ts`, registered by the dashboard and till. The source
+mark in `packages/ui-core/src/nutrition-icons.ts`, registered by the dashboard and till.
+The server uses the same paths in the guest-menu page. The source
 notes beside these paths identify their licences.
 
 - `licenses/Apache-2.0.txt` is that licence.

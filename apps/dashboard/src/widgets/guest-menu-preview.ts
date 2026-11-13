@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import { languageDisplayName } from "@waitron/shared";
@@ -32,16 +32,45 @@ export class GuestMenuPreview extends LitElement {
   @state() private loading = false;
   @state() private answer: Awaited<ReturnType<DashboardApi["getGuestMenuPreview"]>> = null;
   @state() private error = "";
+  @state() private source = "";
 
+  #generation = 0;
+  #language?: string;
+  #clear() {
+    URL.revokeObjectURL(this.source);
+    this.source = "";
+    this.answer = null;
+  }
+  #close() {
+    this.#generation++;
+    this.#clear();
+    this.opened = false;
+    this.loading = false;
+  }
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    this.#close();
+  }
+  protected override willUpdate(changed: PropertyValues) {
+    if (changed.has("menuId")) this.#close();
+  }
   async #load(language?: string) {
+    const generation = ++this.#generation;
+    this.#language = language;
+    this.#clear();
     this.loading = true;
     this.error = "";
     try {
-      this.answer = await this.api.getGuestMenuPreview(this.menuId, language);
+      const answer = await this.api.getGuestMenuPreview(this.menuId, language);
+      if (generation !== this.#generation) return;
+      this.answer = answer;
+      this.source = answer
+        ? URL.createObjectURL(new Blob([answer.html], { type: "text/html" }))
+        : "";
     } catch (error) {
-      this.error = codeMessage(codeOf(error));
+      if (generation === this.#generation) this.error = codeMessage(codeOf(error));
     } finally {
-      this.loading = false;
+      if (generation === this.#generation) this.loading = false;
     }
   }
   override render() {
@@ -56,14 +85,12 @@ export class GuestMenuPreview extends LitElement {
       <wt-modal
         .open=${this.opened}
         heading=${t("menus.guest_preview")}
-        @wt-close=${() => {
-          this.opened = false;
-        }}
+        @wt-close=${() => this.#close()}
       >
         ${
           this.error
             ? html`<p role="alert">${this.error}</p>
-                <wt-button variant="secondary" @click=${() => this.#load(this.answer?.language)}
+                <wt-button variant="secondary" @click=${() => this.#load(this.#language)}
                   >${t("content_languages.retry")}</wt-button
                 >`
             : nothing
@@ -85,7 +112,7 @@ export class GuestMenuPreview extends LitElement {
                 <iframe
                   title=${t("menus.guest_preview")}
                   sandbox="allow-same-origin"
-                  .srcdoc=${this.answer.html}
+                  .src=${this.source}
                 ></iframe>`
             : !this.loading && !this.error
               ? html`<p>${t("menus.guest_unpublished")}</p>`
@@ -95,7 +122,7 @@ export class GuestMenuPreview extends LitElement {
           slot="footer"
           variant="secondary"
           @click=${() => {
-            this.opened = false;
+            this.#close();
           }}
           >${t("action.close")}</wt-button
         >

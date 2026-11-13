@@ -25,9 +25,32 @@ const menu: PublicGuestMenu = {
           price: { min: "3.00", max: "6.00" },
           unit: "ea",
           allergens: { gluten: { kinds: ["wheat"] } },
-          dietary: ["vegan"],
+          dietary: ["vegan", "vegetarian"],
           variants: [],
-          modifiers: [],
+          modifiers: [
+            {
+              kind: "extras",
+              name: "Extras",
+              items: [
+                {
+                  name: "Bread",
+                  price: "1.50",
+                  portion: "2.000",
+                  unit: "ea",
+                  allergens: null,
+                  dietary: [],
+                },
+                {
+                  name: "Oil",
+                  price: "1.00",
+                  portion: "0.050",
+                  unit: "kg",
+                  allergens: {},
+                  dietary: [],
+                },
+              ],
+            },
+          ],
         },
       ],
     },
@@ -43,6 +66,14 @@ it("renders escaped guest content and section links in the chosen language", asy
   expect(await page.locator("article .line").first().textContent()).toContain("6,00");
   const words = guestMenuWords("es", "en").text;
   expect(await page.locator("body").textContent()).toContain(`${words.gluten} (${words.wheat})`);
+  const extras = await page.locator(".choice .line").allTextContents();
+  expect.soft(extras[0]).toContain("2 ea");
+  expect.soft(extras[1]).toContain("0,05 kg");
+  expect.soft(await page.locator("article .declarations small").count()).toBe(0);
+  expect.soft(await page.locator("footer svg").count()).toBe(3);
+  expect
+    .soft(await page.getByRole("button", { name: words.vegetarian, exact: true }).count())
+    .toBe(1);
   const href = await page.locator("nav a").getAttribute("href");
   expect(await page.locator(href!).textContent()).toContain("Starters");
   expect(
