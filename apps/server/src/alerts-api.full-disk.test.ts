@@ -47,7 +47,7 @@ async function seedPerson(role: PersonRoleValue, name: string): Promise<Person> 
 }
 
 beforeEach(async () => {
-  manager = await seedPerson("manager", "Marta");
+  manager = await seedPerson("manager", "Martha");
   supervisor = await seedPerson("supervisor", "Sergio");
   await withTransaction(suite.db, (tx) =>
     recordIncident(tx, {
@@ -273,7 +273,7 @@ describe("answered by the full-disk retry alone", () => {
       const named = await tx
         .select({ id: persons.id })
         .from(persons)
-        .where(eq(persons.displayName, "Marta"));
+        .where(eq(persons.displayName, "Martha"));
       return named.map(() => ({
         key: "backup.stream_behind",
         code: "backup.stream_behind",
