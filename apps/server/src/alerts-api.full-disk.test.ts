@@ -48,7 +48,7 @@ async function seedPerson(role: PersonRoleValue, name: string): Promise<Person> 
 
 beforeEach(async () => {
   manager = await seedPerson("manager", "Martha");
-  supervisor = await seedPerson("supervisor", "Sergio");
+  supervisor = await seedPerson("supervisor", "Simon");
   await withTransaction(suite.db, (tx) =>
     recordIncident(tx, {
       origin: jobOrigin("fiscal_filing"),
