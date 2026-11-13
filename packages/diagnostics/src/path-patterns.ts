@@ -17,6 +17,7 @@ export const PATH_PATTERNS = [
   "/management-api/cloud/remote-access",
   "/management-api/cloud/replacement/check",
   "/management-api/cloud/replacement/prepare",
+  "/management-api/cloud/replacement/reissue",
   "/management-api/cloud/revoke",
   "/management-api/cloud/start",
   "/management-api/cloud/status",

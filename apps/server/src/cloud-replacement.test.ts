@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { createPublicKey, generateKeyPairSync, randomUUID, verify } from "node:crypto";
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -21,6 +21,7 @@ const registration = {
 const dirs: string[] = [];
 const clouds: { close: () => Promise<void> }[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(clouds.splice(0).map((cloud) => cloud?.close()));
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -540,4 +541,208 @@ it("does not let a corrupt replacement file block Stop access, while start-up an
   expect((await f.connection.status()).installation?.state).toBe("revoked");
   await expect(client.resume()).rejects.toMatchObject({ code: "cloud.replacement_state_invalid" });
   await expect(client.check()).rejects.toMatchObject({ code: "cloud.replacement_state_invalid" });
+});
+
+async function setAside(stateDir: string) {
+  return (await readdir(join(stateDir, "cloud"))).filter((name) =>
+    name.startsWith("replacement.json.set-aside-"),
+  );
+}
+
+it("sets an unreadable request aside and asks Cloud again with fresh keys saved before sending", async () => {
+  const f = await fixture();
+  const path = join(f.stateDir, "cloud/replacement.json");
+  const recoveryPath = join(f.stateDir, "cloud/recovery.json");
+  await createCloudReplacement({ ...f.options, connection: f.connection }).prepare();
+  const old = JSON.parse(await readFile(path, "utf8"));
+  await chmod(path, 0o640);
+  const oldBytes = await readFile(path);
+  const recoveryBefore = await readFile(recoveryPath, "utf8");
+  let onDisk: Record<string, string> | undefined;
+  const fetchImpl = (async (url: string, init?: RequestInit) => {
+    onDisk = JSON.parse(await readFile(path, "utf8"));
+    return f.options.fetch(url, init);
+  }) as typeof fetch;
+  const view = await createCloudReplacement({
+    ...f.options,
+    fetch: fetchImpl,
+    connection: f.connection,
+  }).reissue();
+  expect(view.state).toBe("awaiting_owner");
+  const [aside, ...more] = await setAside(f.stateDir);
+  expect(more).toEqual([]);
+  expect(await readFile(join(f.stateDir, "cloud", aside!))).toEqual(oldBytes);
+  expect(await readFile(recoveryPath, "utf8")).toBe(recoveryBefore);
+  const saved = JSON.parse(await readFile(path, "utf8"));
+  expect(saved.publicKey).not.toBe(old.publicKey);
+  expect(saved.peerPublicKey).not.toBe(old.peerPublicKey);
+  expect(onDisk?.publicKey).toBe(saved.publicKey);
+  expect(onDisk?.peerPublicKey).toBe(saved.peerPublicKey);
+  const sent = f.requests.at(-1)!;
+  expect(sent.action).toBe("reissue");
+  expect(sent.payload).toEqual([
+    "waitron-cloud-replacement-v1",
+    origin,
+    f.requestId,
+    "reissue",
+    localVenueId,
+    nodeId,
+    "test",
+    saved.publicKey,
+    saved.peerPublicKey,
+    expect.any(Number),
+  ]);
+  const bytes = Buffer.from(sent.body.payload, "base64url");
+  for (const [key, signature] of [
+    [f.publicKey, sent.body.signature],
+    [saved.publicKey, sent.body.keySignature],
+  ])
+    expect(
+      verify(
+        null,
+        bytes,
+        createPublicKey({ key: Buffer.from(key!, "base64url"), format: "der", type: "spki" }),
+        Buffer.from(signature!, "base64url"),
+      ),
+    ).toBe(true);
+});
+
+it("resends the same fresh keys after a lost reissue reply without setting anything else aside", async () => {
+  const f = await fixture();
+  const path = join(f.stateDir, "cloud/replacement.json");
+  await writeFile(path, "corrupt", { mode: 0o600 });
+  f.setMode("lost");
+  await expect(
+    createCloudReplacement({ ...f.options, connection: f.connection }).reissue(),
+  ).rejects.toMatchObject({ code: "cloud.unavailable" });
+  f.setMode("awaiting_owner");
+  await createCloudReplacement({ ...f.options, connection: f.connection }).reissue();
+  const [first, second] = f.requests.filter((request) => request.action === "reissue");
+  expect(second!.payload[7]).toBe(first!.payload[7]);
+  expect(second!.payload[8]).toBe(first!.payload[8]);
+  expect(await setAside(f.stateDir)).toHaveLength(1);
+});
+
+it("does not move a readable request when asked again", async () => {
+  const f = await fixture();
+  const path = join(f.stateDir, "cloud/replacement.json");
+  const client = createCloudReplacement({ ...f.options, connection: f.connection });
+  await client.prepare();
+  const before = JSON.parse(await readFile(path, "utf8"));
+  await client.reissue();
+  expect(await setAside(f.stateDir)).toEqual([]);
+  expect(f.requests.at(-1)!.payload[7]).toBe(before.publicKey);
+  expect(JSON.parse(await readFile(path, "utf8")).privateKey).toBe(before.privateKey);
+});
+
+it("leaves an unreadable request in place while the box holds another Cloud connection", async () => {
+  const f = await fixture();
+  const path = join(f.stateDir, "cloud/replacement.json");
+  await writeFile(path, "corrupt", { mode: 0o600 });
+  const key = generateKeyPairSync("ed25519");
+  await writeFile(
+    join(f.stateDir, "cloud/connection.json"),
+    JSON.stringify({
+      version: 1,
+      origin,
+      localVenueId,
+      environment: "test",
+      requestId: randomUUID(),
+      code: "12345678",
+      privateKey: key.privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url"),
+      publicKey: key.publicKey.export({ format: "der", type: "spki" }).toString("base64url"),
+    }),
+    { mode: 0o600 },
+  );
+  await expect(
+    createCloudReplacement({ ...f.options, connection: f.connection }).reissue(),
+  ).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+  expect(await readFile(path, "utf8")).toBe("corrupt");
+  expect(await setAside(f.stateDir)).toEqual([]);
+  expect(f.requests.filter((request) => request.action === "reissue")).toEqual([]);
+});
+
+it("Check reconnection resends a reissue whose reply was lost, then checks status once Cloud answers", async () => {
+  const f = await fixture();
+  await writeFile(join(f.stateDir, "cloud/replacement.json"), "corrupt", { mode: 0o600 });
+  f.setMode("lost");
+  await expect(
+    createCloudReplacement({ ...f.options, connection: f.connection }).reissue(),
+  ).rejects.toMatchObject({ code: "cloud.unavailable" });
+  f.setMode("awaiting_owner");
+  const client = createCloudReplacement({ ...f.options, connection: f.connection });
+  await client.check();
+  await client.check();
+  expect(f.requests.map((request) => request.action)).toEqual(["reissue", "reissue", "status"]);
+  expect(new Set(f.requests.map((request) => request.payload[7])).size).toBe(1);
+});
+
+it("keeps the unreadable request in place when the fresh save fails, so pressing again still reissues", async () => {
+  const f = await fixture();
+  const path = join(f.stateDir, "cloud/replacement.json");
+  await writeFile(path, "corrupt", { mode: 0o600 });
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-13T10:00:00.000Z"));
+  // A folder where the save stages its working copy makes that save fail.
+  await mkdir(`${path}.tmp`);
+  await expect(
+    createCloudReplacement({ ...f.options, connection: f.connection }).reissue(),
+  ).rejects.toThrow();
+  const earlier = await setAside(f.stateDir);
+  await rm(`${path}.tmp`, { recursive: true });
+  const client = createCloudReplacement({ ...f.options, connection: f.connection });
+  expect(await readFile(path, "utf8")).toBe("corrupt");
+  await expect(client.status()).rejects.toMatchObject({
+    code: "cloud.replacement_state_invalid",
+  });
+  await expect(client.prepare()).rejects.toMatchObject({
+    code: "cloud.replacement_state_invalid",
+  });
+  expect(f.requests).toEqual([]);
+  vi.setSystemTime(new Date("2026-11-13T10:00:01.000Z"));
+  await client.reissue();
+  expect(f.requests.map((request) => request.action)).toEqual(["reissue"]);
+  const saved = JSON.parse(await readFile(path, "utf8"));
+  expect(saved.reissued).toBe(true);
+  expect(f.requests[0]!.payload[7]).toBe(saved.publicKey);
+  const after = await setAside(f.stateDir);
+  expect(after).toEqual(expect.arrayContaining(earlier));
+  expect(after.length).toBeGreaterThan(0);
+  for (const name of after)
+    expect(await readFile(join(f.stateDir, "cloud", name), "utf8")).toBe("corrupt");
+});
+
+it("never overwrites an earlier set-aside request that holds the name the next one would take", async () => {
+  const f = await fixture();
+  const path = join(f.stateDir, "cloud/replacement.json");
+  await writeFile(path, "corrupt", { mode: 0o600 });
+  const now = new Date("2026-11-13T10:00:00.000Z");
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(now);
+  const earlier = join(
+    f.stateDir,
+    `cloud/replacement.json.set-aside-${now.toISOString().replace(/[:.]/g, "-")}`,
+  );
+  await writeFile(earlier, "earlier", { mode: 0o600 });
+  await expect(
+    createCloudReplacement({ ...f.options, connection: f.connection }).reissue(),
+  ).rejects.toMatchObject({ code: "cloud.busy" });
+  expect(await readFile(earlier, "utf8")).toBe("earlier");
+  expect(await readFile(path, "utf8")).toBe("corrupt");
+  expect(await setAside(f.stateDir)).toHaveLength(1);
+  expect(f.requests).toEqual([]);
+});
+
+it("sets nothing aside and asks Cloud nothing when the person may not make the change", async () => {
+  const f = await fixture();
+  const path = join(f.stateDir, "cloud/replacement.json");
+  await writeFile(path, "corrupt", { mode: 0o600 });
+  await expect(
+    createCloudReplacement({ ...f.options, connection: f.connection }).reissue(async () => {
+      throw new Error("refused");
+    }),
+  ).rejects.toThrow("refused");
+  expect(await setAside(f.stateDir)).toEqual([]);
+  expect(f.requests).toEqual([]);
+  expect(await readFile(path, "utf8")).toBe("corrupt");
 });

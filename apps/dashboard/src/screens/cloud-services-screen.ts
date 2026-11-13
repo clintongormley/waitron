@@ -461,7 +461,11 @@ export class CloudServicesScreen extends LitElement {
                 ${
                   s.state === "not_connected"
                     ? s.replacementError
-                      ? nothing
+                      ? s.replacementError === "cloud.replacement_state_invalid" && s.isPrimary
+                        ? button("reissue-reconnection", t("cloud.replacement_reissue"), () =>
+                            this.api.reissueCloudReplacement(),
+                          )
+                        : nothing
                       : s.replacement || s.replacementPending || s.replacementEligible
                         ? html`<p>${t("cloud.replacement_intro")}</p>
                             ${

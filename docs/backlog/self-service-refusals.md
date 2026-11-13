@@ -663,7 +663,7 @@ not verify that every provider, device or process eventually recovers.
 | `pin.throttled`, till/dashboard; `password.throttled`, dashboard/setup | `packages/identity/src/pin-throttle.ts:110`; `packages/provisioning/src/password-throttle.ts:139`. Both compare a clock with an unlock time or an in-flight attempt. | Waiting can release the throttle; it does not correct the entered credential. |
 | `account_action.rate_limited`, dashboard | `apps/server/src/account-rate-limit.ts:39` resets the request counters after the 60-second window. | Waiting can release this limit. It does not make an expired or invalid action link valid. |
 | `backup.reload_in_progress`, dashboard | `apps/server/src/stream-host.ts:213` clears its gate in `finally`; `apps/server/src/backup-supervisor.ts:189` sets a reload gate. | An active operation can finish. This audit did not reproduce a stuck reload. |
-| `cloud.busy`, dashboard connection | `apps/server/src/cloud-replacement.ts:77` removes its active marker in `finally`; `apps/server/src/cloud-client.ts:313` waits for an active operation. | Temporary local concurrency on these callers. |
+| `cloud.busy`, dashboard connection | `locked` in `apps/server/src/cloud-replacement.ts` removes its active marker in `finally`; `setAsideUnreadable` in the same file answers it when a set-aside name for the same millisecond already exists; `apps/server/src/cloud-client.ts:313` waits for an active operation. | Temporary local concurrency on these callers, or a set-aside name already taken in the same millisecond; a later press takes a new name. |
 | `alert.source_unavailable`, dashboard bell | `apps/server/src/alerts.ts:130` preserves a failed source as an alert; `apps/dashboard/src/api/query-controller.ts:45` sets a one-minute refresh. | Another read is scheduled in an open dashboard. A persistent underlying failure still needs diagnosis; this is no guarantee of repair. |
 | `fiscal_test.uncertain`, setup | `packages/provisioning/src/fiscal-readiness-runner.ts:140` calls the fiscal drain and returns uncertain on a throw or unsettled result; `packages/provisioning/src/fiscal-readiness.ts:106` invokes submit again without accepted evidence. | Retry is an operation, not just waiting. No deterministic permanent cause was established for this message. |
 | `payments.stuck.unknown_unreachable`, dashboard | `apps/dashboard/src/screens/payments-screen.ts:67` uses the unreachable reason; `:68` gives an ambiguous answer different guidance. | A network retry can help; preserve the reason distinction. |
@@ -1253,8 +1253,3 @@ an existing encrypted backup was qualified by this wording change.
 They do not exercise navigation through the unsaved-changes prompt. They read the downloaded
 key files, but check only that the Copy controls exist; clipboard contents were not exercised.
 Keep these limits separate from the open authenticated diagnosis and correction workflow.
-
-## Unusable Cloud reconnection request
-
-The Cloud services page has no way to set an unusable reconnection request aside and request
-again. Cloud reconnection after a restore is test-only.

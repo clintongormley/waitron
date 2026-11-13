@@ -393,6 +393,7 @@ export const en = {
   "cloud.intro": "Connect this venue to your Waitron Cloud account.",
   "cloud.replacement_intro": "Reconnect this restored test server to its existing Cloud venue.",
   "cloud.replacement_request": "Request reconnection",
+  "cloud.replacement_reissue": "Get a fresh reconnection request",
   "cloud.replacement_check": "Check reconnection",
   "cloud.replacement_waiting": "Waiting for the Cloud owner to approve the replacement.",
   "cloud.replacement_pending": "The request was saved. Check Cloud to recover its result.",
@@ -4315,6 +4316,7 @@ export const es: Record<StringKey, string> = {
   "cloud.replacement_intro":
     "Vuelve a conectar este servidor de prueba restaurado con su local existente en Cloud.",
   "cloud.replacement_request": "Solicitar reconexión",
+  "cloud.replacement_reissue": "Obtener una nueva solicitud de reconexión",
   "cloud.replacement_check": "Comprobar reconexión",
   "cloud.replacement_waiting": "Esperando a que el propietario de Cloud apruebe la sustitución.",
   "cloud.replacement_pending":

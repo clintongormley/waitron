@@ -22,7 +22,14 @@ export interface CloudApiDeps {
   connection?: CloudConnection;
   replacement?: Pick<
     CloudReplacement,
-    "status" | "hasProposal" | "approval" | "eligible" | "prepare" | "check" | "recordStop"
+    | "status"
+    | "hasProposal"
+    | "approval"
+    | "eligible"
+    | "prepare"
+    | "check"
+    | "reissue"
+    | "recordStop"
   >;
   managementOrigin: string;
   isPrimary: () => boolean;
@@ -119,7 +126,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       return c.json({ asOf, calendarTimeZone, billing, prices, accountUrl });
     }),
   );
-  for (const action of ["prepare", "check"] as const)
+  for (const action of ["prepare", "check", "reissue"] as const)
     app.post(`/management-api/cloud/replacement/${action}`, (c) =>
       run(c, log, async () => {
         if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))
@@ -139,10 +146,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
           await recheck();
           await requireConfirmation(c);
         };
-        const replacement =
-          action === "prepare"
-            ? await deps.replacement.prepare(authorizeChange)
-            : await deps.replacement.check(authorizeChange);
+        const replacement = await deps.replacement[action](authorizeChange);
         await recheck();
         const status = deps.connection
           ? await deps.connection.status()

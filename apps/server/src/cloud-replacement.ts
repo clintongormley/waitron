@@ -1,7 +1,11 @@
-import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
-import { CLOUD_DIR, CLOUD_REPLACEMENT_FILE } from "@waitron/store";
+import { mkdirDurable, syncFolderHolding, writeFileDurable } from "@waitron/provisioning";
+import {
+  CLOUD_DIR,
+  CLOUD_REPLACEMENT_FILE,
+  CLOUD_REPLACEMENT_SET_ASIDE_PREFIX,
+} from "@waitron/store";
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign } from "node:crypto";
-import { lstat, readFile } from "node:fs/promises";
+import { link, lstat, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
@@ -45,6 +49,8 @@ interface SavedReplacement {
   peerPrivateKey: string;
   view?: ReplacementView;
   stopped?: true;
+  /** Fresh keys Cloud has not yet answered must be sent as a reissue, not a status check. */
+  reissued?: true;
 }
 export interface ReplacementOptions {
   stateDir: string;
@@ -96,7 +102,8 @@ export function createCloudReplacement(options: ReplacementOptions) {
         typeof value.publicKey !== "string" ||
         typeof value.peerPrivateKey !== "string" ||
         typeof value.peerPublicKey !== "string" ||
-        (value.stopped !== undefined && value.stopped !== true)
+        (value.stopped !== undefined && value.stopped !== true) ||
+        (value.reissued !== undefined && value.reissued !== true)
       )
         throw Error();
       const key = createPrivateKey({
@@ -157,9 +164,9 @@ export function createCloudReplacement(options: ReplacementOptions) {
     if (value.phase !== "reported") conflict();
     return value;
   }
-  async function candidate() {
+  async function candidate(reissue: boolean, overUnreadable: boolean) {
     const proof = await identity();
-    let saved = await read();
+    let saved = overUnreadable ? undefined : await read();
     if (saved && (saved.requestId !== proof.requestId || saved.pointId !== proof.pointId))
       conflict();
     const connection = await options.connection.status();
@@ -190,6 +197,7 @@ export function createCloudReplacement(options: ReplacementOptions) {
           .toString("base64url"),
         peerPrivateKey: peerPrivate.subarray(-32).toString("base64"),
         peerPublicKey: peerPublic.subarray(-32).toString("base64"),
+        ...(reissue ? { reissued: true as const } : {}),
       };
       await save(saved);
     }
@@ -257,14 +265,44 @@ export function createCloudReplacement(options: ReplacementOptions) {
       unavailable();
     return value as unknown as ReplacementView;
   }
-  async function exchange(action: "prepare" | "status", authorize?: () => Promise<void>) {
-    const { saved, proof } = await candidate();
+  async function setAsideUnreadable(): Promise<boolean> {
+    await identity();
+    try {
+      await read();
+      return false;
+    } catch (error) {
+      if (!(error instanceof AppError) || error.code !== "cloud.replacement_state_invalid")
+        throw error;
+    }
+    if ((await options.connection.status()).state !== "not_connected") conflict();
+    const aside = join(
+      resolve(options.stateDir),
+      `${CLOUD_REPLACEMENT_SET_ASIDE_PREFIX}${new Date().toISOString().replace(/[:.]/g, "-")}`,
+    );
+    // A second name, never a move: `replacement.json` stays the unreadable original until the
+    // fresh request replaces it, so an interrupted reissue still shows the refusal.
+    try {
+      await link(path, aside);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new AppError("cloud.busy", {});
+      throw error;
+    }
+    await syncFolderHolding(aside);
+    return true;
+  }
+  async function exchange(
+    action: "prepare" | "status" | "reissue",
+    authorize?: () => Promise<void>,
+    overUnreadable = false,
+  ) {
+    const { saved, proof } = await candidate(action === "reissue", overUnreadable);
+    const sent = saved.reissued && !saved.view ? "reissue" : action;
     const bytes = Buffer.from(
       JSON.stringify([
         "waitron-cloud-replacement-v1",
         options.origin,
         saved.requestId,
-        action,
+        sent,
         saved.localVenueId,
         saved.nodeId,
         "test",
@@ -285,7 +323,7 @@ export function createCloudReplacement(options: ReplacementOptions) {
       ).toString("base64url");
     let value: unknown;
     try {
-      const response = await fetchImpl(`${options.origin}/api/replacement/${action}`, {
+      const response = await fetchImpl(`${options.origin}/api/replacement/${sent}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -352,6 +390,11 @@ export function createCloudReplacement(options: ReplacementOptions) {
     },
     prepare: (authorize?: () => Promise<void>) => locked(() => exchange("prepare", authorize)),
     check: (authorize?: () => Promise<void>) => locked(() => exchange("status", authorize)),
+    reissue: (authorize?: () => Promise<void>) =>
+      locked(async () => {
+        await authorize?.();
+        return exchange("reissue", authorize, await setAsideUnreadable());
+      }),
     async status(): Promise<ReplacementView | null> {
       return (await read())?.view ?? null;
     },
@@ -369,9 +412,10 @@ export function createCloudReplacement(options: ReplacementOptions) {
         try {
           saved = await read();
         } catch {
-          // Resume and check refuse the file while it stays unreadable; a repaired file comes back
-          // without the stop (`docs/backlog/replication-cloud.md`, "A stop made while
-          // `cloud/replacement.json` is unreadable is not recorded in it").
+          // Resume and check refuse the file while it stays unreadable; a repaired file, or the fresh
+          // request that Get a fresh reconnection request writes, carries no stop
+          // (`docs/backlog/replication-cloud.md`, "A stop made while `cloud/replacement.json` is
+          // unreadable is not recorded in it").
           return;
         }
         if (!saved || (await options.connection.status()).requestId !== saved.requestId) return;
