@@ -4226,8 +4226,9 @@ failure. Pointer: `packages/migrations/src/apply-complete.test.ts`.
 **Nothing EXTERNAL may block a sale, though a start must have its time confirmed first — and a till
 needs the venue's PRIMARY.** AEAT, the card network and the internet are never on the sale path of
 whichever node is primary, except that, on a box that files records and whose time service is not
-synchronised, a start or a clock jump of over a minute waits for two devices or a person to confirm
-its time before the next payment (owner, 2026-11-10; [below](#every-start-confirms-the-boxs-time-before-it-trades)): records chain locally
+synchronised, a start, or a clock jump of over a minute once the clock watch's next look (15 seconds
+after the last ends) finds it, waits for two devices or a person to confirm its time before any
+later payment (owner, 2026-11-10; [below](#every-start-confirms-the-boxs-time-before-it-trades)): records chain locally
 and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. Fiscal submission
 is an outbox, never inline.
 
@@ -4409,8 +4410,8 @@ How it moves (plan D3):
   start's does. Device readings taken before the jump do not count towards it: the store
   (`apps/server/src/clock-witnesses.ts`) drops a reading once the wall clock has moved more than a
   second against the steady clock since it arrived. The cause reaches Box status as
-  `clock.waiting.cause` and the till's `clock.unconfirmed` notice as `params.cause`, which word a
-  jump's wait apart from a start's.
+  `clock.waiting.cause`, and the till's `clock.unconfirmed` notice and the dashboard bell's
+  `clock.unconfirmed` alert as `params.cause`, which word a jump's wait apart from a start's.
 
 A confirmation that sets nothing writes a log line and no row. Each confirmation keeps the chain
 heads it was made at, read through the seat's optional `recordHeads?(tx)` (`packages/fiscal/src/backend.ts`).

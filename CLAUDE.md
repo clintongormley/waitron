@@ -914,8 +914,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **Nothing EXTERNAL may block a sale, though a start must have its time confirmed first — and a till
   needs the venue's PRIMARY.** AEAT, the card network and the internet are never on the sale path of
   whichever node is primary, except that, on a box that files records and whose time service is not
-  synchronised, a start or a clock jump of over a minute waits for two devices or a person to
-  confirm its time before the next payment (owner, 2026-11-10): records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
+  synchronised, a start, or a clock jump of over a minute once the clock watch's next look (15
+  seconds after the last ends) finds it, waits for two devices or a person to confirm its time
+  before any later payment (owner, 2026-11-10): records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
   inline. TODAY a venue has ONE node and no failover at all. Detail:
   [conventions-data.md](docs/developers/conventions-data.md).
@@ -951,9 +952,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).
 - **While the box's internet time service is synchronised, the clock never stops a sale, whatever a
   till's time, a jump or the latest record's time say** (owner, 2026-11-11 14:34: "we trust NTP over
-  everything else"). **When it is not synchronised, payments and records also wait after the clock
-  jumps by more than a minute against the box's steady clock, until the time is confirmed as at a
-  start** ("We only stop if we have reason to suspect that the time is wrong and we can't talk to
+  everything else"). **When it is not synchronised, on a box that files records, payments and
+  records also wait after the clock jumps by more than a minute against the box's steady clock,
+  until the time is confirmed as at a start** ("We only stop if we have reason to suspect that the time is wrong and we can't talk to
   NTP"). Guards: `apps/server/src/clock-watch.start-up.test.ts` and
   `apps/server/src/start-clock-check.test.ts`, weaker than the rule: named cases only.
   [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).
