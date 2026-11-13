@@ -226,6 +226,7 @@ it("refuses an invoice the agency refused, and refuses a fix that would move it 
         nodeId,
         environment: "production",
         clock: steadyClock,
+        requireClockConfirmed: () => {},
         requireWritable: () => {},
       },
     },

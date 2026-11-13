@@ -1,4 +1,5 @@
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
+import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import { beforeEach, expect, it } from "vitest";
@@ -6,6 +7,8 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { AppError, nodeId } from "@waitron/shared";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
@@ -81,4 +84,51 @@ it.each([
   const res = await send(body);
   expect(res.status).toBe(400);
   expect(await res.json()).toMatchObject({ error: { code: "fiscal.remedy_request_invalid" } });
+});
+
+it("refuses clock.unconfirmed before writing while the start's time check holds", async () => {
+  const records = () => suite.db.all(sql`select id from registros_facturacion`).length;
+  const before = records();
+  const sendUnder = (confirmed: boolean) => {
+    const app = new Hono();
+    mountRecordRemedies(
+      app,
+      {
+        db: suite.db,
+        recordGeneration: {
+          nodeId: nodeId(crypto.randomUUID()),
+          environment: "preproduction",
+          clock: steadyClock,
+          requireWritable() {},
+          requireClockConfirmed() {
+            if (!confirmed) throw new AppError("clock.unconfirmed" as never, {} as never);
+          },
+        },
+      },
+      () => {},
+      new Set(["record-correction"]),
+    );
+    return app.request("/management-api/fiscal-records/remedy", {
+      method: "POST",
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "record-correction",
+        caseId: crypto.randomUUID(),
+        registroId: crypto.randomUUID(),
+        actionKey: "correct-facts",
+        reason: "Correct the stored record facts",
+        facts: { description: "Corrected restaurant service" },
+      }),
+    });
+  };
+
+  const held = await sendUnder(false);
+  expect(held.status).toBe(409);
+  expect(await held.json()).toEqual({ error: { code: "clock.unconfirmed", params: {} } });
+  expect(records()).toBe(before);
+  // Control: with the time confirmed the same request goes on to the fresh sign-in check.
+  const confirmed = await sendUnder(true);
+  expect(await confirmed.json()).toMatchObject({
+    error: { code: "management_session.proof_required" },
+  });
 });

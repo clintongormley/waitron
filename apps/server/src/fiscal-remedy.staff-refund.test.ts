@@ -98,6 +98,7 @@ function remedy(
         nodeId: venue.cfg.nodeId,
         environment,
         clock: venue.clock,
+        requireClockConfirmed: () => {},
         requireWritable: () => {},
       },
     },

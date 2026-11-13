@@ -89,6 +89,9 @@ export interface ModuleRouteContext {
     environment: "production" | "preproduction";
     clock: TrustedClock;
     requireWritable(): void;
+    /** Refuses `clock.unconfirmed` while the start's time check holds: a remedy writes records
+     * outside the fiscal seat that the check wraps. */
+    requireClockConfirmed(): void;
     returnSource?(tx: Transaction): Promise<NodeId | null>;
   };
   liveOperations?: LiveModuleOperationBridge;

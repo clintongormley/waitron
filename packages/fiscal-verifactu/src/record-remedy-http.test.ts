@@ -121,6 +121,7 @@ function send(
             environment,
             clock,
             returnSource,
+            requireClockConfirmed: () => {},
             requireWritable: () => {
               if (!writable) throw new AppError("node.read_only", {});
               if (!tradingReady)

@@ -98,6 +98,7 @@ function send(
               ...steadyClock,
               now: () => ({ ...steadyClock.now(), instant, offsetMinutes: -300 }),
             },
+            requireClockConfirmed: () => {},
             requireWritable: () => {
               if (!writable) throw new AppError("node.read_only", {});
             },

@@ -35,6 +35,7 @@ const run = createErrorBoundary(
     "fiscal.chain_handed_over": 409,
     "node.read_only": 409,
     "clock.behind_chain": 409,
+    "clock.unconfirmed": 409,
     "clock.unusable": 409,
     "venue.time_zone_not_ready": 409,
   },
@@ -80,6 +81,7 @@ export function mountRecordRemedies(
         await admitRecordRemedy(tx, token, kind, allowed);
         if (ctx.recordGeneration === undefined)
           throw new AppError("fiscal.remedy_disabled", { kind });
+        ctx.recordGeneration.requireClockConfirmed();
         await requireFreshManagementSignIn(tx, token);
         if (kind === "record-correction")
           return applyCorrectedRecordFacts(tx, ctx.recordGeneration, token, allowed, body);

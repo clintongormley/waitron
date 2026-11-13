@@ -74,6 +74,7 @@ beforeEach(async () => {
     nodeId: node.nodeId,
     environment: "preproduction",
     clock: { ...steadyClock, now: () => ({ ...steadyClock.now(), instant, offsetMinutes: -300 }) },
+    requireClockConfirmed: () => {},
     requireWritable() {
       if (!writable) throw new AppError("node.read_only", {});
       if (!trading) throw new AppError("venue.time_zone_not_ready", { reason: "restart_required" });

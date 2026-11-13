@@ -19,6 +19,7 @@ it("admits a trading primary and observes later loss and return of write authori
     mode: () => mode,
     role: () => role,
     fenced: () => fenced,
+    clockUnconfirmed: () => false,
   });
   expect(() => generation.requireWritable()).not.toThrow();
   mode = "mirror";
@@ -49,6 +50,7 @@ it("keeps module record generation closed until trading admission is ready", () 
     mode: () => "primary",
     role: () => "primary",
     fenced: () => false,
+    clockUnconfirmed: () => false,
   });
   expect(() => generation.requireWritable()).toThrowError(
     expect.objectContaining({ code: "venue.time_zone_not_ready", params: { reason: "unchecked" } }),
@@ -62,4 +64,23 @@ it("keeps module record generation closed until trading admission is ready", () 
       params: { reason: "restart_required" },
     }),
   );
+});
+
+it("refuses clock.unconfirmed while the start's time check holds, and admits once it lets go", () => {
+  let holds = true;
+  const generation = moduleRecordGeneration({
+    nodeId: nodeId(crypto.randomUUID()),
+    environment: "preproduction",
+    clock: systemClock(),
+    trading: new TradingAdmission(),
+    mode: () => "primary",
+    role: () => "primary",
+    fenced: () => false,
+    clockUnconfirmed: () => holds,
+  });
+  expect(() => generation.requireClockConfirmed()).toThrowError(
+    expect.objectContaining({ code: "clock.unconfirmed" }),
+  );
+  holds = false;
+  expect(() => generation.requireClockConfirmed()).not.toThrow();
 });

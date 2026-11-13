@@ -88,6 +88,7 @@ function send(facts: unknown, enabled = true) {
         nodeId: node.nodeId,
         environment: "preproduction",
         clock: { ...steadyClock, now: () => ({ ...steadyClock.now(), instant }) },
+        requireClockConfirmed: () => {},
         requireWritable() {},
       },
     },
