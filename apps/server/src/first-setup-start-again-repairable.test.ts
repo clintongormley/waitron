@@ -56,7 +56,8 @@ it.each(["claimed", "abandoned"] as const)(
     await expectStartAgainDeleted(folders);
     for (const dir of [folders.venueDir, folders.stateDir])
       expect((await readdir(dir)).filter((name) => !/^venue\.(lock|holder)/.test(name))).toEqual(
-        [],
+        dir === folders.stateDir ? ["flows"] : [],
       );
+    expect(await readdir(join(folders.stateDir, "flows"))).toEqual([]);
   },
 );
