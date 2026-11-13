@@ -1,6 +1,6 @@
 import { VENUE_DIR_NAME } from "@waitron/store";
 import { join } from "node:path";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   isUniqueViolation,
   nowIso,
@@ -14,6 +14,7 @@ import {
   assertPinLength,
   hashPassword,
   hashPin,
+  listAdminHolders,
   persons,
 } from "@waitron/identity";
 import { DEFAULT_STATE_ROOT } from "./boot.js";
@@ -92,10 +93,7 @@ export async function runBreakGlassReset(deps: {
   try {
     try {
       return await withTransaction(opened.db, async (tx) => {
-        const admins = await tx
-          .select({ id: persons.id })
-          .from(persons)
-          .where(eq(persons.role, "admin"));
+        const admins = await listAdminHolders(tx);
 
         if (admins.length === 0) {
           deps.out("break-glass: no admin found on this box");
@@ -126,7 +124,7 @@ export async function runBreakGlassReset(deps: {
             googleSubject: null,
             status: "active",
           })
-          .where(and(eq(persons.id, targetId), eq(persons.role, "admin")))
+          .where(eq(persons.id, targetId))
           .returning({ id: persons.id });
 
         if (updated.length !== 1) {

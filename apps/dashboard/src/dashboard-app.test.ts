@@ -129,7 +129,13 @@ const meResponse = {
   sessionDefault: "es-ES",
   venueName: "Deli Test SL",
   onboardingIntent: "prepare",
-  permissions: ["booking.manage"],
+  permissions: [
+    "booking.manage",
+    "venue.view",
+    "catalogue.manage",
+    "hardware.manage",
+    "system.manage",
+  ],
   modules: ["bookings"],
 };
 
@@ -292,7 +298,7 @@ it.each(["staff", "supervisor", "manager", "admin"])(
         locale: null,
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
-        permissions: [],
+        permissions: role === "staff" ? [] : ["venue.view"],
         modules: [],
         venueName: "Venue",
       }),
@@ -696,7 +702,7 @@ describe("dashboard-app", () => {
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
           venueName: "Deli Test SL",
-          permissions: [],
+          permissions: ["venue.view"],
           modules: [],
           sessionExpiresInSeconds: 1,
           sessionIdleTimeoutSeconds: 2,
@@ -748,7 +754,7 @@ describe("dashboard-app", () => {
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
           venueName: "Deli Test SL",
-          permissions: [],
+          permissions: ["venue.view"],
           modules: [],
           sessionExpiresInSeconds: 1,
           sessionIdleTimeoutSeconds: 2,
@@ -780,7 +786,7 @@ describe("dashboard-app", () => {
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
         venueName: "Deli Test SL",
-        permissions: [],
+        permissions: ["venue.view"],
         modules: [],
       })
       .mockRejectedValueOnce({ code: "management_session.expired" });
@@ -807,7 +813,7 @@ describe("dashboard-app", () => {
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
-      permissions: [],
+      permissions: ["venue.view"],
       modules: [],
     };
     const getMe = vi.fn().mockResolvedValueOnce(initial).mockReturnValueOnce(late);
@@ -935,7 +941,7 @@ describe("dashboard-app", () => {
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
-      permissions: [],
+      permissions: ["venue.view"],
       modules: [],
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -1000,7 +1006,7 @@ describe("dashboard-app", () => {
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
           venueName: "Deli Test SL",
-          permissions: [],
+          permissions: ["venue.view"],
           modules: [],
         }),
     });
@@ -1025,6 +1031,61 @@ describe("dashboard-app", () => {
     expect(mySchedule(el)).toBeNull();
     expect(login(el)).toBeNull();
   });
+
+  it.each([
+    ["payment.take", ["payment.take"], ["my-schedule", "orders"]],
+    [
+      "venue.view",
+      ["venue.view"],
+      [
+        "overview",
+        "sales",
+        "catalogue",
+        "courses",
+        "units",
+        "venue-settings",
+        "staff",
+        "approvals",
+        "planned-actual",
+        "purchases",
+        "appearance",
+        "devices",
+        "printers",
+        "device-profiles",
+        "orders",
+      ],
+    ],
+    ["nothing", [], ["my-schedule", "orders"]],
+    [
+      "catalogue.manage",
+      ["catalogue.manage"],
+      ["menus", "modifiers", "content-languages", "orders"],
+    ],
+  ])(
+    "a person holding only %s signs in and sees permitted pages",
+    async (_name, permissions, screens) => {
+      const { role: _role, ...person } = meResponse;
+      const api = stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...person, permissions, modules: [] }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      expect(login(el)).toBeNull();
+      expect(logoutBtn(el)).not.toBeNull();
+      const shown = [...el.shadowRoot!.querySelectorAll(".nav-item")].map((item) =>
+        item.getAttribute("data-test")!.replace("nav-", ""),
+      );
+      expect(shown.sort()).toEqual([...screens].sort());
+      if (permissions[0] === "catalogue.manage")
+        expect(el.shadowRoot!.querySelector("dashboard-menus-screen")).not.toBeNull();
+      if (permissions.length === 0 || permissions[0] === "payment.take") {
+        expect(mySchedule(el)).not.toBeNull();
+        navItem(el, "orders")!.click();
+        await flush(el);
+        expect(el.shadowRoot!.querySelector("dashboard-orders-screen")).not.toBeNull();
+      }
+    },
+  );
 
   it("a STAFF-role session opens on the self-service my-schedule screen, never the manager staff screen", async () => {
     const api = stubApi({
@@ -1459,7 +1520,9 @@ describe("dashboard-app", () => {
   async function mountOnCatalogue(overrides: Record<string, unknown> = {}) {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["product.manage"] }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, permissions: ["product.manage", "venue.view"] }),
         getProfile: vi.fn().mockResolvedValue(ownProfile),
         listCatalogues: vi
           .fn()
@@ -1770,7 +1833,7 @@ describe("dashboard-app", () => {
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
-          permissions: [],
+          permissions: ["venue.view"],
           modules: [],
         }),
     });
@@ -1801,7 +1864,7 @@ describe("dashboard-app", () => {
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
           venueName: "Deli",
-          permissions: [],
+          permissions: ["venue.view"],
           modules: [],
         }),
     });
@@ -1836,7 +1899,7 @@ describe("dashboard-app", () => {
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
           venueName: "Deli Test SL",
-          permissions: [],
+          permissions: ["venue.view"],
           modules: [],
         }),
     });
@@ -1874,7 +1937,7 @@ describe("dashboard-app", () => {
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
           venueName: "Deli Test SL",
-          permissions: [],
+          permissions: ["venue.view"],
           modules: [],
         }),
     });
@@ -1917,7 +1980,7 @@ describe("dashboard-app", () => {
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
-      permissions: [],
+      permissions: ["venue.view"],
       modules: [],
     });
     await flush(el);
@@ -1952,7 +2015,7 @@ describe("dashboard-app", () => {
                 venueLocale: "es-ES",
                 sessionDefault: "es-ES",
                 venueName: "Deli Test SL",
-                permissions: [],
+                permissions: ["venue.view"],
                 modules: [],
               }),
       });
@@ -2335,7 +2398,7 @@ describe("dashboard-app", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings", "adjustments"],
-        permissions: ["booking.manage", "adjustment.manage", "report.view"],
+        permissions: ["booking.manage", "adjustment.manage", "report.view", "venue.view"],
       }),
       liveData: new LiveData(),
     });
@@ -2398,7 +2461,7 @@ describe("dashboard-app", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings", "adjustments"],
-        permissions: ["booking.manage", "report.view"],
+        permissions: ["booking.manage", "report.view", "venue.view"],
       }),
       liveData: new LiveData(),
     });
@@ -2426,14 +2489,16 @@ describe("dashboard-app", () => {
   });
 
   it.each([
-    { permissions: ["booking.manage"], canManageReaders: false },
-    { permissions: ["booking.manage", "hardware.manage"], canManageReaders: true },
+    { permissions: ["booking.manage", "venue.view"], canManageReaders: false },
+    { permissions: ["booking.manage", "hardware.manage", "venue.view"], canManageReaders: true },
   ])(
     "tells the devices screen whether the session may manage card readers ($permissions)",
     async ({ permissions, canManageReaders }) => {
       const api = stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", ...permissions] }),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
       await flush(el);
@@ -2446,14 +2511,16 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    { permissions: ["booking.manage"], canManage: false },
-    { permissions: ["booking.manage", "hardware.manage"], canManage: true },
+    { permissions: ["booking.manage", "venue.view"], canManage: false },
+    { permissions: ["booking.manage", "hardware.manage", "venue.view"], canManage: true },
   ])(
     "tells the printers screen whether the session may manage printers ($permissions)",
     async ({ permissions, canManage }) => {
       const api = stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", ...permissions] }),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
       await flush(el);
@@ -2469,7 +2536,9 @@ describe("dashboard-app", () => {
   it("tells the printers screen which screens the session may open, for its Used by links", async () => {
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
-      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["booking.manage"] }),
+      getMe: vi
+        .fn()
+        .mockResolvedValue({ ...meResponse, permissions: ["booking.manage", "venue.view"] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -2483,15 +2552,17 @@ describe("dashboard-app", () => {
   });
 
   it.each([
-    { permissions: ["report.view"], canExport: false },
-    { permissions: ["report.view", "report.export"], canExport: true },
+    { permissions: ["report.view", "venue.view"], canExport: false },
+    { permissions: ["report.view", "report.export", "venue.view"], canExport: true },
   ])(
     "tells the orders screen whether the session may export reports ($permissions)",
     async ({ permissions, canExport }) => {
       history.replaceState(null, "", "/manage/orders");
       const api = stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", ...permissions] }),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
       await flush(el);
@@ -2503,15 +2574,17 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    { permissions: ["report.view"], canExport: false },
-    { permissions: ["report.view", "report.export"], canExport: true },
+    { permissions: ["report.view", "venue.view"], canExport: false },
+    { permissions: ["report.view", "report.export", "venue.view"], canExport: true },
   ])(
     "tells the sales screen whether the session may export reports ($permissions)",
     async ({ permissions, canExport }) => {
       history.replaceState(null, "", "/manage/sales");
       const api = stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", ...permissions] }),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
       await flush(el);
@@ -2525,8 +2598,11 @@ describe("dashboard-app", () => {
   it("tells the open devices screen when a session re-read finds hardware.manage gone", async () => {
     const getMe = vi
       .fn()
-      .mockResolvedValueOnce({ ...meResponse, permissions: ["booking.manage", "hardware.manage"] })
-      .mockResolvedValue({ ...meResponse, permissions: ["booking.manage"] });
+      .mockResolvedValueOnce({
+        ...meResponse,
+        permissions: ["booking.manage", "hardware.manage", "venue.view"],
+      })
+      .mockResolvedValue({ ...meResponse, permissions: ["booking.manage", "venue.view"] });
     // After the re-read the alert and content-language reads stay unanswered, so neither redraws the
     // shell; `setLocale` in `#applyMe` still does, so this case passes without `#applyMe`'s own redraw.
     let reread = false;
@@ -2928,7 +3004,7 @@ describe("dashboard-app", () => {
       ...meResponse,
       venueLocale: locale,
       sessionDefault: locale,
-      permissions: ["report.export", "report.view"],
+      permissions: ["report.export", "report.view", "venue.view"],
       modules: ["adjustments"],
     };
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -3135,7 +3211,7 @@ describe("dashboard-app", () => {
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
-          permissions: [],
+          permissions: ["venue.view"],
           modules: ["bookings"],
         }),
       }),
@@ -3159,7 +3235,7 @@ describe("dashboard-app", () => {
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
-          permissions: ["booking.manage"],
+          permissions: ["booking.manage", "venue.view"],
           modules: [],
         }),
       }),
@@ -3180,7 +3256,7 @@ describe("dashboard-app", () => {
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
-          permissions: ["booking.manage"],
+          permissions: ["booking.manage", "venue.view"],
           modules: ["bookings"],
         }),
       }),
@@ -3200,7 +3276,7 @@ describe("dashboard-app", () => {
       locale: null,
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
-      permissions: ["booking.manage"],
+      permissions: ["booking.manage", "venue.view"],
       modules: ["bookings"],
     };
     const session2 = { ...session1, modules: [] as string[] };
@@ -3408,7 +3484,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: [],
+        permissions: ["venue.view"],
         modules: [],
       }),
       listStaff: vi.fn().mockResolvedValue([]),
@@ -3420,14 +3496,20 @@ describe("dashboard-app", () => {
     await flush(el);
     const page = venueSettings(el)!;
     expect(page.shadowRoot!.querySelector("dashboard-receipts-screen")).toBeNull();
-    expect(page.shadowRoot!.querySelector("wt-tabs")).toBeNull();
+    expect(
+      (
+        page.shadowRoot!.querySelector("wt-tabs") as HTMLElement & { items: { key: string }[] }
+      ).items.map((tab) => tab.key),
+    ).toEqual(["venue-details"]);
     expect(page.shadowRoot!.querySelector("h1")).not.toBeNull();
   });
 
   it("Products and menus lists Courses after Modifiers to someone with venue.view", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["venue.view"] }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", "catalogue.manage"] }),
       }),
     });
     await flush(el);
@@ -3447,7 +3529,7 @@ describe("dashboard-app", () => {
   it("hides Courses without venue.view", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["venue.configure"] }),
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["catalogue.manage"] }),
       }),
     });
     await flush(el);
@@ -3514,7 +3596,7 @@ describe("dashboard-app", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: [],
+        permissions: ["venue.view"],
         modules: [],
       }),
       listStaff: vi.fn().mockResolvedValue([]),
@@ -3535,7 +3617,9 @@ describe("dashboard-app", () => {
   it("shows Box status in Settings, directly before Diagnostics, only to a session that manages the system", async () => {
     const { el: mgr } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["system.manage"] }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, permissions: ["system.manage", "venue.view"] }),
         listStaff: vi.fn().mockResolvedValue([]),
       }),
     });
@@ -3553,7 +3637,7 @@ describe("dashboard-app", () => {
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
           role: "supervisor",
-          permissions: [],
+          permissions: ["venue.view"],
         }),
         listStaff: vi.fn().mockResolvedValue([]),
       }),
@@ -3565,9 +3649,11 @@ describe("dashboard-app", () => {
 
   it("shows the Servers nav, after Backups, only to a session holding the permission it needs", async () => {
     const admin = stubApi({
-      getMe: vi
-        .fn()
-        .mockResolvedValue({ ...meResponse, role: "admin", permissions: ["node.manage"] }),
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        role: "admin",
+        permissions: ["node.manage", "system.manage", "venue.view"],
+      }),
       listStaff: vi.fn().mockResolvedValue([]),
     });
     const { el: adm } = await mountWidget<DashboardApp>("dashboard-app", { api: admin });
@@ -3600,13 +3686,15 @@ describe("dashboard-app", () => {
 
   it.each([
     ["admin", ["node.manage"], "dashboard-servers-screen", "/manage/servers"],
-    ["manager", ["booking.manage"], "dashboard-overview-screen", "/manage/overview"],
+    ["manager", ["booking.manage", "venue.view"], "dashboard-overview-screen", "/manage/overview"],
   ])(
     "opens /manage/servers for the %s role only when the session holds the permission",
     async (role, permissions, tag, path) => {
       history.replaceState(null, "", "/manage/servers");
       const api = stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, role, permissions: ["venue.view", ...permissions] }),
         listServers: vi.fn().mockResolvedValue({ term: 0, authorityFingerprint: null, nodes: [] }),
         liveData: new LiveData(),
       });
@@ -3629,7 +3717,11 @@ describe("dashboard-app", () => {
     async (role, permissions) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions: ["venue.view", ...permissions],
+          }),
           listStaff: vi.fn().mockResolvedValue([]),
         }),
       });
@@ -3653,7 +3745,11 @@ describe("dashboard-app", () => {
       history.replaceState(null, "", "/manage/catalogue-defaults");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions: ["venue.view", ...permissions],
+          }),
           listStaff: vi.fn().mockResolvedValue([]),
         }),
       });
@@ -3694,7 +3790,11 @@ describe("dashboard-app", () => {
     async (role, permissions) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions: ["venue.view", ...permissions],
+          }),
           listStaff: vi.fn().mockResolvedValue([]),
         }),
       });
@@ -3719,7 +3819,11 @@ describe("dashboard-app", () => {
       history.replaceState(null, "", "/manage/content-languages");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions: ["venue.view", ...permissions],
+          }),
           listStaff: vi.fn().mockResolvedValue([]),
         }),
       });
@@ -3761,7 +3865,9 @@ describe("dashboard-app", () => {
     history.replaceState(null, "", "/manage/appearance");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", ...permissions] }),
         listStaff: vi.fn().mockResolvedValue([]),
         listThemes: themesStub(),
       }),
@@ -3805,14 +3911,15 @@ describe("dashboard-app", () => {
       }),
     });
     await flush(el);
-    expect(navItem(el, "overview")).toBeTruthy();
+    expect(navItem(el, "overview")).toBeNull();
+    expect(logoutBtn(el)).not.toBeNull();
     expect(navItem(el, "appearance")).toBeNull();
   });
 
   it.each([
     ["manager", ["venue.view"], "dashboard-appearance-screen", "/manage/appearance"],
-    ["manager", ["venue.configure"], "dashboard-overview-screen", "/manage/overview"],
-    ["supervisor", [], "dashboard-overview-screen", "/manage/overview"],
+    ["manager", ["venue.configure"], "dashboard-my-schedule-screen", "/manage/my-schedule"],
+    ["supervisor", [], "dashboard-my-schedule-screen", "/manage/my-schedule"],
     ["staff", ["payment.take"], "dashboard-my-schedule-screen", "/manage/my-schedule"],
   ])(
     "opens /manage/appearance for a %s session only when it holds venue.view",
@@ -3820,7 +3927,12 @@ describe("dashboard-app", () => {
       history.replaceState(null, "", "/manage/appearance");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions,
+            modules: [],
+          }),
           listStaff: vi.fn().mockResolvedValue([]),
           listThemes: themesStub(),
         }),
@@ -3843,7 +3955,9 @@ describe("dashboard-app", () => {
 
   it("offers the VAT return under Sales to a session holding report.export, and opens its page", async () => {
     const api = stubApi({
-      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["report.export"] }),
+      getMe: vi
+        .fn()
+        .mockResolvedValue({ ...meResponse, permissions: ["report.export", "venue.view"] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -3869,7 +3983,13 @@ describe("dashboard-app", () => {
     "does not offer the VAT return to a %s session without report.export",
     async (role, permissions) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-        api: stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }) }),
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions: ["venue.view", ...permissions],
+          }),
+        }),
       });
       await flush(el);
       expect(navItem(el, "sales")).toBeTruthy();
@@ -3885,7 +4005,13 @@ describe("dashboard-app", () => {
     async (role, permissions, tag, path) => {
       history.replaceState(null, "", "/manage/vat-return");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-        api: stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }) }),
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions: ["venue.view", ...permissions],
+          }),
+        }),
       });
       await flush(el);
       expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
@@ -3903,7 +4029,11 @@ describe("dashboard-app", () => {
       history.replaceState(null, "", "/manage/email");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({ ...meResponse, role }),
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions: role === "supervisor" ? ["venue.view"] : meResponse.permissions,
+          }),
           listStaff: vi.fn().mockResolvedValue([]),
           getEmailInbox: vi.fn(() => new Promise(() => undefined)),
         }),
@@ -3936,7 +4066,11 @@ describe("dashboard-app", () => {
       history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions: ["venue.view", ...permissions],
+          }),
           getFloorPlan: vi.fn(() => new Promise(() => undefined)),
           listZones: vi.fn().mockResolvedValue([]),
           listTables: vi.fn().mockResolvedValue([]),
@@ -4332,7 +4466,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
           venueLocale: "en-GB",
           sessionDefault: "en-GB",
           venueName: "Test SL",
-          permissions: [],
+          permissions: ["venue.view"],
           modules: [],
         }),
       getLocales: vi.fn(
@@ -4366,7 +4500,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
         venueName: "Test SL",
-        permissions: [],
+        permissions: ["venue.view"],
         modules: [],
       }),
       logout: vi.fn().mockRejectedValue(new Error("offline")),
@@ -4420,7 +4554,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
           venueName: "Test SL",
-          permissions: [],
+          permissions: ["venue.view"],
           modules: [],
         }),
       getLocales: vi.fn().mockResolvedValue({
@@ -4531,7 +4665,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         locale: null,
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: [],
+        permissions: ["venue.view"],
         modules: [],
       }),
     });
@@ -4554,7 +4688,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
           locale: "en-GB",
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
-          permissions: [],
+          permissions: ["venue.view"],
           modules: [],
         }),
     });
@@ -4671,7 +4805,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         locale: "en-GB",
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: [],
+        permissions: ["venue.view"],
         modules: [],
       }),
     });
@@ -4726,7 +4860,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
-      permissions: [],
+      permissions: ["venue.view"],
       modules: [],
     });
     await flush(el);
@@ -4763,7 +4897,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         locale: "en-GB",
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
-        permissions: [],
+        permissions: ["venue.view"],
         modules: [],
       }),
       logout,
@@ -4802,7 +4936,12 @@ describe("dashboard URL navigation", () => {
       const length = history.length;
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions, modules }),
+          getMe: vi.fn().mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions: ["venue.view", ...permissions],
+            modules,
+          }),
         }),
         request: async (path) => {
           if (path === "/management-api/venue-service/routing")
@@ -4895,7 +5034,7 @@ describe("dashboard URL navigation", () => {
           locale: "en-GB",
           venueLocale: "en-GB",
           sessionDefault: "en-GB",
-          permissions: ["venue.configure"],
+          permissions: ["venue.configure", "venue.view"],
           modules: ["venue-service"],
           venueName: "Venue",
         }),
@@ -4941,7 +5080,7 @@ describe("dashboard URL navigation", () => {
           locale: "en-GB",
           venueLocale: "en-GB",
           sessionDefault: "en-GB",
-          permissions: ["venue.configure"],
+          permissions: ["venue.configure", "venue.view"],
           modules: ["venue-service"],
           venueName: "Venue",
         }),
@@ -4975,8 +5114,8 @@ describe("dashboard URL navigation", () => {
     expect(push).not.toHaveBeenCalled();
   });
   it.each([
-    { modules: ["venue-service"], permissions: [] },
-    { modules: [], permissions: ["venue.configure"] },
+    { modules: ["venue-service"], permissions: ["venue.view"] },
+    { modules: [], permissions: ["venue.configure", "venue.view"] },
   ])(
     "denies a saved venue tab unless both module and permission are present: %j",
     async ({ modules, permissions }) => {
@@ -5017,7 +5156,7 @@ describe("dashboard URL navigation", () => {
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
-        permissions: ["venue.configure"],
+        permissions: ["venue.configure", "venue.view"],
         modules: ["venue-service"],
         venueName: "Venue",
       }),
@@ -5127,7 +5266,7 @@ describe("dashboard URL navigation", () => {
       locale: "en-GB",
       venueLocale: "en-GB",
       sessionDefault: "en-GB",
-      permissions: ["venue.configure"],
+      permissions: ["venue.configure", "venue.view"],
       modules: ["venue-service"],
       venueName: "Venue",
     });
@@ -5208,7 +5347,7 @@ describe("dashboard URL navigation", () => {
           locale: null,
           venueLocale: "es-ES",
           sessionDefault: "es-ES",
-          permissions: [],
+          permissions: role === "staff" ? [] : ["venue.view"],
           modules: [],
         }),
       }),
@@ -5232,7 +5371,7 @@ describe("dashboard URL navigation", () => {
       locale: null,
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
-      permissions: [],
+      permissions: ["venue.view"],
       modules: [],
     });
     login(el)!.dispatchEvent(new CustomEvent("logged-in", { bubbles: true, composed: true }));
@@ -5552,7 +5691,7 @@ describe("the floor plan editor inside the real page", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         locale,
-        permissions: ["venue.configure"],
+        permissions: ["venue.configure", "venue.view"],
       }),
       getFloorPlan: vi.fn().mockResolvedValue({
         zoneId: "z1",
@@ -5980,7 +6119,7 @@ describe("the banner's email inbox link", () => {
           getMe: vi.fn().mockResolvedValue({
             ...meResponse,
             role: "admin",
-            permissions: ["person.admin"],
+            permissions: ["person.admin", "system.manage", "hardware.manage", "venue.view"],
             onboardingIntent: intent,
           }),
         })
@@ -6060,7 +6199,14 @@ describe("the banner's email inbox link", () => {
     history.replaceState(null, "", "/manage/demo-printer");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, role, onboardingIntent: intent }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({
+            ...meResponse,
+            role,
+            permissions: role === "supervisor" ? ["venue.view"] : meResponse.permissions,
+            onboardingIntent: intent,
+          }),
       }),
     });
     await flush(el);
@@ -6102,7 +6248,12 @@ describe("the banner's email inbox link", () => {
           getMe: vi.fn().mockResolvedValue({
             ...meResponse,
             role,
-            permissions: role === "admin" ? ["person.admin"] : [],
+            permissions: [
+              "venue.view",
+              "hardware.manage",
+              "system.manage",
+              ...(role === "admin" ? ["person.admin"] : []),
+            ],
             onboardingIntent: intent,
           }),
           listStaff: vi.fn().mockResolvedValue([]),
@@ -6363,7 +6514,7 @@ describe("alerts in the shell", () => {
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
           role: "admin",
-          permissions: ["person.admin"],
+          permissions: ["person.admin", "system.manage", "hardware.manage", "venue.view"],
           sessionDefault: locale,
           onboardingIntent: intent,
         }),
@@ -6404,7 +6555,7 @@ describe("alerts in the shell", () => {
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
           role: "admin",
-          permissions: ["person.admin"],
+          permissions: ["person.admin", "system.manage", "hardware.manage", "venue.view"],
           sessionDefault: locale,
           onboardingIntent: intent,
         }),
@@ -6832,7 +6983,7 @@ describe("alerts in the shell", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         sessionDefault: "en-GB",
-        permissions: ["system.manage"],
+        permissions: ["system.manage", "venue.view"],
       }),
       getBoxNetwork: vi.fn().mockRejectedValue({ code: "box_host.unavailable" }),
       getBoxHealth: vi.fn(() => new Promise(() => undefined)),
@@ -7514,7 +7665,9 @@ describe("dashboard-app: remaining faces and shell controls", () => {
 
   const systemManagerFaceApi = (): DashboardApi =>
     Object.assign(faceApi(), {
-      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["system.manage"] }),
+      getMe: vi
+        .fn()
+        .mockResolvedValue({ ...meResponse, permissions: ["system.manage", "venue.view"] }),
     });
 
   it("opens Box status for a session that manages the system from its address, with the shell's api", async () => {
@@ -7573,7 +7726,9 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   it("signs out to come back to Box status when the Box status screen asks for an administrator", async () => {
     history.replaceState(null, "", "/manage/box-status");
     const api = Object.assign(faceApi(), {
-      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["system.manage"] }),
+      getMe: vi
+        .fn()
+        .mockResolvedValue({ ...meResponse, permissions: ["system.manage", "venue.view"] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api,
@@ -7617,7 +7772,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings", "venue-service"],
-        permissions: ["booking.manage", "venue.configure"],
+        permissions: ["booking.manage", "venue.configure", "venue.view"],
       }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
@@ -7652,8 +7807,8 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   });
 
   it.each([
-    ["Bookings is not enabled", { modules: [], permissions: ["booking.manage"] }],
-    ["the session may not open Bookings", { modules: ["bookings"], permissions: [] }],
+    ["Bookings is not enabled", { modules: [], permissions: ["booking.manage", "venue.view"] }],
+    ["the session may not open Bookings", { modules: ["bookings"], permissions: ["venue.view"] }],
   ])("draws no Service header when %s", async (_label, me) => {
     const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, ...me }) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
@@ -7839,12 +7994,16 @@ describe("the nav search", () => {
   });
 
   it("finds Box status by its label in English and in Spanish", async () => {
-    const english = await mountSession(sessionIn("en-GB", { permissions: ["system.manage"] }));
+    const english = await mountSession(
+      sessionIn("en-GB", { permissions: ["system.manage", "venue.view"] }),
+    );
     await search(english, "box");
     expect(shownItems(english)).toEqual(["nav-box-status"]);
     english.remove();
 
-    const spanish = await mountSession(sessionIn("es-ES", { permissions: ["system.manage"] }));
+    const spanish = await mountSession(
+      sessionIn("es-ES", { permissions: ["system.manage", "venue.view"] }),
+    );
     // The first word of the Spanish label, upper-cased, so the search is shown case-blind.
     await search(spanish, es["nav.box_status"].split(" ")[0]!.toUpperCase());
     expect(shownItems(spanish)).toEqual(["nav-box-status"]);
@@ -7886,7 +8045,13 @@ describe("the nav search", () => {
     const el = await mountSession(sessionIn("en-GB"));
     await search(el, "menus");
     expect(shownHeaders(el)).toEqual(["nav-group-menu"]);
-    expect(shownItems(el)).toEqual(["nav-menus", "nav-catalogue", "nav-modifiers", "nav-units"]);
+    expect(shownItems(el)).toEqual([
+      "nav-menus",
+      "nav-catalogue",
+      "nav-modifiers",
+      "nav-courses",
+      "nav-units",
+    ]);
   });
 
   it("finds the moved pages under Venue operations", async () => {
@@ -7922,11 +8087,15 @@ describe("the nav search", () => {
 
   it("never offers a page the person may not open, typed with its exact label", async () => {
     const el = await mountSession(
-      sessionIn("en-GB", { role: "supervisor", permissions: [], modules: ["bookings"] }),
+      sessionIn("en-GB", {
+        role: "supervisor",
+        permissions: ["venue.view"],
+        modules: ["bookings"],
+      }),
     );
     // "Menus" is a manager page; its group's name holds the term, so the group's other pages show.
     await search(el, "Menus");
-    expect(shownItems(el)).toEqual(["nav-catalogue", "nav-units"]);
+    expect(shownItems(el)).toEqual(["nav-catalogue", "nav-courses", "nav-units"]);
     await search(el, "Diagnostics");
     expect(shownItems(el)).toEqual([]);
     // Bookings is enabled for the venue, but this session lacks its permission.
@@ -8748,9 +8917,10 @@ describe("inline translation application leave paths", () => {
         })),
       };
       const api = stubApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, permissions: ["person.manage", "catalogue.manage"] }),
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          permissions: ["person.manage", "catalogue.manage", "venue.view"],
+        }),
         getContentLanguages: vi.fn().mockResolvedValue(config),
         getContentLanguageRules: vi
           .fn()
@@ -8947,7 +9117,7 @@ describe("mounted public department dialogs", () => {
   }
   async function mountDepartments(
     path = "/manage/venue-operations",
-    permissions = ["venue.configure"],
+    permissions = ["venue.configure", "venue.view"],
     missingPeriods = false,
     liveDeli = false,
   ) {
@@ -9203,11 +9373,14 @@ describe("mounted public department dialogs", () => {
     expect(box.isConnected).toBe(true);
     expect(box.value).toBe("Draft restaurant");
   });
-  it.each([{ permissions: [] }, { permissions: ["venue.view"] }])(
+  it.each([
+    { permissions: [], landing: "/manage/my-schedule" },
+    { permissions: ["venue.view"], landing: "/manage/overview" },
+  ])(
     "a department deep link still requires its own permission: %j",
-    async ({ permissions }) => {
+    async ({ permissions, landing }) => {
       const app = await mountDepartments("/manage/venue-operations/department/d1", permissions);
-      expect(location.pathname).toBe("/manage/overview");
+      expect(location.pathname).toBe(landing);
       expect(find(app, "department-settings")).toBeNull();
       expect(navItem(app, "venue-operations")).toBeNull();
     },
@@ -9283,10 +9456,10 @@ describe("mounted public department dialogs", () => {
   it.each([["venue.view"], ["booking.manage"], []])(
     "a Receipt deep link cannot bypass venue permission: %j",
     async (...permissions) => {
-      const app = await mountDepartments(
-        "/manage/venue-operations/department/d1/view/receipt",
-        permissions,
-      );
+      const app = await mountDepartments("/manage/venue-operations/department/d1/view/receipt", [
+        "venue.view",
+        ...permissions,
+      ]);
       expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
       expect(find(app, 'button[data-key="receipt"]')).toBeNull();
       expect(find(app, "department-settings")).toBeNull();
@@ -9455,7 +9628,7 @@ it.each([false, true])("passes admin authority to the staff screen (%s)", async 
   const api = stubApi({
     getMe: vi.fn().mockResolvedValue({
       ...meResponse,
-      permissions: ["person.manage", ...(admin ? ["person.admin"] : [])],
+      permissions: ["venue.view", "person.manage", ...(admin ? ["person.admin"] : [])],
     }),
   });
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -9471,7 +9644,11 @@ it.each([false, true])(
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
-        permissions: ["person.manage", canExport ? "personal_data.export" : "person.admin"],
+        permissions: [
+          "venue.view",
+          "person.manage",
+          canExport ? "personal_data.export" : "person.admin",
+        ],
       }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -9517,7 +9694,11 @@ it.each([false, true])(
       listStaff: vi.fn().mockResolvedValue([]),
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
-        permissions: ["report.view", canExport ? "personal_data.export" : "report.export"],
+        permissions: [
+          "venue.view",
+          "report.view",
+          canExport ? "personal_data.export" : "report.export",
+        ],
       }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -9578,7 +9759,7 @@ describe("the Users screen's administrator sign-in, pressed for real", () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
-        permissions: ["person.manage", "personal_data.export"],
+        permissions: ["venue.view", "person.manage", "personal_data.export"],
       }),
       listStaff: vi.fn().mockResolvedValue([marta]),
       downloadPersonalData: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
@@ -9827,7 +10008,7 @@ it("expires a dirty repair session without retaining its draft or leave question
   const api = stubApi({
     getMe: vi.fn().mockResolvedValue({
       ...meResponse,
-      permissions: ["venue.configure"],
+      permissions: ["venue.configure", "venue.view"],
       tradingAdmission: { state: "invalid" },
     }),
     getVenueZoneRepair: vi.fn().mockResolvedValue(status),

@@ -49,7 +49,7 @@ function stubApi(modules: string[] = ["second", "unordered", "first"]): Dashboar
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
-      permissions: ["test.use"],
+      permissions: ["test.use", "venue.view"],
       modules,
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),

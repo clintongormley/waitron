@@ -1,3 +1,4 @@
+import { listAdminHolders } from "@waitron/identity";
 import {
   openBackupQuery,
   SCRATCH_DIR,
@@ -627,11 +628,9 @@ export async function readRestoreAdminVerifiers(databasePath: string): Promise<r
   const opened = await openBackupQuery(databasePath);
   try {
     const hashes: string[] = [];
-    for await (const row of opened.query.rows(
-      "select password_hash from persons where role = 'admin' and status = 'active'",
-    )) {
-      if (typeof row.password_hash === "string" && row.password_hash !== "")
-        hashes.push(row.password_hash);
+    for (const person of await listAdminHolders(opened.query, { status: "active" })) {
+      if (person.passwordHash !== null && person.passwordHash !== "")
+        hashes.push(person.passwordHash);
     }
     // An unfinished flow without a password cannot offer authenticated discard.
     if (hashes.length === 0) throw new AppError("restore.administrator_password_missing", {});

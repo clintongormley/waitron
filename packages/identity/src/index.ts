@@ -1,4 +1,11 @@
-export { readPersonAuthority, holds, holdsInCopy, type PersonAuthority } from "./authority.js";
+export {
+  readPersonAuthority,
+  listAdminHolders,
+  isAdminHolder,
+  holds,
+  holdsInCopy,
+  type PersonAuthority,
+} from "./authority.js";
 export { authorize, authorizeByPin } from "./authorize.js";
 export { checkPin, verifyPersonCredential, verifyThrottledCredential } from "./credential.js";
 export type { PinAttempts } from "./credential.js";

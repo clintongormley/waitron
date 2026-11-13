@@ -32,7 +32,13 @@ const meResponse = {
   sessionDefault: "es-ES",
   venueName: "Deli Test SL",
   onboardingIntent: "prepare",
-  permissions: ["booking.manage"],
+  permissions: [
+    "booking.manage",
+    "venue.view",
+    "catalogue.manage",
+    "hardware.manage",
+    "system.manage",
+  ],
   modules: ["bookings"],
 };
 
@@ -488,7 +494,7 @@ describe("the full-disk bar's button", () => {
 
   it.each([
     ["a manager", "manager", ["system.manage"], "dashboard-box-status-screen"],
-    ["a supervisor", "supervisor", [], "dashboard-overview-screen"],
+    ["a supervisor", "supervisor", ["venue.view"], "dashboard-overview-screen"],
   ])(
     "signs a supervisor out with Box status kept for the next sign-in; %s then lands on it or their usual page",
     async (_who, role, permissions, landing) => {
@@ -623,7 +629,7 @@ describe("the full-disk bar's button", () => {
   it("leaves the staff screen's administrator sign-in clearing the address as before", async () => {
     history.replaceState(null, "", "/manage/staff");
     const logout = vi.fn().mockResolvedValue(undefined);
-    const { el } = await mountAs("manager", ["system.manage", "person.view"], { logout });
+    const { el } = await mountAs("manager", ["system.manage", "person.view", "venue.view"], { logout });
     const staff = await vi.waitFor(() => {
       const screen = el.shadowRoot!.querySelector("dashboard-staff-screen");
       expect(screen).not.toBeNull();

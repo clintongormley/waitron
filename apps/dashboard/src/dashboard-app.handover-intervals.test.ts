@@ -26,7 +26,7 @@ it.each([true, false])(
         sessionDefault: "en-GB",
         venueName: "Test venue",
         modules: [],
-        permissions: allowed ? ["report.view"] : [],
+        permissions: allowed ? ["venue.view", "report.view"] : ["venue.view"],
         sessionExpiresInSeconds: 1800,
         sessionIdleTimeoutSeconds: 1800,
       }),

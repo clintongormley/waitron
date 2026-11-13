@@ -971,6 +971,10 @@ screens by permission and knows a person is signed in from their id. Behaviour u
 
 **Build note, 2026-11-13:** `holdsInCopy` and its handover comparison caller/tests moved to PR9
 under the watcher's 04:48 clearance. The remaining readers below stay in PR10.
+The watcher cleared `listAdminHolders` accepting `BackupQuery` as well as the live database on
+2026-11-13 at 06:59 in Lane K's `questions.md`: the recovery password reader moved to
+`restore-request.ts` and reads the offered copy. Workforce's correction reader and bill-venue's
+level read were already removed by earlier slices.
 
 
 **Files:** `packages/identity/src/authority.ts` (new readers); `apps/server/src/recovery-environment.ts:133`,

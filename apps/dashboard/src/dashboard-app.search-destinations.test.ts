@@ -129,7 +129,7 @@ async function mount(
       venueLocale: "en-GB",
       sessionDefault: "en-GB",
       venueName: "Library test",
-      permissions: options.permissions ?? ["library.read"],
+      permissions: ["venue.view", ...(options.permissions ?? ["library.read"])],
       modules: options.modules ?? ["search-fixture"],
     }),
     getGoogleConfig: async () => ({ configured: false }),

@@ -28,7 +28,7 @@ function touchApi(overrides: Record<string, unknown> = {}): DashboardApi {
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
       onboardingIntent: "prepare",
-      permissions: [],
+      permissions: ["venue.view", "catalogue.manage", "hardware.manage", "system.manage"],
       modules: [],
     }),
     getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),

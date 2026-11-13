@@ -10,7 +10,10 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
-async function mount(path = "/manage/backup", permissions = ["venue.view", "venue.configure"]) {
+async function mount(
+  path = "/manage/backup",
+  permissions = ["venue.view", "venue.configure", "system.manage"],
+) {
   history.replaceState(null, "", path);
   let logouts = 0;
   const locales: string[] = [];
@@ -79,8 +82,10 @@ async function mount(path = "/manage/backup", permissions = ["venue.view", "venu
       },
     } as unknown as DashboardApi,
   });
-  await expect.poll(() => app.shadowRoot!.querySelector("[data-test=nav-backup]")).not.toBeNull();
-  if (path.endsWith("backup"))
+  await expect.poll(() => app.shadowRoot!.querySelector("[data-test=account-menu]")).not.toBeNull();
+  if (permissions.includes("system.manage"))
+    expect(app.shadowRoot!.querySelector("[data-test=nav-backup]")).not.toBeNull();
+  if (path.endsWith("backup") && permissions.includes("system.manage"))
     await expect
       .poll(() => backup(app)?.shadowRoot?.querySelector("[data-test=destination]"))
       .not.toBeNull();
@@ -91,14 +96,19 @@ function backup(app: DashboardApp) {
 }
 
 it.each([false, true])(
-  "passes system.manage=%s from the authenticated session to the recovery pack card",
+  "opens Backups and its recovery pack card only with system.manage=%s",
   async (allowed) => {
     const { app } = await mount(
       "/manage/backup",
       allowed ? ["venue.view", "system.manage"] : ["venue.view"],
     );
     const screen = backup(app);
-    expect(screen.canManage).toBe(allowed);
+    if (!allowed) {
+      expect(screen).toBeNull();
+      expect(app.shadowRoot!.querySelector("[data-test=nav-backup]")).toBeNull();
+      return;
+    }
+    expect(screen.canManage).toBe(true);
     await screen.updateComplete;
     expect(screen.shadowRoot!.querySelector("dashboard-recovery-pack-card") !== null).toBe(allowed);
   },

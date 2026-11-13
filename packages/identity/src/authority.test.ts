@@ -30,6 +30,35 @@ describe("person authority", () => {
     },
   );
 
+  it("lists Admin holders with their password hashes, optionally active only", async () => {
+    const admin = await seedPerson(suite.db, "admin");
+    const suspended = await seedPerson(suite.db, "admin", "suspended");
+    const pending = await seedPerson(suite.db, "admin", "pending");
+    await seedPerson(suite.db, "manager");
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(sql`update persons set password_hash = 'stored-verifier' where id = ${admin}`),
+    );
+    expect(await identity.listAdminHolders(suite.db)).toEqual(
+      expect.arrayContaining([
+        { id: admin, passwordHash: "stored-verifier" },
+        { id: suspended, passwordHash: null },
+        { id: pending, passwordHash: null },
+      ]),
+    );
+    expect(await identity.listAdminHolders(suite.db)).toHaveLength(3);
+    expect(await identity.listAdminHolders(suite.db, { status: "active" })).toEqual([
+      { id: admin, passwordHash: "stored-verifier" },
+    ]);
+  });
+
+  it("checks Admin membership independently of status, and refuses other or missing people", async () => {
+    const admin = await seedPerson(suite.db, "admin", "suspended");
+    const manager = await seedPerson(suite.db, "manager");
+    expect(await identity.isAdminHolder(suite.db, admin)).toBe(true);
+    expect(await identity.isAdminHolder(suite.db, manager)).toBe(false);
+    expect(await identity.isAdminHolder(suite.db, crypto.randomUUID())).toBe(false);
+  });
+
   it("an unknown person holds nothing", async () => {
     const personId = crypto.randomUUID();
     const authority = await identity.readPersonAuthority(suite.db, personId);
@@ -55,12 +84,25 @@ describe("person authority", () => {
     const directory = await mkdtemp(join(tmpdir(), "authority-copy-"));
     try {
       const path = join(directory, "copy.db");
+      await withTransaction(suite.db, (tx) =>
+        tx.execute(sql`update persons set password_hash = 'copy-verifier' where id = ${admin}`),
+      );
       await suite.db.archiveTo(path);
       await withTransaction(suite.db, (tx) =>
         tx.execute(sql`update persons set role = 'staff' where id = ${admin}`),
       );
       const copy = await openBackupQuery(path);
       try {
+        expect(await identity.listAdminHolders(copy.query, { status: "active" })).toEqual([
+          { id: admin, passwordHash: "copy-verifier" },
+        ]);
+        expect(await identity.listAdminHolders(copy.query)).toEqual(
+          expect.arrayContaining([
+            { id: admin, passwordHash: "copy-verifier" },
+            { id: suspended, passwordHash: null },
+          ]),
+        );
+        expect(await identity.listAdminHolders(copy.query)).toHaveLength(2);
         expect(await identity.holdsInCopy(copy.query, admin, "node.manage")).toBe(true);
         expect(await identity.holdsInCopy(copy.query, manager, "node.manage")).toBe(false);
         expect(await identity.holdsInCopy(copy.query, suspended, "node.manage")).toBe(false);

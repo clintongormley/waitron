@@ -27,7 +27,6 @@ declare module "@waitron/shared" {
     "attendance.append_contention": { nodeId: string; attempts: number };
     /** A correction or an approval named an entry that does not exist. */
     "correction.target_not_found": { entryId: string };
-    /** The approver's `persons.role` is not supervisor, manager or admin. */
     "correction.not_permitted": { personId: string };
     "shift.not_found": { shiftId: string };
     "roster.not_published": { rosterVersionId: string };

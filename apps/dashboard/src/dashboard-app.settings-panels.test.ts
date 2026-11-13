@@ -90,7 +90,7 @@ afterEach(() => {
   setLocale("es-ES");
 });
 
-function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
+function stubApi(role = "manager", permissions = ["test.use", "venue.view"]): DashboardApi {
   const pending = () => vi.fn(() => new Promise(() => undefined));
   return {
     getMe: vi.fn().mockResolvedValue({
@@ -129,7 +129,7 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
 async function mount(
   path: string,
   role = "manager",
-  permissions = ["test.use"],
+  permissions = ["test.use", "venue.view"],
 ): Promise<DashboardApp> {
   const url = new URL(location.href);
   url.pathname = path;
@@ -170,10 +170,10 @@ it("puts a module's panels on their tab by their stated order, the core panels c
 
 it("leaves out a panel the session lacks the permission for, and a disabled module's panel", async () => {
   const el = await mount("/manage/venue-settings/view/venue-details");
-  expect(tabKeys(el)).toEqual(["kitchen"]);
+  expect(tabKeys(el)).toEqual(["venue-details", "kitchen"]);
   expect(page(el).shadowRoot!.querySelector("[data-test=panel-reasons]")).toBeNull();
   expect(page(el).shadowRoot!.querySelector("[data-test=panel-gadgets]")).toBeNull();
-  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
 });
 
 it("refuses to start when a module names an unknown settings tab", async () => {

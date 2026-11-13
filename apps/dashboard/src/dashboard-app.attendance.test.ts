@@ -31,7 +31,7 @@ async function mount(modules: string[], permissions: string[], role = "superviso
       venueLocale: "es-ES",
       sessionDefault: "en-GB",
       venueName: "Deli",
-      permissions,
+      permissions: role === "staff" ? permissions : ["venue.view", ...permissions],
       modules,
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
@@ -87,13 +87,7 @@ async function mount(modules: string[], permissions: string[], role = "superviso
     },
   });
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
-  await expect
-    .poll(() =>
-      el.shadowRoot!.querySelector(
-        role === "staff" ? "[data-test=nav-my-schedule]" : "[data-test=nav-overview]",
-      ),
-    )
-    .not.toBeNull();
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=account-menu]")).not.toBeNull();
   return { el, requests };
 }
 it("a permitted supervisor opens the real workforce correction screen from Team", async () => {

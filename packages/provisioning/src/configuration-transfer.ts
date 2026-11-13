@@ -1,3 +1,4 @@
+import { listAdminHolders } from "@waitron/identity";
 import { createStarterStaffRole } from "@waitron/staffing";
 import {
   exportSettingsDocuments,
@@ -12,7 +13,7 @@ import {
 } from "@waitron/country-packs";
 import { STARTER_JOB_ROLE_NAMES } from "./starter-content.js";
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, notInArray, sql } from "drizzle-orm";
 import {
   AppError,
   businessDayAt,
@@ -764,10 +765,7 @@ export async function importConfigurationTables(
         holidayArea: bundle.holidayArea,
       });
   }
-  const administrators = await tx
-    .select({ id: persons.id })
-    .from(persons)
-    .where(eq(persons.role, "admin"));
+  const administrators = await listAdminHolders(tx);
   const [starterRole] = await tx
     .select({ name: staffRoles.name })
     .from(staffRoles)
@@ -846,10 +844,12 @@ export async function importConfigurationTables(
   await tx.execute(sql`pragma defer_foreign_keys = on`);
   for (const [declaration] of [...checked].reverse()) {
     if (declaration.name === "persons") {
-      await tx.execute(sql`
-        delete from ${sql.identifier(declaration.name)}
-        where role <> 'admin'
-      `);
+      await tx.delete(persons).where(
+        notInArray(
+          persons.id,
+          administrators.map((person) => person.id),
+        ),
+      );
     } else {
       await tx.execute(sql`
         delete from ${sql.identifier(declaration.name)}

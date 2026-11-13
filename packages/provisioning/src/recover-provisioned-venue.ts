@@ -1,3 +1,4 @@
+import { listAdminHolders } from "@waitron/identity";
 import { sql } from "drizzle-orm";
 import { readVenue, withTransaction, type Database } from "@waitron/db";
 import { readIssueZone } from "@waitron/fiscal";
@@ -44,10 +45,8 @@ export async function recoverProvisionedVenue(
     await readIssueZone(tx, { nodeId: row.nodeId });
     if (initial !== undefined) {
       if (row.nodeId !== initial.nodeId) return refuse();
-      const administrator = await tx.execute<{ id: string }>(sql`
-        select id from persons where id = ${initial.administratorId}
-          and role = 'admin' and status = 'active'`);
-      if (administrator.rows.length !== 1) return refuse();
+      const administrators = await listAdminHolders(tx, { status: "active" });
+      if (!administrators.some((person) => person.id === initial.administratorId)) return refuse();
     }
     const resolver = owners[0]?.provisioning?.seed?.series;
     const expected: readonly { id?: string; code: string; purpose: string }[] =
