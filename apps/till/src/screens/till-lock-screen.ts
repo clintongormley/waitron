@@ -203,6 +203,7 @@ export class TillLockScreen extends LitElement {
   #throttleTimer?: ReturnType<typeof setInterval>;
   #connection = 0;
   #staffLive?: { stop(): void };
+  #staffRead?: Promise<void>;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -214,7 +215,7 @@ export class TillLockScreen extends LitElement {
       this.#staffLive?.stop();
       this.#staffLive = undefined;
     }
-    if (this.live && !this.#staffLive)
+    if (this.isConnected && this.live && !this.#staffLive)
       this.#staffLive = queuedLiveRefresh(this.live, {
         types: TILL_LIVE_TYPES.signIn!,
         run: () => this.#loadStaff(),
@@ -234,7 +235,13 @@ export class TillLockScreen extends LitElement {
     this.#clearThrottle();
   }
 
-  async #loadStaff(): Promise<void> {
+  #loadStaff(): Promise<void> {
+    return (this.#staffRead ??= this.#readStaff().finally(() => {
+      this.#staffRead = undefined;
+    }));
+  }
+
+  async #readStaff(): Promise<void> {
     const initial = this.staff === undefined;
     const connection = this.#connection;
     try {

@@ -879,6 +879,10 @@ none (light path).
 **Interfaces:** `DEVICE_TYPES` drops `device_profile_admission_persons` and adds `staff_roles` and
 `person_staff_roles`.
 
+**2026-11-13 correction (watcher 03:45, Lane K questions.md):** keep `DEVICE_TYPES` unchanged
+and add the two job sources only to `signIn`, so unrelated screens do not refresh for a job edit.
+The lock screen uses the existing shared connection and refresh helper.
+
 - [ ] **Step 1–4:** `it("a new holder of a ticked job role reaches the lock screen without
   reload")`. **Step 5: Commit.**
 

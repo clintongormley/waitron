@@ -12,8 +12,6 @@ const DEVICE_TYPES = [
   "device_profile_service_access",
   "device_profile_zones",
   "device_profile_admission_roles",
-  "staff_roles",
-  "person_staff_roles",
 ];
 const ORDER_TYPES = [
   "working_orders",
@@ -90,7 +88,7 @@ const KITCHEN_TYPES = [
 ];
 
 export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
-  signIn: [...DEVICE_TYPES, "persons"],
+  signIn: [...DEVICE_TYPES, "staff_roles", "person_staff_roles", "persons"],
   station: KITCHEN_TYPES,
   pass: KITCHEN_TYPES,
   deliveries: [

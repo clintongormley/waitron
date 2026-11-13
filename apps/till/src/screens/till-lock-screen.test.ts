@@ -80,6 +80,45 @@ afterEach(() => {
 });
 
 describe("till-lock-screen", () => {
+  it("stops reading staff when a used lock screen leaves the page", async () => {
+    const live = liveConnectionFixture();
+    const listStaff = vi.fn().mockResolvedValue([ana, ben]);
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi({ listStaff }),
+      live: live.connection,
+    });
+    await flush(el);
+    click(el, '[data-person="p2"]');
+    await flush(el);
+    const reads = listStaff.mock.calls.length;
+    el.remove();
+    await flush(el);
+    live.change("person_staff_roles");
+    await flush(el);
+    expect(listStaff).toHaveBeenCalledTimes(reads);
+    live.connection.stop();
+  });
+
+  it("shares the initial staff read with an already connected live stream", async () => {
+    const live = liveConnectionFixture();
+    live.ready();
+    let answer!: (value: StaffMember[]) => void;
+    const response = new Promise<StaffMember[]>((resolve) => {
+      answer = resolve;
+    });
+    const listStaff = vi.fn(() => response);
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi({ listStaff }),
+      live: live.connection,
+    });
+    await flush(el);
+    expect(listStaff).toHaveBeenCalledOnce();
+    answer([ana, ben]);
+    await flush(el);
+    expect(query(el, '[data-person="p2"]')?.textContent).toContain("Ben");
+    live.connection.stop();
+  });
+
   it("keeps the known sign-in list when a live read fails", async () => {
     const live = liveConnectionFixture();
     const listStaff = vi.fn().mockResolvedValue([ana, ben]);
