@@ -317,10 +317,20 @@ A successful hosted retry proves recovery only; it does not establish server hea
 You can dispatch this explicit probe while the human switch is hosted. The controller
 must recognise `server-probe-1` before the first attempt can be picked up.
 
-Measured routing decisions stay on their queues. Automatic controller pickup and cleanup
-continue without rebalancing a full pool or moving refused/failed work. Qualify published
-behavior with actual run, attempt, source and runner identities; local tests do not
-establish scheduling, queue-time improvement or workflow-token permission.
+Automatic controller pickup can move an untouched first-attempt PR run from a full pool
+to GitHub. Refused sources and failed automatic workers do not move their runs. Qualify
+published behavior with actual run, attempt, source and runner identities; local tests
+do not establish scheduling, queue-time improvement or workflow-token permission.
+
+On 13 November, the installed controller at Cloud `ff3b0fce1055cdfe8eb5cf50b10a7752d0ce6e3e`
+moved [owned drill run 43390920001](https://github.com/clintongormley/waitron/actions/runs/43390920001)
+on unchanged head `f855208c36b9b79828a899d1f09c14f3cd264544`. Its log records the marker/cancel
+at 08:10:22 UTC and the hosted rerun at 08:12:00 UTC. The first target was cancelled without
+a runner; all three no-op fixture jobs passed on GitHub in attempt 2. Ordinary work supplied
+the full pool: the prepared filler was never dispatched, pushes continued, and the driver
+wrote no movement marker or cancellation/rerun request. Recovery logged one POST 409 before
+a later pass reran it. This qualifies one untouched-run forward move. Stuck cancellation,
+reverse movement, free-room recovery, product checks and speed gains remain outside this drill.
 
 The watch-list evaluator withholds the four job-status functions from step environment
 expressions. Its “evaluates watch-list environment expressions without job-status functions”
