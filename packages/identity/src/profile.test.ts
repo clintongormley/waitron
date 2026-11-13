@@ -358,6 +358,7 @@ describe("your profile", () => {
 
   it("lists and removes only your own passkeys", async () => {
     const f = await fixture();
+    await seedManager(suite.db, { email: "admin@example.test", role: "admin" });
     const colleague = await seedManager(suite.db, { email: "colleague@example.com" });
     const credentialId = randomUUID();
     const otherId = randomUUID();
@@ -546,6 +547,7 @@ describe("your profile", () => {
 
   it("unlinks Google after reauthentication", async () => {
     const f = await fixture();
+    await seedManager(suite.db, { email: "admin@example.test", role: "admin" });
     await suite.db.execute(
       sql`update persons set google_subject = 'google-subject' where id = ${f.personId}`,
     );

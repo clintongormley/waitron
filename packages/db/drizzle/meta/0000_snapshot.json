@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a1a4fd4b-80c6-44a7-9c3a-c8fe5ced169c",
+  "id": "dd5c9d26-14d8-4f2e-8d6e-1b17099ff975",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -19683,7 +19683,7 @@
       "checkConstraints": {
         "outgoing_mail_kind_ck": {
           "name": "outgoing_mail_kind_ck",
-          "value": "\"outgoing_mail\".\"kind\" in ('invoice', 'attendance_question', 'certificate_reminder', 'box_alert', 'account_action', 'role_membership_changed')"
+          "value": "\"outgoing_mail\".\"kind\" in ('invoice', 'attendance_question', 'certificate_reminder', 'box_alert', 'account_action', 'role_membership_changed', 'email_changed')"
         },
         "outgoing_mail_status_ck": {
           "name": "outgoing_mail_status_ck",

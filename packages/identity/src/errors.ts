@@ -59,7 +59,6 @@ declare module "@waitron/shared" {
     "person.email_taken": { email: string };
     /** Another active or pending person already uses this display name. */
     "person.display_name_taken": { displayName: string };
-    /** An account change would leave the venue without an active administrator. */
     "person.last_admin": Record<string, never>;
     /** The requested direct status change is not part of the account lifecycle. */
     "person.transition_invalid": Record<string, never>;

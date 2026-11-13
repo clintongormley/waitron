@@ -8,7 +8,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, registerModulePermissions } from "@waitron/identity";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
@@ -78,12 +78,11 @@ async function fixture(
       .returning();
     await suite.db.insert(personRoles).values({ personId: target!.id, roleId: accountant!.id });
   }
-  if (targetKind === "admin")
-    await seedPersons(suite.db, {
-      displayName: "Other Admin",
-      role: "admin",
-      passwordHash: hashPassword("other admin password"),
-    });
+  await seedPersons(suite.db, {
+    displayName: "Other Admin",
+    role: "admin",
+    passwordHash: hashPassword("other admin password"),
+  });
   const app = new Hono();
   mountManagementApi(
     app,
@@ -201,4 +200,30 @@ it("a Manager with person.admin can invite someone new without person.email", as
       .from(persons)
       .where(eq(persons.email, "new@example.test")),
   ).toEqual([{ email: "new@example.test", status: "pending" }]);
+});
+
+it("the staff role field cannot demote the last usable Admin", async () => {
+  const f = await fixture("email", "admin");
+  await setBuiltInRoleForTest(suite.db, f.manager.id, "admin");
+  await suite.db.update(persons).set({ passwordHash: null });
+  await suite.db
+    .update(persons)
+    .set({ passwordHash: "target-password" })
+    .where(eq(persons.id, f.target.id));
+  const response = await f.send(`/management-api/staff/${f.target.id}`, "PUT", {
+    displayName: "Target",
+    firstNames: "Target",
+    lastNames: "Person",
+    telephone: null,
+    email: f.target.email,
+    role: "manager",
+    status: "active",
+  });
+  expect(await response.json()).toMatchObject({ error: { code: "person.last_admin" } });
+  expect(response.status).toBe(409);
+  const [adminRole] = await suite.db.select().from(roles).where(eq(roles.builtInKey, "admin"));
+  expect(
+    await suite.db.select().from(personRoles).where(eq(personRoles.personId, f.target.id)),
+  ).toEqual([{ personId: f.target.id, roleId: adminRole!.id }]);
+  expect(await suite.db.select().from(outgoingMail)).toEqual([]);
 });

@@ -37,6 +37,11 @@ const noopLog: Logger = () => {};
 
 describe("your profile", () => {
   it("lets a staff session edit only itself", async () => {
+    await seedPersons(suite.db, {
+      displayName: "Usable Admin",
+      role: "admin",
+      passwordHash: "admin-password",
+    });
     const personId = await seedPerson("Profile owner");
     const colleagueId = await seedPerson("Colleague");
     await suite.db.execute(
@@ -359,3 +364,37 @@ describe("Me API — the identity property: the session's person, never the body
     expect(ids).toEqual([pShift]); // only P's, Q's excluded
   });
 });
+
+it.each(["passkey", "google"])(
+  "refuses losing the last usable Admin through the own %s route with 409",
+  async (method) => {
+    const [admin] = await seedPersons(suite.db, {
+      displayName: "Admin",
+      role: "admin",
+      googleSubject: method === "google" ? "google-subject" : null,
+    });
+    await seedPersons(suite.db, { displayName: "PIN-only Admin", role: "admin", pinHash: "pin" });
+    const [key] = await suite.db
+      .insert(webauthnCredentials)
+      .values({ personId: admin!.id, credentialId: "own-key", publicKey: "key" })
+      .returning();
+    if (method === "google") await suite.db.execute(sql`delete from webauthn_credentials`);
+    const path = method === "google" ? "google" : `passkeys/${key!.id}`;
+    const response = await send(
+      mountApp(),
+      "DELETE",
+      `/management-api/session/me/${path}`,
+      await cookieFor(admin!.id),
+      {},
+    );
+    expect(await response.json()).toEqual({ error: { code: "person.last_admin", params: {} } });
+    expect(response.status).toBe(409);
+    if (method === "passkey")
+      expect(await suite.db.select().from(webauthnCredentials)).toHaveLength(1);
+    else
+      expect(
+        (await suite.db.execute(sql`select google_subject from persons where id=${admin!.id}`))
+          .rows,
+      ).toEqual([{ google_subject: "google-subject" }]);
+  },
+);

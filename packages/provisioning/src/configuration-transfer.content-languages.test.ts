@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -62,6 +63,11 @@ describe("required languages before configuration replacement", () => {
   });
 
   it("runs the destination check while the previous table rows are still present", async () => {
+    await seedPersons(suite.db, {
+      displayName: "Admin",
+      role: "admin",
+      passwordHash: "admin-password",
+    });
     await seedVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`create table zz_language_import (id text primary key)`);

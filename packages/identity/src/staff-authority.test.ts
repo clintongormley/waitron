@@ -246,6 +246,7 @@ describe("non-admin sign-in authority", () => {
   it.each(["staff", "admin"] as const)(
     "lets a manager edit a %s person's names and telephone",
     async (role) => {
+      await openManagementSession(suite.db, "admin");
       const actor = await openManagementSession(suite.db, "manager");
       const target = await seedPerson(suite.db, role);
       await suite.db
@@ -277,6 +278,7 @@ describe("non-admin sign-in authority", () => {
     },
   );
   it("lets a manager edit an inactive admin's names without deleting their PIN or passkeys", async () => {
+    await openManagementSession(suite.db, "admin");
     const actor = await openManagementSession(suite.db, "manager");
     const target = await seedPerson(suite.db, "admin", "suspended");
     await suite.db
@@ -518,6 +520,7 @@ it.each(["role", "status"] as const)(
 it.each(["details"] as const)(
   "preserves a manager's own non-admin role change through %s",
   async () => {
+    await openManagementSession(suite.db, "admin");
     const actor = await openManagementSession(suite.db, "manager");
     const before = await row(actor.personId);
     await run((tx) =>

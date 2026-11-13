@@ -1,4 +1,5 @@
 import {
+  assertUsableAdminRemains,
   listAdminHolders,
   prepareAccessRoleImport,
   importAccessRole,
@@ -1005,4 +1006,5 @@ export async function importConfigurationTables(
     const contribution = module.configurationTransfer;
     if (contribution?.kind === "tables") await contribution.afterImport?.(tx);
   }
+  await assertUsableAdminRemains(tx);
 }

@@ -1,6 +1,7 @@
 import "./errors.js";
 import { and, eq, isNotNull, isNull, ne, or } from "drizzle-orm";
 import {
+  recordActivity,
   indexViolated,
   isUniqueViolation,
   nowIso,
@@ -25,12 +26,12 @@ import { foldForUniqueness } from "./fold.js";
 import { authorizeManager } from "./manager-login.js";
 import { requireFreshManagementSignIn } from "./fresh-sign-in.js";
 import type { Permission } from "./permissions.js";
-import { assertActorCovers } from "./admin-anchor.js";
+import { queueEmailChangedNotice } from "./email-change-mail.js";
+import { assertActorCovers, assertUsableAdminRemains } from "./admin-anchor.js";
 import {
   holds,
   readPersonAuthority,
   authorityForRoles,
-  listAdminHolders,
   type PersonAuthority,
 } from "./authority.js";
 import type { BuiltInRoleKey } from "./permissions.js";
@@ -202,12 +203,6 @@ async function deleteSignInRows(tx: Transaction, personId: string): Promise<void
   await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.personId, personId));
 }
 
-/**
- * The last-admin refusal counts the active admins and then writes. The count still holds at the
- * write only because a caller inside `withTransaction` holds the venue's write lock; the same goes
- * for {@link resetPersonLogin}. The pattern is stated once, with its
- * measurement and its control, on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
- */
 export async function updatePersonDetails(
   tx: Transaction,
   input: {
@@ -226,7 +221,6 @@ export async function updatePersonDetails(
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  const activeAdmins = await listAdminHolders(tx, { status: "active" });
   const [person] = await tx
     .select()
     .from(persons)
@@ -266,14 +260,6 @@ export async function updatePersonDetails(
         throw new AppError("authorization.not_permitted", { permission: "person.email" });
     }
   }
-  if (
-    personRole === "admin" &&
-    person.status === "active" &&
-    input.role !== "admin" &&
-    activeAdmins.length === 1
-  ) {
-    throw new AppError("person.last_admin", {});
-  }
   if (email !== person.email || input.role !== personRole || input.status !== person.status)
     await requireFreshManagementSignIn(tx, input.managementSessionId);
   await assertDisplayNameAvailable(tx, displayName, person.id);
@@ -302,6 +288,29 @@ export async function updatePersonDetails(
   if (becomesSuspended) await deleteSignInRows(tx, person.id);
   if (email !== person.email || input.status !== person.status)
     await revokePersonAccess(tx, person.id);
+  if (email !== person.email && authorizedBy !== person.id) {
+    const activity = await recordActivity(tx, {
+      kind: "person.email_changed",
+      subjectId: person.id,
+      personId: authorizedBy,
+      data: {},
+    });
+    if (person.email !== null) {
+      const [editor] = await tx
+        .select({ displayName: persons.displayName })
+        .from(persons)
+        .where(eq(persons.id, authorizedBy));
+      await queueEmailChangedNotice(tx, {
+        activityId: activity.id,
+        personId: person.id,
+        actorId: authorizedBy,
+        oldEmail: person.email,
+        editorName: editor!.displayName,
+        at: activity.at,
+      });
+    }
+  }
+  await assertUsableAdminRemains(tx);
 }
 
 export async function deactivatePerson(
@@ -329,6 +338,7 @@ export async function deactivatePerson(
     .where(eq(persons.id, person.id));
   await deleteSignInRows(tx, person.id);
   if (!alreadySuspended) await revokePersonAccess(tx, person.id);
+  await assertUsableAdminRemains(tx);
 }
 
 export async function clearPersonPin(
@@ -353,7 +363,6 @@ export async function resetPersonLogin(
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
   await authorizePersonLoginChange(tx, input);
-  const activeAdmins = await listAdminHolders(tx, { status: "active" });
   const [person] = await tx
     .select({
       id: persons.id,
@@ -364,16 +373,13 @@ export async function resetPersonLogin(
     .where(eq(persons.id, settleId(input.personId)));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status === "suspended") throw new AppError("person.transition_invalid", {});
-  const personRole = await heldBuiltInKey(tx, person.id);
-  if (personRole === "admin" && person.status === "active" && activeAdmins.length === 1) {
-    throw new AppError("person.last_admin", {});
-  }
   await tx
     .update(persons)
     .set({ emailVerifiedAt: null, status: "pending", ...NO_SIGN_IN_SECRETS })
     .where(eq(persons.id, person.id));
   await deleteSignInRows(tx, person.id);
   await revokePersonAccess(tx, person.id);
+  await assertUsableAdminRemains(tx);
 }
 
 export async function reactivatePersonForInvitation(

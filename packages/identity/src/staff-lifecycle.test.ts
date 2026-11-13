@@ -544,7 +544,7 @@ describe("updatePersonDetails refusals and side effects", () => {
     const { token } = await openManagementSession(suite.db, "manager");
     const admin = await seedPerson(suite.db, "admin");
     await suite.db.execute(
-      sql`update persons set email = ${details(token, admin).email} where id = ${admin}`,
+      sql`update persons set email = ${details(token, admin).email}, password_hash = 'admin-password' where id = ${admin}`,
     );
     await run((tx) =>
       updatePersonDetails(

@@ -517,8 +517,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta persona puede hacer cosas que tú no, así que solo alguien que pueda hacer todo lo que ella hace puede cambiar su acceso.",
   },
   "person.last_admin": {
-    en: "Keep at least one active administrator.",
-    es: "Debe quedar al menos un administrador activo.",
+    en: "Keep at least one active Admin who can sign in to the dashboard.",
+    es: "Mantén al menos un administrador activo que pueda entrar al panel.",
   },
   "person.transition_invalid": {
     en: "Use the account action provided for that status change.",
