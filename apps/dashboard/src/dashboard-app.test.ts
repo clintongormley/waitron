@@ -7668,7 +7668,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
 
   it.each([
     [["fiscal.view", "report.export"], true],
-    [["fiscal.view"], false],
+    [["fiscal.view", "venue.view"], false],
   ])(
     "lets the Alerts face open Fiscal filing, the fiscal alerts' Go to, for %j: %s",
     async (permissions, opens) => {
