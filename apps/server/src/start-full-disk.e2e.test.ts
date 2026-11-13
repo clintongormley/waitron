@@ -287,9 +287,9 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     store = await openVenueDatabase(venueDir);
     db = store.venue;
     await seedVenue(db, { name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" });
-    manager = await seedPerson("manager", "Marta");
-    supervisor = await seedPerson("supervisor", "Sergio");
-    admin = await seedPerson("admin", "Ana");
+    manager = await seedPerson("manager", "Martha");
+    supervisor = await seedPerson("supervisor", "Simon");
+    admin = await seedPerson("admin", "Anna");
     cashier = await seedPerson("staff", "Paula");
     nodeId = await seedNode(db);
     // Here, not in the case: a clock-in's `withTransaction` drain would deliver the change the
