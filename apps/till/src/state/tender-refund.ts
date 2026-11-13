@@ -23,10 +23,11 @@ export class TenderRefundAttemptError extends Error {
 }
 
 const PREFIX = "waitron.tender-refund:";
-const fail = (kind: TenderRefundAttemptError["kind"]): never => {
+export const fail = (kind: TenderRefundAttemptError["kind"]): never => {
   throw new TenderRefundAttemptError(kind);
 };
-const scopePrefix = (scope: TenderRefundScope) =>
+/** Every journal entry of `scope` starts with this, so `clear` wipes them all. */
+export const scopePrefix = (scope: TenderRefundScope) =>
   `${PREFIX}${JSON.stringify([scope.deviceId, scope.personId])}:`;
 const keyFor = (scope: TenderRefundScope, saleId: string) =>
   `${scopePrefix(scope)}${JSON.stringify(saleId)}`;
@@ -38,11 +39,31 @@ export function tenderRefundAmount(value: string): string | null {
     : null;
 }
 
+export function withJournalStorage<T>(
+  storage: Storage | undefined,
+  work: (storage: Storage) => T,
+): T {
+  try {
+    return work(storage ?? localStorage);
+  } catch {
+    return fail("storage");
+  }
+}
+
+/** Refuses `storage` when the entry does not read back as written, so nothing is sent unsaved. */
+export function writeVerified(storage: Storage, key: string, value: string): void {
+  storage.setItem(key, value);
+  if (storage.getItem(key) !== value) fail("storage");
+}
+
 function normalized(ask: TenderRefundAsk): TenderRefundAsk {
   if (typeof ask.tenderId !== "string" || ask.tenderId === "") return fail("invalid");
   if (typeof ask.reason !== "string" || ask.reason.trim() === "" || ask.reason.length > REASON_MAX)
     return fail("invalid");
   if (ask.manualConfirmed !== undefined && typeof ask.manualConfirmed !== "boolean")
+    return fail("invalid");
+  const correctionId = ask.invoiceCorrectionId;
+  if (correctionId !== undefined && (typeof correctionId !== "string" || correctionId === ""))
     return fail("invalid");
   const ids = ask.cancellationIds;
   if (
@@ -65,6 +86,7 @@ function normalized(ask: TenderRefundAsk): TenderRefundAsk {
     reason: ask.reason.trim(),
     manualConfirmed: ask.manualConfirmed === true,
     ...(ids === undefined || ids.length === 0 ? {} : { cancellationIds: [...ids] }),
+    ...(correctionId === undefined ? {} : { invoiceCorrectionId: correctionId.toLowerCase() }),
   };
 }
 
@@ -78,11 +100,7 @@ export class TenderRefundAttempts {
   constructor(private readonly storage?: Storage) {}
 
   #storage<T>(work: (storage: Storage) => T): T {
-    try {
-      return work(this.storage ?? localStorage);
-    } catch {
-      return fail("storage");
-    }
+    return withJournalStorage(this.storage, work);
   }
 
   read(scope: TenderRefundScope, saleId: string): SavedTenderRefund | null {
@@ -112,12 +130,9 @@ export class TenderRefundAttempts {
   }
 
   #write(scope: TenderRefundScope, sent: SavedTenderRefund): void {
-    this.#storage((storage) => {
-      const key = keyFor(scope, sent.saleId);
-      const value = JSON.stringify({ version: 1, ...sent });
-      storage.setItem(key, value);
-      if (storage.getItem(key) !== value) return fail("storage");
-    });
+    this.#storage((storage) =>
+      writeVerified(storage, keyFor(scope, sent.saleId), JSON.stringify({ version: 1, ...sent })),
+    );
   }
 
   prepare(
