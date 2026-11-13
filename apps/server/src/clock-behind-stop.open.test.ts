@@ -153,7 +153,11 @@ describe("while the latest record is a day after the box's clock", () => {
     });
     expect(saved.status).toBe(200);
     const draft = saved.json.draft as { id: string; revision: number; lines: { id: string }[] };
-    const tickets = count(venue.db, "ticket_items", sql`working_order_id = ${tabId}`);
+    const tickets = count(
+      venue.db,
+      "ticket_items",
+      sql`working_order_line_id in (select id from working_order_lines where working_order_id = ${tabId})`,
+    );
 
     const sent = await send(
       app,
@@ -171,9 +175,13 @@ describe("while the latest record is a day after the box's clock", () => {
     );
 
     expect(sent.status).toBe(200);
-    expect(count(venue.db, "ticket_items", sql`working_order_id = ${tabId}`)).toBeGreaterThan(
-      tickets,
-    );
+    expect(
+      count(
+        venue.db,
+        "ticket_items",
+        sql`working_order_line_id in (select id from working_order_lines where working_order_id = ${tabId})`,
+      ),
+    ).toBeGreaterThan(tickets);
     expect(count(venue.db, "bill_payments", sql`working_order_id = ${tabId}`)).toBe(0);
     expect(records()).toBe(before);
   });

@@ -136,7 +136,11 @@ function count(table: string, where = sql`1 = 1`): number {
 
 const allRecords = () => count("registros_facturacion");
 const salesOf = (billId: string) => count("sales", sql`working_order_id = ${billId}`);
-const ticketItemsOf = (billId: string) => count("ticket_items", sql`working_order_id = ${billId}`);
+const ticketItemsOf = (billId: string) =>
+  count(
+    "ticket_items",
+    sql`working_order_line_id in (select id from working_order_lines where working_order_id = ${billId})`,
+  );
 const printJobs = () => count("print_jobs");
 const departureRowsOf = (partyId: string) => count("unpaid_departures", sql`party_id = ${partyId}`);
 

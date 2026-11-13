@@ -7848,6 +7848,7 @@ export async function advanceTicketItem(
     if (item.firedAt === null) throw new AppError("ticket.item_held", { ticketItemId: itemId });
     throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
   }
+  if (attendance === undefined) return;
   await captureKitchenActivity(
     tx,
     attendance,

@@ -669,8 +669,10 @@ async function caseGroups(venue: BenchVenue, clock: BenchClock): Promise<BenchGr
           name: "print.problems",
           sample: async (time) => {
             const [job] = await venue.db
-              .select({ id: printJobs.id, kind: printJobs.kind })
+              .select({ id: printJobs.id })
               .from(printJobs)
+              .where(eq(printJobs.kind, "document"))
+              .orderBy(sql`${printJobs}.rowid desc`)
               .limit(1);
             if (!job) throw new Error("bench: no print job for the problem read");
             await venue.db

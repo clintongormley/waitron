@@ -126,11 +126,12 @@ async function release(
     .returning({ id: ticketItems.id });
   if (released.length !== offered.ticketItemIds.length) throw stale();
   await printRelease(tx, cfg, ask.target, cardRows, offered.ticketItemIds);
+  const releasedIds = new Set(offered.ticketItemIds);
   await captureKitchenActivity(
     tx,
     attendance,
     by.personId,
-    cardRows.filter((row) => offered.ticketItemIds.includes(row.item.id)).map((row) => row.orderId),
+    cardRows.filter((row) => releasedIds.has(row.item.id)).map((row) => row.orderId),
     ask.submissionId,
   );
   return { releasedTicketItemIds: offered.ticketItemIds };

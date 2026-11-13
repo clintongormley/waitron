@@ -678,7 +678,7 @@ export async function bumpGroupReady(
           ),
         )
         .returning({ lineId: ticketItems.workingOrderLineId });
-      return changed.length === 0
+      return changed.length === 0 || attendance === undefined
         ? []
         : tx
             .select({ orderId: workingOrderLines.workingOrderId })
