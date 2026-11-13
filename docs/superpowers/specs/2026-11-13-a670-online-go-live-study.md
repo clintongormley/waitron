@@ -26,8 +26,9 @@ dish photographs out initially so a useful menu does not depend on a photo layou
 
 Offer the venue’s enabled content languages, initially matching the browser where possible and
 otherwise using the venue default. Keep the guest’s explicit choice. Reuse `resolveMenuText`
-for missing dish text, including its staff-name fallback when no customer translation exists.
-That fallback name is public; staff-only metadata remains excluded. Do not invent translations. Translate controls, keys and explanations too.
+for missing dish text, subject to the owner's choice about its staff-name fallback when no
+customer translation exists. That name would be public; staff-only metadata remains excluded.
+Do not invent translations. Translate controls, keys and explanations too.
 The earlier proposal’s shared guest wording and CA/GL drafts are design inputs, not an existing
 language bundle. For missing standard wording, propose a whole bundle fallback to the venue
 default, then English, visibly naming the fallback language.
@@ -62,6 +63,10 @@ The [A951 status](../../backlog/replication-cloud.md#a951-the-boxs-lasting-tunne
 records the original tunnel as dropped in favour of A951-S, using the Cloud gateway and outbound
 WireGuard. Its “customer pages stay later” status predates this read-only go-live request; ordering
 still stays later. A951-S staff access does not deliver either proposed guest route.
+The [22 October ranking](../../backlog.md) at `docs/backlog.md:141–145` also puts customer
+ordering after go-live and through the box. This study follows the later 20:45 watcher direction
+for read-only browsing; a hosted copy is a proposed delivery change for the owner to choose,
+not a silent change to that ranking or the ordering route.
 
 ### What is still needed
 
@@ -102,8 +107,9 @@ the manager sees the pending update, and reconnecting delivers it. Qualify the a
 unavailable page instead if forwarding is chosen.
 
 **Open decisions:** hosted publication or box forwarding for day one? Recommend hosted publication,
-subject to Cloud sizing and readiness. Settle the dietary-mark presentation. If neither route can
-deliver in time, choose explicitly whether to commission manual static export.
+subject to Cloud sizing and readiness. Settle dietary marks and whether untranslated dishes may
+show their staff names. If neither route can deliver in time, choose explicitly whether to
+commission manual static export.
 
 **Local study checks:** EN/ES/CA read-only mock-ups are in Lane D’s uncommitted
 `receipts/a670-studies-2026-11-13/`. Chromium checks cover 25 demo dishes, no ordering controls,

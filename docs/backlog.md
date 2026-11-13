@@ -482,7 +482,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A885. Say that lines already on an open order keep their VAT class after a republish.**
   [Detail](backlog/catalogue.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
 
-- **A670 — guest-menu studies; build waits for the owner's design review (2026-11-12).** The
+- **A670 — guest-menu studies; build waits for the owner's design review (2026-11-13).** The
   [read-only online go-live scope](superpowers/specs/2026-11-13-a670-online-go-live-study.md) and
   [printed-template comparison](superpowers/specs/2026-11-13-a670-printed-template-study.md) answer
   the owner's later direction. Delivery route, template flexibility, key placement and PDF method

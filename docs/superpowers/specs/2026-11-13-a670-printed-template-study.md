@@ -19,7 +19,7 @@ Presets allow these where designed; blocks arrange them; uploads need matching a
 proposed display capabilities, not existing controls or new prices. A5/A3, landscape and folded
 paper stay outside the proposed A4 first cut.
 
-## Two restaurant studies
+## Two invented restaurant-style studies
 
 **Bistro:** a serif masthead, balanced tapas/mains columns and a pale dessert band across the page.
 **Lunch and wine:** a bold heading, wide dish column and narrow coloured drinks panel. Prices
@@ -27,6 +27,10 @@ stay per dish; this adds no set-lunch sales feature. Both use the same proposed 
 
 Local EN/ES HTML and images: Lane D `receipts/a670-studies-2026-11-13/index.html`, never committed.
 Names/prices come from demo content; declarations are illustrative, not verified recipes.
+
+A smaller owner choice is to keep designer menus outside Waitron and offer only one plain
+generated preset. That leaves flexibility with the designer, but their separate copy can drift
+when prices or declarations change. No new export or restored Allergens screen is included here.
 
 ## Recommendation to test with the owner
 
@@ -46,5 +50,6 @@ samples at phone/desktop widths and both surrounding themes. Rendered studies we
 A working editor, long translations, automatic continuations and actual printed/saved output
 remain future checks. Reusable content sources are in the [online study](2026-11-13-a670-online-go-live-study.md#evidence-and-future-acceptance-checks).
 
-**Owner choice:** are presets sufficient, or which real layout needs blocks or uploads?
+**First owner question:** which one or two real menus should these options be tested against?
+Then choose a plain generated preset alongside your own design, presets, blocks or uploaded artwork.
 Confirm the key default; choose the PDF method after templates.
