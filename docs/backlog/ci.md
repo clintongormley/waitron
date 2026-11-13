@@ -1397,23 +1397,6 @@ Audit these remaining CLI callers and their containing test or hook deadlines. B
   beyond the metadata subprocess budgets for compilation. No timeout failure was reproduced.
 
 
-
-## Retired settings after a source escape
-
-On 1 November, A696's first normal pre-push run failed
-`scripts/no-till-as-issuer.test.ts`: the old branch retained an obsolete location override and
-one fiscal fixture still used a till identifier. Both are corrected without changing the guard.
-A whole-source text search found the same retired override in another fixture's template literal,
-immediately after an escaped newline. `inspectSource` reports the plain spelling but misses the
-escaped-prefix form: the raw source has no word boundary where the decoded value has a newline.
-The corrected fixture preserves its wrong-node restore input and all existing assertions.
-
-Extend the spelling check to decoded string/template values, without dropping raw-text checks or
-its legitimate negative/historical controls. Add the missing escaped-prefix case and a positive
-control first. This branch records the scanner gap; it does not claim a new guard fix.
-The two-way probe and blocked-hook output are in Lane E
-`receipts/a696-resume-20261101/retired-setting-escape-control.log` and `push-1.log`.
-
 ## A1306. Rewrite git history to drop the development artifacts
 
 Owner, 2026-11-02: "there is no point in keeping these development artifacts as history".
