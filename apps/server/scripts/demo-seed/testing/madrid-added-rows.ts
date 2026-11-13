@@ -24,77 +24,95 @@ export interface MadridAddedCategory {
   products: MadridAddedProduct[];
 }
 
-interface Declared {
-  products: Set<string>;
-  categories: Set<string>;
-  sections: Set<string>;
-  images: Set<string>;
-  mediaImages: Set<string>;
-}
+type Row = Record<string, unknown>;
 const key = (table: string, ...parts: unknown[]) => `@${table}:${stable(parts)}`;
-const TIED: Record<string, (row: Record<string, unknown>, declared: Declared) => boolean> = {
-  products: (row, d) => d.products.has(String(row.id)),
-  categories: (row, d) => d.categories.has(String(row.id)),
-  category_details: (row, d) => d.categories.has(String(row.category_id)),
-  sections: (row, d) => d.sections.has(String(row.id)),
-  section_members: (row, d) =>
-    d.products.has(String(row.product_id)) || d.sections.has(String(row.child_section_id)),
-  menu_items: (row, d) => d.products.has(String(row.product_id)),
-  routing_cells: (row, d) =>
-    d.categories.has(String(row.category_id)) || d.products.has(String(row.product_id)),
-  media_images: (row, d) => d.images.has(String(row.filename)),
-  media_image_data: (row, d) => d.mediaImages.has(String(row.image_id)),
-  media_image_edits: (row, d) => d.mediaImages.has(String(row.image_id)),
-  menu_version_images: (row, d) => d.images.has(String(row.filename)),
+/** What ties an added row to a declaration; each declaration expects each slot exactly once. */
+const SLOT: Record<string, (row: Row) => unknown> = {
+  products: (row) => [row.id],
+  categories: (row) => [row.id],
+  category_details: (row) => [row.category_id],
+  sections: (row) => [row.id],
+  section_members: (row) => [row.section_id, row.product_id, row.child_section_id],
+  menu_items: (row) => [row.id, row.menu_id, row.product_id],
+  routing_cells: (row) => [row.category_id, row.product_id, row.zone_id],
+  media_images: (row) => [row.id, row.filename],
+  media_image_data: (row) => [row.image_id],
+  media_image_edits: (row) => [row.image_id],
+  menu_version_images: (row) => [row.version_id, row.filename],
 };
 
 interface Offer {
   productId?: unknown;
   [field: string]: unknown;
 }
+interface SectionMember {
+  sectionId?: unknown;
+  names?: unknown;
+  members?: unknown[];
+}
 interface MenuDocument {
-  offers: Record<string, Offer>;
-  root: { members: { sectionId?: unknown }[] };
+  offers?: Record<string, Offer>;
+  root?: { members: SectionMember[] };
 }
 
 /** Add reviewed new products, each in a new category and menu section, to the original capture.
- * The declared facts (names, VAT class, price, pricing unit, category, menu, image) are checked
- * against both the seeded rows and the published menu document. Every other cell of an added row —
- * its ids, sort positions, colour, kitchen station, media metadata — is taken from `seeded` on
- * trust, as is the order of the new section and offers within the document. Refused: a declared
- * product, category or section the seed did not add; an added row outside the listed tables or not
- * tied to a declaration; any existing row changed or removed; a published document that differs
- * from the capture's once the new section and offers are taken out. Returns the added row count
- * per table. */
+ * Each added row must fill one slot the declarations imply, and every slot must be filled once:
+ * per category a `categories`, `category_details`, `sections` and `routing_cells` (no product or zone)
+ * row and a `section_members` row placing the section in its menu's root; per product a
+ * `products`, `menu_items` (its declared menu), `section_members` (its declared section),
+ * `media_images`, `media_image_data` and `media_image_edits` row, and a `menu_version_images` row
+ * for each published version of its menu. The declared facts (names, VAT class, price, pricing
+ * unit, category, menu, image) are checked against the seeded rows, and all but the category
+ * against the published offer, whose placement must be the declared section. Each declared menu's
+ * published root must hold the declared section exactly once, with the declared names, listing
+ * exactly the declared products once each; a declared offer in any other menu, or under another
+ * key, is refused. Every other cell of an added row — its sort positions and the section-member ids
+ * that carry them, colour, kitchen station, media metadata — is taken from `seeded` on trust, as is the order of the new section, its
+ * products and the offers within the document. Also refused: any existing row changed or
+ * removed; a published document that differs from the capture's once the new section and offers
+ * are taken out. Returns the added row count per table, which the declarations fix. */
 export function madridWithAddedRows(
   original: CanonicalMadridSemantics,
   seeded: CanonicalMadridSemantics,
   categories: MadridAddedCategory[],
 ): { semantics: CanonicalMadridSemantics; added: Record<string, number> } {
   const result = structuredClone(original);
-  const declared: Declared = {
-    products: new Set(),
-    categories: new Set(),
-    sections: new Set(),
-    images: new Set(),
-    mediaImages: new Set(),
-  };
-  const menus = new Set<string>();
-  for (const category of categories) {
-    const menu = key("catalogues", category.menu);
-    menus.add(menu);
-    declared.categories.add(key("categories", category.name));
-    declared.sections.add(key("sections", menu, "section", category.name));
-    for (const product of category.products) {
-      declared.products.add(key("products", product.image));
-      declared.images.add(product.image);
-      declared.mediaImages.add(key("media_images", product.image));
-    }
-  }
   const tables = new Set([...Object.keys(original.tables), ...Object.keys(seeded.tables)]);
   for (const name of tables)
     if (!original.tables[name] || !seeded.tables[name])
       throw new Error(`Madrid table added or removed: ${name}`);
+
+  const versions = Object.entries(original.tables.menu_versions!.rows);
+  const slots = new Map(Object.keys(SLOT).map((table) => [table, new Set<string>()]));
+  const slot = (table: string, ...parts: unknown[]) => slots.get(table)!.add(stable(parts));
+  const declaredMenuOf = new Map<string, string>();
+  for (const category of categories) {
+    const menu = key("catalogues", category.menu);
+    const categoryKey = key("categories", category.name);
+    const section = key("sections", menu, "section", category.name);
+    const roots = Object.values(original.tables.sections!.rows).filter(
+      (row) => row.role === "menu_root" && row.owner_menu_id === menu,
+    );
+    if (roots.length !== 1) throw new Error(`Madrid menu has no single root: ${category.menu}`);
+    slot("categories", categoryKey);
+    slot("category_details", categoryKey);
+    slot("sections", section);
+    slot("section_members", roots[0]!.id, null, section);
+    slot("routing_cells", categoryKey, null, null);
+    for (const product of category.products) {
+      const productKey = key("products", product.image);
+      const mediaImage = key("media_images", product.image);
+      declaredMenuOf.set(productKey, menu);
+      slot("products", productKey);
+      slot("section_members", section, productKey, null);
+      slot("menu_items", key("menu_items", menu, productKey), menu, productKey);
+      slot("media_images", mediaImage, product.image);
+      slot("media_image_data", mediaImage);
+      slot("media_image_edits", mediaImage);
+      for (const [versionKey, version] of versions)
+        if (version.menu_id === menu) slot("menu_version_images", versionKey, product.image);
+    }
+  }
 
   for (const [name, table] of Object.entries(original.tables)) {
     if (name === "menu_versions") continue;
@@ -104,15 +122,18 @@ export function madridWithAddedRows(
         throw new Error(`Madrid row changed or removed: ${name} ${rowKey}`);
     }
   }
-  const added: Record<string, number> = {};
+  const filled = new Set<string>();
   for (const [name, table] of Object.entries(seeded.tables)) {
     const before = original.tables[name]!.rows;
     for (const [rowKey, row] of Object.entries(table.rows)) {
       if (Object.hasOwn(before, rowKey)) continue;
-      if (!TIED[name]?.(row, declared))
+      const filling = SLOT[name] && stable(SLOT[name](row));
+      if (filling === undefined || !slots.get(name)!.has(filling))
         throw new Error(`Madrid row not tied to a declared addition: ${name} ${rowKey}`);
+      if (filled.has(`${name} ${filling}`))
+        throw new Error(`Madrid declared addition duplicated: ${name} ${rowKey}`);
+      filled.add(`${name} ${filling}`);
       result.tables[name]!.rows[rowKey] = structuredClone(row);
-      added[name] = (added[name] ?? 0) + 1;
     }
   }
 
@@ -120,26 +141,6 @@ export function madridWithAddedRows(
     Object.hasOwn(original.tables[table]!.rows, rowKey)
       ? undefined
       : seeded.tables[table]!.rows[rowKey];
-  const offers = new Map<string, Offer>();
-  for (const [versionKey, version] of Object.entries(original.tables.menu_versions!.rows)) {
-    if (!menus.has(String(version.menu_id))) continue;
-    const after = seeded.tables.menu_versions!.rows[versionKey];
-    const document = after?.document as MenuDocument | undefined;
-    if (!document) throw new Error(`Madrid row changed or removed: menu_versions ${versionKey}`);
-    const stripped = structuredClone(document);
-    for (const [offerKey, offer] of Object.entries(stripped.offers))
-      if (declared.products.has(String(offer.productId))) {
-        offers.set(String(offer.productId), offer);
-        delete stripped.offers[offerKey];
-      }
-    stripped.root.members = stripped.root.members.filter(
-      (member) => !declared.sections.has(String(member.sectionId)),
-    );
-    if (stable(stripped) !== stable(version.document))
-      throw new Error(`Madrid published document changed beyond the addition: ${versionKey}`);
-    result.tables.menu_versions!.rows[versionKey]!.document = structuredClone(document);
-  }
-
   for (const category of categories) {
     const menu = key("catalogues", category.menu);
     const categoryKey = key("categories", category.name);
@@ -151,38 +152,98 @@ export function madridWithAddedRows(
       throw new Error(`Madrid declared section names differ: ${category.name}`);
     for (const product of category.products) {
       const row = addedRow("products", key("products", product.image));
-      const offer = offers.get(key("products", product.image));
-      if (!row || !offer) throw new Error(`Madrid declared product not added: ${product.image}`);
-      const facts: [string, unknown, unknown, unknown, unknown?][] = [
-        ["name", product.name, row.name, offer.name],
-        ["customerName", product.customerName, row.customer_name, offer.customerName],
-        ["kitchenName", product.kitchenName, row.kitchen_name, offer.kitchenName],
-        ["vatClass", product.vatClass, row.vat_class, offer.vatClass],
-        [
-          "unitPrice",
-          product.unitPrice,
-          row.unit_price,
-          offer.unitPrice,
-          (product.unitPrice / 100).toFixed(2),
-        ],
-        ["pricingUnit", product.pricingUnit, row.pricing_unit, offer.pricingUnit],
-        ["category", categoryKey, row.category_id, categoryKey],
-        ["menu", menu, row.catalogue_id, menu],
-        ["image", product.image, row.image, offer.image],
+      if (!row) throw new Error(`Madrid declared product not added: ${product.image}`);
+      const facts: [string, unknown, unknown][] = [
+        ["name", product.name, row.name],
+        ["customerName", product.customerName, row.customer_name],
+        ["kitchenName", product.kitchenName, row.kitchen_name],
+        ["vatClass", product.vatClass, row.vat_class],
+        ["unitPrice", product.unitPrice, row.unit_price],
+        ["pricingUnit", product.pricingUnit, row.pricing_unit],
+        ["category", categoryKey, row.category_id],
+        ["menu", menu, row.catalogue_id],
+        ["image", product.image, row.image],
       ];
-      for (const [field, want, inRow, inOffer, wantInOffer = want] of facts)
-        if (stable(inRow) !== stable(want) || stable(inOffer) !== stable(wantInOffer))
+      for (const [field, want, inRow] of facts)
+        if (stable(inRow) !== stable(want))
           throw new Error(`Madrid declared ${field} differs: ${product.image}`);
     }
   }
+  for (const [table, expected] of slots)
+    for (const filling of expected)
+      if (!filled.has(`${table} ${filling}`))
+        throw new Error(`Madrid declared addition missing: ${table} ${filling}`);
+
+  for (const [versionKey, version] of versions) {
+    const menuId = String(version.menu_id);
+    const after = seeded.tables.menu_versions!.rows[versionKey];
+    const document = after?.document as MenuDocument | undefined;
+    if (!document) throw new Error(`Madrid row changed or removed: menu_versions ${versionKey}`);
+    const stripped = structuredClone(document);
+    const inMenu = categories.filter((category) => key("catalogues", category.menu) === menuId);
+    for (const category of inMenu) {
+      const section = key("sections", menuId, "section", category.name);
+      const published = stripped.root?.members.filter((member) => member.sectionId === section);
+      if (published?.length !== 1)
+        throw new Error(`Madrid declared section not published once: ${category.name}`);
+      if (stable(published[0]!.names) !== stable(category.names))
+        throw new Error(`Madrid declared section names differ: ${category.name}`);
+      const listed = (published[0]!.members ?? []).map((member) => stable(member)).sort();
+      const declaredMembers = category.products
+        .map((product) => {
+          const productId = key("products", product.image);
+          return stable({
+            kind: "product",
+            menuItemId: key("menu_items", menuId, productId),
+            productId,
+          });
+        })
+        .sort();
+      if (stable(listed) !== stable(declaredMembers))
+        throw new Error(`Madrid published section contents differ: ${category.name}`);
+      stripped.root!.members = stripped.root!.members.filter(
+        (member) => member.sectionId !== section,
+      );
+      for (const product of category.products) {
+        const offerKey = key("menu_items", menuId, key("products", product.image));
+        const offer = stripped.offers?.[offerKey];
+        if (!offer) throw new Error(`Madrid declared product not published: ${product.image}`);
+        delete stripped.offers![offerKey];
+        const facts: [string, unknown, unknown][] = [
+          ["name", product.name, offer.name],
+          ["customerName", product.customerName, offer.customerName],
+          ["kitchenName", product.kitchenName, offer.kitchenName],
+          ["vatClass", product.vatClass, offer.vatClass],
+          ["unitPrice", (product.unitPrice / 100).toFixed(2), offer.unitPrice],
+          ["pricingUnit", product.pricingUnit, offer.pricingUnit],
+          ["menu", menuId, offer.menuId],
+          ["section", [[section]], offer.placements],
+          ["image", product.image, offer.image],
+        ];
+        for (const [field, want, inOffer] of facts)
+          if (stable(inOffer) !== stable(want))
+            throw new Error(`Madrid declared ${field} differs: ${product.image}`);
+      }
+    }
+    for (const offer of Object.values(stripped.offers ?? {}))
+      if (declaredMenuOf.has(String(offer.productId)))
+        throw new Error(`Madrid declared offer in another menu: ${String(offer.productId)}`);
+    if (inMenu.length === 0) continue;
+    if (stable(stripped) !== stable(version.document))
+      throw new Error(`Madrid published document changed beyond the addition: ${versionKey}`);
+    result.tables.menu_versions!.rows[versionKey]!.document = structuredClone(document);
+  }
 
   recomputeMadridHashes(result);
-  const versions = result.tables.menu_versions!.rows;
+  const resultVersions = result.tables.menu_versions!.rows;
   const seededVersions = seeded.tables.menu_versions!.rows;
   if (
-    Object.keys(versions).length !== Object.keys(seededVersions).length ||
-    Object.entries(versions).some(([k, row]) => stable(row) !== stable(seededVersions[k]))
+    Object.keys(resultVersions).length !== Object.keys(seededVersions).length ||
+    Object.entries(resultVersions).some(([k, row]) => stable(row) !== stable(seededVersions[k]))
   )
     throw new Error("Madrid row changed or removed: menu_versions");
+  const added = Object.fromEntries(
+    [...slots].filter(([, expected]) => expected.size > 0).map(([t, e]) => [t, e.size]),
+  );
   return { semantics: result, added };
 }
