@@ -1081,7 +1081,7 @@ Its cost entry is 397.2 seconds: each original table run's three range costs wer
 the median of the two totals was rounded to one decimal. The six inputs are 70.2800, 160.6283
 and 101.4127 seconds in run 43159064593, and 58.9374, 218.9710 and 184.2398 in run 42963449689.
 These older range reports omit boundary-spanning mutants; their sum is a model input, not a
-measurement of a whole-file run. Every other cost remains unchanged.
+measurement of a whole-file run. Every other committed cost-table entry remains unchanged.
 
 **Refreshing the table.** Use reports only from runs after this whole-file change. Earlier runs
 split `sales.ts` into three reports, and `costTable` no longer excludes it: feeding those reports
