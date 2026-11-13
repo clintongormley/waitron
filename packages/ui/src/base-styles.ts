@@ -1,5 +1,10 @@
 import { css } from "lit";
-export { baseStyles, disabledStyles, visuallyHiddenStyles } from "@waitron/ui-core/base-styles";
+export {
+  baseStyles,
+  disabledStyles,
+  pageTitleStyles,
+  visuallyHiddenStyles,
+} from "@waitron/ui-core/base-styles";
 
 export const floorTrayStyles = css`
   .tray {

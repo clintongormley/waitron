@@ -2,6 +2,7 @@ export { applyTokens } from "./tokens/index.js";
 export { TickingClock } from "./ticking-clock.js";
 export {
   baseStyles,
+  pageTitleStyles,
   disabledStyles,
   floorTrayStyles,
   visuallyHiddenStyles,

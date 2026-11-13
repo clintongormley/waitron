@@ -1,6 +1,11 @@
 import { css, html, LitElement } from "lit";
 import { expect, test } from "vitest";
-import { baseStyles, disabledStyles, visuallyHiddenStyles } from "./base-styles.js";
+import {
+  baseStyles,
+  disabledStyles,
+  pageTitleStyles,
+  visuallyHiddenStyles,
+} from "./base-styles.js";
 test("exports a Lit stylesheet", () => {
   expect(baseStyles.cssText).toContain("box-sizing");
 });
@@ -11,6 +16,7 @@ test("exports a Lit stylesheet", () => {
 test.each([
   ["baseStyles", baseStyles],
   ["disabledStyles", disabledStyles],
+  ["pageTitleStyles", pageTitleStyles],
   ["visuallyHiddenStyles", visuallyHiddenStyles],
 ])("%s declares no literal colours", (_name, styles) => {
   expect(styles.cssText).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
@@ -143,6 +149,37 @@ test("a component with no weight of its own, drawn inside bold text, stays bold"
     const inner = outer.shadowRoot!.querySelector<PlainProbe>("base-styles-plain-probe")!;
     await inner.updateComplete;
     expect(getComputedStyle(inner.shadowRoot!.querySelector("span")!).fontWeight).toBe("800");
+  } finally {
+    root.remove();
+  }
+});
+
+class PageTitleProbe extends LitElement {
+  static override styles = [baseStyles, pageTitleStyles];
+  override render() {
+    return html`<h1>Orders</h1>
+      <h2>Today</h2>
+      <span>Current orders</span>`;
+  }
+}
+customElements.define("base-styles-page-title-probe", PageTitleProbe);
+
+test("page titles opt into XL and bold without changing other text or base-only headings", async () => {
+  const root = pageRoot("400", "800");
+  root.style.setProperty("--wt-font-size-xl", "31px");
+  root.style.setProperty("--wt-font-size-md", "13px");
+  const title = document.createElement("base-styles-page-title-probe") as PageTitleProbe;
+  const baseOnly = document.createElement("base-styles-bold-probe") as BoldProbe;
+  root.append(title, baseOnly);
+  try {
+    await Promise.all([title.updateComplete, baseOnly.updateComplete]);
+    const computed = (el: LitElement, selector: string) =>
+      getComputedStyle(el.shadowRoot!.querySelector(selector)!);
+    expect(computed(title, "h1").fontSize).toBe("31px");
+    expect(computed(title, "h1").fontWeight).toBe("800");
+    expect(computed(title, "h2").fontSize).toBe(computed(baseOnly, "h2:not(.own)").fontSize);
+    expect(computed(title, "span").fontSize).toBe("13px");
+    expect(computed(baseOnly, "h1").fontSize).toBe("26px");
   } finally {
     root.remove();
   }
