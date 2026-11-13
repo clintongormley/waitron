@@ -190,20 +190,35 @@ export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
   const reasonOf = (error: unknown) =>
     isAppError(error) ? error.code : ((error as NodeJS.ErrnoException).code ?? "unknown");
 
+  const open = new Set<Socket>();
+  const track = (socket: Socket) => {
+    open.add(socket);
+    socket.on("close", () => open.delete(socket));
+  };
+  // Once set, no pending connection may dial the spare: `close` only destroys what is tracked.
+  let closed = false;
+  let lastReached: string | undefined;
+
   const reach = async (reasons: Set<string>): Promise<TLSSocket | undefined> => {
     let addresses: string[];
     try {
       ({ addresses } = await lookup(host));
     } catch (error) {
-      refused(reasons, reasonOf(error));
+      if (!closed) refused(reasons, reasonOf(error));
       return undefined;
     }
+    if (closed) return undefined;
     const [cert, key] = await Promise.all([
       readFile(deps.clientCertFile, "utf8"),
       readFile(deps.clientKeyFile, "utf8"),
     ]);
+    const first = lastReached;
+    if (first !== undefined && addresses.includes(first)) {
+      addresses = [first, ...addresses.filter((address) => address !== first)];
+    }
     let last: string | undefined;
     for (const address of addresses) {
+      if (closed) return undefined;
       const reached = await new Promise<TLSSocket | string>((resolve) => {
         const socket = connectTls({
           host: address,
@@ -214,20 +229,32 @@ export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
           key,
           rejectUnauthorized: true,
         });
+        track(socket);
         const timer = setTimeout(() => failed({ code: "ETIMEDOUT" }), connectTimeoutMs);
         const failed = (error: { code?: string }) => {
           clearTimeout(timer);
           socket.destroy();
           resolve(error.code ?? "unknown");
         };
+        // `close` destroys a socket mid-handshake without an error.
+        const ended = () => failed({ code: "ECONNRESET" });
         socket.once("error", failed);
+        socket.once("close", ended);
         socket.once("secureConnect", () => {
           clearTimeout(timer);
           socket.off("error", failed);
+          socket.off("close", ended);
           resolve(socket);
         });
       });
-      if (typeof reached !== "string") return reached;
+      if (closed) {
+        if (typeof reached !== "string") reached.destroy();
+        return undefined;
+      }
+      if (typeof reached !== "string") {
+        lastReached = address;
+        return reached;
+      }
       failedWith(reasons, reached);
       last = reached;
     }
@@ -235,11 +262,6 @@ export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
     return undefined;
   };
 
-  const open = new Set<Socket>();
-  const track = (socket: Socket) => {
-    open.add(socket);
-    socket.on("close", () => open.delete(socket));
-  };
   const server = createTcpServer({ pauseOnConnect: true }, (local) => {
     track(local);
     local.on("error", () => local.destroy());
@@ -251,7 +273,6 @@ export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
           local.destroy();
           return;
         }
-        track(remote);
         let replied = false;
         let localLeft = false;
         let remoteError: string | undefined;
@@ -273,7 +294,7 @@ export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
         local.resume();
       },
       (error: unknown) => {
-        refused(reasons, reasonOf(error));
+        if (!closed) refused(reasons, reasonOf(error));
         local.destroy();
       },
     );
@@ -291,6 +312,7 @@ export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
     problem: () => problem,
     close: () =>
       new Promise<void>((resolve) => {
+        closed = true;
         server.close(() => resolve());
         for (const socket of open) socket.destroy();
       }),

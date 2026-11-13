@@ -285,7 +285,7 @@ describe("startStorePipe", () => {
 
   async function open(overrides: Partial<StorePipeDeps> = {}) {
     pipe = await startStorePipe({
-      storeUrl: `https://${SPARE_NAME}:${listener!.port}`,
+      storeUrl: `https://${SPARE_NAME}:${overrides.storeUrl === undefined ? listener!.port : 0}`,
       authorityPem: venue.caCertPem,
       clientCertFile: join(dir, "client.crt"),
       clientKeyFile: join(dir, "client.key"),
@@ -455,6 +455,117 @@ describe("startStorePipe", () => {
       expect(problem()).toBeNull();
     } finally {
       silent.close();
+    }
+  });
+
+  it("tries the address that last completed a handshake first", async () => {
+    const port = await listen();
+    let dialed = 0;
+    const silent = createTcpServer(() => (dialed += 1));
+    await new Promise<void>((resolve) => silent.listen(port, "::1", resolve));
+    try {
+      const { loopbackUrl } = await open({
+        connectTimeoutMs: 200,
+        lookup: async () => ({ addresses: ["::1", "127.0.0.1"], remembered: false }),
+      });
+
+      expect(await getThrough(loopbackUrl)).toBe("200 stored");
+      expect(await getThrough(loopbackUrl)).toBe("200 stored");
+
+      expect(dialed).toBe(1);
+    } finally {
+      silent.close();
+    }
+  });
+
+  /** A TCP listener that counts the connections it is offered and records when each one ends. */
+  async function counting() {
+    const sockets: import("node:net").Socket[] = [];
+    const ended: boolean[] = [];
+    const server = createTcpServer((socket) => {
+      const index = sockets.push(socket) - 1;
+      ended[index] = false;
+      socket.on("error", () => {});
+      socket.on("close", () => (ended[index] = true));
+      // Read, or the end of the stream is never seen and the socket never closes.
+      socket.resume();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const close = () => {
+      for (const socket of sockets) socket.destroy();
+      return new Promise<void>((resolve) => server.close(() => resolve()));
+    };
+    return { port: (server.address() as AddressInfo).port, sockets, ended, close };
+  }
+
+  it("a connection still waiting on the name's lookup dials nothing once close has returned", async () => {
+    const target = await counting();
+    try {
+      let release: (addresses: string[]) => void = () => {};
+      let asked = false;
+      const opened = await open({
+        storeUrl: `https://${SPARE_NAME}:${target.port}`,
+        lookup: () => {
+          asked = true;
+          return new Promise(
+            (resolve) => (release = (addresses) => resolve({ addresses, remembered: false })),
+          );
+        },
+      });
+      const local = connectTcp(Number(new URL(opened.loopbackUrl).port), "127.0.0.1");
+      local.on("error", () => {});
+      await vi.waitFor(() => expect(asked).toBe(true));
+
+      await opened.close();
+      pipe = undefined;
+      release(["127.0.0.1"]);
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(target.sockets).toHaveLength(0);
+    } finally {
+      await target.close();
+    }
+  });
+
+  it("close ends a connection to the spare still in its handshake, and logs no refusal for it", async () => {
+    const target = await counting();
+    try {
+      const opened = await open({
+        storeUrl: `https://${SPARE_NAME}:${target.port}`,
+        connectTimeoutMs: 300,
+      });
+      const local = connectTcp(Number(new URL(opened.loopbackUrl).port), "127.0.0.1");
+      local.on("error", () => {});
+      await vi.waitFor(() => expect(target.sockets).toHaveLength(1));
+
+      await opened.close();
+      pipe = undefined;
+
+      await vi.waitFor(() => expect(target.ended).toEqual([true]), { timeout: 250 });
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(logged.filter((line) => line.event === "stream.spare_store_refused")).toEqual([]);
+    } finally {
+      await target.close();
+    }
+  });
+
+  it("close settles a connection still in its handshake without waiting for its time limit", async () => {
+    const target = await counting();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const opened = await open({ storeUrl: `https://${SPARE_NAME}:${target.port}` });
+      const local = connectTcp(Number(new URL(opened.loopbackUrl).port), "127.0.0.1");
+      local.on("error", () => {});
+      await vi.waitFor(() => expect(target.sockets).toHaveLength(1));
+      expect(vi.getTimerCount()).toBe(1);
+
+      await opened.close();
+      pipe = undefined;
+
+      await vi.waitFor(() => expect(vi.getTimerCount()).toBe(0));
+    } finally {
+      vi.useRealTimers();
+      await target.close();
     }
   });
 
