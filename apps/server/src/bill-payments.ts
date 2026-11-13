@@ -532,22 +532,25 @@ export async function holdsPayment(tx: Transaction, workingOrderId: string): Pro
 }
 
 /**
- * For these bills: the net applied money each has received, for those that have received any, and
- * the bills holding a payment as {@link holdsPayment} reads it.
+ * For these bills: the net applied money each has received, for those that have received any, the
+ * bills holding a payment as {@link holdsPayment} reads it, and those holding money as
+ * {@link billsHoldingMoney} reads it.
  */
 export async function readPaymentsByBill(
   tx: Transaction,
   workingOrderIds: readonly string[],
-): Promise<{ received: Map<string, Decimal>; holding: Set<string> }> {
+): Promise<{ received: Map<string, Decimal>; holding: Set<string>; holdingMoney: Set<string> }> {
   const received = new Map<string, Decimal>();
   const holding = new Set<string>();
+  const holdingMoney = new Set<string>();
   for (const payment of await readPaymentMoney(tx, workingOrderIds)) {
     const { state, workingOrderId: bill } = payment.row;
     if (HOLDING_STATES.includes(state)) holding.add(bill);
+    if (holdsMoney([payment])) holdingMoney.add(bill);
     if (state === "received")
       received.set(bill, addDecimal(received.get(bill) ?? ZERO, payment.netApplied));
   }
-  return { received, holding };
+  return { received, holding, holdingMoney };
 }
 
 /** A bill's `total` less what it has received, at the money scale. */

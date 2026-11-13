@@ -125,6 +125,15 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations offering Close as deferred payment, and with it switched off", async () => {
+    const { el, host } = await mount({ deferredOffered: { state: "offered" } });
+    await expectNoA11yViolations(host);
+    el.deferredOffered = { state: "off", reason: "deferred_close.payment_unconfirmed" };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-pay-deferred-reason]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with no method offered", async () => {
     const { host } = await mount({
       takesReaderCard: false,

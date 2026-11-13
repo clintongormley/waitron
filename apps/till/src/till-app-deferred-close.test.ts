@@ -5,13 +5,18 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { billUnsentText } from "./state/bill-unsent.js";
 import {
+  balanceOf,
   billOf,
+  emit,
   flush,
   floor,
   invoiceOf,
+  line,
+  lock,
   money,
   openDialog,
   openTable,
+  paymentOf,
   press,
   resetBillPayDrafts,
   stubApi,
@@ -19,10 +24,11 @@ import {
   text,
   till,
 } from "../test/bill-pay-app.js";
-import type { CurrentOrders, PartyBill } from "./api/client.js";
+import type { CurrentOrderRow, CurrentOrders, PartyBill } from "./api/client.js";
 import type { CloseDeferredResult } from "./api/deferred-close-types.js";
 import type { CapabilityFlag } from "./layout.js";
 import type { TillDeferredCloseDialog } from "./widgets/deferred-close-dialog.js";
+import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 
 const originalLocale = currentLocale();
 beforeEach(() => {
@@ -573,3 +579,521 @@ it("switches the button off when Current orders could not be read, saying so", a
   await openDialog(el, "rest");
   expect(deferredReason(el)).toBe(t("deferred_close.orders_unread"));
 });
+
+const presentedPay = (el: TillApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("till-presented-pay-dialog");
+
+async function openPresentedClosing(el: TillApp): Promise<void> {
+  await openTable(el);
+  tableOrder(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+  await flush(el);
+  const pay = presentedPay(el);
+  expect(pay).not.toBeNull();
+  pay!.shadowRoot!.querySelector<HTMLElement>("[data-pay-deferred]")!.click();
+  await flush(el);
+  expect(presentedPay(el)).toBeNull();
+  expect(closing(el)?.open).toBe(true);
+}
+
+it("closes a presented bill from its Pay window, sending the same close", async () => {
+  const api = deferredApi({
+    getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openPresentedClosing(el);
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledExactlyOnceWith(
+    "wo-4",
+    expect.objectContaining({ expectedRevision: 0, expectedTotal: "120.00", invoiceType: "F2" }),
+  );
+  expect(closing(el)).toBeNull();
+  expect(documents(el)).not.toBeNull();
+});
+
+it("Cancel on a presented bill's close returns to the presented bill's Pay window", async () => {
+  const api = deferredApi({
+    getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openPresentedClosing(el);
+  closing(el)!.shadowRoot!.querySelector<HTMLElement>("[data-deferred-close-cancel]")!.click();
+  await flush(el, 8);
+  expect(closing(el)).toBeNull();
+  expect(presentedPay(el)).not.toBeNull();
+  expect(payDialog(el)).toBeNull();
+  expect(api.closeDeferred).not.toHaveBeenCalled();
+});
+
+const unservedDish: CurrentOrderRow = {
+  billStatus: "placed",
+  netAmount: "40.00",
+  readyAt: null,
+  requestedAt: null,
+  firedAt: null,
+  lineId: "dish-4",
+  workingOrderId: "wo-4",
+  lineNo: 1,
+  courseId: null,
+  name: "Paella",
+  quantity: "1.000",
+  unitPrecision: 0,
+  servedQuantity: "0.000",
+  servedAt: null,
+  released: true,
+  kitchen: null,
+  note: null,
+  extras: [],
+};
+
+it("switches a presented bill's close off while a dish is unserved, saying what to do", async () => {
+  const api = deferredApi({
+    getPartyBills: vi.fn().mockResolvedValue([billOf({ status: "placed" })]),
+    readCurrentOrders: vi.fn().mockResolvedValue({ ...noOrders, ungrouped: [unservedDish] }),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openTable(el);
+  tableOrder(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+  await flush(el);
+  const pay = presentedPay(el)!.shadowRoot!;
+  const button = pay.querySelector<HTMLElement & { disabled: boolean }>("[data-pay-deferred]")!;
+  expect(button.disabled).toBe(true);
+  expect(text(pay.querySelector("[data-pay-deferred-reason]"))).toBe(t("deferred_close.unserved"));
+  button.click();
+  await flush(el);
+  expect(closing(el)).toBeNull();
+  expect(api.closeDeferred).not.toHaveBeenCalled();
+});
+
+const lunch = {
+  id: "meal",
+  menuItemId: "offer-meal",
+  catalogueId: "cat-default",
+  name: "Lunch",
+  pricingUnit: "each" as const,
+  unitPrice: "30.00",
+  vatClass: "general" as const,
+  category: null,
+  allergens: null,
+};
+
+/** The Counter basket holding one lunch, stored as a bill by Pay, whose bill Pay window is open;
+ * `beforePay` runs on the basket first. */
+async function counterPay(
+  over: Record<string, unknown> = {},
+  beforePay?: (el: TillApp) => Promise<void>,
+) {
+  let id = "";
+  const api = deferredApi({
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      fullInvoices: true,
+      receiptLanguages: ["es", "en"],
+      capabilities: [...till.capabilities, "close-deferred"] as CapabilityFlag[],
+    }),
+    getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({ invoicePrinter: null }),
+    setOrderInvoiceChoice: vi.fn().mockResolvedValue({ revision: 1 }),
+    parkOrder: vi.fn(async (request: { id: string }) => {
+      id = request.id;
+      return { id, orderNumber: 7 };
+    }),
+    retrieveWorkingOrder: vi.fn(async () => ({
+      id,
+      orderNumber: 7,
+      revision: 0,
+      label: null,
+      expectedEdit: null,
+      kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+      lines: [
+        {
+          workingOrderLineId: "dish-1",
+          menuItemId: "offer-meal",
+          quantity: "1.000",
+          product: lunch,
+        },
+      ],
+    })),
+    getTabLines: vi.fn().mockResolvedValue({
+      revision: 0,
+      lines: [line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" })],
+    }),
+    getBillBalance: vi.fn(async () =>
+      balanceOf({ workingOrderId: id, total: "30.00", outstanding: "30.00" }),
+    ),
+    closeDeferred: vi.fn(async () => ({
+      ...closedAs("not_applicable"),
+      workingOrderId: id,
+      total: "30.00",
+    })),
+    getFiledTicket: vi.fn().mockResolvedValue(invoiceOf("30.00")),
+    ...over,
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flush(el);
+  const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  counter.store.addProduct(lunch, "1");
+  await flush(el);
+  await beforePay?.(el);
+  emit(counter, "counter-bill-pay", {});
+  await flush(el, 6);
+  expect(payDialog(el)).not.toBeNull();
+  return { api, el, id: () => id };
+}
+
+const deferredButton = (el: TillApp) =>
+  payDialog(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    "[data-pay-deferred]",
+  );
+
+it("closes a Counter bill as a deferred payment, sending a simplified invoice with no recipient", async () => {
+  const { api, el, id } = await counterPay();
+  expect(deferredButton(el)!.disabled).toBe(false);
+  deferredButton(el)!.click();
+  await flush(el);
+  expect(payDialog(el)).toBeNull();
+  expect(closing(el)!.bill).toMatchObject({ total: "30.00", customer: null, issued: false });
+  const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledExactlyOnceWith(id(), {
+    submissionId: expect.any(String),
+    expectedRevision: 0,
+    expectedEdit: null,
+    expectedTotal: "30.00",
+    invoiceType: "F2",
+    recipient: null,
+    receiptLanguage: "es",
+    delivery: null,
+    partyFinish: null,
+  });
+  expect(api.getFiledTicket).toHaveBeenCalledExactlyOnceWith(id());
+  expect(closing(el)).toBeNull();
+  expect(documents(el)).not.toBeNull();
+  expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(heldReads);
+});
+
+it("a failed receipt read after a Counter close lets the order go and reads the held list again", async () => {
+  const { api, el } = await counterPay({
+    getFiledTicket: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+  });
+  deferredButton(el)!.click();
+  await flush(el);
+  const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+  await confirm(el);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(documents(el)).toBeNull();
+  expect(text(el.shadowRoot!.querySelector(".error"))).toContain(t("deferred_close.ticket_unread"));
+  expect(
+    el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!.store.lines,
+  ).toEqual([]);
+  expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(heldReads);
+});
+
+it.each(["declined", "failed"] as const)(
+  "offers the Counter close on a bill whose only card payment %s",
+  async (state) => {
+    const { el } = await counterPay({
+      getBillBalance: vi.fn(async (billId: string) =>
+        balanceOf({
+          workingOrderId: billId,
+          total: "30.00",
+          outstanding: "30.00",
+          payments: [paymentOf({ method: "card", entry: "reader", applied: "30.00", state })],
+        }),
+      ),
+    });
+    expect(deferredButton(el)!.disabled).toBe(false);
+  },
+);
+
+it.each([
+  ["offers", "given back in full", "10.00", "0.00", "30.00", false],
+  ["switches off", "given back in part", "5.00", "5.00", "25.00", true],
+] as const)(
+  "%s the Counter close on a bill whose only payment was %s",
+  async (_offers, _case, given, received, outstanding, hidden) => {
+    const { el } = await counterPay({
+      getBillBalance: vi.fn(async (billId: string) =>
+        balanceOf({
+          workingOrderId: billId,
+          total: "30.00",
+          received,
+          outstanding,
+          payments: [
+            paymentOf({
+              applied: "10.00",
+              state: "received",
+              refunds: [
+                {
+                  id: "refund-1",
+                  paymentId: "pay-1",
+                  submissionId: "refund-sub-1",
+                  appliedAmount: given,
+                  tipAmount: "0.00",
+                  reason: "error",
+                  state: "completed",
+                  createdAt: "2026-09-30T20:05:00.000Z",
+                  completedAt: "2026-09-30T20:05:00.000Z",
+                },
+              ],
+            }),
+          ],
+        }),
+      ),
+    });
+    if (hidden) expect(deferredButton(el)).toBeNull();
+    else expect(deferredButton(el)!.disabled).toBe(false);
+  },
+);
+
+/** The Counter Pay window on held order `wo-9`, retrieved from the held list with the invoice type
+ * the server stored on it, which this till never chose. */
+async function heldCounterPay(invoiceType: "F1" | "F2") {
+  const api = deferredApi({
+    retrieveWorkingOrder: vi.fn().mockResolvedValue({
+      id: "wo-9",
+      orderNumber: 9,
+      revision: 2,
+      label: null,
+      expectedEdit: null,
+      invoiceType,
+      kitchenNote: { scope: { workingOrderId: "wo-9" }, note: null, revision: 0, ownerRevision: 0 },
+      lines: [
+        {
+          workingOrderLineId: "dish-1",
+          menuItemId: "offer-meal",
+          quantity: "1.000",
+          product: lunch,
+        },
+      ],
+    }),
+    getTabLines: vi.fn().mockResolvedValue({
+      revision: 2,
+      lines: [line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" })],
+    }),
+    getBillBalance: vi
+      .fn()
+      .mockResolvedValue(
+        balanceOf({ workingOrderId: "wo-9", total: "30.00", outstanding: "30.00" }),
+      ),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flush(el);
+  const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  emit(counter, "retrieve-order", { id: "wo-9" });
+  await flush(el);
+  emit(counter, "counter-bill-pay", {});
+  await flush(el, 6);
+  expect(payDialog(el)).not.toBeNull();
+  return { api, el };
+}
+
+it("switches the Counter close off for a held order stored for a full invoice this till never chose", async () => {
+  const { api, el } = await heldCounterPay("F1");
+  expect(deferredButton(el)!.disabled).toBe(true);
+  expect(text(payDialog(el)!.shadowRoot!.querySelector("[data-pay-deferred-reason]"))).toBe(
+    t("deferred_close.counter_full_invoice"),
+  );
+  deferredButton(el)!.click();
+  await flush(el);
+  expect(closing(el)).toBeNull();
+  expect(api.closeDeferred).not.toHaveBeenCalled();
+});
+
+it("offers the Counter close for a held order stored for a simplified invoice", async () => {
+  const { el } = await heldCounterPay("F2");
+  expect(deferredButton(el)!.disabled).toBe(false);
+});
+
+it("switches the Counter close off when the bill is set for a full invoice, saying what to do", async () => {
+  const { api, el } = await counterPay({}, async (app) => {
+    emit(app.shadowRoot!.querySelector("till-counter-screen")!, "choose-invoice");
+    await flush(app);
+    emit(
+      app.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345678",
+          legalName: "Talleres Mar SL",
+          address: "Carrer Major 1, Valencia",
+          countryCode: "ES",
+        },
+      },
+    );
+    await flush(app);
+  });
+  expect(api.setOrderInvoiceChoice).toHaveBeenCalledOnce();
+  expect(deferredButton(el)!.disabled).toBe(true);
+  expect(text(payDialog(el)!.shadowRoot!.querySelector("[data-pay-deferred-reason]"))).toBe(
+    t("deferred_close.counter_full_invoice"),
+  );
+  deferredButton(el)!.click();
+  await flush(el);
+  expect(closing(el)).toBeNull();
+  expect(api.closeDeferred).not.toHaveBeenCalled();
+});
+
+it("after a Counter close with no answer, confirm sends the same close under a new id", async () => {
+  const { api, el } = await counterPay();
+  vi.mocked(api.closeDeferred).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  deferredButton(el)!.click();
+  await flush(el);
+  await confirm(el);
+  expect(closing(el)!.refusal).toBe(t("deferred_close.unanswered"));
+  expect(documents(el)).toBeNull();
+  await confirm(el);
+  const [[, first], [, second]] = vi.mocked(api.closeDeferred).mock.calls as [
+    unknown,
+    { submissionId: string },
+  ][];
+  expect(second.submissionId).not.toBe(first.submissionId);
+  expect({ ...second, submissionId: "" }).toEqual({ ...first, submissionId: "" });
+  expect(documents(el)).not.toBeNull();
+});
+
+it("a refused Counter close closes the window and says why on the screen", async () => {
+  const { api, el } = await counterPay({
+    closeDeferred: vi.fn().mockRejectedValue({
+      code: "deferred_close.ineligible",
+      reason: "non_positive",
+      status: 409,
+    }),
+  });
+  deferredButton(el)!.click();
+  await flush(el);
+  const reads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
+  await confirm(el);
+  expect(closing(el)).toBeNull();
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(text(el.shadowRoot!.querySelector(".error"))).toContain(
+    codeMessage("deferred_close.ineligible", "en", { reason: "non_positive" }),
+  );
+  expect(vi.mocked(api.retrieveWorkingOrder).mock.calls.length).toBeGreaterThan(reads);
+  expect(api.getPartyBills).not.toHaveBeenCalled();
+});
+
+it("Cancel on a Counter close returns to the Counter's Pay window", async () => {
+  const { api, el } = await counterPay();
+  deferredButton(el)!.click();
+  await flush(el);
+  closing(el)!.shadowRoot!.querySelector<HTMLElement>("[data-deferred-close-cancel]")!.click();
+  await flush(el, 8);
+  expect(closing(el)).toBeNull();
+  expect(deferredButton(el)).not.toBeNull();
+  expect(api.closeDeferred).not.toHaveBeenCalled();
+});
+
+it("Cancel after a Counter close with no answer reads the order again instead of returning to Pay", async () => {
+  const { api, el } = await counterPay({
+    closeDeferred: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+  });
+  deferredButton(el)!.click();
+  await flush(el);
+  await confirm(el);
+  const reads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
+  closing(el)!.shadowRoot!.querySelector<HTMLElement>("[data-deferred-close-cancel]")!.click();
+  await flush(el, 8);
+  expect(closing(el)).toBeNull();
+  expect(payDialog(el)).toBeNull();
+  expect(vi.mocked(api.retrieveWorkingOrder).mock.calls.length).toBeGreaterThan(reads);
+});
+
+const basket = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!.store;
+const orderGone = (api: ReturnType<typeof deferredApi>) =>
+  vi
+    .mocked(api.retrieveWorkingOrder)
+    .mockRejectedValue({ code: "working_order.not_found", status: 404 });
+/** The Counter order's closure as the server reads it back, made under `submissionId`. */
+const counterClosure = (submissionId: string) =>
+  vi.fn(async (billId: string) => ({
+    closure: {
+      ...closedAs("not_applicable"),
+      submissionId,
+      workingOrderId: billId,
+      total: "30.00",
+    },
+  }));
+const cancel = async (el: TillApp) => {
+  closing(el)!.shadowRoot!.querySelector<HTMLElement>("[data-deferred-close-cancel]")!.click();
+  await flush(el, 8);
+};
+
+it("a refused Counter close of an order another till closed lets the order go and reads the held list again", async () => {
+  const { api, el, id } = await counterPay({
+    closeDeferred: vi.fn().mockRejectedValue({ code: "deferred_close.conflict", status: 409 }),
+    getDeferredClosure: counterClosure("another-till"),
+  });
+  deferredButton(el)!.click();
+  await flush(el);
+  orderGone(api);
+  const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+  await confirm(el);
+  expect(closing(el)).toBeNull();
+  expect(documents(el)).toBeNull();
+  expect(basket(el).id).not.toBe(id());
+  expect(basket(el).lines).toEqual([]);
+  expect(text(el.shadowRoot!.querySelector(".error"))).toContain(t("held.stale"));
+  expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(heldReads);
+});
+
+it("Cancel after an unanswered Counter close, on an order gone with no closure of this window, lets the order go", async () => {
+  const { api, el, id } = await counterPay({
+    closeDeferred: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    getDeferredClosure: vi.fn().mockResolvedValue({ closure: null }),
+  });
+  deferredButton(el)!.click();
+  await flush(el);
+  await confirm(el);
+  orderGone(api);
+  const heldReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+  await cancel(el);
+  expect(closing(el)).toBeNull();
+  expect(documents(el)).toBeNull();
+  expect(basket(el).id).not.toBe(id());
+  expect(basket(el).lines).toEqual([]);
+  expect(text(el.shadowRoot!.querySelector(".error"))).toContain(t("held.stale"));
+  expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(heldReads);
+});
+
+it("Cancel after an unanswered Counter close that went through opens the documents window, sending nothing again", async () => {
+  let made = "";
+  const { api, el, id } = await counterPay({
+    closeDeferred: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    getDeferredClosure: vi.fn((billId: string) => counterClosure(made)(billId)),
+  });
+  deferredButton(el)!.click();
+  await flush(el);
+  await confirm(el);
+  made = firstSent(api).toUpperCase();
+  orderGone(api);
+  await cancel(el);
+  expect(api.closeDeferred).toHaveBeenCalledOnce();
+  expect(api.getDeferredClosure).toHaveBeenCalledWith(id());
+  expect(api.getFiledTicket).toHaveBeenCalledExactlyOnceWith(id());
+  expect(closing(el)).toBeNull();
+  expect(documents(el)).not.toBeNull();
+  expect(text(el.shadowRoot!.querySelector(".error"))).not.toContain(t("held.stale"));
+});
+
+it.each([
+  ["offers", "all given back in full", {}, false],
+  ["does not offer", "still holding money", { holdsMoney: true as const }, true],
+] as const)(
+  "%s a table bill's close when its payments are %s",
+  async (_offers, _case, holds, hidden) => {
+    const api = deferredApi({
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ hasPayments: true, ...holds })]),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await openTable(el);
+    await openDialog(el, "rest");
+    const button = payDialog(el)!.shadowRoot!.querySelector("[data-pay-deferred]");
+    if (hidden) expect(button).toBeNull();
+    else expect(button).not.toBeNull();
+  },
+);

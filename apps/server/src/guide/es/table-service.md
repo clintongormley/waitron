@@ -703,14 +703,15 @@ una acción aparte, después del cobro.
 
 ## Cerrar una cuenta como pago aplazado {#deferred-payment}
 
-Úsalo cuando el cliente vaya a pagar toda la cuenta más tarde, fuera de Waitron. En una cuenta
-abierta (aún no presentada), abre **Cobrar**, elige **Toda la cuenta** y luego **Cerrar como pago
-aplazado**. Comprueba la cuenta, la factura y el total, y confirma. Waitron emite la factura si aún no se ha emitido y cierra la cuenta
+Úsalo cuando el cliente vaya a pagar toda la cuenta más tarde, fuera de Waitron. Abre **Cobrar** en
+la cuenta y elige **Cerrar como pago aplazado** (en una cuenta aún no presentada, elige antes **Toda
+la cuenta**). Comprueba la cuenta, la factura y el total, y confirma. Waitron emite la factura si aún no se ha emitido y cierra la cuenta
 definitivamente. No registra ningún pago de la cuenta, ni ahora ni después, y la cuenta muestra
 **Pago aplazado** desde entonces.
 
-El botón solo aparece en una cuenta sin ningún pago. Todos los platos de la cuenta tienen que estar
-servidos o cancelados antes. Un responsable lo permite en un dispositivo activando **Cierra cuentas
+El botón solo aparece en una cuenta sin nada cobrado. En la cuenta de una mesa, todos los platos
+tienen que estar servidos o cancelados antes; en el mostrador, la cuenta tiene que llevar factura
+simplificada. Un responsable lo permite en un dispositivo activando **Cierra cuentas
 como pago aplazado** en el perfil del dispositivo, en **Perfiles de dispositivo** del panel.
 
 Tu gestor obtiene la lista de estas cuentas con **Exportar pagos aplazados (CSV)**, en la página

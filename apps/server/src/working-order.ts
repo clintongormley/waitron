@@ -4993,6 +4993,8 @@ export interface HeldOrder {
   revision: number;
   /** The receipt language staff chose for the order; absent while the venue's own applies. */
   receiptLanguage?: string;
+  /** The invoice the order is set to issue: `F1` once a full invoice has been chosen for it. */
+  invoiceType: "F1" | "F2";
   /**
    * PARENT rows only, each dish's child lines nested as `extras`.
    */
@@ -5140,6 +5142,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         label: workingOrders.label,
         revision: workingOrders.revision,
         receiptLocale: workingOrders.receiptLocale,
+        invoiceType: workingOrders.invoiceType,
         partyId: workingOrders.partyId,
       })
       .from(workingOrders)
@@ -5279,6 +5282,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       revision: order.revision,
       kitchenNote,
       ...(order.receiptLocale === null ? {} : { receiptLanguage: order.receiptLocale }),
+      invoiceType: order.invoiceType,
       lines,
     };
   });

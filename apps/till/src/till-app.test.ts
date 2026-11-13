@@ -23167,6 +23167,7 @@ describe("A737 Find a bill page", () => {
       id: "bill-1",
       orderNumber: 42,
       label: "Held",
+      invoiceType: "F2",
       revision: 3,
       lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "3.000" }],
     });

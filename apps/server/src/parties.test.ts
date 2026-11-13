@@ -1774,6 +1774,27 @@ describe("money received against a bill before its invoice", () => {
     });
   });
 
+  it("says which bills still hold money: not one whose only payment was given back in full, tip included", async () => {
+    const venue = await setupPartyVenue(suite.db);
+    const table4 = await venue.table("Table 4");
+    const { partyId, tabId } = await seat(venue, table4, 2);
+    await order(venue, tabId, "Burger", "Red wine bottle");
+    const partlyId = await split(venue, partyId, tabId, [2]);
+    const whole = await contribute(venue, tabId, "10.00", "1.00");
+    await refund(venue.cfg, whole, 1000, 100);
+    const partly = await contribute(venue, partlyId, "10.00");
+    await refund(venue.cfg, partly, 500, 0);
+
+    const bills = await inTx(suite, (tx) => readPartyBills(tx, partyId));
+
+    expect(
+      bills.map((bill) => [bill.workingOrderId, bill.hasPayments, bill.holdsMoney ?? false]),
+    ).toEqual([
+      [tabId, true, false],
+      [partlyId, true, true],
+    ]);
+  });
+
   it("will not abandon an emptied bill that still holds a tip, and finishes once it is given back", async () => {
     const venue = await setupPartyVenue(suite.db);
     const { partyId, tabId } = await seat(venue, await venue.table("Table 4"));
