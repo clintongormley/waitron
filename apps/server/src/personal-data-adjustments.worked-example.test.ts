@@ -66,13 +66,13 @@ const voidReason = (name: string): AdjustmentReasonInput => ({
 
 interface Story {
   venue: AdjustmentVenue;
-  marta: string;
-  luis: string;
-  ana: string;
+  martha: string;
+  lewis: string;
+  anna: string;
   /** Table 4's order number, as `billWith` allocated it. */
   tableFourOrder: number;
   /** Anna's bill's order number, as `billWith` allocated it. */
-  anaOrder: number;
+  annaOrder: number;
   /** Line ids on table 4's bill, by dish. */
   lines: Map<string, string>;
   /** Each recorded cancel's `created_at`, by dish. */
@@ -82,7 +82,7 @@ interface Story {
 let story: Story;
 
 /** Martha's `adjustments.json`: the three line voids she made giving a reason, in time order. */
-function martaAdjustments(s: Story) {
+function marthaAdjustments(s: Story) {
   return {
     counts: { cancel: 3, comp: 0, discount_percent: 0, discount_amount: 0 },
     entries: [
@@ -207,7 +207,7 @@ async function voidLine(
 }
 
 async function tellStory(venue: AdjustmentVenue): Promise<Story> {
-  const { offers, ids, reasons, ana } = await inTx(venue, async (tx) => {
+  const { offers, ids, reasons, anna } = await inTx(venue, async (tx) => {
     await tx
       .update(persons)
       .set({ displayName: "Martha Lewis" })
@@ -248,12 +248,12 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
       kitchenError: (await createAdjustmentReason(tx, voidReason("Kitchen error"))).id,
       spilled: (await createAdjustmentReason(tx, voidReason("Spilled"))).id,
     };
-    return { offers, ids, reasons, ana: added!.id };
+    return { offers, ids, reasons, anna: added!.id };
   });
   const selling = { ...venue, item: (name: string) => offers.offerFor(ids.get(name)!) };
-  const marta = venue.staffId;
-  const luis = venue.supervisorId;
-  const luisApproves = { personId: luis, pin: PINS.supervisor };
+  const martha = venue.staffId;
+  const lewis = venue.supervisorId;
+  const lewisApproves = { personId: lewis, pin: PINS.supervisor };
 
   const tableFour = await billWith(
     selling,
@@ -263,7 +263,7 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
       { name: "Chocolate cake" },
       { name: "Sparkling water" },
     ],
-    { operatorId: marta },
+    { operatorId: martha },
   );
   const tableFourOrder = await orderNumberOf(venue, tableFour.billId);
   const lines = await linesOf(venue, tableFour.billId);
@@ -273,47 +273,47 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
 
   at.set(
     "Grilled squid",
-    (await voidLine(venue, tableFour, lines.get("Grilled squid")!, marta, {
+    (await voidLine(venue, tableFour, lines.get("Grilled squid")!, martha, {
       outcome: "remove_charge",
       reasonId: reasons.wrongTable,
-      approver: luisApproves,
+      approver: lewisApproves,
     }))!,
   );
   at.set(
     "House red",
-    (await voidLine(venue, tableFour, lines.get("House red")!, marta, {
+    (await voidLine(venue, tableFour, lines.get("House red")!, martha, {
       outcome: "keep_charge",
       reasonId: reasons.kitchenError,
     }))!,
   );
   at.set(
     "Chocolate cake",
-    (await voidLine(venue, tableFour, lines.get("Chocolate cake")!, marta, {
+    (await voidLine(venue, tableFour, lines.get("Chocolate cake")!, martha, {
       outcome: "remove_charge",
       reasonId: reasons.wrongTable,
-      approver: luisApproves,
+      approver: lewisApproves,
     }))!,
   );
-  const removed = await voidLine(venue, tableFour, lines.get("Sparkling water")!, marta, {
+  const removed = await voidLine(venue, tableFour, lines.get("Sparkling water")!, martha, {
     outcome: "remove_charge",
   });
   expect(removed).toBeUndefined();
 
-  const anasBill = await billWith(selling, [{ name: "Lemon tart" }], { operatorId: ana });
-  const anaOrder = await orderNumberOf(venue, anasBill.billId);
-  expect(anaOrder).not.toBe(tableFourOrder);
-  const tart = (await linesOf(venue, anasBill.billId)).get("Lemon tart")!;
+  const annasBill = await billWith(selling, [{ name: "Lemon tart" }], { operatorId: anna });
+  const annaOrder = await orderNumberOf(venue, annasBill.billId);
+  expect(annaOrder).not.toBe(tableFourOrder);
+  const tart = (await linesOf(venue, annasBill.billId)).get("Lemon tart")!;
   await startPreparing(venue, tart);
   at.set(
     "Lemon tart",
-    (await voidLine(venue, anasBill, tart, ana, {
+    (await voidLine(venue, annasBill, tart, anna, {
       outcome: "remove_charge",
       reasonId: reasons.spilled,
-      approver: luisApproves,
+      approver: lewisApproves,
     }))!,
   );
 
-  return { venue, marta, luis, ana, tableFourOrder, anaOrder, lines, at };
+  return { venue, martha, lewis, anna, tableFourOrder, annaOrder, lines, at };
 }
 
 // The money in the same story, as S2c's `personal-data-actions.test.ts` seeds it, on this venue: a
@@ -410,29 +410,29 @@ async function tellMoney(s: Story): Promise<void> {
     await seedTenderRefund(tx, s.venue, refunded, {
       id: refundId,
       appliedAmount: 567,
-      requestedBy: s.marta,
-      authorizedBy: s.luis,
+      requestedBy: s.martha,
+      authorizedBy: s.lewis,
       createdAt: "2026-10-20T10:30:00.000Z",
     });
     await seedDrawerOpen(tx, s.venue, {
       id: "00000000-0000-4000-8000-00000000d933",
       reason: "cash_sale",
-      personId: s.marta,
+      personId: s.martha,
       saleId: first.saleId,
       openedAt: "2026-10-20T08:30:00.000Z",
     });
     await seedDrawerOpen(tx, s.venue, {
       id: "00000000-0000-4000-8000-00000000d932",
       reason: "cash_sale",
-      personId: s.marta,
+      personId: s.martha,
       saleId: second.saleId,
       openedAt: "2026-10-20T09:30:00.000Z",
     });
     await seedDrawerOpen(tx, s.venue, {
       id: "00000000-0000-4000-8000-00000000d931",
       reason: "tender_refund",
-      personId: s.marta,
-      authorizedBy: s.luis,
+      personId: s.martha,
+      authorizedBy: s.lewis,
       saleId: refunded.saleId,
       tenderRefundId: refundId,
       openedAt: "2026-10-20T10:31:00.000Z",
@@ -469,12 +469,12 @@ async function download(
 
 describe("the worked example's line voids in Martha's download", () => {
   it("lists her three voids made giving a reason, once each, and not the line she removed", async () => {
-    const files = await download(story.marta);
+    const files = await download(story.martha);
     expect(files.map((f) => f.name)).toEqual(["profile.json", "sign-in.json", "adjustments.json"]);
     const times = ["Grilled squid", "House red", "Chocolate cake"].map((d) => story.at.get(d)!);
     expect(times).toEqual([...new Set(times)].sort());
     const file = files.find((f) => f.name === "adjustments.json")!;
-    expect(JSON.parse(file.content as string)).toEqual(martaAdjustments(story));
+    expect(JSON.parse(file.content as string)).toEqual(marthaAdjustments(story));
   });
 
   it("records the kept-charge cancel's actor as the adjustment's requester, who is Martha", async () => {
@@ -489,8 +489,8 @@ describe("the worked example's line voids in Martha's download", () => {
         .from(adjustments)
         .where(and(eq(adjustments.lineId, lineId), eq(adjustments.chargeKept, true))),
     }));
-    expect(cancellation).toEqual([{ actorId: story.marta }]);
-    expect(adjustment).toEqual([{ requestedBy: story.marta }]);
+    expect(cancellation).toEqual([{ actorId: story.martha }]);
+    expect(adjustment).toEqual([{ requestedBy: story.martha }]);
   });
 });
 
@@ -527,18 +527,18 @@ function lemonTartEntry(order: number, yourPart: string[]) {
 
 describe("the worked example's whole download: the refund, the drawer, and the other people", () => {
   it("gives Martha four files, her adjustments.json as before", async () => {
-    const files = await downloadAll(story.marta);
+    const files = await downloadAll(story.martha);
     expect(files.map((f) => f.name)).toEqual([
       "profile.json",
       "sign-in.json",
       "adjustments.json",
       "actions.json",
     ]);
-    expect(fileNamed(files, "adjustments.json")).toEqual(martaAdjustments(story));
+    expect(fileNamed(files, "adjustments.json")).toEqual(marthaAdjustments(story));
   });
 
   it("leaves Martha's actions.json as S2c wrote it: one refund asked for, three openings", async () => {
-    const files = await downloadAll(story.marta);
+    const files = await downloadAll(story.martha);
     expect(fileNamed(files, "actions.json")).toEqual({
       counts: { voids: 0, refunds: 1, drawerOpenings: 3 },
       voids: [],
@@ -583,47 +583,47 @@ describe("the worked example's whole download: the refund, the drawer, and the o
   it("lists the three cancels Lewis approved, in time order, in his adjustments.json", async () => {
     const times = ["Grilled squid", "Chocolate cake", "Lemon tart"].map((d) => story.at.get(d)!);
     expect(times).toEqual([...new Set(times)].sort());
-    const marta = martaAdjustments(story).entries;
+    const martha = marthaAdjustments(story).entries;
     const approved = { yourPart: ["approved"] };
-    const files = await downloadAll(story.luis);
+    const files = await downloadAll(story.lewis);
     expect(fileNamed(files, "adjustments.json")).toEqual({
       counts: { cancel: 3, comp: 0, discount_percent: 0, discount_amount: 0 },
       entries: [
-        { ...marta[0], ...approved },
-        { ...marta[2], ...approved },
-        lemonTartEntry(story.anaOrder, ["approved"]),
+        { ...martha[0], ...approved },
+        { ...martha[2], ...approved },
+        lemonTartEntry(story.annaOrder, ["approved"]),
       ],
     });
   });
 
   it("lists Anna's own cancel in her adjustments.json", async () => {
-    const files = await downloadAll(story.ana);
+    const files = await downloadAll(story.anna);
     expect(fileNamed(files, "adjustments.json")).toEqual({
       counts: { cancel: 1, comp: 0, discount_percent: 0, discount_amount: 0 },
-      entries: [lemonTartEntry(story.anaOrder, ["requested"])],
+      entries: [lemonTartEntry(story.annaOrder, ["requested"])],
     });
   });
 
   it("names no other person in anyone's files", async () => {
     const everything = async (personId: string) =>
       (await downloadAll(personId)).map((f) => f.content as string).join("\n");
-    const marta = await everything(story.marta);
-    expect(marta).toContain("Grilled squid");
-    expect(marta).toContain("Martha Lewis");
+    const martha = await everything(story.martha);
+    expect(martha).toContain("Grilled squid");
+    expect(martha).toContain("Martha Lewis");
     for (const absent of [
-      story.luis,
-      story.ana,
+      story.lewis,
+      story.anna,
       "Lewis Green",
       "Anna Smith",
       "Spilled",
       "Lemon tart",
     ])
-      expect(marta).not.toContain(absent);
-    const luis = await everything(story.luis);
-    for (const absent of [story.marta, story.ana, "Martha Lewis", "Anna Smith"])
-      expect(luis).not.toContain(absent);
-    const ana = await everything(story.ana);
-    for (const absent of [story.marta, story.luis, "Martha Lewis", "Lewis Green"])
-      expect(ana).not.toContain(absent);
+      expect(martha).not.toContain(absent);
+    const lewis = await everything(story.lewis);
+    for (const absent of [story.martha, story.anna, "Martha Lewis", "Anna Smith"])
+      expect(lewis).not.toContain(absent);
+    const anna = await everything(story.anna);
+    for (const absent of [story.martha, story.lewis, "Martha Lewis", "Lewis Green"])
+      expect(anna).not.toContain(absent);
   });
 });
