@@ -44,6 +44,13 @@ it("preserves the frozen Madrid adapter and captures while renaming current code
     expect(readFileSync(join(root, paths[0]), "utf8")).toBe("table_merges");
     for (const path of paths.slice(1))
       expect(readFileSync(join(root, path), "utf8")).toBe("floor_today_joins");
+    writeFileSync(join(root, paths[0]), "floor_today_joins");
+    expect(execFileSync(process.execPath, [script], { cwd: root, env, encoding: "utf8" })).toBe(
+      "apps/current.ts\n",
+    );
+    expect(readFileSync(join(root, paths[0]), "utf8")).toBe("table_merges");
+    for (const path of paths.slice(1))
+      expect(readFileSync(join(root, path), "utf8")).toBe("floor_today_joins");
     expect(execFileSync(process.execPath, [script], { cwd: root, env, encoding: "utf8" })).toBe("");
   } finally {
     process.chdir(originalCwd);

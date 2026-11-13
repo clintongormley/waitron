@@ -808,9 +808,18 @@ it.each(["restore", "keep"])(
         images,
       }),
     );
-    const run = (file, args, input) => {
-      if (args[0] === "inspect" && args[2]?.includes("Config.Labels"))
+    const removed = [];
+    const run = async (file, args, input) => {
+      if (args[0] === "inspect" && args[2]?.includes("Config.Labels")) {
+        if (args.at(-1).endsWith("-agent")) return { stdout: directory };
         throw Object.assign(new Error("missing"), { code: 1, stderr: "No such container" });
+      }
+      if (args[0] === "rm") {
+        removed.push(args);
+        return { stdout: "" };
+      }
+      if (args.includes("up"))
+        await expect(fs.access(join(directory, "check"))).rejects.toMatchObject({ code: "ENOENT" });
       return hostRun(file, args, input);
     };
     const result = await runUpgradeCli([verb, root], { run });
@@ -818,6 +827,7 @@ it.each(["restore", "keep"])(
       phase: "committed",
       target: verb === "restore" ? "old" : "candidate",
     });
+    expect(removed).toEqual([["rm", "--force", expect.stringMatching(/-agent$/)]]);
     const installed = JSON.parse(await fs.readFile(join(root, "compose.yml"), "utf8"));
     expect(installed.services.app.image).toBe(images[verb === "restore" ? "old" : "candidate"].app);
     expect(await fs.readFile(join(root, "state", "retained"), "utf8")).toBe(
