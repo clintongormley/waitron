@@ -1,5 +1,6 @@
-import { CORE_MIGRATIONS, refusalError, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, personStaffRoles, refusalError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -82,6 +83,10 @@ describe("createPerson", () => {
     );
     expect(rows.rows).toEqual([{ role: "supervisor", status: "active", display_name: "Bea" }]);
 
+    await run(async (tx) => {
+      const staffRoleId = await ensureFixtureJobRole(tx);
+      await tx.insert(personStaffRoles).values({ personId: id, staffRoleId });
+    });
     const session = await run((tx) => loginWithPin(tx, { deviceId, personId: id, pin: "5678" }));
     expect(session).toEqual({
       id: expect.any(String),
