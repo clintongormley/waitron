@@ -792,8 +792,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   name rather than a till string. Believed to predate the slice; not run on main.
 
 - **A1261. A full invoice for a bill already paid, from the table's ⋮ (left open by A803 slice 3,
-  Owner question 2, #2360).** Once A802 gives the till a way in, offer it from the ⋮ for a paid
-  bill.
+  Owner question 2, #2360).** Correct invoice (A802) does not issue a full invoice; offer one
+  from the ⋮ for a paid bill once something does.
   [Detail](backlog/till.md#a1261-a-full-invoice-for-a-bill-already-paid-from-the-tables-)
 
 - **A bill another till moved, merged or part-paid** (bundle of 2, 1 important, size M). Holds A1267, A1288. [Detail](backlog/till.md#bundle-a-bill-another-till-moved-merged-or-part-paid)

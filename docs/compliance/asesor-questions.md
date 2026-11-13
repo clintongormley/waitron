@@ -2913,7 +2913,9 @@ This records a question; no enquiry has been sent.
 record carries only the amount that changes. No till screen or server route calls it yet. Its only
 callers under `apps/` are three demo scripts in `apps/server/scripts/`, plus tests. *(2026-10-02,
 C126: the till's cancel route now calls it, crediting an issued ticket in full when its order is
-cancelled — see Q32.)* Since
+cancelled — see Q32.)* *(2026-11-13, A802 slice 5b: the till's Correct invoice now calls it for
+part of a paid ticket, by differences; the backlog entry named below is now* Correcting a paid
+invoice: what A802 left open*.)* Since
 2026-09-30 (#922), a correction that would take the invoice's total below zero, counting earlier
 corrections, is refused (`sale.correction_exceeds_total`).
 

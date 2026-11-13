@@ -24,6 +24,10 @@ kitchen families and clears their lists while preserving the bill.
 > **2026-10-20 A802 update:** the [partial paid-invoice correction proposal](2026-10-20-a802-partial-paid-invoice-correction-design.md)
 > is ready for owner review. References below to A802 as still queued describe the earlier state.
 > Its new policies are proposals; they do not amend this approved design before owner approval.
+>
+> **2026-11-13:** A802 landed without the same-step filing of a cancelled-dish refund that D20 and
+> §3.8 promise "once A802 lands"; it is open in
+> [backlog/fiscal.md](../../backlog/fiscal.md#correcting-a-paid-invoice-what-a802-left-open).
 
 Status: **design, revised 2026-10-19 a second time, for the owner's four answers to A758r3's
 question (D23–D26), then for the answer to A758r4's question (D28).** Settled and buildable, all of

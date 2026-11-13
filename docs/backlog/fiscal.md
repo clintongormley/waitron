@@ -906,9 +906,9 @@ A802 slice 5b:
   2026-10-18): once A802 lands, a refund of cancelled dishes files their partial R5 in the same
   step. §3.8.1 there has a worked example: €5.50 back at 10% is an R5 of −€5.50, base −€5.00, VAT
   −€0.50.
-- **Asesor Q31** (correct by differences or by substitution, `TipoRectificativa` "I" or "S" in
-  `packages/fiscal-verifactu/src/backend.ts`) changes only the filing type; Waitron files by
-  differences.
+
+Also open, from before A802:
+
 - **The derived correction path**, which works out VAT by rounding, checks almost nothing against
   the invoice: a −12.00 corrective whose lines came to −12.10 was accepted (from `e56323007c`, #982;
   the runs in the [A802 slice 3 plan](../superpowers/plans/2026-11-10-a802-correction-history.md)).
