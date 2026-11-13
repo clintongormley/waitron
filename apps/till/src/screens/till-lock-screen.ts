@@ -203,11 +203,11 @@ export class TillLockScreen extends LitElement {
   #throttleTimer?: ReturnType<typeof setInterval>;
   #connection = 0;
   #staffLive?: { stop(): void };
-  #staffRead?: Promise<void>;
+  #initialStaffRead?: Promise<void>;
 
   override connectedCallback(): void {
     super.connectedCallback();
-    void this.#loadStaff();
+    if (!this.live?.up) this.#initialStaffRead = this.#loadStaff();
   }
 
   override updated(changed: PropertyValues): void {
@@ -218,6 +218,7 @@ export class TillLockScreen extends LitElement {
     if (this.isConnected && this.live && !this.#staffLive)
       this.#staffLive = queuedLiveRefresh(this.live, {
         types: TILL_LIVE_TYPES.signIn!,
+        beforeRun: () => this.#initialStaffRead,
         run: () => this.#loadStaff(),
       });
   }
@@ -225,6 +226,7 @@ export class TillLockScreen extends LitElement {
   override disconnectedCallback(): void {
     this.#staffLive?.stop();
     this.#staffLive = undefined;
+    this.#initialStaffRead = undefined;
     super.disconnectedCallback();
     this.#connection++;
     this.pin = "";
@@ -235,13 +237,7 @@ export class TillLockScreen extends LitElement {
     this.#clearThrottle();
   }
 
-  #loadStaff(): Promise<void> {
-    return (this.#staffRead ??= this.#readStaff().finally(() => {
-      this.#staffRead = undefined;
-    }));
-  }
-
-  async #readStaff(): Promise<void> {
+  async #loadStaff(): Promise<void> {
     const initial = this.staff === undefined;
     const connection = this.#connection;
     try {

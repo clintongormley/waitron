@@ -80,6 +80,32 @@ afterEach(() => {
 });
 
 describe("till-lock-screen", () => {
+  it("reads again for a job change delivered while the initial staff read waits", async () => {
+    const live = liveConnectionFixture();
+    let answer!: (value: StaffMember[]) => void;
+    const listStaff = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<StaffMember[]>((resolve) => {
+            answer = resolve;
+          }),
+      )
+      .mockResolvedValue([ana, ben]);
+    const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+      api: stubApi({ listStaff }),
+      live: live.connection,
+    });
+    await flush(el);
+    live.ready();
+    live.change("person_staff_roles");
+    await flush(el);
+    answer([ana]);
+    await flush(el);
+    expect(query(el, '[data-person="p2"]')?.textContent).toContain("Ben");
+    live.connection.stop();
+  });
+
   it("stops reading staff when a used lock screen leaves the page", async () => {
     const live = liveConnectionFixture();
     const listStaff = vi.fn().mockResolvedValue([ana, ben]);
