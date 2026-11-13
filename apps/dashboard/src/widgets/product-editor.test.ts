@@ -40,6 +40,26 @@ registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 beforeEach(() => setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] }));
 
+it("saves the set-lunch switch and shows it in the folded Selling summary", async () => {
+  const el = await mountPricing({ ...saved, setLunch: false });
+  await openSection(el, "selling");
+  const field = el.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="set-lunch"]');
+  expect(field).not.toBeNull();
+  field!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(el.currentValue.setLunch).toBe(true);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value.setLunch).toBe(true);
+  expect(section(el, "selling")!.querySelector('[slot="summary"]')!.textContent).toContain(
+    t("editor.set_lunch"),
+  );
+});
+
 it.each([0, 150])(
   "keeps unreviewed allergens null when only a dietary label is saved (press %s ms)",
   async (delay) => {

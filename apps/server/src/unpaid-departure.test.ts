@@ -1,3 +1,5 @@
+import { products, lineServiceCancellations } from "@waitron/db";
+import { createProduct, createExtraList, writeProductModifiers } from "@waitron/catalogue";
 import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
@@ -13,7 +15,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -139,6 +141,90 @@ useVenueDb({
     );
     staffSessionCookie = await sessionCookieForTest(db, staff.token);
   },
+});
+
+it("stops the lunch dishes, without treating its priced shell as kitchen work, on unpaid departure", async () => {
+  const party = await seatedWith(venue);
+  const children = await inTx(venue, async (tx) => {
+    const [sample] = await tx.select().from(products).where(eq(products.name, "Tarta"));
+    const [drink] = await tx.select().from(products).where(eq(products.name, "Caña"));
+    const lunch = await createProduct(tx, {
+      catalogueId: sample!.catalogueId,
+      categoryId: null,
+      name: "House lunch departure",
+      customerName: { "es-ES": "Table lunch" },
+      kitchenName: "LUNCH",
+      pricingUnit: "each",
+      unitPrice: "18.00",
+      vatClass: "reduced",
+      setLunch: true,
+    });
+    const list = await createExtraList(
+      tx,
+      {
+        name: "Departure lunch choices",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: null,
+        active: true,
+        items: [sample!.id, drink!.id].map((productId) => ({
+          productId,
+          price: "0.00",
+          maxQuantity: 1,
+          preselected: false,
+        })),
+      },
+      venue.cfg.locale,
+    );
+    await writeProductModifiers(tx, lunch.id, [{ kind: "extras", id: list.id }]);
+    const offers = await offerProducts(tx, venue.cfg, {
+      zone: { zoneId: venue.zoneId },
+      orderStart: "table",
+    });
+    await addTabRound(tx, venue.cfg, party.tabId, [
+      {
+        menuItemId: offers.offerFor(lunch.id),
+        quantity: "1",
+        extras: [
+          {
+            listId: list.id,
+            picks: [sample!.id, drink!.id].map((productId) => ({ productId, quantity: 1 })),
+          },
+        ],
+      },
+    ]);
+    const lines = await tx
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, party.tabId));
+    return {
+      ids: lines.map((line) => line.id),
+      children: lines.filter((line) => line.parentLineId !== null).map((line) => line.id),
+    };
+  });
+  expect(
+    await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+    ),
+  ).toHaveLength(2);
+  const answer = await depart(party.partyId, {
+    expectedPartyRevision: revisionOf(party.partyId),
+    reason: REASON,
+  });
+  expect(answer.status, JSON.stringify(answer)).toBe(200);
+  const cancelled = await inTx(venue, (tx) =>
+    tx
+      .select()
+      .from(lineServiceCancellations)
+      .where(inArray(lineServiceCancellations.lineId, children.ids)),
+  );
+  expect(cancelled.map((row) => row.lineId).sort()).toEqual(children.children.sort());
+  expect(
+    await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+    ),
+  ).toEqual([]);
 });
 
 async function depart(partyId: string, body: Record<string, unknown>, cookie = supervisorCookie) {

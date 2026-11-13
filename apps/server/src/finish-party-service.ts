@@ -1,5 +1,6 @@
+import { serviceDishCondition } from "./service-dishes.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -275,7 +276,15 @@ async function readFinishState(tx: Transaction, args: FinishStateArgs) {
             .filter((bill) => bill.status === "settled" && !bill.leftUnpaid)
             .map((bill) => bill.id),
         ),
-        isNull(workingOrderLines.parentLineId),
+        await serviceDishCondition(
+          tx,
+          inArray(
+            workingOrders.id,
+            bills
+              .filter((bill) => bill.status === "settled" && !bill.leftUnpaid)
+              .map((bill) => bill.id),
+          ),
+        ),
       ),
     )
     .orderBy(workingOrders.id, workingOrderLines.lineNo);

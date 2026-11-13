@@ -1141,6 +1141,33 @@ export async function findOrderServiceZones(
   return new Map(rows.map((row) => [row.workingOrderId, row.zoneId]));
 }
 
+export async function readLunchLineIds(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<Set<string>> {
+  if (lineIds.length === 0) return new Set();
+  const contexts = await tx
+    .select({
+      lineId: workingLineContexts.workingOrderLineId,
+      menuItemId: workingLineContexts.menuItemId,
+      versionId: workingLineContexts.menuVersionId,
+    })
+    .from(workingLineContexts)
+    .where(inArray(workingLineContexts.workingOrderLineId, [...lineIds]));
+  const documents = await readRecordedDocuments(
+    tx,
+    contexts.flatMap((row) => (row.versionId === null ? [] : [row.versionId])),
+  );
+  return new Set(
+    contexts.flatMap((row) =>
+      row.versionId !== null &&
+      documents.get(row.versionId)?.offers[row.menuItemId]?.setLunch === true
+        ? [row.lineId]
+        : [],
+    ),
+  );
+}
+
 export async function readLunchOffers(
   tx: Transaction,
   workingOrderId: string,

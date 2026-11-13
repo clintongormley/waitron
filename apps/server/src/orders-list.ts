@@ -768,6 +768,7 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
   const stored = await tx
     .select({
       id: workingOrderLines.id,
+
       parentLineId: workingOrderLines.parentLineId,
       optionSnapshots: workingOrderLines.optionSnapshots,
       note: workingOrderLines.note,
@@ -794,7 +795,15 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
     tx,
     stored.map((line) => line.id),
   );
-  const lines = stored.map((line) => ({ ...line, sentNutrition: saved.get(line.id) ?? null }));
+  const lunches = await VENUE_SERVICE.readLunchLineIds(
+    tx,
+    stored.map((line) => line.id),
+  );
+  const lines = stored.map((line) => ({
+    ...line,
+    setLunch: lunches.has(line.id),
+    sentNutrition: saved.get(line.id) ?? null,
+  }));
   return foldIdenticalPortions(lines).map((line) => ({
     sentNutrition: line.sentNutrition,
     sent: line.sentAt !== null,
@@ -809,6 +818,7 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
 }
 
 interface StoredBillLine {
+  setLunch: boolean;
   sentNutrition: LineNutrition | null;
   id: string;
   parentLineId: string | null;
@@ -871,7 +881,7 @@ function foldIdenticalPortions<L extends StoredBillLine>(lines: readonly L[]): L
   const byKey = new Map<string, { dish: L; extras: L[] }>();
   const folded = new Set<string>();
   for (const dish of out) {
-    if (dish.parentLineId !== null || dish.measured !== false) continue;
+    if (dish.parentLineId !== null || dish.measured !== false || dish.setLunch) continue;
     const extras = (extrasOf.get(dish.id) ?? [])
       .map((extra) => ({ extra, key: JSON.stringify([looks(extra), extra.quantity]) }))
       .sort((a, b) => (a.key < b.key ? -1 : 1));

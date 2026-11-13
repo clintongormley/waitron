@@ -1,3 +1,4 @@
+import { serviceDishPredicate } from "./service-dishes.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   lineServiceCancellations,
@@ -51,7 +52,7 @@ export function countsWholePortions(dish: Pick<CountedLine, "unitPrecision" | "u
 /**
  * One dish's counts. A dish sold by the unit (`takesExtras`'s rule: no hardware unit, no decimal
  * places, not a measure) counts its whole quantity; any other dish, or a fractional quantity,
- * counts as one; extras count nothing. The units left to serve take the first state that matches:
+ * counts as one; ordinary extras count nothing. The units left to serve take the first state that matches:
  * not sent, held (an extra's kitchen part neither requested nor fired, or, unless the dish is made
  * here, its own such part or a held group), waiting, ready. A handed-over order has nothing left to serve.
  */
@@ -139,13 +140,14 @@ export async function readOrderStateCounts(
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
     .where(inArray(workingOrderLines.workingOrderId, [...orderIds]));
+  const isDish = await serviceDishPredicate(tx, lines);
   const extras = new Map<string, KitchenPart[]>();
   for (const line of lines) {
-    if (line.parentLineId === null) continue;
+    if (line.parentLineId === null || isDish(line)) continue;
     extras.set(line.parentLineId, [...(extras.get(line.parentLineId) ?? []), kitchenPart(line)]);
   }
   for (const line of lines) {
-    if (line.parentLineId !== null) continue;
+    if (!isDish(line)) continue;
     const dish: CountedLine = {
       ...kitchenPart(line),
       quantity: line.quantity,

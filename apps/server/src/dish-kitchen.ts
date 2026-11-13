@@ -54,10 +54,11 @@ export async function dishKitchenItems(
 ): Promise<Map<string, DishKitchenItem[]>> {
   const result = new Map<string, DishKitchenItem[]>();
   if (dishLineIds.length === 0) return result;
+  const dishes = new Set(dishLineIds);
   const rows = await dishKitchenItemsQuery(tx, dishLineIds);
   for (const row of rows) {
-    const extra = row.parentLineId !== null;
-    const dishLineId = row.parentLineId ?? row.workingOrderLineId;
+    const extra = !dishes.has(row.workingOrderLineId);
+    const dishLineId = extra ? row.parentLineId! : row.workingOrderLineId;
     const items = result.get(dishLineId) ?? [];
     const item: DishKitchenItem = {
       ticketItemId: row.ticketItemId,
