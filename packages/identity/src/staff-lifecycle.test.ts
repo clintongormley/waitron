@@ -1,7 +1,8 @@
 import { builtInRoleForTest } from "../test/person-rows.js";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
+  roles,
   captureError,
   checkFailed,
   withTransaction,
@@ -16,7 +17,6 @@ import { isAppError } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import {
   clearPersonPin,
-  createPerson,
   deactivatePerson,
   invitePerson,
   listPersons,
@@ -617,14 +617,18 @@ describe("deactivatePerson refusals", () => {
     expect(await statusOf(target)).toBe("active");
   });
 
-  it("refuses to deactivate the only active admin", async () => {
+  it("refuses a Manager holding person.admin before considering the last Admin", async () => {
     const { token } = await openManagementSession(suite.db, "manager");
     const admin = await seedPerson(suite.db, "admin");
+    await suite.db
+      .update(roles)
+      .set({ permissions: ["person.manage", "person.admin"] })
+      .where(eq(roles.builtInKey, "manager"));
     expect(
       await codeOf(() =>
         run((tx) => deactivatePerson(tx, { managementSessionId: token, personId: admin })),
       ),
-    ).toBe("person.last_admin");
+    ).toBe("person.holds_more");
     expect(await statusOf(admin)).toBe("active");
   });
 
@@ -820,62 +824,6 @@ describe("a colliding row that lands after the pre-check", () => {
           lastNames: "Role",
           telephone: null,
           role: "staff",
-          email: "bad-role@example.com",
-        }),
-      ),
-    );
-    expect(isAppError(error)).toBe(false);
-    expect(checkFailed(error, "persons_display_name_ck")).toBe(true);
-  });
-
-  it("createPerson reports a display-name collision as person.display_name_taken", async () => {
-    const { token } = await openManagementSession(suite.db, "admin");
-    const before = await personCount();
-    await expect(
-      withRacerPlanted("insert", () =>
-        run((tx) =>
-          createPerson(tx, {
-            managementSessionId: token,
-            displayName: "Racer",
-            role: "staff",
-            pin: "5678",
-            email: "late@example.com",
-          }),
-        ),
-      ),
-    ).rejects.toMatchObject({
-      code: "person.display_name_taken",
-      params: { displayName: "Racer" },
-    });
-    expect(await personCount()).toBe(before);
-  });
-
-  it("createPerson reports a login-email collision as person.email_taken", async () => {
-    const { token } = await openManagementSession(suite.db, "admin");
-    await expect(
-      withRacerPlanted("insert", () =>
-        run((tx) =>
-          createPerson(tx, {
-            managementSessionId: token,
-            displayName: "Late comer",
-            role: "staff",
-            pin: "5678",
-            email: " Racer@Example.com ",
-          }),
-        ),
-      ),
-    ).rejects.toMatchObject({ code: "person.email_taken", params: { email: "racer@example.com" } });
-  });
-
-  it("createPerson passes a refusal that is not a collision through untranslated", async () => {
-    const { token } = await openManagementSession(suite.db, "admin");
-    const error = await captureError(() =>
-      run((tx) =>
-        createPerson(tx, {
-          managementSessionId: token,
-          displayName: "\0",
-          role: "staff",
-          pin: "5678",
           email: "bad-role@example.com",
         }),
       ),

@@ -512,6 +512,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That display name is already in use. Add a surname or nickname.",
     es: "Ese nombre visible ya está en uso. Añade un apellido o apodo.",
   },
+  "person.holds_more": {
+    en: "This person can do things you can't, so only someone who can do everything they can may change their sign-in.",
+    es: "Esta persona puede hacer cosas que tú no, así que solo alguien que pueda hacer todo lo que ella hace puede cambiar su acceso.",
+  },
   "person.last_admin": {
     en: "Keep at least one active administrator.",
     es: "Debe quedar al menos un administrador activo.",

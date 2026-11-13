@@ -13,11 +13,11 @@ import { CORE_MIGRATIONS, captureError, indexViolated, withTransaction } from "@
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
-import { createPerson, setEmail } from "./staff.js";
+import { invitePerson } from "./staff.js";
 import { saveOwnProfile } from "./profile.js";
 import { openManagementSession, seedManager, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
 import { foldForUniqueness } from "./fold.js";
-import { PERSONS_LIVE_DISPLAY_NAME } from "./person-constraints.js";
+import { PERSONS_EMAIL, PERSONS_LIVE_DISPLAY_NAME } from "./person-constraints.js";
 import { startManagementSession } from "./management-session.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -40,11 +40,13 @@ function create(
   email = `${randomUUID()}@example.test`,
 ): Promise<{ id: string }> {
   return run((tx) =>
-    createPerson(tx, {
+    invitePerson(tx, {
       managementSessionId: token,
       displayName,
       role: "staff",
-      pin: "5678",
+      firstNames: "First",
+      lastNames: "Last",
+      telephone: null,
       email,
     }),
   );
@@ -163,30 +165,19 @@ describe("an unproven replacement address is taken whichever way its accent is e
   });
 });
 
-/**
- * Every gated write path pre-checks a name or an address before it writes, so a duplicate is
- * normally refused by a `select` and the index never fires. These two take a path with no
- * pre-check in front of it: `setEmail` has none, and the display-name case writes through the
- * table definition.
- */
 describe("the index itself folds, not only the check in front of it", () => {
-  it("refuses setEmail when the address differs only in how the accent is encoded", async () => {
+  it("refuses an email update whose accent encoding matches an existing address", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     await create(token, "Held", "mari\u0301a@example.test");
     const target = await seedPerson(suite.db, "staff");
-
-    await expect(
-      run((tx) =>
-        setEmail(tx, {
-          managementSessionId: token,
-          personId: target,
-          email: "mar\u00eda@example.test",
-        }),
-      ),
-    ).rejects.toMatchObject({
-      code: "person.email_taken",
-      params: { email: "mar\u00eda@example.test" },
-    });
+    const error = await captureError(() =>
+      run(async (tx) => {
+        tx.execute(
+          sql`update persons set email = ${"mar\u00eda@example.test"}, email_folded = ${foldForUniqueness("mar\u00eda@example.test")} where id = ${target}`,
+        );
+      }),
+    );
+    expect(indexViolated(error, PERSONS_EMAIL)).toBe(true);
   });
 
   it("refuses a second live row whose folded name matches, written through the table", async () => {

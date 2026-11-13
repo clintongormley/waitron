@@ -207,6 +207,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "passkey.challenge_expired": 400,
   "passkey.already_registered": 409,
   "person.suspended": 403,
+  "person.holds_more": 403,
   "person.self_deactivation": 403,
   "person.not_found": 404,
   "person.email_invalid": 400,

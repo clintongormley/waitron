@@ -42,6 +42,7 @@ declare module "@waitron/shared" {
     "google.already_linked": Record<string, never>;
     "google.second_factor_required": Record<string, never>;
     "person.not_found": { personId: string };
+    "person.holds_more": { personId: string };
     "device_profile.admission_invalid": {
       field: "admittedStaffRoleIds";
       reason: "not_found";

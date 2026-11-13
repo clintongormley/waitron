@@ -1,5 +1,6 @@
 import {
   CORE_MIGRATIONS,
+  outgoingMail,
   withTransaction,
   type Transaction,
   persons,
@@ -17,22 +18,20 @@ import {
 } from "../test/fixtures.js";
 import {
   completeAccountAction,
+  queueInvitation,
   inspectAccountAction,
   issueAccountAction,
 } from "./account-action.js";
 import {
   clearPersonPin,
-  createPerson,
   deactivatePerson,
   invitePerson,
   reactivatePersonForInvitation,
   resetPersonLogin,
-  resetPin,
-  setEmail,
-  setPassword,
-  setRole,
   updatePersonDetails,
 } from "./staff.js";
+
+import { declaredPermissions, registerModulePermissions } from "./permissions.js";
 
 type Change = (tx: Transaction, managementSessionId: string, personId: string) => Promise<unknown>;
 const changes: {
@@ -42,30 +41,6 @@ const changes: {
   field: "email" | "pinHash" | "passwordHash" | "role" | "status";
   value: string | null;
 }[] = [
-  {
-    name: "email",
-    status: "active",
-    change: (tx, managementSessionId, personId) =>
-      setEmail(tx, { managementSessionId, personId, email: "replacement@example.test" }),
-    field: "email",
-    value: "replacement@example.test",
-  },
-  {
-    name: "password",
-    status: "active",
-    change: (tx, managementSessionId, personId) =>
-      setPassword(tx, { managementSessionId, personId, password: "replacement password" }),
-    field: "passwordHash",
-    value: null,
-  },
-  {
-    name: "PIN replacement",
-    status: "active",
-    change: (tx, managementSessionId, personId) =>
-      resetPin(tx, { managementSessionId, personId, pin: "4321" }),
-    field: "pinHash",
-    value: null,
-  },
   {
     name: "PIN clearing",
     status: "active",
@@ -99,14 +74,6 @@ const changes: {
     value: "suspended",
   },
   {
-    name: "role",
-    status: "active",
-    change: (tx, managementSessionId, personId) =>
-      setRole(tx, { managementSessionId, personId, role: "supervisor" }),
-    field: "role",
-    value: "supervisor",
-  },
-  {
     name: "staff details",
     status: "active",
     change: (tx, managementSessionId, personId) =>
@@ -131,6 +98,22 @@ const row = async (id: string) => ({
   ...(await suite.db.select().from(persons).where(eq(persons.id, id)))[0]!,
   role: await builtInRoleForTest(suite.db, id),
 });
+
+async function changeRole(
+  tx: Transaction,
+  input: { managementSessionId: string; personId: string; role: "manager" | "admin" },
+) {
+  const person = await row(input.personId);
+  await updatePersonDetails(tx, {
+    ...input,
+    displayName: person.displayName,
+    firstNames: "First",
+    lastNames: "Last",
+    telephone: null,
+    email: person.email!,
+    status: person.status,
+  });
+}
 
 describe("admin sign-in authority", () => {
   it.each(changes)(
@@ -165,7 +148,7 @@ describe("admin sign-in authority", () => {
         expect(after[field]).toBe(value);
     },
   );
-  it.each(["create", "invite", "promote"] as const)(
+  it.each(["invite", "promote"] as const)(
     "refuses a manager's attempt to %s an admin",
     async (operation) => {
       const actor = await openManagementSession(suite.db, "manager");
@@ -173,25 +156,17 @@ describe("admin sign-in authority", () => {
       const before = await suite.db.select().from(persons);
       await expect(
         run<unknown>((tx) =>
-          operation === "create"
-            ? createPerson(tx, {
+          operation === "invite"
+            ? invitePerson(tx, {
                 managementSessionId: actor.token,
                 displayName: "New Admin",
+                firstNames: "New",
+                lastNames: "Admin",
+                telephone: null,
                 role: "admin",
-                pin: "4321",
                 email: "new-admin@example.test",
               })
-            : operation === "invite"
-              ? invitePerson(tx, {
-                  managementSessionId: actor.token,
-                  displayName: "New Admin",
-                  firstNames: "New",
-                  lastNames: "Admin",
-                  telephone: null,
-                  role: "admin",
-                  email: "new-admin@example.test",
-                })
-              : setRole(tx, { managementSessionId: actor.token, personId: target, role: "admin" }),
+            : changeRole(tx, { managementSessionId: actor.token, personId: target, role: "admin" }),
         ),
       ).rejects.toMatchObject({
         code: "authorization.not_permitted",
@@ -338,30 +313,22 @@ describe("non-admin sign-in authority", () => {
         .where(eq(webauthnCredentials.personId, target)),
     ).toEqual([{ id: `cred-${target}` }]);
   });
-  it.each(["create", "invite"] as const)(
+  it.each(["invite"] as const)(
     "refuses a manager's attempt to %s a non-admin account",
-    async (operation) => {
+    async () => {
       const actor = await openManagementSession(suite.db, "manager");
       const before = await suite.db.select().from(persons);
       await expect(
         run((tx) =>
-          operation === "create"
-            ? createPerson(tx, {
-                managementSessionId: actor.token,
-                displayName: "New Staff",
-                role: "staff",
-                pin: "4321",
-                email: "new@example.test",
-              })
-            : invitePerson(tx, {
-                managementSessionId: actor.token,
-                displayName: "New Staff",
-                firstNames: "New",
-                lastNames: "Staff",
-                telephone: null,
-                role: "staff",
-                email: "new@example.test",
-              }),
+          invitePerson(tx, {
+            managementSessionId: actor.token,
+            displayName: "New Staff",
+            firstNames: "New",
+            lastNames: "Staff",
+            telephone: null,
+            role: "staff",
+            email: "new@example.test",
+          }),
         ),
       ).rejects.toMatchObject({
         code: "authorization.not_permitted",
@@ -376,11 +343,9 @@ describe("account links across admin role changes", () => {
   it.each([
     { method: "details", purpose: "password_reset" },
     { method: "details", purpose: "invitation" },
-    { method: "setRole", purpose: "password_reset" },
-    { method: "setRole", purpose: "invitation" },
   ] as const)(
     "serves a $purpose link issued before $method promotes the person",
-    async ({ method, purpose }) => {
+    async ({ purpose }) => {
       const actor = await openManagementSession(suite.db, "admin");
       const target = await seedPerson(
         suite.db,
@@ -394,19 +359,17 @@ describe("account links across admin role changes", () => {
       const issued = await run((tx) => issueAccountAction(tx, { personId: target, purpose }));
       const person = await row(target);
       await run((tx) =>
-        method === "setRole"
-          ? setRole(tx, { managementSessionId: actor.token, personId: target, role: "admin" })
-          : updatePersonDetails(tx, {
-              managementSessionId: actor.token,
-              personId: target,
-              displayName: person.displayName,
-              firstNames: "Future",
-              lastNames: "Admin",
-              telephone: null,
-              email: person.email!,
-              role: "admin",
-              status: person.status,
-            }),
+        updatePersonDetails(tx, {
+          managementSessionId: actor.token,
+          personId: target,
+          displayName: person.displayName,
+          firstNames: "Future",
+          lastNames: "Admin",
+          telephone: null,
+          email: person.email!,
+          role: "admin",
+          status: person.status,
+        }),
       );
       await expect(
         run((tx) =>
@@ -435,7 +398,7 @@ it("serves an invitation issued after an admin approves the promotion", async ()
     .set({ email: "future-owner@example.test" })
     .where(eq(persons.id, target));
   await run((tx) =>
-    setRole(tx, { managementSessionId: actor.token, personId: target, role: "admin" }),
+    changeRole(tx, { managementSessionId: actor.token, personId: target, role: "admin" }),
   );
   const issued = await run((tx) =>
     issueAccountAction(tx, { personId: target, purpose: "invitation" }),
@@ -467,7 +430,7 @@ it("preserves an unused reset when a non-admin becomes a manager", async () => {
     issueAccountAction(tx, { personId: target, purpose: "password_reset" }),
   );
   await run((tx) =>
-    setRole(tx, { managementSessionId: actor.token, personId: target, role: "manager" }),
+    changeRole(tx, { managementSessionId: actor.token, personId: target, role: "manager" }),
   );
   await expect(
     run((tx) =>
@@ -481,9 +444,9 @@ it("preserves an unused reset when a non-admin becomes a manager", async () => {
   expect((await row(target)).role).toBe("manager");
 });
 
-it.each(["details", "setRole"] as const)(
+it.each(["details"] as const)(
   "preserves an admin's unused reset on demotion through %s",
-  async (method) => {
+  async () => {
     const actor = await openManagementSession(suite.db, "admin");
     const target = await seedPerson(suite.db, "admin");
     await suite.db
@@ -495,19 +458,17 @@ it.each(["details", "setRole"] as const)(
     );
     const person = await row(target);
     await run((tx) =>
-      method === "setRole"
-        ? setRole(tx, { managementSessionId: actor.token, personId: target, role: "manager" })
-        : updatePersonDetails(tx, {
-            managementSessionId: actor.token,
-            personId: target,
-            displayName: person.displayName,
-            firstNames: "Former",
-            lastNames: "Admin",
-            telephone: null,
-            email: person.email!,
-            role: "manager",
-            status: "active",
-          }),
+      updatePersonDetails(tx, {
+        managementSessionId: actor.token,
+        personId: target,
+        displayName: person.displayName,
+        firstNames: "Former",
+        lastNames: "Admin",
+        telephone: null,
+        email: person.email!,
+        role: "manager",
+        status: "active",
+      }),
     );
     await expect(
       run((tx) =>
@@ -554,67 +515,52 @@ it.each(["role", "status"] as const)(
   },
 );
 
-it.each(["details", "setRole"] as const)(
+it.each(["details"] as const)(
   "preserves a manager's own non-admin role change through %s",
-  async (method) => {
+  async () => {
     const actor = await openManagementSession(suite.db, "manager");
     const before = await row(actor.personId);
     await run((tx) =>
-      method === "setRole"
-        ? setRole(tx, {
-            managementSessionId: actor.token,
-            personId: actor.personId,
-            role: "supervisor",
-          })
-        : updatePersonDetails(tx, {
-            managementSessionId: actor.token,
-            personId: actor.personId,
-            displayName: before.displayName,
-            firstNames: "Own",
-            lastNames: "Account",
-            telephone: null,
-            email: before.email!,
-            role: "supervisor",
-            status: "active",
-          }),
+      updatePersonDetails(tx, {
+        managementSessionId: actor.token,
+        personId: actor.personId,
+        displayName: before.displayName,
+        firstNames: "Own",
+        lastNames: "Account",
+        telephone: null,
+        email: before.email!,
+        role: "supervisor",
+        status: "active",
+      }),
     );
     expect((await row(actor.personId)).role).toBe("supervisor");
   },
 );
-it.each(["details", "setRole"] as const)(
-  "refuses a manager promoting themselves through %s",
-  async (method) => {
-    const actor = await openManagementSession(suite.db, "manager");
-    const before = await row(actor.personId);
-    await expect(
-      run((tx) =>
-        method === "setRole"
-          ? setRole(tx, {
-              managementSessionId: actor.token,
-              personId: actor.personId,
-              role: "admin",
-            })
-          : updatePersonDetails(tx, {
-              managementSessionId: actor.token,
-              personId: actor.personId,
-              displayName: before.displayName,
-              firstNames: "Own",
-              lastNames: "Account",
-              telephone: null,
-              email: before.email!,
-              role: "admin",
-              status: "active",
-            }),
-      ),
-    ).rejects.toMatchObject({
-      code: "authorization.not_permitted",
-      params: { permission: "person.admin" },
-    });
-    expect(await row(actor.personId)).toEqual(before);
-  },
-);
+it.each(["details"] as const)("refuses a manager promoting themselves through %s", async () => {
+  const actor = await openManagementSession(suite.db, "manager");
+  const before = await row(actor.personId);
+  await expect(
+    run((tx) =>
+      updatePersonDetails(tx, {
+        managementSessionId: actor.token,
+        personId: actor.personId,
+        displayName: before.displayName,
+        firstNames: "Own",
+        lastNames: "Account",
+        telephone: null,
+        email: before.email!,
+        role: "admin",
+        status: "active",
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: "authorization.not_permitted",
+    params: { permission: "person.admin" },
+  });
+  expect(await row(actor.personId)).toEqual(before);
+});
 
-it.each(["create", "invite", "details", "setRole"] as const)(
+it.each(["invite", "details"] as const)(
   "only an Admin holder grants Admin through %s, even with person.admin",
   async (method) => {
     const actor = await openManagementSession(suite.db, "manager");
@@ -626,37 +572,27 @@ it.each(["create", "invite", "details", "setRole"] as const)(
     const before = await row(target);
     await expect(
       run<unknown>((tx) =>
-        method === "create"
-          ? createPerson(tx, {
+        method === "invite"
+          ? invitePerson(tx, {
               managementSessionId: actor.token,
               displayName: "New Admin",
+              firstNames: "New",
+              lastNames: "Admin",
+              telephone: null,
               email: "new-admin@example.test",
               role: "admin",
-              pin: "4321",
             })
-          : method === "invite"
-            ? invitePerson(tx, {
-                managementSessionId: actor.token,
-                displayName: "New Admin",
-                firstNames: "New",
-                lastNames: "Admin",
-                telephone: null,
-                email: "new-admin@example.test",
-                role: "admin",
-              })
-            : method === "setRole"
-              ? setRole(tx, { managementSessionId: actor.token, personId: target, role: "admin" })
-              : updatePersonDetails(tx, {
-                  managementSessionId: actor.token,
-                  personId: target,
-                  displayName: before.displayName,
-                  firstNames: "New",
-                  lastNames: "Admin",
-                  telephone: null,
-                  email: before.email!,
-                  role: "admin",
-                  status: "active",
-                }),
+          : updatePersonDetails(tx, {
+              managementSessionId: actor.token,
+              personId: target,
+              displayName: before.displayName,
+              firstNames: "New",
+              lastNames: "Admin",
+              telephone: null,
+              email: before.email!,
+              role: "admin",
+              status: "active",
+            }),
       ),
     ).rejects.toMatchObject({
       code: "authorization.not_permitted",
@@ -725,4 +661,62 @@ it("recognises Admin membership when another built-in membership sorts first", a
     ),
   ).rejects.toMatchObject({ code: "authorization.not_permitted" });
   expect(await builtInRoleForTest(suite.db, personId)).toBe("admin");
+});
+
+describe("Rule 2 at the invitation writer", () => {
+  it.each(["accountant", "admin"] as const)(
+    "refuses a Manager's invitation to %s even outside the route",
+    async (kind) => {
+      registerModulePermissions([{ permission: "fiscal.remedy", defaultHolders: [] }]);
+      const actor = await openManagementSession(suite.db, "manager");
+      await suite.db
+        .update(roles)
+        .set({
+          permissions:
+            kind === "admin"
+              ? declaredPermissions()
+              : ["person.manage", "person.admin", "report.view"],
+        })
+        .where(eq(roles.builtInKey, "manager"));
+      const target = await seedPerson(suite.db, kind === "admin" ? "admin" : "staff", "pending");
+      if (kind === "accountant") {
+        const [role] = await suite.db
+          .insert(roles)
+          .values({
+            name: "Accountant",
+            nameFolded: "accountant",
+            permissions: ["report.view", "fiscal.remedy"],
+          })
+          .returning();
+        await suite.db.insert(personRoles).values({ personId: target, roleId: role!.id });
+      }
+      await expect(
+        run((tx) =>
+          queueInvitation(tx, {
+            managementSessionId: actor.token,
+            personId: target,
+            origin: "http://localhost",
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "person.holds_more", params: { personId: target } });
+      expect(await suite.db.select().from(outgoingMail)).toEqual([]);
+    },
+  );
+  it("requires person.admin even when the actor covers the other person", async () => {
+    const actor = await openManagementSession(suite.db, "manager");
+    const target = await seedPerson(suite.db, "staff", "pending");
+    await expect(
+      run((tx) =>
+        queueInvitation(tx, {
+          managementSessionId: actor.token,
+          personId: target,
+          origin: "http://localhost",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "authorization.not_permitted",
+      params: { permission: "person.admin" },
+    });
+    expect(await suite.db.select().from(outgoingMail)).toEqual([]);
+  });
 });
