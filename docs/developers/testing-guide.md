@@ -298,6 +298,12 @@ reproduced the two missing-column failures, then passed after the four identity 
 were appended to each expected phase. The captures, digests and original assertions stayed
 unchanged (`madrid-red.log` and `madrid-green.log` in the same receipt folder).
 
+A new demo product in a new category is added to the expected capture with `madridWithAddedRows`
+(`apps/server/scripts/demo-seed/testing/madrid-added-rows.ts`): the baseline test declares each new
+category's section names and each product's names, VAT class, price, unit, category, menu and
+image. The helper takes every other cell of the new rows, and the other fields of the new section
+and offers in the published menu, from the seeded output; what it refuses is stated at its export.
+
 ## A migration set gets a whole database-backed suite by calling one function.
 
 `packages/db/src/testing/schema-conformance.ts` is a suite FACTORY — a function you call at the top
