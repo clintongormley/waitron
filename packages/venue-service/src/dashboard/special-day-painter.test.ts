@@ -936,6 +936,9 @@ describe("Save", () => {
     saveButton(painter).click();
     await settle(painter);
     expect(writes).toEqual([]);
+    await expect
+      .poll(() => painter.shadowRoot!.activeElement)
+      .toBe(painter.shadowRoot!.querySelector("wt-input[name=name]"));
     expect(
       painter.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=name]")!
         .error,
@@ -943,6 +946,34 @@ describe("Save", () => {
     expect(frame(painter).refusal).toBe("Correct the highlighted fields to continue.");
     expect(saveButton(painter).disabled).toBe(true);
     await typeName(painter, "Fixed");
+    expect(frame(painter).refusal).toBe("");
+    expect(saveButton(painter).disabled).toBe(false);
+  });
+
+  it("a new special day starts without the previous day's validation marks", async () => {
+    const { painter } = await mount();
+    await typeName(painter, "");
+    saveButton(painter).click();
+    await settle(painter);
+    expect(frame(painter).refusal).toBe("Correct the highlighted fields to continue.");
+    painter.specialDayId = null;
+    painter.date = "2026-12-24";
+    await loaded(painter);
+    expect(
+      painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+    ).toBe("");
+    expect(frame(painter).refusal).toBe("");
+    expect(saveButton(painter).disabled).toBe(true);
+  });
+
+  it("a successful save clears validation for the next edit", async () => {
+    const { painter, writes } = await mount();
+    await typeName(painter, "Renamed");
+    await save(painter, writes);
+    await typeName(painter, "");
+    expect(
+      painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+    ).toBe("");
     expect(frame(painter).refusal).toBe("");
     expect(saveButton(painter).disabled).toBe(false);
   });

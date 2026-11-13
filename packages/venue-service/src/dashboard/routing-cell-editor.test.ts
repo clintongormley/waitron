@@ -265,6 +265,7 @@ it("marks an unfinished line and blocks Save until it is fixed", async () => {
   await click(el, "add-line");
   await click(el, "save-cell");
   expect(saves).toEqual([]);
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(linePeriods(el)[0]);
   expect(linePeriods(el)[0]!.error).toBe("Choose at least one period.");
   expect(lineTargets(el)[0]!.error).toBe("Choose a station.");
   expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
@@ -274,6 +275,18 @@ it("marks an unfinished line and blocks Save until it is fixed", async () => {
   expect(bottom(el)).toBe("");
   await click(el, "save-cell");
   expect(saves).toEqual([{ target: up, periods: [{ periodId: "lunch", target: down }] }]);
+});
+
+it("a different cell starts without the previous cell's validation marks", async () => {
+  const el = await mount();
+  await click(el, "add-line");
+  await click(el, "save-cell");
+  expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
+  el.cell = { address: { row: cocktails, zoneId: "bar" }, label: "Cocktails, Bar", target: null };
+  await el.updateComplete;
+  expect(one<Combobox>(el, "[name=target]")!.error).toBe("");
+  expect(bottom(el)).toBe("");
+  expect(button(el, "save-cell")!.disabled).toBe(true);
 });
 
 it("requires a station for any other time", async () => {
