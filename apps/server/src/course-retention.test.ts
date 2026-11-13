@@ -80,7 +80,7 @@ async function setup() {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  const [ana, sam] = await seedPersons(db, [
+  const [anna, sam] = await seedPersons(db, [
     { displayName: "Anna", pinHash: hashPin("5555"), role: "staff" },
     { displayName: "Sam", pinHash: hashPin("6666"), role: "staff" },
   ]);
@@ -145,14 +145,14 @@ async function setup() {
     },
     () => {},
   );
-  async function session(person: typeof ana, pin: string) {
+  async function session(person: typeof anna, pin: string) {
     const deviceId = await seedSessionDevice(db);
     const token = await withTransaction(db, (tx) =>
       loginWithPin(tx, { deviceId, personId: person!.id, pin }),
     );
     return sessionCookieForTest(db, token.token);
   }
-  const cookie = await session(ana, "5555");
+  const cookie = await session(anna, "5555");
   const samCookie = await session(sam, "6666");
   async function request(path: string, method = "GET", body?: unknown, chosenCookie = cookie) {
     return app.request(path, {

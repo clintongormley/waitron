@@ -260,7 +260,7 @@ describe("existing service in a closed zone", () => {
     });
     expect(added.status).toBe(200);
     const [party] = await suite.db.select().from(parties).where(eq(parties.id, seated.partyId));
-    const [tarta] = await suite.db
+    const [cake] = await suite.db
       .select({ id: workingOrderLines.id })
       .from(workingOrderLines)
       .where(
@@ -274,7 +274,7 @@ describe("existing service in a closed zone", () => {
       await observedBillActionBody(v.db, `/api/bills/${seated.tabId}/move-dishes`, {
         partyId: seated.partyId,
         expectedPartyRevision: party!.revision,
-        lineIds: [tarta!.id],
+        lineIds: [cake!.id],
         toBillId: null,
       }),
     );
@@ -289,7 +289,7 @@ describe("existing service in a closed zone", () => {
       await suite.db
         .select({ billId: workingOrderLines.workingOrderId })
         .from(workingOrderLines)
-        .where(eq(workingOrderLines.id, tarta!.id)),
+        .where(eq(workingOrderLines.id, cake!.id)),
     ).toEqual([{ billId: answer.json.billId }]);
   });
 

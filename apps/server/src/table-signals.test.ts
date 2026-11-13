@@ -817,7 +817,7 @@ describe("the floor's attention signals", () => {
         .where(eq(workingOrderLines.groupId, groupId)),
     );
     const burger = lines.find((line) => line.name === "Burger")!;
-    const paella = lines.find((line) => line.name === "Paella")!;
+    const riceDish = lines.find((line) => line.name === "Paella")!;
     const heldSignal = async () =>
       (await floorRow(v, table2)).signals.filter((signal) => signal.kind === "held");
     const cancel = (lineId: string, quantity: number) =>
@@ -838,7 +838,7 @@ describe("the floor's attention signals", () => {
       tx
         .update(workingOrderLines)
         .set({ unitPrecision: 3, quantity: 350 })
-        .where(eq(workingOrderLines.id, paella.id)),
+        .where(eq(workingOrderLines.id, riceDish.id)),
     );
     expect(await heldSignal()).toEqual([{ kind: "held", count: 2 }]);
 
@@ -867,7 +867,7 @@ describe("the floor's attention signals", () => {
     );
     expect(await heldSignal()).toEqual([{ kind: "held", count: 1 }]);
 
-    await cancel(paella.id, 350);
+    await cancel(riceDish.id, 350);
     expect(await heldSignal()).toEqual([]);
   });
 

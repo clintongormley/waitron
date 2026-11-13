@@ -639,10 +639,10 @@ describe("A773 pass display policy", () => {
   };
 
   /** A burger at Grill and a paella at Cold on one card; Grill waits when `grillWaits`. */
-  async function burgerAndPaella(
+  async function burgerAndRiceDish(
     f: Awaited<ReturnType<typeof fixture>>,
     grillWaits: boolean,
-  ): Promise<{ burger: string; paella: string }> {
+  ): Promise<{ burger: string; riceDish: string }> {
     const cold = (await inTx(f.v, (tx) => createStation(tx, { name: "Cold" }))).id;
     await inTx(f.v, async (tx) => {
       await routeProductTo(tx, f.v.productId("Burger"), f.grill);
@@ -659,7 +659,7 @@ describe("A773 pass display policy", () => {
     );
     return {
       burger: rows.find((row) => row.stationId === f.grill)!.id,
-      paella: rows.find((row) => row.stationId === cold)!.id,
+      riceDish: rows.find((row) => row.stationId === cold)!.id,
     };
   }
 
@@ -691,7 +691,7 @@ describe("A773 pass display policy", () => {
 
   it("moves a pass's dimmed dishes to their card's hidden dishes and drops their overview facts when its device hides them, leaving every card's column and release as shown", async () => {
     const f = await fixture();
-    const { burger, paella } = await burgerAndPaella(f, true);
+    const { burger, riceDish } = await burgerAndRiceDish(f, true);
     /** The board shown, then hidden, by the device's own choice. */
     const both = async () => {
       await choose(f.a.id, "pass", true);
@@ -706,13 +706,13 @@ describe("A773 pass display policy", () => {
     ).toEqual(
       expect.arrayContaining([
         [burger, false],
-        [paella, true],
+        [riceDish, true],
       ]),
     );
     expect(requestedPair.before.board.overview.map((fact) => fact.informational)).toContain(true);
     expect(boardItems(requestedPair.after.board).map((item) => item.id)).toEqual([burger]);
     expect(hiddenIds(requestedPair.before.board)).toEqual([]);
-    expect(hiddenIds(requestedPair.after.board)).toEqual([paella]);
+    expect(hiddenIds(requestedPair.after.board)).toEqual([riceDish]);
     expect(requestedPair.after.board.overview.map((fact) => fact.informational)).toEqual([false]);
     expect(facts(requestedPair.after.board)).toEqual(facts(requestedPair.before.board));
     expect(requestedPair.after.display).toEqual({
@@ -746,16 +746,16 @@ describe("A773 pass display policy", () => {
     expect(readyPair.before.board.inProgress).toHaveLength(1);
     expect(readyPair.before.board.inProgress[0]!.allReady).toBe(false);
     expect(boardItems(readyPair.after.board).map((item) => item.id)).toEqual([burger]);
-    expect(hiddenIds(readyPair.after.board)).toEqual([paella]);
+    expect(hiddenIds(readyPair.after.board)).toEqual([riceDish]);
     expect(facts(readyPair.after.board)).toEqual(facts(readyPair.before.board));
   });
 
   it("hides nothing in view while no station in view waits", async () => {
     const f = await fixture();
-    const { burger, paella } = await burgerAndPaella(f, false);
+    const { burger, riceDish } = await burgerAndRiceDish(f, false);
     await choose(f.a.id, "pass", false);
     const read = await shown(f, f.a.cookie, "/api/device/pass-board");
-    expect(items(read).sort()).toEqual([burger, paella].sort());
+    expect(items(read).sort()).toEqual([burger, riceDish].sort());
     expect(hiddenIds(read.board)).toEqual([]);
     expect(boardCards(read.board).length).toBeGreaterThan(0);
     for (const card of boardCards(read.board)) expect(card).not.toHaveProperty("hiddenItems");
@@ -764,7 +764,7 @@ describe("A773 pass display policy", () => {
 
   it("applies a pass monitor's own choice and still names nothing to release", async () => {
     const f = await fixture();
-    const { burger, paella } = await burgerAndPaella(f, true);
+    const { burger, riceDish } = await burgerAndRiceDish(f, true);
     const monitor = await f.device("Pass monitor", f.kds, {
       kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
     });
@@ -776,7 +776,7 @@ describe("A773 pass display policy", () => {
     await choose(monitor.id, "pass_monitor", false);
     const after = await shown(f, monitor.cookie, "/api/device/pass-monitor-board");
     expect(boardItems(after.board).map((item) => item.id)).toEqual([burger]);
-    expect(hiddenIds(after.board)).toEqual([paella]);
+    expect(hiddenIds(after.board)).toEqual([riceDish]);
     expect(facts(after.board)).toEqual(facts(before.board));
     for (const card of boardCards(after.board)) {
       expect(card.releaseTicketItemIds).toEqual([]);
@@ -787,7 +787,7 @@ describe("A773 pass display policy", () => {
 
   it("hides by the profile's choice when the device's own is cleared", async () => {
     const f = await fixture();
-    const { burger, paella } = await burgerAndPaella(f, true);
+    const { burger, riceDish } = await burgerAndRiceDish(f, true);
     await inTx(f.v, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, f.kds, {
         pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
@@ -796,7 +796,7 @@ describe("A773 pass display policy", () => {
     await choose(f.a.id, "pass", null);
     const read = await shown(f, f.a.cookie, "/api/device/pass-board");
     expect(boardItems(read.board).map((item) => item.id)).toEqual([burger]);
-    expect(hiddenIds(read.board)).toEqual([paella]);
+    expect(hiddenIds(read.board)).toEqual([riceDish]);
     expect(read.display).toEqual({ showNonPassStations: false, nonPassStationsOverride: null });
   });
 
