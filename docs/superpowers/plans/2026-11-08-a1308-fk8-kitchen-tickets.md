@@ -74,8 +74,8 @@ bundle count from 21 to 20. Ask the watcher to confirm that its older “FULL re
 the usual two Claude run-it reviews for this migration branch, with lane landing as below.
 
 **Size / stop.** Provisional counted additions: production ≈225, tests/ports ≈410,
-support/script/docs ≈120, total ≈755 (original ≈630). This forecast is itself at the stop;
-seek the watcher's outside opinion on scope/size before build, rather than treating it as room. Separately uncounted: pure deletions,
+script/support ≈60, docs ≈105, total ≈800 (original ≈630). The plan refresh itself counts;
+seek the watcher's outside opinion on this forecast before build. Separately uncounted: pure deletions,
 generated migrations, committed fixture-script output; script source/manual ports count.
 Retain the original **20% outside-opinion stop at 756**: consult the watcher before exceeding it.
 No framework, new guard or permanent mutation
