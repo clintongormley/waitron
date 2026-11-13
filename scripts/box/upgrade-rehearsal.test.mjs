@@ -1,9 +1,18 @@
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+  chmodSync,
+  existsSync,
+} from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { setTimeout, clearTimeout } from "node:timers";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { copyStoppedTree } from "./upgrades/copy.mjs";
 import { upgradePayload, upgradeStage } from "../../bench/box-installer/upgrade.mjs";
 
 it("rejects changed rows after reboot without replacing the original comparison baseline", () => {
@@ -144,14 +153,50 @@ it("does not announce a restore cut when flushing its partial target fails", asy
       output += bytes;
       if (output.includes("A950_CUT")) process.kill(-child.pid, "SIGTERM");
     });
-    const timer = setTimeout(() => process.kill(-child.pid, "SIGKILL"), 5000);
+    const timer = setTimeout(() => process.kill(-child.pid, "SIGKILL"), 1000);
     const code = await new Promise((done) => child.once("exit", done));
     clearTimeout(timer);
     expect(output).not.toContain("A950_CUT");
+    expect(existsSync(join(root, "console"))).toBe(false);
     expect(code).toBe(1);
   } finally {
     if (child && child.exitCode === null && child.signalCode === null)
       process.kill(-child.pid, "SIGTERM");
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it("makes the copy cut observable when the controller captures subprocess stdout", async () => {
+  const root = mkdtempSync(join(tmpdir(), "upgrade-cut-console-"));
+  try {
+    const bin = join(root, "bin"),
+      source = join(root, "copies/0"),
+      consoleFile = join(root, "console"),
+      shim = join(bin, "cp");
+    for (const folder of [bin, source]) mkdirSync(folder, { recursive: true });
+    writeFileSync(join(source, "data"), "source");
+    for (const command of ["sync", "sleep"])
+      writeFileSync(join(bin, command), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    const stage = upgradeStage(),
+      begin = stage.indexOf("printf '%s' '#!/bin/bash"),
+      end = stage.indexOf("\nchmod 700", begin);
+    const write = stage
+      .slice(begin, end)
+      .replaceAll("/opt/waitron-host/probe-bin/cp", shim)
+      .replaceAll(
+        "/var/lib/docker/volumes/waitron_state/_data/partial-restore",
+        join(root, "partial"),
+      )
+      .replaceAll("/dev/console", consoleFile);
+    expect(spawnSync("bash", ["-ec", write]).status).toBe(0);
+    chmodSync(shim, 0o700);
+    vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
+    vi.stubEnv("A950_PROBE", "restore");
+    await copyStoppedTree(source, join(root, "destination"));
+    expect(existsSync(consoleFile)).toBe(true);
+    expect(readFileSync(consoleFile, "utf8")).toBe("A950_CUT\n");
+  } finally {
+    vi.unstubAllEnvs();
     rmSync(root, { recursive: true, force: true });
   }
 });

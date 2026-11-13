@@ -45,7 +45,7 @@ case "$*" in
     while [ ! -f /run/a950-port-ready ]; do sleep 0.1; done
   else
     if [ "$A950_PROBE" = restore ]; then touch /var/lib/docker/volumes/waitron_state/_data/partial-restore; sync; fi
-    echo A950_CUT
+    echo A950_CUT >/dev/console
     sleep infinity
   fi ;;
 esac
