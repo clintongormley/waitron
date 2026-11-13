@@ -241,6 +241,29 @@ describe("server health recovery", () => {
       expect(f.calls.some(([, options]) => options.method)).toBe(false);
     },
   );
+  it("preserves an assigned sibling found by a fresh final inventory", async () => {
+    const f = fixture(),
+      pages = [];
+    replyJobs(
+      f,
+      (path) => {
+        pages.push(Number(new URL("https://fixture.test" + path).searchParams.get("page")));
+        return {
+          total_count: 2,
+          jobs:
+            pages.length === 1
+              ? [f.job]
+              : pages.length === 2
+                ? []
+                : [f.job, { ...f.job, id: 124, runner_id: 7, status: "in_progress" }],
+        };
+      },
+      3,
+    );
+    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+    expect(pages).toEqual([1, 2, 1]);
+    expect(f.calls.some(([, options]) => options.method)).toBe(false);
+  });
   it("keeps an unstarted job's creation time when selecting a cancelled retry", async () => {
     const f = fixture();
     Object.assign(f.run, { status: "completed", conclusion: "cancelled" });
@@ -1097,24 +1120,29 @@ describe("server health recovery", () => {
     expect((await health.recoverServer(f.options)).retried).toEqual([]);
   });
 
-  it.each(["duplicate", "changed-count"])(
+  it.each(["duplicate", "duplicate-changed-count", "changed-count", "malformed-count"])(
     "reports a moving completed history as unavailable: %s",
     async (change) => {
       const f = fixture(),
         request = f.request,
-        reports = [];
+        reports = [],
+        pages = [];
       f.options.request = async (path, options) => {
-        if (path.includes("status=completed"))
+        if (path.includes("status=completed")) {
+          const page = Number(new URL("https://fixture.test" + path).searchParams.get("page"));
+          pages.push(page);
           return {
-            total_count: change === "changed-count" && path.endsWith("&page=2") ? 3 : 2,
+            total_count:
+              page !== 2 || change === "duplicate" ? 2 : change === "malformed-count" ? null : 3,
             workflow_runs: [
               {
                 ...f.run,
-                id: change === "duplicate" || path.endsWith("&page=1") ? 98 : 99,
+                id: change.startsWith("duplicate") || path.endsWith("&page=1") ? 98 : 99,
                 head_repository: { id: 99 },
               },
             ],
           };
+        }
         return request(path, options);
       };
       await health.healthCommand("recover", f.options, {
@@ -1122,6 +1150,7 @@ describe("server health recovery", () => {
         output: () => {},
       });
       expect(reports.join("\n")).toMatch(/inventory.*unavailable/i);
+      expect(pages).toEqual(change === "changed-count" ? [1, 2, 1, 2] : [1, 2]);
       expect(f.calls.some(([, options]) => options.method)).toBe(false);
     },
   );

@@ -5,7 +5,7 @@
 **Authority:** Lane I `questions.md`, 13 November 05:29, quoted in the request:
 > You are right: the partial page already reads as unknown and goes to GitHub, under the owner's unknown-goes-hosted policy. Keep that policy. Add one bounded fresh whole-inventory reread on a pagination mismatch: route to the server only if the complete fresh read justifies it, otherwise stay unknown and hosted. A failing transient-page test first. Then points 2 and 3 of my 05:25 note as written.
 
-The watcher cleared this behavior, not an owner-approved design; building waits for Claude plan review and watcher plan clearance, handled by the driver.
+Claude reviewed the plan on 13 November (Lane I receipt `a1454-20261113/a1473-plan-review.md`). The watcher cleared the corrected plan at 05:43 in Lane I `questions.md`: “One” is per list; only an empty page or changed valid total earns the reread; duplicate/excess rows stay unknown and hosted. No owner approval of this design is recorded.
 
 **Context:** supplied planner receipt `43360103809`, 03:39:12Z, reported unknown/hosted after an empty page following one of two entries, not unknown-as-zero; A1454 returned to twelve fixed slots. Separate Cloud operations: land publisher PR #1199, then announce one bounded new-release trial and compare a healthy comparable run; roll back only for admissible server room with no admission for five minutes, job failure or a guest killed for memory, not hosted queuing while genuinely full.
 

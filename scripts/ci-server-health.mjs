@@ -6,29 +6,37 @@ import { setTimeout as delay } from "node:timers/promises";
 
 class InventoryUnavailable extends Error {}
 
-async function inventory(request, path, key, limit, pageSize = 100) {
+async function inventory(request, path, key, limit, pageSize = 100, reread = true) {
   const entries = [];
   let total;
   for (let page = 1; ; page++) {
     const answer = await request(
       `${path}${path.includes("?") ? "&" : "?"}per_page=${pageSize}&page=${page}`,
     );
-    total ??= answer.total_count;
     assert.ok(
-      Number.isSafeInteger(total) &&
-        total >= 0 &&
-        (limit !== undefined || total <= 1000) &&
-        answer.total_count === total &&
+      Number.isSafeInteger(answer.total_count) &&
+        answer.total_count >= 0 &&
+        (limit !== undefined || answer.total_count <= 1000) &&
         Array.isArray(answer[key]),
       new InventoryUnavailable("Incomplete server inventory"),
     );
+    total ??= answer.total_count;
     entries.push(...answer[key]);
     assert.ok(
-      entries.length <= total && new Set(entries.map((entry) => entry.id)).size === entries.length,
+      entries.length <= answer.total_count &&
+        new Set(entries.map((entry) => entry.id)).size === entries.length,
       new InventoryUnavailable("Duplicate server inventory"),
+    );
+    if (answer.total_count !== total && reread)
+      return inventory(request, path, key, limit, pageSize, false);
+    assert.equal(
+      answer.total_count,
+      total,
+      new InventoryUnavailable("Incomplete server inventory"),
     );
     if (entries.length >= Math.min(total, limit ?? total))
       return entries.slice(0, limit ?? entries.length);
+    if (!answer[key].length && reread) return inventory(request, path, key, limit, pageSize, false);
     assert.ok(
       answer[key].length > 0,
       new InventoryUnavailable(
