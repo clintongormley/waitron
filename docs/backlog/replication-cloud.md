@@ -290,8 +290,7 @@ Owner, 2026-10-02. A second machine can rebuild from the owner's bucket
 For a venue that does not file with Veri*Factu, a joining spare now receives a copy from the
 primary over the venue's network, puts it in place at its next start and finishes joining as a
 standby (it cannot take over yet); a Veri*Factu venue is still refused until 3b-F. Wanted: adding
-a mirror works with the internet down, which is the very case an on-prem mirror exists for. Slice 5 should name this as the way a mirror is added and prove it with the
-internet unplugged. A cloud mirror needs the internet anyway and is outside this item.
+a mirror works with the internet down, which is the very case an on-prem mirror exists for. Left: the owner measures it on two boxes with the internet unplugged (3b plan Task 6.11). A cloud mirror needs the internet anyway and is outside this item.
 
 ## A stop made while `cloud/replacement.json` is unreadable is not recorded in it
 

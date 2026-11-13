@@ -345,7 +345,7 @@ it("points the disk warning at the Box status page, in three sentences, in both 
   expect(es).toContain(t("nav.box_status", "es-ES"));
 });
 
-describe("the copy when it goes to the standby server, which has no bucket", () => {
+describe("the copy when it goes to the standby server, not the owner's bucket", () => {
   const CHECK_EN =
     "Check that the standby server is switched on and connected to the restaurant's network.";
   const CHECK_ES =
@@ -379,8 +379,8 @@ describe("the copy when it goes to the standby server, which has no bucket", () 
     [
       "backup.stream_stopped",
       { reason: "start_failed" },
-      "The copy to the standby server is not running, so new changes are not reaching the standby server. Sales continue. This box tries again each time it starts, so open Box status and press Restart the box.",
-      "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este equipo lo vuelve a intentar cada vez que arranca, así que abre Estado del equipo y pulsa Reiniciar el equipo.",
+      "The copy to the standby server is not running, so new changes are not reaching the standby server. Sales continue. This box tries again each time it starts: when the restaurant is not serving, open Box status and press Restart the box.",
+      "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este equipo lo vuelve a intentar cada vez que arranca: cuando el restaurante no esté atendiendo, abre Estado del equipo y pulsa Reiniciar el equipo.",
     ],
     [
       "backup.stream_refused",

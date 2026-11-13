@@ -1918,8 +1918,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   TLS).
 
 - **Adding a mirror while the internet is down** (owner, 2026-10-02). Since 3b-6a a spare of a venue that does
-  not file with Veri*Factu takes its first copy over the venue's network; left: prove it with the
-  internet unplugged (3b-6b), and a Veri*Factu venue (3b-F).
+  not file with Veri*Factu takes its first copy over the venue's network; left: the owner's
+  measurement with the internet unplugged (3b plan Task 6.11), and a Veri*Factu venue (3b-F).
   [Detail](backlog/replication-cloud.md#adding-a-mirror-while-the-internet-is-down)
 
 **Cloud integration and SQLite work.**

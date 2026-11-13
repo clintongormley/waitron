@@ -177,8 +177,8 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       toSpare: {
         mode: "replace",
-        en: "The copy to the standby server is not running, so new changes are not reaching the standby server. Sales continue. This box tries again each time it starts, so open Box status and press Restart the box.",
-        es: "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este equipo lo vuelve a intentar cada vez que arranca, así que abre Estado del equipo y pulsa Reiniciar el equipo.",
+        en: "The copy to the standby server is not running, so new changes are not reaching the standby server. Sales continue. This box tries again each time it starts: when the restaurant is not serving, open Box status and press Restart the box.",
+        es: "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este equipo lo vuelve a intentar cada vez que arranca: cuando el restaurante no esté atendiendo, abre Estado del equipo y pulsa Reiniciar el equipo.",
       },
     },
   },

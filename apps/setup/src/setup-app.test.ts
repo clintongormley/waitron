@@ -2106,11 +2106,11 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
-        "The primary server already has a standby server receiving its data, and this version of Waitron keeps one standby per restaurant. A standby receiving its data cannot be removed in this version. Nothing was changed on either server. Choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant. You can also leave it switched off.",
+        "The primary server already has a standby server set up to receive the restaurant's data, and this version of Waitron keeps one standby per restaurant. A standby set up this way cannot be removed in this version. Nothing was changed on either server. Choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant. You can also leave it switched off.",
       ],
       [
         "es-ES",
-        "El servidor principal ya tiene un servidor en espera que recibe sus datos, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera que recibe sus datos no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo. También puedes dejarlo apagado.",
+        "El servidor principal ya tiene un servidor en espera preparado para recibir los datos del restaurante, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera preparado así no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo. También puedes dejarlo apagado.",
       ],
     ] as const)("shows the second-standby refusal and Back (%s)", async (locale, sentence) => {
       try {

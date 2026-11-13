@@ -390,10 +390,10 @@ describe("waitron-credentials rotate", () => {
         'credentials.rotation_spare_joined {"role":"streams"}',
 
         "This box has a standby server, which holds this key ring too. Rotating here would leave " +
-          "the standby unable to open the venue's keys. Nothing was changed. If the standby never " +
-          "finished joining, remove it in the dashboard (Servers, then Remove on its row) and " +
-          "rotate again. A standby that finished joining cannot be removed in this version, so " +
-          "this key ring cannot be rotated while it is joined.",
+          "the standby unable to open the venue's keys. Nothing was changed. If the standby is not " +
+          "yet set up to receive the venue's data, remove it in the dashboard (Servers, then " +
+          "Remove on its row) and rotate again. One that is cannot be removed in this version, " +
+          "so this key ring cannot be rotated while it is.",
       ]);
       expect(keyVersions()).toEqual([{ key_version: 1 }, { key_version: 1 }, { key_version: 1 }]);
     });

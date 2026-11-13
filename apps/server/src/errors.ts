@@ -1386,8 +1386,8 @@ declare module "@waitron/shared" {
     /** The machine asked to be removed is a former primary (`sell-only`), so it has served. */
     "membership.node_has_served": Record<string, never>;
     /**
-     * The standby asked to be removed has a `nodes` row in this database: its store answered and
-     * this box streams to it (`spare-join.ts`).
+     * The standby asked to be removed has a `nodes` row in this database: its store answered
+     * (`spare-join.ts`).
      */
     "membership.standby_joined": Record<string, never>;
     /**

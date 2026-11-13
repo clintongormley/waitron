@@ -65,8 +65,8 @@ function streamAlert(alert: Pick<OngoingAlert, "code" | "params" | "since">): On
   return { key: code, code, params, severity: "error", since, screen: BACKUP_SCREEN };
 }
 
-/** The standby's store has no bucket and is reached over the venue's network, so the dashboard
- * words these alerts for it. */
+/** The standby's store is not the owner's bucket and is reached over the venue's network, so the
+ * dashboard words these alerts for it. */
 function spareParam(stream: HostStreamView): { toSpare?: true } {
   return "toSpare" in stream ? { toSpare: true } : {};
 }

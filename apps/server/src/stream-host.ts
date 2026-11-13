@@ -158,7 +158,7 @@ export async function readNewerBucketMain(
 }
 
 /** The copy's status; `toSpare` is set while it goes, or was to go, to the standby's store, which
- * has no bucket. */
+ * is not the owner's bucket. */
 export type HostStreamView = StreamView | ((StreamStatus | StreamNotStarted) & { toSpare: true });
 
 interface PairTarget {
