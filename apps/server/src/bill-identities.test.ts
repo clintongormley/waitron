@@ -551,21 +551,24 @@ describe("A803 bill numbers: tables", () => {
   });
 
   it("moving guests onto a seated table gives our bills that table's next numbers, including a paid bill that stays on our closed party", async () => {
-    const ana = await seat(v, await v.table("S4 ana"));
-    const luisTable = await v.table("S4 luis");
-    const luis = await seat(v, luisTable);
-    await order(v, ana.tabId, "Burger", "Red wine bottle");
-    await order(v, luis.tabId, "Water");
-    const second = await split(v, ana.partyId, ana.tabId, [2]);
-    await pay(v, ana.tabId, "12.00");
-    const options = await tableOptions(ana.partyId, luis.partyId);
+    const anna = await seat(v, await v.table("S4 ana"));
+    const lewisTable = await v.table("S4 luis");
+    const lewis = await seat(v, lewisTable);
+    await order(v, anna.tabId, "Burger", "Red wine bottle");
+    await order(v, lewis.tabId, "Water");
+    const second = await split(v, anna.partyId, anna.tabId, [2]);
+    await pay(v, anna.tabId, "12.00");
+    const options = await tableOptions(anna.partyId, lewis.partyId);
 
-    await inTx(v, (tx) => moveGuests(tx, v.cfg, ana.partyId, luisTable, options));
+    await inTx(v, (tx) => moveGuests(tx, v.cfg, anna.partyId, lewisTable, options));
 
-    expect(await billRow(v, ana.tabId)).toMatchObject({ status: "settled", partyId: ana.partyId });
-    expect(await numbersOf(v, luis.partyId)).toEqual([
-      [luis.tabId, 1, null],
-      [ana.tabId, 2, null],
+    expect(await billRow(v, anna.tabId)).toMatchObject({
+      status: "settled",
+      partyId: anna.partyId,
+    });
+    expect(await numbersOf(v, lewis.partyId)).toEqual([
+      [lewis.tabId, 1, null],
+      [anna.tabId, 2, null],
       [second, 3, null],
     ]);
     await everyPartyBillNumbered();
@@ -771,35 +774,35 @@ describe("A803 bill list", () => {
   });
 
   it("a bill that arrived shows its new number and is listed after the party's own Bill 1", async () => {
-    const ana = await seat(v, await v.table("L3 ana"));
-    await order(v, ana.tabId, "Water", "Flan");
-    const anaSecond = await split(v, ana.partyId, ana.tabId, [1]);
-    const luis = await seat(v, await v.table("L3 luis"));
-    await order(v, luis.tabId, "Water");
-    const luisTable = (await activeTablesOf(v, luis.partyId))[0]!;
+    const anna = await seat(v, await v.table("L3 ana"));
+    await order(v, anna.tabId, "Water", "Flan");
+    const annaSecond = await split(v, anna.partyId, anna.tabId, [1]);
+    const lewis = await seat(v, await v.table("L3 luis"));
+    await order(v, lewis.tabId, "Water");
+    const lewisTable = (await activeTablesOf(v, lewis.partyId))[0]!;
 
-    await moveTo(anaSecond, { tableId: luisTable });
+    await moveTo(annaSecond, { tableId: lewisTable });
 
-    expect(await listOf(luis.partyId)).toEqual([
-      [luis.tabId, 1, null, "open"],
-      [anaSecond, 2, null, "open"],
+    expect(await listOf(lewis.partyId)).toEqual([
+      [lewis.tabId, 1, null, "open"],
+      [annaSecond, 2, null, "open"],
     ]);
   });
 
   it("the floor lists unsent orders in number order", async () => {
-    const ana = await seat(v, await v.table("L4 ana"));
-    await order(v, ana.tabId, "Water", "Flan");
-    const anaSecond = await split(v, ana.partyId, ana.tabId, [1]);
-    const luis = await seat(v, await v.table("L4 luis"));
-    await order(v, luis.tabId, "Water");
-    const luisTable = (await activeTablesOf(v, luis.partyId))[0]!;
-    await moveTo(anaSecond, { tableId: luisTable });
-    await saveUnsent(luis.partyId, anaSecond, "Burger");
-    await saveUnsent(luis.partyId, luis.tabId, "Red wine bottle");
+    const anna = await seat(v, await v.table("L4 ana"));
+    await order(v, anna.tabId, "Water", "Flan");
+    const annaSecond = await split(v, anna.partyId, anna.tabId, [1]);
+    const lewis = await seat(v, await v.table("L4 luis"));
+    await order(v, lewis.tabId, "Water");
+    const lewisTable = (await activeTablesOf(v, lewis.partyId))[0]!;
+    await moveTo(annaSecond, { tableId: lewisTable });
+    await saveUnsent(lewis.partyId, annaSecond, "Burger");
+    await saveUnsent(lewis.partyId, lewis.tabId, "Red wine bottle");
 
-    expect(await unsentOf(luis.partyId)).toEqual([
-      [luis.tabId, 1],
-      [anaSecond, 2],
+    expect(await unsentOf(lewis.partyId)).toEqual([
+      [lewis.tabId, 1],
+      [annaSecond, 2],
     ]);
   });
 
@@ -1097,26 +1100,26 @@ describe("A803 rename", () => {
   });
 
   it("a paid bill left on a party merged into this one is renamed with the surviving party's id and revision", async () => {
-    const ana = await seat(v, await v.table("R10 ana"));
-    const luisTable = await v.table("R10 luis");
-    const luis = await seat(v, luisTable);
-    await order(v, ana.tabId, "Burger", "Red wine bottle");
-    await order(v, luis.tabId, "Water");
-    await split(v, ana.partyId, ana.tabId, [2]);
-    await pay(v, ana.tabId, "12.00");
-    const options = await tableOptions(ana.partyId, luis.partyId);
-    await inTx(v, (tx) => moveGuests(tx, v.cfg, ana.partyId, luisTable, options));
-    expect(await billRow(v, ana.tabId)).toMatchObject({ partyId: ana.partyId });
-    await nameParty(v, luis.partyId, "Luis");
-    await nameParty(v, luis.partyId, "Luis y Ana");
-    const revision = await revisionOf(v, luis.partyId);
-    expect(revision).not.toBe(await revisionOf(v, ana.partyId));
+    const anna = await seat(v, await v.table("R10 ana"));
+    const lewisTable = await v.table("R10 luis");
+    const lewis = await seat(v, lewisTable);
+    await order(v, anna.tabId, "Burger", "Red wine bottle");
+    await order(v, lewis.tabId, "Water");
+    await split(v, anna.partyId, anna.tabId, [2]);
+    await pay(v, anna.tabId, "12.00");
+    const options = await tableOptions(anna.partyId, lewis.partyId);
+    await inTx(v, (tx) => moveGuests(tx, v.cfg, anna.partyId, lewisTable, options));
+    expect(await billRow(v, anna.tabId)).toMatchObject({ partyId: anna.partyId });
+    await nameParty(v, lewis.partyId, "Luis");
+    await nameParty(v, lewis.partyId, "Luis y Ana");
+    const revision = await revisionOf(v, lewis.partyId);
+    expect(revision).not.toBe(await revisionOf(v, anna.partyId));
 
-    const answer = await rename(ana.tabId, "Ana", luis.partyId);
+    const answer = await rename(anna.tabId, "Ana", lewis.partyId);
 
     expect(answer).toEqual({ revision: revision + 1, billNumber: 2, billName: "Ana" });
-    await refusedRename(() => rename(ana.tabId, "Otra", ana.partyId), "party.out_of_date", {
-      partyId: ana.partyId,
+    await refusedRename(() => rename(anna.tabId, "Otra", anna.partyId), "party.out_of_date", {
+      partyId: anna.partyId,
     });
   });
 
