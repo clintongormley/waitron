@@ -473,7 +473,7 @@ describe("queue-pressure routing", () => {
     },
   );
 
-  it("uses hosted when the active run list shrinks between pages", async () => {
+  it("uses hosted after two incomplete reads of the active run list", async () => {
     const f = fixture(),
       request = f.options.request;
     let reads = 0;
