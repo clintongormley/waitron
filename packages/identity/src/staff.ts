@@ -24,10 +24,15 @@ import { normalizeEmail, isValidEmail } from "./email.js";
 import { foldForUniqueness } from "./fold.js";
 import { authorizeManager } from "./manager-login.js";
 import { requireFreshManagementSignIn } from "./fresh-sign-in.js";
-import { assertPinLength, hashPin } from "./verify-pin.js";
-import { assertPasswordLength, hashPassword } from "./verify-password.js";
 import type { Permission } from "./permissions.js";
-import { holds, authorityForRoles, listAdminHolders, type PersonAuthority } from "./authority.js";
+import { assertActorCovers } from "./admin-anchor.js";
+import {
+  holds,
+  readPersonAuthority,
+  authorityForRoles,
+  listAdminHolders,
+  type PersonAuthority,
+} from "./authority.js";
 import type { BuiltInRoleKey } from "./permissions.js";
 import { heldBuiltInKey, setBuiltInMembership } from "./roles.js";
 import {
@@ -154,12 +159,11 @@ export async function authorizePersonLoginChange(
     .select({ id: persons.id })
     .from(persons)
     .where(eq(persons.id, settleId(input.personId)));
-  if (person !== undefined && actor.authorizedBy !== settleId(input.personId))
+  if (person !== undefined && actor.authorizedBy !== person.id) {
     requireAdminAuthority(actor.authority);
-  return {
-    ...actor,
-    targetRole: person === undefined ? null : await heldBuiltInKey(tx, person.id),
-  };
+    assertActorCovers(actor.authority, await readPersonAuthority(tx, person.id));
+  }
+  return actor;
 }
 
 async function invalidatePersonAccountActions(tx: Transaction, personId: string): Promise<void> {
@@ -246,14 +250,6 @@ export async function updatePersonDetails(
       throw new AppError("authorization.not_permitted", { permission: "person.admin" });
     }
   }
-  if (
-    personRole === "admin" &&
-    person.status === "active" &&
-    (input.role !== "admin" || input.status !== "active") &&
-    activeAdmins.length === 1
-  ) {
-    throw new AppError("person.last_admin", {});
-  }
 
   const displayName = requiredText(input.displayName, "displayName");
   const firstNames = requiredText(input.firstNames, "firstNames");
@@ -264,6 +260,19 @@ export async function updatePersonDetails(
   const email = normalizeAndValidateEmail(input.email);
   if ((email !== person.email && authorizedBy !== person.id) || input.status !== person.status) {
     requireAdminAuthority(authority);
+    if (authorizedBy !== person.id) {
+      assertActorCovers(authority, await readPersonAuthority(tx, person.id));
+      if (email !== person.email && !holds(authority, "person.email"))
+        throw new AppError("authorization.not_permitted", { permission: "person.email" });
+    }
+  }
+  if (
+    personRole === "admin" &&
+    person.status === "active" &&
+    (input.role !== "admin" || input.status !== "active") &&
+    activeAdmins.length === 1
+  ) {
+    throw new AppError("person.last_admin", {});
   }
   if (email !== person.email || input.role !== personRole || input.status !== person.status)
     await requireFreshManagementSignIn(tx, input.managementSessionId);
@@ -312,11 +321,12 @@ export async function deactivatePerson(
   if (authorizedBy === settleId(input.personId)) {
     throw new AppError("person.self_deactivation", {});
   }
+  requireAdminAuthority(authority);
+  assertActorCovers(authority, await readPersonAuthority(tx, person.id));
   const personRole = await heldBuiltInKey(tx, person.id);
   if (personRole === "admin" && person.status === "active" && activeAdmins.length === 1) {
     throw new AppError("person.last_admin", {});
   }
-  requireAdminAuthority(authority);
   const alreadySuspended = person.status === "suspended";
   await tx
     .update(persons)
@@ -375,7 +385,7 @@ export async function reactivatePersonForInvitation(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  const { authority } = await authorizeManager(tx, {
+  const { authorizedBy, authority } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -390,6 +400,8 @@ export async function reactivatePersonForInvitation(
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status !== "suspended") throw new AppError("person.transition_invalid", {});
   requireAdminAuthority(authority);
+  if (authorizedBy !== person.id)
+    assertActorCovers(authority, await readPersonAuthority(tx, person.id));
   await assertDisplayNameAvailable(tx, person.displayName, person.id);
   try {
     await tx
@@ -457,104 +469,6 @@ export async function invitePerson(
       throw new AppError("person.display_name_taken", { displayName });
     }
     asEmailTaken(error, email);
-  }
-}
-
-/** Bootstrapping the FIRST admin is provisioning's job, not this gated path. */
-export async function createPerson(
-  tx: Transaction,
-  input: {
-    managementSessionId: string;
-    displayName: string;
-    role: BuiltInRoleKey;
-    pin: string;
-    email: string;
-  },
-): Promise<{ id: string }> {
-  const { authority } = await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "person.manage",
-  });
-  requireAdminAuthority(authority);
-  if (input.role === "admin" && !authority.admin)
-    throw new AppError("authorization.not_permitted", { permission: "person.admin" });
-  assertPinLength(input.pin);
-  const email = normalizeAndValidateEmail(input.email);
-  const displayName = requiredText(input.displayName, "displayName");
-  await assertDisplayNameAvailable(tx, displayName);
-  await assertEmailAvailable(tx, email);
-  try {
-    const [row] = await tx
-      .insert(persons)
-      .values({
-        displayName,
-        displayNameFolded: foldForUniqueness(displayName),
-        pinHash: hashPin(input.pin),
-        email,
-        emailFolded: foldForUniqueness(email),
-      })
-      .returning({ id: persons.id });
-    await setBuiltInMembership(tx, row!.id, input.role);
-    return { id: row!.id };
-  } catch (err) {
-    // Any unique violation off the email index is read as the display name: the insert leaves
-    // `pending_email` and `google_subject` null and lets `id` default, so the live display-name
-    // index is the only other key it can collide on.
-    if (isUniqueViolation(err) && !indexViolated(err, PERSONS_EMAIL)) {
-      throw new AppError("person.display_name_taken", { displayName });
-    }
-    asEmailTaken(err, email);
-  }
-}
-
-export async function setRole(
-  tx: Transaction,
-  input: { managementSessionId: string; personId: string; role: BuiltInRoleKey },
-): Promise<void> {
-  const { authority, targetRole } = await authorizePersonLoginChange(tx, input);
-  if ((input.role === "admin" || targetRole === "admin") && !authority.admin)
-    throw new AppError("authorization.not_permitted", { permission: "person.admin" });
-  await setBuiltInMembership(tx, settleId(input.personId), input.role);
-}
-
-export async function resetPin(
-  tx: Transaction,
-  input: { managementSessionId: string; personId: string; pin: string },
-): Promise<void> {
-  await authorizePersonLoginChange(tx, input);
-  assertPinLength(input.pin);
-  await tx
-    .update(persons)
-    .set({ pinHash: hashPin(input.pin) })
-    .where(eq(persons.id, settleId(input.personId)));
-}
-
-export async function setPassword(
-  tx: Transaction,
-  input: { managementSessionId: string; personId: string; password: string },
-): Promise<void> {
-  await authorizePersonLoginChange(tx, input);
-  assertPasswordLength(input.password);
-  await tx
-    .update(persons)
-    .set({ passwordHash: hashPassword(input.password) })
-    .where(eq(persons.id, settleId(input.personId)));
-}
-
-/** `email_folded` is written beside `email` because it is what `persons_tenant_email_uq` reads. */
-export async function setEmail(
-  tx: Transaction,
-  input: { managementSessionId: string; personId: string; email: string },
-): Promise<void> {
-  await authorizePersonLoginChange(tx, input);
-  const email = normalizeAndValidateEmail(input.email);
-  try {
-    await tx
-      .update(persons)
-      .set({ email, emailFolded: foldForUniqueness(email), emailVerifiedAt: null })
-      .where(eq(persons.id, settleId(input.personId)));
-  } catch (err) {
-    asEmailTaken(err, email);
   }
 }
 

@@ -19,7 +19,7 @@ import {
   persons,
 } from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
-import { authorizeManager } from "./manager-login.js";
+import { authorizePersonLoginChange } from "./staff.js";
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
@@ -432,10 +432,7 @@ export async function queueInvitation(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; origin: string; now?: Date },
 ): Promise<void> {
-  const { authorizedBy } = await authorizeManager(tx, {
-    managementSessionId: input.managementSessionId,
-    permission: "person.manage",
-  });
+  const { authorizedBy } = await authorizePersonLoginChange(tx, input);
   await queueAccountMail(tx, { ...input, purpose: "invitation", requestedBy: authorizedBy });
 }
 

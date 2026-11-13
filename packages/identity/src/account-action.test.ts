@@ -335,7 +335,7 @@ describe("management account actions", () => {
   });
 
   it("records the session's person as requested_by on an invitation", async () => {
-    const inviter = await seedManager(suite.db, { email: "queue-inviter@x.com" });
+    const inviter = await seedManager(suite.db, { email: "queue-inviter@x.com", role: "admin" });
     const personId = await seedManager(suite.db, { email: "queue-invited@x.com" });
     await makePending(personId);
     const session = await run((tx) =>

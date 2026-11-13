@@ -94,6 +94,7 @@ describe("roleHasPermission", () => {
       "node.manage",
       "system.box_admin",
       "person.admin",
+      "person.email",
       "personal_data.export",
     ]);
     for (const p of PERMISSIONS) {
@@ -284,6 +285,7 @@ describe("explicit permission declarations", () => {
       "hardware.manage": ["manager"],
       "fiscal.view": ["manager"],
       "person.admin": [],
+      "person.email": [],
       "personal_data.export": [],
       "node.manage": [],
       "system.box_admin": [],
