@@ -192,9 +192,7 @@ controls remain open; no provider work is authorised.
   The standby's reset page does not show this server's machine id, so an operator cannot tell
   which row on the primary's Servers screen is this server's (left for the owner from A70's
   review). Removing a standby that "never finished joining" (A61, #708) reads that as
-  `serving-secondary` with no `nodes` row in the primary's database, and a remote standby writes
-  that row in its own database, so the check cannot see a remote standby that finished — none can
-  today (`finish-adoption.ts`).
+  `serving-secondary` with no `nodes` row in the primary's database.
   **Still open after A63 (#712):** (i) a removed trust anchor (a machine whose key sits in the
   receiver's own `nodes` table) can still make up a key for a machine in good standing that is not
   an anchor, vouch for it, and sign as that machine — unless that machine signed the receiver's
@@ -281,8 +279,9 @@ initial copy ([design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-
 question**: `tenant_credentials` is `local` and a blob sealed under one node's ring cannot be opened
 under another's. Since A947 slice 3a a spare receives the main box's ring when it joins
 (`credentialsRing` in `apps/server/src/mirror-bundle.ts`, written by `apps/server/src/adopt.ts`), so
-rows a copy of `venue.db` brings open there; nothing yet delivers that copy, nor a ring the main box
-changes after the join (A1273).
+rows a copy of `venue.db` brings open there. Since 3b-6a a spare of a venue that does not file with
+Veri*Factu receives that copy; nothing yet delivers a ring the main box changes after the join
+(A1273).
 
 ## Adding a mirror while the internet is down
 
@@ -291,12 +290,7 @@ Owner, 2026-10-02. A second machine can rebuild from the owner's bucket
 For a venue that does not file with Veri*Factu, a joining spare now receives a copy from the
 primary over the venue's network, puts it in place at its next start and finishes joining as a
 standby (it cannot take over yet); a Veri*Factu venue is still refused until 3b-F. Wanted: adding
-a mirror works with the internet down, which is the very case an on-prem mirror exists for. The
-topology design's §4.4 already
-has the primary stream to the mirror box over the LAN once that box is enrolled, and a stream to a
-new place should begin with a full copy of the database (to be checked on the pinned Litestream),
-so the design may cover it — but it never says so, and it does not list what else enrolling needs
-from the internet. Slice 5 should name this as the way a mirror is added and prove it with the
+a mirror works with the internet down, which is the very case an on-prem mirror exists for. Slice 5 should name this as the way a mirror is added and prove it with the
 internet unplugged. A cloud mirror needs the internet anyway and is outside this item.
 
 ## A stop made while `cloud/replacement.json` is unreadable is not recorded in it
@@ -403,8 +397,7 @@ that slice 3 has to restore:
   wording says a mirror keeps a copy of the restaurant's data but cannot take over yet, and points
   to restore to recover a restaurant; each refusal's wording says what
   happened and either what to fix before pressing Connect again or to choose Back.
-  Removing or disabling the option until slice 3
-  lands the replacement is a product call, not a wording one. Whoever takes it should decide for
+  Removing or disabling the option while a mirror cannot take over is a product call, not a wording one. Whoever takes it should decide for
   `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` row together.
 
 - **Re-admission `sell-only → serving-secondary`** — the primary-minted un-fence that makes a rejoined
@@ -415,13 +408,9 @@ that slice 3 has to restore:
   (`mirror.membership_full`), and an admin can clear a REMOVED (`evicted`) machine to free its place,
   from the Servers screen (A63). What stays open: only an `evicted` entry can be cleared, and A61's
   Remove refuses a standby only when the primary's own database holds a `nodes` row for it
-  (`judgeRemoval`, `apps/server/src/membership-removal.ts`). The only writers of a `nodes` row
-  found are provisioning (`packages/provisioning/src/venue-apply.ts`, the row of the box being set
-  up) and `insertReservedNodeTx`, which a standby runs on its OWN database
-  (`apps/server/src/reserved-identity.ts`). So today a remote standby's old entry (a
-  wiped-and-re-adopted box's previous id, for one) reads as never-joined even if it finished, and
-  can be removed and then cleared. Once adoption can finish (`finish-adoption.ts`) and that check
-  can see a finished standby, nothing will free such an entry. A `sell-only` former primary keeps
+  (`judgeRemoval`, `apps/server/src/membership-removal.ts`). Since 3b-6a the main box writes a
+  spare's `nodes` row once the spare's store answers (`apps/server/src/spare-join.ts`), so Remove
+  refuses every spare whose store answered, and nothing frees its entry. A `sell-only` former primary keeps
   its place until that box retires itself (`apps/server/src/retire.ts` marks it `evicted`).
   Re-admission must retire, not add.
 - **Chart hygiene:** a post-setup change to `WAITRON_MANAGEMENT_ORIGIN` is never re-published, and a

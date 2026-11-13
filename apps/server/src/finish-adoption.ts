@@ -42,8 +42,8 @@ export async function writePendingAdoption(stateDir: string, p: PendingAdoption)
   await writeFileDurable(pendingPath(stateDir), JSON.stringify(p), 0o600);
 }
 
-/** Read the pending-adoption record, or `null` when the file is absent (established, or never
- * pending). Any other read/parse error propagates — a corrupt record is a loud boot failure. */
+/** Read the pending-adoption record, or `null` when the file is absent (finished joining, or
+ * never pending). Any other read/parse error propagates — a corrupt record is a loud boot failure. */
 export async function readPendingAdoption(stateDir: string): Promise<PendingAdoption | null> {
   let raw: string;
   try {

@@ -31,8 +31,8 @@ export const nodes = table("nodes", {
   // (nodeId, publicKey, endorsedBy, signature) vouching that lets other members trust a document
   // this node later signs, chaining back to setup. Public data, so it lives here, not in the secret
   // vault. Nullable: only a reserved STANDBY carries one; a fresh primary is self-trusted and has
-  // NULL. Set by insertReservedNodeTx, the only writer by convention: at adopt on the spare, and by
-  // the main box once its spare's store answers (`apps/server/src/spare-join.ts`).
+  // NULL. Set by insertReservedNodeTx, the only writer by convention: the main box, once its spare's
+  // store answers (`apps/server/src/spare-join.ts`); the spare receives the row in its first copy.
   endorsement: json<Endorsement>("endorsement"),
   createdAt: ts("created_at").notNull().$defaultFn(now),
 });

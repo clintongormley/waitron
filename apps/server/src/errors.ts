@@ -1385,7 +1385,10 @@ declare module "@waitron/shared" {
     "membership.node_is_primary": Record<string, never>;
     /** The machine asked to be removed is a former primary (`sell-only`), so it has served. */
     "membership.node_has_served": Record<string, never>;
-    /** The standby asked to be removed has a `nodes` row in this database, so it finished joining. */
+    /**
+     * The standby asked to be removed has a `nodes` row in this database: its store answered and
+     * this box streams to it (`spare-join.ts`).
+     */
     "membership.standby_joined": Record<string, never>;
     /**
      * The machine asked to be cleared is not removed (`evicted`): only a removed machine's place in

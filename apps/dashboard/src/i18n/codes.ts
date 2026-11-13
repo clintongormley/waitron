@@ -1142,8 +1142,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Se ha visto a otro equipo escribiendo la copia de este local en el mismo bucket, así que este equipo no copiará encima. Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
   },
   "backup.spare_stream_active": {
-    en: "This venue has a standby server, listed under Servers, which receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. If the standby never finished joining, choose Remove on its row under Servers; the bucket can then be saved here. A standby that finished joining cannot be removed in this version, so the copy stays with it until an update lets the standby pass it on to a bucket.",
-    es: "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o está a punto de recibirla, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Si el servidor en espera no terminó de unirse, elige Retirar en su fila de Servidores; después se puede guardar aquí el bucket. Un servidor en espera que terminó de unirse no se puede retirar en esta versión, así que la copia sigue yendo a él hasta que una actualización le permita pasarla a un bucket.",
+    en: "This venue has a standby server, listed under Servers, which receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. If the standby is not yet receiving its data, choose Remove on its row under Servers; the bucket can then be saved here. A standby that is receiving its data cannot be removed in this version, so the copy stays with it until an update lets the standby pass it on to a bucket.",
+    es: "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o está a punto de recibirla, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Si el servidor en espera aún no recibe sus datos, elige Retirar en su fila de Servidores; después se puede guardar aquí el bucket. Un servidor en espera que recibe sus datos no se puede retirar en esta versión, así que la copia sigue yendo a él hasta que una actualización le permita pasarla a un bucket.",
   },
   "backup.stream_config_unsafe": {
     en: "The bucket copy cannot use one of these settings as written.",
@@ -1376,8 +1376,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este servidor ya ha funcionado como principal, así que no se puede retirar.",
   },
   "membership.standby_joined": {
-    en: "This standby finished joining, so it cannot be removed.",
-    es: "Este servidor en espera terminó de unirse, así que no se puede retirar.",
+    en: "This standby is receiving its data, so it cannot be removed.",
+    es: "Este servidor en espera recibe sus datos, así que no se puede retirar.",
   },
   "membership.node_not_removed": {
     en: "This server has not been removed, so it cannot be cleared from the list.",

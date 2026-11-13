@@ -1876,7 +1876,7 @@ outstanding on code that exists.
   plan is written (eleven pull requests; Q1 is the owner's); 3b-1, 3b-2 ([#2742](https://github.com/clintongormley/waitron/pull/2742)),
   3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)), 3b-4 ([#2779](https://github.com/clintongormley/waitron/pull/2779))
   3b-5a ([#2898](https://github.com/clintongormley/waitron/pull/2898); the pair link, and a spare joins with no Cloud relay)
-  and 3b-5b (a spare runs its store, which admits only its main box; nothing streams to it yet) landed, and so did 3b-G (a box trusts only the venue's authority when it asks another box at start and sets aside a spare still joining ([3b plan](superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's decision, which the owner may overrule); its chart check at start reaches a real box under the venue's authority, which still refuses it for want of a credential; and a box that lost its own record does not start selling or filing), and so did 3b-6a (the first copy and finishing joining); 3b-6b onwards are still to build. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
+  and 3b-5b (a spare runs its store, which admits only its main box) landed, and so did 3b-G (a box trusts only the venue's authority when it asks another box at start and sets aside a spare still joining ([3b plan](superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) D19, lane A's decision, which the owner may overrule); its chart check at start reaches a real box under the venue's authority, which still refuses it for want of a credential; and a box that lost its own record does not start selling or filing), and so did 3b-6a (the first copy and finishing joining); 3b-6b onwards are still to build. 3b-4 retired `WAITRON_MIRROR_ALLOW_EXPOSED` (a spare now listens on the
   venue's network), one step **Hand over the venue** needs on real boxes. It is not live yet: a spare
   of a venue that does not file with Veri*Factu now receives a copy over the venue's network, puts
   it in place at its next start and finishes joining as a standby, but it cannot take over yet, and
@@ -1917,9 +1917,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **The mirror as a backup destination**, and the mirror's print agent (gated on B6's cross-box
   TLS).
 
-- **Adding a mirror while the internet is down** (owner, 2026-10-02). Wanted: a new mirror takes
-  its first copy straight from the primary over the LAN. Slice 5 should name this as the way a
-  mirror is added and prove it with the internet unplugged.
+- **Adding a mirror while the internet is down** (owner, 2026-10-02). Since 3b-6a a spare of a venue that does
+  not file with Veri*Factu takes its first copy over the venue's network; left: prove it with the
+  internet unplugged (3b-6b), and a Veri*Factu venue (3b-F).
   [Detail](backlog/replication-cloud.md#adding-a-mirror-while-the-internet-is-down)
 
 **Cloud integration and SQLite work.**

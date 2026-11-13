@@ -43,8 +43,8 @@ export type ClearanceVerdict =
 
 /**
  * Whether the serving primary may remove `targetNodeId` from its chart. The rule: the target is
- * `serving-secondary` and this database holds no `nodes` row with its id — a standby that never
- * finished joining.
+ * `serving-secondary` and this database holds no `nodes` row with its id — a standby whose store
+ * never answered this box (`spare-join.ts` writes the row when it does).
  */
 export function judgeRemoval(
   held: SignedMembershipDocument | null,

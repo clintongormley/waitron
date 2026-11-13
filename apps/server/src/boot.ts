@@ -1238,12 +1238,12 @@ async function bootServer(
   } catch (error) {
     log("error", "cloud.refresh_failed", { errorCode: codeOf(error) });
   }
+  // Both placements run here and not in entry so that `startServer`-based starts and the dev entry
+  // place too. It follows entry's ahead check, whose close drains the old file's -wal before placing
+  // removes it (pinned in `boot.place-copy.test.ts`). A box with no identity has no node id to read
+  // an operation by, and nothing is placed.
   if (config.node !== undefined)
     await placeFirstCopy({ stateDir: config.stateDir, venueDir: config.venueDir, log });
-  // Here and not in entry so that `startServer`-based starts and the dev entry place too. It follows
-  // entry's ahead check, whose close drains the old file's -wal before placing removes it (pinned in
-  // `boot.place-copy.test.ts`). A box with no identity has no node id to read an operation by, and
-  // nothing is placed.
   const placement =
     config.node === undefined
       ? null
@@ -1830,8 +1830,8 @@ async function bootServer(
     current: { version: 1, key: accountPurposeKey(accountKey, "totp") },
   };
 
-  // Adoption-pending boot: adopt records a latch instead of establishing the standby identity, and
-  // every boot retries that step. In this mode boot serves `/health` and a minimal
+  // Joining start: while the adoption latch exists, each start tries to finish joining
+  // (`runFinishAdoption`). In this mode boot serves `/health` and a minimal
   // `/api/box/status`, and reads no deployment axes or membership.
   const ownHostname = boxHostnameFor(config.node.nodeId);
   const ownNameOnly: readonly string[] = [ownHostname];
