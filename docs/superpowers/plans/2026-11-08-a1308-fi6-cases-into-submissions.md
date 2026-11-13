@@ -415,6 +415,10 @@ fi5. fi2's `bench grow-fiscal`. Any part of A1089's filing-case route that has l
 … land before the slice that touches their tables, or are re-planned onto the new shape"); its files
 are added to Files before Task 2.
 
+W41s-9 slice 1 (2026-11-10) added readers of `filing_cases`, `filing_case_events` and `envios`,
+which this slice folds: `packages/fiscal-verifactu/src/filing-overview.ts`, and `openFilingCases`
+in `filing-cases.ts`. The Fiscal filing screen and its export name each case by its record id (`registroId`).
+
 **Landed by: owner.**
 
 ---

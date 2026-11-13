@@ -11,19 +11,10 @@ import {
   readReturnedBatch,
 } from "./handover-return.js";
 import type { BackupQuery, BackupValue } from "@waitron/store";
+import { ENVIO_STATES, type EnvioState } from "./filing-states.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
 
-/** The states `envios_estado_ck` admits. */
-export const ENVIO_STATES = [
-  "pendiente",
-  "enviando",
-  "aceptado",
-  "aceptado_con_errores",
-  "rechazado",
-  "detenido",
-  "retenido",
-] as const;
-export type EnvioState = (typeof ENVIO_STATES)[number];
+export { ENVIO_STATES, type EnvioState };
 
 export type ChainSummary = {
   readonly nodeId: string;

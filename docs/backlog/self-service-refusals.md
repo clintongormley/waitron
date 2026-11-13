@@ -221,9 +221,11 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:190` and `apps/dashboard/src/i18n/alert-messages.ts:191`.
 
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.registro_rechazado`.
+
 State: An AEAT response rejects a record and opens a filing case. An external refusal is not proof of a Waitron bug. Receipt: `packages/fiscal-verifactu/src/drain.ts:1445`.
 
-Route: Missing in the searched server routes: a filing-case decision screen/action. W41s-8 and W41s-9 remain queued; a library function or a planned screen is not a product recovery path.
+Route: Missing in the searched server routes: a filing-case decision action. The evidence page exists (**Reporting → Fiscal filing**, W41s-9 slice 1, 2026-11-10) and decides nothing; W41s-8's remedies are not enabled, and a library function or a planned screen is not a product recovery path.
 
 ### `fiscal.respuesta_descuadrada`
 
@@ -251,6 +253,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:206` and `apps/dashboard/src/i18n/alert-messages.ts:207`.
 
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.duplicado_anulado`.
+
 State: The duplicate outcome is annulled; the drain rejects the row and opens a filing case. AEAT-held state is external evidence, not a bug-only receipt. Receipt: `packages/fiscal-verifactu/src/drain.ts:1773`.
 
 Route: Missing: a supported filing-case resolution route. Keep the existing stop until a valid decision is made.
@@ -265,6 +269,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 | ES | No se ha enviado una anulación porque la AEAT rechazó la factura original. Contacta con soporte. |
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:210` and `apps/dashboard/src/i18n/alert-messages.ts:211`.
+
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.anulacion_retenida`.
 
 State: A cancellation whose original record was refused is set aside and gets its own case. It does not become sendable just by waiting. Receipt: `packages/fiscal-verifactu/src/drain.ts:862`.
 
@@ -281,9 +287,11 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:214` and `apps/dashboard/src/i18n/alert-messages.ts:215`.
 
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.huella_divergente`.
+
 State: A duplicate lookup identifies a different fingerprint and opens a case. External or restored-data disagreement is not proved to be bug-only. Receipt: `packages/fiscal-verifactu/src/drain.ts:1773`.
 
-Route: Missing: a supported evidence/decision route for the conflict. Never rewrite a recorded fingerprint.
+Route: Missing: a supported decision route for the conflict; the evidence page, **Reporting → Fiscal filing**, exists (W41s-9 slice 1, 2026-11-10). Never rewrite a recorded fingerprint.
 
 ### `fiscal.environment_mismatch`
 
@@ -371,9 +379,11 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:258` and `apps/dashboard/src/i18n/alert-messages.ts:259`.
 
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.filing_cases_open`.
+
 State: The query finds open filing cases. They require a decision; elapsed time does not make that decision. Receipt: `packages/fiscal-verifactu/src/submission-alerts.ts:64`.
 
-Route: Missing: the supported filing-case screen/action. Keep W41s-8/W41s-9 and A696 dependencies visible instead of directing the owner to support.
+Route: Missing: the supported filing-case decision action; the evidence page, **Reporting → Fiscal filing**, exists (W41s-9 slice 1, 2026-11-10). Keep W41s-8 and A696 dependencies visible instead of directing the owner to support.
 
 ### `fiscal.refusals_repeated`
 
@@ -385,6 +395,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 | ES | La AEAT ha rechazado {count} registros fiscales seguidos con el código {codigo}. Waitron reintenta cada hora el primer registro detenido que puede enviar. Una aceptación o un rechazo distinto puede reanudar el envío. Contacta con soporte. |
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:262` and `apps/dashboard/src/i18n/alert-messages.ts:263`.
+
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.refusals_repeated`.
 
 State: A chain has a run of same-code refusals and eligible stopped work. A refusal run is not a bug-only state. Receipt: `packages/fiscal-verifactu/src/submission-alerts.ts:143`.
 
@@ -924,13 +936,13 @@ Unchanged local commands run for this recheck:
 Logs are in `/Users/clintongormley/waitron-campaign-e/receipts/a1089-fiscal-integrity-20261029/`.
 These local fixtures do not qualify live AEAT, a complete chain audit, persistent repair or a rendered
 inspection screen. The proposal separates saved evidence from fresh reads, offers sign-in at the
-action and a safe Stop, and grants no write or repair authority. Choose planning inspection first,
-leaving persistent repair open, or designing the complete recovery/decision path before a build.
-Both options require separate implementation approval; the product referrals remain open.
+action and a safe Stop, and grants no write or repair authority. The owner retired the separate
+evidence screen on 2026-11-10: its evidence goes on Reporting → Fiscal filing as one small step.
+The product referrals remain open.
 
 ### fiscal-cases
 
-**Fiscal filing-case alerts need a real decision route.** Use W41s-8/W41s-9 when released, or keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
+**Fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. It decides nothing, so the decision step still waits for W41s-8's remedies to be enabled (`ENABLED_REMEDIES` is empty); until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
 
 ### fiscal-reply
 
@@ -965,8 +977,8 @@ The logs report **23**, **56** and **20** passing cases respectively; the first 
 real XML client, not live AEAT, an end-to-end inspection journey or a persistent-repair qualification.
 No original assertion, fiscal record, guard or production source changes in this milestone.
 
-**Still open:** decide whether to plan evidence inspection first, with persistent response repair
-explicitly open, or design the complete fiscal decision route before a build. Keep the support
+**Still open:** the owner retired the separate evidence screen on 2026-11-10: its evidence goes on
+Reporting → Fiscal filing as one small step; persistent response repair stays open. Keep the support
 wording in scope until an actual action exists. Inspection must distinguish the first retained
 warning from freshly read submission state; it cannot reconstruct replies that were never kept.
 A malformed reply does not establish a Waitron bug or authorise a reset, altered chain, new invoice

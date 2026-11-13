@@ -103,6 +103,8 @@ export async function insertPendingAlta(
     nombreRazonEmisor?: string | undefined;
     /** Defaults to `TEST_SISTEMA`'s. */
     producerNif?: string | undefined;
+    /** Defaults to none, as on a simplified F2. */
+    destinatarios?: unknown;
   },
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
@@ -180,6 +182,7 @@ export async function insertPendingAlta(
       nombreRazonEmisor: params.nombreRazonEmisor ?? "Waitron SL",
       tipoFactura: "F2",
       descripcionOperacion: "Venta en establecimiento",
+      destinatarios: params.destinatarios ?? null,
       desglose,
       cuotaTotal: "2.10",
       importeTotal: "12.10",
@@ -290,7 +293,7 @@ export async function appendPendingAlta(
   db: Database,
   seeded: SeededDrain,
   secuencia: number,
-  options: { nombreRazonEmisor?: string; generadoEn?: string } = {},
+  options: { nombreRazonEmisor?: string; generadoEn?: string; destinatarios?: unknown } = {},
 ): Promise<{ registroId: string; facturaKey: string }> {
   const huella = String(secuencia).padStart(64, "0");
   // `DEFAULT_ENTORNO`, so the appended row agrees with the chain it extends.
@@ -305,6 +308,7 @@ export async function appendPendingAlta(
     entorno: DEFAULT_ENTORNO,
     nombreRazonEmisor: options.nombreRazonEmisor,
     generadoEn: options.generadoEn,
+    destinatarios: options.destinatarios,
   });
   await db.insert(envios).values({ registroId, proximoIntentoEn: DUE_AT });
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };

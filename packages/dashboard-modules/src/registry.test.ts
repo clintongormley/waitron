@@ -53,6 +53,19 @@ describe("DASHBOARD_MODULES honesty", () => {
     });
   });
 
+  it("places Fiscal filing right after VAT return, before the other module reports, for anyone who may export reports", () => {
+    const fiscal = DASHBOARD_MODULES.find((c) => c.module === "fiscal-verifactu");
+    expect(
+      fiscal?.moreScreens?.find((entry) => entry.screen.id === "fiscal-filing")?.screen,
+    ).toEqual({
+      id: "fiscal-filing",
+      navLabelKey: "nav.fiscal_filing",
+      group: "reports",
+      order: -1,
+      requiresPermission: "report.export",
+    });
+  });
+
   it("registers the Staff roles page in the Team group for managers of staffing", () => {
     const staffing = DASHBOARD_MODULES.find((c) => c.module === "staffing");
     expect(staffing?.screen).toEqual({

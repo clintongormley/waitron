@@ -103,6 +103,19 @@ describe("the user guides", () => {
     ]);
   });
 
+  it.each(GUIDE_LANGUAGES)("the Fiscal filing guide in %s registers its sections", (lang) => {
+    expect(GUIDE_PAGES).toContain("fiscal-filing");
+    const markdown = readGuide(root, lang, "fiscal-filing");
+    expect(markdown).toBeDefined();
+    expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+      "open",
+      "conflict",
+      "progress",
+      "cases",
+      "export",
+    ]);
+  });
+
   it.each(GUIDE_LANGUAGES)("the servers guide in %s registers its sections", (lang) => {
     expect(GUIDE_PAGES).toContain("servers");
     const markdown = readGuide(root, lang, "servers");

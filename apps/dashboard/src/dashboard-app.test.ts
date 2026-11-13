@@ -7666,6 +7666,29 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(escaped).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [["fiscal.view", "report.export"], true],
+    [["fiscal.view", "venue.view"], false],
+  ])(
+    "lets the Alerts face open Fiscal filing, the fiscal alerts' Go to, for %j: %s",
+    async (permissions, opens) => {
+      history.replaceState(null, "", "/manage/alerts");
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: Object.assign(faceApi(), {
+          getMe: vi
+            .fn()
+            .mockResolvedValue({ ...meResponse, permissions, modules: ["fiscal-verifactu"] }),
+        }),
+        request: stubRequest,
+      });
+      await flush(el);
+      const alertsFace = el.shadowRoot!.querySelector<
+        HTMLElement & { canOpen: (screen: string) => boolean }
+      >("dashboard-alerts-screen")!;
+      expect(alertsFace.canOpen("fiscal-filing")).toBe(opens);
+    },
+  );
+
   const systemManagerFaceApi = (): DashboardApi =>
     Object.assign(faceApi(), {
       getMe: vi

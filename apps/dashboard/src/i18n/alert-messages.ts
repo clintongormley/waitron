@@ -249,8 +249,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La hora de este equipo ha retrocedido: ha cambiado {wallClockDeltaSeconds} segundos. Revisa su fecha y hora.",
   },
   "fiscal.registro_rechazado": {
-    en: "The tax agency (AEAT) rejected an invoice record: {mensaje} (code {codigo}). Contact support.",
-    es: "La AEAT ha rechazado un registro de facturación: {mensaje} (código {codigo}). Contacta con soporte.",
+    en: "The tax agency (AEAT) rejected an invoice record: {mensaje} (code {codigo}). The record and AEAT's answer are on Fiscal filing. Waitron keeps sending later records unless AEAT refuses several in a row with the same code.",
+    es: "La AEAT ha rechazado un registro de facturación: {mensaje} (código {codigo}). El registro y la respuesta de la AEAT están en Remisión a la AEAT. Waitron sigue enviando los registros posteriores salvo que la AEAT rechace varios seguidos con el mismo código.",
   },
   "fiscal.aceptado_con_errores": {
     en: "The tax agency (AEAT) accepted an invoice record but reported a problem: {mensaje} (code {codigo}).",
@@ -265,16 +265,16 @@ export const ALERT_MESSAGES: Readonly<
     es: "La AEAT ha respondido a un envío con un número de líneas distinto del de registros de facturación que Waitron envió, así que Waitron no ha aplicado ninguna y volverá a enviar cada uno salvo que esté en espera un registro anterior de su cadena. Contacta con soporte.",
   },
   "fiscal.duplicado_anulado": {
-    en: "The tax agency (AEAT) already holds this invoice record as cancelled. Contact support.",
-    es: "La AEAT ya tiene este registro de facturación como anulado. Contacta con soporte.",
+    en: "The tax agency (AEAT) already holds this invoice record as cancelled. The record and AEAT's answer are on Fiscal filing.",
+    es: "La AEAT ya tiene este registro de facturación como anulado. El registro y la respuesta de la AEAT están en Remisión a la AEAT.",
   },
   "fiscal.anulacion_retenida": {
-    en: "A cancellation was not sent because the tax agency (AEAT) refused the original invoice. Contact support.",
-    es: "No se ha enviado una anulación porque la AEAT rechazó la factura original. Contacta con soporte.",
+    en: "A cancellation was not sent because the tax agency (AEAT) refused the original invoice. The cancellation is on Fiscal filing, and Waitron keeps sending later records.",
+    es: "No se ha enviado una anulación porque la AEAT rechazó la factura original. La anulación está en Remisión a la AEAT y Waitron sigue enviando los registros posteriores.",
   },
   "fiscal.huella_divergente": {
-    en: "An invoice record's fingerprint does not match the copy the tax agency (AEAT) holds. Contact support.",
-    es: "La huella de un registro de facturación no coincide con la copia de la AEAT. Contacta con soporte.",
+    en: "An invoice record's fingerprint does not match the copy the tax agency (AEAT) holds. The record and AEAT's answer are on Fiscal filing.",
+    es: "La huella de un registro de facturación no coincide con la copia de la AEAT. El registro y la respuesta de la AEAT están en Remisión a la AEAT.",
   },
   "fiscal.environment_mismatch": {
     en: "An invoice record was made for the tax agency's {recordEnvironment} service, but this box sends to {hostEnvironment}. It has not been sent. Contact support.",
@@ -325,12 +325,12 @@ export const ALERT_MESSAGES: Readonly<
     es: "{count} registro(s) fiscal(es) han detenido su envío y requieren atención.",
   },
   "fiscal.filing_cases_open": {
-    en: "{count} fiscal record(s) need someone to decide what to do. Contact support.",
-    es: "{count} registro(s) fiscal(es) necesitan que alguien decida qué hacer. Contacta con soporte.",
+    en: "{count} fiscal record(s) need someone to decide what to do. They are on Fiscal filing, with any answer from AEAT.",
+    es: "{count} registro(s) fiscal(es) necesitan que alguien decida qué hacer. Están en Remisión a la AEAT, con la respuesta de la AEAT si la hay.",
   },
   "fiscal.refusals_repeated": {
-    en: "AEAT rejected {count} fiscal records in a row with code {codigo}. Waitron retries the first eligible stopped record hourly. An accept or a different refusal can restart sending. Contact support.",
-    es: "La AEAT ha rechazado {count} registros fiscales seguidos con el código {codigo}. Waitron reintenta cada hora el primer registro detenido que puede enviar. Una aceptación o un rechazo distinto puede reanudar el envío. Contacta con soporte.",
+    en: "AEAT rejected {count} fiscal records in a row with code {codigo}. Waitron retries the first eligible stopped record hourly. An accept or a different refusal can restart sending. The records and AEAT's answers are on Fiscal filing.",
+    es: "La AEAT ha rechazado {count} registros fiscales seguidos con el código {codigo}. Waitron reintenta cada hora el primer registro detenido que puede enviar. Una aceptación o un rechazo distinto puede reanudar el envío. Los registros y las respuestas de la AEAT están en Remisión a la AEAT.",
   },
   "fiscal.awaiting_certificate": {
     en: "Fiscal records are waiting because no AEAT certificate is installed. Install it in Venue settings.",

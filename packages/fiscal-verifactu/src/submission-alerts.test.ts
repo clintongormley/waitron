@@ -138,6 +138,16 @@ describe("fiscalSubmissionSource", () => {
     });
   });
 
+  it("points a stopped submission at the Fiscal filing screen", async () => {
+    const id = await seedIdentity(suite.db);
+    await seedWaiting(suite.db, id, hoursAgo(1), "detenido");
+    await withTransaction(suite.db, async (tx) => {
+      const alerts = await fiscalSubmissionSource.read({ tx, now: NOW });
+      const stopped = alerts.find((a) => a.code === "fiscal.submission_stopped");
+      expect(stopped?.screen).toBe("fiscal-filing");
+    });
+  });
+
   // Exactly at each threshold, because the source compares with `>=`: a mutation to `>` would still
   // pass the 3h/5h/25h cases but must fail here — 4h is the warning boundary, 24h the error boundary.
   it("treats exactly 4 hours as a warning and exactly 24 hours as an error", async () => {

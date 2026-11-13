@@ -492,6 +492,10 @@ trigger"); README "Additions of 6 November 2026" for the no-delete trigger.
 fi8; fi6 (adds to `triggers/fiscal-verifactu.sql` and `trigger-refusals.ts`, which fi4a creates). The Cloud lane's
 fixture change, in step. (The second unique index is dropped: owner, 2026-11-09.)
 
+W41s-9 slice 1 (2026-11-10) added a reader of `registro_sif`, which this slice reshapes:
+`packages/fiscal-verifactu/src/filing-overview.ts`, through `readActiveConflicts`, and
+`openFilingCases` in `filing-cases.ts`, which joins it for each case's installation. The Fiscal filing screen and its export name each case by its record id (`registroId`).
+
 **Landed by: owner.**
 
 ---

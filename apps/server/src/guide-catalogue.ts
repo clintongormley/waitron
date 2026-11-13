@@ -17,6 +17,7 @@ export const GUIDE_PAGES = [
   "purchases",
   "till-notices",
   "box-status",
+  "fiscal-filing",
   "backup-recovery",
   "time-zone",
   "opening-hours",
