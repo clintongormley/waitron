@@ -875,7 +875,7 @@ the helper's constant status is not evidence of the write.
   Local `issuance-pass.test.ts`, `till-sale-tender-block.test.ts`, `sale-till-source.receipt.test.ts`,
   `served.test.ts`, `report-api.categories-reconcile.test.ts` and `demo-seed.db.test.ts` use English staff display names.
   The recovery-page personal-data suite uses Martha Lewis and George Hill as staff samples. Its Spanish venue legal-name, location and table-name samples remain.
-  The logger's table-driven staff-person cases and the first nested editor sample use Martha Spencer; other Spanish staff names remain there. Spanish staff display-name samples remain in other local and shared `testing/` fixtures.
+  The logger's first masking table's staff-person rows and the first nested editor sample use Martha Spencer; other Spanish staff names remain there. Spanish staff display-name samples remain in other local and shared `testing/` fixtures.
   Location and dish samples remain in the issuance-pass and list-unit-price fiscal-identity,
   served-at-huella, split-bill fiscal and tabs filing suites.
   Remaining local venue seeds,
