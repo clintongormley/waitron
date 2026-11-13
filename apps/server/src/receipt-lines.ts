@@ -117,8 +117,14 @@ export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
   return groups;
 }
 
-/** Lunches stay with their diners; identical ordinary counted dishes may share a printed row.
- * Twin: `apps/server/src/receipt-lines.ts` / `apps/till/src/screens/till-ticket-view.ts`. */
+/**
+ * A set lunch stays with its diner. Ordinary identical dishes may share a simplified receipt row.
+ * A group joins an earlier one
+ * when its dish and each extra print the same at the same unit price and VAT rate, counted not
+ * measured, with no list price and no comp or discount; counts and amounts add. A row carries its
+ * rate only on a full invoice, so the other rows group only when `oneRate` says the sale filed one.
+ * Twin: `apps/till/src/screens/till-ticket-view.ts`.
+ */
 export function mergeIdenticalGroups(groups: readonly LineGroup[], oneRate: boolean): LineGroup[] {
   const merged: LineGroup[] = [];
   for (const group of groups) {
