@@ -404,7 +404,7 @@ describe("A773 hold paper: extras off and moves", () => {
         LATER_CLOCK,
         "GROUP 1",
         "1 x BURG",
-        "  CANCEL: Chips",
+        "  CANCEL: CHIPS",
         "",
       ];
       const fryer = [

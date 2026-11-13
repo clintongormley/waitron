@@ -2165,17 +2165,11 @@ describe("dish extras on kitchen tickets", () => {
       const espressoProduct = await makeProduct(tx, catalogueId, "Flat white", {
         stationId: kitchenStation.id,
       });
-      const { listId, productIds } = await addExtras(
-        tx,
-        cfg,
-        catalogueId,
-        espressoProduct,
-        [
-          { name: "Cream", maxQuantity: 3 }, // a per-dish cap of 3 admits a ×2
-          { name: "Oat milk" }, // single pick (cap 1)
-        ],
-        { staffNameOnly: true },
-      );
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, espressoProduct, [
+        // a per-dish cap of 3 admits a ×2
+        { name: "Cream", customerName: "Whipped cream", kitchenName: "CRM", maxQuantity: 3 },
+        { name: "Oat milk", customerName: "Oat drink", kitchenName: "OAT" }, // single pick (cap 1)
+      ]);
       const [creamExtra, oatMilkExtra] = productIds;
 
       await fireNewOrder(tx, cfg, [
@@ -2200,10 +2194,10 @@ describe("dish extras on kitchen tickets", () => {
     expect(stationJobs).toHaveLength(1);
     const ticket = decodeTicket(stationJobs[0]!.payload);
     expect(ticket).toContain("Flat white");
-    expect(ticket).toContain("+ Cream x2");
-    expect(ticket).toContain("+ Oat milk");
-    expect(ticket).not.toContain("Oat milk x");
-    expect(ticket).not.toMatch(/\+ Cream(?! x)/u);
+    expect(ticket).toContain("+ CRM x2");
+    expect(ticket).toContain("+ OAT");
+    expect(ticket).not.toContain("OAT x");
+    expect(ticket).not.toMatch(/\+ CRM(?! x)/u);
   });
 
   it("lets an unclaimed extra follow its dish when no default station is on", async () => {
@@ -2975,14 +2969,9 @@ describe("A803 portion grouping", () => {
       vatClass: "general",
     });
     await routeProductTo(tx, octopus, fryer.id);
-    const { listId, productIds } = await addExtras(
-      tx,
-      cfg,
-      catalogueId,
-      burger,
-      [{ name: "Cheese", maxQuantity: 2 }],
-      { staffNameOnly: true },
-    );
+    const { listId, productIds } = await addExtras(tx, cfg, catalogueId, burger, [
+      { name: "Cheese", customerName: "Mature cheddar", kitchenName: "CHED", maxQuantity: 2 },
+    ]);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const [table] = await tx
       .insert(diningTables)
@@ -3093,8 +3082,8 @@ describe("A803 portion grouping", () => {
     const one = `1 x Burger`;
     expect(count(lines, two)).toBe(1);
     expect(count(lines, one)).toBe(3);
-    expect(lines[lines.indexOf(two) + 1]).toMatch(/^\s*\+ Cheese x2$/u);
-    expect(lines.filter((line) => /\+ Cheese$/u.test(line))).toHaveLength(1);
+    expect(lines[lines.indexOf(two) + 1]).toMatch(/^\s*\+ CHED x2$/u);
+    expect(lines.filter((line) => /\+ CHED$/u.test(line))).toHaveLength(1);
     expect(lines.filter((line) => /\* No onion$/u.test(line))).toHaveLength(1);
   });
 
