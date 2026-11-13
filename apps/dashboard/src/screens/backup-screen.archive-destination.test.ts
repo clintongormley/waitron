@@ -2052,29 +2052,40 @@ describe("a folder on this box and a bucket together", () => {
 it.each([
   [
     "scratch",
+    "/var/lib/waitron/state/scratch/backups",
     "This folder is inside /var/lib/waitron/state/scratch, which the box empties at startup. Choose a backup folder outside it.",
   ],
-  ["unreadable", "The box could not read this folder. Choose a folder the box can access."],
-])("a %s folder refusal names the problem and the next choice", async (reason, expected) => {
-  const before = currentLocale();
-  try {
-    setLocale("en");
-    const { el } = await openEdit(LOCAL_ONLY, {
-      applyBackup: vi.fn().mockRejectedValue({
+  [
+    "unreadable",
+    "/var/backups",
+    "The box could not read this folder. Choose a folder the box can access.",
+  ],
+  ["relative", "backups", "This folder is not a full path. Enter the full path, starting with /."],
+])(
+  "a %s folder refusal names the problem and the next choice",
+  async (reason, folder, expected) => {
+    const before = currentLocale();
+    try {
+      setLocale("en");
+      const applyBackup = vi.fn().mockRejectedValue({
         code: "backup.request_invalid",
         params: {
           field: "dir",
           reason,
           scratchRoot: "/var/lib/waitron/state/scratch",
         },
-      }),
-    });
-    await typeFolder(el, "/var/lib/waitron/state/scratch/backups");
-    q(el, "[data-test=save-settings]")!.click();
-    await vi.waitFor(() =>
-      expect((q(el, "[data-test=destination]") as Field).error).toBe(expected),
-    );
-  } finally {
-    setLocale(before);
-  }
-});
+      });
+      const { el } = await openEdit(LOCAL_ONLY, { applyBackup });
+      await typeFolder(el, folder);
+      q(el, "[data-test=save-settings]")!.click();
+      await vi.waitFor(() =>
+        expect((q(el, "[data-test=destination]") as Field).error).toBe(expected),
+      );
+      expect(applyBackup).toHaveBeenCalledWith(
+        expect.objectContaining({ destinations: [{ kind: "local-fs", dir: folder }] }),
+      );
+    } finally {
+      setLocale(before);
+    }
+  },
+);

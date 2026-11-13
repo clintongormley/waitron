@@ -1453,7 +1453,9 @@ export class BackupScreen extends LitElement {
         ? fill("backup.destination.folder_scratch_refused", { folder: this.folderScratchRoot })
         : this.folderRefusalReason === "unreadable"
           ? t("backup.destination.folder_unreadable")
-          : t("backup.destination.folder_refused")
+          : this.folderRefusalReason === "relative"
+            ? t("backup.destination.folder_relative")
+            : t("backup.destination.folder_refused")
       : this.attempted && this.#folderMissing
         ? t("backup.destination.folder_required")
         : "";

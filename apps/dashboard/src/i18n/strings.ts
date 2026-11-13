@@ -2126,6 +2126,8 @@ export const en = {
     "This folder is inside {folder}, which the box empties at startup. Choose a backup folder outside it.",
   "backup.destination.folder_unreadable":
     "The box could not read this folder. Choose a folder the box can access.",
+  "backup.destination.folder_relative":
+    "This folder is not a full path. Enter the full path, starting with /.",
   "backup.destination.folder_refused":
     "The box cannot use this folder. Remove any tab, line break or other control character.",
   "backup.archive_test.timed_out": "The bucket took too long to answer.",
@@ -6107,6 +6109,8 @@ export const es: Record<StringKey, string> = {
     "Esta carpeta está dentro de {folder}, que la caja vacía al arrancar. Elige una carpeta de copias fuera de ella.",
   "backup.destination.folder_unreadable":
     "La caja no ha podido leer esta carpeta. Elige una carpeta a la que pueda acceder.",
+  "backup.destination.folder_relative":
+    "Esta carpeta no es una ruta completa. Escribe la ruta completa, empezando por /.",
   "backup.destination.folder_refused":
     "La caja no puede usar esta carpeta. Quita cualquier tabulador, salto de línea u otro carácter de control.",
   "backup.archive_test.timed_out": "El bucket ha tardado demasiado en responder.",

@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { credentialRevision, putCredential, loadKeyRing } from "@waitron/credentials";
 import { withTransaction } from "@waitron/db";
@@ -143,10 +142,10 @@ describe("resolveArchiveChoice", () => {
   const ctx = { stream, held: null };
 
   it("resolves a local folder to an absolute path under the primary id", () => {
-    expect(resolveArchiveChoice({ kind: "local-fs", dir: "backups" }, ctx)).toEqual({
+    expect(resolveArchiveChoice({ kind: "local-fs", dir: "/var/other/../backups" }, ctx)).toEqual({
       kind: "local-fs",
       id: "primary",
-      dir: resolve("backups"),
+      dir: "/var/backups",
     });
   });
 
@@ -156,6 +155,16 @@ describe("resolveArchiveChoice", () => {
       expect(refusal(() => resolveArchiveChoice({ kind: "local-fs", dir }, ctx))).toEqual({
         code: "backup.request_invalid",
         params: { field: "dir" },
+      });
+    },
+  );
+
+  it.each(["backups", "./backups", "../backups"])(
+    "refuses the relative local folder %j, asking for the full path",
+    (dir) => {
+      expect(refusal(() => resolveArchiveChoice({ kind: "local-fs", dir }, ctx))).toEqual({
+        code: "backup.request_invalid",
+        params: { field: "dir", reason: "relative" },
       });
     },
   );
@@ -353,10 +362,10 @@ describe("resolveArchiveChoice", () => {
 
 describe("resolveArchiveChoices", () => {
   const ctx = { stream, held: null };
-  const folder = { kind: "local-fs", dir: "backups" };
+  const folder = { kind: "local-fs", dir: "/var/backups" };
   const streamBucket = { kind: "stream-bucket" };
   const customBucket = custom;
-  const resolvedFolder = { kind: "local-fs", id: "primary", dir: resolve("backups") };
+  const resolvedFolder = { kind: "local-fs", id: "primary", dir: "/var/backups" };
   const resolvedCustom = { kind: "s3", id: "bucket", bucket: without(custom, "kind") };
 
   it("resolves a folder and a separate bucket together", () => {
@@ -381,8 +390,8 @@ describe("resolveArchiveChoices", () => {
     ["not an array", folder],
     ["null", null],
     ["empty", []],
-    ["three entries", [folder, streamBucket, { kind: "local-fs", dir: "other" }]],
-    ["two folders", [folder, { kind: "local-fs", dir: "other" }]],
+    ["three entries", [folder, streamBucket, { kind: "local-fs", dir: "/var/other" }]],
+    ["two folders", [folder, { kind: "local-fs", dir: "/var/other" }]],
     ["the stream bucket and a custom bucket", [streamBucket, custom]],
     ["two custom buckets", [custom, { ...custom, bucket: "second-bucket" }]],
     ["an entry that is not an object", [folder, "stream-bucket"]],

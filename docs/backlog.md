@@ -1716,8 +1716,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Box status rows** (bundle of 4, 1 important, size S). [Detail](backlog/box.md#bundle-box-status-rows)
 
-- **Refuse folders that cannot be safe** (bundle of 1, size S). [Detail](backlog/box.md#bundle-refuse-folders-that-cannot-be-safe)
-
 - **A transaction opened outside the write queue can let a body's writes after a full disk
   commit.**
   [Detail](backlog/box.md#a-transaction-opened-outside-the-write-queue-can-let-a-bodys-writes-after-a-full-disk-commit)
