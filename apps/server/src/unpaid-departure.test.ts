@@ -203,6 +203,11 @@ it("stops the lunch dishes, without treating its priced shell as kitchen work, o
       children: lines.filter((line) => line.parentLineId !== null).map((line) => line.id),
     };
   });
+  expect(
+    await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+    ),
+  ).toHaveLength(2);
   const answer = await depart(party.partyId, {
     expectedPartyRevision: revisionOf(party.partyId),
     reason: REASON,

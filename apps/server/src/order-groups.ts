@@ -1017,6 +1017,10 @@ export async function releaseHeldWorkOf(
   attendance?: OrderAttendance,
 ): Promise<void> {
   if (billIds.length === 0) return;
+  const serviceDish = await serviceDishCondition(
+    tx,
+    inArray(workingOrderLines.workingOrderId, [...billIds]),
+  );
   const held = await tx
     .selectDistinct({
       id: orderGroups.id,
@@ -1030,7 +1034,7 @@ export async function releaseHeldWorkOf(
         eq(orderGroups.partyId, partyId),
         eq(orderGroups.state, "held"),
         inArray(workingOrderLines.workingOrderId, [...billIds]),
-        await serviceDishCondition(tx, inArray(workingOrderLines.workingOrderId, [...billIds])),
+        serviceDish,
       ),
     )
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
@@ -1062,7 +1066,7 @@ export async function releaseHeldWorkOf(
       .where(
         and(
           eq(workingOrderLines.groupId, group.id),
-          await serviceDishCondition(tx, inArray(workingOrderLines.workingOrderId, [...billIds])),
+          serviceDish,
           inArray(workingOrderLines.workingOrderId, [...billIds]),
         ),
       );

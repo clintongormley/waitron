@@ -12,6 +12,7 @@ export async function serviceDishPredicate(tx: Transaction, lines: readonly Line
     line.parentLineId === null ? !lunches.has(line.id) : lunches.has(line.parentLineId);
 }
 
+/** Scope must include every row the consuming query can return, so every lunch shell is known. */
 export async function serviceDishCondition(tx: Transaction, scope: SQL): Promise<SQL> {
   const lines = await tx
     .select({ id: workingOrderLines.id, parentLineId: workingOrderLines.parentLineId })

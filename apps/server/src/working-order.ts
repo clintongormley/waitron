@@ -1976,10 +1976,21 @@ export async function fireLines(
     tx,
     lines.map((line) => line.id),
   );
+  const lunchNotes =
+    lunches.size === 0
+      ? []
+      : await tx
+          .select({ id: workingOrderLines.id, note: workingOrderLines.note })
+          .from(workingOrderLines)
+          .where(inArray(workingOrderLines.id, [...lunches]));
+  const noteByLunch = new Map(lunchNotes.map((line) => [line.id, line.note]));
   const parentLines = lines
     .filter(isDish)
     .map((line) => ({
       ...line,
+      note:
+        line.note ??
+        (line.parentLineId === null ? null : (noteByLunch.get(line.parentLineId) ?? null)),
       quantity: serviceQuantities(line.quantity, 0, cancellations.get(line.id) ?? 0).active,
     }))
     .filter((line) => line.quantity > 0);
@@ -6227,6 +6238,7 @@ async function applyLineEdits(
   const inserted: WorkingOrderLineInsert[] = [];
   const insertedContexts: typeof priced.lineContexts = [];
   const fireNow: Parameters<typeof fireLines>[3] = [];
+  const addedFrom = new Map<string, string>();
   const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
   const keepStations = new Map<string, string>();
   const keepReleased = new Set<string>();
@@ -6449,6 +6461,16 @@ async function applyLineEdits(
       });
     }
     for (const [rowIndex, row] of group.rows.entries()) {
+      if (as.origin !== undefined) {
+        const source =
+          row.parentLineId === null
+            ? as.origin
+            : as.origin.children.find(
+                (child) =>
+                  child.productId === row.productId && child.extraListId === row.extraListId,
+              );
+        if (source !== undefined) addedFrom.set(row.id!, source.id);
+      }
       inserted.push({
         ...row,
         lineNo: ++nextLineNo,
@@ -6575,11 +6597,19 @@ async function applyLineEdits(
       .select(fireableLineColumns)
       .from(workingOrderLines)
       .where(inArray(workingOrderLines.parentLineId, [...lunchParents]));
+    const sourceOf = new Map([
+      ...copiedContexts.map(({ from, to }) => [to, from] as const),
+      ...addedFrom,
+    ]);
     for (const child of children) {
-      const before = order.parents.find((parent) => parent.id === child.parentLineId);
-      const prior = before?.children.find((line) => line.id === child.id);
+      const before = order.parents.find(
+        (parent) => parent.id === (sourceOf.get(child.parentLineId!) ?? child.parentLineId),
+      );
+      const prior = before?.children.find(
+        (line) => line.id === (sourceOf.get(child.id) ?? child.id),
+      );
       if (before !== undefined && prior?.ticket == null) continue;
-      if (before === undefined)
+      if (before === undefined || sourceOf.has(child.id))
         await tx
           .update(workingOrderLines)
           .set({ sentAt: null })

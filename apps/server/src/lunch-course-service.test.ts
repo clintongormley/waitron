@@ -39,7 +39,14 @@ import { readOrderPreviewItems } from "./order-preview.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { readOrderStateCounts } from "./order-state-counts.js";
-import { markServed, ordersWithUnfiredDish, listCounterWaiting } from "./working-order.js";
+import {
+  markServed,
+  ordersWithUnfiredDish,
+  listCounterWaiting,
+  fireOrderLines,
+  listStationQueues,
+  readPassRows,
+} from "./working-order.js";
 import { partyRevision } from "./parties.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import {
@@ -515,81 +522,121 @@ describe("set lunch course service", () => {
         .from(printJobs)
         .where(eq(printJobs.printerId, venue.printers.kitchen));
       expect(decodeTicket(jobs.at(-1)!.payload)).toContain("No salt");
+      expect(items[0]!.note).toBe("No salt");
+      expect(
+        (await listStationQueues(tx, [venue.stations.kitchen])).get(venue.stations.kitchen)![0]!
+          .items[0]!.note,
+      ).toBe("No salt");
+      expect(
+        (await readPassRows(tx, eq(ticketItems.workingOrderId, id), Date.now()))[0]!.item.note,
+      ).toBe("No salt");
     });
   });
-  it("fires a replaced choice through its held group", async () => {
-    const venue = await setupSplitExtrasVenue();
-    const id = venue.party.tabId;
-    await withTransaction(suite.db, async (tx) => {
-      const { picks } = await lunch(tx, venue, true);
-      const initial = await rows(tx, id);
-      const starter = initial.find((line) => line.productId === venue.products.cheese)!;
-      await fireHeldLine(tx, venue.cfg, venue.party.partyId, starter.id, {
-        operatorId: OPERATOR,
-        submissionId: randomUUID(),
-        expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+  it.each(["group", "line"] as const)(
+    "fires a replaced choice through its held %s",
+    async (path) => {
+      const venue = await setupSplitExtrasVenue();
+      const id = venue.party.tabId;
+      await withTransaction(suite.db, async (tx) => {
+        const { picks } = await lunch(tx, venue, true);
+        const initial = await rows(tx, id);
+        const starter = initial.find((line) => line.productId === venue.products.cheese)!;
+        await fireHeldLine(tx, venue.cfg, venue.party.partyId, starter.id, {
+          operatorId: OPERATOR,
+          submissionId: randomUUID(),
+          expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+        });
+        const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+        await updateOrderLine(
+          tx,
+          venue.cfg,
+          id,
+          initial[0]!.lineNo,
+          { extras: picks([venue.products.cheese, venue.products.onionRings]) },
+          bill!.revision,
+          OPERATOR,
+        );
+        const choice = (await rows(tx, id)).find(
+          (line) => line.productId === venue.products.onionRings,
+        )!;
+        const [beforeSend] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+        if (path === "line") await fireOrderLines(tx, venue.cfg, id, [choice.id]);
+        else
+          await fireGroup(tx, venue.cfg, venue.party.partyId, choice.groupId!, {
+            operatorId: OPERATOR,
+            submissionId: randomUUID(),
+            expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+          });
+        const [afterSend] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+        expect(afterSend!.revision).toBe(beforeSend!.revision + 1);
+        expect(
+          (await tickets(tx, id)).find((item) => item.workingOrderLineId === choice.id),
+        ).toMatchObject({ firedAt: expect.any(String) });
       });
-      const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
-      await updateOrderLine(
-        tx,
-        venue.cfg,
-        id,
-        initial[0]!.lineNo,
-        { extras: picks([venue.products.cheese, venue.products.onionRings]) },
-        bill!.revision,
-        OPERATOR,
-      );
-      const choice = (await rows(tx, id)).find(
-        (line) => line.productId === venue.products.onionRings,
-      )!;
-      await fireGroup(tx, venue.cfg, venue.party.partyId, choice.groupId!, {
-        operatorId: OPERATOR,
-        submissionId: randomUUID(),
-        expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
-      });
-      expect(
-        (await tickets(tx, id)).find((item) => item.workingOrderLineId === choice.id),
-      ).toMatchObject({ firedAt: expect.any(String) });
-    });
-  });
-  it("keeps a second lunch's later course held when its quantity increases", async () => {
-    const venue = await setupSplitExtrasVenue();
-    const id = venue.party.tabId;
-    await withTransaction(suite.db, async (tx) => {
-      await lunch(tx, venue);
-      const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
-      await updateOrderLine(
-        tx,
-        venue.cfg,
-        id,
-        (await rows(tx, id))[0]!.lineNo,
-        { quantity: "2" },
-        bill!.revision,
-        OPERATOR,
-      );
-      const lines = await rows(tx, id);
-      const items = await tickets(tx, id);
-      expect(
-        lines.filter((line) => line.parentLineId === null).map((line) => line.quantity),
-      ).toEqual([1000, 1000]);
-      expect(
-        items
-          .filter(
+    },
+  );
+  it.each([false, true])(
+    "keeps copied courses held and unqueued choices unsent (later choice: %s)",
+    async (late) => {
+      const venue = await setupSplitExtrasVenue();
+      const id = venue.party.tabId;
+      await withTransaction(suite.db, async (tx) => {
+        const { picks } = await lunch(tx, venue);
+        if (late) {
+          const [before] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+          await updateOrderLine(
+            tx,
+            venue.cfg,
+            id,
+            (await rows(tx, id))[0]!.lineNo,
+            { extras: picks([venue.products.cheese, venue.products.onionRings]) },
+            before!.revision,
+            OPERATOR,
+          );
+        }
+        const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+        await updateOrderLine(
+          tx,
+          venue.cfg,
+          id,
+          (await rows(tx, id))[0]!.lineNo,
+          { quantity: "2" },
+          bill!.revision,
+          OPERATOR,
+        );
+        const lines = await rows(tx, id);
+        const items = await tickets(tx, id);
+        expect(
+          lines.filter((line) => line.parentLineId === null).map((line) => line.quantity),
+        ).toEqual([1000, 1000]);
+        expect(
+          items
+            .filter(
+              (item) =>
+                lines.find((line) => line.id === item.workingOrderLineId)!.productId ===
+                venue.products.chips,
+            )
+            .map((item) => item.firedAt),
+        ).toEqual(late ? [] : [null, null]);
+        expect(
+          items.filter(
             (item) =>
               lines.find((line) => line.id === item.workingOrderLineId)!.productId ===
-              venue.products.chips,
-          )
-          .map((item) => item.firedAt),
-      ).toEqual([null, null]);
-      expect(
-        items.filter(
-          (item) =>
-            lines.find((line) => line.id === item.workingOrderLineId)!.productId ===
-            venue.products.cheese,
-        ),
-      ).toHaveLength(2);
-    });
-  });
+              venue.products.onionRings,
+          ),
+        ).toEqual([]);
+        expect(
+          items
+            .filter(
+              (item) =>
+                lines.find((line) => line.id === item.workingOrderLineId)!.productId ===
+                venue.products.cheese,
+            )
+            .map((item) => item.firedAt),
+        ).toEqual([expect.any(String), expect.any(String)]);
+      });
+    },
+  );
   it("holds lunch dishes added through the round writer until asked", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(suite.db, async (tx) => {

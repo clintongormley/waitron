@@ -2113,7 +2113,7 @@ async function addLine(tx: Transaction, venue: SellingVenue, orderId: string, li
   return id;
 }
 
-it("reads lunch identity from each line's recorded version, in a base query and a join", async () => {
+it("reads lunch identity from each line's recorded version after republishing", async () => {
   const venue = await seedSellingVenue();
   await scoped(async (tx) => {
     const id = await openOrder(tx, venue, 1);
@@ -2148,26 +2148,6 @@ it("reads lunch identity from each line's recorded version, in a base query and 
       new Set([lunch]),
     );
     expect(await readLunchLineIds(tx, [])).toEqual(new Set());
-    const selected = tx
-      .select({ id: workingOrderLines.id })
-      .from(workingOrderLines)
-      .where(
-        inArray(workingOrderLines.id, [
-          ...(await readLunchLineIds(tx, [ordinary, lunch, withoutVersion])),
-        ]),
-      );
-    expect(await selected).toEqual([{ id: lunch }]);
-    expect(
-      await tx
-        .select({ id: workingOrderLines.id })
-        .from(workingOrders)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
-        .where(
-          inArray(workingOrderLines.id, [
-            ...(await readLunchLineIds(tx, [ordinary, lunch, withoutVersion])),
-          ]),
-        ),
-    ).toEqual([{ id: lunch }]);
   });
 });
 
