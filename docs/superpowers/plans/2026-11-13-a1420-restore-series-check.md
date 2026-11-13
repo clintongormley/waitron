@@ -7,7 +7,11 @@
 > that plan stands. Implementers are dispatched as `subagent_type: "implementer"`. Fiscal clock
 > rule: full review path, two Codex run-it reviews per PR, and the owner lands each PR.
 
-**Status: draft 4, 2026-11-13.** Draft 2 (`2bd199bed6`, cleared by the watcher 08:55) let any
+**Status: draft 5, 2026-11-13, cleared by the watcher at 12:31 with five changes, all folded in
+here with no further read (its note: "Fold these in, no further plan read").** Draft 5 also takes
+the owner's 12:28 answer to Q2: AEAT's time no longer counts at all, so PR 4 (the time service in
+place of AEAT) now lands FIRST, before PR 3a, and PR 3b is split into 3b1 and 3b2 (the watcher's
+change 2). Draft 4 (`59de68ec88`) is what the watcher read. Draft 2 (`2bd199bed6`, cleared by the watcher 08:55) let any
 device on the venue's network confirm a restore's start with no sign-in. The owner replaced that
 at 09:47 and 09:52 (below). Draft 3 (`d4d000487b`) rewrote PR 3 to the ruling; one fresh-context
 read of it found 0 Critical, 5 Important, 6 Minor, all taken here: PR 3 is split into 3a and 3b,
@@ -16,20 +20,20 @@ confirmation replaces the 30-second one, and Confirm compares again when pressed
 already holds work built to draft 2; "What becomes of the built commits" says what to keep. Base:
 main `f1deb720ed`, which holds #3025 (`8da04096ef`). The clock code PR 3 builds on is stacked,
 unpushed, at `feat/a1506-2-till-time-wrong` (`d6a5e273fc`), which does not hold #3025; a line number
-marked "stack" is on that commit, "branch" on PR 3b's head `42860d1df9`, and every other one on
+marked "stack" is on that commit, "branch" on PR 3b2's built head `42860d1df9`, and every other one on
 `f1deb720ed`. Every receipt is read, not run, unless it says RUN.
 
-**UNVERIFIED (no approval recorded): this plan's own choices**: the done screen holding the node
-recovery key through the wait (D-key), carrying a select made under any second clock across the
-same boot (D-carry), the refusal reason `confirmation_required`, which refusals wait (D-wait), the
-waiting page's words, and dropping A1420's Task 16 (D6′). They stand until the watcher clears or
-flips them.
+**Cleared by the watcher (12:31), not approved by the owner: this plan's own choices**: the done
+screen holding the node recovery key through the wait (D-key), carrying a select made under any
+second clock across the same boot (D-carry), the refusal reason `confirmation_required`, which
+refusals wait (D-wait), the waiting page's words, and dropping A1420's Task 16 (D6′). The owner may
+flip any of them when landing.
 
 **Amended constraint.** The A1420 plan's "The series check is untouched except for Q1. No device,
 till or administrator confirmation is ever read by it (R5)" now reads: **"The series check changes
 only as `2026-11-13-a1420-restore-series-check.md` says: it reads the time service, and a device's
-time only once the person who proved themselves on that series step confirms it; never AEAT (from
-PR 4), and never the start check's confirmations (its devices, tills or administrators)."**
+time only once the person who proved themselves on that series step confirms it (from PR 3a);
+never AEAT (from PR 4), and never the start check's confirmations (its devices, tills or administrators)."**
 
 ## Why this revision
 
@@ -43,9 +47,13 @@ PR 4), and never the start check's confirmations (its devices, tills or administ
   changing the time to the device time can probably be done by any device user), and the other case
   is where we are doing something that requires starting a new invoice series, in which case we
   should never just accept another device's match automatically. instead, we should always ask for
-  confirmation, and that confirmation should be protected."
+  confirmation, and that confirmation should be protected." Its last sentence: "we always ask for
+  the recovery key first, don't we? in which case the user has already authenticated themselves,
+  no?"
 - **The owner, 2026-11-13 09:52**, verbatim: "no, let's keep it at two devices then, and i agree
-  with the rest". "The rest" is the watcher's 09:49 proposal (watcher's 09:52 note): (1) an
+  with the rest". "The rest" is the watcher's 09:49 proposal, so This device on these pages and the
+  list of proofs below are the watcher's words, agreed by the owner in that sentence (watcher's 09:52
+  note): (1) an
   ordinary start is unchanged; (2) any step that names a new series, when internet time cannot
   confirm the box, never accepts a device's match by itself: "The page shows both times and the
   person confirms (or sets the box from their device, #3025), and only a person who has already
@@ -59,6 +67,10 @@ PR 4), and never the start check's confirmations (its devices, tills or administ
   [...] Only if it cannot: fall back to asking for the recovery key again (~40 lines)"; (4) "Drop
   the unsigned waiting-page reading (old Q1 recommendation) and Q2 as written; no sign-in-free
   route names a series."
+- **The owner, 2026-11-13 12:28** (watcher's 12:28 note), asked "Until PR 4 lands, should AEAT's
+  reply about the time still count as 'internet time' that lets setup carry on without asking? (a)
+  Yes, as today … (b) No, from now on. You said 'we don't bother about AEAT', so without the time
+  service a person confirms.", answered: "b".
 
 ## Words used here
 
@@ -66,8 +78,10 @@ PR 4), and never the start check's confirmations (its devices, tills or administ
   promotion, a conflict switch), a second clock must agree with the box's within 30 seconds
   (`compareHourClocks`, `packages/fiscal-verifactu/src/hour-clock.ts:63`). The series is named from
   the box's minute, so a wrong clock could repeat a name.
-- **Internet clock**: today AEAT's web server (`hour-clock-internet.ts`); from PR 4 the host's own
-  internet time keeper (the NTP protocol) answering "synchronised" (`deploy/box/waitron-box.sh:61-65,95`).
+- **Internet clock**: today AEAT's web server (`hour-clock-internet.ts`); from PR 4, which lands
+  first, only the host's own internet time keeper (the NTP protocol) answering "synchronised"
+  (`deploy/box/waitron-box.sh:61-65,95`). AEAT's time is never read for the series check again
+  (owner, 12:28, "b").
 - **Proved on that page**: the proof each series step already checks on every request: the setup
   owner's pass (another device also types the setup password), the backup's node recovery key
   (restore; its series step refuses without it, `setup-recovery-preparation-api.ts:66-74`), a
@@ -135,39 +149,49 @@ run: a real power cut, and the box itself.
 
 ## What a person can do when this lands
 
-- **PR 3a (lands first).** On the setup, restore, handover and conflict-switch pages, when no
-  internet clock checks the box, a matching device time no longer carries on by itself: the page
-  shows both times and the person presses **Confirm the time** (or **This device** when they
-  differ). With an internet clock, nothing changes. The restore's start is unchanged (it still asks
-  AEAT and fails towards the start-failure page when it cannot).
-- **PR 3b.** The restore's start reuses the restore page's choice when the box has not been
-  switched off since "Restore backup". If it has, the start waits instead of failing: the done
-  screen that pressed "Restore backup" shows both times again and asks the same person to confirm,
-  with no key typed; every other page on the box's address says the box is waiting and offers the
-  node recovery key from the backup's paper to confirm from that device.
-- **PR 4.** Nothing asks AEAT's web server for the time any more. A box whose time service is
-  synchronised names its series with no confirmation; otherwise a confirmed device time, as in 3a.
+- **PR 4 (lands first).** Nothing asks AEAT's web server for the time any more. A box whose time
+  service is synchronised names its series with no question; otherwise a matching device time
+  carries on by itself, as today, until PR 3a.
+- **PR 3a.** On the setup, restore, handover and conflict-switch pages, when the time service does
+  not vouch for the box, a matching device time no longer carries on by itself: the page shows both
+  times and the person presses **Confirm the time** (on first setup, Proceed; D-confirm), or **This
+  device** when they differ. With the time service synchronised, nothing changes.
+- **PR 3b1.** A restore whose start has no time service finishes when the box was not switched off
+  since "Restore backup": the start reuses the restore page's choice (D-carry).
+- **PR 3b2.** If the box was switched off, the start waits instead of failing: the done screen that
+  pressed "Restore backup" shows both times again and asks the same person to confirm, with no key
+  typed; every other page on the box's address says the box is waiting and offers the node recovery
+  key from the backup's paper to confirm from that device. The start also carries on by itself
+  within about 15 s of the time service synchronising.
 
-**Order: PR 3a, PR 3b, then PR 4 soon after, all after A1420 PRs 5-6 (#2964, #3003), 1b, A1506
-PRs 1-2 and A1420 PR 2, as A1506 orders them.** PRs 3b and 4 use `clockServiceSynchronised`
-(`clock-service-reading.ts:25-33`, stack). PR 4 before 3b would send a restore at a venue that
-blocks NTP but lets web traffic out (R4 in the A1420 plan) to the start-failure page, where today
-AEAT lets it through. PR 3a stands alone.
+**Order: PR 4, PR 3a, PR 3b1, PR 3b2, all after A1420 PRs 5-6 (#2964, #3003), 1b, A1506 PRs 1-2
+and A1420 PR 2, as A1506 orders them.** PR 4 and PR 3b2 use `clockServiceSynchronised`
+(`clock-service-reading.ts:25-33`, stack). **What the owner's "b" changes (the watcher asked which):
+PR 4 moves earlier and shrinks.** It moves earlier because PR 3a can no longer treat AEAT as an
+internet clock, and without PR 4 the restore's start, where nobody can confirm, would have no
+second clock at all. It shrinks because its 15-second look at the time service in `runEntry`'s
+wait goes to PR 3b2, which builds that wait (no wait exists before 3b2), and 3b2 never builds the
+blind 60-second try draft 4 kept for AEAT. **The cost of the order, stated for the owner:** from PR
+4 until PR 3b1 lands, a restore at a venue that blocks NTP but lets web traffic out fails at its
+start to the start-failure page (Retry), where today AEAT lets it through (R4 in the A1420 plan);
+from 3b1 until 3b2, only when the box is switched off between "Restore backup" and its start. This
+is the owner's "b" ("without the time service a person confirms") at the one step where nobody can
+confirm until 3b2.
 
 ## Receipts
 
 **S1. Every caller of the series check.** `compare` always adds AEAT's reading
 (`hour-setup-clock.ts:46,128`); a browser on the box's own screen does not count (`same_machine`).
 
-| Caller | Who is there, proved how | Second clocks today | PR 3a / 3b | After PR 4 |
+| Caller | Who is there, proved how | Second clocks today | After PR 4 (first) | After PR 3a-3b2 |
 | --- | --- | --- | --- | --- |
-| First setup page (`initial-hour-setup.ts:223-246` → `hour-preparation.ts:173-184`) | setup owner; another device types the setup password (`setup/first-hour.ts:65-66`) | browser, AEAT | AEAT, or browser + Confirm | time service, or browser + Confirm |
-| First setup command (`initial-hour-setup.ts:93-115`, `browser: null`) | an operator at a terminal | AEAT | unchanged | time service only |
-| Restore page (`hosted-hour-recovery.ts:110-128`) | holder of the node recovery key | browser, AEAT | AEAT, or browser + Confirm | time service, or browser + Confirm |
-| **Restore's start** (`hosted-hour-recovery.ts:140-150`, `compare(…, null, { onBox: true })`) | nobody | AEAT | 3a: AEAT; 3b: the page's select if same boot (D-carry), AEAT, or a confirmation from the done screen or the typed key (D-key) | the same, time service for AEAT |
-| Restore command (`restore-command.ts:393` → `recovery-entry.ts`) | an operator at a terminal | AEAT | unchanged | time service only |
-| Handover page (`handover-screen.ts:198-235` → `handover-preparation.ts:146-170`) | `node.manage` sign-in | browser, AEAT | AEAT, or browser + Confirm | time service, or browser + Confirm |
-| Conflict switch (`dashboard/conflict-recovery.ts:278-300`) | administrator | browser, AEAT | AEAT, or browser + Confirm | time service, or browser + Confirm |
+| First setup page (`initial-hour-setup.ts:223-246` → `hour-preparation.ts:173-184`; selects through `candidates`, `:252-268`) | setup owner; another device types the setup password (`setup/first-hour.ts:65-66`) | browser, AEAT | time service, or browser | time service, or browser + Proceed as the confirmation (3a) |
+| First setup command (`initial-hour-setup.ts:93-115`, `browser: null`) | an operator at a terminal | AEAT | time service only | unchanged |
+| Restore page (`hosted-hour-recovery.ts:110-128`) | holder of the node recovery key | browser, AEAT | time service, or browser | time service, or browser + Confirm (3a) |
+| **Restore's start** (`hosted-hour-recovery.ts:140-150`, `compare(…, null, { onBox: true })`) | nobody | AEAT | time service only (the gap in Order) | 3b1: also the page's select if same boot (D-carry); 3b2: also a confirmation from the done screen or the typed key (D-key), and a wait |
+| Restore command (`restore-command.ts:393` → `recovery-entry.ts`) | an operator at a terminal | AEAT | time service only | unchanged |
+| Handover page (`handover-screen.ts:198-235` → `handover-preparation.ts:146-170`) | `node.manage` sign-in | browser, AEAT | time service, or browser | time service, or browser + Confirm (3a) |
+| Conflict switch (`dashboard/conflict-recovery.ts:278-300`) | administrator | browser, AEAT | time service, or browser | time service, or browser + Confirm (3a) |
 
 The `/management-api/promote/preparation` route (`promote-api.ts:126`) has no client
 (`git grep -n "management-api/promote"` finds only the route and `read-only-exemptions.ts:50,57`).
@@ -221,33 +245,59 @@ read reports a probe that admitted 29 000 ms and refused 31 000 ms `clock_stale`
 
 ## Decisions
 
-**D5′ (replaces D5; PR 4). The second clocks.** The series check takes one of: **(1)** the time
+**D5′ (replaces D5; PR 4, which lands first). The second clocks.** The series check takes one of: **(1)** the time
 service answering synchronised, read fresh through the host service at that comparison (at most
 2 s, `DEFAULT_STATUS_MS`), never the shared one-minute reading; it carries on by itself; **(2)** a
-device's time that the person proved on that page confirms (D-confirm), or at the restore's start a
-carried select (D-carry) or a confirmation kept by the waiting app (D-key). AEAT is never read;
+device's time: by itself in PR 4 (as today), confirmed by the person proved on that page from PR 3a
+(D-confirm), or at the restore's start a carried select (D-carry, 3b1) or a confirmation kept by
+the waiting app (D-key, 3b2). AEAT is never read (owner, 12:28, "b");
 `hour-clock-internet.ts` and its test are deleted. A synchronised answer becomes an observation of
 source `internet` equal to the box's clock with no uncertainty, so `compareHourClocks` keeps
 judging. **While it is present, a device that disagrees does not refuse** (owner rule 1,
 2026-11-11: "we trust NTP over everything else").
 
 **D-confirm (PR 3a). A device's time counts only once the person confirms it.** `select` gains
-`confirmed?: true`. When the comparison it names holds no usable `internet` observation,
+`confirmed?: true`. When the comparison it names holds no usable `internet` observation (after PR
+4, the time service answering synchronised is the only one),
 `select` without it refuses `sif.allocation_invalid`, reason `confirmation_required`; the check
 lives in the module (`hour-selection.ts`, beside `clockRefusal` at `:403`), so every page and every
 host gets it. Each page already sends its proof with `select`, so "only a person who has already
 proved themselves on that page" holds with no new sign-in. Pages: on agreement with no internet
 clock, the step shows both times (`renderClockRows`, `clock-wait.ts:522`) and **Confirm the
-time**. The press compares again (a fresh challenge and `compare-clocks`) and sends `select` with
+time**. **The press flow is built once, in the shared `ClockWait` (`setup/clock-wait.ts:263`)**
+(the watcher's change 3): a new `{ kind: "confirm" }` problem draws both times, `confirmWhy` and
+the button, and one method runs the press (fresh challenge, `compare-clocks`, then answers whether
+to send `confirmed: true` or shows the disagreement step); `first-hour.ts` and `recovery-hour.ts`
+(restore and handover) call it. The dashboard conflict switch has no `ClockWait`
+(`dashboard/conflict-recovery.ts`) and keeps its own copy of the flow. The press compares again (a fresh challenge and `compare-clocks`) and sends `select` with
 `confirmed: true` only if that comparison still agrees with no internet clock; if it now
 disagrees, the page shows the disagreement step instead. So a press minutes after the first
 comparison is never refused `clock_stale` (S11). A successful **This device** counts as the
 confirmation, so the re-comparison after it selects by itself as today (owner, 2026-11-12 15:28:
 "once they choose the time, you can continue with the process"). The box's own screen still does
-not count (`same_machine`). Disagreement stays as #3025 left it: The server / This device / Both
+not count (`same_machine`).
+
+**First setup: Proceed is the confirmation, and `candidates` carries it** (the watcher's change 1).
+First setup selects through `candidates`, which today admits exactly `{ comparisonId }`
+(`initial-hour-setup.ts:252-268`, `exact(proposal, ["comparisonId"])`), so a `confirmed` field
+would be refused `malformed_allocation`. PR 3a admits `{ comparisonId, confirmed: true }` there
+(`true` only; any other value or key still refused) and passes it to `select`. The forwarders
+carry the proposal untouched and need no change (read): the setup app's
+`initial-setup-screen.ts:151` → `first-setup-session.ts:481` → `api/client.ts:693` →
+`setup-first-fiscal-api.ts:506-515` (exact `module`, `proposal`, `reconfirmation`; the proposal is
+only size-checked, `boundedPublic`) → `first-setup-preparation.ts:159` → `seat.candidates`. **Where
+Confirm sits against Proceed:** first setup already has one deliberate press, Proceed, which
+re-reads the clocks (`#run` → `readClocks`, `first-hour.ts:279`) and is followed by the setup
+password's reconfirmation. So first setup gets no second button: when the comparison before
+Proceed agrees with no internet clock, the step shows both times and `confirmWhyProceed` above Proceed
+(today the clock step stays hidden before Proceed, `first-hour.ts:319`), and Proceed is the
+confirmation; the page sends `confirmed: true` only when the press's fresh comparison still agrees
+with no internet clock. A waiting answer's automatic re-checks after a press keep sending it; a
+wait the box recorded before this page loaded (`#recordedWait`) sends none, is refused
+`confirmation_required`, and shows the step with Proceed. Disagreement stays as #3025 left it: The server / This device / Both
 times are wrong. With an internet clock, pages carry on by themselves as today.
 
-**D-carry (PR 3b). The restore's start uses the page's select while the box has not been switched
+**D-carry (PR 3b1). The restore's start uses the page's select while the box has not been switched
 off.** A select writes the box's boot reading into the intent it stores (`{ bootId, uptimeMs,
 wallMs }`, read through a new host member `readBoot?()`; no boot id → nothing written). At the
 restore's start, `resume` builds a usable observation from it when the boot id now is the same and
@@ -258,10 +308,14 @@ on unstepped since. A different or missing boot id, or a step, leaves the start 
 clocks and so to the wait. No time limit: the owner's condition is only "provided the box has not
 been switched off since" (Q1).
 
-**D-key (PR 3b). After a power cut the start asks the same browser, which keeps the key it
+**D-key (PR 3b2). After a power cut the start asks the same browser, which keeps the key it
 already holds.** On a successful "Restore backup" the setup app keeps the node recovery key from
 the request, in memory only (never storage), and hands it to the done screen instead of dropping it
-(`setup-app.ts:1838-1839,1913-1915,2012`); a refused request still drops it as today. The box
+(`setup-app.ts:1838-1839,1913-1915,2012`); a refused request still drops it as today. **The done
+screen drops the key** (the watcher's change 4: that key also opens a restore or a promotion,
+`operation-authentication.ts:49`) **when its ready poll first answers ready** (`#pollOnce` sets
+`ready`, `done-screen.ts:136-144`), **and when it leaves the page** (`disconnectedCallback`,
+`:118`). A reload or a closed tab loses it with the page's memory. The box
 already keeps that key as a file through the restart and a power cut (`NODE_KEY`,
 `restore-request.ts:288`, read at the start by `readStagedNodeKey`, `:518`, branch). While the start
 waits, the waiting app's clock routes (`/restore-clock/challenge`, `/compare`, `/confirm`, `/set`)
@@ -290,15 +344,15 @@ box's boot reading (`{ bootId, uptimeMs, wallMs }`), as D-carry keeps a select, 
 moved within 1 s of `/proc/uptime`. A new confirmation starts a try at the next 15-second look,
 outside the once-a-minute limit.
 
-**D-wait (replaces D7's scope; D7's source stands). UNVERIFIED.** At the restore's start, three
+**D-wait (PR 3b2; replaces D7's scope; D7's source stands).** At the restore's start, three
 refusals wait, uncounted: `second_clock_missing`, `clock_disagreement`, `clock_corrected`.
 `confirmation_required` cannot reach the start (it reads no `select`). `clock_stale`,
 `clock_unconfirmed` and `minute_not_later` count as failures, as today. **The retry runs in the
 same process**, a loop in `runEntry` around `runStagedRestore`. A try is not cheap (S5), so the loop
 tries again only for a reason: every 15 seconds it looks for a confirmation kept since the last try
-(D-key), which starts a try at once, or (PR 4) the time service answering synchronised. Other tries
-happen at most once a minute: PR 3b keeps a try every 60 seconds with no reason, because only a try
-tells whether AEAT answers now; PR 4 deletes it. If a try refuses again with a confirmation kept (a
+(D-key) or the time service answering synchronised, either of which starts a try at once. There is
+no try without a reason: draft 4's blind try every 60 seconds existed only to ask AEAT, which PR 4
+has removed. If a try refuses again with a confirmation kept (a
 step since it, or a power cut), the confirmation is dropped and the done screen asks again. Each try writes its attempt as today and the wait takes it back
 (`withoutAttempt`), so a power cut during a wait is not counted. One log line per wait,
 `server.start_waiting_for_clock` with the reason.
@@ -308,61 +362,62 @@ explains (words below), and every other request answers 503 `server.waiting_for_
 It takes no device time from anyone without the key; with the key typed, it shows the same step as
 the done screen (D-key).
 
-**D6′. The start-failure page's cause. UNVERIFIED.** D6's only cause came from AEAT's
+**D6′ (PR 3b2). The start-failure page's cause.** D6's only cause came from AEAT's
 `clock-corrected` reason; that refusal now waits, and Task 16 is not built. The code-only words
 for `sif.allocation_invalid` change: they name the page's own controls, traced for a page with and
 without verifiers (SDD ledger ruling I1 on the branch: the built sentence names a restore button the
 page does not have).
 
 **The watcher's example: a standby promoted at 23:00 behind a firewall that blocks NTP.** The
-person opens the spare's handover page on a phone and signs in (`node.manage`). Before PR 4, AEAT
-(if web traffic leaves) carries on by itself (Q2); otherwise, and always after PR 4, the page shows the
-phone's and the spare's times and the person presses Confirm the time, or This device when they
+person opens the spare's handover page on a phone and signs in (`node.manage`). From PR 3a the page
+shows the phone's and the spare's times and the person presses Confirm the time, or This device when they
 differ. On the spare's own screen the page says it does not count. After promotion, A1420's start
 check holds payments until two tills or handhelds agree within 5 s or a person confirms (D1).
 
 **#3025 has landed (`8da04096ef`), so:** (1) PR 3b's branch is stacked on `d6a5e273fc`, which does
-not hold it; its rebase onto PR 3a meets #3025 in `hour-setup-clock.ts` (14a's `measureDeviceReading` replaces
+not hold it; its rebase onto PR 3b1 (as PR 3b2) meets #3025 in `hour-setup-clock.ts` (14a's `measureDeviceReading` replaces
 `take`'s measuring too, `:113-127`), `hosted-hour-recovery.ts` (`set-clock` beside `resume`) and
 `operation-preparation.ts` (`setBoxClock` beside the new members). (2) The waiting step's This
 device reuses #3025's setup-mode setter and its note (S9), so no new setter. (3) Its refusal lines
 stay; its `witnessed` line goes with #3003, as its finish note says; after PR 4 its `synchronised`
 line is reached only if the box synchronises between a comparison and the press. (4) The A1482
-sentence in root `CLAUDE.md` §5 that it is "not owner-approved" is now covered by the owner's 09:52
-agreement ("or sets the box from their device, #3025"); PR 3a rewrites it (Sentences changed).
+sentence in root `CLAUDE.md` §5 that it is "not owner-approved" is now covered: the watcher's 09:49
+proposal named it ("or sets the box from their device, #3025") and the owner agreed to that
+proposal at 09:52 ("i agree with the rest"); PR 3a rewrites the sentence (Sentences changed).
 
-## Questions for the watcher (cases the ruling leaves open)
+## Answers (were the watcher's questions)
 
-**Q1. How old may a same-boot select or confirmation be at the restore's start?** **Recommended:
-no limit**, the owner's words ("provided the box has not been switched off since"). Cost: a clock
-that keeps no internet time drifts while it runs; one confirmed days earlier may then be further
-out than 30 seconds (reasoned, not measured). A minute already in a history the box reads is still
-never taken. Alternative: past 24 hours, ask again on the done screen, about 5 lines.
+**Q1. How old may a same-boot select or confirmation be at the restore's start? No limit** (the
+watcher, 12:31: "no age limit on a same-boot confirmation (owner: "provided the box has not been
+switched off")"). Cost, reasoned not measured: a clock that keeps no internet time drifts while it
+runs, so one confirmed days earlier may be further out than 30 seconds. A minute already in a
+history the box reads is still never taken.
 
-**Q2. Between PR 3a and PR 4, does AEAT's agreeing time count as "internet time" that carries on
-by itself? UNVERIFIED.** **Recommended: yes**, as today, until PR 4 swaps it for the time service,
-and PR 4 lands soon after PR 3b. Cost: for that gap, a box that reaches AEAT names its series with
-no person's confirmation even when NTP is blocked. Against: the owner's "we rely on NTP only, we
-don't bother about AEAT" (2026-11-10); the other answer makes PR 3a also add the time service,
-most of PR 4.
+**Q2. Does AEAT's agreeing time count as internet time before PR 4? No: the owner chose "b" at
+12:28**, overriding the reviewer's "yes". Folded in by moving PR 4 first (Order).
 
-**Choices made without a question** (the watcher may flip each): D-carry carrying an
-internet-admitted select too; `confirmation_required` as a reason under `sif.allocation_invalid`;
-a confirmation kept only when the times agree; D-key keeping the key in the tab rather than a
-separate pass; D-wait's reasons; D5′'s fresh read per comparison; D5′'s "a synchronised box
-overrules a disagreeing device"; D-host's `timedatectl` for the setup command (PR 4); D6′ dropping
-Task 16.
+**Choices made without a question, cleared by the watcher at 12:31** (the owner may flip each):
+D-carry carrying an internet-admitted select too; `confirmation_required` as a reason under
+`sif.allocation_invalid`; a confirmation kept only when the times agree; D-key keeping the key in
+the tab rather than a separate pass; D-wait's reasons; D5′'s fresh read per comparison; D5′'s "a
+synchronised box overrules a disagreeing device"; D-host's `timedatectl` for the setup command (PR
+4); D6′ dropping Task 16; Proceed as first setup's confirmation (new in draft 5, from the watcher's
+change 1).
 
 ## Words (English and Spanish change together)
 
-Series steps (PR 3a; `clockWaitStrings`, `clock-wait.ts`, so all four pages share them):
+Series steps (PR 3a; `clockWaitStrings`, `clock-wait.ts`, shared by the setup pages; the conflict switch keeps its own copy beside its `conflict_recovery.*` strings):
 
 | Key | EN | ES |
 | --- | --- | --- |
 | confirmWhy | The server could not check its time over the internet. Check that both times below are right, then press Confirm the time. | El servidor no ha podido comprobar su hora por internet. Comprueba que las dos horas de abajo son correctas y pulsa Confirmar la hora. |
 | confirm | Confirm the time | Confirmar la hora |
+| confirmWhyProceed (first setup) | The server could not check its time over the internet. Check that both times below are right before you press Proceed. | El servidor no ha podido comprobar su hora por internet. Comprueba que las dos horas de abajo son correctas antes de pulsar Continuar. |
 
-Done screen while the start waits (PR 3b; tills say "server", so does the setup app):
+Proceed's names are the page's own (`proceed`, `setup/check-venue.ts:14,33`: "Proceed",
+"Continuar").
+
+Done screen while the start waits (PR 3b2; tills say "server", so does the setup app):
 
 | Key | EN | ES |
 | --- | --- | --- |
@@ -371,7 +426,7 @@ Done screen while the start waits (PR 3b; tills say "server", so does the setup 
 
 The button's names are the setup app's own (`restore.submit`, `apps/setup/src/i18n/strings/restore.ts:70,253`).
 
-Waiting page for every other visitor (PR 3b):
+Waiting page for every other visitor (PR 3b2):
 
 | Key | EN | ES |
 | --- | --- | --- |
@@ -381,185 +436,20 @@ Waiting page for every other visitor (PR 3b):
 The key field reuses the restore page's label and its refusal line. Start-failure page: D6′. PR 4's setup
 and command words: as draft 2 (unchanged, kept below in Task 13b′).
 
-## PR 3a — a person confirms the time for every new series
+## Building on the unpushed stack
 
-A new branch, `feat/a1420-3a-confirm-series`, from a base holding both the stack and #3025 (main
-once the stack's PRs have landed, as Order says; 14c′'s This device cases need #3025). Files:
-`packages/fiscal-verifactu/src/` `hour-selection.ts`, `hosted-hour-recovery.ts`, `hour-preparation.ts`,
-`conflict-recovery-contract.ts`, `setup/clock-wait.ts`, `setup/first-hour.ts`, `setup/recovery-hour.ts`,
-`dashboard/conflict-recovery.ts`; root `CLAUDE.md` §5 (C3a).
+PR 4 needs `clockServiceSynchronised` from the stack (A1506 PR 2, `d6a5e273fc`) and #3025 from
+main, and no branch holds both until the stack lands. Until then, build on a local integration
+commit, never pushed: a branch at the stack's head with `origin/main` merged in, its conflicts
+resolved as #2964's latest rebase resolved the same files. PR 4, 3a, 3b1 and 3b2 stack on it in
+that order. Once the stack has landed, each moves with `git rebase --onto <its new base>
+<integration commit>`, and its focused tests run again before its push.
 
-### Task 14b′: `select` needs a confirmation without an internet clock (fiscal-verifactu)
+## PR 4 — the time service replaces AEAT in the series check (lands first)
 
-- [ ] Tests first (`hour-selection.test.ts`, `hosted-hour-recovery.test.ts`, the `hour-preparation`
-  cases): browser agrees, internet unavailable, no `confirmed` → `confirmation_required`; with
-  `confirmed: true` → selected; internet usable and no `confirmed` → selected (control);
-  `conflict-recovery-contract` parses `confirmed: true` and refuses any other value. Every existing
-  case that selects on a browser alone with no usable internet adds `confirmed: true`; any other
-  assertion change is a STOP.
-- [ ] Implement in `hour-selection.ts`; `clockProblem` maps `confirmation_required` to a new
-  `{ kind: "confirm" }` for the pages.
-- [ ] `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node
-  src/hosted-hour-recovery.test.ts src/hour-setup-clock.test.ts src/hour-clock.test.ts
-  src/hour-selection.test.ts src/conflict-recovery-contract.test.ts src/conflict-recovery-routes.test.ts
-  src/minute-selection-unknown-name.test.ts src/hour-recovery-preparation.relinquished.test.ts`,
-  `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node src/write-path.e2e.test.ts
-  inmutabilidad`, `pnpm --filter @waitron/composition exec vitest run
-  src/allocation-configuration.test.ts`, and the 16 `apps/server` files that send `select` (`git
-  grep -l 'action: "select"' -- 'apps/server/src/*.test.ts'`, at `f1deb720ed`:
-  `boot.handover-chart-moved-on`, `conflict-payment-recovery`, `handover-activation-repair`,
-  `handover-activation`, `handover-compare`, `handover-controlled.e2e`, `handover-dormant-setup`,
-  `handover-minute-history`, `handover-preparation`, `hour-promotion`, `hour-recovery-host`,
-  `hour-recovery-placement-1`, `-2`, `-3`, `hour-recovery-staged`, `live-conflict-recovery`), in
-  groups sized to `memory_pressure | grep free`. Most stub the internet clock usable (for example
-  `hour-promotion.test.ts:100`, `handover-preparation.test.ts:162`) and need no change; the run
-  finds the cases that select without it.
-
-### Task 14c′: setup, restore and handover pages show Confirm the time (fiscal-verifactu setup UI)
-
-- [ ] Tests first (browser): `recovery-hour` (restore and its use inside the handover screen) and
-  `first-hour`: agreement with no internet row shows both times and Confirm the time, and sends no
-  `select` until pressed; the press sends a fresh `clock-challenge` and `compare-clocks`, then
-  `select` with `confirmed: true` and the new comparison's id; a press 31 s after the first
-  comparison (fake clock) still selects (the control for S11); a press whose fresh comparison now
-  disagrees shows the disagreement step and sends no `select`; with an internet row the page
-  selects by itself (control); after This device answers `set`, the re-comparison selects with
-  `confirmed: true` and no press. Axe cases for the new state, both themes.
-- [ ] Words (series steps), English and Spanish.
-- [ ] `memory_pressure | grep free`, then `pnpm --filter @waitron/fiscal-verifactu exec vitest run
-  src/setup/clock-wait.browser.test.ts src/setup/first-hour.browser.test.ts
-  src/setup/recovery-hour.browser.test.ts src/setup/recovery-hour.a11y.browser.test.ts
-  src/setup/first-hour.a11y.browser.test.ts`.
-
-### Task 14c2′: the conflict switch shows Confirm the time (fiscal-verifactu dashboard UI)
-
-- [ ] Tests first: the same cases as 14c′ in the conflict-recovery dashboard suites (`git grep -l
-  conflict-recovery -- 'packages/fiscal-verifactu/src/dashboard/*.test.ts'`), where today's
-  `compare()` selects at once (`dashboard/conflict-recovery.ts:278-310`); its disagreement keeps
-  today's refusal words (it has no This device).
-- [ ] Words beside its own `conflict_recovery.*` strings, English and Spanish; C3a in root
-  `CLAUDE.md`; `docs/developers/conventions-data.md` beside `:4166-4168` (D-confirm).
-- [ ] The suites named, then `pnpm exec vitest run scripts/english-only.test.ts
-  scripts/claude-md-pointers.test.ts`.
-
-## PR 3b — a restore's start reuses the page's choice, and otherwise waits for the same person
-
-Work on `feat/a1420-3-restore-waits`, rebased onto PR 3a (which brings #3025). Files:
-`packages/module/src/` (device reading, host members), `packages/fiscal-verifactu/src/`
-`hour-setup-clock.ts`, `hosted-hour-recovery.ts`, `hour-selection.ts`; `apps/server/src/`
-`node-entry.ts`, `recovery-entry.ts`, `recovery-preparation.ts`, `restore-request.ts`,
-`start-clock-waiting.ts`, `errors.ts`, `i18n/`; `apps/setup/src/` `setup-app.ts`,
-`screens/done-screen.ts`, `i18n/strings/finish.ts`.
-
-### Task 14a′: rebase, and the host's device reading becomes a kept confirmation (module, fiscal-verifactu)
-
-- [ ] Rebase onto PR 3a. `take` (`hour-setup-clock.ts:113-127`) measures through
-  `measureDeviceReading`; the #3025 suites pass unedited (the control that nothing changed).
-- [ ] Rename `startClockReading?()` to `startClockConfirmation?()`, answering a kept confirmation
-  (the measured reading and its boot reading) or null; one comment: "a confirmation the restore
-  page's key holder made while the restore's start waits".
-- [ ] `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node
-  src/hosted-hour-recovery.test.ts src/hour-setup-clock.test.ts src/hour-clock.test.ts`,
-  `pnpm --filter @waitron/module exec vitest run src/device-clock.test.ts`.
-
-### Task 14d′: a select or a kept confirmation stands while the boot is the same (module, fiscal-verifactu, server wiring)
-
-- [ ] Tests first (`hosted-hour-recovery.test.ts`, through `configure!(host)` then
-  `resumeRecovery` then `prepare`): internet unavailable, a select made with `readBoot` answering
-  `{ id: "b1", ms: 1000 }` at wall `W`, start reading `{ "b1", 61 000 }` at `W + 60 000` →
-  admitted; boot id `"b2"` → `second_clock_missing` (control: switched off); same id, wall
-  `W + 62 000` → `second_clock_missing` (stepped); `readBoot` absent or id `null` at either end →
-  `second_clock_missing`. The same four for a `startClockConfirmation` kept two minutes before the
-  try (no 30-second life).
-- [ ] Add `readBoot?(): { ms: number; id: string | null }` to `ModuleOperationHost`; the intent
-  carries the reading; `resume` builds the observation from the intent or the confirmation (D-carry).
-- [ ] Wire `readBoot: bootReader().readBoot` into `createSelectedRecoveryPreparation`'s host
-  (`recovery-preparation.ts:234`), which both the restore page and the start build.
-- [ ] The commands of 14a′, and `pnpm --filter @waitron/server exec vitest run
-  src/hour-recovery-placement-2.test.ts src/hour-recovery-placement-3.test.ts
-  src/hour-recovery-staged.test.ts`.
-
-### Task 14e′: the done screen keeps the node recovery key (setup app)
-
-- [ ] Tests first (`setup-app-recovery-credentials.test.ts`): after a successful archive, bucket
-  and Cloud "Restore backup", the done screen holds the node recovery key that was sent, and no
-  other credential (the archive key, the kit); a refused request keeps none (the existing case);
-  nothing reaches `sessionStorage`, `localStorage` or `document.cookie`.
-- [ ] Implement in `setup-app.ts` (`:1838-1839,1913-1915,2012`) and a `nodeRecoveryKey` property on
-  the done screen.
-- [ ] `memory_pressure | grep free`, then `pnpm --filter @waitron/setup exec vitest run
-  src/setup-app-recovery-credentials.test.ts src/screens/done-screen.test.ts`.
-
-### Task 14f′: the waiting app takes a confirmation only with the key (server)
-
-- [ ] Tests first (`start-clock-waiting.test.ts`): pages and `/api/*` as built. `POST
-  /restore-clock/challenge`, `/compare`, `/confirm`, `/set` without the key or with a wrong one →
-  403 `promotion.break_glass_invalid`; with the staged key: `compare` answers both times;
-  `confirm` within 5 s of its challenge and agreeing → kept with the boot reading, and
-  `confirmation()` answers it until the next try; disagreeing → not kept, answer `differs`; past
-  5 s → not kept (control); from the box's own screen → not kept, `same_machine`; `set` calls the
-  setter with the measured offset and answers its answer. The page shows the key field and, once a
-  correct key is typed, the same step as the done screen. Render the page to a file and open it in
-  the workspace's Playwright Chromium, both themes and phone width (§4). No plain-HTTP case: the app
-  is routed only when the box's certificate passes its check (`recovery-listener.ts:151`).
-- [ ] Implement: keep the shell; drop `/restore-clock/reading` and the time-sending script;
-  `admitReading` becomes the key check, refusing by default, reading the staged key file; the
-  setter is `createSetupClockSet`.
-- [ ] `pnpm --filter @waitron/server exec vitest run src/start-clock-waiting.test.ts
-  src/start-clock-waiting-page.test.ts`, `pnpm exec vitest run scripts/errors-reachable.test.ts
-  scripts/personal-log-params.test.ts scripts/module-seams.test.ts scripts/english-only.test.ts`.
-
-### Task 14g′: the restore's start waits for a kept confirmation (server)
-
-- [ ] Tests (`node-entry.test.ts`, as built, renamed): keep cases 1-2 and the serve-before-take-back
-  and close-failure cases. Case 3 becomes: no confirmation → the stub is called again at 60 000 ms
-  and not before; a confirmation kept at 20 s → called at the next 15-second look; one kept 10 s
-  after a try → called at the next look, not a minute later (the confirmation is not lost, the
-  fresh read's Important 2); a try that refuses again drops the kept confirmation (control). The
-  page runner's host has no `startClockConfirmation` (`createInteractiveRecoveryPreparation`).
-- [ ] Implement in `runEntry` and the plumbing `recovery-entry.ts` → `recovery-preparation.ts`.
-- [ ] `pnpm --filter @waitron/server exec vitest run src/node-entry.test.ts src/restore-request.test.ts
-  src/hour-recovery-placement-2.test.ts src/hour-recovery-placement-3.test.ts`.
-
-### Task 15′: the done screen asks the same person (setup app)
-
-- [ ] Tests first (`done-screen.test.ts`): a poll answered 503 `server.waiting_for_clock` draws the
-  clock step (both times, Confirm the time, This device) and never navigates; Confirm sends the key
-  to `/restore-clock/confirm` and shows `done.clock_confirmed`; a later poll still answered
-  `server.waiting_for_clock` after a refused try draws the step again; This device sends it to
-  `/set`, then compares again; a 503 with another code waits (control); a 404 shows "ready"; after a
-  bucket rebuild the device steps stay below the clock step. Axe case for the new state.
-- [ ] `memory_pressure | grep free`, then `pnpm --filter @waitron/setup exec vitest run
-  src/screens/done-screen.test.ts src/screens/done-screen.a11y.test.ts`.
-
-### Task 16″: words, rules and documents
-
-- [ ] Start-failure words (D6′) and `recovery-surface.test.ts:618-633`. Docs:
-  `docs/operations/hour-recovery.md` (the restore's start: same boot carries on; otherwise the done
-  screen asks again, or the key on any page), `apps/server/src/guide/{en,es}/backup-recovery.md`
-  (one paragraph each), `docs/developers/conventions-data.md` beside `:4166-4168` (D-carry, D-key,
-  D-wait), root `CLAUDE.md` §5 (C3b).
-- [ ] `pnpm --filter @waitron/server exec vitest run src/recovery-surface.test.ts
-  src/guide-content.test.ts`, `pnpm exec vitest run scripts/guide-links.test.ts
-  scripts/claude-md-pointers.test.ts`.
-
-## What becomes of the built commits (`d6a5e273fc..42860d1df9`)
-
-| Commit | Built under draft 2 | Now |
-| --- | --- | --- |
-| `2e09d5e76a` 14a | `measureDeviceReading`, `AGREEMENT_MS`, `DeviceClockReading` in `@waitron/module`; `compare`'s `measured` argument; `startClockReading?()`; five cases | **Keep**, rebased onto 3a (14a′); member **renamed** and answers a kept confirmation; cases kept |
-| `fc04219437` 14a review | 31-s-ahead case, comments | **Keep** |
-| `436f1e4d38` 14b | waiting app: pages and `/api/*` 503, unsigned challenge and reading, inline script, 64 challenges, `admitReading` | **Change** (14f′): keep the shell, error code, words file's title, 64-challenge bound; **drop** the unsigned reading route and script; `admitReading` becomes the key check |
-| `35f2b5413b` 14b review | dates on both times, reload when the restore ends, two readings, 1 KiB body limit, times outside the live region | **Keep** body limit (on the key routes) and the date format (moves to the done screen); **drop** the two-readings rule and the script's reload |
-| `59998cbddc` 14b review 2 | clear on an unmeasured answer; noon-pinned page tests | **Drop** with the script |
-| `195a75159d` 14c | `runEntry` loop: three reasons, attempt taken back, log line, 15-s looks, 60-s blind try, close before `startServer`; plumbing | **Keep**; **change** the reason to try (a kept confirmation starts one, 14g′) and the plumbing's name |
-| `1c6b99d13f` 14c review | serve before taking the attempt back; a failed close keeps the refusal; required dependency in fixtures | **Keep** |
-| `45d8cbdcaa` 15 | done screen opens `/` on `server.waiting_for_clock` | **Drop**: navigating reloads the page and throws away the key held in memory; replaced by 15′ |
-| `e4032ae5e7` 15 review | after a rebuild, link the waiting page instead | **Drop** the link; **keep** the device steps on screen (15′) |
-| `97eb0396f6` 16′ | start-failure words, guides, docs | **Change** (16″): words per D6′, docs to this design |
-| `42860d1df9` 16′ review | narrowed comments and docs | **Change** with 16″; keep the recovery-page comment |
-
-## PR 4 — the time service replaces AEAT in the series check
+A new branch, `feat/a1420-4-time-service`, from a base holding both the stack and #3025 (Building
+on the unpushed stack, above). Usable when it lands: nothing reads AEAT's time for a series; a box
+whose time service is synchronised names its series with no question.
 
 ### Task 11′: the series check reads the time service (fiscal-verifactu)
 
@@ -575,21 +465,19 @@ Work on `feat/a1420-3-restore-waits`, rebased onto PR 3a (which brings #3025). F
   `second_clock_missing`; true → admitted, and `select` needs no `confirmed` (D-confirm).
   Afterwards `git grep -n "hour-clock-internet\|observeInternetHourClock\|authenticatedHourHead" --
   '*.ts'` prints nothing.
-- [ ] The fiscal-verifactu commands of 14b′.
+- [ ] The fiscal-verifactu commands of 14b′ (its third bullet).
 
 ### Task 12′: every host supplies the time service (module contract, server, provisioning)
 
 - [ ] Add `timeServiceSynchronised?()` to `ModuleOperationHost` (absent answers false);
   `hostedHourPreparation` and `hostedHourRecovery` hand it to `createSetupHourClock`. Wire the
   builders (`git grep -n "createModuleOperationHost("`) with `clockServiceSynchronised`; the setup
-  command's (`bin.ts:63`) with `timedatectl show -p NTPSynchronized --value`, false without it. In
-  `runEntry`'s wait, replace the blind 60-second try with a look at the time service every 15 s.
+  command's (`bin.ts:63`) with `timedatectl show -p NTPSynchronized --value`, false without it.
+  (`runEntry`'s wait, and its 15-second look at the time service, are PR 3b2's, Task 14g′.)
 - [ ] The restore command's line (Words of draft 2, below), and the same sentence in
   `deploy/README.md`'s restore command section (`:616-681`).
 - [ ] Tests first: `module-operation-host.test.ts`; `restore-request.test.ts` (the start's host and
-  the page's both read it); `node-entry.test.ts` (synchronised at a look → the stub is called; never
-  synchronised and no confirmation → not called over ten minutes, the control for the blind try's
-  removal); `restore-command.test.ts`; `first-setup-command.test.ts` (true reader names the series
+  the page's both read it); `restore-command.test.ts`; `first-setup-command.test.ts` (true reader names the series
   with no browser; false reader as control).
 - [ ] `pnpm exec vitest run scripts/module-seams.test.ts`, the named suites, then the fiscal core
   command.
@@ -623,40 +511,253 @@ Work on `feat/a1420-3-restore-waits`, rebased onto PR 3a (which brings #3025). F
 - [ ] `memory_pressure | grep free`, then the setup browser suites of 14c′, and
   `scripts/english-only.test.ts`, `scripts/claude-md-pointers.test.ts`.
 
+## PR 3a — a person confirms the time for every new series
+
+A new branch, `feat/a1420-3a-confirm-series`, from PR 4's head. Files:
+`packages/fiscal-verifactu/src/` `hour-selection.ts`, `hosted-hour-recovery.ts`, `hour-preparation.ts`,
+`initial-hour-setup.ts` (the watcher's change 1), `conflict-recovery-contract.ts`,
+`setup/clock-wait.ts`, `setup/first-hour.ts`, `setup/recovery-hour.ts`,
+`dashboard/conflict-recovery.ts`; root `CLAUDE.md` §5 (C3a).
+
+### Task 14b′: `select` needs a confirmation without an internet clock (fiscal-verifactu)
+
+- [ ] Tests first (`hour-selection.test.ts`, `hosted-hour-recovery.test.ts`, the `hour-preparation`
+  cases): browser agrees, internet unavailable, no `confirmed` → `confirmation_required`; with
+  `confirmed: true` → selected; time service synchronised and no `confirmed` → selected (control);
+  `conflict-recovery-contract` parses `confirmed: true` and refuses any other value. First setup
+  (`initial-hour-setup.test.ts`): `candidates`
+  with `{ comparisonId, confirmed: true }` selects with no internet clock; `{ comparisonId }` alone
+  → `confirmation_required`; `confirmed: false`, `"true"` or an extra key → `malformed_allocation`. Every existing
+  case that selects on a browser alone with no usable internet adds `confirmed: true`; any other
+  assertion change is a STOP.
+- [ ] Implement in `hour-selection.ts` and `initial-hour-setup.ts`'s `candidates`; `clockProblem`
+  maps `confirmation_required` to a new `{ kind: "confirm" }` for the pages.
+- [ ] `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node
+  src/hosted-hour-recovery.test.ts src/hour-setup-clock.test.ts src/hour-clock.test.ts
+  src/hour-selection.test.ts src/initial-hour-setup.test.ts src/conflict-recovery-contract.test.ts
+  src/conflict-recovery-routes.test.ts
+  src/minute-selection-unknown-name.test.ts src/hour-recovery-preparation.relinquished.test.ts`,
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node src/write-path.e2e.test.ts
+  inmutabilidad`, `pnpm --filter @waitron/composition exec vitest run
+  src/allocation-configuration.test.ts`, and the 16 `apps/server` files that send `select` (`git
+  grep -l 'action: "select"' -- 'apps/server/src/*.test.ts'`, at `f1deb720ed`:
+  `boot.handover-chart-moved-on`, `conflict-payment-recovery`, `handover-activation-repair`,
+  `handover-activation`, `handover-compare`, `handover-controlled.e2e`, `handover-dormant-setup`,
+  `handover-minute-history`, `handover-preparation`, `hour-promotion`, `hour-recovery-host`,
+  `hour-recovery-placement-1`, `-2`, `-3`, `hour-recovery-staged`, `live-conflict-recovery`), in
+  groups sized to `memory_pressure | grep free`. Most stub the internet clock usable (for example
+  `hour-promotion.test.ts:100`, `handover-preparation.test.ts:162`) and need no change; the run
+  finds the cases that select without it.
+
+### Task 14c′: setup, restore and handover pages show Confirm the time (fiscal-verifactu setup UI)
+
+- [ ] Tests first, **the press flow once, in `clock-wait.browser.test.ts`** (the watcher's change
+  3): agreement with no internet row shows both times and Confirm the time, and sends nothing until
+  pressed; the press sends a fresh `clock-challenge` and `compare-clocks`, then answers "send
+  `confirmed: true`" with the new comparison's id; a press 31 s after the first comparison (fake
+  clock) still answers so (the control for S11); a press whose fresh comparison now disagrees shows
+  the disagreement step and answers "do not send"; with an internet row the step selects by itself
+  (control); after This device answers `set`, the re-comparison answers "send" with no press.
+- [ ] **One wiring case per page:** `recovery-hour.browser.test.ts` (restore; the handover screen
+  uses the same element), the press ends in `select` with `confirmed: true`;
+  `first-hour.browser.test.ts`, the step and `confirmWhyProceed` show before Proceed and Proceed
+  ends in `candidates` with `{ comparisonId, confirmed: true }`. Axe cases for the new state, both
+  themes, in the two a11y files.
+- [ ] Words (series steps), English and Spanish.
+- [ ] `memory_pressure | grep free`, then `pnpm --filter @waitron/fiscal-verifactu exec vitest run
+  src/setup/clock-wait.browser.test.ts src/setup/first-hour.browser.test.ts
+  src/setup/recovery-hour.browser.test.ts src/setup/recovery-hour.a11y.browser.test.ts
+  src/setup/first-hour.a11y.browser.test.ts`.
+
+### Task 14c2′: the conflict switch shows Confirm the time (fiscal-verifactu dashboard UI)
+
+- [ ] Tests first: the conflict switch keeps its own flow (it has no `ClockWait`), so the press
+  cases of 14c′ run again in the conflict-recovery dashboard suites (`git grep -l conflict-recovery
+  -- 'packages/fiscal-verifactu/src/dashboard/*.test.ts'`), where today's `compare()` selects at
+  once (`dashboard/conflict-recovery.ts:278-310`); its disagreement keeps today's refusal words (it
+  has no This device).
+- [ ] Words beside its own `conflict_recovery.*` strings, English and Spanish; C3a in root
+  `CLAUDE.md`; `docs/developers/conventions-data.md` beside `:4166-4168` (D-confirm).
+- [ ] The suites named, then `pnpm exec vitest run scripts/english-only.test.ts
+  scripts/claude-md-pointers.test.ts`.
+
+## PR 3b1 — a restore's start reuses the page's choice while the box stayed on
+
+A new branch, `feat/a1420-3b1-same-boot`, from PR 3a's head (the watcher's change 2: about 45
+lines of code and 120 of tests). Usable when it lands: a restore with no internet time finishes
+when the box was not switched off since "Restore backup". Files: `packages/module/src/` (the host
+member), `packages/fiscal-verifactu/src/` `hosted-hour-recovery.ts`, `hour-selection.ts`;
+`apps/server/src/recovery-preparation.ts`; `docs/developers/conventions-data.md` beside
+`:4166-4168` (D-carry).
+
+### Task 14d1′: a select stands while the boot is the same (module, fiscal-verifactu, server wiring)
+
+- [ ] Tests first (`hosted-hour-recovery.test.ts`, through `configure!(host)` then
+  `resumeRecovery` then `prepare`): time service not synchronised, a select made with `readBoot`
+  answering `{ id: "b1", ms: 1000 }` at wall `W`, start reading `{ "b1", 61 000 }` at `W + 60 000`
+  → admitted; boot id `"b2"` → `second_clock_missing` (control: switched off); same id, wall
+  `W + 62 000` → `second_clock_missing` (stepped); `readBoot` absent or id `null` at either end →
+  `second_clock_missing`.
+- [ ] Add `readBoot?(): { ms: number; id: string | null }` to `ModuleOperationHost`; the intent
+  carries the reading; `resume` builds the observation from the intent (D-carry).
+- [ ] Wire `readBoot: bootReader().readBoot` into `createSelectedRecoveryPreparation`'s host
+  (`recovery-preparation.ts:234`), which both the restore page and the start build.
+- [ ] `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node
+  src/hosted-hour-recovery.test.ts src/hour-setup-clock.test.ts src/hour-clock.test.ts`, and
+  `pnpm --filter @waitron/server exec vitest run src/hour-recovery-placement-2.test.ts
+  src/hour-recovery-placement-3.test.ts src/hour-recovery-staged.test.ts`.
+
+## PR 3b2 — after a switch-off, the restore's start waits for the same person
+
+Work on `feat/a1420-3-restore-waits`, rebased onto PR 3b1 (which brings #3025 through PR 4). Files:
+`packages/module/src/` (device reading, host members), `packages/fiscal-verifactu/src/`
+`hour-setup-clock.ts`, `hosted-hour-recovery.ts`, `hour-selection.ts`; `apps/server/src/`
+`node-entry.ts`, `recovery-entry.ts`, `recovery-preparation.ts`, `restore-request.ts`,
+`start-clock-waiting.ts`, `errors.ts`, `i18n/`; `apps/setup/src/` `setup-app.ts`,
+`screens/done-screen.ts`, `i18n/strings/finish.ts`.
+
+### Task 14a′: rebase, and the host's device reading becomes a kept confirmation (module, fiscal-verifactu)
+
+- [ ] Rebase onto PR 3b1. `take` (`hour-setup-clock.ts:113-127`) measures through
+  `measureDeviceReading`; the #3025 suites pass unedited (the control that nothing changed).
+- [ ] Rename `startClockReading?()` to `startClockConfirmation?()`, answering a kept confirmation
+  (the measured reading and its boot reading) or null; one comment: "a confirmation the restore
+  page's key holder made while the restore's start waits".
+- [ ] `pnpm --filter @waitron/fiscal-verifactu exec vitest run --project node
+  src/hosted-hour-recovery.test.ts src/hour-setup-clock.test.ts src/hour-clock.test.ts`,
+  `pnpm --filter @waitron/module exec vitest run src/device-clock.test.ts`.
+
+### Task 14d2′: a kept confirmation stands while the boot is the same (module, fiscal-verifactu)
+
+- [ ] Tests first (`hosted-hour-recovery.test.ts`): 14d1′'s four cases again for a
+  `startClockConfirmation` kept two minutes before the try (no 30-second life).
+- [ ] `resume` builds the observation from the confirmation as 14d1′ does from the intent.
+- [ ] The commands of 14d1′.
+
+### Task 14e′: the done screen keeps the node recovery key (setup app)
+
+- [ ] Tests first (`setup-app-recovery-credentials.test.ts`): after a successful archive, bucket
+  and Cloud "Restore backup", the done screen holds the node recovery key that was sent, and no
+  other credential (the archive key, the kit); a refused request keeps none (the existing case);
+  nothing reaches `sessionStorage`, `localStorage` or `document.cookie`. In `done-screen.test.ts`
+  (the watcher's change 4): the key is gone from the done screen once its poll answers ready, and
+  once the element is removed from the page; a poll answered 503 keeps it (control).
+- [ ] Implement in `setup-app.ts` (`:1838-1839,1913-1915,2012`) and a `nodeRecoveryKey` property on
+  the done screen, cleared where `ready` is set (`#pollOnce`) and in `disconnectedCallback`.
+- [ ] `memory_pressure | grep free`, then `pnpm --filter @waitron/setup exec vitest run
+  src/setup-app-recovery-credentials.test.ts src/screens/done-screen.test.ts`.
+
+### Task 14f′: the waiting app takes a confirmation only with the key (server)
+
+- [ ] Tests first (`start-clock-waiting.test.ts`): pages and `/api/*` as built. `POST
+  /restore-clock/challenge`, `/compare`, `/confirm`, `/set` without the key or with a wrong one →
+  403 `promotion.break_glass_invalid`; with the staged key: `compare` answers both times;
+  `confirm` within 5 s of its challenge and agreeing → kept with the boot reading, and
+  `confirmation()` answers it until the next try; disagreeing → not kept, answer `differs`; past
+  5 s → not kept (control); from the box's own screen → not kept, `same_machine`; `set` calls the
+  setter with the measured offset and answers its answer. The page shows the key field and, once a
+  correct key is typed, the same step as the done screen. Render the page to a file and open it in
+  the workspace's Playwright Chromium, both themes and phone width (§4). No plain-HTTP case: the app
+  is routed only when the box's certificate passes its check (`recovery-listener.ts:151`).
+- [ ] Implement: keep the shell; drop `/restore-clock/reading` and the time-sending script;
+  `admitReading` becomes the key check, refusing by default, reading the staged key file; the
+  setter is `createSetupClockSet`.
+- [ ] `pnpm --filter @waitron/server exec vitest run src/start-clock-waiting.test.ts
+  src/start-clock-waiting-page.test.ts`, `pnpm exec vitest run scripts/errors-reachable.test.ts
+  scripts/personal-log-params.test.ts scripts/module-seams.test.ts scripts/english-only.test.ts`.
+
+### Task 14g′: the restore's start waits for a kept confirmation (server)
+
+- [ ] Tests (`node-entry.test.ts`, as built, renamed): keep cases 1-2 and the serve-before-take-back
+  and close-failure cases. Case 3 becomes: no confirmation and the time service never synchronised
+  → not called again over ten minutes (no blind try); the time service synchronised at a look →
+  called at that look; a confirmation kept at 20 s → called at the next 15-second look; one kept
+  10 s after a try → called at the next look (the confirmation is not lost, the fresh read's
+  Important 2); a try that refuses again drops the kept confirmation (control). The
+  page runner's host has no `startClockConfirmation` (`createInteractiveRecoveryPreparation`).
+- [ ] Implement in `runEntry` (the look reads `clockServiceSynchronised`; the built 60-second blind
+  try is removed) and the plumbing `recovery-entry.ts` → `recovery-preparation.ts`.
+- [ ] `pnpm --filter @waitron/server exec vitest run src/node-entry.test.ts src/restore-request.test.ts
+  src/hour-recovery-placement-2.test.ts src/hour-recovery-placement-3.test.ts`.
+
+### Task 15′: the done screen asks the same person (setup app)
+
+- [ ] Tests first (`done-screen.test.ts`): a poll answered 503 `server.waiting_for_clock` draws the
+  clock step (both times, Confirm the time, This device) and never navigates; Confirm sends the key
+  to `/restore-clock/confirm` and shows `done.clock_confirmed`; a later poll still answered
+  `server.waiting_for_clock` after a refused try draws the step again; This device sends it to
+  `/set`, then compares again; a 503 with another code waits (control); a 404 shows "ready"; after a
+  bucket rebuild the device steps stay below the clock step. Axe case for the new state.
+- [ ] `memory_pressure | grep free`, then `pnpm --filter @waitron/setup exec vitest run
+  src/screens/done-screen.test.ts src/screens/done-screen.a11y.test.ts`.
+
+### Task 16″: words, rules and documents
+
+- [ ] Start-failure words (D6′) and `recovery-surface.test.ts:618-633`. Docs:
+  `docs/operations/hour-recovery.md` (the restore's start: same boot carries on; otherwise the done
+  screen asks again, or the key on any page), `apps/server/src/guide/{en,es}/backup-recovery.md`
+  (one paragraph each), `docs/developers/conventions-data.md` beside `:4166-4168` (D-key, D-wait),
+  root `CLAUDE.md` §5 (C3b).
+- [ ] `pnpm --filter @waitron/server exec vitest run src/recovery-surface.test.ts
+  src/guide-content.test.ts`, `pnpm exec vitest run scripts/guide-links.test.ts
+  scripts/claude-md-pointers.test.ts`.
+
+## What becomes of the built commits (`d6a5e273fc..42860d1df9`, all PR 3b2's)
+
+| Commit | Built under draft 2 | Now |
+| --- | --- | --- |
+| `2e09d5e76a` 14a | `measureDeviceReading`, `AGREEMENT_MS`, `DeviceClockReading` in `@waitron/module`; `compare`'s `measured` argument; `startClockReading?()`; five cases | **Keep**, rebased onto 3a (14a′); member **renamed** and answers a kept confirmation; cases kept |
+| `fc04219437` 14a review | 31-s-ahead case, comments | **Keep** |
+| `436f1e4d38` 14b | waiting app: pages and `/api/*` 503, unsigned challenge and reading, inline script, 64 challenges, `admitReading` | **Change** (14f′): keep the shell, error code, words file's title, 64-challenge bound; **drop** the unsigned reading route and script; `admitReading` becomes the key check |
+| `35f2b5413b` 14b review | dates on both times, reload when the restore ends, two readings, 1 KiB body limit, times outside the live region | **Keep** body limit (on the key routes) and the date format (moves to the done screen); **drop** the two-readings rule and the script's reload |
+| `59998cbddc` 14b review 2 | clear on an unmeasured answer; noon-pinned page tests | **Drop** with the script |
+| `195a75159d` 14c | `runEntry` loop: three reasons, attempt taken back, log line, 15-s looks, 60-s blind try, close before `startServer`; plumbing | **Keep**; **change** the reason to try (a kept confirmation or the time service starts one, 14g′), **drop** the 60-s blind try, rename the plumbing |
+| `1c6b99d13f` 14c review | serve before taking the attempt back; a failed close keeps the refusal; required dependency in fixtures | **Keep** |
+| `45d8cbdcaa` 15 | done screen opens `/` on `server.waiting_for_clock` | **Drop**: navigating reloads the page and throws away the key held in memory; replaced by 15′ |
+| `e4032ae5e7` 15 review | after a rebuild, link the waiting page instead | **Drop** the link; **keep** the device steps on screen (15′) |
+| `97eb0396f6` 16′ | start-failure words, guides, docs | **Change** (16″): words per D6′, docs to this design |
+| `42860d1df9` 16′ review | narrowed comments and docs | **Change** with 16″; keep the recovery-page comment |
+
 ## Sentences changed, word for word
 
-**C3a (new), PR 3a, root `CLAUDE.md` §5.** The written rule says a device's agreement needs no
-confirmation; the owner's 09:47 ruling says the opposite, so PR 3a replaces
+**C4′ (replaces C4), PR 4, first, root `CLAUDE.md` §5.** In the sentence
 
 > Setup/restore/promotion use five symbols for the box's UTC minute, after another machine's clock
 > agrees within 30 seconds (no confirmation); a device that has just set the box's clock from that
 > page is that machine (A1482 plan, cleared by the watcher 2026-11-12 18:33; not owner-approved); a
 > minute whose name is already in a history the box reads is not taken.
 
-with
+PR 4 replaces "after another machine's clock agrees within 30 seconds (no confirmation)" with
+"after the box's internet time service says it is synchronised, or another machine's clock agrees
+within 30 seconds (no confirmation); AEAT's time is not read for it (owner, 2026-11-11: "Instead we
+rely on NTP"; 2026-11-13: "b", AEAT no longer counts)", and adds `hour-clock-time-service` to that
+rule's guard list.
+
+**C3a (new), PR 3a.** The written rule says a device's agreement needs no confirmation; the
+owner's 09:47 ruling says the opposite, so PR 3a replaces the whole sentence as C4′ left it with
 
 > Setup/restore/promotion/conflict switch use five symbols for the box's UTC minute, after a second
-> clock agrees within 30 seconds. An internet clock carries on by itself; another machine's clock
-> counts only once the person proved on that page (setup password, the backup's node recovery key,
-> a `node.manage` or administrator sign-in) confirms both times or sets the box's clock from that
-> machine (owner, 2026-11-13: "we should never just accept another device's match automatically.
-> instead, we should always ask for confirmation, and that confirmation should be protected"). A
-> minute whose name is already in a history the box reads is not taken.
+> clock agrees within 30 seconds. The box's internet time service saying it is synchronised carries
+> on by itself, and AEAT's time is not read for it (owner, 2026-11-11: "Instead we rely on NTP");
+> another machine's clock counts only once the person proved on that page (setup password, the
+> backup's node recovery key, a `node.manage` or administrator sign-in) confirms both times or sets
+> the box's clock from that machine (owner, 2026-11-13: "we should never just accept another
+> device's match automatically. instead, we should always ask for confirmation, and that
+> confirmation should be protected"; This device and the list of proofs are the watcher's 09:49
+> proposal, which the owner agreed to at 09:52: "i agree with the rest"). A minute whose name is
+> already in a history the box reads is not taken.
 
 and adds `hour-setup-clock` to that rule's guard list.
 
-**C3b, PR 3b.** After C3a's "confirms both times or sets the box's clock from that machine (owner,
-…)." PR 3b inserts: "A restore's start uses the restore page's choice while the box's boot id is
-unchanged; otherwise it waits until the node recovery key confirms again, held by the browser that
-pressed Restore backup or typed on the waiting page." It adds `start-clock-waiting` to the guard
-list. In the clock-setting rule (§5, "the restore page (under its recovery key or kit)"), PR 3b adds
-after that phrase: ", the done screen or waiting page while that restore's start waits (under the
-node recovery key)".
+**C3b1, PR 3b1.** After C3a's "(owner, … "i agree with the rest")." PR 3b1 inserts: "A restore's
+start uses the restore page's choice while the box's boot id is unchanged."
 
-**C4′ (replaces C4), PR 4.** In C3a's text, "An internet clock carries on by itself" becomes "The
-box's internet time service saying it is synchronised carries on by itself, and AEAT's time is not
-read for it (owner, 2026-11-10, A1420 Q1: "Yes, time service stands in"; 2026-11-11: "Instead we
-rely on NTP")".
+**C3b2, PR 3b2.** After C3b1's sentence PR 3b2 inserts: "Otherwise it waits until the time service
+synchronises or the node recovery key confirms again, held by the browser that pressed Restore
+backup or typed on the waiting page." It adds `start-clock-waiting` to the guard list. In the
+clock-setting rule (§5, "the restore page (under its recovery key or kit)"), PR 3b2 adds after that
+phrase: ", the done screen or waiting page while that restore's start waits (under the node
+recovery key)".
 
 **#3003's clause, deleted by PR 4.** #3003 says (commit `92c95072d4`, root `CLAUDE.md` §5 and
 `conventions-data.md`): "**Waitron never reads AEAT's time except to warn of drift from its filing
@@ -666,61 +767,66 @@ setup, restore and promotion (`hour-clock-internet.ts`)" in both files.
 
 ## Changed test checks (assertions the spec changes)
 
+- PR 4 (first): `hour-clock-internet.test.ts` is deleted. Word assertions follow Task 13b′ in the
+  files `git grep -l "Connect the box to the internet\|Conecta el servidor a internet\|the
+  internet's" -- '*.test.ts'` lists. A stub's AEAT reason (`"tls"`, `"network"`, `"offline"`)
+  becomes `not_synchronised` where a case reads it back. A case that relied on AEAT to admit a
+  restore's start with no browser now stubs the time service synchronised.
 - PR 3a: every case that selects on a browser alone with no usable internet observation adds
   `confirmed: true` (the request changes, not the assertion); the browser suites that assert a page
   selects by itself on agreement now assert the Confirm press (`recovery-hour.browser.test.ts`,
   `first-hour.browser.test.ts`, the conflict-recovery dashboard suites).
-- PR 3b: `recovery-surface.test.ts:618-633` asserts D6′'s words; the built `done-screen.test.ts`
+- PR 3b2: `recovery-surface.test.ts:618-633` asserts D6′'s words; the built `done-screen.test.ts`
   cases that assert `navigate("/")` or the waiting-page link are replaced (15′); the built
   `start-clock-waiting` cases for the unsigned reading are deleted with the route (14f′); the
   existing "drops the entered node key from a refused request" case is unchanged (a refusal still
   drops it).
-- PR 4: `hour-clock-internet.test.ts` is deleted. Word assertions follow Task 13b′ in the files
-  `git grep -l "Connect the box to the internet\|Conecta el servidor a internet\|the internet's" --
-  '*.test.ts'` lists. A stub's AEAT reason (`"tls"`, `"network"`, `"offline"`) becomes
-  `not_synchronised` where a case reads it back.
 
 ## On the test box (Task 19's "PRs 3-4" step, replaced)
 
-**PR 3a:** block UDP 123 and TCP 443 outbound (`nft`, as Task 19 step 2). Restore from a laptop:
-**expect** both times and Confirm the time, nothing selected before the press; wait two minutes,
-press, **expect** the series chosen. Unblock TCP 443: **expect** no Confirm (AEAT carries on).
+**PR 4 (first):** (1) TCP 443 blocked, UDP 123 open: restore from a laptop, switch the box off and
+on after "Restore backup": **expect** placement with no press. (2) UDP 123 blocked, TCP 443 open:
+**expect** the restore's start on the start-failure page (the gap Order states), and a laptop's
+matching time carrying the restore page on by itself, as today. (3) UDP 123 open and a laptop's
+clock 2 minutes wrong: first setup names the series with no clock question.
 
-**PR 3b:** UDP 123 and TCP 443 blocked. (1) Restore from a laptop, confirm, "Restore backup":
-**expect** placement with no wait (same boot). (2) Again, switching the box off and on after
-"Restore backup" with the laptop's page left open: **expect** the done screen's clock step; any
-other page at the box's address shows the waiting page with the key field; `failures` in
-`recovery.json` unchanged over five minutes; one `server.start_waiting_for_clock` a minute. Press
-Confirm the time: **expect** placement within about 15 s. (3) Again, closing the laptop's tab
-before the box is back: on a phone, type the node recovery key on the waiting page and confirm:
-**expect** placement. A wrong key: **expect** the refusal line beside the field. Report from the log
-the time from each press to placement.
+**PR 3a:** block UDP 123 outbound (`nft`, as Task 19 step 2). Restore from a laptop: **expect**
+both times and Confirm the time, nothing selected before the press; wait two minutes, press,
+**expect** the series chosen. First setup from a laptop: **expect** both times above Proceed.
+The watcher's example at 23:00: **expect** Confirm the time on the phone's handover page, then the
+series named. Unblock UDP 123: **expect** no Confirm.
 
-**PR 4:** (1) TCP 443 blocked, UDP 123 open: a restore with the box switched off after "Restore
-backup" finishes with no wait and no press. (2) UDP 123 blocked, the box switched off, the page
-closed: **expect** no try after the first for ten minutes; unblock UDP 123 and report the time to
-placement. (3) The watcher's example at 23:00 with UDP 123 blocked: **expect** Confirm the time on
-the phone's handover page, then the series named. (4) UDP 123 open and a laptop's clock 2 minutes
-wrong: first setup names the series with no clock question.
+**PR 3b1:** UDP 123 blocked. Restore from a laptop, confirm, "Restore backup": **expect** placement
+with no wait (same boot).
+
+**PR 3b2:** UDP 123 blocked. (1) Restore, switching the box off and on after "Restore backup" with
+the laptop's page left open: **expect** the done screen's clock step; any other page at the box's
+address shows the waiting page with the key field; `failures` in `recovery.json` unchanged and no
+try after the first over ten minutes; one `server.start_waiting_for_clock` line. Press Confirm the
+time: **expect** placement within about 15 s. (2) Again, closing the laptop's tab before the box is
+back: on a phone, type the node recovery key on the waiting page and confirm: **expect** placement.
+A wrong key: **expect** the refusal line beside the field. (3) Again, pressing nothing: unblock UDP
+123 and report the time to placement. Report from the log the time from each press to placement.
 
 ## Size (estimates; production and tests apart)
 
 | PR | Production | Tests | Docs |
 | --- | --- | --- | --- |
-| **3a** confirmation on every series page (Tasks 14b′, 14c′, 14c2′) | about +110 / −10 (14b′: 30; 14c′: 55 with words; 14c2′: 25 with words) | about +260 | +15 / −5 |
-| **3b** same-boot carry, the wait, the key-held confirmation (Tasks 14a′, 14d′-g′, 15′, 16″) | about +520 / −60 (14a′: 60 kept; 14d′: 45; 14e′: 15; 14f′: 200 with the key form and words, of which about 100 kept; 14g′: 95, about 85 kept; 15′: 90 with words; 16″: 15) | about +1,050, of which about 700 already on the branch and reworked | +60 / −20 |
-| **4** time service in, AEAT out (Tasks 11′-13b′) | about +120 / −175 | about +150 / −401; about 125 lines changed across the stub files | +30 / −20 |
+| **4** (first) time service in, AEAT out (Tasks 11′-13b′) | about +110 / −175 | about +130 / −401; about 125 lines changed across the stub files | +30 / −20 |
+| **3a** confirmation on every series page (Tasks 14b′, 14c′, 14c2′) | about +125 / −10 (14b′: 40 with `candidates`; 14c′: 60 with words and Proceed; 14c2′: 25 with words) | about +240 (the press flow tested once) | +15 / −5 |
+| **3b1** same-boot carry (Task 14d1′) | about +45 | about +120 | +5 |
+| **3b2** the wait and the key-held confirmation (Tasks 14a′, 14d2′-g′, 15′, 16″) | about +470 / −60 (14a′: 60 kept; 14d2′: 10; 14e′: 20 with the key dropped; 14f′: 200, about 100 kept; 14g′: 90, about 80 kept, the blind try removed; 15′: 90; 16″: 15) | about +950, of which about 700 already on the branch and reworked | +55 / −20 |
 
-Against draft 3's single PR 3 (+620 / −60 production and +1,150 tests, plus Q1's +80 / +100): the
-key held by the done screen replaces the separate pass (about −30), the typed key is in 3b, and the
-stored confirmation adds about 10.
+Against draft 4: the same total within about 20 lines; PR 4 loses its `runEntry` look (about −10)
+and 3b2 its blind try (about −10); 3a gains `candidates` and Proceed (about +15) and loses
+repeated press cases (about −20 tests).
 
 ## What becomes of A1420's Tasks 11-16
 
 | Task | Now |
 | --- | --- |
 | 11 (synchronised option on the comparison) | replaced by 11′ |
-| 12 (`startClock.synchronised` on the host) | replaced by 12′ (`timeServiceSynchronised`), 14a′ (`startClockConfirmation`) and 14d′ (`readBoot`) |
-| 14 (wait on `network`/`timeout` only, exit and restart) | replaced by 14b′-c2′ (PR 3a: a confirmation on every series step) and 14a′, 14d′-g′ (PR 3b: the same-boot carry, the key-held confirmation, an in-process wait) |
+| 12 (`startClock.synchronised` on the host) | replaced by 12′ (`timeServiceSynchronised`), 14a′ (`startClockConfirmation`) and 14d1′ (`readBoot`) |
+| 14 (wait on `network`/`timeout` only, exit and restart) | replaced by 14b′-c2′ (PR 3a: a confirmation on every series step), 14d1′ (PR 3b1: the same-boot carry) and 14a′, 14d2′-g′ (PR 3b2: the key-held confirmation, an in-process wait) |
 | 15 (done screen line) | replaced by 15′: the done screen asks the same person |
 | 16 (`lastErrorCause` `clock_moved`) | dropped (D6′) |
