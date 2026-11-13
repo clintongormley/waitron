@@ -69,7 +69,7 @@ Three parts:
 
 **2026-11-09:** A950 is go-live work again. The [two-group plan](../superpowers/plans/2026-11-09-a950-shorter-upgrades.md) is approved (owner, 22:04); Lane F builds its first group after A739 and A840/A842/A848. The owner chose steps 2/3/4/8 first, with no other-project dependency: copy/restore, readiness and a real sale on a disposable copy, online trial migration (A799), and safe manual install-fix-now from current data. Later: signed releases (A940/B3), timer/window, status/email, then pairs needing a new A947 upgrade-hold decision. No btrfs requirement. First-group host status/logs do not promise email; the owner accepts no email when neither version starts. Any copy-sale refusal fails readiness. Manual failure offers restore/keep; automatic failure restores by itself. Cloud hold, password-checked manual go-back, proof-of-close and backup-stream handoff are after-first-venue work. Full venue upgrade qualification remains UNVERIFIED / NOT RUN.
 
-**Remaining first-group work:** connect the contained data-check entry to host readiness, start the print agent without sending jobs, qualify the mandatory sale on a disposable copy and Linux interruptions (3b), add the online trial (4), then activate manual commands with the replacement restart/recovery services and installed-recipe integration (8). The stopped-tree controller, host image/recovery adapter, pinned host-runtime bootstrap and contained data-check library are dormant foundations; no installed command or service uses them. The library checks packaged migrations, both SQLite files, append-only protection, configured fiscal history, menu structures, an Orders page and its details, and the configured TLS listener while refusing requests. It reports data checks only; no test sale is implemented yet. Full venue upgrades, readiness, test sales and power loss remain unqualified.
+**Remaining first-group work:** the advisory online migration trial (4). The manual command now connects the stopped-tree controller, readiness/copy-sale checks and retained host runtime to installed restart/recovery owners; its host-console choices are Restore and Keep. Later work still includes automatic windows, status/email, signed release activation and pairs. The current-build synthetic Linux rehearsal is separate from historical release qualification; see [checked manual upgrades](../../deploy/README.md#checked-manual-upgrades).
 
 **Historical design summary, 2026-10-29; retained receipts, superseded delivery requirements.**
 The [approved design](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the
@@ -135,7 +135,7 @@ notifications; A9/Cloud reporting and A1016 backup/support choices remain separa
 
 The source inventory is explicitly historical READ evidence at
 `9d5853c310e691ed558d80a8a12d0dbddccab2e7`, not today's runtime. Later source changes prove no
-A950 behaviour. No A950 Linux, VM, TPM, btrfs, bucket or two-box runtime qualification has run;
+A950 behaviour. That historical inventory qualified no A950 Linux, VM, TPM, btrfs, bucket or two-box runtime;
 B3 hardware/trust holds remain gates (A799 is folded into A950's new plan, owner 2026-11-09).
 The mockup brief and EN/ES copy (removed from the repository on 2026-11-02) retained the existing
 validation/restoration/completion views and added eight rendered and visually inspected window-settings
@@ -144,7 +144,7 @@ has owner approval (option A). Cuts 1–2 add isolated settings, dated-window, b
 producer, archive completion integration, account-free Cloud hold contract, B3 host/image/trust
 qualification, and released A947 stream/spare/membership interfaces in that historical route.
 For the next build, follow the new plan above rather than those superseded dependencies. Reuse settings/window policy after removing retired clock-digest inputs; keep old discovery/journal/admission and A799 download helpers unwired instead of fabricating their inputs. A799 has no separate delivery. Activate only after the new route's applicable real checks pass on the exact releases and platform.
-All A950 runtime qualification remains **UNVERIFIED / NOT RUN**.
+The historical route described here remains **UNVERIFIED / NOT RUN**. Follow the current manual-path rehearsal linked above for its separate synthetic Linux checks.
 
 ## start-space.ts's `logDir: null` option is dead since A1042
 

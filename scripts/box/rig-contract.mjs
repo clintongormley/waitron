@@ -44,6 +44,8 @@ export const RIG_CASES = Object.freeze([
   "installed-setup",
   "installed-refusals",
   "existing-stick",
+  "upgrade-manual",
+  "upgrade-power-cut",
 ]);
 
 const OPTIONS = /** @type {const} */ ({ "--case": "caseName", "--run-dir": "runDir" });

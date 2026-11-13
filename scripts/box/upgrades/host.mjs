@@ -4,8 +4,11 @@ import { recoverUpgrade, upgradeStatus, writeFileDurable } from "./transaction.m
 import { execFile } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { parseEnv, promisify } from "node:util";
+import { createServer, createConnection } from "node:net";
+import { once } from "node:events";
 
 const execute = promisify(execFile);
+const composeFor = (box) => ["compose", "--project-directory", box, "-f", join(box, "compose.yml")];
 const command = (file, args, input) => {
   const result = execute(file, args, { maxBuffer: 4 * 1024 * 1024 });
   if (input !== undefined) result.child.stdin.end(input);
@@ -54,18 +57,12 @@ export async function createUpgradeHost({
   candidate,
   directory,
   checkCandidate,
+  prepareCandidate,
   run = command,
 }) {
-  const compose = [
-    "compose",
-    "--project-directory",
-    boxDirectory,
-    "-f",
-    join(boxDirectory, "compose.yml"),
-  ];
+  const compose = composeFor(boxDirectory);
   const config = await composeConfig(boxDirectory, run);
-  const rawCandidate = typeof candidate === "string" ? candidate : JSON.stringify(candidate);
-  const candidateConfig = await composeConfig(boxDirectory, run, rawCandidate);
+  let rawCandidate = typeof candidate === "string" ? candidate : JSON.stringify(candidate);
   const paths = [];
   for (const key of COPIED_VOLUMES) {
     const name = config.volumes[key].name;
@@ -128,6 +125,13 @@ export async function createUpgradeHost({
   return {
     paths,
     host: {
+      async abortPreparation() {
+        try {
+          await restoreRestartPolicies(boxDirectory, run);
+        } finally {
+          await Promise.allSettled(tags.splice(0).map((tag) => removeImageTag(tag, run)));
+        }
+      },
       async prepareImages() {
         try {
           pinnedCompose(await fs.readFile(join(boxDirectory, "compose.yml"), "utf8"), old);
@@ -136,11 +140,16 @@ export async function createUpgradeHost({
             await run("docker", ["image", "tag", id, tag]);
             tags.push(tag);
           }
+          const prepared = await prepareCandidate?.();
+          if (prepared) rawCandidate = prepared.compose;
+          const candidateConfig = await composeConfig(boxDirectory, run, rawCandidate);
           const next = {};
           for (const [key, service] of Object.entries(candidateConfig.services)) {
             if (service.profiles?.length && old[key] === undefined) continue;
-            if (key === "tunnel" && service.image === config.services[key]?.image) {
+            if (key === "tunnel" && old[key] !== undefined) {
               next[key] = old[key];
+            } else if (prepared?.images?.[key]) {
+              next[key] = prepared.images[key];
             } else {
               const reference = await candidateReference(service.image, run);
               await run("docker", ["pull", reference]);
@@ -152,9 +161,16 @@ export async function createUpgradeHost({
           }
           await assertCopyRoom(paths, dirname(directory), { run });
           pinnedCompose(rawCandidate, next);
+          const ids = (
+            await run("docker", [...compose, "--profile", "staff-tunnel", "ps", "-a", "-q"])
+          ).stdout
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
+          if (ids.length > 0) await run("docker", ["update", "--restart=no", ...ids]);
           return { old, candidate: next };
         } catch (error) {
-          await Promise.allSettled(tags.map((tag) => removeImageTag(tag, run)));
+          await Promise.allSettled(tags.splice(0).map((tag) => removeImageTag(tag, run)));
           throw error;
         }
       },
@@ -173,7 +189,7 @@ export async function createUpgradeHost({
         await pins(images);
         releaseState?.();
         releaseState = undefined;
-        await reopenImages(compose, images, run);
+        await reopenImages(boxDirectory, images, run);
       },
       async cleanup() {
         for (const tag of tags) await removeImageTag(tag, run);
@@ -220,13 +236,7 @@ export async function recoverInstalledUpgrade({
     )
       throw new Error("Docker must be stopped before offline recovery");
   }
-  const compose = [
-    "compose",
-    "--project-directory",
-    boxDirectory,
-    "-f",
-    join(boxDirectory, "compose.yml"),
-  ];
+  const compose = composeFor(boxDirectory);
   const recorded = await upgradeStatus(directory);
   let releaseState;
   let marker;
@@ -256,7 +266,7 @@ export async function recoverInstalledUpgrade({
           if (offline) return false;
           releaseState?.();
           releaseState = undefined;
-          await reopenImages(compose, images, run);
+          await reopenImages(boxDirectory, images, run);
         },
         async cleanup(images) {
           for (const [kind, services] of Object.entries(images))
@@ -461,8 +471,9 @@ async function composeConfig(boxDirectory, run, input) {
   );
 }
 
-async function reopenImages(compose, images, run) {
-  await run("docker", [
+async function reopenImages(boxDirectory, images, run) {
+  const compose = composeFor(boxDirectory);
+  const up = [
     ...compose,
     ...(images.tunnel === undefined ? [] : ["--profile", "staff-tunnel"]),
     "up",
@@ -470,10 +481,25 @@ async function reopenImages(compose, images, run) {
     "--pull",
     "never",
     "--remove-orphans",
-    "--wait",
-    "--wait-timeout",
-    "180",
-  ]);
+  ];
+  await run("docker", up);
+  await restoreRestartPolicies(boxDirectory, run);
+  await run("docker", [...up, "--wait", "--wait-timeout", "180"]);
+}
+
+export async function restoreRestartPolicies(boxDirectory, run = command) {
+  const compose = composeFor(boxDirectory);
+  const config = JSON.parse(
+    (await run("docker", [...compose, "--profile", "*", "config", "--format", "json"])).stdout,
+  );
+  for (const [name, service] of Object.entries(config.services)) {
+    const ids = (await run("docker", [...compose, "--profile", "*", "ps", "-a", "-q", name])).stdout
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (ids.length > 0)
+      await run("docker", ["update", `--restart=${service.restart ?? "no"}`, ...ids]);
+  }
 }
 
 async function candidateReference(image, run) {
@@ -509,6 +535,55 @@ export async function assertCopyRoom(paths, directory, { run = command, statfs =
     .split("\n")
     .reduce((total, line) => total + BigInt(line.trim().split(/\s+/)[0]) * 1024n, 0n);
   const available = await statfs(directory, { bigint: true });
-  if (available.bavail * available.bsize < bytes + 16n * 1024n * 1024n)
+  if (available.bavail * available.bsize < 2n * bytes + 16n * 1024n * 1024n)
     throw new Error("not enough room for the upgrade copy");
+}
+
+export async function clockStatusRelay({ directory, socketPath = "/run/waitron-box/box.sock" }) {
+  await fs.mkdir(directory, { mode: 0o755 });
+  const clients = new Set();
+  const server = createServer((client) => {
+    clients.add(client);
+    let source;
+    let request = "";
+    client.on("error", () => {});
+    client.on("close", () => {
+      clients.delete(client);
+      source?.destroy();
+    });
+    client.on("data", (bytes) => {
+      request += bytes.toString();
+      if (!request.includes("\n") && request.length <= 4096) return;
+      client.removeAllListeners("data");
+      if (request !== "clock.status\n") {
+        client.end('{"ok":false,"reason":"forbidden"}\n');
+        return;
+      }
+      source = createConnection(socketPath);
+      source.on("connect", () => source.write("clock.status\n"));
+      let reply = "";
+      source.on("data", (chunk) => {
+        reply += chunk.toString();
+        const end = reply.indexOf("\n");
+        if (end >= 0) {
+          client.end(reply.slice(0, end + 1));
+          source.destroy();
+        } else if (reply.length > 4096) source.destroy();
+      });
+      source.on("error", () => client.end('{"ok":false,"reason":"unavailable"}\n'));
+      source.on("close", () => client.end());
+    });
+  });
+  const path = join(directory, "box.sock");
+  server.listen(path);
+  await once(server, "listening");
+  await fs.chmod(path, 0o666);
+  return {
+    async close() {
+      for (const client of clients) client.destroy();
+      await new Promise((done, reject) =>
+        server.close((error) => (error ? reject(error) : done())),
+      );
+    },
+  };
 }

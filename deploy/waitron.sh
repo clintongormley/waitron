@@ -14,6 +14,7 @@
 set -euo pipefail
 
 WAITRON_DIR="${WAITRON_DIR:-/opt/waitron}"
+WAITRON_HOST_DIR="${WAITRON_HOST_DIR:-/opt/waitron-host}"
 # The public repo, written out in full (not via a variable) so scripts/deploy-image-env.test.ts can
 # pin the literal URL as text — a typo in the org/repo then fails the guard loudly.
 RAW_BASE="https://raw.githubusercontent.com/clintongormley/waitron"
@@ -29,6 +30,8 @@ waitron.sh: usage:
   waitron.sh install [ref]     install or upgrade the box (ref defaults to main)
   waitron.sh update [ref]      same as install
   waitron.sh status            show each running Waitron image and its build time
+  waitron.sh restore           restore the intact copy from a held manual upgrade
+  waitron.sh keep              start the candidate despite its failed checks
   waitron.sh reset [--all]     wipe the box to a clean state (keeps the certificate unless the box
                                joined another, the start-again records and the files a Move set
                                aside; --all drops them too)
@@ -403,6 +406,28 @@ is_release_tag() {
     && [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 }
 
+resolve_source_metadata() {
+  local ref="$1" url metadata source_metadata
+  if ! command -v jq >/dev/null 2>&1; then
+    command -v apt-get >/dev/null 2>&1 || die "need jq to read source commit metadata — install it and re-run"
+    apt_get update
+    apt_get install -y --no-install-recommends jq
+  fi
+  url="https://api.github.com/repos/clintongormley/waitron/commits/${ref//%/%25}"
+  url="${url//#/%23}"
+  if command -v curl >/dev/null 2>&1; then
+    metadata="$(curl -fsSL --connect-timeout 15 --max-time 60 -H 'Accept: application/vnd.github+json' "$url")" \
+      || die "could not resolve $ref to a commit — check the network and the ref"
+  else
+    metadata="$(wget -qO- --timeout=60 --tries=1 --header='Accept: application/vnd.github+json' "$url")" \
+      || die "could not resolve $ref to a commit — check the network and the ref"
+  fi
+  source_metadata="$(printf '%s' "$metadata" | jq -er '[.sha, (.commit.committer.date | fromdateiso8601 | tostring)] | join(":")')" \
+    || die "could not resolve $ref to source commit metadata"
+  [[ "$source_metadata" =~ ^[0-9a-f]{40}:[0-9]+$ ]] || die "could not resolve $ref to a commit — GitHub returned no full SHA and commit time"
+  printf '%s\n' "$source_metadata"
+}
+
 # 3. main pulls every image in compose.yml and records no override; a release vX.Y.Z pulls its
 #    published images and records them in .env; any other branch/commit builds both Waitron images
 #    on the box from the git context and records the tags in .env so the box stays on them.
@@ -421,36 +446,28 @@ select_image() {
     docker compose -f "$WAITRON_DIR/compose.yml" pull \
       || die "could not pull the box's images for $ref: $why"
   else
-    local safe tag agent_tag sha created url metadata source_metadata
-    if ! command -v jq >/dev/null 2>&1; then
-      command -v apt-get >/dev/null 2>&1 || die "need jq to read source commit metadata — install it and re-run"
-      apt_get update
-      apt_get install -y --no-install-recommends jq
-    fi
+    local safe tag agent_tag sha created source_metadata="${2:-}"
     safe="$(printf '%s' "$ref" | tr -c 'A-Za-z0-9._-' '-')"; safe="${safe:0:100}"
     tag="waitron:${safe}"; agent_tag="waitron-print-agent:${safe}"
-    url="https://api.github.com/repos/clintongormley/waitron/commits/${ref//%/%25}"
-    url="${url//#/%23}"
-    if command -v curl >/dev/null 2>&1; then
-      metadata="$(curl -fsSL --connect-timeout 15 --max-time 60 -H 'Accept: application/vnd.github+json' "$url")" \
-        || die "could not resolve $ref to a commit — check the network and the ref"
-    else
-      metadata="$(wget -qO- --timeout=60 --tries=1 --header='Accept: application/vnd.github+json' "$url")" \
-        || die "could not resolve $ref to a commit — check the network and the ref"
-    fi
-    source_metadata="$(printf '%s' "$metadata" | jq -er '[.sha, (.commit.committer.date | fromdateiso8601 | tostring)] | join(":")')" \
-      || die "could not resolve $ref to source commit metadata"
-    [[ "$source_metadata" =~ ^[0-9a-f]{40}:[0-9]+$ ]] || die "could not resolve $ref to a commit — GitHub returned no full SHA and commit time"
+    [ -n "$source_metadata" ] || source_metadata="$(resolve_source_metadata "$ref")"
     sha="${source_metadata%%:*}"
     created="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-    docker build -t "$tag" -f deploy/Dockerfile --build-arg "WAITRON_BUILD_ID=$sha" \
+    local -a app_output=(-t "$tag") agent_output=(-t "$agent_tag")
+    if [ -n "${3:-}" ]; then
+      app_output=(--iidfile "$3/app.id")
+      agent_output=(--iidfile "$3/agent.id")
+    fi
+    docker build "${app_output[@]}" -f deploy/Dockerfile --build-arg "WAITRON_BUILD_ID=$sha" \
       --build-arg "WAITRON_SOURCE_METADATA=$source_metadata" \
       --build-arg "WAITRON_IMAGE_CREATED=$created" --build-arg "WAITRON_IMAGE_REF=$ref" \
       "https://github.com/clintongormley/waitron.git#${sha}"
-    docker build -t "$agent_tag" -f deploy/Dockerfile --target print-agent --build-arg "WAITRON_BUILD_ID=$sha" \
+    docker build "${agent_output[@]}" -f deploy/Dockerfile --target print-agent --build-arg "WAITRON_BUILD_ID=$sha" \
       --build-arg "WAITRON_SOURCE_METADATA=$source_metadata" \
       --build-arg "WAITRON_IMAGE_CREATED=$created" --build-arg "WAITRON_IMAGE_REF=$ref" \
       "https://github.com/clintongormley/waitron.git#${sha}"
+    if [ -n "${3:-}" ]; then
+      tag="$(cat "$3/app.id")"; agent_tag="$(cat "$3/agent.id")"
+    fi
     env_set WAITRON_IMAGE "$tag"
     env_set WAITRON_PRINT_AGENT_IMAGE "$agent_tag"
   fi
@@ -574,9 +591,17 @@ print_image_versions() {
 }
 
 cmd_status() {
+  local result=0
+  if [ -x "$WAITRON_HOST_DIR/node-v26.7.0/bin/node" ]; then
+    upgrade_cli status || { echo "waitron.sh: retain ${WAITRON_DIR}.upgrades for inspection" >&2; result=1; }
+  elif upgrade_pending; then
+    echo "waitron.sh: upgrade pending; the retained host runtime is unavailable" >&2
+    result=1
+  fi
   [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
   cd "$WAITRON_DIR"
   print_image_versions
+  return "$result"
 }
 
 # Show the ready banner on stdout, and — on a headless box wired to a monitor — also on the physical
@@ -776,8 +801,165 @@ delete_previous_images() {
 # any image is built or pulled: the check reads the box with its CURRENT compose.yml and image, which
 # the fetch replaces and the build or pull supersedes. refresh_self, which runs first, may already
 # have replaced this script itself. The wipe waits until the new images are in place.
+upgrade_pending() {
+  [ -d "${WAITRON_DIR}.upgrades" ] || return 1
+  [ -n "$(find "${WAITRON_DIR}.upgrades" -mindepth 1 -maxdepth 1 -print -quit)" ]
+}
+
+refuse_pending_upgrade() {
+  if upgrade_pending; then
+    die "upgrade pending — run 'waitron.sh status', then choose restore or keep; nothing was refreshed or reset"
+  fi
+}
+
+lock_managed_box() {
+  [ -f "$BOX_UNIT_DIR/waitron-app.service" ] || return 0
+  exec 9>"${WAITRON_DIR}.upgrade.lock"
+  flock -n 9 || die "another host operation is running"
+  refuse_pending_upgrade
+}
+
+upgrade_cli() {
+  local node="$WAITRON_HOST_DIR/node-v26.7.0/bin/node"
+  [ -x "$node" ] || die "the retained host runtime is unavailable — retain the upgrade copy and runtime; do not reset"
+  local verb="$1"; shift
+  "$node" "$WAITRON_HOST_DIR/box/upgrades/cli.mjs" "$verb" "$WAITRON_DIR" "$@"
+}
+
+cmd_upgrade_choice() (
+  exec 9>"${WAITRON_DIR}.upgrade.lock"
+  flock -n 9 || die "another host operation is running"
+  local result
+  result="$(upgrade_cli "$1")"
+  printf '%s\n' "$result"
+  if [ "$result" != null ] && ! upgrade_pending && [ -f "$BOX_UNIT_DIR/waitron-app.service" ]; then
+    flock -u 9
+    exec 9>&-
+    as_root systemctl --no-block restart waitron-app.service
+  fi
+)
+
+fetch_upgrade_driver() {
+  local sha="$1" stage="$2" file
+  fetch "$RAW_BASE/$sha/deploy/waitron.sh" "$stage/waitron.sh" || return 1
+  for file in bootstrap.sh cli.mjs host.mjs transaction.mjs copy.mjs candidate.mjs; do
+    fetch "$RAW_BASE/$sha/scripts/box/upgrades/$file" "$stage/$file" || return 1
+  done
+  for file in upgrade-restart.sh waitron-app.service waitron-upgrade-recovery.service; do
+    fetch "$RAW_BASE/$sha/deploy/box/$file" "$stage/$file" || return 1
+  done
+}
+
+install_upgrade_driver() {
+  local stage="$1" file
+  mkdir -p "$WAITRON_HOST_DIR/box/upgrades"
+  for file in "$stage/"*.mjs; do
+    install -m 0644 "$file" "$WAITRON_HOST_DIR/box/upgrades/${file##*/}"
+  done
+  install -m 0755 "$stage/bootstrap.sh" "$WAITRON_HOST_DIR/box/upgrades/bootstrap.sh"
+  install -m 0755 "$stage/waitron.sh" "$WAITRON_HOST_DIR/waitron.sh"
+  as_root install -d -m 0755 "$BOX_LIB_DIR" "$BOX_UNIT_DIR"
+  as_root install -m 0755 "$stage/upgrade-restart.sh" "$BOX_LIB_DIR/upgrade-restart.sh"
+  for file in waitron-app.service waitron-upgrade-recovery.service; do
+    as_root install -m 0644 "$stage/$file" "$BOX_UNIT_DIR/$file"
+  done
+  printf 'WAITRON_DIR="%s"\nWAITRON_HOST_DIR="%s"\n' "$WAITRON_DIR" "$WAITRON_HOST_DIR" > "$WAITRON_HOST_DIR/service.env"
+  chmod 600 "$WAITRON_HOST_DIR/service.env"
+  as_root install -d -m 0755 "$BOX_UNIT_DIR/docker.service.d" "$BOX_UNIT_DIR/docker.socket.d"
+  for file in docker.service docker.socket; do
+    printf '[Unit]\nRequires=waitron-upgrade-recovery.service\nAfter=waitron-upgrade-recovery.service\n' \
+      > "$stage/$file.conf"
+    as_root install -m 0644 "$stage/$file.conf" "$BOX_UNIT_DIR/$file.d/waitron-upgrade.conf"
+  done
+  as_root systemctl daemon-reload
+  as_root systemctl enable waitron-upgrade-recovery.service waitron-app.service
+}
+
+cmd_manual_install() (
+  local ref="$1" metadata sha preferred="" source="resolved Git SHA" stage result
+  [ -d "$SYSTEMD_RUN_DIR" ] || die 'safe manual upgrades require a Linux host running systemd'
+  metadata="$(resolve_source_metadata "$ref")"
+  sha="${metadata%%:*}"
+  mkdir -p "$WAITRON_HOST_DIR"
+  stage="$(mktemp -d "$WAITRON_HOST_DIR/.driver.XXXXXX")"
+  trap 'rm -rf -- "$stage"' EXIT
+  if [ "$ref" = main ]; then
+    preferred="$(docker buildx imagetools inspect ghcr.io/clintongormley/waitron:main \
+      --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}')" || preferred=""
+    if [[ "$preferred" =~ ^[0-9a-f]{40}$ ]] && fetch_upgrade_driver "$preferred" "$stage"; then
+      sha="$preferred"; source="registry revision"
+    else
+      rm -f -- "$stage/"*
+      source="resolved Git fallback"
+      fetch_upgrade_driver "$sha" "$stage" || die 'could not download one complete upgrade driver'
+    fi
+  else
+    fetch_upgrade_driver "$sha" "$stage" || die 'could not download one complete upgrade driver'
+  fi
+  bash "$stage/bootstrap.sh" "$WAITRON_HOST_DIR" "$WAITRON_DIR"
+  exec 9>"${WAITRON_DIR}.upgrade.lock"
+  flock -n 9 || die 'another host operation is running'
+  refuse_pending_upgrade
+  install_upgrade_driver "$stage"
+  load_print_agent_apparmor "$sha"
+  disable_bluetooth_autopair
+  enable_time_sync
+  install_box_service "$sha"
+  echo "waitron.sh: retained upgrade driver $sha ($source)" >&2
+  result="$(upgrade_cli apply bash "$WAITRON_HOST_DIR/waitron.sh" __candidate "$ref" "$metadata" "$WAITRON_DIR")"
+  printf '%s\n' "$result"
+  if upgrade_pending; then
+    die "upgrade held — run 'waitron.sh status', then choose restore or keep"
+  fi
+  flock -u 9
+  exec 9>&-
+  as_root systemctl --no-block restart waitron-app.service
+  announce_ready
+)
+
+immutable_main_image() {
+  local digest
+  digest="$(docker buildx imagetools inspect "$1:main" --format '{{.Manifest.Digest}}')"
+  [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || die 'registry returned no immutable image digest'
+  printf '%s@%s\n' "$1" "$digest"
+}
+
+prepare_upgrade_candidate() (
+  local ref="$1" metadata="$2" installed="$3" work app agent revision reference
+  work="$(mktemp -d "$WAITRON_HOST_DIR/.candidate.XXXXXX")"
+  trap 'rm -rf -- "$work"' EXIT
+  WAITRON_DIR="$work"
+  [ ! -f "$installed/.env" ] || cp "$installed/.env" "$WAITRON_DIR/.env"
+  if [ "$ref" = main ]; then
+    reference="$(immutable_main_image ghcr.io/clintongormley/waitron)"
+    docker pull "$reference" >&2
+    app="$(docker image inspect "$reference" --format '{{.Id}}')"
+    revision="$(docker image inspect "$app" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+    [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || die 'candidate app has no source revision'
+    fetch_box_files "$revision" >&2
+    reference="$(immutable_main_image ghcr.io/clintongormley/waitron-print-agent)"
+    docker pull "$reference" >&2
+    agent="$(docker image inspect "$reference" --format '{{.Id}}')"
+    [ "$(docker image inspect "$agent" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$revision" ] \
+      || die 'candidate app and print agent name different source revisions'
+  else
+    fetch_box_files "${metadata%%:*}" >&2
+    select_image "$ref" "$metadata" "$work" >&2
+    app="$(docker image inspect "$(sed -n 's/^WAITRON_IMAGE=//p' "$WAITRON_DIR/.env")" --format '{{.Id}}')"
+    agent="$(docker image inspect "$(sed -n 's/^WAITRON_PRINT_AGENT_IMAGE=//p' "$WAITRON_DIR/.env")" --format '{{.Id}}')"
+  fi
+  jq -Rsc --arg app "$app" --arg agent "$agent" '{compose:.,images:{app:$app,"print-agent":$agent}}' "$WAITRON_DIR/compose.yml"
+)
+
 cmd_install() {
   local ref="${1:-main}" wipe="$RESET_BEFORE_INSTALL"
+  refuse_pending_upgrade
+  if [ "$wipe" -eq 0 ] && [ -f "$WAITRON_DIR/compose.yml" ]; then
+    ensure_docker
+    cmd_manual_install "$ref"
+    return
+  fi
+  lock_managed_box
   refresh_self "$ref"
   ensure_docker
   if [ "$wipe" -eq 1 ]; then
@@ -874,7 +1056,9 @@ cmd_reset() {
   for a in "$@"; do
     reset_option "$a" || die "reset: unknown option '$a'" 2
   done
+  refuse_pending_upgrade
   [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
+  lock_managed_box
   confirm_reset
   cd "$WAITRON_DIR"
   wipe_box
@@ -901,7 +1085,7 @@ main() {
     verb=install
   fi
   case "$verb" in
-    install | update | status | reset | "" | -h | --help) ;;
+    install | update | status | restore | keep | reset | __candidate | "" | -h | --help) ;;
     *) die "unknown command '$verb'" 2 ;;
   esac
   if [ -n "$first" ]; then
@@ -911,7 +1095,9 @@ main() {
   fi
   case "$verb" in
     install | update) shift; cmd_install "$@" ;;
+    __candidate) shift; prepare_upgrade_candidate "$@" ;;
     status) shift; cmd_status "$@" ;;
+    restore | keep) cmd_upgrade_choice "$verb" ;;
     reset)   shift; cmd_reset "$@" ;;
     *) usage ;;
   esac

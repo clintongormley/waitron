@@ -1,7 +1,7 @@
 [Unit]
 Description=Start the installed emulator-only Waitron development box
-After=docker.service network-online.target
-Requires=docker.service
+After=waitron-app.service network-online.target
+Requires=waitron-app.service
 
 [Service]
 Type=oneshot

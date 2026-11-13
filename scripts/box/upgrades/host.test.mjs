@@ -96,6 +96,8 @@ async function imageFixture({
   inUse = false,
   reopenFailure = false,
   serviceChange = false,
+  prepareCandidate,
+  writers = false,
 } = {}) {
   const fs = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
@@ -132,8 +134,10 @@ async function imageFixture({
   if (!noEnv) await fs.writeFile(join(root, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/first\n");
   const created = new Set();
   const resolved = new Map();
+  let opened = false;
   const run = async (file, args, input) => {
     calls.push([file, ...args]);
+    if (args.includes("up")) opened = true;
     if (pullFailure && args[0] === "pull" && resolved.get(args[1]) === "agent:old")
       throw new Error("registry offline");
     if (cleanupFailure && args[0] === "image" && args[1] === "rm")
@@ -185,7 +189,16 @@ async function imageFixture({
       return { stdout: JSON.stringify([{ Mountpoint: join(root, args[2].slice(8)) }]) };
     if (args.includes("ps"))
       return {
-        stdout: (activeTunnel || stoppedTunnel) && args.at(-1) === "tunnel" ? "tunnel-id\n" : "",
+        stdout:
+          (activeTunnel || stoppedTunnel) && args.at(-1) === "tunnel"
+            ? "tunnel-id\n"
+            : writers && args.at(-1) === "-q"
+              ? "app-id\nagent-id\n"
+              : writers && opened && ["app", "print-agent"].includes(args.at(-1))
+                ? args.at(-1) === "app"
+                  ? "app-id\n"
+                  : "agent-id\n"
+                : "",
       };
     if (args[0] === "inspect")
       return {
@@ -204,7 +217,13 @@ async function imageFixture({
           : `sha256:${resolved.get(args[2]) ?? args[2]}\n`,
       };
     }
-    if (args[0] === "image" || args[0] === "pull" || args.includes("up") || args.includes("stop"))
+    if (
+      args[0] === "update" ||
+      args[0] === "image" ||
+      args[0] === "pull" ||
+      args.includes("up") ||
+      args.includes("stop")
+    )
       return { stdout: "" };
     throw new Error(`unexpected command: ${file} ${args.join(" ")}`);
   };
@@ -223,6 +242,7 @@ async function imageFixture({
     boxDirectory: root,
     directory,
     candidate: realCompose ? shipped : candidate,
+    prepareCandidate: prepareCandidate && (() => prepareCandidate({ candidate, calls })),
     run,
     checkCandidate: async () => [{ name: "sale", ok: true }],
   });
@@ -275,7 +295,7 @@ it("pins all old images before pulling any candidate, and resumes only recorded 
   await f.host.resume(images.old);
   const pinned = JSON.parse(await fs.readFile(join(root, "compose.yml"), "utf8"));
   expect(pinned.services.app.image).toBe("sha256:app:old");
-  expect(calls.at(-1)).toEqual([
+  expect(calls.findLast((args) => args.includes("up"))).toEqual([
     "docker",
     "compose",
     "--project-directory",
@@ -299,6 +319,42 @@ it("pins all old images before pulling any candidate, and resumes only recorded 
   await f.host.cleanup(images);
   await expect(fs.access(directory)).rejects.toMatchObject({ code: "ENOENT" });
   expect(calls.filter((args) => args[1] === "image" && args[2] === "rm")).toHaveLength(6);
+});
+
+it("pins the stopped source before building local candidates and saves the refreshed candidate configuration", async () => {
+  const { f, root, directory, fs, join, images, calls } = await imageFixture({
+    stage: false,
+    activeTunnel: true,
+    prepareCandidate: async ({ candidate, calls }) => {
+      expect(calls.filter((args) => args[2] === "tag")).toHaveLength(4);
+      return {
+        compose: JSON.stringify({
+          ...candidate,
+          services: {
+            ...candidate.services,
+            app: { image: "local:new", environment: { UPGRADE_SETTING: "built" } },
+          },
+        }),
+        images: { app: "sha256:local", "print-agent": "sha256:agent", mailpit: "sha256:mail" },
+      };
+    },
+  });
+  expect(images.old.app).toBe("sha256:app:old");
+  expect(images.candidate).toEqual({
+    app: "sha256:local",
+    "print-agent": "sha256:agent",
+    mailpit: "sha256:mail",
+    tunnel: "sha256:running-tunnel",
+  });
+  expect(calls.some((args) => ["pull", "manifest"].includes(args[1]))).toBe(false);
+  await f.host.stop();
+  const saved = JSON.parse(await fs.readFile(join(directory, "candidate-compose.json"), "utf8"));
+  expect(JSON.parse(saved.compose).services.app.environment).toEqual({ UPGRADE_SETTING: "built" });
+  await f.host.installCandidate(images.candidate);
+  const installed = JSON.parse(await fs.readFile(join(root, "compose.yml"), "utf8"));
+  expect(installed.services.app.image).toBe("sha256:local");
+  expect(installed.services.app.environment).toEqual({ UPGRADE_SETTING: "built" });
+  await f.host.resume(images.old);
 });
 
 it("boot recovery holds a failed manual attempt without Docker, and pins a committed target without removing its copies", async () => {
@@ -440,19 +496,19 @@ it("a fresh Keep retries the saved candidate configuration when installation fai
   expect(kept.services.app.environment).toEqual({ UPGRADE_SETTING: "new" });
 });
 
-it("requires measured copy size plus a reserve in the attempt filesystem", async () => {
+it("requires room for the intact and disposable copies plus a reserve in the attempt filesystem", async () => {
   const { assertCopyRoom } = await import("./host.mjs");
   const run = async () => ({ stdout: "4 /volumes/state\n8 /box/compose.yml\n" });
   await expect(
     assertCopyRoom(["/volumes/state", "/box/compose.yml"], "/attempts", {
       run,
-      statfs: async () => ({ bavail: 4098n, bsize: 4096n }),
+      statfs: async () => ({ bavail: 4099n, bsize: 4096n }),
     }),
   ).rejects.toThrow("not enough room for the upgrade copy");
   await expect(
     assertCopyRoom(["/volumes/state", "/box/compose.yml"], "/attempts", {
       run,
-      statfs: async () => ({ bavail: 4099n, bsize: 4096n }),
+      statfs: async () => ({ bavail: 4102n, bsize: 4096n }),
     }),
   ).resolves.toBeUndefined();
 });
@@ -619,4 +675,112 @@ it("keeps an already-stopped tunnel off when reopening", async () => {
   expect(images.old).not.toHaveProperty("tunnel");
   await f.host.resume(images.old);
   expect(calls.find((args) => args.includes("up"))).not.toContain("staff-tunnel");
+});
+
+it("relays only the real clock status line and refuses a clock change without contacting the host", async () => {
+  const { createServer, createConnection } = await import("node:net");
+  const { clockStatusRelay } = await import("./host.mjs");
+  const { root, fs, join } = await imageFixture({ prepare: false });
+  const source = join(root, "host.sock");
+  const received = [];
+  const realReply =
+    '{"ok":true,"service":"on","unit":"chrony.service","synchronised":false,"lastSyncAt":null}\n';
+  const upstream = createServer((socket) =>
+    socket.on("data", (bytes) => {
+      received.push(bytes.toString());
+      socket.end(realReply);
+    }),
+  );
+  await new Promise((done) => upstream.listen(source, done));
+  let relay;
+  try {
+    relay = await clockStatusRelay({ directory: join(root, "relay"), socketPath: source });
+    const exchange = (line) =>
+      new Promise((done, reject) => {
+        const socket = createConnection(join(root, "relay", "box.sock"));
+        let reply = "";
+        socket.on("connect", () => socket.write(line));
+        socket.on("data", (bytes) => {
+          reply += bytes.toString();
+        });
+        socket.on("end", () => done(reply));
+        socket.on("error", reject);
+      });
+    expect(await exchange("clock.status\n")).toBe(realReply);
+    expect(await exchange('clock.set {"targetMs":1}\n')).toBe(
+      '{"ok":false,"reason":"forbidden"}\n',
+    );
+    expect(received).toEqual(["clock.status\n"]);
+    expect((await fs.stat(join(root, "relay", "box.sock"))).mode & 0o777).toBe(0o666);
+  } finally {
+    await relay?.close();
+    await new Promise((done) => upstream.close(done));
+  }
+});
+
+it.each([false, true])(
+  "disables container restart before the marker and restores policies on reopen (%s)",
+  async (realCompose) => {
+    const t = await imageFixture({
+      realCompose,
+      writers: true,
+      stoppedTunnel: true,
+      prepare: false,
+      stage: false,
+    });
+    const path = t.join(t.root, "compose.yml");
+    if (!realCompose) {
+      for (const service of Object.values(t.config.services)) service.restart = "unless-stopped";
+      await t.fs.writeFile(path, JSON.stringify(t.config));
+    }
+    const original = await t.fs.readFile(path, "utf8");
+    const images = await t.f.host.prepareImages();
+    expect(t.calls).toContainEqual(["docker", "update", "--restart=no", "app-id", "agent-id"]);
+    expect(await t.fs.readFile(path, "utf8")).toBe(original);
+    await t.f.host.resume(images.old);
+    expect(t.calls).toContainEqual(["docker", "update", "--restart=unless-stopped", "app-id"]);
+    expect(t.calls).toContainEqual(["docker", "update", "--restart=unless-stopped", "agent-id"]);
+    expect(t.calls).toContainEqual(["docker", "update", "--restart=unless-stopped", "tunnel-id"]);
+    expect(t.calls.findLast((args) => args.includes("up"))).not.toContain("staff-tunnel");
+    expect(t.calls.findIndex((args) => args.includes("--restart=unless-stopped"))).toBeLessThan(
+      t.calls.findLastIndex((args) => args.includes("--wait")),
+    );
+    const resolved = JSON.parse(
+      (await t.run("docker", ["compose", "-f", path, "config", "--format", "json"])).stdout,
+    );
+    for (const service of Object.values(resolved.services))
+      expect(service.restart).toBe("unless-stopped");
+  },
+);
+
+it("routes Apply through the host controller and retains a refused copy sale", async () => {
+  const { runUpgradeCli } = await import("./cli.mjs");
+  const f = await imageFixture({ prepare: false });
+  const stateFile = f.join(f.root, "state", "retained");
+  await f.fs.writeFile(stateFile, "intact source");
+  f.candidate.services["print-agent"].healthcheck = { test: ["CMD", "true"] };
+  const run = async (file, args, input) => {
+    if (file === "prepare-fixture") {
+      expect(args).toEqual(["candidate-ref"]);
+      return { stdout: JSON.stringify({ compose: JSON.stringify(f.candidate) }) };
+    }
+    if (args[0] === "inspect" && !args.includes("--format"))
+      return {
+        stdout: JSON.stringify([{ State: { Running: true, Health: { Status: "healthy" } } }]),
+      };
+    if (args[0] === "run" && args.includes("readiness"))
+      return { stdout: '[{"name":"readiness","ok":true}]\n' };
+    if (args[0] === "exec") {
+      if (args.includes("sale")) throw new Error("sale refused");
+      return { stdout: "" };
+    }
+    if (args[0] === "run" || args[0] === "rm" || args[0] === "stop") return { stdout: "" };
+    return f.run(file, args, input);
+  };
+  const result = await runUpgradeCli(["apply", f.root, "prepare-fixture", "candidate-ref"], {
+    run,
+  });
+  expect(result).toMatchObject({ phase: "awaiting-choice", copied: true, failure: "sale refused" });
+  const directory = f.join(`${f.root}.upgrades`, (await f.fs.readdir(`${f.root}.upgrades`))[0]);
+  expect(await f.fs.readFile(f.join(directory, "copies/0/retained"), "utf8")).toBe("intact source");
 });

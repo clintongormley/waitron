@@ -103,8 +103,7 @@ export function installShutdownHandlers(
 }
 
 /**
- * Docker restarts the box once it exits (`deploy/compose.yml`). Safe to call again and again: with a
- * shutdown under way another SIGTERM would only cut it short.
+ * A second SIGTERM would interrupt the closers already draining.
  */
 export function restartProcess(): void {
   if (!shutdownUnderWay) process.kill(process.pid, "SIGTERM");

@@ -22,6 +22,7 @@ packages=(
   --package='docker-ce-cli=5:29.9.3-1~debian.13~trixie'
   --package='containerd.io=2.4.2-3~debian.13~trixie'
   --package='docker-compose-plugin=5.7.0-1~debian.13~trixie'
+  --package='docker-buildx-plugin=0.39.0-1~debian.13~trixie'
 )
 cd "$output"
 timeout -k 10 600 mkosi --directory="$repo/deploy/box" --sandbox-tree="$output/sandbox" \
@@ -34,6 +35,25 @@ install -d -m 0755 "$root/opt/waitron" "$root/etc/dracut.conf.d"
 install -D -m 0755 "$repo/deploy/box/start-dev.sh" "$root/usr/local/sbin/waitron-dev-start"
 install -D -m 0644 "$repo/deploy/box/waitron-dev.service" "$root/etc/systemd/system/waitron-dev.service"
 systemctl --root="$root" enable waitron-dev.service
+install -D -m 0755 "$repo/deploy/waitron.sh" "$root/opt/waitron-host/waitron.sh"
+install -D -m 0755 "$repo/deploy/box/upgrade-restart.sh" "$root/usr/local/lib/waitron/upgrade-restart.sh"
+for unit in waitron-app waitron-upgrade-recovery; do
+  install -m 0644 "$repo/deploy/box/$unit.service" "$root/etc/systemd/system/"
+done
+install -D -m 0644 "$repo/deploy/box/docker-waitron-disk.conf" "$root/etc/systemd/system/waitron-upgrade-recovery.service.d/waitron-disk.conf"
+# Recovery precedes Docker; only the disk gate may precede recovery.
+sed -i 's/ waitron-upgrade-recovery.service//g' "$root/etc/systemd/system/waitron-upgrade-recovery.service.d/waitron-disk.conf"
+systemctl --root="$root" enable waitron-app.service waitron-upgrade-recovery.service
+for module in cli host transaction copy candidate; do
+  install -D -m 0644 "$repo/scripts/box/upgrades/$module.mjs" "$root/opt/waitron-host/box/upgrades/$module.mjs"
+done
+install -D -m 0755 "$repo/scripts/box/upgrades/bootstrap.sh" "$root/opt/waitron-host/box/upgrades/bootstrap.sh"
+(
+  trap 'rm -f "$root/etc/resolv.conf"' EXIT
+  cp /etc/resolv.conf "$root/etc/resolv.conf"
+  chroot "$root" bash /opt/waitron-host/box/upgrades/bootstrap.sh /opt/waitron-host /opt/waitron
+)
+install -m 0644 "$root/opt/waitron-host/node-v26.7.0/LICENSE" "$root/app/third-party/node-host-LICENSE"
 install -d -m 0755 "$root/opt/waitron-host/box"
 for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host network-host host-protocol wifi-record wifi-boot-copy; do
   install -m 0644 "$repo/scripts/box/$module.mjs" "$root/opt/waitron-host/box/"
@@ -53,7 +73,7 @@ for unit in docker.service docker.socket; do
 done
 install -d -m 0755 "$root/usr/lib/dracut/modules.d/95waitron"
 install -m 0755 "$repo/deploy/box/dracut/95waitron/"*.sh "$root/usr/lib/dracut/modules.d/95waitron/"
-cp "$repo/deploy/compose.yml" "$root/opt/waitron/compose.yml"
+install -m 0644 "$repo/deploy/compose.yml" "$root/opt/waitron/compose.yml"
 mkdir "$output/input-stage"
 for kind in app agent mailpit; do
   archive="$inputs/$kind.tar"

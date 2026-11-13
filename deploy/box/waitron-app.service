@@ -1,0 +1,13 @@
+[Unit]
+Description=Waitron application and local services
+Requires=docker.service waitron-upgrade-recovery.service
+After=docker.service waitron-upgrade-recovery.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/opt/waitron-host/service.env
+ExecStart=/usr/local/lib/waitron/upgrade-restart.sh run
+
+[Install]
+WantedBy=multi-user.target

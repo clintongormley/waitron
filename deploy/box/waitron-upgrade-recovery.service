@@ -1,0 +1,15 @@
+[Unit]
+Description=Recover an interrupted Waitron upgrade before Docker
+DefaultDependencies=no
+After=local-fs.target
+Before=docker.service docker.socket shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/opt/waitron-host/service.env
+ExecStart=/usr/local/lib/waitron/upgrade-restart.sh offline
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -8,9 +8,11 @@ luks_uuid="$(cryptsetup luksUUID "$backing")" || refuse encrypted-root
 [ -n "$luks_uuid" ] && [ "$luks_uuid" = "$(cat /etc/waitron-dev-luks)" ] || refuse encrypted-root
 disk="$(node /opt/waitron-host/box/disk-start.mjs check)" || refuse disk-key
 cd /opt/waitron
-apparmor_parser -r /etc/apparmor.d/waitron-print-agent
-export WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent
-docker compose up -d --pull never
+box="$(pwd -P)"
+if [ -d "${box}.upgrades" ] && [ -n "$(find "${box}.upgrades" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+  refuse upgrade-pending
+fi
+systemctl start waitron-app.service
 status=""
 for attempt in $(seq 1 90); do
   status="$(curl -ksS --max-time 5 -o /run/waitron-status.json -w '%{http_code}' https://127.0.0.1/setup-api/status)" || status=""

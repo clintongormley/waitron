@@ -114,7 +114,6 @@ describe("contained upgrade data checks", () => {
     const { config, env } = await copiedConfig();
     const report = await checkUpgradeData(config, env);
     expect(report).toEqual({ mode: "trading", menus: 3, orders: 1, fiscalRecords: 1 });
-    // These checks inspect the copy; the mandatory test sale has a separate disposable copy.
     expect(await checkUpgradeData(config, env)).toEqual(report);
   });
 
@@ -262,7 +261,7 @@ describe("contained upgrade data checks", () => {
     await rebound.close();
   });
 
-  it("ships an inert library entry that checks data and reports a refused bind", async () => {
+  it("ships an executable entry that checks data and reports invalid configuration or a refused bind", async () => {
     vi.stubEnv("CLAUDECODE", "1");
     vi.stubEnv("CLAUDE_CODE_CHILD_SESSION", "1");
     vi.stubEnv("WAITRON_TLS_CERT_FILE", "/ambient/never-use.pem");
@@ -286,9 +285,9 @@ describe("contained upgrade data checks", () => {
         WAITRON_STATE_DIR: coldState,
       },
       timeout: 10_000,
-    });
-    expect(cold.stdout).toBe("");
-    expect(cold.stderr).toBe("");
+    }).catch((error: childProcess.ExecFileException & { stdout: string; stderr: string }) => error);
+    expect(cold).toMatchObject({ code: 1, stdout: "" });
+    expect(cold.stderr).toBe("server.config_invalid\n");
     expect(await readdir(coldState)).toEqual([]);
     const port = await freePort();
     const script = `const {runUpgradeChecks}=await import(${JSON.stringify(pathToFileURL(entry).href)});
@@ -309,6 +308,22 @@ describe("contained upgrade data checks", () => {
       fiscalRecords: 1,
     });
     expect(checked.stderr).toBe("");
+    const invoked = await execute(process.execPath, [entry, "readiness"], {
+      env: {
+        PATH: process.env.PATH,
+        ...env,
+        WAITRON_MIGRATIONS_DIR: join(artifact, "drizzle"),
+        WAITRON_HTTP_PORT: String(port),
+      },
+      timeout: 30_000,
+    });
+    expect(JSON.parse(invoked.stdout)).toEqual([
+      {
+        name: "readiness",
+        ok: true,
+        details: { mode: "trading", menus: 3, orders: 1, fiscalRecords: 1 },
+      },
+    ]);
     const held = await retainHttpListener();
     try {
       const busyScript = `const {runUpgradeChecks}=await import(${JSON.stringify(pathToFileURL(entry).href)});
