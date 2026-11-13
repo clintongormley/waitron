@@ -737,8 +737,8 @@ credit):
 Commands: `pnpm --filter @waitron/core exec vitest run src/settle-sale.test.ts
 src/list-outstanding-sales.test.ts`; `cd apps/server && TESTCONTAINERS_RYUK_DISABLED=true pnpm exec
 vitest run src/find-bill-bills.test.ts src/find-bill-transactions.test.ts src/orders-list.test.ts
-src/orders-list.reads.test.ts src/till-sale-integrated.db.test.ts` `src/deferred-close.test.ts`
-`src/deferred-payment-export.test.ts`; root `pnpm exec
+src/orders-list.reads.test.ts src/till-sale-integrated.db.test.ts
+src/deferred-close.test.ts src/deferred-payment-export.test.ts`; root `pnpm exec
 vitest run scripts/corrective-sums.test.ts`. A PR tests only changed packages (CLAUDE.md §2), so run
 the till and dashboard suites that read these routes if any response shape changes.
 
