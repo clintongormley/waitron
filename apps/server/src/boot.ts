@@ -445,7 +445,7 @@ import { collectBoxHealth } from "./box-health.js";
 import { sharedClockServiceReading } from "./clock-service-reading.js";
 import { CLOCK_WATCH_MS, createClockWatch, clockWatchJob } from "./clock-watch.js";
 import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
-import { startClockAgreed, startClockCheck, startClockState } from "./start-clock-check.js";
+import { startClockCheck, startClockState } from "./start-clock-check.js";
 import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
 import { clockSyncAlertSource } from "./clock-sync-alert.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
@@ -3068,10 +3068,7 @@ async function bootServer(
                 start: startClock,
               }),
               // The waiting start alone: its words say devices are awaited, untrue during a set.
-              startClockAgreed: () =>
-                filesRecords() && startClock.unconfirmed()
-                  ? startClockAgreed(clockWitnesses.witnesses())
-                  : null,
+              startClockWaits,
             },
             enabledAtStart,
           ),

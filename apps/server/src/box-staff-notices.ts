@@ -7,6 +7,7 @@ import type {
   StaffNoticeSource,
   WaitronModule,
 } from "@waitron/module";
+import type { StartClockWaiting } from "./clock-unconfirmed-alert.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import { enabledStaffNoticeSources } from "./modules.js";
@@ -59,23 +60,25 @@ const CHECK_TIME: StaffNotice = {
 
 type ClockCheck = (tx: Transaction, reading: StaffNoticeReadContext["reading"]) => Promise<boolean>;
 
-/** While `check` answers true at the read's reading: `clock.unconfirmed` with its count while
- * `startClockAgreed` answers one (the start check waits), otherwise `clock.check_time`. */
+type StartClockWaits = () => Pick<StartClockWaiting, "agreed" | "cause"> | null;
+
+/** While `check` answers true at the read's reading: `clock.unconfirmed` with its count and cause
+ * while `startClockWaits` answers them (the start check waits), otherwise `clock.check_time`. */
 export function clockCheckNoticeSource(
   check: ClockCheck,
-  startClockAgreed?: () => number | null,
+  startClockWaits?: StartClockWaits,
 ): StaffNoticeSource {
   return {
     read: async ({ tx, reading }) => {
       if (!(await check(tx, reading))) return [];
-      const agreed = startClockAgreed?.() ?? null;
-      if (agreed === null) return [CHECK_TIME];
+      const waiting = startClockWaits?.() ?? null;
+      if (waiting === null) return [CHECK_TIME];
       return [
         {
           key: "clock.unconfirmed",
           code: "clock.unconfirmed",
           severity: "error",
-          params: { agreed },
+          params: { agreed: waiting.agreed, cause: waiting.cause },
         },
       ];
     },
@@ -87,7 +90,7 @@ export function clockCheckNoticeSource(
 export function deviceNoticeSources(
   box: Parameters<typeof boxStaffNoticeSource>[0] & {
     clockCheck?: ClockCheck;
-    startClockAgreed?: () => number | null;
+    startClockWaits?: StartClockWaits;
   },
   modules: readonly WaitronModule[],
 ): readonly OwnedStaffNoticeSource[] {
@@ -98,7 +101,7 @@ export function deviceNoticeSources(
       : [
           {
             owner: BOX_CLOCK_NOTICE_OWNER,
-            source: clockCheckNoticeSource(box.clockCheck, box.startClockAgreed),
+            source: clockCheckNoticeSource(box.clockCheck, box.startClockWaits),
           },
         ]),
     ...enabledStaffNoticeSources(modules),
