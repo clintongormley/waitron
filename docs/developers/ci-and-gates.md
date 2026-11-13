@@ -3681,6 +3681,10 @@ are observations of successful runs, not tests of a stalled transfer:
 | Image nightly [43067644301](https://github.com/clintongormley/waitron/actions/runs/43067644301), smoke job 130686770204 | buildx 7 s (post 13 s), app 65 s, print-agent 14 s | 1 / 3 / 1 min |
 | Seven nightly CodeQL runs, 7–13 November, ending at [43346782629](https://github.com/clintongormley/waitron/actions/runs/43346782629) | init 22 s; JS/TS job 1792 s | init 1 min; job 60 min |
 
+The retained logs include actual bundle downloads: run 42325293985's JS/TS initialization
+finished downloading and extracting its CodeQL bundle in 1.3 seconds. The one-minute init
+limit therefore includes a measured download, though no stalled-transfer cancellation was tried.
+
 For the CodeQL job, use the job rule above: 1792 seconds doubled and rounded up to five
 minutes gives 60. Only three of the seven runs satisfy the checkout-health screen used for
 timing comparisons; their longest job is 1651 seconds. That comparison screen does not
@@ -3693,8 +3697,8 @@ step. No hosted forced-timeout experiment has proved post-save cancellation.
 
 | Source | Own words | What this establishes |
 | --- | --- | --- |
-| [ActionRunner.cs, v2.338.2](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/ActionRunner.cs#L38-L59), also L118 | `Timeout => Action?.Timeout`; `ContinueOnError => Action?.ContinueOnError`; `postRunner.Action = Action` | The post runner receives the same action and reads these properties from it. |
-| [StepsRunner.cs, v2.338.2](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/StepsRunner.cs#L64-L66), also L276–288 and L325 | `jobContext.JobSteps.Enqueue(jobContext.PostJobSteps.Pop())`; `SetTimeout(timeout)`; `ApplyContinueOnError` | Post steps pass through the timeout and failure-tolerance handling. |
+| [ActionRunner.cs, v2.338.2](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/ActionRunner.cs#L64), also L41 and L131 | `Timeout => Action?.TimeoutInMinutes`; `ContinueOnError => Action?.ContinueOnError`; `actionRunner.Action = Action` | The post runner receives the same action and reads these properties from it. |
+| [StepsRunner.cs, v2.338.2](https://github.com/actions/runner/blob/v2.338.2/src/Runner.Worker/StepsRunner.cs#L71), also L313 and L353 | `PostJobSteps.TryPop(out var postStep)`; `SetTimeout(timeout)`; `ApplyContinueOnError(step.ContinueOnError)` | Post steps pass through the timeout and failure-tolerance handling. |
 
 Keep buildx for image smoke and publication. The publication workflow already rebuilds from
 its local checking-build cache with an SBOM and provenance attestation; smoke uses the same
