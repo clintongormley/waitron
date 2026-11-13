@@ -111,8 +111,6 @@ and message behavior; keep domain-specific refusal clearing local. See the
   (right credentials, a role without the permission) and the adjustment approver's
   `adjustment.approval_required` for a right PIN whose role is too low; a signed-in person's
   re-check of their OWN password or code (`profile.ts`) still names the field. Still open:
-  - `manager-login.ts` reports an authenticator secret it cannot decrypt as a failed login
-    (`password.invalid`, logged with the reason `unreadable_secret` since C95), like a wrong code.
   - The membership route, the adjustment approver, the refund override and the manual-refund
     confirmer have no one-answer test case of their own.
   - Refusals thrown in `apps/server` itself (a malformed id or PIN) carry no `reason`.
@@ -473,6 +471,10 @@ Shared form plumbing, an untraced dialog focus line and retiring the summary onc
   untried. Left open by A331 batch 3a (#1401).
 
 ## Decisions and deliberate limits
+
+- **An unreadable authenticator secret is a sign-in refusal (C95, #930).**
+  `manager-login.ts` reports an authenticator secret it cannot decrypt as a failed login
+  (`password.invalid`, logged with the reason `unreadable_secret` since C95), like a wrong code.
 
 - **Reorder row paint (watcher, 2026-11-12 09:54, Lane D questions.md).** The scrolling
   wrapper clips the held last row's bottom shadow in shared reorder lists and the variant table.
