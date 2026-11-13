@@ -752,3 +752,35 @@ it.each([false, true])(
       expect(service.restart).toBe("unless-stopped");
   },
 );
+
+it("routes Apply through the host controller and retains a refused copy sale", async () => {
+  const { runUpgradeCli } = await import("./cli.mjs");
+  const f = await imageFixture({ prepare: false });
+  const stateFile = f.join(f.root, "state", "retained");
+  await f.fs.writeFile(stateFile, "intact source");
+  f.candidate.services["print-agent"].healthcheck = { test: ["CMD", "true"] };
+  const run = async (file, args, input) => {
+    if (file === "prepare-fixture") {
+      expect(args).toEqual(["candidate-ref"]);
+      return { stdout: JSON.stringify({ compose: JSON.stringify(f.candidate) }) };
+    }
+    if (args[0] === "inspect" && !args.includes("--format"))
+      return {
+        stdout: JSON.stringify([{ State: { Running: true, Health: { Status: "healthy" } } }]),
+      };
+    if (args[0] === "run" && args.includes("readiness"))
+      return { stdout: '[{"name":"readiness","ok":true}]\n' };
+    if (args[0] === "exec") {
+      if (args.includes("sale")) throw new Error("sale refused");
+      return { stdout: "" };
+    }
+    if (args[0] === "run" || args[0] === "rm" || args[0] === "stop") return { stdout: "" };
+    return f.run(file, args, input);
+  };
+  const result = await runUpgradeCli(["apply", f.root, "prepare-fixture", "candidate-ref"], {
+    run,
+  });
+  expect(result).toMatchObject({ phase: "awaiting-choice", copied: true, failure: "sale refused" });
+  const directory = f.join(`${f.root}.upgrades`, (await f.fs.readdir(`${f.root}.upgrades`))[0]);
+  expect(await f.fs.readFile(f.join(directory, "copies/0/retained"), "utf8")).toBe("intact source");
+});

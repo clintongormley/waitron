@@ -1,6 +1,6 @@
-import { expect, it, onTestFinished } from "vitest";
+import { expect, it, onTestFinished, vi } from "vitest";
 import * as fs from "node:fs/promises";
-import { join } from "node:path";
+import { join, delimiter } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -61,6 +61,11 @@ it("reports no attempt without creating files and refuses an unsupported choice"
   await expect(runUpgradeCli(["discard", f.box])).rejects.toThrow(
     "Expected apply, status, restore, keep or offline-recovery",
   );
+  await expect(runUpgradeCli(["apply", f.box])).rejects.toThrow(
+    "apply requires the candidate preparation command",
+  );
+  await fs.writeFile(`${f.box}.upgrades`, "not a directory");
+  await expect(runUpgradeCli(["status", f.box])).rejects.toMatchObject({ code: "ENOTDIR" });
 });
 
 it("refuses offline recovery with Docker running before removing a check tree", async () => {
@@ -128,4 +133,22 @@ it("holds an interrupted manual candidate on startup without choosing restore or
   expect(JSON.parse(await fs.readFile(join(f.directory, "attempt.json"), "utf8"))).toEqual(result);
   expect(calls.some((args) => args.includes("stop"))).toBe(true);
   expect(calls.some((args) => args.includes("up"))).toBe(false);
+  await expect(
+    runUpgradeCli(["apply", f.box, "must-not-run"], {
+      run: async () => {
+        throw new Error("pending Apply must run nothing");
+      },
+    }),
+  ).rejects.toThrow("resolve the upgrade attempt with restore or keep before installing");
+  await fs.mkdir(join(f.directory, "check"));
+  await fs.writeFile(join(f.directory, "check", "partial"), "disposable");
+  const bin = join(f.root, "bin");
+  await fs.mkdir(bin);
+  await fs.writeFile(join(bin, "systemctl"), "#!/bin/sh\nprintf 'inactive\\ninactive\\n'\n", {
+    mode: 0o700,
+  });
+  vi.stubEnv("PATH", bin + delimiter + process.env.PATH);
+  onTestFinished(() => vi.unstubAllEnvs());
+  expect(await runUpgradeCli(["offline-recovery", f.box])).toEqual(result);
+  await expect(fs.access(join(f.directory, "check"))).rejects.toMatchObject({ code: "ENOENT" });
 });
