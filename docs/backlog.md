@@ -2152,7 +2152,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   local Mailpit start refused the absent Docker socket. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.**
-  Private person and dish bindings remain in other suites, including `kitchen-print.test.ts`.
+  Private person and dish bindings remain, including person bindings in `kitchen-print.test.ts`.
   Protected fiscal and receipt helpers still need their boundary audit.
   Split-suite comments and file names also remain.
   Remaining server drink bindings include the sale-source receipt, issuance-identity, list-price
