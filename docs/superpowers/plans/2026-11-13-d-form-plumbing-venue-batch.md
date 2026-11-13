@@ -1,8 +1,9 @@
 # Lane D: venue form feedback batch
 
 **13 November 2026.** Separate GPT-6.1 Sol high-effort author; driver checked the draft against source.
-Claude approach read complete; driver applied its three corrections. Watcher clearance
-is pending; no implementation until cleared. This proposes scope inside the queue ask; no owner design approval is claimed.
+Claude approach read complete (149 seconds); driver applied its three corrections.
+The watcher cleared this batch at 01:06 on 13 November, after A1515 slice2. The API
+branch is now waiting only on CI; RUNNER H1a permits this independent batch in that gap. This proposes scope inside the queue ask; no owner design approval is claimed.
 
 **Original queue ask, verbatim**, recorded in
 `/Users/clintongormley/waitron-campaign-d/queue.md`, D-form-plumbing:

@@ -4,7 +4,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
+  bottomMessage,
   saveActionState,
   submitOnEnter,
   type DraftScope,
@@ -64,7 +65,7 @@ export class FloorPlanSetDialog extends LitElement {
   @property({ attribute: false }) refusal?: Refusal;
   @property({ attribute: false }) draftParent?: object;
   @state() private draft: Draft = { departmentId: "", name: "", fromSetId: "" };
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   private scope?: DraftScope<Draft>;
   private leave?: LeaveCoordinator;
   private opened?: string;
@@ -110,7 +111,7 @@ export class FloorPlanSetDialog extends LitElement {
         fromSetId: defaultSetOf(only),
       };
       this.baseline = { ...this.input };
-      this.attempted = false;
+      this.feedback.reset();
       this.refusal = undefined;
       this.submitted = undefined;
     }
@@ -171,7 +172,7 @@ export class FloorPlanSetDialog extends LitElement {
       return this.refusal!.code === "floor_plan_set.name_taken"
         ? t("floor_plans.name_taken")
         : t("menu.field_refused");
-    return this.attempted ? (this.ownErrors[field] ?? "") : "";
+    return this.feedback.attempted ? (this.ownErrors[field] ?? "") : "";
   }
   private changed(field: Field, value: string) {
     this.draft = { ...this.draft, [field]: value };
@@ -183,10 +184,10 @@ export class FloorPlanSetDialog extends LitElement {
   private save() {
     if (!this.open || !this.isConnected || this.busy || saveActionState(this.scope).unchanged)
       return;
-    this.attempted = true;
+    this.feedback.press();
     this.refusal = undefined;
     if (Object.keys(this.ownErrors).length) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     this.submittedGeneration = this.generation;
@@ -305,7 +306,7 @@ export class FloorPlanSetDialog extends LitElement {
         </div>
         <wt-form-actions
           slot="footer"
-          .error=${[bottom, marked ? t("menu.fix_fields") : ""].filter(Boolean).join(" ")}
+          .error=${bottomMessage(bottom, marked ? t("menu.fix_fields") : "")}
         >
           <wt-button
             slot="cancel"
@@ -320,7 +321,7 @@ export class FloorPlanSetDialog extends LitElement {
           <wt-button
             data-test="save-set"
             variant=${s.variant}
-            ?disabled=${s.unchanged || this.busy || (this.attempted && Object.keys(this.ownErrors).length > 0)}
+            ?disabled=${s.unchanged || this.busy || (this.feedback.attempted && Object.keys(this.ownErrors).length > 0)}
             ?loading=${this.busy}
             @click=${() => {
               if (current()) this.save();

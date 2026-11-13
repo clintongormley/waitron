@@ -74,6 +74,10 @@ it("Save with a field missing explains it beside the field and at the bottom", a
   expect(field(el, "name")!.error).toBe("");
   expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
   expect(save(el).disabled).toBe(true);
+  const department = field(el, "departmentId")!;
+  await expect
+    .poll(() => department.shadowRoot!.activeElement)
+    .toBe(department.shadowRoot!.querySelector("button.trigger"));
   await change(el, "departmentId", "deli");
   expect(field(el, "departmentId")!.error).toBe("");
   expect(bottom(el)).toBe("");
@@ -197,4 +201,24 @@ it("speaks Spanish", async () => {
   el.open = true;
   await el.updateComplete;
   expect(heading(el)).toBe("Copiar Cena");
+});
+
+it("reopens Copy quietly after Add was refused by its own checks", async () => {
+  const { el } = await mount((dialog) => {
+    dialog.mode = "add";
+  });
+  await change(el, "name", "Brunch");
+  save(el).click();
+  await el.updateComplete;
+  expect(field(el, "departmentId")!.error).toBe("Choose a department.");
+  el.open = false;
+  await el.updateComplete;
+  el.mode = "copy";
+  el.set = el.departments[0]!.sets[0]!;
+  el.open = true;
+  await el.updateComplete;
+  expect(field(el, "name")!.value).toBe("");
+  expect(field(el, "name")!.error).toBe("");
+  expect(bottom(el)).toBe("");
+  expect(save(el).disabled).toBe(true);
 });
