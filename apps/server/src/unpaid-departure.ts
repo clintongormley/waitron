@@ -1,3 +1,4 @@
+import { serviceDishPredicate } from "./service-dishes.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
@@ -221,7 +222,7 @@ async function stopDepartureKitchen(
     .select()
     .from(workingOrderLines)
     .where(inArray(workingOrderLines.workingOrderId, kitchenBillIds));
-  const dishes = rows.filter((row) => row.parentLineId === null);
+  const dishes = rows.filter(await serviceDishPredicate(tx, rows));
   const priors = await tx
     .select()
     .from(lineServiceCancellations)

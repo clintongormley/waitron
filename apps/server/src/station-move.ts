@@ -1,3 +1,4 @@
+import { serviceDishPredicate } from "./service-dishes.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import type { OrderAttendance } from "./working-order.js";
 import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
@@ -96,8 +97,16 @@ export async function rerouteHeldAtRelease(
     return !state || !state.active || !state.open;
   });
   const unchosen = closed.filter((row) => unchosenAtClosedStation(row, states.get(row.stationId)));
-  const dishes = unchosen.filter((row) => row.parentLineId === null && row.productId !== null);
-  const stranded = unchosen.filter((row) => row.parentLineId !== null || row.productId === null);
+  const isDish = await serviceDishPredicate(
+    tx,
+    unchosen.map((row) => ({ ...row, id: row.lineId })),
+  );
+  const dishes = unchosen.filter(
+    (row) => isDish({ ...row, id: row.lineId }) && row.productId !== null,
+  );
+  const stranded = unchosen.filter(
+    (row) => !isDish({ ...row, id: row.lineId }) || row.productId === null,
+  );
   const alertStranded = async () => {
     if (stranded.length === 0) return;
     const waiting = await passWaitingStations(
@@ -381,11 +390,12 @@ export async function moveDishesToStation(
               .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
               .where(inArray(workingOrderLines.id, lineIds));
       const byId = new Map(rows.map((row) => [row.id, row]));
+      const isDish = await serviceDishPredicate(tx, rows);
       for (const lineId of lineIds) {
         const row = byId.get(lineId);
         if (row === undefined || row.workingOrderId !== orderId)
           throw new AppError("tab.line_not_found", { tabId: orderId, lineId });
-        if (row.parentLineId !== null && !options.includeExtras)
+        if (!isDish(row) && !options.includeExtras)
           throw new AppError("ticket.extra_not_movable", { workingOrderId: orderId, lineId });
         if (row.ticketItemId === null)
           throw new AppError("ticket.not_sent", { workingOrderId: orderId, lineId });

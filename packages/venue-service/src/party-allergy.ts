@@ -1,3 +1,4 @@
+import { lunchLineSql } from "./operations.js";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   allergyLineTicks,
@@ -262,7 +263,10 @@ export async function setAllergyLineTicks(
               ) select id from family
             )`,
           ),
-          isNull(workingOrderLines.parentLineId),
+          or(
+            isNull(workingOrderLines.parentLineId),
+            lunchLineSql(sql`working_order_lines.parent_line_id`),
+          ),
         ),
       ))
       found.add(id);

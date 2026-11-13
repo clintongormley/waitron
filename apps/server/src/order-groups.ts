@@ -1,3 +1,4 @@
+import { serviceDishPredicate, serviceDishCondition } from "./service-dishes.js";
 import { readDisplayLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import {
   readLineCancellations,
@@ -569,7 +570,7 @@ export async function fireHeldLine(
         .where(
           and(
             eq(workingOrderLines.id, lineId),
-            isNull(workingOrderLines.parentLineId),
+            serviceDishCondition(),
             eq(workingOrders.partyId, partyId),
             eq(orderGroups.partyId, partyId),
             ne(orderGroups.state, "removed"),
@@ -840,7 +841,7 @@ async function copyGroups(
     .where(
       and(
         inArray(workingOrderLines.id, [...new Set(lineIds)]),
-        isNull(workingOrderLines.parentLineId),
+        serviceDishCondition(),
         eq(orderGroups.partyId, fromPartyId),
         eq(orderGroups.state, state),
       ),
@@ -988,13 +989,7 @@ async function activeGroupLines(tx: Transaction, groupId: string) {
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(
-      and(
-        eq(workingOrderLines.groupId, groupId),
-        isNull(workingOrderLines.parentLineId),
-        onShownBill(),
-      ),
-    )
+    .where(and(eq(workingOrderLines.groupId, groupId), serviceDishCondition(), onShownBill()))
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
   const cancellations = await readLineCancellations(
     tx,
@@ -1029,7 +1024,7 @@ export async function releaseHeldWorkOf(
         eq(orderGroups.partyId, partyId),
         eq(orderGroups.state, "held"),
         inArray(workingOrderLines.workingOrderId, [...billIds]),
-        isNull(workingOrderLines.parentLineId),
+        serviceDishCondition(),
       ),
     )
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
@@ -1061,7 +1056,7 @@ export async function releaseHeldWorkOf(
       .where(
         and(
           eq(workingOrderLines.groupId, group.id),
-          isNull(workingOrderLines.parentLineId),
+          serviceDishCondition(),
           inArray(workingOrderLines.workingOrderId, [...billIds]),
         ),
       );
@@ -1306,7 +1301,7 @@ export async function moveLinesToGroup(
               workingOrderLines.id,
               moves.map((m) => m.lineId),
             ),
-            isNull(workingOrderLines.parentLineId),
+            serviceDishCondition(),
             eq(orderGroups.partyId, partyId),
             ne(orderGroups.state, "removed"),
           ),
@@ -1612,7 +1607,7 @@ export async function removeEmptiedHeldGroups(
               tx
                 .select({ id: workingOrderLines.id })
                 .from(workingOrderLines)
-                .where(eq(workingOrderLines.groupId, orderGroups.id)),
+                .where(and(eq(workingOrderLines.groupId, orderGroups.id), serviceDishCondition())),
             ),
           ),
         )
@@ -1683,7 +1678,7 @@ async function readGroups(
     .from(workingOrderLines)
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(and(eq(orderGroups.partyId, partyId), isNull(workingOrderLines.parentLineId), ...scope))
+    .where(and(eq(orderGroups.partyId, partyId), serviceDishCondition(), ...scope))
     .orderBy(asc(workingOrders.orderNumber), asc(workingOrderLines.lineNo));
   const remaining = leftToServe();
   const ready = or(eq(ticketItems.madeHere, true), eq(ticketItems.state, "ready"));
@@ -1854,8 +1849,7 @@ export async function readReleaseReminders(
           workingOrderLines.groupId,
           groups.map((group) => group.id),
         ),
-        // The NULL-parent index range includes historical top-level dishes.
-        isNull(sql`+${workingOrderLines.parentLineId}`),
+        serviceDishCondition(),
         onShownBill(),
       ),
     );
@@ -1918,8 +1912,7 @@ export async function readHeldCounts(
         inArray(orderGroups.partyId, [...partyIds]),
         eq(orderGroups.state, "held"),
         eq(parties.state, "open"),
-        // The NULL-parent index range includes historical top-level dishes.
-        isNull(sql`+${workingOrderLines.parentLineId}`),
+        serviceDishCondition(),
         onShownBill(),
       ),
     );
@@ -2141,9 +2134,12 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     tx,
     lines.map((line) => line.id),
   );
-  const heldExtras = dishesWithHeldExtra(lines);
+  const isDish = await serviceDishPredicate(tx, lines);
+  const heldExtras = dishesWithHeldExtra(
+    lines.filter((line) => line.parentLineId === null || !isDish(line)),
+  );
   for (const line of lines) {
-    if (line.parentLineId === null) continue;
+    if (line.parentLineId === null || isDish(line)) continue;
     extras.set(line.parentLineId, [
       ...(extras.get(line.parentLineId) ?? []),
       {
@@ -2161,7 +2157,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
   }
   const families = new Map<string, (typeof lines)[number][]>();
   for (const line of lines) {
-    const parentId = line.parentLineId ?? line.id;
+    const parentId = isDish(line) ? line.id : (line.parentLineId ?? line.id);
     const familyLines = families.get(parentId) ?? [];
     familyLines.push(line);
     families.set(parentId, familyLines);
@@ -2182,7 +2178,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
   const dishes: { groupId: string | null; servedAt: string | null; fullyCancelled?: true }[] = [];
   const retainedCourses = new Map<string, CurrentOrders["retainedCourses"][number]>();
   for (const line of lines) {
-    if (line.parentLineId !== null) continue;
+    if (!isDish(line)) continue;
     if (line.course !== null) retainedCourses.set(line.course.id, line.course);
     const group = line.groupId === null ? undefined : byId.get(line.groupId);
     if (line.groupId !== null && group === undefined) continue;
@@ -2763,7 +2759,7 @@ export async function groupArrivingDishes(
     .where(
       and(
         eq(workingOrderLines.workingOrderId, billId),
-        isNull(workingOrderLines.parentLineId),
+        serviceDishCondition(),
         isNull(workingOrderLines.groupId),
       ),
     )

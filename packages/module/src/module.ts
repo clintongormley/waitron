@@ -1167,6 +1167,8 @@ export interface VenueServiceContribution {
     tx: Transaction,
     workingOrderIds: readonly string[],
   ): Promise<ReadonlyMap<string, string>>;
+  lunchLineSql(lineId: SQL): SQL<boolean>;
+  readLunchLineIds(tx: Transaction, lineIds: readonly string[]): Promise<Set<string>>;
   readLunchOffers(
     tx: Transaction,
     workingOrderId: string,

@@ -1,3 +1,4 @@
+import { serviceDishPredicate } from "./service-dishes.js";
 import { eq, inArray } from "drizzle-orm";
 import {
   parties,
@@ -202,24 +203,23 @@ export async function readArrivingAllergyDishes(
   const allergens = (line: (typeof lines)[number]) =>
     line.productId === null ? null : (nutrition.get(line.productId) ?? null);
   const active = lines.filter((line) => line.quantity > (cancellations.get(line.id) ?? 0));
-  return active
-    .filter((line) => line.parentLineId === null)
-    .map((line) => ({
-      line: { kind: "working", id: line.id },
-      billId,
-      name: staffPresentationName({ name: line.name, variantName: line.variantName }),
-      quantity: thousandthsToDecimal(line.quantity - (cancellations.get(line.id) ?? 0)),
-      allergens: allergens(line),
-      extras: active
-        .filter((extra) => extra.parentLineId === line.id)
-        .map((extra) => ({
-          name: staffPresentationName({ name: extra.name, variantName: extra.variantName }),
-          quantity: thousandthsToDecimal(extra.quantity - (cancellations.get(extra.id) ?? 0)),
-          allergens: allergens(extra),
-        })),
-      sentAt: line.sentAt,
-      offeredBefore: false,
-    }));
+  const isDish = await serviceDishPredicate(tx, lines);
+  return active.filter(isDish).map((line) => ({
+    line: { kind: "working", id: line.id },
+    billId,
+    name: staffPresentationName({ name: line.name, variantName: line.variantName }),
+    quantity: thousandthsToDecimal(line.quantity - (cancellations.get(line.id) ?? 0)),
+    allergens: allergens(line),
+    extras: active
+      .filter((extra) => extra.parentLineId === line.id && !isDish(extra))
+      .map((extra) => ({
+        name: staffPresentationName({ name: extra.name, variantName: extra.variantName }),
+        quantity: thousandthsToDecimal(extra.quantity - (cancellations.get(extra.id) ?? 0)),
+        allergens: allergens(extra),
+      })),
+    sentAt: line.sentAt,
+    offeredBefore: false,
+  }));
 }
 
 export async function readAllergySendView(
@@ -233,6 +233,7 @@ export async function readAllergySendView(
     cfg,
     partyId,
   );
+  const isDish = await serviceDishPredicate(tx, [...storedById.values()]);
   let chosen: Set<string>;
   if (target.kind === "draft") {
     const draft = drafts.find((d) => d.id === target.draftId);
@@ -300,7 +301,7 @@ export async function readAllergySendView(
           (l) => l.workingOrderId === target.orderId && l.lineNo === n,
         );
         if (named === undefined) continue;
-        if (named.parentLineId !== null) invalid("lineNos");
+        if (!isDish(named)) invalid("lineNos");
         const held = current.groups.find(
           (g) => g.state === "held" && g.rows.some((r) => r.lineId === named.id),
         );

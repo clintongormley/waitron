@@ -56,8 +56,8 @@ export async function dishKitchenItems(
   if (dishLineIds.length === 0) return result;
   const rows = await dishKitchenItemsQuery(tx, dishLineIds);
   for (const row of rows) {
-    const extra = row.parentLineId !== null;
-    const dishLineId = row.parentLineId ?? row.workingOrderLineId;
+    const extra = !dishLineIds.includes(row.workingOrderLineId);
+    const dishLineId = extra ? row.parentLineId! : row.workingOrderLineId;
     const items = result.get(dishLineId) ?? [];
     const item: DishKitchenItem = {
       ticketItemId: row.ticketItemId,

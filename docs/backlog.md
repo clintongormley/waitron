@@ -474,7 +474,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A1515. Set lunch menus, the _menú del día_ (owner, 2026-11-11): go-live.** One fixed price for a
   menu of courses, where the guest picks a dish for each course (say one of three starters), with
   bread, a drink or coffee included and an extra charge for a premium choice. The receipt shows one
-  line. Today a set lunch can only be sold as separate dishes with their own prices. The
+  line. The catalogue switch and course-service API are built; dedicated till choice controls and
+  lunch bill/receipt presentation remain. The
   [proposal](superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md) records the owner’s extras,
   later-choice, course-send and table-service 10% decisions. Claude reviewed the build plan; the watcher
   cleared it at 22:04 on 12 November; takeaway/delivery VAT remain with S10/Lane L.

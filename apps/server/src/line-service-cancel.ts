@@ -44,7 +44,7 @@ export function serviceCancellationFamilies(
       dish,
       prior,
       quantity,
-      family: (rowsByDish.get(dish.id) ?? []).map((row) => ({
+      family: (rowsByDish.get(dish.id) ?? [dish]).map((row) => ({
         row,
         remaining: row.quantity - shareOf(row, quantity),
         covered: shareOf(row, off),

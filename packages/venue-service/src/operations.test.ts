@@ -95,6 +95,8 @@ import {
   offeredKey,
   productsOfferedIn,
   readLateSendMarks,
+  readLunchLineIds,
+  lunchLineSql,
 } from "./operations.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 
@@ -2111,6 +2113,56 @@ async function addLine(tx: Transaction, venue: SellingVenue, orderId: string, li
   });
   return id;
 }
+
+it("reads lunch identity from each line's recorded version, in a base query and a join", async () => {
+  const venue = await seedSellingVenue();
+  await scoped(async (tx) => {
+    const id = await openOrder(tx, venue, 1);
+    await recordOrderServiceContext(tx, id, venue.diningZone);
+    const ordinary = await addLine(tx, venue, id, 1);
+    await recordWorkingLineContexts(
+      tx,
+      id,
+      [{ workingOrderLineId: ordinary, menuItemId: venue.menuItemId }],
+      await listZoneOffers(tx, venue.diningZone),
+    );
+    await updateProduct(tx, venue.productId, { setLunch: true });
+    await publish(tx, venue.menuId);
+    const lunch = await addLine(tx, venue, id, 2);
+    const withoutVersion = await addLine(tx, venue, id, 3);
+    await recordWorkingLineContexts(
+      tx,
+      id,
+      [lunch, withoutVersion].map((workingOrderLineId) => ({
+        workingOrderLineId,
+        menuItemId: venue.menuItemId,
+      })),
+      await listZoneOffers(tx, venue.diningZone),
+    );
+    await tx
+      .update(workingLineContexts)
+      .set({ menuVersionId: null })
+      .where(eq(workingLineContexts.workingOrderLineId, withoutVersion));
+    await updateProduct(tx, venue.productId, { setLunch: false });
+    await publish(tx, venue.menuId);
+    expect(await readLunchLineIds(tx, [ordinary, lunch, withoutVersion, randomUUID()])).toEqual(
+      new Set([lunch]),
+    );
+    expect(await readLunchLineIds(tx, [])).toEqual(new Set());
+    const selected = tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(lunchLineSql(sql`working_order_lines.id`));
+    expect(await selected).toEqual([{ id: lunch }]);
+    expect(
+      await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrders)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+        .where(lunchLineSql(sql`working_order_lines.id`)),
+    ).toEqual([{ id: lunch }]);
+  });
+});
 
 describe("order service context", () => {
   afterEach(() => {

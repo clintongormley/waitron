@@ -33,6 +33,11 @@ elige por él.
 Elige la miniatura marcada con un lápiz junto a Nombre para cambiar la imagen o el color. El cuadrado
 muestra el cambio de color antes de guardar. Cierra el panel con Escape para volver a la miniatura.
 
+Para una comida a precio fijo servida en mesa, activa **Comida a precio fijo**. Añade listas de
+extras para sus platos, indica cero en las opciones incluidas y el suplemento de las opciones
+especiales, y asigna a cada plato su pase de cocina. Usa los periodos de servicio de la carta
+para decidir cuándo se vende.
+
 ## Elige una unidad de venta {#selling-unit}
 
 Un producto se vende de uno en uno salvo que elijas una unidad. Elige una cuando lo vendas por peso o
