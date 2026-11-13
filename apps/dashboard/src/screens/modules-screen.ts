@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  pageTitleStyles,
   draftScopeFor,
   UrlStateController,
   type DataTableColumn,
@@ -37,13 +38,13 @@ export const CARD_PROVIDERS_PATH = "/manage/modules/view/card-providers/state/al
 export class ModulesScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
       }
       h1 {
         margin: 0;
-        font-size: var(--wt-font-size-lg);
       }
       .toolbar {
         display: flex;

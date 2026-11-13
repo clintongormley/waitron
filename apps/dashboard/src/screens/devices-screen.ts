@@ -5,6 +5,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
 import {
   baseStyles,
+  pageTitleStyles,
   draftScopeFor,
   leaveCoordinatorFor,
   saveActionState,
@@ -318,6 +319,7 @@ function batteryStaleAfter(reportedAt: string): number {
 export class DevicesScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     holdNoticeStyles,
     css`
       :host {
@@ -333,7 +335,6 @@ export class DevicesScreen extends LitElement {
       }
       .title {
         margin: 0;
-        font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
       .qr {

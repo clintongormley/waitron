@@ -1,6 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -20,12 +20,12 @@ const readsBilling = (s: CloudConnectionStatus | undefined) =>
 export class CloudServicesScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
       }
       h1 {
-        font-size: var(--wt-font-size-lg);
         margin: 0 0 var(--wt-space-4);
       }
       h2 {

@@ -5,6 +5,7 @@ import {
   UrlStateController,
   submitOnEnter,
   baseStyles,
+  pageTitleStyles,
   draftScopeFor,
   saveActionState,
   type DraftScope,
@@ -57,6 +58,7 @@ export function scheduleWindow(now: Date, days: number): { from: string; to: str
 export class MyScheduleScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -64,7 +66,6 @@ export class MyScheduleScreen extends LitElement {
 
       h1 {
         margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
 

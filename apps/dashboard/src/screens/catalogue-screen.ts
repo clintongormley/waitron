@@ -6,6 +6,7 @@ import type { ContentLanguages } from "@waitron/shared";
 import type { RoutingModel } from "@waitron/venue-service/routing";
 import {
   baseStyles,
+  pageTitleStyles,
   encodePathSegment,
   navigationGuardFor,
   setContentLanguages,
@@ -63,6 +64,7 @@ import { refusalText } from "../widgets/archive-refusal.js";
 export class CatalogueScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -78,7 +80,6 @@ export class CatalogueScreen extends LitElement {
       h1 {
         margin: 0;
         color: var(--wt-color-text);
-        font-size: var(--wt-font-size-lg);
       }
       .archive-extra-lists {
         overflow-wrap: anywhere;

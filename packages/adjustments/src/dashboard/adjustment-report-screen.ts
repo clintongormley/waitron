@@ -9,7 +9,12 @@ import {
   tableNoMatches,
 } from "@waitron/dashboard-kit";
 import { addDecimal, decimal, formatMoney } from "@waitron/shared";
-import { baseStyles, type ComboboxOption, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  pageTitleStyles,
+  type ComboboxOption,
+  type DataTableColumn,
+} from "@waitron/ui";
 import { MAX_ENTRY_PAGE_SIZE } from "../entry-pages.js";
 import { isFullComp } from "../full-comp.js";
 import type {
@@ -172,6 +177,7 @@ const ALL_REASONS = "all";
 export class AdjustmentReportScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;

@@ -540,8 +540,22 @@ describe("guided printer calibration", () => {
       for (const locale of ["en", "es-ES"] as const) {
         setLocale(locale);
         const el = await openCalibration(stubApi());
+        const title = q(el, "h1")!;
+        expect(title).not.toBeNull();
+        const size = (token: string) => {
+          const probe = document.createElement("span");
+          probe.style.fontSize = `var(${token})`;
+          el.shadowRoot!.append(probe);
+          const value = getComputedStyle(probe).fontSize;
+          probe.remove();
+          return value;
+        };
+        expect(getComputedStyle(title).fontSize).toBe(size("--wt-font-size-xl"));
         const progress = () => text(el, "[data-test=edit-printer-modal] p[role=status]");
         expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true);
+        expect(el.shadowRoot!.querySelectorAll("h2.title").length).toBeGreaterThan(0);
+        for (const heading of el.shadowRoot!.querySelectorAll("h2.title"))
+          expect(getComputedStyle(heading).fontSize).toBe(size("--wt-font-size-lg"));
         expect(text(el, "[data-test=print-ruler-p1]")).toBe(t("printers.ruler_print"));
         expect(q(el, 'wt-combobox[name="printer-ruler-number"]')?.checkVisibility()).toBe(true);
         expect(progress()).toBe(locale === "en" ? "Step 1 of 3" : "Paso 1 de 3");

@@ -11,7 +11,7 @@ import type {
   CorrectionItem,
   ManagerHours,
 } from "@waitron/dashboard-modules";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import { AttendanceExportApi } from "../api/attendance-export.js";
 import "../widgets/attendance-export-dialog.js";
 import { HoursApi } from "../api/hours.js";
@@ -56,13 +56,11 @@ export class AttendanceCorrectionsScreen extends LitElement {
   }
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
         color: var(--wt-color-text);
-      }
-      h1 {
-        font-size: var(--wt-font-size-xl);
       }
       h2 {
         font-size: var(--wt-font-size-lg);

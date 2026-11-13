@@ -7,6 +7,7 @@ import {
   submitOnEnter,
   UrlStateController,
   baseStyles,
+  pageTitleStyles,
   type DataTableColumn,
   type WtModal,
   leaveCoordinatorFor,
@@ -269,6 +270,7 @@ export const DISCOVERY_RENEW_MS = 60_000;
 export class PrintersScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     holdNoticeStyles,
     settingsCardStyles,
     css`
@@ -544,8 +546,10 @@ export class PrintersScreen extends LitElement {
       }
       .title {
         margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
+      }
+      h2.title {
+        font-size: var(--wt-font-size-lg);
       }
       .panel-title {
         margin: var(--wt-space-6) 0 var(--wt-space-3);

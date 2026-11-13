@@ -6,6 +6,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { live } from "lit/directives/live.js";
 import {
   baseStyles,
+  pageTitleStyles,
   leaveCoordinatorFor,
   draftScopeFor,
   saveActionState,
@@ -335,6 +336,7 @@ export class MenusScreen extends LitElement {
   @property({ attribute: false }) reportLateSave?: (name: string) => void;
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       .field-error {
         color: var(--wt-color-danger);
@@ -368,7 +370,6 @@ export class MenusScreen extends LitElement {
       }
       h1 {
         margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-xl);
       }
       .header {
         display: flex;

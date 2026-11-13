@@ -1,7 +1,12 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { formatBytes, pickLocale } from "@waitron/dashboard-kit";
-import { baseStyles, visuallyHiddenStyles, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  pageTitleStyles,
+  visuallyHiddenStyles,
+  type DataTableColumn,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -98,6 +103,7 @@ type ReadName = "getBoxHealth" | "listAlerts";
 export class BoxStatusScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     wholeTimesStyles,
     css`
       :host {
@@ -107,7 +113,6 @@ export class BoxStatusScreen extends LitElement {
       }
       .title {
         margin: 0 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-lg);
       }
       .legend,
       .note {

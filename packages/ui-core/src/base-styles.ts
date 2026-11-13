@@ -1,5 +1,11 @@
 import { css } from "lit";
 
+export const pageTitleStyles = css`
+  h1 {
+    font-size: var(--wt-font-size-xl);
+  }
+`;
+
 export const baseStyles = css`
   :host,
   :host *,

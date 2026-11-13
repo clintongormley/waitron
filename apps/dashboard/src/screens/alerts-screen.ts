@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { UrlStateController, baseStyles, type DataTableColumn } from "@waitron/ui";
+import { UrlStateController, baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-tabs.js";
@@ -32,6 +32,7 @@ type View = (typeof VIEWS)[number];
 export class AlertsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     wholeTimesStyles,
     css`
       :host {
@@ -39,7 +40,6 @@ export class AlertsScreen extends LitElement {
       }
       .title {
         margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
       /* Reserve room for the pinned actions while long payment references wrap on a phone. */

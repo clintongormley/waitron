@@ -1,6 +1,12 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, draftScopeFor, saveActionState, type DraftScope } from "@waitron/ui";
+import {
+  baseStyles,
+  pageTitleStyles,
+  draftScopeFor,
+  saveActionState,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -17,6 +23,7 @@ type Draft = { timeZone: string; confirmed: boolean };
 export class VenueZoneRepair extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -28,9 +35,6 @@ export class VenueZoneRepair extends LitElement {
       dl {
         display: grid;
         gap: var(--wt-space-3);
-      }
-      h1 {
-        font-size: var(--wt-font-size-xl);
       }
       .preview {
         padding: var(--wt-space-3);

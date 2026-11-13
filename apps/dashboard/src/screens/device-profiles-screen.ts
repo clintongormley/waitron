@@ -7,6 +7,7 @@ import {
   submitOnEnter,
   parseDecimalInput,
   baseStyles,
+  pageTitleStyles,
   formMessage,
   formMessageStyles,
   draftScopeFor,
@@ -386,6 +387,7 @@ const FIELD_BY_REASON: Record<string, EditorField> = {
 export class DeviceProfilesScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     formMessageStyles,
     css`
       :host {
@@ -393,7 +395,6 @@ export class DeviceProfilesScreen extends LitElement {
       }
       .title {
         margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
         overflow-wrap: anywhere;
       }

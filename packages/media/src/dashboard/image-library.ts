@@ -3,6 +3,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  pageTitleStyles,
   bottomMessage,
   ContentLanguageController,
   currentContentLanguages,
@@ -103,6 +104,7 @@ interface BatchPhoto {
 export class ImageLibrary extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;

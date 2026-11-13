@@ -2,7 +2,7 @@ import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { subscribeLocale, QueryController } from "@waitron/dashboard-kit";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { ChangeObserver, baseStyles } from "@waitron/ui";
+import { ChangeObserver, baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -18,6 +18,7 @@ import type { Booking, BookingInput, BookingApi, DashboardTable } from "./client
 export class BookingsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -31,7 +32,6 @@ export class BookingsScreen extends LitElement {
       }
       .title {
         margin: 0;
-        font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
       .picker {

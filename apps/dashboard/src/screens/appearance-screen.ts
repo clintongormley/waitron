@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { QueryController } from "@waitron/dashboard-kit";
 import { themeNameKey } from "@waitron/ui-core/theme";
@@ -43,6 +43,7 @@ function applied(list: ThemeList, change: ThemesChanged): ThemeList {
 export class AppearanceScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;

@@ -3,6 +3,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  pageTitleStyles,
   leaveCoordinatorFor,
   draftScopeFor,
   focusFirstInvalid,
@@ -120,6 +121,7 @@ function screenDevices(devices: PrepStationsView["devices"], stationId: string) 
 export class PrepStationsScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;

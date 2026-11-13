@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, pageTitleStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -68,6 +68,7 @@ const swatchColours = unsafeCSS(
 export class FloorPlansScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
       :host {
         display: block;
@@ -83,7 +84,6 @@ export class FloorPlansScreen extends LitElement {
       }
       h1 {
         margin: 0;
-        font-size: var(--wt-font-size-xl);
       }
       wt-data-table {
         --tree-arrow-width: 0px;

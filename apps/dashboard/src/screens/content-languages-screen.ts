@@ -8,6 +8,7 @@ import {
 } from "@waitron/shared";
 import {
   baseStyles,
+  pageTitleStyles,
   formMessage,
   formMessageStyles,
   setContentLanguages,
@@ -32,6 +33,7 @@ import { receiptLanguageWarning } from "../widgets/receipt-language.js";
 export class ContentLanguagesScreen extends LitElement {
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     formMessageStyles,
     css`
       :host {
