@@ -20,7 +20,6 @@ const OWNED = [
   "webauthn_credentials",
   "webauthn_challenges",
   "device_profile_admission_roles",
-  "device_profile_admission_persons",
 ];
 
 /** Core tables the core set, which now holds this package's tables, must create exactly once. */

@@ -123,7 +123,7 @@ function consumedResponse(body: unknown) {
 }
 
 describe("DepartmentTransferMonitor", () => {
-  it.each(["device_profile_admission_roles", "device_profile_admission_persons"])(
+  it.each(["device_profile_admission_roles"])(
     "rechecks transfer access when %s changes while connected",
     async (type) => {
       const source = desk();

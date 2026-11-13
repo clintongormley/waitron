@@ -218,6 +218,7 @@ it.each(GUIDE_LANGUAGES)(
       "invoice-customer-data",
       "delete-staff-role",
       "job-roles",
+      "device-profile-sign-in",
       "hours",
     ]);
   },

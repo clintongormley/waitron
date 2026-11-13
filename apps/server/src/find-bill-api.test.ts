@@ -194,7 +194,7 @@ describe("Find a bill list routes", () => {
     const id = await parked(venue, "Caña");
     const profile = await profileId();
     await inTx(venue, async (tx) => {
-      await setProfileAdmission(tx, profile, { admittedRoles: ["admin"] });
+      await setProfileAdmission(tx, profile, { admittedStaffRoleIds: [] });
       await endSessionsNotAdmitted(tx, venue.deviceId, profile);
     });
     for (const path of [...paths, `/api/bills/${id}`])

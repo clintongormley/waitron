@@ -1,6 +1,7 @@
+import { personStaffRoles, persons } from "@waitron/db";
 import { ADJUSTMENTS_PERMISSIONS } from "@waitron/adjustments";
 import { registerModulePermissions } from "@waitron/identity";
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { observedClosingBody } from "./party-close-fixture.js";
@@ -207,6 +208,13 @@ export async function provisionBillVenue(
       pinHash: fixturePinHash("5555"),
       role: "staff",
     });
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    await tx
+      .insert(personStaffRoles)
+      .values({ personId: admin!.id, staffRoleId: await ensureFixtureJobRole(tx) });
     const [profile, cashOnly] = await seedDeviceProfiles(tx, [
       {
         name: "Counter till",

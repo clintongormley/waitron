@@ -84,8 +84,7 @@ const profile = (id: string, name: string, extra: Partial<DeviceProfile> = {}): 
   departmentId: null,
   allowedZoneIds: null,
   startingZoneId: null,
-  admittedRoles: ["staff", "supervisor", "manager", "admin"],
-  personExceptions: [],
+  admittedStaffRoleIds: ["job-waiter", "job-chef"],
   ...extra,
 });
 const tillLists = {

@@ -19,6 +19,7 @@ import { dayCutoverChanges } from "../schema/day-cutover-changes.js";
 import { catalogues } from "../schema/catalogue.js";
 import { createVenueSettings, saveVenueFields, venueLocationId, type Venue } from "../venue.js";
 
+import { deviceProfileAdmissionRoles } from "../schema/identity/profile-admission.js";
 import { staffRoles } from "../schema/identity/staff-roles.js";
 
 export const FIXTURE_JOB_ROLE = "Fixture team";
@@ -162,12 +163,35 @@ export async function seedKitchenStation(
   return row!.id;
 }
 
-export type DeviceProfileInsert = typeof deviceProfiles.$inferInsert;
+export type DeviceProfileInsert = typeof deviceProfiles.$inferInsert & {
+  admitted?: readonly string[];
+};
 export async function seedDeviceProfiles(
   db: Database | Transaction,
   values: DeviceProfileInsert | readonly DeviceProfileInsert[],
 ): Promise<(typeof deviceProfiles.$inferSelect)[]> {
-  return db.insert(deviceProfiles).values([values].flat()).returning();
+  const seeds = [values].flat();
+  const rows = await db
+    .insert(deviceProfiles)
+    .values(
+      seeds.map((seed) => {
+        const row = { ...seed };
+        delete row.admitted;
+        return row;
+      }),
+    )
+    .returning();
+  const fixtureRole = seeds.some((seed) => seed.admitted === undefined)
+    ? await ensureFixtureJobRole(db)
+    : null;
+  const admissions = rows.flatMap((row, i) =>
+    (seeds[i]!.admitted ?? [fixtureRole!]).map((staffRoleId) => ({
+      deviceProfileId: row.id,
+      staffRoleId,
+    })),
+  );
+  if (admissions.length > 0) await db.insert(deviceProfileAdmissionRoles).values(admissions);
+  return rows;
 }
 
 let deviceCounter = 0;

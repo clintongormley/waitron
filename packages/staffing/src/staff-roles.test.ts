@@ -1,4 +1,10 @@
-import { activityLog, personStaffRoles, staffRoles } from "@waitron/db";
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import {
+  deviceProfileAdmissionRoles,
+  activityLog,
+  personStaffRoles,
+  staffRoles,
+} from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -442,10 +448,23 @@ describe("staff roles", () => {
     await inTx((tx) => setStaffRoleHolders(tx, role.id, [v.ana, v.marc], { personId: null }));
     await paintBlock(v, role.id);
     await assignShift(v, v.ana, role.id);
+    const [profile] = await seedDeviceProfiles(suite.db, {
+      name: "Counter",
+      formFactor: "till",
+      capabilities: [],
+      admitted: [role.id],
+    });
+
     expect(await inTx((tx) => deleteStaffRole(tx, role.id, { personId: null }))).toEqual({
       outcome: "hidden",
       removedFrom: 2,
     });
+    expect(
+      await suite.db
+        .select()
+        .from(deviceProfileAdmissionRoles)
+        .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profile!.id)),
+    ).toEqual([]);
     const [stored] = await suite.db.select().from(staffRoles).where(eq(staffRoles.id, role.id));
     expect(stored).toMatchObject({ name: "Waiter", hiddenAt: expect.any(String) });
     expect(await suite.db.select().from(personStaffRoles)).toEqual([]);

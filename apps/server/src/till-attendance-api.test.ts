@@ -10,7 +10,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
-  deviceProfileAdmissionPersons,
+  deviceProfileAdmissionRoles,
   hashPin,
   persons,
   loginWithPin,
@@ -237,8 +237,8 @@ it.each(["ended", "disabled", "deleted", "admission", "suspended"] as const)(
         .where(eq(devices.id, venue.deviceId));
     if (kind === "admission")
       await suite.db
-        .insert(deviceProfileAdmissionPersons)
-        .values({ deviceProfileId: venue.profileId, personId: venue.personId, admitted: false });
+        .delete(deviceProfileAdmissionRoles)
+        .where(eq(deviceProfileAdmissionRoles.deviceProfileId, venue.profileId));
     if (kind === "suspended")
       await suite.db
         .update(persons)
@@ -418,8 +418,8 @@ it.each(["session", "admission", "device", "profile"] as const)(
           .where(eq(sessions.id, venue.sessionId));
       if (kind === "admission")
         await tx
-          .insert(deviceProfileAdmissionPersons)
-          .values({ deviceProfileId: venue.profileId, personId: venue.personId, admitted: false });
+          .delete(deviceProfileAdmissionRoles)
+          .where(eq(deviceProfileAdmissionRoles.deviceProfileId, venue.profileId));
       if (kind === "device")
         await tx.update(devices).set({ active: false }).where(eq(devices.id, venue.deviceId));
       if (kind === "profile")

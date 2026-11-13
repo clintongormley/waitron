@@ -108,10 +108,19 @@ Existing shifts keep the role's name. To assign new shifts, choose another role.
 
 ## Job roles per person {#job-roles}
 
-To put someone on the rota, open their editor in **Users**, choose their **Job roles** and press
+To put someone on the rota and the sign-in list of devices that take their job, open their editor in **Users**, choose their **Job roles** and press
 **Save job roles**. You need permission to manage the schedule. These tags save separately from
 the person's details. If someone changes them while you edit, press **Reload** to see their latest
 roles before choosing again.
+
+## Who can sign in on a device {#device-profile-sign-in}
+
+Open **Device profiles** and edit the profile used by the device. Under **Who can sign in**,
+select its job roles and save. For example, select Waiter for a handheld used by your waiting staff.
+Everyone holding a selected job can sign in; their permissions still decide what they can do.
+Leave every job unticked to let nobody sign in. When you add a profile, it starts with every current
+job selected. Copying a profile keeps its selections. When you add a job later, select it on the
+profiles where its holders need to sign in.
 
 ## Hours and breaks {#hours}
 

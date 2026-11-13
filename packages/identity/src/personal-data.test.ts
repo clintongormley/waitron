@@ -13,10 +13,9 @@ import {
   managementAccountActions,
   totpEnrollments,
   googleOidcStates,
-  deviceProfileAdmissionPersons,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedDevice, seedDeviceProfiles, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -248,15 +247,6 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
     })),
   );
 
-  // Named so that the name order is the reverse of the insert order.
-  const profileNames = [s("Zone kitchen screens"), s("Zone bar tills")];
-  for (const [i, name] of profileNames.entries()) {
-    const [profile] = await seedDeviceProfiles(db, { name, formFactor: "till", capabilities: [] });
-    await db
-      .insert(deviceProfileAdmissionPersons)
-      .values({ deviceProfileId: profile!.id, personId, admitted: i === 0 });
-  }
-
   return {
     personId,
     secrets: Object.values(secrets).flat(),
@@ -274,7 +264,6 @@ async function seedFull(db: Database, who: string, year: number): Promise<Seeded
       s("Bar tablet"),
       s("Kitchen phone"),
       ...(who === "marta" ? [] : ["Bitwarden"]),
-      ...profileNames,
       ...Array.from({ length: 39 }, (_, n) => t(n)),
     ],
   };
@@ -352,10 +341,6 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       role: "supervisor",
       status: "active",
       createdAt: t(0),
-      deviceProfileExceptions: [
-        { deviceProfile: "marta-Zone bar tills", admitted: false },
-        { deviceProfile: "marta-Zone kitchen screens", admitted: true },
-      ],
     };
     const expectedSignIn = {
       pinSet: true,
@@ -463,7 +448,6 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       role: "staff",
       status: "active",
       createdAt: row!.createdAt,
-      deviceProfileExceptions: [],
     });
     expect(signIn).toEqual({
       pinSet: false,

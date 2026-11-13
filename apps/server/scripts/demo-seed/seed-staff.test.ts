@@ -3,10 +3,10 @@ import { DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { deviceProfiles, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { verifyPin, type PersonRoleValue } from "@waitron/identity";
+import { listStaffAdmittedTo, verifyPin, type PersonRoleValue } from "@waitron/identity";
 import { seedStaff } from "./seed-staff.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 import { DEMO_ADMIN_EMAIL, DEMO_PIN } from "./credentials.js";
@@ -41,6 +41,13 @@ describe("seedStaff", () => {
       return rows;
     });
 
+    const admitted = await withTransaction(suite.db, async (tx) => {
+      const ids = new Set<string>();
+      for (const profile of await tx.select().from(deviceProfiles))
+        for (const person of await listStaffAdmittedTo(tx, profile.id)) ids.add(person.personId);
+      return ids;
+    });
+    expect(admitted.size).toBe(6);
     // The provisioning admin plus this seed's five people.
     expect(persons.length).toBe(6);
 

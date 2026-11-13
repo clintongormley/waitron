@@ -12,7 +12,6 @@ const DEVICE_TYPES = [
   "device_profile_service_access",
   "device_profile_zones",
   "device_profile_admission_roles",
-  "device_profile_admission_persons",
 ];
 const ORDER_TYPES = [
   "working_orders",

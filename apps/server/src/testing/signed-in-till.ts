@@ -1,11 +1,17 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  persons,
+  personStaffRoles,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { loginWithPin } from "@waitron/identity";
 import { SimulatorPaymentProvider } from "@waitron/payments";
@@ -113,6 +119,13 @@ export async function provisionSignedInTill<S extends TillSeed>(
       pinHash: fixturePinHash("5555"),
       role: "staff",
     });
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    await tx
+      .insert(personStaffRoles)
+      .values({ personId: admin!.id, staffRoleId: await ensureFixtureJobRole(tx) });
     return { ...seed, personId: person!.id };
   });
   const [profile] = await seedDeviceProfiles(db, {

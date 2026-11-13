@@ -266,11 +266,19 @@ describe("loginWithPin on a device whose profile does not admit the person", () 
     const deviceId = await seedSessionDevice(suite.db);
     const denied = await seedPerson(suite.db, "staff");
     const admitted = await seedPerson(suite.db, "manager");
-    await run((tx) =>
-      tx.execute(sql`
-        insert into device_profile_admission_roles (device_profile_id, role)
-        select device_profile_id, 'manager' from devices where id = ${deviceId}`),
-    );
+    await run(async (tx) => {
+      const job = crypto.randomUUID();
+      await tx.execute(sql`insert into staff_roles (id, name) values (${job}, ${job})`);
+      await tx.execute(
+        sql`insert into person_staff_roles (person_id, staff_role_id) values (${admitted}, ${job})`,
+      );
+      await tx.execute(
+        sql`delete from device_profile_admission_roles where device_profile_id = (select device_profile_id from devices where id = ${deviceId})`,
+      );
+      await tx.execute(
+        sql`insert into device_profile_admission_roles (device_profile_id, staff_role_id) select device_profile_id, ${job} from devices where id = ${deviceId}`,
+      );
+    });
     return { deviceId, denied, admitted };
   }
 

@@ -1,6 +1,8 @@
 import "./errors.js";
 import {
   FORM_FACTOR_REFUSAL,
+  staffRoles,
+  deviceProfileAdmissionRoles,
   constraintTarget,
   deviceProfilePrinters,
   deviceProfiles,
@@ -202,6 +204,14 @@ export async function createDeviceProfile(
   } catch (error) {
     translateWriteError(error);
   }
+  const roles = await tx
+    .select({ id: staffRoles.id })
+    .from(staffRoles)
+    .where(isNull(staffRoles.hiddenAt));
+  if (roles.length > 0)
+    await tx
+      .insert(deviceProfileAdmissionRoles)
+      .values(roles.map((role) => ({ deviceProfileId: created.id, staffRoleId: role.id })));
   const lists = input.printerLists ?? emptyPrinterLists();
   await setProfilePrinterLists(tx, created.id, lists);
   return toRow(created, lists);

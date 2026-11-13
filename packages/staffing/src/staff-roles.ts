@@ -1,4 +1,10 @@
-import { insertInChunks, recordActivity, personStaffRoles, staffRoles } from "@waitron/db";
+import {
+  deviceProfileAdmissionRoles,
+  insertInChunks,
+  recordActivity,
+  personStaffRoles,
+  staffRoles,
+} from "@waitron/db";
 import { and, asc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
@@ -266,6 +272,9 @@ export async function deleteStaffRole(
   const previous = await readStaffRole(tx, staffRoleId);
   await setStaffRoleHolders(tx, staffRoleId, [], actor);
   if (used) {
+    await tx
+      .delete(deviceProfileAdmissionRoles)
+      .where(eq(deviceProfileAdmissionRoles.staffRoleId, staffRoleId));
     await tx.delete(staffingBlocks).where(eq(staffingBlocks.staffRoleId, staffRoleId));
     await tx
       .update(staffRoles)

@@ -364,7 +364,6 @@ export { tenantCredentials } from "./schema/index.js";
 export { mediaImageBlobs, mediaImageData, mediaImageEdits, mediaImages } from "./schema/index.js";
 export { handoverActivations, handoverScenario, handoverReturnBatches } from "./schema/index.js";
 export {
-  deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,
   googleOidcStates,
   managementAccountActions,

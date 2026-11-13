@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { asc, eq, like, sql } from "drizzle-orm";
 import {
+  staffRoles,
+  personStaffRoles,
+  deviceProfileAdmissionRoles,
   catalogues,
   devices,
   deviceProfiles,
@@ -404,6 +407,22 @@ async function seed(
       role: "manager",
     });
 
+    const [benchJob] = await tx.insert(staffRoles).values({ name: "Bench team" }).returning();
+    const holders = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(like(persons.displayName, `${WAITER_PREFIX}%`));
+    const [manager] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.displayName, MANAGER_NAME));
+    await tx.insert(personStaffRoles).values(
+      [...holders, manager!].map((person) => ({
+        personId: person.id,
+        staffRoleId: benchJob!.id,
+      })),
+    );
+
     const tillProfiles: { profileId: string; departmentId: string }[] = [];
     for (const departmentId of departmentIds) {
       const [profile] = await tx
@@ -414,6 +433,9 @@ async function seed(
           capabilities: [...TILL_CAPABILITIES],
         })
         .returning({ id: deviceProfiles.id });
+      await tx
+        .insert(deviceProfileAdmissionRoles)
+        .values({ deviceProfileId: profile!.id, staffRoleId: benchJob!.id });
       const zoneIds = zonesOf.get(departmentId)!;
       await setProfileServiceAccess(tx, profile!.id, {
         departmentId,

@@ -1929,8 +1929,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
         departmentId: "d1",
         allowedZoneIds: ["z2"],
         startingZoneId: "z2",
-        admittedRoles: ["staff"],
-        personExceptions: [{ personId: "pe1", admitted: false }],
+        admittedStaffRoleIds: ["job-waiter"],
         startingScreen: "show-schedule",
       },
     );
@@ -1952,8 +1951,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
         departmentId: "d1",
         allowedZoneIds: ["z2"],
         startingZoneId: "z2",
-        admittedRoles: ["staff"],
-        personExceptions: [{ personId: "pe1", admitted: false }],
+        admittedStaffRoleIds: ["job-waiter"],
         startingScreen: "show-schedule",
       },
       {

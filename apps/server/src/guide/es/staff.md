@@ -120,10 +120,20 @@ Los turnos existentes conservan el nombre del puesto. Para asignar nuevos turnos
 
 ## Puestos por persona {#job-roles}
 
-Para incluir a alguien en el cuadrante, abre su editor en **Usuarios**, elige sus **Puestos** y pulsa
+Para incluir a alguien en el cuadrante y en la lista de acceso de los dispositivos que aceptan su puesto, abre su editor en **Usuarios**, elige sus **Puestos** y pulsa
 **Guardar puestos**. Necesitas permiso para gestionar el horario. Estas etiquetas se guardan por
 separado de los datos de la persona. Si alguien las cambia mientras editas, pulsa **Recargar** para
 ver sus puestos actuales antes de elegir de nuevo.
+
+## Quién puede iniciar sesión en un dispositivo {#device-profile-sign-in}
+
+Abre **Perfiles de dispositivo** y edita el perfil que usa el dispositivo. En **Quién puede iniciar
+sesión**, selecciona sus puestos y guarda. Por ejemplo, selecciona Camarero para un móvil que usa
+el personal de sala. Las personas que tienen un puesto seleccionado pueden iniciar sesión; sus
+permisos siguen decidiendo lo que pueden hacer. No marques ningún puesto para que nadie pueda
+iniciar sesión. Un perfil nuevo empieza con todos los puestos actuales seleccionados. Al copiar
+un perfil se conservan sus selecciones. Si añades un puesto después, selecciónalo en los perfiles
+donde sus titulares necesiten iniciar sesión.
 
 ## Horas y descansos {#hours}
 

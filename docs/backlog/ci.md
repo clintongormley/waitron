@@ -1243,10 +1243,10 @@ also repeat the list of sharded packages. Do it on its own branch.
   `packages/provisioning/src/cli.test.ts` and `packages/payments/src/reconciliation-schedule/store.concurrency.test.ts`.
 
 
-## Task 2's review found no test that fails when `device_profile_admission_roles` or `device_profile_admission_persons` is left out of `apps/server/src/testing/clear-provision-fixture.ts`
+## Task 2's review found no test that fails when `device_profile_admission_roles` is left out of `apps/server/src/testing/clear-provision-fixture.ts`
 
-Read, not run: both tables' keys into
-`device_profiles` cascade on delete (identity `0007_profile_admission.sql`). Left open by W97
+The remaining table's key into `device_profiles` cascades on delete
+(`packages/db/src/schema/identity/profile-admission.ts`; `pnpm --filter @waitron/identity exec vitest run src/profile-admission.test.ts`, 9 passed on 2026-11-13). The per-person exception table was removed by A1002 PR7. Left open by W97
 (#1311).
 
 

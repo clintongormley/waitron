@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { deviceProfileAdmissionPersons, hashSessionToken, sessions } from "@waitron/identity";
+import { deviceProfileAdmissionRoles, hashSessionToken, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergyMoveRead } from "@waitron/module";
 import {
@@ -310,8 +310,8 @@ async function revoke(f: Fixture, what: keyof typeof authority) {
       .where(eq(deviceProfiles.id, f.profileId));
   if (what === "admission")
     await v.db
-      .insert(deviceProfileAdmissionPersons)
-      .values({ deviceProfileId: f.profileId, personId: OPERATOR, admitted: false });
+      .delete(deviceProfileAdmissionRoles)
+      .where(eq(deviceProfileAdmissionRoles.deviceProfileId, f.profileId));
   if (what === "session")
     await v.db
       .update(sessions)

@@ -38,6 +38,8 @@ import {
   drawerOpens,
   invoiceSeries,
   parties,
+  persons,
+  personStaffRoles,
   printJobs,
   sales,
   withTransaction,
@@ -99,7 +101,7 @@ import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { seedNode, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedNode, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   seedSessionDevice,
   openTillSession,
@@ -221,6 +223,13 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       receipt: { operationDescription: "Venta en establecimiento" },
     });
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    await tx
+      .insert(personStaffRoles)
+      .values({ personId: admin!.id, staffRoleId: await ensureFixtureJobRole(tx) });
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const drinks = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {

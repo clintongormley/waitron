@@ -80,16 +80,16 @@ export async function createClockVenue(
       .from(persons)
       .where(eq(persons.email, "owner@example.test"));
     const management = await startManagementSession(tx, { personId: admin!.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Anna",
+      pinHash: fixturePinHash("5555"),
+      role: "staff",
+    });
     const profile = await createDeviceProfile(tx, {
       managementSessionId: management.token,
       name: "Clock only",
       formFactor: "till",
       capabilities: ["clock-in"],
-    });
-    const [person] = await seedPersons(tx, {
-      displayName: "Anna",
-      pinHash: fixturePinHash("5555"),
-      role: "staff",
     });
     return { profile, person: person! };
   });

@@ -33,11 +33,10 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
     filesHeading: "What each file holds",
     files: {
       "profile.json": {
-        holds:
-          "your name, contact details, language, role and account status, and any device profile set to let you in or keep you out.",
+        holds: "your name, contact details, language, role and account status.",
         use: "Used to run the venue, contact you and decide what you may do.",
         sentTo: [
-          "A manager or admin can download a configuration export that holds your name, contact details, language, role and account status, and any device profile set to let you in or keep you out, including after you leave; they protect it with a passphrase they choose.",
+          "A manager or admin can download a configuration export that holds your name, contact details, language, role and account status, including after you leave; they protect it with a passphrase they choose.",
         ],
         kept: [
           "Your profile stays on the box after your account is disabled: nothing in the box deletes it.",
@@ -156,11 +155,10 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
     filesHeading: "Qué contiene cada archivo",
     files: {
       "profile.json": {
-        holds:
-          "tu nombre, tus datos de contacto, tu idioma, tu rol y el estado de tu cuenta, y los perfiles de dispositivo configurados para dejarte entrar o impedírtelo.",
+        holds: "tu nombre, tus datos de contacto, tu idioma, tu rol y el estado de tu cuenta.",
         use: "Sirve para gestionar el local, contactarte y decidir qué puedes hacer.",
         sentTo: [
-          "Un gerente o un administrador puede descargar una exportación de la configuración que contiene tu nombre, tus datos de contacto, tu idioma, tu rol, el estado de tu cuenta y los perfiles de dispositivo configurados para dejarte entrar o impedírtelo, también después de que te vayas; la protege con una contraseña que elige esa persona.",
+          "Un gerente o un administrador puede descargar una exportación de la configuración que contiene tu nombre, tus datos de contacto, tu idioma, tu rol y el estado de tu cuenta, también después de que te vayas; la protege con una contraseña que elige esa persona.",
         ],
         kept: [
           "Tu perfil se queda en el servidor Waitron del local después de que se deshabilite tu cuenta: nada en el servidor lo borra.",

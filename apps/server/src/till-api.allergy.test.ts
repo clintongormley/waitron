@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { hashSessionToken, sessions, deviceProfileAdmissionPersons } from "@waitron/identity";
+import { hashSessionToken, sessions, deviceProfileAdmissionRoles } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId } from "@waitron/shared";
 import { listDepartments, readPartyAllergy, setProfileServiceAccess } from "@waitron/venue-service";
@@ -421,8 +421,8 @@ describe("A669 allergy routes", () => {
       .set({ capabilities: ["take-orders"] })
       .where(eq(deviceProfiles.id, profileId));
     await suite.db
-      .insert(deviceProfileAdmissionPersons)
-      .values({ deviceProfileId: profileId, personId, admitted: false });
+      .delete(deviceProfileAdmissionRoles)
+      .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
     await expectError(
       await request(verb, route(verb), bodyFor(verb)),
       403,
@@ -481,8 +481,8 @@ describe("A669 allergy routes", () => {
         await vi.waitFor(() => expect(raw.text).toHaveBeenCalled());
         if (change === "admission")
           await suite.db
-            .insert(deviceProfileAdmissionPersons)
-            .values({ deviceProfileId: profileId, personId, admitted: false });
+            .delete(deviceProfileAdmissionRoles)
+            .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
         if (change === "session")
           await suite.db
             .update(sessions)

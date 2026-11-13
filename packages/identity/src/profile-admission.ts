@@ -1,229 +1,131 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
-import {
-  deviceProfiles,
-  personRole,
-  persons,
-  deviceProfileAdmissionPersons,
-  deviceProfileAdmissionRoles,
-} from "@waitron/db";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { deviceProfileAdmissionRoles, persons, personStaffRoles, staffRoles } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import type { PersonRoleValue } from "@waitron/shared";
 import type { StaffListEntry } from "./staff.js";
 
-/** The roles a profile admits, `"every"` when it names none; `null` when the profile does not exist. */
-async function admittedRoles(
-  tx: Database | Transaction,
-  profileId: string,
-): Promise<ReadonlySet<string> | "every" | null> {
-  const [profile] = await tx
-    .select({ id: deviceProfiles.id })
-    .from(deviceProfiles)
-    .where(eq(deviceProfiles.id, profileId));
-  if (profile === undefined) return null;
-  const rows = await tx
-    .select({ role: deviceProfileAdmissionRoles.role })
-    .from(deviceProfileAdmissionRoles)
-    .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
-  return rows.length === 0 ? "every" : new Set(rows.map((row) => row.role));
-}
-
-/** Each person with their role and their exception on `profileId`, if any. */
-function personsWithException(tx: Database | Transaction, profileId: string) {
+function admittedPeople(tx: Database | Transaction) {
   return tx
-    .select({
+    .selectDistinct({
+      profileId: deviceProfileAdmissionRoles.deviceProfileId,
       personId: persons.id,
       displayName: persons.displayName,
-      role: persons.role,
-      exception: deviceProfileAdmissionPersons.admitted,
     })
-    .from(persons)
-    .leftJoin(
-      deviceProfileAdmissionPersons,
-      and(
-        eq(deviceProfileAdmissionPersons.personId, persons.id),
-        eq(deviceProfileAdmissionPersons.deviceProfileId, profileId),
-      ),
-    );
+    .from(deviceProfileAdmissionRoles)
+    .innerJoin(staffRoles, eq(staffRoles.id, deviceProfileAdmissionRoles.staffRoleId))
+    .innerJoin(personStaffRoles, eq(personStaffRoles.staffRoleId, staffRoles.id))
+    .innerJoin(persons, eq(persons.id, personStaffRoles.personId));
 }
 
-function admits(
-  roles: ReadonlySet<string> | "every",
-  person: { role: string; exception: boolean | null },
-): boolean {
-  if (person.exception !== null) return person.exception;
-  return roles === "every" || roles.has(person.role);
-}
-
-/**
- * Whether `personId` may sign in on, or switch to, the device profile `profileId`. Only an active
- * person is ever admitted. Their own exception on the profile decides first; without one, their
- * role must be in the profile's role set, and a profile with no role set admits every role.
- */
 export async function canUseDeviceProfile(
   tx: Database | Transaction,
   profileId: string,
   personId: string,
 ): Promise<boolean> {
-  const roles = await admittedRoles(tx, profileId);
-  if (roles === null) return false;
-  const [person] = await personsWithException(tx, profileId).where(
-    and(eq(persons.id, personId), eq(persons.status, "active")),
-  );
-  return person !== undefined && admits(roles, person);
+  const rows = await admittedPeople(tx)
+    .where(
+      and(
+        eq(deviceProfileAdmissionRoles.deviceProfileId, profileId),
+        eq(persons.id, personId),
+        eq(persons.status, "active"),
+        isNull(staffRoles.hiddenAt),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
-/** The profiles of `profileIds` that {@link canUseDeviceProfile} admits `personId` to, in that order. */
 export async function profilesAdmitting(
   tx: Transaction,
   personId: string,
   profileIds: readonly string[],
 ): Promise<string[]> {
   if (profileIds.length === 0) return [];
-  const [person] = await tx
-    .select({ role: persons.role })
-    .from(persons)
-    .where(and(eq(persons.id, personId), eq(persons.status, "active")));
-  if (person === undefined) return [];
-  const roles = await tx
-    .select({ profileId: deviceProfiles.id, role: deviceProfileAdmissionRoles.role })
-    .from(deviceProfiles)
-    .leftJoin(
-      deviceProfileAdmissionRoles,
-      eq(deviceProfileAdmissionRoles.deviceProfileId, deviceProfiles.id),
-    )
-    .where(inArray(deviceProfiles.id, [...profileIds]));
-  const exceptions = await tx
-    .select({
-      profileId: deviceProfileAdmissionPersons.deviceProfileId,
-      admitted: deviceProfileAdmissionPersons.admitted,
-    })
-    .from(deviceProfileAdmissionPersons)
-    .where(
-      and(
-        eq(deviceProfileAdmissionPersons.personId, personId),
-        inArray(deviceProfileAdmissionPersons.deviceProfileId, [...profileIds]),
-      ),
-    );
-  return profileIds.filter((profileId) => {
-    const rows = roles.filter((row) => row.profileId === profileId);
-    if (rows.length === 0) return false;
-    const named = rows.flatMap((row) => (row.role === null ? [] : [row.role]));
-    const exception = exceptions.find((row) => row.profileId === profileId)?.admitted ?? null;
-    return admits(named.length === 0 ? "every" : new Set(named), { ...person, exception });
-  });
+  const rows = await admittedPeople(tx).where(
+    and(
+      inArray(deviceProfileAdmissionRoles.deviceProfileId, [...profileIds]),
+      eq(persons.id, personId),
+      eq(persons.status, "active"),
+      isNull(staffRoles.hiddenAt),
+    ),
+  );
+  const admitted = new Set(rows.map((row) => row.profileId));
+  return profileIds.filter((id) => admitted.has(id));
 }
 
-/** The people {@link canUseDeviceProfile} admits to `profileId`, in the shape and order of
- * `listActiveStaff`. */
 export async function listStaffAdmittedTo(
   tx: Transaction,
   profileId: string,
 ): Promise<StaffListEntry[]> {
-  const roles = await admittedRoles(tx, profileId);
-  if (roles === null) return [];
-  const rows = await personsWithException(tx, profileId)
-    .where(eq(persons.status, "active"))
-    .orderBy(persons.displayName);
-  return rows
-    .filter((row) => admits(roles, row))
-    .map((row) => ({ personId: row.personId, displayName: row.displayName }));
+  const rows = await admittedPeople(tx)
+    .where(
+      and(
+        eq(deviceProfileAdmissionRoles.deviceProfileId, profileId),
+        eq(persons.status, "active"),
+        isNull(staffRoles.hiddenAt),
+      ),
+    )
+    .orderBy(asc(persons.displayName));
+  return rows.map(({ personId, displayName }) => ({ personId, displayName }));
 }
 
-/** Who may sign in on a device profile, as a manager edits it. */
 export interface ProfileAdmission {
-  /** Never empty: a profile with no role rows admits every role, and reads as all of them. */
-  admittedRoles: PersonRoleValue[];
-  personExceptions: { personId: string; admitted: boolean }[];
+  admittedStaffRoleIds: string[];
 }
 
-/** Each named profile's role set and person exceptions, in the order `profileIds` names them. */
 export async function readProfileAdmissions(
   tx: Transaction,
   profileIds: readonly string[],
 ): Promise<({ profileId: string } & ProfileAdmission)[]> {
   if (profileIds.length === 0) return [];
-  const roles = await tx
+  const rows = await tx
     .select({
       profileId: deviceProfileAdmissionRoles.deviceProfileId,
-      role: deviceProfileAdmissionRoles.role,
+      staffRoleId: deviceProfileAdmissionRoles.staffRoleId,
     })
     .from(deviceProfileAdmissionRoles)
-    .where(inArray(deviceProfileAdmissionRoles.deviceProfileId, [...profileIds]));
-  const exceptions = await tx
-    .select({
-      profileId: deviceProfileAdmissionPersons.deviceProfileId,
-      personId: deviceProfileAdmissionPersons.personId,
-      admitted: deviceProfileAdmissionPersons.admitted,
-    })
-    .from(deviceProfileAdmissionPersons)
-    .where(inArray(deviceProfileAdmissionPersons.deviceProfileId, [...profileIds]))
-    .orderBy(asc(deviceProfileAdmissionPersons.personId));
-  return profileIds.map((profileId) => {
-    const named = roles.filter((row) => row.profileId === profileId).map((row) => row.role);
-    return {
-      profileId,
-      admittedRoles: personRole.enumValues.filter(
-        (role) => named.length === 0 || named.includes(role),
+    .innerJoin(staffRoles, eq(staffRoles.id, deviceProfileAdmissionRoles.staffRoleId))
+    .where(
+      and(
+        inArray(deviceProfileAdmissionRoles.deviceProfileId, [...profileIds]),
+        isNull(staffRoles.hiddenAt),
       ),
-      personExceptions: exceptions
-        .filter((row) => row.profileId === profileId)
-        .map(({ personId, admitted }) => ({ personId, admitted })),
-    };
-  });
+    )
+    .orderBy(asc(staffRoles.position), asc(staffRoles.name));
+  return profileIds.map((profileId) => ({
+    profileId,
+    admittedStaffRoleIds: rows
+      .filter((row) => row.profileId === profileId)
+      .map((row) => row.staffRoleId),
+  }));
 }
 
-/**
- * Replaces the parts of a profile's sign-in rule that `input` names. An empty role set is refused,
- * because storing no role rows means every role; every role is stored as no rows. A person exception
- * must name a person that exists, whatever their status.
- */
 export async function setProfileAdmission(
   tx: Transaction,
   profileId: string,
   input: Partial<ProfileAdmission>,
 ): Promise<void> {
-  if (input.admittedRoles !== undefined) {
-    const named = new Set(input.admittedRoles);
-    if (named.size === 0)
+  if (input.admittedStaffRoleIds === undefined) return;
+  const ids = [...new Set(input.admittedStaffRoleIds)];
+  if (ids.length > 0) {
+    const found = await tx
+      .select({ id: staffRoles.id })
+      .from(staffRoles)
+      .where(and(inArray(staffRoles.id, ids), isNull(staffRoles.hiddenAt)));
+    const missing = ids.find((id) => !found.some((row) => row.id === id));
+    if (missing !== undefined)
       throw new AppError("device_profile.admission_invalid", {
-        field: "admittedRoles",
-        reason: "empty",
+        field: "admittedStaffRoleIds",
+        reason: "not_found",
+        staffRoleId: missing,
       });
-    await tx
-      .delete(deviceProfileAdmissionRoles)
-      .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
-    if (personRole.enumValues.some((role) => !named.has(role)))
-      await tx
-        .insert(deviceProfileAdmissionRoles)
-        .values([...named].map((role) => ({ deviceProfileId: profileId, role })));
   }
-  if (input.personExceptions !== undefined) {
-    const ids = input.personExceptions.map((exception) => exception.personId);
-    if (ids.length > 0) {
-      const found = await tx
-        .select({ id: persons.id })
-        .from(persons)
-        .where(inArray(persons.id, ids));
-      const missing = ids.find((id) => !found.some((row) => row.id === id));
-      if (missing !== undefined)
-        throw new AppError("device_profile.admission_invalid", {
-          field: "personExceptions",
-          reason: "not_found",
-          personId: missing,
-        });
-    }
+  await tx
+    .delete(deviceProfileAdmissionRoles)
+    .where(eq(deviceProfileAdmissionRoles.deviceProfileId, profileId));
+  if (ids.length > 0)
     await tx
-      .delete(deviceProfileAdmissionPersons)
-      .where(eq(deviceProfileAdmissionPersons.deviceProfileId, profileId));
-    if (ids.length > 0)
-      await tx.insert(deviceProfileAdmissionPersons).values(
-        input.personExceptions.map(({ personId, admitted }) => ({
-          deviceProfileId: profileId,
-          personId,
-          admitted,
-        })),
-      );
-  }
+      .insert(deviceProfileAdmissionRoles)
+      .values(ids.map((staffRoleId) => ({ deviceProfileId: profileId, staffRoleId })));
 }

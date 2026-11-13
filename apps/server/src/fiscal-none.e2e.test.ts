@@ -2,8 +2,9 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
-import { invoiceSeries, withTransaction } from "@waitron/db";
+import { invoiceSeries, personStaffRoles, withTransaction } from "@waitron/db";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, resolveFiscalModules } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
@@ -147,13 +148,15 @@ async function setupGbVenue(): Promise<GbVenue> {
   );
   const adminPersonId = adminRows[0]!.id;
   const sessionDeviceId = await seedSessionDevice(suite.db);
-  const { id: adminSessionId } = await asApp((tx) =>
-    loginWithPin(tx, {
+  const { id: adminSessionId } = await asApp(async (tx) => {
+    const staffRoleId = await ensureFixtureJobRole(tx);
+    await tx.insert(personStaffRoles).values({ personId: adminPersonId, staffRoleId });
+    return loginWithPin(tx, {
       deviceId: sessionDeviceId,
       personId: adminPersonId,
       pin: "1234",
-    }),
-  );
+    });
+  });
 
   return {
     deviceId: sessionDeviceId,

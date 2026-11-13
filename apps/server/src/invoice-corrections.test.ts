@@ -13,6 +13,7 @@ import {
   tenderRefunds,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import { createProduct } from "@waitron/catalogue";
 import { previewCorrectionAmounts, recordSubstitution } from "@waitron/core";
@@ -22,7 +23,6 @@ import {
   createPinThrottle,
   hashPin,
   loginWithPin,
-  persons,
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -110,10 +110,11 @@ useVenueDb({
       ids.set("Cold soup", soup.id);
       const offers = await offerProducts(tx, venue.cfg, { zone: { zoneId: venue.zoneId } });
       offerOf = (name) => offers.offerFor(ids.get(name)!);
-      const [manager] = await tx
-        .insert(persons)
-        .values({ displayName: "Marta", pinHash: hashPin("8888"), role: "manager" })
-        .returning({ id: persons.id });
+      const [manager] = await seedPersons(tx, {
+        displayName: "Marta",
+        pinHash: hashPin("8888"),
+        role: "manager",
+      });
       managerId = manager!.id;
       managerSessionId = (
         await loginWithPin(tx, { deviceId: venue.deviceId, personId: managerId, pin: "8888" })

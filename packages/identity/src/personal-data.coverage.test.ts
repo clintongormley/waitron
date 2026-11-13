@@ -78,10 +78,6 @@ const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[]
     in: ["expires_at"],
     out: ["id", "person_id", "mode", "state_hash", "nonce", "verifier"],
   },
-  device_profile_admission_persons: {
-    in: ["device_profile_id", "admitted"],
-    out: ["person_id"],
-  },
 };
 
 const tables = Object.values(schema).flatMap((value) =>

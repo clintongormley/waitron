@@ -18,7 +18,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDeviceProfiles, seedNode } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedDeviceProfiles, seedNode } from "@waitron/db/testing/seed.js";
 import {
   billPaymentLines,
   billPaymentRefunds,
@@ -30,6 +30,7 @@ import {
   invoiceSeries,
   pagePrinters,
   parties,
+  personStaffRoles,
   printJobs,
   products,
   saleLines,
@@ -341,6 +342,10 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     profileId: seeded.seededHandheldWithDrawerProfileId,
   });
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
+  await withTransaction(db, async (tx) => {
+    const staffRoleId = await ensureFixtureJobRole(tx);
+    await tx.insert(personStaffRoles).values({ personId: admin!.id, staffRoleId });
+  });
   // Every device prints receipts and slips here; its profile decides whether it opens the drawer.
   db.run(
     sql`update devices set receipt_printer_id = ${seeded.printerId}, payment_slip_printer_id = ${seeded.printerId}, cash_drawer_printer_id = ${seeded.printerId}`,

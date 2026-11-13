@@ -2,6 +2,8 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import {
   CORE_MIGRATIONS,
+  staffRoles,
+  deviceProfileAdmissionRoles,
   captureError,
   deviceProfilePrinters,
   deviceProfiles,
@@ -14,6 +16,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  ensureFixtureJobRole,
   seedBusinessDay,
   seedDeviceProfiles,
   seedTenant,
@@ -149,6 +152,37 @@ describe("device-profile store against a real migrated database", () => {
     } finally {
       await purgeProfiles();
     }
+  });
+
+  it("a new profile ticks every visible job role, and a new role is ticked nowhere", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const fixtureRole = await ensureFixtureJobRole(suite.db);
+    const [visible] = await suite.db.insert(staffRoles).values({ name: "Waiter" }).returning();
+    await suite.db.insert(staffRoles).values({ name: "Retired", hiddenAt: "2026-11-13T00:00:00Z" });
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "New profile",
+        formFactor: "till",
+        capabilities: [],
+      }),
+    );
+    expect(
+      await suite.db
+        .select({ id: deviceProfileAdmissionRoles.staffRoleId })
+        .from(deviceProfileAdmissionRoles)
+        .where(eq(deviceProfileAdmissionRoles.deviceProfileId, created.id))
+        .then((rows) => rows.map((row) => row.id).sort()),
+    ).toEqual([fixtureRole, visible!.id].sort());
+    await suite.db.insert(staffRoles).values({ name: "Chef" });
+    expect(
+      await suite.db
+        .select({ id: deviceProfileAdmissionRoles.staffRoleId })
+        .from(deviceProfileAdmissionRoles)
+        .where(eq(deviceProfileAdmissionRoles.deviceProfileId, created.id))
+        .then((rows) => rows.map((row) => row.id).sort()),
+    ).toEqual([fixtureRole, visible!.id].sort());
   });
 
   it("persists clock-in on operator profiles and refuses a shared display", async () => {
@@ -1072,12 +1106,6 @@ describe("what can refuse a write to device_profiles", () => {
       },
       {
         child: "device_approved_profiles",
-        column: "device_profile_id",
-        parent: "device_profiles",
-        on_delete: "CASCADE",
-      },
-      {
-        child: "device_profile_admission_persons",
         column: "device_profile_id",
         parent: "device_profiles",
         on_delete: "CASCADE",

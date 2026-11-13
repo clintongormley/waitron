@@ -1,3 +1,4 @@
+import { staffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -16,7 +17,7 @@ import { createCatalogue } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedZone } from "@waitron/db/testing/seed.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import {
@@ -43,6 +44,14 @@ const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
+
+async function visibleJobs(): Promise<string[]> {
+  return suite.db
+    .all<{ id: string }>(
+      sql`select id from staff_roles where hidden_at is null order by position, name`,
+    )
+    .map((row) => row.id);
+}
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -229,8 +238,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       departmentId: ordering.departmentId,
       allowedZoneIds: null,
       startingZoneId: ordering.startingZoneId,
-      admittedRoles: ["staff", "supervisor", "manager", "admin"],
-      personExceptions: [],
+      admittedStaffRoleIds: await visibleJobs(),
     });
     const { id } = row;
 
@@ -258,8 +266,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       departmentId: ordering.departmentId,
       allowedZoneIds: null,
       startingZoneId: ordering.startingZoneId,
-      admittedRoles: ["staff", "supervisor", "manager", "admin"],
-      personExceptions: [],
+      admittedStaffRoleIds: await visibleJobs(),
     });
 
     // LIST includes it.
@@ -303,8 +310,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       departmentId: null,
       allowedZoneIds: null,
       startingZoneId: null,
-      admittedRoles: ["staff", "supervisor", "manager", "admin"],
-      personExceptions: [],
+      admittedStaffRoleIds: await visibleJobs(),
       narrowedDevices: [],
     });
 
@@ -2107,15 +2113,17 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     departmentId: string | null;
     allowedZoneIds: string[] | null;
     startingZoneId: string | null;
-    admittedRoles: string[];
-    personExceptions: { personId: string; admitted: boolean }[];
+    admittedStaffRoleIds: string[];
   };
-  const EVERY_ROLE = ["staff", "supervisor", "manager", "admin"];
+  let EVERY_ROLE: string[];
+  let waiter: string;
+  let chef: string;
+  let supervisorJob: string;
+  let managerJob: string;
 
   let cookie: string;
   /** A second zone of the counter's department, and a department of its own with one zone. */
   let place: { terrace: string; deli: string; deliCounter: string };
-  let clerk: string;
 
   beforeAll(async () => {
     await setupTenantOnce();
@@ -2135,11 +2143,22 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       });
       return { terrace: terrace.id, deli: deli.id, deliCounter: deliCounter.id };
     });
-    const [person] = await suite.db
-      .select({ id: persons.id })
-      .from(persons)
-      .where(eq(persons.email, STAFF_EMAIL));
-    clerk = person!.id;
+    const jobs = await suite.db
+      .insert(staffRoles)
+      .values([
+        { name: "Waiter", position: 1 },
+        { name: "Chef", position: 2 },
+        { name: "Service lead", position: 3 },
+        { name: "Manager on duty", position: 4 },
+      ])
+      .returning();
+    [waiter, chef, supervisorJob, managerJob] = jobs.map((role) => role.id) as [
+      string,
+      string,
+      string,
+      string,
+    ];
+    EVERY_ROLE = await visibleJobs();
   });
 
   async function send(
@@ -2163,6 +2182,47 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     expect(res.status).toBe(200);
     return (await res.json()) as Detail;
   }
+
+  it("the copy route keeps source job ticks when the body omits them", async () => {
+    for (const selected of [[], [waiter]]) {
+      const source = await send(
+        "POST",
+        handheld(uniqueName("Copy source"), { ...ordering, admittedStaffRoleIds: selected }),
+      );
+      expect(source.status).toBe(201);
+      const res = await mountApp().request(
+        `/management-api/device-profiles/${(source.body as Detail).id}/copy`,
+        {
+          method: "POST",
+          headers: { ...JSON_HEADERS, cookie },
+          body: JSON.stringify(handheld(uniqueName("Copy"), ordering)),
+        },
+      );
+      expect(res.status).toBe(201);
+      expect(((await res.json()) as Detail).admittedStaffRoleIds).toEqual(selected);
+    }
+  });
+
+  it("saves an empty job selection and refuses duplicate job ids", async () => {
+    const created = await send(
+      "POST",
+      handheld(uniqueName("Job profile"), { ...ordering, admittedStaffRoleIds: [] }),
+    );
+    expect(created.status).toBe(201);
+    expect((await read((created.body as Detail).id)).admittedStaffRoleIds).toEqual([]);
+    const id = randomUUID();
+    expect(
+      await send(
+        "POST",
+        handheld(uniqueName("Duplicate jobs"), { ...ordering, admittedStaffRoleIds: [id, id] }),
+      ),
+    ).toEqual({
+      status: 400,
+      body: {
+        error: { code: "management.request_invalid", params: { field: "admittedStaffRoleIds" } },
+      },
+    });
+  });
 
   async function listed(id: string): Promise<Detail | undefined> {
     const res = await mountApp().request("/management-api/device-profiles", {
@@ -2189,8 +2249,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
         departmentId: ordering.departmentId,
         allowedZoneIds: [place.terrace],
         startingZoneId: place.terrace,
-        admittedRoles: ["staff", "supervisor"],
-        personExceptions: [{ personId: clerk, admitted: false }],
+        admittedStaffRoleIds: [waiter, chef],
         startingScreen: "show-schedule",
       }),
     );
@@ -2215,8 +2274,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       departmentId: ordering.departmentId,
       allowedZoneIds: [place.terrace],
       startingZoneId: place.terrace,
-      admittedRoles: ["staff", "supervisor"],
-      personExceptions: [{ personId: clerk, admitted: false }],
+      admittedStaffRoleIds: [waiter, chef],
     };
     expect(created.body).toEqual(expected);
     expect(await read(id)).toEqual(expected);
@@ -2229,8 +2287,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       "POST",
       handheld(name, {
         ...ordering,
-        admittedRoles: ["staff"],
-        personExceptions: [{ personId: clerk, admitted: true }],
+        admittedStaffRoleIds: [waiter],
         startingScreen: "show-schedule",
       }),
     );
@@ -2241,8 +2298,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
         capabilities: ["take-orders", "show-expo"],
         departmentId: place.deli,
         startingZoneId: place.deliCounter,
-        admittedRoles: ["manager", "admin"],
-        personExceptions: [],
+        admittedStaffRoleIds: [supervisorJob, managerJob],
         startingScreen: "show-expo",
       }),
       id,
@@ -2254,8 +2310,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       departmentId: place.deli,
       allowedZoneIds: null,
       startingZoneId: place.deliCounter,
-      admittedRoles: ["manager", "admin"],
-      personExceptions: [],
+      admittedStaffRoleIds: [supervisorJob, managerJob],
     };
     expect(await read(id)).toMatchObject(after);
 
@@ -2268,7 +2323,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     expect(await read(id)).toMatchObject(after);
   });
 
-  it("takes an omitted zone list, role set, exception list and starting screen as every zone, every role, none and none, and an explicit null the same", async () => {
+  it("takes an omitted zone list, job selection and starting screen as every zone, every current job and none, and an explicit null the same", async () => {
     for (const extra of [{}, { allowedZoneIds: null, startingScreen: null }]) {
       const created = await send(
         "POST",
@@ -2279,8 +2334,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
         departmentId: ordering.departmentId,
         allowedZoneIds: null,
         startingZoneId: ordering.startingZoneId,
-        admittedRoles: EVERY_ROLE,
-        personExceptions: [],
+        admittedStaffRoleIds: EVERY_ROLE,
         startingScreen: null,
       });
     }
@@ -2395,14 +2449,13 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     expect((await read(id)).departmentId).toBe(ordering.departmentId);
   });
 
-  it("refuses an unknown department, a zone of another department and an unknown person, naming the field, and leaves the stored profile as it was", async () => {
+  it("refuses an unknown department, a zone of another department and an unknown job role, naming the field, and leaves the stored profile as it was", async () => {
     const name = uniqueName("Kept policy");
     const created = await send(
       "POST",
       handheld(name, {
         ...ordering,
-        admittedRoles: ["staff"],
-        personExceptions: [{ personId: clerk, admitted: true }],
+        admittedStaffRoleIds: [waiter],
       }),
     );
     const id = (created.body as Detail).id;
@@ -2427,15 +2480,10 @@ describe("Management API — who and where a device profile serves (W97)", () =>
         {
           departmentId: place.deli,
           startingZoneId: place.deliCounter,
-          personExceptions: [{ personId: randomUUID(), admitted: true }],
+          admittedStaffRoleIds: [randomUUID()],
         },
         "device_profile.admission_invalid",
-        { field: "personExceptions", reason: "not_found" },
-      ],
-      [
-        { departmentId: place.deli, startingZoneId: place.deliCounter, admittedRoles: [] },
-        "device_profile.admission_invalid",
-        { field: "admittedRoles", reason: "empty" },
+        { field: "admittedStaffRoleIds", reason: "not_found" },
       ],
     ] as const;
     for (const [extra, code, params] of refusals) {
@@ -2453,7 +2501,7 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     }
   });
 
-  it("refuses a malformed scope, role set, exception list or starting screen, naming the field", async () => {
+  it("refuses a malformed scope, job selection or starting screen, naming the field", async () => {
     const twice = randomUUID();
     const cases = [
       ["departmentId", { departmentId: "not-a-uuid", startingZoneId: ordering.startingZoneId }],
@@ -2461,26 +2509,10 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       ["allowedZoneIds", { ...ordering, allowedZoneIds: "every" }],
       ["allowedZoneIds", { ...ordering, allowedZoneIds: [twice, twice] }],
       ["startingZoneId", { departmentId: ordering.departmentId, startingZoneId: ["x"] }],
-      ["admittedRoles", { ...ordering, admittedRoles: "staff" }],
-      ["admittedRoles", { ...ordering, admittedRoles: ["chef"] }],
-      ["admittedRoles", { ...ordering, admittedRoles: ["staff", "staff"] }],
-      ["admittedRoles", { ...ordering, admittedRoles: null }],
-      ["personExceptions", { ...ordering, personExceptions: null }],
-      ["personExceptions", { ...ordering, personExceptions: [{ personId: "x", admitted: true }] }],
-      [
-        "personExceptions",
-        { ...ordering, personExceptions: [{ personId: clerk, admitted: "yes" }] },
-      ],
-      [
-        "personExceptions",
-        {
-          ...ordering,
-          personExceptions: [
-            { personId: clerk, admitted: true },
-            { personId: clerk, admitted: false },
-          ],
-        },
-      ],
+      ["admittedStaffRoleIds", { ...ordering, admittedStaffRoleIds: "staff" }],
+      ["admittedStaffRoleIds", { ...ordering, admittedStaffRoleIds: ["chef"] }],
+      ["admittedStaffRoleIds", { ...ordering, admittedStaffRoleIds: [twice, twice] }],
+      ["admittedStaffRoleIds", { ...ordering, admittedStaffRoleIds: null }],
     ] as const;
     for (const [field, extra] of cases) {
       expect({ field, ...(await send("POST", handheld(uniqueName("Bad"), extra))) }).toEqual({

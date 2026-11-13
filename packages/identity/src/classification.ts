@@ -13,7 +13,6 @@ export const IDENTITY_TABLES = [
   "webauthn_challenges",
   "totp_enrollments",
   "device_profile_admission_roles",
-  "device_profile_admission_persons",
   "google_oidc_states",
 ] as const;
 
@@ -31,5 +30,4 @@ export const IDENTITY_CHANGE_SOURCES: readonly ChangeSource[] = [
     related: [{ type: "persons", column: "person_id" }],
   },
   { table: "device_profile_admission_roles", type: "device_profile_admission_roles" },
-  { table: "device_profile_admission_persons", type: "device_profile_admission_persons" },
 ];

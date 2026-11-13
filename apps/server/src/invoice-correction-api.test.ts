@@ -11,6 +11,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { listAdjustmentReasons, type AdjustmentReason } from "@waitron/adjustments";
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -61,14 +62,11 @@ useVenueDb({
       const department = await createDepartment(tx, { name: "Interior", orderStart: "table" });
       otherZone = (await createServiceZone(tx, { name: "Interior", departmentId: department.id }))
         .id;
-      const [profile] = await tx
-        .insert(deviceProfiles)
-        .values({
-          name: "Zoned till",
-          formFactor: "till",
-          capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
-        })
-        .returning({ id: deviceProfiles.id });
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Zoned till",
+        formFactor: "till",
+        capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
+      });
       return profile!.id;
     });
     const device = await enrolDeviceForTest(db, venue.cfg, { name: "Zoned till", profileId });

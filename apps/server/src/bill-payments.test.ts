@@ -19,6 +19,7 @@ import {
   billPayments,
   BILL_PAYMENT_CHANGE_REFUSAL,
   captureError,
+  personStaffRoles,
   printJobs,
   saleReceiptGuests,
   saleSettlements,
@@ -43,7 +44,7 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import { registroSif, registrosFacturacion, VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedNode } from "@waitron/db/testing/seed.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { payments, SimulatorPaymentProvider } from "@waitron/payments";
@@ -208,6 +209,13 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
   };
   return withTransaction(db, async (tx) => {
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    await tx
+      .insert(personStaffRoles)
+      .values({ personId: admin!.id, staffRoleId: await ensureFixtureJobRole(tx) });
     const cat = await createCatalogue(tx, { name: `Bill payments menu ${venueId}` });
     const dishes = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();

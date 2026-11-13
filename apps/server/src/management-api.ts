@@ -73,7 +73,6 @@ import {
   readOwnProfile,
   updatePersonDetails,
   verifyOwnCredentials,
-  personRole,
   readProfileAdmissions,
   setProfileAdmission,
   type PersonRoleValue,
@@ -574,8 +573,7 @@ type ProfileBody = {
   departmentId?: unknown;
   allowedZoneIds?: unknown;
   startingZoneId?: unknown;
-  admittedRoles?: unknown;
-  personExceptions?: unknown;
+  admittedStaffRoleIds?: unknown;
 };
 
 type ProfileScope = {
@@ -600,33 +598,8 @@ function parseProfileScope(body: ProfileBody): Partial<ProfileScope> {
   return scope;
 }
 
-/** Shape only, each part only when present; `setProfileAdmission` refuses an empty role set. */
 function parseProfileAdmission(body: ProfileBody): Partial<ProfileAdmission> {
-  const admission: Partial<ProfileAdmission> = {};
-  if (body.admittedRoles !== undefined) {
-    const field = "admittedRoles";
-    if (!Array.isArray(body.admittedRoles))
-      throw new AppError("management.request_invalid", { field });
-    const roles = body.admittedRoles.map((role) => requireEnum(role, field, personRole.enumValues));
-    if (new Set(roles).size !== roles.length)
-      throw new AppError("management.request_invalid", { field });
-    admission.admittedRoles = roles;
-  }
-  if (body.personExceptions !== undefined) {
-    const field = "personExceptions";
-    if (!Array.isArray(body.personExceptions))
-      throw new AppError("management.request_invalid", { field });
-    const exceptions = body.personExceptions.map((entry: unknown) => {
-      const { personId, admitted } = (entry ?? {}) as { personId?: unknown; admitted?: unknown };
-      if (typeof admitted !== "boolean")
-        throw new AppError("management.request_invalid", { field });
-      return { personId: requireBodyUuid(personId, field), admitted };
-    });
-    if (new Set(exceptions.map((entry) => entry.personId)).size !== exceptions.length)
-      throw new AppError("management.request_invalid", { field });
-    admission.personExceptions = exceptions;
-  }
-  return admission;
+  return parseIdLists(body, ["admittedStaffRoleIds"]);
 }
 
 /** Each profile row with where it serves and who may sign in on it, as last saved. */
@@ -645,8 +618,7 @@ async function withProfileAccess(
       departmentId: scope.departmentId,
       allowedZoneIds: scope.allowedZoneIds,
       startingZoneId: scope.startingZoneId,
-      admittedRoles: admission.admittedRoles,
-      personExceptions: admission.personExceptions,
+      admittedStaffRoleIds: admission.admittedStaffRoleIds,
     };
   });
 }
@@ -1372,6 +1344,10 @@ export function mountManagementApi(
           await VENUE_SERVICE.copyProfileKitchenScreens(tx, sourceId, created.id);
         else if (kitchenScreens !== undefined)
           await VENUE_SERVICE.setProfileKitchenScreens(tx, created.id, kitchenScreens);
+        if (sourceId !== undefined && admission.admittedStaffRoleIds === undefined)
+          admission.admittedStaffRoleIds = (
+            await readProfileAdmissions(tx, [sourceId])
+          )[0]!.admittedStaffRoleIds;
         await setProfileAdmission(tx, created.id, admission);
         return (await withProfileAccess(tx, [created]))[0];
       });
@@ -1381,8 +1357,8 @@ export function mountManagementApi(
   app.post("/management-api/device-profiles/:id/copy", (c) => createProfile(c, c.req.param("id")));
 
   // An omitted `inactivityTimeoutSeconds` stores null. These stay as
-  // they were when omitted: the starting screen, a printer list, the kitchen screens, the role
-  // set, the person exceptions, and each of the department, the zones and the starting zone.
+  // they were when omitted: the starting screen, a printer list, the kitchen screens, the job-role
+  // ticks and each of the department, the zones and the starting zone.
   app.put("/management-api/device-profiles/:id", (c) =>
     runBodyPrinters(c, log, async () => {
       const sessionId = requireManagementSession(c);

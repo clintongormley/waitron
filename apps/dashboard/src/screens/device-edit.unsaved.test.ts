@@ -33,8 +33,7 @@ const profile: DeviceProfile = {
   departmentId: null,
   allowedZoneIds: null,
   startingZoneId: null,
-  admittedRoles: ["staff", "supervisor", "manager", "admin"],
-  personExceptions: [],
+  admittedStaffRoleIds: ["job-waiter", "job-chef"],
   id: "p1",
   name: "Counter",
 

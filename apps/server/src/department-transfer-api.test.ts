@@ -533,7 +533,7 @@ describe("department transfer till writes", () => {
     const f = await ready();
     const id = await pending(f);
     await withTransaction(suite.db, (tx) =>
-      setProfileAdmission(tx, f.deskProfile, { personExceptions: [{ personId, admitted: false }] }),
+      setProfileAdmission(tx, f.deskProfile, { admittedStaffRoleIds: [] }),
     );
     expect(
       await post(f.desk.cookie, resolutionPath(id, "accept"), {
@@ -746,7 +746,7 @@ describe("departmentless transfer monitoring", () => {
       if (change === "admission")
         await withTransaction(suite.db, (tx) =>
           setProfileAdmission(tx, till.profileId, {
-            personExceptions: [{ personId, admitted: false }],
+            admittedStaffRoleIds: [],
           }),
         );
       if (change === "suspended")
@@ -971,7 +971,7 @@ describe("department transfer durable reads", () => {
     const f = await ready();
     const id = await pending(f);
     await withTransaction(suite.db, (tx) =>
-      setProfileAdmission(tx, f.deskProfile, { personExceptions: [{ personId, admitted: false }] }),
+      setProfileAdmission(tx, f.deskProfile, { admittedStaffRoleIds: [] }),
     );
     for (const path of ["/api/department-transfers/incoming", `/api/department-transfers/${id}`])
       expect(await get(f.desk.cookie, path)).toMatchObject({

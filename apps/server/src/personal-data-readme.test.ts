@@ -25,7 +25,7 @@ const base: PersonalDataReadmeInput = {
 };
 
 const PROFILE_LINE =
-  "- profile.json: your name, contact details, language, role and account status, and any device profile set to let you in or keep you out. Used to run the venue, contact you and decide what you may do.";
+  "- profile.json: your name, contact details, language, role and account status. Used to run the venue, contact you and decide what you may do.";
 const SIGN_IN_LINE =
   "- sign-in.json: how you sign in: whether you have a PIN, a password, an authenticator app or a Google login (never the secrets themselves), your passkeys, how many recovery codes you have, your sign-ins, the account emails issued to you and any setup you started but did not finish. Used to keep your account secure.";
 const MACHINE = "The .json files are a machine-readable copy you can take to another service.";
@@ -34,7 +34,7 @@ You, or a supervisor, manager or admin at the venue, entered your details, or th
 const BACKUP =
   "- If the venue has set up backups, they hold a copy of the whole database, this data included, wherever the venue keeps them.";
 const CONFIG_EXPORT =
-  "- A manager or admin can download a configuration export that holds your name, contact details, language, role and account status, and any device profile set to let you in or keep you out, including after you leave; they protect it with a passphrase they choose.";
+  "- A manager or admin can download a configuration export that holds your name, contact details, language, role and account status, including after you leave; they protect it with a passphrase they choose.";
 const EMAIL =
   "- Account emails (invitations, password resets and email-change codes) are sent through the email service the venue set up, when it has one.";
 const GOOGLE =

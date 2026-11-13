@@ -452,11 +452,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
     "the roles a device profile admits; copied to a standby, never drained back",
   ),
   classify(
-    "device_profile_admission_persons",
-    "state",
-    "one person's exception to a device profile's roles; copied to a standby, never drained back",
-  ),
-  classify(
     "google_oidc_states",
     "state",
     "a short-lived Google sign-in ceremony; its state is stored only as a hash; copied to a standby, never drained back",

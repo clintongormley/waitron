@@ -37,7 +37,6 @@ describe("the personal-data downloads in a real start", () => {
   it("answers a signed-in person with their own profile, gives an administrator another person's, and refuses a manager, in primary mode", async () => {
     beforeServerStarts();
     const venue = await createClockVenue(suite.db, () => new Date(), modules);
-    await suite.db.delete(personStaffRoles).where(eq(personStaffRoles.personId, venue.personId));
     const session = await withTransaction(suite.db, (tx) =>
       startManagementSession(tx, { personId: venue.personId }),
     );
@@ -47,6 +46,7 @@ describe("the personal-data downloads in a real start", () => {
       body: JSON.stringify({ expectedEntryId: null }),
     });
     expect(clockedIn.status).toBe(200);
+    await suite.db.delete(personStaffRoles).where(eq(personStaffRoles.personId, venue.personId));
     const [admin, manager] = await seedPersons(suite.db, [
       { displayName: "Ada Admin", email: "ada@example.test", role: "admin" },
       { displayName: "Mia Manager", email: "mia@example.test", role: "manager" },

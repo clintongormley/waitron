@@ -27,8 +27,7 @@ const profile: DeviceProfile = {
   departmentId: "d1",
   allowedZoneIds: null,
   startingZoneId: "z1",
-  admittedRoles: ["staff", "supervisor", "manager", "admin"],
-  personExceptions: [],
+  admittedStaffRoleIds: ["job-waiter", "job-chef"],
   startingScreen: "show-station",
 };
 const printer: Printer = {
@@ -105,6 +104,10 @@ async function mount(overrides: Partial<DashboardApi> = {}, loaded = profile) {
       listProfileKitchenScreens: async () => [
         { profileId: "p1", screens: { station: { stationIds: ["s1"], zoneIds: null } } },
       ],
+      listJobRoles: vi.fn().mockResolvedValue([
+        { id: "job-waiter", name: "Waiter", colour: "grey", position: 0 },
+        { id: "job-chef", name: "Chef", colour: "grey", position: 1 },
+      ]),
       listStaff: async () => [
         {
           personId: "pe1",
@@ -171,8 +174,7 @@ for (const [id, initial, edited] of [
   ["profile-form-factor", "till", "phone-portrait"],
   ["profile-starting-zone", "z1", "z2"],
   ["profile-starting-screen", "show-station", "show-expo"],
-  ["profile-role-staff", true, false],
-  ["profile-person-pe1", "", "deny"],
+  ["profile-role-job-waiter", true, false],
   ["cap-take-orders", false, true],
   ["payment-slip-printers-r1", false, true],
   ["receipt-printers-default", "", "r1"],
@@ -532,6 +534,38 @@ it("W69 late create defaults keep earlier name input dirty and become the clean 
   await expect.poll(() => (q(screen, "profile-department") as HTMLInputElement).value).toBe("d1");
   expect(unload()).toBe(true);
   change(screen, "profile-name", "");
+  expect(unload()).toBe(false);
+});
+
+it("W69 late scope defaults preserve an unticked job and its dirty state", async () => {
+  let finish!: () => void;
+  let reads = 0;
+  const choices = {
+    departments: [{ id: "d1", name: "Restaurant", active: true }],
+    zones: [{ id: "z1", name: "Room", departmentId: "d1", active: true }],
+  };
+  const { screen } = await mount({
+    getProfileScopeChoices: async () => {
+      if (++reads !== 1)
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      return choices;
+    },
+  });
+  q(screen, "profile-cancel")!.click();
+  await expect.poll(() => q(screen, "create")).not.toBeNull();
+  q(screen, "create")!.click();
+  await expect.poll(() => q(screen, "profile-role-job-chef")).not.toBeNull();
+  change(screen, "profile-role-job-chef", false);
+  expect(unload()).toBe(true);
+  finish();
+  await expect.poll(() => (q(screen, "profile-department") as HTMLInputElement).value).toBe("d1");
+  expect((q(screen, "profile-role-job-chef") as HTMLElementTagNameMap["wt-switch"]).checked).toBe(
+    false,
+  );
+  expect(unload()).toBe(true);
+  change(screen, "profile-role-job-chef", true);
   expect(unload()).toBe(false);
 });
 

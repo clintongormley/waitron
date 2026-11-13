@@ -2244,7 +2244,7 @@ export const en = {
   "person.telephone": "Telephone",
   "person.reload_job_roles": "Reload",
   "person.job_roles": "Job roles",
-  "person.job_roles_hint": "Puts them on the rota",
+  "person.job_roles_hint": "Puts them on the rota and on the devices that take that job",
   "person.save_job_roles": "Save job roles",
   "person.role": "Role",
   "person.pin": "PIN",
@@ -2707,14 +2707,8 @@ export const en = {
   "device_profiles.starting_zone": "Starting zone",
   "device_profiles.starting_zone_hint": "Where a device opens for each new person",
   "device_profiles.who_heading": "Who can sign in",
-  "device_profiles.roles": "Roles that can sign in",
-  "device_profiles.admitted_people": "Can sign in now: {names}",
-  "device_profiles.admitted_nobody": "Nobody can sign in on this profile now.",
-  "device_profiles.people": "Rules for one person",
-  "device_profiles.people_none": "None specified",
-  "device_profiles.person_follows_role": "Follows their role",
-  "device_profiles.person_allowed": "Can always sign in",
-  "device_profiles.person_refused": "Can never sign in",
+  "device_profiles.roles": "Job roles that can sign in",
+  "device_profiles.admitted_nobody": "Nobody can sign in on devices with this profile.",
   "device_profiles.actions": "What it can do",
   "device_profiles.actions_hint":
     "A device on this profile can do only what is switched on here. A new profile starts with nothing switched on.",
@@ -2742,9 +2736,7 @@ export const en = {
   "device_profiles.err_starting_zone_required": "Choose the zone a device starts in",
   "device_profiles.err_starting_zone":
     "Check the starting zone: it must be one of the zones this profile serves.",
-  "device_profiles.err_roles_required": "Choose at least one role that can sign in",
-  "device_profiles.err_people":
-    "Check the rules for one person: someone on the list no longer exists.",
+  "device_profiles.err_roles": "A selected job role is no longer available. Choose again",
   "device_profiles.err_shared_display_action":
     "A kitchen display can only take, prepare and hand over orders. Switch the other actions off.",
   "device_profiles.err_starting_screen":
@@ -6204,7 +6196,7 @@ export const es: Record<StringKey, string> = {
   "person.telephone": "Teléfono",
   "person.reload_job_roles": "Recargar",
   "person.job_roles": "Puestos",
-  "person.job_roles_hint": "Los pone en el cuadrante",
+  "person.job_roles_hint": "Los pone en el cuadrante y en los dispositivos que aceptan ese puesto",
   "person.save_job_roles": "Guardar puestos",
   "person.role": "Rol",
   "person.pin": "PIN",
@@ -6670,14 +6662,9 @@ export const es: Record<StringKey, string> = {
   "device_profiles.starting_zone": "Zona inicial",
   "device_profiles.starting_zone_hint": "Dónde se abre un dispositivo para cada persona nueva",
   "device_profiles.who_heading": "Quién puede iniciar sesión",
-  "device_profiles.roles": "Roles que pueden iniciar sesión",
-  "device_profiles.admitted_people": "Pueden iniciar sesión ahora: {names}",
-  "device_profiles.admitted_nobody": "Ahora nadie puede iniciar sesión con este perfil.",
-  "device_profiles.people": "Reglas para una persona",
-  "device_profiles.people_none": "Sin especificar",
-  "device_profiles.person_follows_role": "Según su rol",
-  "device_profiles.person_allowed": "Siempre puede iniciar sesión",
-  "device_profiles.person_refused": "Nunca puede iniciar sesión",
+  "device_profiles.roles": "Puestos que pueden iniciar sesión",
+  "device_profiles.admitted_nobody":
+    "Nadie puede iniciar sesión en los dispositivos con este perfil.",
   "device_profiles.actions": "Qué puede hacer",
   "device_profiles.actions_hint":
     "Un dispositivo con este perfil solo puede hacer lo que esté activado aquí. Un perfil nuevo empieza sin nada activado.",
@@ -6706,9 +6693,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.err_starting_zone_required": "Elige la zona en la que empieza un dispositivo",
   "device_profiles.err_starting_zone":
     "Revisa la zona inicial: debe ser una de las zonas que sirve este perfil.",
-  "device_profiles.err_roles_required": "Elige al menos un rol que pueda iniciar sesión",
-  "device_profiles.err_people":
-    "Revisa las reglas para una persona: alguien de la lista ya no existe.",
+  "device_profiles.err_roles": "Un puesto seleccionado ya no está disponible. Vuelve a elegir",
   "device_profiles.err_shared_display_action":
     "Una pantalla de cocina solo puede tomar, preparar y entregar pedidos. Desactiva las demás acciones.",
   "device_profiles.err_starting_screen":

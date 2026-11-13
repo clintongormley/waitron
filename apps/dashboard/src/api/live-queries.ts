@@ -301,6 +301,7 @@ export const QUERY_DEPENDENCIES = {
     "day_cutover_changes",
   ],
   getReportPrinters: ["printers"],
+  listJobRoles: ["staff_roles", "person_staff_roles", "persons"],
   listStaff: ["persons", "webauthn_credentials"],
   getStaffRoster: ["persons"],
   listPendingAbsences: ["absences"],
@@ -405,7 +406,7 @@ export const QUERY_DEPENDENCIES = {
     "device_profile_service_access",
     "device_profile_zones",
     "device_profile_admission_roles",
-    "device_profile_admission_persons",
+    "staff_roles",
   ],
   getDeviceProfile: [
     "device_profiles",
@@ -413,7 +414,7 @@ export const QUERY_DEPENDENCIES = {
     "device_profile_service_access",
     "device_profile_zones",
     "device_profile_admission_roles",
-    "device_profile_admission_persons",
+    "staff_roles",
   ],
   getProfileScopeChoices: ["departments", "floor_zones"],
   listProfileKitchenScreens: [

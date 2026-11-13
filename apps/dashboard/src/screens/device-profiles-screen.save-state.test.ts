@@ -141,11 +141,7 @@ const till: DeviceProfile = {
   // z4 is switched off since, and was the starting zone: the form shows z2 alone, starting there.
   allowedZoneIds: ["z4", "z2"],
   startingZoneId: "z4",
-  admittedRoles: ["manager", "staff"],
-  personExceptions: [
-    { personId: "pe-luis", admitted: false },
-    { personId: "pe-ana", admitted: true },
-  ],
+  admittedStaffRoleIds: ["job-waiter"],
 };
 const kds: DeviceProfile = {
   ...till,
@@ -167,8 +163,7 @@ const kds: DeviceProfile = {
   departmentId: null,
   allowedZoneIds: null,
   startingZoneId: null,
-  admittedRoles: ["staff", "supervisor", "manager", "admin"],
-  personExceptions: [],
+  admittedStaffRoleIds: ["job-waiter", "job-chef"],
 };
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -198,6 +193,10 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       },
     ]),
     getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),
+    listJobRoles: vi.fn().mockResolvedValue([
+      { id: "job-waiter", name: "Waiter", colour: "grey", position: 0 },
+      { id: "job-chef", name: "Chef", colour: "grey", position: 1 },
+    ]),
     listStaff: vi
       .fn()
       .mockResolvedValue([person("pe-ana", "Ann", "staff"), person("pe-luis", "Lewis", "manager")]),
@@ -333,10 +332,8 @@ describe("the device profile editor's Save", () => {
     expect(checked(el, "profile-zone-z2")).toBe(true);
     expect(checked(el, "profile-zone-z1")).toBe(false);
     expect(value(el, "profile-starting-zone")).toBe("z2");
-    expect(checked(el, "profile-role-manager")).toBe(true);
-    expect(checked(el, "profile-role-supervisor")).toBe(false);
-    expect(value(el, "profile-person-pe-ana")).toBe("allow");
-    expect(value(el, "profile-person-pe-luis")).toBe("deny");
+    expect(checked(el, "profile-role-job-waiter")).toBe(true);
+    expect(checked(el, "profile-role-job-chef")).toBe(false);
     expect(checked(el, "cap-show-station")).toBe(true);
     expect(value(el, "profile-starting-screen")).toBe("show-station");
     expect(checked(el, "payment-slip-printers-pr-old")).toBe(true);
@@ -543,13 +540,8 @@ describe("the device profile editor's Save", () => {
     ],
     [
       "a role",
-      (el) => change(el, "profile-role-supervisor", true),
-      (el) => change(el, "profile-role-supervisor", false),
-    ],
-    [
-      "a person's rule",
-      (el) => change(el, "profile-person-pe-ana", ""),
-      (el) => change(el, "profile-person-pe-ana", "allow"),
+      (el) => change(el, "profile-role-job-chef", true),
+      (el) => change(el, "profile-role-job-chef", false),
     ],
     [
       "a receipt printer",
@@ -735,12 +727,12 @@ describe("the device profile editor's Save", () => {
     const { el } = await openEdit("p1", api);
     await typeName(el, "Front counter 2");
     await press(el);
-    await change(el, "profile-role-supervisor", true);
+    await change(el, "profile-role-job-chef", true);
     answer({ ...till, name: "Front counter 2" });
     await settle(el);
     expect(q(el, "editor-form")).not.toBeNull();
     expect(await state(el)).toEqual(ready);
-    await change(el, "profile-role-supervisor", false);
+    await change(el, "profile-role-job-chef", false);
     expect(await state(el)).toEqual(quiet);
   });
 

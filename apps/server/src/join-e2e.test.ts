@@ -1,3 +1,4 @@
+import { staffRoles, personStaffRoles } from "@waitron/db";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -950,8 +951,8 @@ describe("a deleted device comes back as the same device", () => {
     const profileId = await seedProfile("till");
     const managersOnly = await seedProfile("till");
     await suite.db
-      .insert(deviceProfileAdmissionRoles)
-      .values({ deviceProfileId: managersOnly, role: "manager" });
+      .delete(deviceProfileAdmissionRoles)
+      .where(eq(deviceProfileAdmissionRoles.deviceProfileId, managersOnly));
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     const [person] = await seedPersons(suite.db, {
@@ -980,8 +981,8 @@ describe("a deleted device comes back as the same device", () => {
     const profileId = await seedProfile("till");
     const managersOnly = await seedProfile("till");
     await suite.db
-      .insert(deviceProfileAdmissionRoles)
-      .values({ deviceProfileId: managersOnly, role: "manager" });
+      .delete(deviceProfileAdmissionRoles)
+      .where(eq(deviceProfileAdmissionRoles.deviceProfileId, managersOnly));
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     const approved = await send(app, "PATCH", `/management-api/devices/${deviceId}`, {
@@ -999,6 +1000,11 @@ describe("a deleted device comes back as the same device", () => {
       { displayName: "Manager", pinHash: hashPin("4321"), role: "manager" },
       { displayName: "Server", pinHash: hashPin("4321"), role: "staff" },
     ]);
+    const [job] = await suite.db.insert(staffRoles).values({ name: randomUUID() }).returning();
+    await suite.db.insert(personStaffRoles).values({ personId: manager!.id, staffRoleId: job!.id });
+    await suite.db
+      .insert(deviceProfileAdmissionRoles)
+      .values({ deviceProfileId: managersOnly, staffRoleId: job!.id });
     const managerIn = await signIn(app, jar, manager!.id);
     expect(managerIn.status).toBe(200);
     let switched = false;

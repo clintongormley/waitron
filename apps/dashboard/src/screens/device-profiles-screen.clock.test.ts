@@ -30,8 +30,7 @@ function fixture(formFactor: DeviceProfile["formFactor"] = "till") {
     invoicePrinterIds: [],
     invoicePrinterDefaultId: null,
     allowedZoneIds: null,
-    admittedRoles: ["staff", "supervisor", "manager", "admin"],
-    personExceptions: [],
+    admittedStaffRoleIds: ["job-waiter", "job-chef"],
     departmentId: "d1",
     startingZoneId: "z1",
   };
@@ -51,6 +50,10 @@ function fixture(formFactor: DeviceProfile["formFactor"] = "till") {
       departments: [{ id: "d1", name: "Restaurant", active: true }],
       zones: [{ id: "z1", name: "Counter", departmentId: "d1", active: true }],
     })),
+    listJobRoles: vi.fn().mockResolvedValue([
+      { id: "job-waiter", name: "Waiter", colour: "grey", position: 0 },
+      { id: "job-chef", name: "Chef", colour: "grey", position: 1 },
+    ]),
     listStaff: vi.fn(async () => []),
     listReaders: vi.fn(async () => []),
     getProfileReaders: vi.fn(async () => ({ readerIds: [], defaultReaderId: null })),

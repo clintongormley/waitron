@@ -39,8 +39,7 @@ const profiles: DeviceProfile[] = [
     departmentId: "d1",
     allowedZoneIds: null,
     startingZoneId: "z1",
-    admittedRoles: ["staff", "supervisor", "manager", "admin"],
-    personExceptions: [],
+    admittedStaffRoleIds: ["job-waiter", "job-chef"],
   },
 ];
 
@@ -110,6 +109,10 @@ function stubApi(
     listStations: vi.fn().mockResolvedValue([]),
     listProfileKitchenScreens: vi.fn().mockResolvedValue([]),
     getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),
+    listJobRoles: vi.fn().mockResolvedValue([
+      { id: "job-waiter", name: "Waiter", colour: "grey", position: 0 },
+      { id: "job-chef", name: "Chef", colour: "grey", position: 1 },
+    ]),
     listStaff: vi.fn().mockResolvedValue(staff),
     listReaders: vi.fn().mockResolvedValue([]),
     getProfileReaders: vi.fn().mockResolvedValue({ readerIds: [], defaultReaderId: null }),
@@ -576,19 +579,16 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       toggle("profile-every-zone", false);
       toggle("cap-show-schedule", true);
       await flush(el);
-      el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-        "[data-test=profile-people]",
-      )!.open = true;
-      await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=profile-zone-z2]")).not.toBeNull();
       await expectNoA11yViolations(host);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
       await flush(el);
-      for (const role of ["staff", "supervisor", "manager", "admin"])
-        toggle(`profile-role-${role}`, false);
+      for (const role of ["job-waiter", "job-chef"]) toggle(`profile-role-${role}`, false);
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
       await flush(el);
-      expect(el.shadowRoot!.querySelector("[data-test=profile-roles-error]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=admitted-people]")!.textContent).toContain(
+        t("device_profiles.admitted_nobody"),
+      );
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);

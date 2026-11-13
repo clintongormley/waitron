@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { ensureFixtureJobRole, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -226,11 +226,15 @@ describe("the public cancellation read and command", () => {
         );
         await inTx(venue, (tx) =>
           setProfileAdmission(tx, profile!.id, {
-            personExceptions: [{ personId: venue.staffId, admitted: false }],
+            admittedStaffRoleIds: [],
           }),
         );
         expect((await call()).json).toMatchObject({ code: "device_profile.not_admitted" });
-        await inTx(venue, (tx) => setProfileAdmission(tx, profile!.id, { personExceptions: [] }));
+        await inTx(venue, async (tx) =>
+          setProfileAdmission(tx, profile!.id, {
+            admittedStaffRoleIds: [await ensureFixtureJobRole(tx)],
+          }),
+        );
         await inTx(venue, (tx) =>
           setProfileServiceAccess(tx, profile!.id, {
             departmentId: department!.id,
@@ -247,7 +251,11 @@ describe("the public cancellation read and command", () => {
             .set({ capabilities: profile!.capabilities })
             .where(eq(deviceProfiles.id, profile!.id)),
         );
-        await inTx(venue, (tx) => setProfileAdmission(tx, profile!.id, { personExceptions: [] }));
+        await inTx(venue, async (tx) =>
+          setProfileAdmission(tx, profile!.id, {
+            admittedStaffRoleIds: [await ensureFixtureJobRole(tx)],
+          }),
+        );
         await inTx(venue, (tx) =>
           setProfileServiceAccess(tx, profile!.id, {
             departmentId: null,
@@ -1390,9 +1398,9 @@ describe("the public cancellation read and command", () => {
     const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
     const before = await frozen();
     try {
-      await inTx(venue, (tx) =>
+      await inTx(venue, async (tx) =>
         setProfileAdmission(tx, device!.deviceProfileId, {
-          personExceptions: [{ personId: venue.staffId, admitted: false }],
+          admittedStaffRoleIds: [],
         }),
       );
       const result = await send(
@@ -1406,8 +1414,10 @@ describe("the public cancellation read and command", () => {
       expect(result.json).toEqual({ code: "device_profile.not_admitted", params: {} });
       expect(await frozen()).toEqual(before);
     } finally {
-      await inTx(venue, (tx) =>
-        setProfileAdmission(tx, device!.deviceProfileId, { personExceptions: [] }),
+      await inTx(venue, async (tx) =>
+        setProfileAdmission(tx, device!.deviceProfileId, {
+          admittedStaffRoleIds: [await ensureFixtureJobRole(tx)],
+        }),
       );
     }
   });
