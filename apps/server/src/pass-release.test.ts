@@ -1062,15 +1062,16 @@ describe("A773 pass release: paper", () => {
     expect(refreshed.releaseContext).toBeNull();
     expect(refreshed.items.find((item) => item.id === placed.item)!.stationClosed).toBe(true);
 
-    await withTransaction(db, (tx) =>
-      moveDishesToStation(
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
+      await moveDishesToStation(
         tx,
         venue.cfg,
         venue.party.tabId,
         { submissionId: randomUUID(), lineIds: [placed.line], stationId: venue.stations.fryer },
         mover(venue),
-      ),
-    );
+      );
+    });
     expect((await rows([placed.item]))[0]).toMatchObject({
       stationId: venue.stations.fryer,
       requestedAt: AT,
@@ -1129,6 +1130,7 @@ describe("A773 pass release: paper", () => {
         new Date(AT),
         await seedActivityActor(tx),
       );
+      await setStationsWaitForPass(tx, true, [venue.stations.bar]);
       await moveDishesToStation(
         tx,
         venue.cfg,

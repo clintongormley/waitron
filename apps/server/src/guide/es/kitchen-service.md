@@ -420,6 +420,10 @@ estación hasta que el pase los marcha. Activarlo o desactivarlo solo decide ad�
 que se piden después; un plato ya pedido se queda donde está. Una exportación de la configuración
 incluye el ajuste.
 
+Un plato que espera al pase y cambia a una estación que no espera, a mano o al cerrar su estación
+por hoy, se empieza allí enseguida, y su comanda dice **Viene de Parrilla**. Si cambia a otra
+estación que espera, sigue esperando.
+
 Un plato que no espera al pase se empieza enseguida. Si su grupo tiene también platos para el pase,
 esperándolo o ya marchados por él y sin servir, la comanda del plato y su tarjeta en la pantalla de
 la estación dicen **Sale con** y los nombres de las estaciones de esos platos, por ejemplo **Sale

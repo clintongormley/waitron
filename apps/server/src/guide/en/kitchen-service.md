@@ -382,6 +382,10 @@ to the pass's **To fire** column, and they wait on the station's screen until th
 Switching it on or off decides only where dishes requested afterwards go; a dish already requested
 stays where it is. A configuration export carries the setting.
 
+A dish waiting for the pass that moves to a station that does not wait, by hand or when its station
+closes for today, starts there at once, and its ticket says **From Grill**. Moved to another station
+that waits, it keeps waiting.
+
 A dish that does not wait for the pass starts at once. When its group also has dishes for the pass,
 waiting for it or fired by it and not yet served, the dish's ticket and its card on the station's
 screen say **Goes with** and the names of those dishes' stations, such as **Goes with Grill and

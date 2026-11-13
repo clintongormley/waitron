@@ -255,7 +255,7 @@ async function transferredCounterOrder(
 }
 
 describe("A773 requested lifecycle: station move", () => {
-  it("keeps a Requested dish Requested, printing nothing, when moved to a waiting station and then to one that does not wait", async () => {
+  it("keeps a Requested dish Requested, printing nothing, when moved to a waiting station, and starts it with a ticket there when moved on to one that does not wait", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
@@ -288,14 +288,20 @@ describe("A773 requested lifecycle: station move", () => {
       expect(await itemOf(tx, burger.id)).toMatchObject({
         stationId: venue.stations.bar,
         requestedAt: AT,
-        firedAt: null,
-        passControlled: true,
+        firedAt: LATEST,
+        queuedAt: LATEST,
+        passControlled: false,
       });
       expect(await movesOf(tx, burger.id)).toEqual([
         { from: venue.stations.grill, to: venue.stations.kitchen },
         { from: venue.stations.kitchen, to: venue.stations.bar },
       ]);
-      expect(await jobCounts(tx, venue)).toEqual(counts);
+      expect(await jobCounts(tx, venue)).toEqual({ ...counts, bar: counts.bar! + 1 });
+      const added = (await slips(tx, venue.printers.bar)).slice(counts.bar);
+      expect(added).toHaveLength(1);
+      expect(added[0]).toContain("From Kitchen");
+      expect(added[0]).toContain("1 x BURG");
+      expect(added[0]).not.toContain("HOLD");
     });
   });
 
@@ -327,7 +333,7 @@ describe("A773 requested lifecycle: station move", () => {
     });
   });
 
-  it("sends a Requested dish on with station closing's send choice, still Requested and printing nothing", async () => {
+  it("starts a Requested dish at once, with its ticket, when station closing sends it to a station that does not wait", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
@@ -351,13 +357,19 @@ describe("A773 requested lifecycle: station move", () => {
       expect(await itemOf(tx, burger.id)).toMatchObject({
         stationId: venue.stations.kitchen,
         requestedAt: AT,
-        firedAt: null,
-        passControlled: true,
+        firedAt: LATER,
+        queuedAt: LATER,
+        passControlled: false,
       });
       expect(await movesOf(tx, burger.id)).toEqual([
         { from: venue.stations.grill, to: venue.stations.kitchen },
       ]);
-      expect(await jobCounts(tx, venue)).toEqual(counts);
+      expect(await jobCounts(tx, venue)).toEqual({ ...counts, kitchen: counts.kitchen! + 1 });
+      const added = (await slips(tx, venue.printers.kitchen)).slice(counts.kitchen);
+      expect(added).toHaveLength(1);
+      expect(added[0]).toContain("From Grill");
+      expect(added[0]).toContain("1 x BURG");
+      expect(added[0]).not.toContain("HOLD");
     });
   });
 

@@ -242,7 +242,7 @@ describe("the till's station day", () => {
       if (state === "held")
         await suite.db
           .update(ticketItems)
-          .set({ firedAt: null })
+          .set({ firedAt: null, requestedAt: null })
           .where(eq(ticketItems.id, item.id));
       const answer = await call("PUT", today(), {
         state: "closed",

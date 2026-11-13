@@ -216,6 +216,7 @@ describe("A773 requested lifecycle: cancel", () => {
       const beforeMove = (await jobs()).length;
       const elsewhere = await inTx(venue, async (tx) => {
         const station = await createStation(tx, { name: "No HOLD paper here" });
+        await setStationsWaitForPass(tx, true, [station.id]);
         await moveDishesToStation(
           tx,
           venue.cfg,

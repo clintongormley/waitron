@@ -20,7 +20,7 @@ import { enqueueKitchenTickets, enqueueStationMoved, firedQuantity } from "./kit
 import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js";
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { heldItem } from "./kitchen-phase.js";
+import { heldItem, requestedItem } from "./kitchen-phase.js";
 import { passWaitingStations } from "./kitchen-release.js";
 import {
   heldPaperStations,
@@ -420,6 +420,13 @@ export async function moveDishesToStation(
           stationId: request.stationId,
           moved: [],
         };
+      const [destinationSettings] = await tx
+        .select({ waitsForPass: kitchenStations.waitsForPass })
+        .from(kitchenStations)
+        .where(eq(kitchenStations.id, request.stationId));
+      const destinationWaits = destinationSettings!.waitsForPass;
+      const startsHere = (row: (typeof moving)[number]) =>
+        !destinationWaits && row.firedAt === null && row.requestedAt !== null;
       const holdPaper = await holdPaperFor(
         tx,
         moving.flatMap((row) =>
@@ -431,8 +438,9 @@ export async function moveDishesToStation(
       // A fired group's Requested dish is corrected at any station recorded for its group, so it
       // joins the destination's HOLD paper whether or not the station it leaves had any.
       const arrivesOnPaper = (row: (typeof moving)[number]) =>
-        paperOf(row) !== undefined ||
-        (row.groupId !== null && row.firedAt === null && row.requestedAt !== null);
+        !startsHere(row) &&
+        (paperOf(row) !== undefined ||
+          (row.groupId !== null && row.firedAt === null && row.requestedAt !== null));
       const byStation = new Map<string, typeof moving>();
       for (const row of moving)
         byStation.set(row.stationId!, [...(byStation.get(row.stationId!) ?? []), row]);
@@ -472,6 +480,24 @@ export async function moveDishesToStation(
         .returning({ id: ticketItems.id });
       if (changed.length !== moving.length)
         throw new Error("station move changed an unexpected number of ticket items");
+      const starting = moving.filter(startsHere);
+      if (starting.length > 0) {
+        const started = await tx
+          .update(ticketItems)
+          .set({ firedAt: at.toISOString(), passControlled: false })
+          .where(
+            and(
+              inArray(
+                ticketItems.id,
+                starting.map((row) => row.ticketItemId!),
+              ),
+              requestedItem(),
+            ),
+          )
+          .returning({ id: ticketItems.id });
+        if (started.length !== starting.length)
+          throw new Error("station move started an unexpected number of ticket items");
+      }
       await tx.insert(ticketItemMoves).values(
         moving.map((row) => ({
           workingOrderLineId: row.id,
@@ -502,7 +528,7 @@ export async function moveDishesToStation(
         const from = stations.get(oldStationId)?.name;
         if (from === undefined) throw new Error("moving ticket has no old station in this venue");
         const fired: FiredItem[] = lines
-          .filter((row) => row.firedAt !== null)
+          .filter((row) => row.firedAt !== null || startsHere(row))
           .map((row) => ({
             workingOrderLineId: row.id,
             stationId: request.stationId,

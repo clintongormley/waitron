@@ -453,6 +453,37 @@ describe("A773 hold paper: extras off and moves", () => {
     });
   });
 
+  it("moving a Requested burger to a station that prints held work but does not wait starts it there on an ordinary ticket, with no HOLD paper", async () => {
+    const venue = await fresh();
+    await withTransaction(db, async (tx) => {
+      const line = await firedFromHold(tx, venue, false);
+      await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.kitchen]);
+      const before = await slips(tx, venue);
+      vi.setSystemTime(new Date(LATER));
+
+      await moveTo(tx, venue, line.id, venue.stations.kitchen);
+
+      const after = await slips(tx, venue);
+      const added = (name: string) => after[name]!.slice(before[name]!.length);
+      expect(added("grill")).toEqual([cancelledBurger]);
+      const kitchen = added("kitchen");
+      expect(kitchen).toHaveLength(1);
+      expect(kitchen[0]).not.toContain("*** HOLD ***");
+      expect(kitchen[0]).toContain("From Grill");
+      expect(kitchen[0]).toContain("1 x BURG");
+      expect(await itemOf(tx, line.id)).toMatchObject({
+        stationId: venue.stations.kitchen,
+        requestedAt: AT,
+        firedAt: LATER,
+      });
+      const recorded = await tx
+        .select({ stationId: orderGroupHoldStations.stationId })
+        .from(orderGroupHoldStations)
+        .where(eq(orderGroupHoldStations.groupId, line.groupId!));
+      expect(recorded.map((row) => row.stationId)).toEqual([venue.stations.grill]);
+    });
+  });
+
   it("moving a Requested burger to a station that prints held work and holds none of the group's gives it the HOLD ticket, which the pass's release marks FIRE", async () => {
     const venue = await fresh();
     const { line, groupId } = await withTransaction(db, async (tx) => {
@@ -598,6 +629,7 @@ describe("A773 hold paper: extras off and moves", () => {
         vi.setSystemTime(new Date(LATER));
         await moveTo(tx, venue, second!.id, venue.stations.fryer);
         await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.kitchen]);
+        await setStationsWaitForPass(tx, true, [venue.stations.kitchen]);
 
         const moved = await printedBy(tx, venue, () =>
           moveDishesToStation(
