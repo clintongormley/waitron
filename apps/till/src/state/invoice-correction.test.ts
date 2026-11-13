@@ -230,3 +230,45 @@ it("refuses to send over a saved entry it cannot read", async () => {
   await expect(h.session.open("sale-1", openAsk)).rejects.toMatchObject({ kind: "storage" });
   expect(h.api.openInvoiceCorrection).toHaveBeenCalledTimes(1);
 });
+
+it.each([
+  { label: "a first send", before: [] },
+  { label: "a retry", before: [lost()] },
+])(
+  "releases a card leg's refund entry when $label is refused for a correction reason, keeping other refusals on a retry",
+  async ({ before }) => {
+    const answers: unknown[] = [
+      ...before,
+      refusal("invoice_correction.leg_too_large"),
+      lost(),
+      refusal("authorization.not_permitted", 403),
+    ];
+    const api = {
+      refundTransaction: vi.fn(async () => {
+        const next = answers.shift();
+        throw next;
+      }),
+      getTenderRefund: vi.fn(),
+      retryTenderRefund: vi.fn(),
+    };
+    const leg = {
+      tenderId: "tender-1",
+      appliedAmount: "5.00",
+      tipAmount: "0.00",
+      reason: "Corrective invoice",
+      invoiceCorrectionId: "correction-1",
+    };
+    const session = new TenderRefundSession(scope, api);
+    if (before.length > 0) await expect(session.submit("sale-1", leg)).rejects.toThrow();
+    await expect(session.submit("sale-1", leg)).rejects.toMatchObject({
+      code: "invoice_correction.leg_too_large",
+    });
+    expect(session.read("sale-1")).toBeNull();
+    const plain = { ...leg, invoiceCorrectionId: undefined, appliedAmount: "4.00" };
+    await expect(session.submit("sale-1", plain)).rejects.toThrow("Failed to fetch");
+    await expect(session.submit("sale-1", plain)).rejects.toMatchObject({
+      code: "authorization.not_permitted",
+    });
+    expect(session.read("sale-1")?.request.appliedAmount).toBe("4.00");
+  },
+);
