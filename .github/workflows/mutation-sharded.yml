@@ -81,9 +81,17 @@ jobs:
       - name: Cache Playwright browsers
         if: inputs.browser
         uses: actions/cache@v6
+        id: browser-cache
+        timeout-minutes: 2
+        continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - name: Install Chromium
         if: inputs.browser

@@ -5914,10 +5914,12 @@ describe("remaining network transfers", () => {
   });
   it("bounds every cache, Docker and CodeQL transfer, with analyze using its job limit", () => {
     const found = workflowFiles.flatMap((name) =>
-      networkTransfers(readFileSync(join(workflowsDir, name), "utf8")).map((entry) => ({
-        workflow: name,
-        ...entry,
-      })),
+      workflowTexts(name).flatMap((text) =>
+        networkTransfers(text).map((entry) => ({
+          workflow: name,
+          ...entry,
+        })),
+      ),
     );
     expect(found.some((entry) => entry.action.startsWith("actions/cache"))).toBe(true);
     expect(found.some((entry) => entry.action.startsWith("docker/"))).toBe(true);
