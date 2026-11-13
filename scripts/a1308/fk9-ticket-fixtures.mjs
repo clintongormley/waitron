@@ -166,9 +166,9 @@ export function rewriteTicketBills(source, path) {
     reports.push(`${path}: inspect raw SQL ticket bill references`);
   return { text, reports };
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
-  const write = process.argv.includes("--write");
-  for (const path of process.argv.slice(2).filter((arg) => arg !== "--write")) {
+export function runTicketFiles(args) {
+  const write = args.includes("--write");
+  for (const path of args.filter((arg) => arg !== "--write")) {
     if (path.endsWith("seed.madrid-baseline.test.ts")) continue;
     const source = readFileSync(path, "utf8"),
       result = rewriteTicketBills(source, path);
@@ -179,3 +179,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
     }
   }
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href)
+  runTicketFiles(process.argv.slice(2));
