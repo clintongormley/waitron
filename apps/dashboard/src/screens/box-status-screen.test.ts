@@ -1403,17 +1403,59 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       expect(api.liveData.refresh).toHaveBeenCalled();
     });
 
-    it("offers only the confirmation, and says why it waits, when the box's clock service is silent", async () => {
+    it("offers the confirmation and the check with this device's time, and says why it waits, when the box's clock service is silent", async () => {
       const el = await mountClock(waitingApi(SILENT_CLOCK));
-      expect(openButton(el)).toBeNull();
+      expect(text(openButton(el))).toBe("Check with this device's time");
       expect(text(confirmButton(el))).toBe(t("box_status.clock.confirm"));
       expect(text(q(el, "[data-test=row-clock] .line"))).toBe(
         `${fill("box_status.clock.waiting", { agreed: "0", boxAt: formatIsoMinute(BOX_AT) })} It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start.`,
       );
       expect(text(q(el, "[data-test=row-clock] [data-test=clock-confirm-help]"))).toBe(
-        "Press this only if the date and time above match a clock you trust. If they do not, do not press it: the box cannot correct its clock while the part that reads its internet time is not answering, so payments keep waiting.",
+        "Press this only if the date and time above match a clock you trust, or use “Check with this device's time” to compare them. If they do not match, the box cannot correct its clock while the part that reads its internet time is not answering, so payments keep waiting.",
       );
     });
+
+    it("confirms the box's time when this device agrees within a minute, while the box's clock service is silent", async () => {
+      deviceNow("2026-10-22T18:10:20.000Z");
+      const api = waitingApi(SILENT_CLOCK);
+      const el = await mountClock(api);
+      await open(el);
+      expect(api.clockConfirm).toHaveBeenCalledExactlyOnceWith({
+        challengeId: "ch-1",
+        asShown: true,
+      });
+      expect(api.clockSet).not.toHaveBeenCalled();
+      expect(text(q(el, "[data-test=clock-confirmed]"))).toBe(
+        "This device agrees, so the box's time is confirmed.",
+      );
+      expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
+    });
+
+    it.each([
+      ["no time service to read", SILENT_CLOCK],
+      [
+        "a time service read apart from the start's look",
+        { ...SILENT_CLOCK, sync: { synced: false, source: "timedatectl" as const, warn: true } },
+      ],
+    ])(
+      "offers no set, and says the time cannot be corrected, when this device is two days off while the box's clock service is silent (%s)",
+      async (_label, clock) => {
+        deviceNow("2026-10-24T18:10:00.000Z");
+        const api = waitingApi(clock);
+        const el = await mountClock(api);
+        await open(el);
+        expect(q(el, "[data-test=clock-set-question]")).toBeNull();
+        expect(text(q(el, "[data-test=clock-check-times]"))).toBe(
+          `The box's clock says ${atSeconds(BOX_AT)}. This device says ${atSeconds("2026-10-24T18:10:00.000Z")}.`,
+        );
+        expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
+          "The box could not show that its clock is within a minute of your device's, and its time cannot be corrected until the part of the box that reads its internet time answers, so payments keep waiting.",
+        );
+        expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
+        expect(api.clockConfirm).not.toHaveBeenCalled();
+        expect(api.clockSet).not.toHaveBeenCalled();
+      },
+    );
 
     it("offers the check with this device's time, but not the confirmation, while the clock reads before 28-10-2024", async () => {
       const el = await mountClock(clockApi({ notices: [CLOCK_UNUSABLE], clock: WAITING_CLOCK }));

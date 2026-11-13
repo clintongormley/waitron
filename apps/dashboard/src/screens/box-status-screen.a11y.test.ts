@@ -277,6 +277,29 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
         await expectNoA11yViolations(host);
       },
     );
+
+    it("renders the open dialog accessibly with differing times while the box's clock service is silent", async () => {
+      const spy = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-24T18:10:00.000Z"));
+      onTestFinished(() => spy.mockRestore());
+      const silent = health({
+        clock: {
+          ...health().clock,
+          sync: { synced: false, source: "unavailable", warn: false },
+          waiting: { boxAt: "2026-10-22T18:10:00.000Z", agreed: 0, hostAnswers: false },
+        },
+      });
+      const api = Object.assign(stubApi(silent), { clockChallenge: challenged() });
+      const { el, host } = await mountWidget<BoxStatusScreen>(
+        "dashboard-box-status-screen",
+        { api, canOpen: () => true, canCheckClock: true },
+        theme,
+      );
+      await flush(el);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=clock-check]")!);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=clock-check-verdict]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
   });
 
   describe("the restart of the box", () => {

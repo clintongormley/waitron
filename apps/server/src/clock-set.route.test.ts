@@ -512,6 +512,21 @@ it("confirms a waiting start as the box's date and time stand, setting nothing",
   ]);
 });
 
+it("confirms a waiting start as shown while the box's clock service does not answer", async () => {
+  const start = startClockState();
+  start.noteHost(false);
+  const box = await stoppedBox(0, { start });
+  box.host.status = { available: false, reason: "lost" };
+  const before = written(box);
+
+  const answer = await confirmAsShown(box, mario.cookie);
+
+  expect(answer.status).toBe(200);
+  expect(answer.json).toMatchObject({ confirmationId: null, stepMs: 0 });
+  expect(written(box)).toEqual(before);
+  expect(start.status).toBe("by_person");
+});
+
 it("refuses a confirmation while the start does not wait, or with no start check", async () => {
   const confirmed = startClockState();
   confirmed.confirm("by_internet", {});

@@ -4083,7 +4083,7 @@ export const en = {
   "box_status.clock.confirm_help":
     "Press this only if the date and time above match a clock you trust. If they do not, use “Check with this device's time”.",
   "box_status.clock.confirm_help_host_silent":
-    "Press this only if the date and time above match a clock you trust. If they do not, do not press it: the box cannot correct its clock while the part that reads its internet time is not answering, so payments keep waiting.",
+    "Press this only if the date and time above match a clock you trust, or use “Check with this device's time” to compare them. If they do not match, the box cannot correct its clock while the part that reads its internet time is not answering, so payments keep waiting.",
   "box_status.clock.confirm_refused_stale":
     "The box's clock changed while this was being sent. Check the date and time above again, then press the button again.",
   "box_status.clock.admin.confirmed": "This device agrees, so the box's time is confirmed.",
@@ -4093,6 +4093,8 @@ export const en = {
   "box_status.clock.admin.times": "The box's clock says {box}. This device says {device}.",
   "box_status.clock.admin.differ":
     "The box could not show that its clock is within a minute of your device's. Check that your device's time is right; if it is, connect the box to the internet so it can correct its clock.",
+  "box_status.clock.admin.differ_host_silent":
+    "The box could not show that its clock is within a minute of your device's, and its time cannot be corrected until the part of the box that reads its internet time answers, so payments keep waiting.",
   "box_status.clock.admin.set.question":
     "The box's clock says {box}. Your device says {device}. Use your device's time?",
   "box_status.clock.admin.set.confirm": "Use this time",
@@ -8321,7 +8323,7 @@ export const es: Record<StringKey, string> = {
   "box_status.clock.confirm_help":
     "Pulsa esto solo si la fecha y la hora de arriba coinciden con un reloj de confianza. Si no, usa «Comprobar con la hora de este dispositivo».",
   "box_status.clock.confirm_help_host_silent":
-    "Pulsa esto solo si la fecha y la hora de arriba coinciden con un reloj de confianza. Si no coinciden, no lo pulses: el equipo no puede corregir su reloj mientras no responda la parte que lee su hora de internet, así que los cobros siguen esperando.",
+    "Pulsa esto solo si la fecha y la hora de arriba coinciden con un reloj de confianza, o usa «Comprobar con la hora de este dispositivo» para compararlas. Si no coinciden, el equipo no puede corregir su reloj mientras no responda la parte que lee su hora de internet, así que los cobros siguen esperando.",
   "box_status.clock.confirm_refused_stale":
     "El reloj del equipo ha cambiado mientras se enviaba. Vuelve a comprobar la fecha y la hora de arriba y pulsa el botón otra vez.",
   "box_status.clock.admin.confirmed":
@@ -8333,6 +8335,8 @@ export const es: Record<StringKey, string> = {
     "El reloj del servidor marca {box}. Este dispositivo marca {device}.",
   "box_status.clock.admin.differ":
     "El servidor no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el servidor a internet para que corrija la hora.",
+  "box_status.clock.admin.differ_host_silent":
+    "El servidor no ha podido comprobar que su hora está a menos de un minuto de la de tu dispositivo, y su hora no se puede corregir hasta que responda la parte del servidor que lee su hora de internet, así que los cobros siguen esperando.",
   "box_status.clock.admin.set.question":
     "El reloj del servidor marca {box}. Tu dispositivo marca {device}. ¿Usar la hora de tu dispositivo?",
   "box_status.clock.admin.set.confirm": "Usar esta hora",

@@ -386,7 +386,12 @@ export class BoxStatusScreen extends LitElement {
   }
 
   #deviceCheckOffered(health: BoxHealth): boolean {
-    return clockUnusable(health) || health.clock.waiting?.hostAnswers === true;
+    return clockUnusable(health) || health.clock.waiting !== undefined;
+  }
+
+  /** A set needs the box's clock service, so none is offered while the start's look hears none. */
+  #clockHostSilent(health: BoxHealth | null): boolean {
+    return health?.clock.waiting?.hostAnswers === false;
   }
 
   /** From the last read; the box judges it again when asked. */
@@ -396,7 +401,8 @@ export class BoxStatusScreen extends LitElement {
       this.canCheckClock &&
       health.clock.sync.source === "timedatectl" &&
       !health.clock.sync.synced &&
-      this.#deviceCheckOffered(health)
+      this.#deviceCheckOffered(health) &&
+      !this.#clockHostSilent(health)
     );
   }
 
@@ -587,7 +593,11 @@ export class BoxStatusScreen extends LitElement {
                     reading.agrees
                       ? nothing
                       : html`<p data-test="clock-check-verdict">
-                          ${t("box_status.clock.admin.differ")}
+                          ${t(
+                            this.#clockHostSilent(this.health)
+                              ? "box_status.clock.admin.differ_host_silent"
+                              : "box_status.clock.admin.differ",
+                          )}
                         </p>`
                   }`
       }
@@ -774,7 +784,7 @@ export class BoxStatusScreen extends LitElement {
           row.id === "clock" && this.canCheckClock && offersConfirm(health)
             ? html`<p class="aside" data-test="clock-confirm-help">
                   ${t(
-                    health.clock.waiting?.hostAnswers === false
+                    this.#clockHostSilent(health)
                       ? "box_status.clock.confirm_help_host_silent"
                       : "box_status.clock.confirm_help",
                   )}
