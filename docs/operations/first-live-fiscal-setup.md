@@ -253,8 +253,11 @@ WAITRON_STATE_DIR=/var/lib/waitron/state \
 
 Follow the venue, password and kept-document prompts; the command asks nothing about the clock or
 recent setups. It needs the box's internet time service to say it is synchronised (it asks
-`timedatectl show -p NTPSynchronized --value`); otherwise it explains why and stops
-(`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal with only the box's
+`timedatectl show -p NTPSynchronized --value`); otherwise it explains why and stops. `timedatectl`
+reports on the machine the command runs on, so run the command on the box itself: where
+`timedatectl` is missing or fails, the answer is "not synchronised" and the command stops
+(`packages/provisioning/src/time-service-command.ts`;
+`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal with only the box's
 clock explains and cancels without a question"; `packages/provisioning/src/first-setup-command.test.ts`,
 "names the series with no browser when the box's time service is synchronised" and "names none when
 the box's time service is not synchronised"). When the name must wait, it prints why and the
