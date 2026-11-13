@@ -11,6 +11,10 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { startManagementSession } from "@waitron/identity";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { remedyRequestBody } from "@waitron/fiscal-verifactu/test/remedy-request.js";
+import {
+  chainHeads,
+  refuseSaleAsFutureDated,
+} from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import type { BoxHostClient } from "./box-host-client.js";
@@ -263,31 +267,16 @@ describe("the start clock gate as boot wires it", () => {
   });
 
   it("hands the clock watch this box's chain: a future-date refusal of a sale recorded since a person confirmed the time sends the box back to waiting, and one recorded before does not", async () => {
-    const heads = () =>
-      Object.fromEntries(
-        venue.db
-          .all<{ node: string; head: number }>(
-            sql`select node_id as node, max(secuencia) as head from registros_facturacion group by node_id`,
-          )
-          .map(({ node, head }) => [node, head]),
-      );
-    const refuse = (workingOrderId: string) =>
-      venue.db.run(sql`
-        update envios set estado = 'rechazado', codigo_error = '1112'
-        where registro_id in (
-          select r.id from registros_facturacion r join sales s on s.id = r.sale_id
-          where s.working_order_id = ${workingOrderId})`);
-
     const seen = await serving(unsynchronisedHost().host, async () => {
       const start = built.start!;
-      start.confirm("by_person", heads());
+      start.confirm("by_person", await chainHeads(venue.db));
       const earlier = await sell();
-      start.confirm("by_person", heads());
+      start.confirm("by_person", await chainHeads(venue.db));
       const later = await sell();
-      refuse(earlier.workingOrderId);
+      await refuseSaleAsFutureDated(venue.db, earlier.workingOrderId);
       await built.watch!.check();
       const afterEarlier = start.status;
-      refuse(later.workingOrderId);
+      await refuseSaleAsFutureDated(venue.db, later.workingOrderId);
       await built.watch!.check();
       return {
         sold: [earlier.status, later.status],

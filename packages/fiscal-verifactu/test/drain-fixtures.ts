@@ -659,3 +659,22 @@ export const answersFechaOperacion = (
     };
   },
 });
+
+/** Each chain's node and its highest record position. */
+export async function chainHeads(db: Database): Promise<Record<string, number>> {
+  const raw = await db.execute<{ node: string; head: number }>(sql`
+    select node_id as node, max(secuencia) as head from registros_facturacion group by node_id
+  `);
+  return Object.fromEntries(raw.rows.map(({ node, head }) => [node, Number(head)]));
+}
+
+/** Stores AEAT's future-date refusal (`1112`) as the filing reply of the records of the sale
+ * written for `workingOrderId`. */
+export async function refuseSaleAsFutureDated(db: Database, workingOrderId: string): Promise<void> {
+  await db.execute(sql`
+    update envios set estado = 'rechazado', codigo_error = '1112'
+    where registro_id in (
+      select r.id from registros_facturacion r join sales s on s.id = r.sale_id
+      where s.working_order_id = ${workingOrderId})
+  `);
+}

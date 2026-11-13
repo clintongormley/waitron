@@ -744,9 +744,7 @@ describe("the Clock row while the start waits for its time", () => {
     setLocale("es");
     expect(
       row(boxStatusRows(waitingHealth(false, "future_date_refused"), []).rows, "clock").line,
-    ).toBe(
-      `Hacienda rechazó una venta por tener fecha futura: no se aceptan cobros hasta que se compruebe la hora. El reloj del equipo indica ${formatIsoMinute(BOX_AT)}.`,
-    );
+    ).toBe(es["box_status.clock.waiting_future_date"].replace("{boxAt}", formatIsoMinute(BOX_AT)));
   });
 
   it("tells the Sales row that payments wait, pointing at the Clock row", () => {
