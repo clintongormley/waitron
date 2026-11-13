@@ -14,7 +14,8 @@ import {
   formatDecimalInput,
   ContentLanguageController,
   currentContentLanguages,
-  focusFirstInvalid,
+  FormFeedback,
+  bottomMessage,
   draftScopeFor,
   saveActionState,
   type DraftScope,
@@ -309,9 +310,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   @state() private actionError?: string;
   @state() private editor?: Editor;
   @state() private draft?: Draft;
-  /** Save has been pressed since the editor opened, so the fields are checked on every change. */
-  @state() private attempted = false;
-  /** The server's refusal of a field, until the operator changes that field or saves again. */
+  readonly #reasonFeedback = new FormFeedback(this);
   @state() private refusedFields: FieldErrors = {};
   /** A refusal that names no field the form shows, until the operator saves again. */
   @state() private editorError?: string;
@@ -321,8 +320,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   /** What the operator chose; undefined until they change a field, so a refresh shows the saved
    * limit without replacing a value being typed. */
   @state() private limitDraft?: LimitDraft;
-  @state() private limitAttempted = false;
-  /** The field the server refused, until the operator changes it or saves again. */
+  readonly #limitFeedback = new FormFeedback(this);
   @state() private limitRefused?: LimitField;
   /** A refusal that names no field, until the operator saves again. */
   @state() private limitError?: string;
@@ -462,7 +460,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     this.limitDraft = undefined;
     this.#limitRevision = undefined;
     this.limitSaving = false;
-    this.limitAttempted = false;
+    this.#limitFeedback.reset();
     this.limitRefused = undefined;
     this.limitError = undefined;
     this.limitSaved = false;
@@ -511,7 +509,7 @@ export class AdjustmentReasonsScreen extends LitElement {
               equal: (a, b) => this.#sameLimit(a, b),
               restore: (value) => {
                 this.limitDraft = { amount: value.amount };
-                this.limitAttempted = false;
+                this.#limitFeedback.reset();
                 this.limitRefused = undefined;
                 this.limitError = undefined;
                 this.limitSaved = false;
@@ -657,7 +655,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #restart(): void {
-    this.attempted = false;
+    this.#reasonFeedback.reset();
     this.refusedFields = {};
     this.editorError = undefined;
   }
@@ -665,9 +663,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #edit(patch: Partial<Draft>, editor: Editor): void {
     if (this.editor !== editor || !this.isConnected) return;
     this.draft = { ...this.draft!, ...patch };
-    const refused = { ...this.refusedFields };
-    for (const key of Object.keys(patch)) delete refused[key as Field];
-    this.refusedFields = refused;
+    this.#reasonFeedback.dismiss(...Object.keys(patch));
     this.#reasonScope?.changed();
   }
 
@@ -721,6 +717,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #refused(error: unknown): void {
+    this.#reasonFeedback.newRefusal();
     const code = codeOf(error);
     const params = (
       error as { params?: { field?: unknown; withNote?: unknown; maxLength?: unknown } }
@@ -756,8 +753,7 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   /** The screen's shadow root also holds the list, so only the editor is searched. */
   async #focusInvalid(): Promise<void> {
-    await this.updateComplete;
-    await focusFirstInvalid(this.renderRoot.querySelector("wt-modal")!);
+    await this.#reasonFeedback.focus(this.renderRoot.querySelector("wt-modal")!);
   }
 
   async #write(action: () => Promise<unknown>): Promise<void> {
@@ -790,7 +786,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #save(editor: Editor): void {
     if (this.editor !== editor || !this.isConnected || this.busy) return;
     if (saveActionState(this.#reasonScope).unchanged) return;
-    this.attempted = true;
+    this.#reasonFeedback.press();
     this.refusedFields = {};
     this.editorError = undefined;
     if (Object.keys(this.#check()).length > 0) {
@@ -949,19 +945,18 @@ export class AdjustmentReasonsScreen extends LitElement {
     if (this.limitDraft === undefined) this.#limitRevision = this.settings!.revision;
     this.limitDraft = { ...this.#limitValue(), ...patch };
     this.#limitScope?.changed();
-    if (this.limitRefused === field) this.limitRefused = undefined;
+    this.#limitFeedback.dismiss(field);
     this.limitSaved = false;
   }
 
   async #focusLimit(): Promise<void> {
-    await this.updateComplete;
-    await focusFirstInvalid(this.renderRoot.querySelector('[data-test="limit"]')!);
+    await this.#limitFeedback.focus(this.renderRoot.querySelector('[data-test="limit"]')!);
   }
 
   /** A refresh that fails after the save succeeded is a load failure, shown as one. */
   async #saveLimit(): Promise<void> {
     if (this.limitSaving || saveActionState(this.#limitScope).unchanged) return;
-    this.limitAttempted = true;
+    this.#limitFeedback.press();
     this.limitRefused = undefined;
     this.limitError = undefined;
     this.limitSaved = false;
@@ -980,6 +975,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       });
     } catch (error) {
       if (generation !== this.#limitGeneration || !this.isConnected) return;
+      this.#limitFeedback.newRefusal();
       const field = (error as { params?: { field?: unknown } }).params?.field;
       if (
         codeOf(error) === "management.request_invalid" &&
@@ -1009,7 +1005,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       this.#limitRevision = settings.revision;
     }
     this.#limitScope?.commit(submitted);
-    this.limitAttempted = false;
+    this.#limitFeedback.reset();
     this.limitSaved = true;
     await this.#loadSettings();
   }
@@ -1027,16 +1023,16 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #limitForm() {
-    const own = this.limitAttempted ? this.#limitCheck() : {};
-    const errors: LimitErrors = { ...own };
-    if (this.limitRefused && !errors[this.limitRefused]) {
-      errors[this.limitRefused] = t(LIMIT_MESSAGES[this.limitRefused]);
-    }
+    const own = this.#limitFeedback.attempted ? this.#limitCheck() : {};
+    const refused = this.#limitFeedback.remaining(
+      this.limitRefused ? { [this.limitRefused]: t(LIMIT_MESSAGES[this.limitRefused]) } : {},
+    );
+    const errors: LimitErrors = { ...refused, ...own };
     const value = this.#limitValue();
-    const bottom = [
-      ...(this.limitError ? [this.limitError] : []),
-      ...(Object.keys(errors).length > 0 ? [t("adjustments.fix_fields")] : []),
-    ].join(" ");
+    const bottom = bottomMessage(
+      this.limitError ?? null,
+      Object.keys(errors).length > 0 ? t("adjustments.fix_fields") : null,
+    );
     return html`<div class="limit-fields">
         <wt-price-input
           name="maxBillComp"
@@ -1374,13 +1370,13 @@ export class AdjustmentReasonsScreen extends LitElement {
     const editor = this.editor;
     if (editor === undefined) return nothing;
     const heading = t(editor.reason ? "adjustments.edit_heading" : "adjustments.new");
-    const checked = this.attempted ? this.#check() : {};
-    const errors = { ...this.refusedFields, ...checked };
+    const checked = this.#reasonFeedback.attempted ? this.#check() : {};
+    const errors = { ...this.#reasonFeedback.remaining(this.refusedFields), ...checked };
     const invalid = Object.keys(checked).length > 0;
-    const bottom = [
-      ...(this.editorError ? [this.editorError] : []),
-      ...(Object.keys(errors).length > 0 ? [t("adjustments.fix_fields")] : []),
-    ].join(" ");
+    const bottom = bottomMessage(
+      this.editorError ?? null,
+      Object.keys(errors).length > 0 ? t("adjustments.fix_fields") : null,
+    );
     return keyed(
       editor,
       html`<wt-modal
