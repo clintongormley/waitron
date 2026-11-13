@@ -2237,6 +2237,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Tighten the checks the A974 review probed** (bundle of 3, size S). [Detail](backlog/architecture.md#bundle-tighten-the-checks-the-a974-review-probed)
 
 - **A976. Finish the server's English test-venue defaults.**
+  Local invoice-correction and fiscal-sale route staff samples use Martha, Administrator, Cashier and Supervisor.
   Local workforce-export staff use Martha Canary, Colleague Green, Anna Admin and Lewis Manager;
   the adjustment-approval and box-email incident samples use Paul and Anna.
   Local session-person and recovery-page route fixtures use Anna for their staff display sample.
