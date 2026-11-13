@@ -23,3 +23,5 @@
 Watcher authority: Lane I questions.md, “WATCHER 2026-11-13 10:18 — CI-NETWORK-LIMITS: plan CLEARED”, four changes. Original receipt paths are receipts/firing-20261112-0624/planner-drill-* and placement-drill-*.
 
 **13 November, as built after review:** the watcher cleared equal-job Docker build limits (smoke15/publish10) and two-minute optional browser caches at11:36 after the two run-it reviewers found the shorter limits cut off Dockerfile retries and missed server cache timings. At11:52 the watcher required immediate failure-only browser-cache cleanup before install, after the one fixes read raised the completion-marker issue. Existing workflow/fixture readers enforce these properties; no new script or framework. The three affected suites pass915tests.
+
+**13 November, shared-workflow integration:** after #3063 landed, the same cache deadline and cleanup moved into mutation-sharded.yml. The network guard reuses its caller reader for numeric job limits. The focused three-suite set passed916tests; deleting cleanup or changing its condition fails the guard in both CI and the shared template, and12restored cases pass.
