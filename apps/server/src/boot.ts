@@ -3137,6 +3137,7 @@ async function bootServer(
       db,
       cfg: { nodeId: dataNodeId },
       venueLocale,
+      hasReturnedInvoices: nodeBackend.hasReturnedInvoices?.bind(nodeBackend),
       returnedInvoices: nodeBackend.returnedInvoices?.bind(nodeBackend),
     },
     log,

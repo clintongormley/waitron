@@ -1,5 +1,5 @@
 import { correctionAdmissionFor } from "./correction-admission.js";
-import { returnedInvoices } from "./returned-invoices.js";
+import { hasReturnedInvoices, returnedInvoices } from "./returned-invoices.js";
 import { filedFiguresFor } from "./filed-figures.js";
 import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
 // Registers this package's own error codes on the shared registry.
@@ -440,6 +440,10 @@ export class VerifactuBackend implements FiscalBackend {
     issuingNodeId: NodeId,
   ): Promise<CorrectionAdmission> {
     return correctionAdmissionFor(tx, saleId, issuingNodeId);
+  }
+
+  hasReturnedInvoices(tx: Transaction) {
+    return hasReturnedInvoices(tx);
   }
 
   returnedInvoices(tx: Transaction, page: { offset: number; limit: number }) {

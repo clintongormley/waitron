@@ -428,6 +428,7 @@ export interface ReturnedInvoiceRecord {
  * outside the sale path, through `FiscalContribution`.
  */
 export interface FiscalBackend {
+  hasReturnedInvoices?(tx: Transaction): Promise<boolean>;
   returnedInvoices?(
     tx: Transaction,
     page: { offset: number; limit: number },

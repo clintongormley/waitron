@@ -212,11 +212,11 @@ it("answers only whether an emergency takeover exists without running the full i
 });
 
 it("gates the cheap warning read with report.view", async () => {
-  const returnedInvoices = vi.fn().mockResolvedValue([]);
+  const hasReturnedInvoices = vi.fn().mockResolvedValue(false);
   app = new Hono();
   mountReportApi(
     app,
-    { db: suite.db, cfg: { nodeId: destination }, venueLocale: "en-GB", returnedInvoices },
+    { db: suite.db, cfg: { nodeId: destination }, venueLocale: "en-GB", hasReturnedInvoices },
     () => {},
   );
   const path = "/management-api/reports/handover-warning";
@@ -226,11 +226,11 @@ it("gates the cheap warning read with report.view", async () => {
   const staff = await app.request(path, { headers: { cookie: staffCookie } });
   expect(staff.status).toBe(403);
   expect((await staff.json()).error.code).toBe("authorization.not_permitted");
-  expect(returnedInvoices).not.toHaveBeenCalled();
+  expect(hasReturnedInvoices).not.toHaveBeenCalled();
 });
 
-it("checks one returned invoice independently of emergency history without exposing its payload", async () => {
-  const returnedInvoices = vi.fn().mockResolvedValue([]);
+it("checks returned-invoice existence independently of emergency history without exposing invoice data", async () => {
+  const hasReturnedInvoices = vi.fn().mockResolvedValue(false);
   const warning = new Hono();
   mountReportApi(
     warning,
@@ -238,7 +238,7 @@ it("checks one returned invoice independently of emergency history without expos
       db: suite.db,
       cfg: { nodeId: destination },
       venueLocale: "en-GB",
-      returnedInvoices,
+      hasReturnedInvoices,
     },
     () => {},
   );
@@ -248,26 +248,7 @@ it("checks one returned invoice independently of emergency history without expos
     hasEmergencyHandover: false,
     hasReturnedInvoices: false,
   });
-  returnedInvoices.mockResolvedValue([
-    {
-      recordId: "returned-record",
-      saleId: "returned-sale",
-      sourceNodeId: source,
-      sourceName: "Old kitchen box",
-      generationId: "generation",
-      installation: "ABCDE",
-      sequence: 1,
-      invoiceNumber: "2026/1",
-      issueDate: "2026-11-10",
-      kind: "F1",
-      category: "invoice",
-      correctsRecordId: null,
-      taxable: "10.00",
-      gross: "12.10",
-      tax: "2.10",
-      receivedAt: "2026-11-13T10:00:00.000Z",
-    },
-  ]);
+  hasReturnedInvoices.mockResolvedValue(true);
   const response = await read();
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.json()).toEqual({ hasEmergencyHandover: false, hasReturnedInvoices: true });
@@ -276,8 +257,5 @@ it("checks one returned invoice independently of emergency history without expos
     hasEmergencyHandover: true,
     hasReturnedInvoices: true,
   });
-  expect(returnedInvoices).toHaveBeenCalledTimes(3);
-  for (const [, page] of returnedInvoices.mock.calls) {
-    expect(page).toEqual({ offset: 0, limit: 1 });
-  }
+  expect(hasReturnedInvoices).toHaveBeenCalledTimes(3);
 });
