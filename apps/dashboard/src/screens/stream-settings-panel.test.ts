@@ -419,11 +419,11 @@ describe("stream-settings-panel: the bucket form", () => {
   it.each([
     [
       "en-GB",
-      "This venue has a standby server, listed under Servers, which receives the venue's copy or is about to, and a venue copies its data to one place at a time. Nothing was saved. If the standby is not yet set up to receive the venue's data, choose Remove on its row under Servers; the bucket can then be saved here. A standby that is set up to receive the venue's data cannot be removed in this version, so the copy stays with it until an update lets the standby pass it on to a bucket.",
+      "This venue has a standby server, listed under Servers, which is set up to receive the venue's copy, or is about to be, and a venue copies its data to one place at a time. Nothing was saved. If the standby is not yet set up to receive the venue's data, choose Remove on its row under Servers; the bucket can then be saved here. A standby that is set up to receive the venue's data cannot be removed in this version, so the copy stays with it until an update lets the standby pass it on to a bucket.",
     ],
     [
       "es-ES",
-      "Este local tiene un servidor en espera, en la lista de Servidores, que recibe la copia del local o está a punto de recibirla, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Si el servidor en espera aún no está preparado para recibir los datos del local, elige Retirar en su fila de Servidores; después se puede guardar aquí el bucket. Un servidor en espera preparado para recibir los datos del local no se puede retirar en esta versión, así que la copia sigue yendo a él hasta que una actualización le permita pasarla a un bucket.",
+      "Este local tiene un servidor en espera, en la lista de Servidores, que está preparado para recibir la copia del local, o lo estará pronto, y un local copia sus datos en un solo sitio a la vez. No se ha guardado nada. Si el servidor en espera aún no está preparado para recibir los datos del local, elige Retirar en su fila de Servidores; después se puede guardar aquí el bucket. Un servidor en espera preparado para recibir los datos del local no se puede retirar en esta versión, así que la copia sigue yendo a él hasta que una actualización le permita pasarla a un bucket.",
     ],
   ] as const)(
     "explains in %s a Save refused because the venue copies to its standby, and leaves Save working",

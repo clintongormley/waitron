@@ -1645,8 +1645,9 @@ declare module "@waitron/shared" {
     /** The live copy refused to start because a value bound for Litestream could not be written
      * into its configuration safely. Built as data by the backups alert source, never thrown. */
     "backup.stream_settings_unusable": { toSpare?: true };
-    /** The copy's bucket or standby store refuses this box's key, or fails the bucket check. Built
-     * as data by the backups alert source, never thrown. */
+    /** The copy's bucket refuses this box's key or fails the bucket check; or, when the copy goes to
+     * the standby (`toSpare`), its store cannot be reached or refuses this box. Built as data by the
+     * backups alert source, never thrown. */
     "backup.stream_bucket_unusable": { toSpare?: true };
     /** The live copy is set up but not running, and nobody stopped it: its supervisor failed, the
      * pinned Litestream cannot run, it could not start, or it refused for a reason with no wording

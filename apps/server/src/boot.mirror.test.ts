@@ -57,16 +57,20 @@ vi.mock("@hono/node-server", async () => {
 const { beforeServerStarts, startServer, startConfiguredServer, httpPort } =
   ephemeralServerFixture();
 
-// Pass-through wrappers that record the mirror-bundle route's wake and the spare join's wakes.
+// Pass-through wrappers that record the mirror-bundle route's wake, the spare join's wakes, and
+// the backup queue the spare join and the copy settings routes were given.
 const joinWiring = vi.hoisted(() => ({
   wakes: 0,
   wakeSpareJoin: undefined as (() => void) | undefined,
+  turns: undefined as unknown,
+  streamApiTurns: undefined as unknown,
 }));
 vi.mock("./spare-join.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./spare-join.js")>();
   return {
     ...actual,
     startSpareJoin: (deps: Parameters<typeof actual.startSpareJoin>[0]) => {
+      joinWiring.turns = deps.turns;
       const join = actual.startSpareJoin(deps);
       return {
         stop: () => join.stop(),
@@ -75,6 +79,16 @@ vi.mock("./spare-join.js", async (importOriginal) => {
           join.wake();
         },
       };
+    },
+  };
+});
+vi.mock("./stream-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./stream-api.js")>();
+  return {
+    ...actual,
+    mountStreamApi: (...args: Parameters<typeof actual.mountStreamApi>) => {
+      joinWiring.streamApiTurns = args[1].turns;
+      return actual.mountStreamApi(...args);
     },
   };
 });
@@ -613,9 +627,11 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     }
   }, 60_000);
 
-  it("a primary's mirror-bundle route wakes the running spare join", async () => {
+  it("the start hands the mirror-bundle route a wake that reaches the running spare join, and gives the join the copy routes' backup queue", async () => {
     joinWiring.wakes = 0;
     joinWiring.wakeSpareJoin = undefined;
+    joinWiring.turns = undefined;
+    joinWiring.streamApiTurns = undefined;
     const server = await startServer({
       ...KEY_ENV,
       WAITRON_VENUE_DIR: venueDir.primary,
@@ -625,6 +641,8 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     try {
       joinWiring.wakeSpareJoin!();
       expect(joinWiring.wakes).toBe(1);
+      expect(joinWiring.turns).toBeDefined();
+      expect(joinWiring.turns).toBe(joinWiring.streamApiTurns);
     } finally {
       await server.close();
     }

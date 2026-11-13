@@ -1028,7 +1028,7 @@ it refuses with `credentials.rotation_spare_joined`, because the spare holds the
 nothing sends it a new one (decision D7 in
 [the 3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)). Removing a spare that
 is not yet set up to receive the venue's data (no `nodes` row yet) deletes the link, and rotation
-then runs. One that is cannot be removed in this version, so while it is the ring is not rotated. On the spare,
+then runs. A spare that is set up cannot be removed in this version, so while it is paired the ring is not rotated. On the spare,
 whose own link names its main box, `rotate` refuses too. A ring changed by hand in `secrets.env` is
 not stopped by this.
 
