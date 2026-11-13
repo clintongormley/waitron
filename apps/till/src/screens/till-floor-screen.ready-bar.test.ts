@@ -1,13 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, userEvent } from "vitest/browser";
 import { setHelpMode, type WtButton, type WtHelpTooltip } from "@waitron/ui";
 import {
   cleanupWidgets,
   distance,
+  loadPhoneFont,
   mountWidget,
   oneLine,
   pageAt,
   paintedAt,
+  PHONE_FONT,
   resetPage,
   rgb,
   type Theme,
@@ -685,6 +687,13 @@ const threeShort = (waited: number): TableState[] =>
 
 const strip = (floor: TillFloorScreen) => bar(floor)!.querySelector<HTMLElement>(".ready-tables")!;
 
+/** {@link inShell}, drawn in a phone's font rather than the machine's own. */
+async function inPhoneShell(tables: TableState[]): Promise<InShell> {
+  const shown = await inShell(tables);
+  shown.area.style.setProperty("--wt-font-family", PHONE_FONT);
+  return shown;
+}
+
 /** Once the floor and every entry have rendered, and two frames have passed so that any resize
  * observation of the strip has been delivered. */
 async function drawn(floor: TillFloorScreen): Promise<void> {
@@ -697,6 +706,14 @@ async function drawn(floor: TillFloorScreen): Promise<void> {
 }
 
 describe("till-floor-screen: the Ready bar's entries on a phone", () => {
+  let phoneFont: FontFace;
+  beforeAll(async () => {
+    phoneFont = await loadPhoneFont();
+  });
+  afterAll(() => {
+    document.fonts.delete(phoneFont);
+  });
+
   afterEach(async () => {
     setLocale("en");
     await resetPage();
@@ -712,10 +729,11 @@ describe("till-floor-screen: the Ready bar's entries on a phone", () => {
       it(`three short-named tables fit without scrolling at 390 px (${lang}, ${look})`, async () => {
         setLocale(lang);
         await pageAt(390, 844);
-        const { floor } = await inShell(threeShort(waited));
+        const { floor } = await inPhoneShell(threeShort(waited));
         expect(bar(floor)!.hasAttribute("data-warning")).toBe(look !== "calm");
         if (look !== "calm") expect(title(floor)).toMatch(new RegExp(` ${waited / minute} min$`));
         const tables = strip(floor);
+        expect(getComputedStyle(tables).fontFamily).toBe(PHONE_FONT);
         expect(tables.querySelectorAll("[data-ready-table]")).toHaveLength(3);
         expect(tables.scrollWidth).toBeLessThanOrEqual(tables.clientWidth);
         const inside = tables.getBoundingClientRect();
@@ -728,7 +746,7 @@ describe("till-floor-screen: the Ready bar's entries on a phone", () => {
 
   it("fades the strip's trailing edge while more entries lie beyond it, and not once scrolled to the end", async () => {
     await pageAt(390, 844);
-    const { floor } = await inShell(numbered(8, 8));
+    const { floor } = await inPhoneShell(numbered(8, 8));
     const tables = strip(floor);
     expect(tables.scrollWidth).toBeGreaterThan(tables.clientWidth);
     await vi.waitFor(() => expect(tables.dataset.overflow).toBe("end"));
@@ -738,7 +756,7 @@ describe("till-floor-screen: the Ready bar's entries on a phone", () => {
     tables.scrollLeft = 0;
     await vi.waitFor(() => expect(tables.dataset.overflow).toBe("end"));
     cleanupWidgets();
-    const fits = await inShell(threeShort(minute));
+    const fits = await inPhoneShell(threeShort(minute));
     await drawn(fits.floor);
     expect(strip(fits.floor).dataset.overflow).toBeUndefined();
     expect(getComputedStyle(strip(fits.floor)).maskImage).toBe("none");
@@ -746,7 +764,7 @@ describe("till-floor-screen: the Ready bar's entries on a phone", () => {
 
   it("fades only the strip's start once scrolled to the far end right to left", async () => {
     await pageAt(390, 844);
-    const { floor, area } = await inShell(numbered(8, 8));
+    const { floor, area } = await inPhoneShell(numbered(8, 8));
     area.dir = "rtl";
     const tables = strip(floor);
     expect(getComputedStyle(tables).direction).toBe("rtl");
@@ -760,7 +778,7 @@ describe("till-floor-screen: the Ready bar's entries on a phone", () => {
   it("fades the trailing edge when entries join a bar that fitted, with the strip's width unchanged", async () => {
     await pageAt(390, 844);
     // From one entry, so the entries the redraw reuses cannot overflow the strip on their own.
-    const { floor } = await inShell(threeShort(minute).slice(0, 1));
+    const { floor } = await inPhoneShell(threeShort(minute).slice(0, 1));
     const tables = strip(floor);
     await drawn(floor);
     expect(tables.dataset.overflow).toBeUndefined();
@@ -774,7 +792,7 @@ describe("till-floor-screen: the Ready bar's entries on a phone", () => {
 
   it("fades the trailing edge once the strip narrows below its entries, with no redraw", async () => {
     await pageAt(390, 844);
-    const { floor, area } = await inShell(threeShort(minute));
+    const { floor, area } = await inPhoneShell(threeShort(minute));
     const tables = strip(floor);
     await drawn(floor);
     expect(tables.dataset.overflow).toBeUndefined();

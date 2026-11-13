@@ -115,7 +115,9 @@ describe("a handheld's bar with more table buttons than fit", () => {
           formFactor: "phone-portrait",
           activeScreen: "floor",
           operatorName: "Ana",
-          // Eleven: right to left, Chromium reports this strip's far end a pixel short of its overflow.
+          // Eleven: right to left on macOS, Chromium stopped this strip a pixel short of its far end.
+          // That hangs on the font and the platform (a Linux container stopped at the end), so the
+          // pixel markOverflow allows is pinned by edge-fade.test.ts, which sets the scroll itself.
           barTables: tablesOf(11),
         });
         host.dir = direction;

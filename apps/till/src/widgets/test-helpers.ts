@@ -157,6 +157,28 @@ export async function resetPage(): Promise<void> {
   await page.viewport(...DEFAULT_FRAME);
 }
 
+/**
+ * A `--wt-font-family` value naming Noto Sans, loaded by {@link loadPhoneFont} from the server's
+ * copy of the file, for a check of what fits on a phone: the page's `system-ui` is San Francisco on
+ * macOS but the much wider DejaVu Sans on CI's Linux runner, while a phone draws Roboto or San
+ * Francisco, close to Noto Sans in width.
+ */
+export const PHONE_FONT = '"Waitron test phone font"';
+
+const PHONE_FONT_FILE = new URL(
+  "../../../server/src/assets/invoice-noto-sans.ttf",
+  import.meta.url,
+);
+
+/** Loads {@link PHONE_FONT} into the document, every weight; delete the face returned when done. */
+export async function loadPhoneFont(): Promise<FontFace> {
+  const face = new FontFace(JSON.parse(PHONE_FONT) as string, `url(${PHONE_FONT_FILE.href})`, {
+    weight: "100 900",
+  });
+  document.fonts.add(await face.load());
+  return face;
+}
+
 /** The client rects of `node`'s text, measured where they are drawn: a break inside a word splits
  * them, and an `overflow: hidden` ancestor does not cut them down. */
 export function textRects(node: Node): DOMRect[] {
