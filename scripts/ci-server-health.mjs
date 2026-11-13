@@ -23,8 +23,11 @@ async function inventory(request, path, key, limit, pageSize = 100, reread = tru
     total ??= answer.total_count;
     entries.push(...answer[key]);
     assert.ok(
-      entries.length <= answer.total_count &&
-        new Set(entries.map((entry) => entry.id)).size === entries.length,
+      entries.length <= answer.total_count,
+      new InventoryUnavailable("Incomplete server inventory"),
+    );
+    assert.ok(
+      new Set(entries.map((entry) => entry.id)).size === entries.length,
       new InventoryUnavailable("Duplicate server inventory"),
     );
     if (answer.total_count !== total && reread)

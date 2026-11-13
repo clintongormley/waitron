@@ -463,7 +463,7 @@ describe("queue-pressure routing", () => {
           if (pages.length === 2)
             return fault === "empty page"
               ? { total_count: 2, jobs: [] }
-              : { total_count: 3, jobs: [f.jobs[1]] };
+              : { total_count: 3, jobs: [f.jobs[1], f.jobs[2]] };
         }
         return request(path, options);
       };
@@ -480,6 +480,7 @@ describe("queue-pressure routing", () => {
     f.options.request = async (path, options) => {
       if (path.includes("/workflows/ci.yml/runs?") && path.includes("status=queued")) {
         reads++;
+        if (reads > 2) throw new Error("Unexpected third enumeration");
         return { total_count: 1, workflow_runs: [] };
       }
       return request(path, options);

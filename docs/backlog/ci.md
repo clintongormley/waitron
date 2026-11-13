@@ -525,8 +525,8 @@ A1424's live qualification was added on 7 November 2026.
   other stuck work is reported without moving runs. First-attempt PR planners use published
   spare capacity; non-PR planning remains hosted. A1473’s reviewed controller is installed;
   its staged overflow drill remains open. Each router list now restarts once after an empty page
-  or a changed valid total, discarding partial rows; persistent mismatch and duplicate/excess
-  rows remain unknown (watcher, 2026-11-13 05:43). Run 43278084012’s first planner never ran the ratio during
+  or a changed valid total, discarding partial rows; persistent mismatch remains unknown.
+  Duplicate/excess refusals take precedence even when totals change (watcher, 2026-11-13 05:43). Run 43278084012’s first planner never ran the ratio during
   its 32-minute wait; the historical admission/recovery cause remains unproved.
   Qualify the idle probe, browser guest
   requirements and current-head coverage/aggregate results.
@@ -543,7 +543,8 @@ A1424's live qualification was added on 7 November 2026.
   [restored under a fresh twelve-slot generation](https://github.com/waitron-io/waitron-cloud/pull/1198#issuecomment-6843575516).
   The captured condition was traced to a partial-list refusal, an earlier busy-server placement
   and an eleven-second refill interval. After the inventory reread lands, one bounded new-release
-  trial is cleared, with rollback for five minutes of admissible room without admissions, job
+  trial is cleared, announced to the watcher before it starts, with rollback for five minutes
+  of admissible room without admissions, job
   failure or a guest killed for memory (watcher, 2026-11-13 05:24/05:43). The timing comparison
   is unqualified because the trial's slowest checkout took 33 seconds.
   A qualified wait/duration comparison remains open. A1461 reduces run sizes. Per-job

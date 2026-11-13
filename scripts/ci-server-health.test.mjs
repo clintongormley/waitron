@@ -1120,7 +1120,7 @@ describe("server health recovery", () => {
     expect((await health.recoverServer(f.options)).retried).toEqual([]);
   });
 
-  it.each(["duplicate", "duplicate-changed-count", "changed-count", "malformed-count"])(
+  it.each(["duplicate", "duplicate-changed-count", "changed-count", "malformed-count", "excess"])(
     "reports a moving completed history as unavailable: %s",
     async (change) => {
       const f = fixture(),
@@ -1133,14 +1133,23 @@ describe("server health recovery", () => {
           pages.push(page);
           return {
             total_count:
-              page !== 2 || change === "duplicate" ? 2 : change === "malformed-count" ? null : 3,
-            workflow_runs: [
-              {
-                ...f.run,
-                id: change.startsWith("duplicate") || path.endsWith("&page=1") ? 98 : 99,
-                head_repository: { id: 99 },
-              },
-            ],
+              page !== 2 || change === "duplicate"
+                ? 2
+                : change === "malformed-count"
+                  ? null
+                  : change === "excess"
+                    ? 0
+                    : 3,
+            workflow_runs:
+              change === "excess" && page === 2
+                ? []
+                : [
+                    {
+                      ...f.run,
+                      id: change.startsWith("duplicate") || page === 1 ? 98 : 99,
+                      head_repository: { id: 99 },
+                    },
+                  ],
           };
         }
         return request(path, options);
@@ -1151,6 +1160,7 @@ describe("server health recovery", () => {
       });
       expect(reports.join("\n")).toMatch(/inventory.*unavailable/i);
       expect(pages).toEqual(change === "changed-count" ? [1, 2, 1, 2] : [1, 2]);
+      if (change === "excess") expect(reports.join("\n")).toContain("Incomplete server inventory");
       expect(f.calls.some(([, options]) => options.method)).toBe(false);
     },
   );

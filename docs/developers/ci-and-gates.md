@@ -221,8 +221,9 @@ The snapshot has no expiry rule, so inspect the printed age; the decision routes
 `scripts/ci-hosted-route.test.mjs` exercises these decisions with controlled API replies,
 including pagination and incomplete inventories; it does not measure live capacity.
 Each list read restarts once from page 1, discarding its earlier rows, after an empty
-page before completion or a changed valid total. Duplicate/excess rows and malformed
-replies still refuse the read; a second mismatch stays unknown and selects hosted.
+page before completion or a changed valid total. Duplicate/excess rows take precedence
+even when the total changes; malformed replies also refuse the read. A second mismatch
+stays unknown and selects hosted.
 Separate lists can each restart, increasing API reads within the existing two-minute
 route-step limit; recovery still requires complete evidence before cancellation.
 
