@@ -1,59 +1,50 @@
 # A670: printed menus that look like your restaurant
 
-**One-page design comparison, 13 November 2026. Proposal, not an approved design or build plan.**
-The owner’s request, quoted in Lane D `questions.md`, WATCHER 12 November 20:45:
-“i'm interested to see how we support templates for printed menus, because the required flexibility
-could be challenging. usually restaurants have custom layouts for their menus.” The watcher’s
-13 November 19:31 request asks for options, two layout studies and a recommendation.
+**One-page comparison, 13 November 2026. Proposal, not a build plan.** The owner, quoted in
+Lane D `questions.md`, WATCHER 12 November 20:45: “usually restaurants have custom layouts for
+their menus”. The watcher’s 13 November 19:31 request asks for options, studies and a recommendation.
+PDF delivery waits for the template choice.
 
-Your menu needs its own character without someone retyping every price after a change. All three
-options would take names, prices, translations and declarations from a selected published menu.
-You edit the paper arrangement separately, then preview one publication and language before output.
-The [online study’s evidence table](2026-11-13-a670-online-go-live-study.md#evidence-and-future-acceptance-checks)
-identifies reusable source pieces, not a working print editor or renderer.
+Your design should keep live names, prices and declarations connected to a selected published
+menu. You arrange paper separately and preview one publication and language.
 
-| Option | What you can change as manager | Limit and relative effort |
+| Option | What you can make | Limits and effort |
 | --- | --- | --- |
-| **Fixed presets** | Choose template, logo, colours, curated fonts, spacing, one/two columns, section order and page breaks. | Lowest initial effort. A narrow wine panel or full-width feature needs a preset that supports it; each new composition adds another preset. |
-| **Pages made from blocks**, recommended | Start with a template; arrange headings, section/dish groups, images and a written key. Choose one/two columns, their proportions, block backgrounds and page breaks. Save the arrangement for reuse. | More editor and pagination work, but bounded. No arbitrary positioning, overlapping artwork, rotated text or unrestricted columns. Long content continues onto another page rather than shrinking to fit. |
-| **Designer-supplied template with placeholders** | Commission a bespoke HTML/CSS design with slots for live content; choose which groups fill them. | Greatest layout freedom and upkeep. Managers need the designer for structural repairs. File format, fonts/assets and pagination need defined limits. A flat PDF/image has no live slots. Defer upload support. |
+| **Fixed presets** | Choose logo, colours, fonts, spacing, section order and page breaks within a supplied layout. | Smallest first build. A narrow wine panel or wide feature needs a preset that supports it; another composition means another preset. |
+| **Pages made from blocks** | Arrange headings, text, dish/section groups, images and a written key. Choose one/two columns, proportions, backgrounds and breaks; save the arrangement. | More editor and pagination work. Proposed first cut: A4 portrait, no arbitrary positioning, overlapping artwork or rotation. Long content needs continuation pages. |
+| **Uploaded design with placeholders** | Use designer artwork as a background with named areas filled by live dish groups/prices; HTML/CSS is another possible format. | Most freedom and upkeep. A flat PDF/image alone has no live areas. Overflow, fonts/assets and formats need import rules; structural repairs may need the designer. Defer. |
 
-## Two quick layout studies
+All three need size-price columns, free text and a choice to hide set-menu component prices.
+Presets allow these where designed; blocks arrange them; uploads need matching areas. These are
+proposed display capabilities, not existing controls or new prices. A5/A3, landscape and folded
+paper stay outside the proposed A4 first cut.
 
-Schematic A4 portrait pages using the same proposed blocks, not rendered mock-ups:
+## Two restaurant studies
 
-```text
-NEIGHBOURHOOD BISTRO                 LUNCH AND WINE
-┌─────────────────────────┐         ┌─────────────────────────┐
-│ Logo · serif masthead   │         │ Bold restaurant heading │
-├────────────┬────────────┤         ├────────────────┬────────┤
-│ Starters   │ Mains      │         │ Lunch feature  │ Wine   │
-│ name/price │ name/price │         │                │ list   │
-│ marks/kinds│ marks/kinds│         │ dish groups    │ tinted │
-├────────────┴────────────┤         │ names/prices   │ panel  │
-│ Desserts · pale panel   │         │ marks/kinds    │        │
-├─────────────────────────┤         ├────────────────┴────────┤
-│ Written key · last page │         │ Written key · last page │
-└─────────────────────────┘         └─────────────────────────┘
-```
+**Bistro:** a serif masthead, balanced tapas/mains columns and a pale dessert band across the page.
+**Lunch and wine:** a bold heading, wide dish column and narrow coloured drinks panel. Prices
+stay per dish; this adds no set-lunch sales feature. Both use the same proposed block vocabulary.
 
-**Bistro:** restrained type, balanced columns and a full-width dessert panel. You can widen mains,
-remove the panel or move desserts to another page. **Lunch and wine:** a wide lunch feature beside
-a narrow, contrasting wine list. Moving wine below lunch needs no new template. These arrange
-existing content; they introduce no set-lunch sales feature. Neither covers overlapping artwork.
+Local EN/ES HTML and images: Lane D `receipts/a670-studies-2026-11-13/index.html`, never committed.
+Names/prices come from demo content; declarations are illustrative, not verified recipes.
 
-**Recommendation:** start with blocks and these two templates, A4 portrait, curated type/spacing
-choices and optional logo/image blocks. Select existing sections or dishes without changing prices
-or the online menu’s order. Keep names, prices and declarations together. Default the written key
-to the last page, retaining per-page and inline-words choices from the
-[earlier proposal](2026-11-12-a670-guest-menu-design.md); keep cereal/nut kinds with their items.
-Do not infer declarations from dish names.
+## Recommendation to test with the owner
 
-**Future acceptance checks, not run:** inspect long EN/ES text, multipage continuations,
-item/price/mark grouping, key placement and actual printed/saved output. These sketches establish
-neither pagination nor print-shop readiness. No rendered mock-ups were inspected for this study.
+**Provisionally choose blocks** if you need to regroup particular dishes, move wine below lunch
+or add a wide feature without commissioning another preset. Both examples also fit fixed
+presets: they do not alone justify a block editor. If these two layouts suffice, presets are the
+smaller first build. Rotated headings and overlapping artwork are a concrete limit of the blocks.
+Bring a real restaurant menu that needs more before choosing uploads.
 
-**Open decisions:** do these controls cover the first restaurants’ layouts, or is there a specific
-existing menu they cannot express? Recommend blocks first and a concrete counterexample before
-adding uploads. Confirm the key-placement default. Decide browser Print / Save as PDF versus
-direct PDF download after choosing templates; neither method is settled here.
+Keep names, prices and declarations together. Retain the [earlier proposal’s](2026-11-12-a670-guest-menu-design.md)
+last-page written key default, per-page/inline-words alternatives and specific cereal/nut kinds.
+Pagination remains unproved and could dominate the work; assess it alongside the deferred PDF
+method after the template choice. A small block vocabulary is no effort guarantee.
+
+**Evidence:** Chromium passed 28 online/paper viewport cases, including these short A4-shaped
+samples at phone/desktop widths and both surrounding themes. Rendered studies were inspected.
+A working editor, long translations, automatic continuations and actual printed/saved output
+remain future checks. Reusable content sources are in the [online study](2026-11-13-a670-online-go-live-study.md#evidence-and-future-acceptance-checks).
+
+**Owner choice:** are presets sufficient, or which real layout needs blocks or uploads?
+Confirm the key default; choose the PDF method after templates.

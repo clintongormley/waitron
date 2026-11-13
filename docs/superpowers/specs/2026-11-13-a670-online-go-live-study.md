@@ -12,7 +12,7 @@ change of direction; that proposal remains historical.
 You select one published menu and give guests one public link, also usable as a QR code or a link
 from your website. A guest opens it on mobile data without signing in, installing a certificate
 or joining restaurant Wi-Fi. It identifies the restaurant and menu, with no table or tab attached.
-The owner has made this a go-live requirement independently of later ordering.
+The watcher’s 20:45 instruction treats this as a go-live item, independently of later ordering.
 
 The page is a simple list with section jump links. Show customer-facing names, descriptions,
 published prices and size/unit labels. Sizes, options and separately priced extras can be read
@@ -21,13 +21,13 @@ section order. Start with one menu link; separate lunch and drinks links can fol
 ordering, payments, waiter calls, bill access and allergen/diet filters are outside this scope.
 This first page reads published content; it does not add live stock display.
 
-You set the venue display name, logo, background/text/accent colours and a curated typeface pair,
-with readable contrast. Guest styling is independent of dashboard appearance. Recommend leaving
+You set the venue display name, logo, background/text/accent colours with readable contrast; a curated typeface pair is optional. Guest styling is independent of dashboard appearance. Recommend leaving
 dish photographs out initially so a useful menu does not depend on a photo layout editor.
 
 Offer the venue’s enabled content languages, initially matching the browser where possible and
 otherwise using the venue default. Keep the guest’s explicit choice. Reuse `resolveMenuText`
-for missing dish text; do not invent translations. Translate controls, keys and explanations too.
+for missing dish text, including its staff-name fallback when no customer translation exists.
+That fallback name is public; staff-only metadata remains excluded. Do not invent translations. Translate controls, keys and explanations too.
 The earlier proposal’s shared guest wording and CA/GL drafts are design inputs, not an existing
 language bundle. For missing standard wording, propose a whole bundle fallback to the venue
 default, then English, visibly naming the fallback language.
@@ -41,33 +41,48 @@ owner’s choice. These are presentation proposals, not a legal compliance asses
 
 ## Guest access is part of day one
 
-**Recommend a Cloud public guest address serving the selected menu from the box.** Cloud would
-provide publicly trusted HTTPS; the box would answer a limited public menu read. Expose only
-guest content and its chosen assets, not the management catalogue response. When the box or
-connection is unavailable, propose an unavailable page asking guests to use the restaurant’s
-paper menu or staff. Do not present a stored old copy as current. Hosted snapshots and offline
-browsing are outside this recommendation.
+Both routes need a permanent public HTTPS menu link, agreed with Cloud before you print QR
+cards. A phone must not need the staff hostname, local certificates or restaurant Wi-Fi.
 
-The guest entrance is still work to agree and qualify with Cloud: public host/certificate,
-correct venue routing, forwarding the limited read and assets, and the disconnected-box response.
-No hostname or delivery date is established here. The current staff entrance is not evidence that
-an ordinary guest can already reach a menu.
+| Delivery option | Freshness and outages | Exposure, failover and work |
+| --- | --- | --- |
+| Cloud forwards each guest read to the box | Reads the selected published menu from the box. Stops when that box or the venue connection is unavailable. | Reuses the tunnel infrastructure, but anonymous reads reach the sales box. Needs a restricted guest route, assets and a choice of serving box after a takeover. |
+| **Cloud serves a published copy**, recommended for this read-only page | Updated when the restaurant publishes. Remains readable while the box is offline; an undelivered new publication leaves the previous delivered version showing. No live stock promise. | Guest traffic and assets stay off the sales box. Needs publication/asset delivery and hosting in Cloud, including showing the manager whether their new publication reached the public page. Guest URL stays put when a box changes. |
+
+**Recommend the hosted published copy, for the owner’s choice.** A read-only menu does not need
+a live sales connection, and this avoids making restaurant connectivity a requirement for every
+view. The box remains the source of menu content. Delivering a publication must not make a sale
+wait on Cloud. The old copy is a deliberately published menu, not live stock; the public page
+should show its publication date, and the manager must be able to see if an update has not arrived.
+No delivery protocol, retry machinery or hosting design is approved here. If that integration is
+too large for go-live, forwarding the box read is the smaller infrastructure-reuse alternative,
+with its outage and exposure costs explicitly accepted. Both still need joint qualification.
 
 The [A951 status](../../backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 records the original tunnel as dropped in favour of A951-S, using the Cloud gateway and outbound
-WireGuard; it also leaves customer pages for later. This study proposes bringing the read-only
-page forward, not reviving A951 or bringing ordering forward.
+WireGuard. Its “customer pages stay later” status predates this read-only go-live request; ordering
+still stays later. A951-S staff access does not deliver either proposed guest route.
 
-Restaurant Wi-Fi alone would not satisfy the mobile-data result above. If Cloud cannot meet
-go-live, static export to your public website is an **optional fallback requiring owner choice**,
-not additional work included here. It would need a separate export/upload workflow and another
-upload after every content change.
+### What is still needed
+
+- **Box:** the guest-content projection; read-only page and standard wording; selected-menu and
+  guest-styling settings with their screen; public publication/asset delivery for the recommended
+  route, and visible delivery status. A QR image for the agreed link also needs producing.
+- **Cloud, in the separate `waitron-cloud` repository:** permanent public guest address, HTTPS,
+  venue routing, hosted menu/assets and update handling for the recommended route. Its readiness
+  has not been established by this study; this lane has not inspected or qualified that service.
+- **Owner and Cloud choices:** agree the delivery route and stable address before printing QR
+  cards. Confirm that a published copy, with explicit update status and no live stock, meets day one.
+
+Restaurant Wi-Fi alone would not meet the mobile-data result. Manual static export to your public
+website is another fallback requiring owner choice and a separate upload after every change;
+it is not automatic publication delivery and is not added to the proposed scope.
 
 ## Evidence and future acceptance checks
 
 **Source inspection only**, at checkout head `4558ba7fe72cd1e4d61dca24fd0388f020324f41`
 (code base `9e6c7fbe7899d1c8dec2a25a6605245e80abd750`).
-No runtime or guest-access verification was performed.
+No product runtime or guest-access verification was performed. Local mock-up checks are separate.
 
 | Reusable piece | Receipt and boundary |
 | --- | --- |
@@ -81,9 +96,17 @@ No runtime or guest-access verification was performed.
 using mobile data, with no staff session or local certificate installed. Reload after a publication
 change and confirm guest names, prices, sizes/extras and declarations. Exercise missing text,
 explicit language choice, keyboard explanations and narrow-screen reading. Check that unpublished
-content, staff fields, unrelated assets and write actions are unavailable through the guest
-entrance. Disconnect the box and inspect the unavailable page.
+content, staff-only metadata, unrelated assets and write actions are unavailable through the guest
+entrance. For hosted delivery, publish while disconnected: the old delivered page stays readable,
+the manager sees the pending update, and reconnecting delivers it. Qualify the alternative route’s
+unavailable page instead if forwarding is chosen.
 
-**Open decisions:** choose the Cloud guest entrance for this go-live page and settle the
-dietary-mark presentation. If Cloud cannot deliver in time, choose
-explicitly whether to commission static export instead.
+**Open decisions:** hosted publication or box forwarding for day one? Recommend hosted publication,
+subject to Cloud sizing and readiness. Settle the dietary-mark presentation. If neither route can
+deliver in time, choose explicitly whether to commission manual static export.
+
+**Local study checks:** EN/ES/CA read-only mock-ups are in Lane D’s uncommitted
+`receipts/a670-studies-2026-11-13/`. Chromium checks cover 25 demo dishes, no ordering controls,
+no page-wide horizontal overflow and keyboard-opened/closed allergen explanations at 390/1280
+in light/dark; the paper studies share the 28-case run. These checks establish no public URL,
+hosted-publication delivery or Cloud readiness.

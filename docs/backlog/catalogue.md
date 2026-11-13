@@ -689,6 +689,14 @@ The owner accepted bringing forward a basic printable guest menu through
 [A1517](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
 on 11 November 2026. The owner stopped the build on 12 November at 02:43 pending a menu design and asked for mock-ups first. The [earlier proposal](../superpowers/plans/2026-11-12-a670-printable-guest-menu.md) is reference only; whether to print and the language/key choices wait for the owner's design review.
 
+**13 November study update:** the owner's 12 November 20:45 direction asks for a simpler online
+menu around go-live and evidence of printed-template flexibility before a build plan. The
+[online access study](../superpowers/specs/2026-11-13-a670-online-go-live-study.md) compares box
+forwarding with a Cloud-hosted publication; the [template study](../superpowers/specs/2026-11-13-a670-printed-template-study.md)
+compares presets, blocks and uploaded artwork with live areas. Both are proposals for the owner;
+the earlier paper-first recommendation and per-page-key default are not settled build decisions.
+Mock-ups remain local; no build, push or landing before the owner sees the studies.
+
 ## The products' made-at read has no screen since A655
 
 **The products' made-at read has no screen since A655** — `GET /management-api/products/made-at`,

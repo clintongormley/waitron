@@ -482,9 +482,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A885. Say that lines already on an open order keep their VAT class after a republish.**
   [Detail](backlog/catalogue.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
 
-- **A670 — guest-menu mock-ups first; printing/build stopped (owner, 2026-11-12).** A printed menu carries each
-  dish's allergen icons after its name and a key on the page naming every icon.
-  The owner brought its basic guest-menu design forward on 11 November through A1517.
+- **A670 — guest-menu studies; build waits for the owner's design review (2026-11-12).** The
+  [read-only online go-live scope](superpowers/specs/2026-11-13-a670-online-go-live-study.md) and
+  [printed-template comparison](superpowers/specs/2026-11-13-a670-printed-template-study.md) answer
+  the owner's later direction. Delivery route, template flexibility, key placement and PDF method
+  remain choices; no product build is cleared.
   [Detail](backlog/catalogue.md#a670--printed-menus-owner-2026-10-14-open-not-designed)
 
 - **wt-data-table: heading wrap, long names, odds and ends** (bundle of 10, size M). Holds A1318, A543. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
