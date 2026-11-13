@@ -352,15 +352,15 @@ The page's own words (the "Waitron guide" trail, each guide's short name, the mi
 
 ### Which boots serve it
 
-`mountGuidePages` is called in `bootServer` (`apps/server/src/boot.ts:1347`), beside `mountDiscovery`
-and before the first branch on the box's mode, so setup mode, the adoption-pending boot and every
-trading boot (primary, read-only mirror, fenced) serve it, ahead of the built apps' catch-alls. The
-cases that fetch a guide are in `apps/server/src/boot.test.ts` (a setup box, a trading box, and a
-trading box whose till catch-all would otherwise answer) and `apps/server/src/boot.mirror.test.ts`.
-Only `bootServer`'s main app serves the guides. The other listeners build their own apps without
-them, among them the failed-start recovery page (`recoveryApp`, started from
-`apps/server/src/node-entry.ts`), the waiting start and the plain-HTTP landing listener
-(`apps/server/src/landing-app.ts`, certificate help and the `/legal/*` pages).
+`mountGuidePages` is called in `bootServer` (`apps/server/src/boot.ts:1408`), beside
+`mountDiscovery` and before the first branch on the box's mode, so setup mode, the adoption-pending
+boot and every trading boot (primary, read-only mirror, fenced) serve it, ahead of the built apps'
+catch-alls. The cases that fetch a guide are in `apps/server/src/boot.test.ts` (a setup box, a
+trading box, and a trading box whose till catch-all would otherwise answer) and
+`apps/server/src/boot.mirror.test.ts`. Only `bootServer`'s main app serves the guides. The other
+listeners build their own apps without them, among them the failed-start recovery page
+(`recoveryApp`, started from `apps/server/src/node-entry.ts`), the waiting start and the plain-HTTP
+landing listener (`apps/server/src/landing-app.ts`, certificate help and the `/legal/*` pages).
 
 ### How the dashboard links a guide
 
@@ -432,7 +432,7 @@ The box serves the software's declaración responsable (A940) from `mountDeclara
   failed read logs `declaration.kept_read_failed` and answers "cannot be shown", 500.
 - `/legal/about`: JSON `{ release: { version, releasedOn } | null, build }` (`LegalAbout`,
   `packages/shared/src/legal-about.ts`), where `build` is `applicationVersion(process.env)`, the
-  value the main app sends as `x-waitron-build` (`apps/server/src/boot.ts:1283`, `:1311`).
+  value the main app sends as `x-waitron-build` (`apps/server/src/boot.ts:1341`, `:1369`).
 
 Any other address under `/legal` answers a "Page not found" page.
 
@@ -479,7 +479,9 @@ slice 2's real renderer.
 
 A box that accepts sales keeps the running release's text in the venue database as it starts
 (`apps/server/src/keep-declaration.ts`), through the fiscal module's `declarations` seat; a box in
-time-zone repair keeps nothing. The pages read the kept versions without a write-lock turn.
+time-zone repair keeps nothing. The pages read the kept versions without a write-lock turn, so a
+page anyone can open never queues behind sales for the lock, and its read leaves the change list as
+it was.
 
 ### Which listeners serve them
 
@@ -490,14 +492,16 @@ These serve them:
 - the waiting start, while a box waits for its peer (`apps/server/src/waiting-start.ts:107`);
 - the plain-HTTP listener, both its forms (`apps/server/src/landing-app.ts:29`);
 - the recovery listener (`apps/server/src/recovery-listener.ts:128`);
-- the Waitron Cloud staff entrance, which lets `/legal/` reads through beside `/help/`
-  (`apps/server/src/cloud-remote.ts:143-144`).
+- the Waitron Cloud staff entrance, which passes `/legal/` reads, beside `/help/`, to the main app
+  (`apps/server/src/cloud-remote.ts:143-144`, `:162`).
 
-Only the main app, and the plain-HTTP listener `bootServer` starts beside it on a trading or
-time-zone repair start, list and serve the kept versions, and only when the venue's fiscal module
-has a `declarations` seat. Elsewhere, in setup, while adoption is pending, on a start restricted
-after a handover, and on the waiting start and recovery listeners, the page has no list and every
-`/legal/declaration/<version>.txt` answers "Page not found".
+Only the main app, the staff entrance that reaches it, and the plain-HTTP listener `bootServer`
+starts beside it on a trading or time-zone repair start, list and serve the kept versions, and only
+when the venue's fiscal module has a `declarations` seat. Trading starts here include mirror and
+fenced ones: they list what their own database holds but keep nothing themselves. Elsewhere, in
+setup, while adoption is pending, on a start restricted after a handover, and on the waiting start
+and recovery listeners, the page has no list and every `/legal/declaration/<version>.txt` answers
+"Page not found".
 
 The plain-HTTP page, in both forms (`trust-page.ts`, `connection-bootstrap-page.ts`), and the
 recovery page (`recovery-surface.ts`) link to `/legal/declaration` at their foot. The guides are
