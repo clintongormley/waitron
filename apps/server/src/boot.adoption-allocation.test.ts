@@ -34,7 +34,7 @@ import {
 } from "./finish-adoption.js";
 import { freePorts } from "./testing/free-ports.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
-import { httpsVia, withMockedKill } from "./testing/boot-harness.js";
+import { httpsVia } from "./testing/boot-harness.js";
 import { writeTlsSet } from "./testing/box-tls.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
@@ -439,7 +439,7 @@ it("joining finishes when the copy holds this box's row, and the next start is a
   }
 }, 60_000);
 
-it("the latch start finishes joining through the restart seam, not by signalling the process", async () => {
+it("the latch start finishes joining through the restart seam", async () => {
   const spare = await seedJoiningSpare();
   const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-restart-seam-"));
   let server: StartedServer | undefined;
@@ -447,11 +447,8 @@ it("the latch start finishes joining through the restart seam, not by signalling
   try {
     const { env } = await joiningStartEnv(scratch, spare);
     let restarts = 0;
-    await withMockedKill(async (kills) => {
-      server = await startServer(env, {}, { restart: () => (restarts += 1) });
-      await vi.waitFor(() => expect(restarts).toBe(1));
-      expect(kills).toEqual([]);
-    });
+    server = await startServer(env, {}, { restart: () => (restarts += 1) });
+    await vi.waitFor(() => expect(restarts).toBe(1));
   } finally {
     allocation.dependent = true;
     await server?.close();

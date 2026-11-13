@@ -394,6 +394,8 @@ describe("takeFirstCopy", () => {
     const restore = vi.fn();
     const r = run({ objectStore, restoreGeneration: restore, hold: new Promise<void>(() => {}) });
 
+    // The job reports waiting, then reaches the hold with no await in between.
+    await vi.waitFor(() => expect(r.statuses).toContainEqual({ copy: "waiting" }));
     r.controller.abort(new Error("stopped"));
     await expect(r.done).rejects.toThrow("stopped");
     expect(restore).not.toHaveBeenCalled();
