@@ -1,5 +1,78 @@
 # A1308 fk8 — kitchen tickets: the allergy snapshot on the ticket, MOVED notices that name their ticket, routing periods without a department copy: implementation plan
 
+## 2026-11-13 — CURRENT-MAIN PREFLIGHT
+
+**DRAFT — awaiting Claude review and watcher clearance; no build begun.** Base `4e930fd07c`;
+fk7 merged `9dbea6ba9e`, exact-merge CI `43482596862` succeeded (Runner receipt). Preserve the
+historical decisions/tests below. After fk8, allergy snapshots live on tickets, MOVED distinguishes
+alike dishes, routing periods derive their department, and tickets need no node column.
+
+**Authority/R2.** Sources: lane M's `reports/r1.md`, `reports/r2.md`; lane E's
+`archive/questions-to-2026-11-11.md` (17:00–17:22). Watcher 17:15:
+“Proposal 4 (delete recallLines, sendToPrep, advanceTicket, their routes and client methods) is
+cleared by the watcher: put it at the start of fk8's plan, after showing with a search and a test
+run that nothing calls them.” Watcher clearance, not new owner design approval. Proposal 1 landed
+in #2926 (`68b0463513`)/#2933 (`1a663dafee`): preserve
+`kitchenWork()`/`leftToServe()` (`apps/server/src/kitchen-print.ts:927-943`), callers and the
+bill/index choice in `working-order.ts:8277-8289`. Recall removal landed #2879 (`a9e8f379b7`).
+**Proposals 2/3/5 are outside this fk8 proposal and NEED watcher allocation:** immediate start/“from Grill”
+printing after a pass-wait move to a non-waiting station; one Ready per pass card, including
+counter/no-course, with server-enforced Runs the pass; undo Ready until served without a time
+limit (17:22). Recommend a separate bounded watcher-queued change before fk9; invent no item.
+Preserve served-dish/floor/split assertions.
+
+**First build step — remaining proposal 4 only.**
+`rg -n -w 'recallLines|sendToPrep|advanceTicket' apps packages -g '!*.test.*'` finds definitions,
+route imports/calls, client and stale error comments; no screen callers, `recallLines` or
+`advanceTicket` client. Runner's `apps/server` baseline, `pnpm exec vitest run
+src/kitchen-request.send.test.ts src/kitchen-request.move.test.ts`, passed 15 tests/2 files;
+nonexistent `src/kitchen-work.test.ts` supplied no evidence. Delete
+`working-order.ts`'s two exports, `till-api.ts`'s `/api/working-orders/:id/prep` and
+`/api/orders/:id/stations/:sid/advance`, and `apps/till/src/api/client.ts`'s `sendToPrep`.
+Audit stale comments/docs, including `errors.ts`; no product UI/guide edits.
+Port shared setup to real `fireLines`/payment/place paths and `advanceTicketItem`; retain supported
+send/attendance/refusal/queue assertions. Delete API-exclusive cases/inventory rows, never shared
+files. Focused suites under `apps/server/src/`:
+`working-order.test.ts`, `working-order.pay-and-dispatch.test.ts`, `kitchen-request.send.test.ts`,
+`kitchen-request.move.test.ts`, `counter-release.test.ts`, `attendance-final-order-paths.test.ts`,
+`attendance-kitchen-service.test.ts`, `till-api.test.ts`, `till-api.fiscal-sale-paths.test.ts`,
+`till-api.courses.test.ts`, `till-api.sell-published.test.ts`, `venue-settings-api.orders-open.test.ts`,
+`till-api.profile-actions.test.ts`, `till-api.profile-zones.test.ts`, `till-device-proof.test.ts`;
+also `apps/till/src/api/client.test.ts`. Re-run the search after removal; add no permanent guard.
+
+**Storage ports and checks.** Service schema lives in `packages/db/src/schema/venue-service/`;
+`ticket-items.ts` stays in its parent. Remove the export from
+`packages/venue-service/src/index.ts`. Keep Tasks 1–5's schema, allergy, MOVED, routing and overdue
+tests; reuse `scripts/a1308/lib/fold-inserts.mjs` (fk0). fk7 replaced `station_printers`
+with `kitchen_stations.printer_ids`. Per slice-rules §9, port
+`apps/server/src/backup-verification-target.test.ts`'s policy pin by comparing serialized policies
+(only the removed allergy-table ownership), and `apps/server/src/configuration-transfer.test.ts`'s
+routing SQL via `menu_periods`, preserving assertions. Update strict lists
+in `scripts/schema-constraints.test.ts`, `packages/venue-service/src/schema/service.test.ts` and
+`packages/db/src/schema/venue-service/migrations.test.ts`; run them. Derive bundle version
+from main at build/rebase. Extend
+`apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` adapter for the four storage changes;
+frozen Madrid captures stay byte-for-byte unchanged. Exclude the adapter from the final bulk
+fixture-script pass, preserving historical source-table names; run both locale cases.
+
+**Protection forecast.** Runner's base list contains all 12 composition/database/phase
+entries (`receipts/fk8-kitchen-tickets/protection-before/protection-list.json` in lane E).
+`missing table ticket_item_allergies` includes its PK, cascading ticket FK and both
+`ticket_item_allergies_{original,current}_ck`; the implicit PK index and three change-feed triggers
+also disappear, without separate nested-removal lines. Keep the other forecast rows below.
+**Resolve before build:** `columns.ts:148` makes `flag()` a plain integer;
+the captured schema has no automatic flag CHECK. Claude/watcher must settle whether an explicit
+0/1 CHECK is intended; predict its name if so. Re-run list/compare after build; unpredicted
+differences stop work, never assume equality. Run TDD, the original finish line and
+`pass-lifetime.test.ts` and `station-outputs-down.test.ts` in `apps/server/src/`, unchanged.
+
+**Size / stop.** Provisional counted additions: production ≈225, tests/ports ≈410,
+support/script/docs ≈100, total ≈735 (original ≈630). Separately uncounted: pure deletions,
+generated migrations, committed fixture-script output; script source/manual ports count.
+Retain the original **20% outside-opinion stop at 756**: consult the watcher before exceeding it.
+No framework, new guard or permanent mutation
+test. Report `Sale-path read changed:` for affected reads; retain every original stop point.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. Every step also
 > follows [the A1308 slice rules](2026-11-08-a1308-slice-rules.md) ("rules").
