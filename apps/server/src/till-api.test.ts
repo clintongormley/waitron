@@ -48,6 +48,7 @@ import {
 import {
   createPinThrottle,
   deactivatePerson,
+  hashPassword,
   deviceProfileAdmissionRoles,
   endSession,
   PIN_THROTTLE_MAX_KEYS_PER_SLOT,
@@ -1336,6 +1337,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     const [admin] = await seedPersons(suite.db, {
       displayName: "Admin",
       pinHash: hashPin("8181"),
+      passwordHash: hashPassword("admin password"),
       role: "admin",
     });
     let token: string;
