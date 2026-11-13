@@ -1141,8 +1141,12 @@ export async function findOrderServiceZones(
   return new Map(rows.map((row) => [row.workingOrderId, row.zoneId]));
 }
 
-export async function readLunchOffers(tx: Transaction, workingOrderId: string) {
-  const contexts = await listWorkingLineContexts(tx, workingOrderId);
+export async function readLunchOffers(
+  tx: Transaction,
+  workingOrderId: string,
+  lineIds: readonly string[],
+) {
+  const contexts = await listWorkingLineContexts(tx, workingOrderId, lineIds);
   const documents = await readRecordedDocuments(
     tx,
     contexts.flatMap((row) => (row.menuVersionId === null ? [] : [row.menuVersionId])),
@@ -1166,6 +1170,7 @@ export async function readLunchOffers(tx: Transaction, workingOrderId: string) {
 export async function listWorkingLineContexts(
   tx: Transaction,
   workingOrderId: string,
+  lineIds?: readonly string[],
 ): Promise<
   {
     workingOrderLineId: string;
@@ -1203,7 +1208,14 @@ export async function listWorkingLineContexts(
     })
     .from(workingLineContexts)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, workingLineContexts.workingOrderLineId))
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, workingOrderId),
+        lineIds === undefined
+          ? undefined
+          : inArray(workingLineContexts.workingOrderLineId, [...lineIds]),
+      ),
+    );
   return rows.map((row) => ({
     ...row,
     hardwareUnit: row.hardwareUnit as "kg" | "g" | "mg" | null,
@@ -1279,10 +1291,6 @@ export async function recordSentLineNutrition(
   }
 }
 
-/**
- * Snapshot the commercial attribution of newly priced working-order lines, and the menu version
- * each was priced from, from `offers`: the zone's offers the lines were priced from.
- */
 export async function recordWorkingLineContexts(
   tx: Transaction,
   workingOrderId: string,

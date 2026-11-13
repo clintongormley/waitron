@@ -2899,3 +2899,26 @@ it("reads the recorded version after another publication changes its price", asy
   expect(price(first.versionId)).toBe("5.00");
   expect(price(second.versionId)).toBe("99.00");
 });
+
+it("reuses a live document when reading the same recorded version without another query", async () => {
+  const f = await menusFixture(fx.db);
+  const published = await publish(f.lunch);
+  await app(async (tx) => {
+    const live = (await readLiveDocuments(tx, [f.lunch])).get(f.lunch)!.document;
+    const session = (
+      tx as unknown as {
+        session: { prepareQuery(query: { sql: string }, ...args: unknown[]): unknown };
+      }
+    ).session;
+    const queries = vi.spyOn(session, "prepareQuery");
+    try {
+      const recorded = await readRecordedDocuments(tx, [published.versionId]);
+      expect(recorded.get(published.versionId)).toBe(live);
+      expect(
+        queries.mock.calls.filter(([query]) => query.sql.includes("menu_versions")),
+      ).toHaveLength(0);
+    } finally {
+      queries.mockRestore();
+    }
+  });
+});

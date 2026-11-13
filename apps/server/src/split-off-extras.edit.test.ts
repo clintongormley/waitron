@@ -9,7 +9,7 @@ import {
   updateOrderLine,
 } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   printJobs,
@@ -884,6 +884,7 @@ it.each([false, true])(
       const initialItems = (await state(tx, id)).items;
       const before = (await state(tx, id)).lines[0]!;
       const contexts = await VENUE_SERVICE.listLineContexts(tx, id);
+      await updateProduct(tx, venue.products.burger, { setLunch: false });
       await updateExtraList(
         tx,
         main.id,
@@ -955,6 +956,41 @@ it.each([false, true])(
       expect(completed.find((row) => row.id === child.id)?.lineTotal).toBe(300);
       expect(completed.map((row) => row.lineTotal).sort((a, b) => a - b)).toEqual([0, 300, 1800]);
       expect((await state(tx, id)).items).toEqual(initialItems);
+    });
+  },
+);
+
+it.each([false, true])(
+  "keeps a stored ordinary dish ordinary after it is published as lunch; null version: %s",
+  async (nullVersion) => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await updateProduct(tx, venue.products.burger, { vatClass: "reduced" });
+      await offerProducts(tx, venue.cfg, {
+        zone: { zoneId: venue.tables.zoneId },
+        orderStart: "table",
+      });
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [line(venue, "burger")]);
+      if (nullVersion)
+        await tx.run(
+          sql`update working_line_contexts set menu_version_id = null where working_order_line_id in (select id from working_order_lines where working_order_id = ${venue.party.tabId})`,
+        );
+      await updateProduct(tx, venue.products.burger, { setLunch: true });
+      await offerProducts(tx, venue.cfg, {
+        zone: { zoneId: venue.tables.zoneId },
+        orderStart: "table",
+      });
+      await edit(tx, venue, 1, {
+        portionLineNos: [],
+        extras: [
+          { listId: venue.lists.burger, picks: [{ productId: venue.products.chips, quantity: 1 }] },
+        ],
+      });
+      const rows = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, venue.party.tabId));
+      expect(rows.find((row) => row.productId === venue.products.chips)!.vatClass).toBe("general");
     });
   },
 );

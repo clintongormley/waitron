@@ -1170,6 +1170,7 @@ export interface VenueServiceContribution {
   readLunchOffers(
     tx: Transaction,
     workingOrderId: string,
+    lineIds: readonly string[],
   ): Promise<ReadonlyMap<string, { offer: ZoneMenuOffer; versionId: string }>>;
   listLineContexts(
     tx: Transaction,

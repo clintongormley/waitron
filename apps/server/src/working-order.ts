@@ -750,7 +750,13 @@ export async function priceOrderLines(
     if (offer.ordering === "not_sold_separately" && line[ADDED_EXTRAS_ONLY] !== true) {
       throw new AppError("product.not_sold_separately", { productId: offer.productId });
     }
-    return { ...line, offer };
+    return {
+      ...line,
+      offer,
+      setLunch:
+        offer.setLunch === true &&
+        (line[ADDED_EXTRAS_ONLY] !== true || line[RECORDED_OFFER] !== undefined),
+    };
   });
   // The mark each confirmed late dish's rows carry, by the dish's index in `lines`.
   const marks = new Map<number, { periodName: string; confirmedBy: string }>();
@@ -835,9 +841,7 @@ export async function priceOrderLines(
       };
   const lunchProducts = [
     ...new Set(
-      lines.flatMap((line) =>
-        line.offer.setLunch ? picksOf(line).map((pick) => pick.productId) : [],
-      ),
+      lines.flatMap((line) => (line.setLunch ? picksOf(line).map((pick) => pick.productId) : [])),
     ),
   ];
   const lunchCourses = new Map(
@@ -890,7 +894,7 @@ export async function priceOrderLines(
       {
         extras:
           line[FROZEN_EXTRAS] === undefined
-            ? extrasListsFor(modifiers.extras, selection.unit, offer.setLunch === true)
+            ? extrasListsFor(modifiers.extras, selection.unit, line.setLunch)
             : [],
         options: line[FROZEN_OPTIONS] === undefined ? modifiers.options : [],
       },
@@ -929,7 +933,7 @@ export async function priceOrderLines(
         kitchenName: child.kitchenName,
         // The GROSS price of ONE of this extra.
         priceDelta: child.price,
-        vatClass: offer.setLunch ? product.vatClass : child.vatClass,
+        vatClass: line.setLunch ? product.vatClass : child.vatClass,
         quantity: child.quantity,
         physicalQuantity: child.physicalQuantity,
         priceQuantity: child.priceQuantity,
@@ -964,7 +968,7 @@ export async function priceOrderLines(
     for (const child of extraChildren) {
       lineMeta.push({
         kind: "child",
-        courseId: offer.setLunch ? (lunchCourses.get(child.productId) ?? null) : null,
+        courseId: line.setLunch ? (lunchCourses.get(child.productId) ?? null) : null,
         recorded: line[RECORDED_OFFER],
         productId: child.productId,
         menuItemId: line.menuItemId,
@@ -5723,7 +5727,13 @@ async function applyLineEdits(
     : undefined;
   const offerById = new Map(snapshot?.offers.map((offer) => [offer.id, offer]));
   const lunches = needsModifiers
-    ? await VENUE_SERVICE.readLunchOffers(tx, orderId)
+    ? await VENUE_SERVICE.readLunchOffers(
+        tx,
+        orderId,
+        plan.edits
+          .filter(({ intent }) => intent.options !== null || intent.extras !== null)
+          .map(({ parent }) => parent.id),
+      )
     : new Map<string, { offer: ZoneMenuOffer; versionId: string }>();
   // A stored line whose dish the live version no longer offers has no published lists left: its
   // options answer, which carries no price, is checked against the dish's own lists instead.
