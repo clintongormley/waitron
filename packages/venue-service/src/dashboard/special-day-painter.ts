@@ -194,8 +194,7 @@ function offerMatch(
   days: readonly SpecialDaySummary[],
   names: readonly string[],
 ): SpecialDaySummary | undefined {
-  const latest = (day: SpecialDaySummary) =>
-    day.dates.reduce((last, { date }) => (date > last ? date : last), "");
+  const latest = (day: SpecialDaySummary) => day.latestDate ?? "";
   for (const name of names) {
     const match = days
       .filter((day) => day.name === name)

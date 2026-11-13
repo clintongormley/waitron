@@ -36,6 +36,7 @@ import {
 } from "./day-resolver.js";
 import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
 import { configureZone, createDepartment, menuState, readZoneClosingStates } from "./operations.js";
+import { holidayReadsAt } from "./holidays.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { closedZoneIdsAt, replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { englishSeasonName } from "./testing/starter-seasons.js";
@@ -992,5 +993,56 @@ describe("a past day's range that misfits its own start", () => {
       ).get(v.departmentId)!,
     );
     expect(days.get("2026-10-20")!.ranges).toEqual([]);
+  });
+});
+
+describe("readServiceDayPlan on a repeating date that follows a holiday's name", () => {
+  async function madridChristmas() {
+    await seedVenue(db, {
+      name: `House ${randomUUID()}`,
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+      province: "Madrid",
+      city: "Madrid",
+    });
+    const [day] = await db
+      .insert(specialDays)
+      .values({ name: "Christmas", repeatsYearly: true })
+      .returning({ id: specialDays.id });
+    const holidays = await scoped((tx) => holidayReadsAt(tx).dates(2026, 2026));
+    const christmas = [...(holidays.get(2026) ?? [])].filter(([, date]) => date === "2026-12-25");
+    expect(christmas).toHaveLength(1);
+    await db.insert(specialDayDates).values({
+      specialDayId: day!.id,
+      date: "2025-12-25",
+      closedAllDay: true,
+      holidayName: christmas[0]![0],
+    });
+    return day!.id;
+  }
+
+  it("finds a repeating holiday date's day in a later year", async () => {
+    const id = await madridChristmas();
+    const prepared = await scoped((tx) => readServiceDayPlan(tx, new Date("2026-12-25T11:00:00Z")));
+    expect(prepared.plan!.special.get("2026-12-25")?.specialDayId).toBe(id);
+  });
+
+  it("reads the venue settings once, with the clock", async () => {
+    await madridChristmas();
+    await scoped(async (tx) => {
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        await readServiceDayPlan(tx, new Date("2026-12-25T11:00:00Z"));
+        const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+        expect(texts.filter((text) => text.includes('"settings"'))).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
   });
 });

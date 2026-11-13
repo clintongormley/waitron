@@ -18,6 +18,7 @@ import {
   part,
   settle,
   storedDay,
+  summaryOf,
 } from "../testing/special-day-painter-fixture.js";
 import { captureShellLinks } from "../testing/shell-link-capture.js";
 import "./opening-hours-screen.js";
@@ -121,13 +122,7 @@ function request(recorded: Recorded): DashboardRequest {
       // The fixture's December 2026, moved to the month asked for.
       return JSON.parse(JSON.stringify(monthModel()).replaceAll("2026-12", month[1]!));
     }
-    if (path.endsWith("/special-days"))
-      return Object.values(days).map(({ id, name, repeatsYearly, dates }) => ({
-        id,
-        name,
-        repeatsYearly,
-        dates,
-      }));
+    if (path.endsWith("/special-days")) return Object.values(days).map(summaryOf);
     const day = /\/special-days\/([^/?]+)$/.exec(path);
     if (day) {
       const found = days[decodeURIComponent(day[1]!)];

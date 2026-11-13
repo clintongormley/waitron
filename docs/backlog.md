@@ -635,8 +635,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Period dialogs** (bundle of 1, size S). [Detail](backlog/service-periods.md#bundle-period-dialogs)
 
-- **Service moment cost** (bundle of 2, size S). [Detail](backlog/service-periods.md#bundle-service-moment-cost)
-
 - **Loose ends left by A755 (#1809).**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a755-1809)
 

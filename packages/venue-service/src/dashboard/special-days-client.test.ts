@@ -39,7 +39,7 @@ it("a failed special-day write passes its refusal on", async () => {
 });
 it("lists the venue's special days with one GET", async () => {
   const requests: unknown[][] = [];
-  const list = [{ id: "a", name: "Navidad", repeatsYearly: false, dates: facts.dates }];
+  const list = [{ id: "a", name: "Navidad", latestDate: "2026-12-25" }];
   const api = new clients.SpecialDaysApi((async (path, method, body, options) => {
     requests.push([path, method, body, options]);
     return list;

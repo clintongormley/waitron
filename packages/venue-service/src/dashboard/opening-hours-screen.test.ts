@@ -15,7 +15,7 @@ import type { OpeningHoursYear } from "../opening-hours-calendar.js";
 import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
-import { frame, settle } from "../testing/special-day-painter-fixture.js";
+import { frame, settle, summaryOf } from "../testing/special-day-painter-fixture.js";
 import { emptyPageAtTop, resizeViewport } from "../testing/window-settled.js";
 import { formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
@@ -503,12 +503,7 @@ describe("Year special-day actions", () => {
     paint: [],
     zonePaint: [],
   };
-  const olderFeast = {
-    id: "feast/2024",
-    name: "Public feast",
-    repeatsYearly: false,
-    dates: [{ date: "2024-10-12", closedAllDay: false }],
-  };
+  const olderFeast = { id: "feast/2024", name: "Public feast", latestDate: "2024-10-12" };
   async function yearMount(
     options: {
       withFeast?: boolean;
@@ -546,12 +541,8 @@ describe("Year special-day actions", () => {
       if (path.endsWith("/special-days") && listFails) throw { code: "connection.failed" };
       if (path.endsWith("/special-days"))
         return withFeast
-          ? [
-              { ...olderFeast },
-              { id: feast.id, name: feast.name, repeatsYearly: false, dates: feast.dates },
-              { id: stored.id, name: stored.name, repeatsYearly: true, dates: stored.dates },
-            ]
-          : [{ id: stored.id, name: stored.name, repeatsYearly: true, dates: stored.dates }];
+          ? [{ ...olderFeast }, summaryOf(feast), summaryOf(stored)]
+          : [summaryOf(stored)];
       if (path.endsWith("/special-days/annual%2Fday")) {
         if (readFails) throw { code: "connection.failed" };
         return { ...structuredClone(stored), repeatsYearly: !oneOff };
@@ -933,8 +924,8 @@ describe("Year view", () => {
         if (path.endsWith("/special-days")) {
           listReads = [...listReads, options];
           return [
-            { id: "annual/day", name: "Anniversary", repeatsYearly: true, dates: [] },
-            { id: "later", name: "Later fair", repeatsYearly: true, dates: [] },
+            { id: "annual/day", name: "Anniversary", latestDate: null },
+            { id: "later", name: "Later fair", latestDate: null },
           ];
         }
         if (path.endsWith("/opening-hours")) openingReads++;
@@ -1504,10 +1495,7 @@ describe("Month view", () => {
           return monthModel({ month: asked[1]! });
         }
         if (path.endsWith("/special-days"))
-          return [
-            { id: "company", name: "Company dinners", repeatsYearly: false, dates: company.dates },
-            { id: "xmas", name: "Christmas Day", repeatsYearly: true, dates: [] },
-          ];
+          return [summaryOf(company), { id: "xmas", name: "Christmas Day", latestDate: null }];
         if (path.endsWith("/special-days/company")) return structuredClone(company);
         const year = /\/opening-hours\/year\?year=(\d+)$/.exec(path);
         if (year) {

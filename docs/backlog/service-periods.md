@@ -481,17 +481,6 @@ The owner decided the rule on 2026-11-06: a closure outside its department's hou
   updates; the server still refuses a delete sent with an old clock revision — left open by
   A506-11, #1694.
 
-## Bundle: Service moment cost
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Once a stored holiday date's year has passed, each order's service-state read
-  (`readServiceDayPlan`) also reads the tenant, the venue and the holiday area** to find that year's
-  holiday: about 100 µs of roughly 860 µs per call, measured over 2000 calls on a Madrid test venue.
-  A cache that outlives the transaction is one way to remove it — left open by A506-5, #1603.
-- **The "Add to" offer reads every special day with every date** (`GET …/special-days`) to show a
-  name and a latest date — left open by A506-5, #1603.
-
 ## Bundle: Calendar marks
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

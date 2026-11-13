@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   buildMenuDocument,
   createCatalogue,
@@ -26,6 +26,7 @@ import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { configureZone, createDepartment } from "./operations.js";
 import {
   deleteSpecialDay,
+  listSpecialDays,
   readSpecialDay,
   saveSpecialDay,
   type SpecialDayDetail,
@@ -923,5 +924,37 @@ describe("deleteSpecialDay", () => {
       params: { specialDayId: missing },
     });
     expect(await read(before.id)).toEqual(before);
+  });
+});
+
+describe("listSpecialDays", () => {
+  it("answers every day by name then id in one statement, with no latest date for a day without dates", async () => {
+    await venue();
+    const holy = await save(null, {
+      name: "Semana Santa",
+      repeatsYearly: false,
+      dates: dates(["2030-12-03", "2030-12-05", "2030-12-04"]),
+    });
+    const empty = await save(null, { name: "Annual closure", repeatsYearly: false, dates: [] });
+    const fairs = [
+      await save(null, { name: "Fair", repeatsYearly: true, dates: dates(["2030-11-10"]) }),
+      await save(null, { name: "Fair", repeatsYearly: false, dates: dates(["2030-11-20"]) }),
+    ].sort((a, b) => (a.id < b.id ? -1 : 1));
+    await scoped(async (tx) => {
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        expect(await listSpecialDays(tx)).toEqual([
+          { id: empty.id, name: "Annual closure", latestDate: null },
+          ...fairs.map((fair) => ({ id: fair.id, name: "Fair", latestDate: fair.dates[0]!.date })),
+          { id: holy.id, name: "Semana Santa", latestDate: "2030-12-05" },
+        ]);
+        expect(spy).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
   });
 });

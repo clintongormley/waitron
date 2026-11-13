@@ -181,7 +181,7 @@ describe("the special-day routes", () => {
     expect(await response.json()).toEqual(expectedDetail(r, day.id));
   });
 
-  it("GET lists the venue's special days with their dates for a venue viewer, by name", async () => {
+  it("GET lists the venue's special days with their latest dates for a venue viewer, by name", async () => {
     const r = await routed();
     const christmasDay = await seeded(r);
     const fair = await scoped((tx) =>
@@ -200,21 +200,8 @@ describe("the special-day routes", () => {
     const response = await r.send("GET", "", r.supervisor);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual([
-      {
-        id: fair.id,
-        name: "Annual fair",
-        repeatsYearly: true,
-        dates: [{ date: "2030-04-20", closedAllDay: true }],
-      },
-      {
-        id: christmasDay.id,
-        name: "Christmas",
-        repeatsYearly: false,
-        dates: [
-          { date: "2030-12-24", closedAllDay: false },
-          { date: "2030-12-25", closedAllDay: true },
-        ],
-      },
+      { id: fair.id, name: "Annual fair", latestDate: "2030-04-20" },
+      { id: christmasDay.id, name: "Christmas", latestDate: "2030-12-25" },
     ]);
   });
 

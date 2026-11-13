@@ -15,7 +15,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { listVenueReadiness } from "./operations.js";
-import { listSpecialDays, readSpecialDay, saveSpecialDay, specialDaysOn } from "./special-days.js";
+import { readSpecialDay, saveSpecialDay, specialDaysOn } from "./special-days.js";
 
 /** Calls to the invented calendar's `read`, so a test can count the holiday-list reads. */
 const reads = vi.hoisted(() => ({ count: 0 }));
@@ -187,7 +187,7 @@ describe("a special-day date records the public holiday it was saved on", () => 
 });
 
 describe("reading a special day gives each date's stored holiday name", () => {
-  it("names the holiday on a holiday date and leaves an ordinary date without one, in one read and the list", async () => {
+  it("names the holiday on a holiday date and leaves an ordinary date without one, in one read", async () => {
     await venue();
     const day = await save({
       name: "Semana Santa",
@@ -199,9 +199,6 @@ describe("reading a special day gives each date's stored holiday name", () => {
       { date: "2026-04-04", closedAllDay: false },
     ];
     expect((await scoped((tx) => readSpecialDay(tx, day.id))).dates).toEqual(expected);
-    expect(await scoped((tx) => listSpecialDays(tx))).toEqual([
-      { id: day.id, name: "Semana Santa", repeatsYearly: false, dates: expected },
-    ]);
   });
 });
 
