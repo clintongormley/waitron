@@ -966,6 +966,18 @@ describe("Save", () => {
     expect(saveButton(painter).disabled).toBe(true);
   });
 
+  it("a successful save clears validation for the next edit", async () => {
+    const { painter, writes } = await mount();
+    await typeName(painter, "Renamed");
+    await save(painter, writes);
+    await typeName(painter, "");
+    expect(
+      painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+    ).toBe("");
+    expect(frame(painter).refusal).toBe("");
+    expect(saveButton(painter).disabled).toBe(false);
+  });
+
   it("no dates is marked under Dates", async () => {
     const { painter, writes } = await mount({ specialDayId: null, date: "2026-12-24" });
     await typeName(painter, "Empty");
