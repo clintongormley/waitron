@@ -34,6 +34,7 @@ import {
   type ObjectStore,
   type SpawnFn,
   type StreamNotStarted,
+  type StreamStatus,
   type StreamView,
 } from "@waitron/stream";
 import { boundObjectStore } from "./bounded-store.js";
@@ -155,6 +156,9 @@ export async function readNewerBucketMain(
     return null;
   }
 }
+
+/** The copy's status; `toSpare` is set while it goes to the standby's store, which has no bucket. */
+export type HostStreamView = StreamView | (StreamStatus & { toSpare: true });
 
 interface PairTarget {
   venueId: string;
@@ -446,13 +450,17 @@ export class StreamHost {
     }
   }
 
-  status(): StreamView {
+  status(): HostStreamView {
     const view = this.#supervisor?.status();
     if (view === undefined) return this.#notStarted ?? { state: "off" };
-    const pipeProblem = this.#pipe?.problem() ?? null;
-    return view.bucketProblem === null && pipeProblem !== null
-      ? { ...view, bucketProblem: pipeProblem }
-      : view;
+    const pipe = this.#pipe;
+    if (pipe === undefined) return view;
+    const pipeProblem = pipe.problem();
+    return {
+      ...view,
+      bucketProblem: view.bucketProblem ?? pipeProblem,
+      toSpare: true,
+    };
   }
 }
 

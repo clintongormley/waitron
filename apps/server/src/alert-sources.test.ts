@@ -51,6 +51,7 @@ import { deleteCardReader } from "./card-reader-delete.js";
 import { createDiskFullState } from "./disk-full-state.js";
 import { createFreeSpaceState } from "./free-space-watch.js";
 import type { SealedStateStatus } from "./sealed-state.js";
+import type { HostStreamView } from "./stream-host.js";
 import { createTtlCache } from "./ttl-cache.js";
 
 const NOW = new Date("2026-09-15T12:00:00Z");
@@ -61,7 +62,7 @@ const OFF: () => StreamView = () => ({ state: "off" });
 function src(
   status: BackupStatus,
   outcomes: BackupOutcomeHolder,
-  readStream: () => StreamView = OFF,
+  readStream: () => HostStreamView = OFF,
 ) {
   return backupAlertSource({
     listStatus: async () => status,
@@ -625,6 +626,49 @@ describe("backupAlertSource and the bucket copy", () => {
       "backup.stream_paused",
       "backup.destination_overdue",
     ]);
+  });
+});
+
+// A box paired with a standby streams to the standby's store over the venue's network; there is
+// no bucket, so the wording must not send the owner to one.
+describe("backupAlertSource and the copy to the standby server", () => {
+  const none = { failed: new Map() };
+  const configured: BackupStatus = { configured: true, destinations: [] };
+  const toSpare = (overrides: Partial<StreamStatus>) => ({
+    ...stream(overrides),
+    toSpare: true as const,
+  });
+  const codesAndParams = async (
+    view: ReturnType<typeof toSpare>,
+    status: BackupStatus = configured,
+  ) => (await src(status, none, () => view).read(ctx)).map((a) => [a.code, a.params]);
+
+  it("marks behind, paused and an unreachable standby as the standby's", async () => {
+    const lagMs = 16 * 60_000;
+    expect(
+      await codesAndParams(toSpare({ state: "paused", reason: "side_file_limit", lagMs })),
+    ).toEqual([
+      ["backup.stream_behind", { minutes: 16, toSpare: true }],
+      ["backup.stream_paused", { toSpare: true }],
+    ]);
+    expect(
+      await codesAndParams(
+        toSpare({ bucketProblem: { reason: "ECONNREFUSED", since: "2026-09-15T11:50:00.000Z" } }),
+      ),
+    ).toEqual([["backup.stream_bucket_unusable", { toSpare: true }]]);
+  });
+
+  it("marks backup.disabled as the standby's when there is no archive and the standby is behind", async () => {
+    expect(
+      await codesAndParams(toSpare({ lagMs: STREAM_BEHIND_AFTER_MS }), { configured: false }),
+    ).toEqual([
+      ["backup.stream_behind", { minutes: 15, toSpare: true }],
+      ["backup.disabled", { toSpare: true }],
+    ]);
+  });
+
+  it("raises nothing while the standby's copy is current", async () => {
+    expect(await codesAndParams(toSpare({}), { configured: false })).toEqual([]);
   });
 });
 

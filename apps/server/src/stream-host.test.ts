@@ -1319,7 +1319,7 @@ describe("the live copy's wiring", () => {
         });
         expect(await getThrough(endpoint)).toBe("200 stored");
         expect(reached).toEqual(["/waitron/probe"]);
-        expect(rt.status()).toMatchObject({ bucketProblem: null });
+        expect(rt.status()).toMatchObject({ bucketProblem: null, toSpare: true });
       } finally {
         await rt.stop();
       }
@@ -1346,6 +1346,7 @@ describe("the live copy's wiring", () => {
           WAITRON_STREAM_ACCESS_KEY_ID: SETTINGS.accessKeyId,
           WAITRON_STREAM_SECRET_ACCESS_KEY: SETTINGS.secretAccessKey,
         });
+        expect(rt.status()).not.toHaveProperty("toSpare");
       } finally {
         await rt.stop();
       }

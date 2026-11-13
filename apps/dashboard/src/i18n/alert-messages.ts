@@ -104,6 +104,13 @@ export const ALERT_MESSAGES: Readonly<
   "backup.disabled": {
     en: "No copy of your data is being kept: there are no scheduled backups, and the bucket copy is off or not up to date. Set one up on the Backups page.",
     es: "No se está guardando ninguna copia de tus datos: no hay copias de seguridad programadas, y la copia en el bucket está desactivada o no está al día. Configura una en la página de Copias.",
+    variants: {
+      toSpare: {
+        mode: "replace",
+        en: "No up-to-date copy of your data is being kept: there are no scheduled backups, and the standby server is not receiving the restaurant's data. Check that the standby server is switched on and connected to the restaurant's network, or set up scheduled backups on the Backups page.",
+        es: "No se está guardando ninguna copia al día de tus datos: no hay copias de seguridad programadas, y el servidor en espera no está recibiendo los datos del restaurante. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante, o configura copias programadas en la página de Copias.",
+      },
+    },
   },
   "backup.archive_settings_unusable": {
     en: "Scheduled backups are off because their saved settings could not be used. Open Backups to read the error; its What the box recorded button shows what the box found and what each choice does. Choose the settings again there. Turn on backups replaces the saved choices; leave without applying to keep them. Sales continue.",
@@ -112,10 +119,24 @@ export const ALERT_MESSAGES: Readonly<
   "backup.stream_behind": {
     en: "The bucket copy is {minutes} minutes behind: your most recent sales are not in it yet. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",
     es: "La copia en el bucket lleva {minutes} minutos de retraso: tus ventas más recientes aún no están en ella. Las ventas continúan. Revisa la conexión a internet del equipo y el bucket en la página de Copias.",
+    variants: {
+      toSpare: {
+        mode: "replace",
+        en: "The standby server is not receiving the restaurant's data: its copy is {minutes} minutes behind, so your most recent sales are not on it yet. Sales continue. Check that the standby server is switched on and connected to the restaurant's network.",
+        es: "El servidor en espera no está recibiendo los datos del restaurante: su copia lleva {minutes} minutos de retraso, así que tus ventas más recientes aún no están en ella. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
+      },
+    },
   },
   "backup.stream_paused": {
     en: "The bucket copy is paused: the bucket could not be reached for so long that the box stopped copying to protect its disk. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",
     es: "La copia en el bucket está en pausa: no se ha podido contactar con el bucket durante tanto tiempo que el equipo ha dejado de copiar para proteger su disco. Las ventas continúan. Revisa la conexión a internet del equipo y el bucket en la página de Copias.",
+    variants: {
+      toSpare: {
+        mode: "replace",
+        en: "The copy to the standby server is paused: this box could not reach the standby for so long that it stopped copying to protect its disk. Sales continue. Check that the standby server is switched on and connected to the restaurant's network.",
+        es: "La copia en el servidor en espera está en pausa: este equipo no ha podido contactar con él durante tanto tiempo que ha dejado de copiar para proteger su disco. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
+      },
+    },
   },
   "backup.stream_refused": {
     en: "The bucket copy has stopped because another box is writing this venue's copy to the same bucket. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
@@ -128,6 +149,13 @@ export const ALERT_MESSAGES: Readonly<
   "backup.stream_bucket_unusable": {
     en: "Your bucket is refusing this box: its access key may no longer work, or the bucket may no longer support the check Waitron uses to stop two boxes overwriting each other's copy. Check the bucket settings on the Backups page.",
     es: "Tu bucket está rechazando este equipo: puede que su clave de acceso ya no funcione, o que el bucket ya no admita la comprobación que usa Waitron para evitar que dos equipos sobrescriban la copia del otro. Revisa los ajustes del bucket en la página de Copias.",
+    variants: {
+      toSpare: {
+        mode: "replace",
+        en: "The standby server is not receiving the restaurant's data: this box cannot reach it, or the standby is refusing this box. Sales continue. Check that the standby server is switched on and connected to the restaurant's network.",
+        es: "El servidor en espera no está recibiendo los datos del restaurante: este equipo no consigue contactar con él, o el servidor en espera está rechazando este equipo. Las ventas continúan. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.",
+      },
+    },
   },
   "backup.stream_stopped": {
     en: "The bucket copy is not running, so new changes are not reaching your bucket. Sales continue. Open Backups and press Start the copy again. If it stops again, choose Change bucket there and press Test to check the bucket.",

@@ -345,6 +345,59 @@ it("points the disk warning at the Box status page, in three sentences, in both 
   expect(es).toContain(t("nav.box_status", "es-ES"));
 });
 
+describe("the copy when it goes to the standby server, which has no bucket", () => {
+  const CHECK_EN =
+    "Check that the standby server is switched on and connected to the restaurant's network.";
+  const CHECK_ES =
+    "Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante.";
+
+  it.each([
+    [
+      "backup.stream_behind",
+      { minutes: 20 },
+      `The standby server is not receiving the restaurant's data: its copy is 20 minutes behind, so your most recent sales are not on it yet. Sales continue. ${CHECK_EN}`,
+      `El servidor en espera no está recibiendo los datos del restaurante: su copia lleva 20 minutos de retraso, así que tus ventas más recientes aún no están en ella. Las ventas continúan. ${CHECK_ES}`,
+    ],
+    [
+      "backup.stream_paused",
+      {},
+      `The copy to the standby server is paused: this box could not reach the standby for so long that it stopped copying to protect its disk. Sales continue. ${CHECK_EN}`,
+      `La copia en el servidor en espera está en pausa: este equipo no ha podido contactar con él durante tanto tiempo que ha dejado de copiar para proteger su disco. Las ventas continúan. ${CHECK_ES}`,
+    ],
+    [
+      "backup.stream_bucket_unusable",
+      {},
+      `The standby server is not receiving the restaurant's data: this box cannot reach it, or the standby is refusing this box. Sales continue. ${CHECK_EN}`,
+      `El servidor en espera no está recibiendo los datos del restaurante: este equipo no consigue contactar con él, o el servidor en espera está rechazando este equipo. Las ventas continúan. ${CHECK_ES}`,
+    ],
+    [
+      "backup.disabled",
+      {},
+      "No up-to-date copy of your data is being kept: there are no scheduled backups, and the standby server is not receiving the restaurant's data. Check that the standby server is switched on and connected to the restaurant's network, or set up scheduled backups on the Backups page.",
+      "No se está guardando ninguna copia al día de tus datos: no hay copias de seguridad programadas, y el servidor en espera no está recibiendo los datos del restaurante. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante, o configura copias programadas en la página de Copias.",
+    ],
+  ])("words %s for the standby, never naming a bucket or the internet", (code, params, en, es) => {
+    expect(alertMessage(code, { ...params, toSpare: true }, "en")).toBe(en);
+    expect(alertMessage(code, { ...params, toSpare: true }, "es")).toBe(es);
+    for (const text of [en, es]) expect(text).not.toMatch(/bucket|internet/i);
+  });
+
+  it("keeps the bucket wording when the copy goes to a bucket", () => {
+    expect(alertMessage("backup.stream_behind", { minutes: 20 }, "en")).toBe(
+      "The bucket copy is 20 minutes behind: your most recent sales are not in it yet. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",
+    );
+    for (const code of [
+      "backup.stream_paused",
+      "backup.stream_bucket_unusable",
+      "backup.disabled",
+    ]) {
+      expect(alertMessage(code, {}, "en")).toBe(ALERT_MESSAGES[code]!.en);
+      expect(alertMessage(code, {}, "es")).toBe(ALERT_MESSAGES[code]!.es);
+      expect(ALERT_MESSAGES[code]!.en).toMatch(/bucket/);
+    }
+  });
+});
+
 describe("a backup that stopped before reaching any destination", () => {
   const LEAD_EN =
     "The last backup stopped before reaching any destination, so no new copy was saved. Sales continue.";
