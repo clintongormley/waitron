@@ -217,7 +217,7 @@ it("a short handheld More menu follows ☰ through a rotation and back", async (
   await page.viewport(390, 844);
   try {
     const more = await openHandheldMore([]);
-    await more.resizeUntilTriggerMoves(844, 390);
+    await more.resizeUntilTriggerMoves(844, 430);
     await more.expectPopupUnderTriggerBelowCap();
     await more.resizeUntilTriggerMoves(390, 844);
     await more.expectPopupUnderTriggerBelowCap();
