@@ -146,6 +146,9 @@ export function createHostedHourPreparation(
   const clocks = createSetupHourClock({
     ...(options.wall === undefined ? {} : { wall: options.wall }),
     monotonic: monotonicNow,
+    ...(host.timeServiceSynchronised === undefined
+      ? {}
+      : { timeService: () => host.timeServiceSynchronised!() }),
   });
   const preparation = createHourPreparation({
     withState: host.withPreparationState,

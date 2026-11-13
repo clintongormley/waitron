@@ -20,8 +20,8 @@ import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
 import { readHourRecoveryState } from "./hour-recovery-state.js";
 import { parseConflictResult, type ConflictAllocationInput } from "./conflict-recovery-contract.js";
 
-vi.mock("./hour-clock-internet.js", () => ({
-  observeInternetHourClock: async () => ({
+vi.mock("./hour-clock-time-service.js", () => ({
+  observeTimeServiceHourClock: async () => ({
     source: "internet",
     result: "unavailable",
     reason: "tls",

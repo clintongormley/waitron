@@ -8,7 +8,7 @@ import {
   type OperationOperator,
 } from "@waitron/module";
 import { FISCAL_OPERATIONS } from "./index.js";
-import * as internet from "./hour-clock-internet.js";
+import * as internet from "./hour-clock-time-service.js";
 import * as release from "./hour-release.js";
 import { encodeMinuteIdentity } from "./hour-identity.js";
 
@@ -39,7 +39,7 @@ beforeEach(() => {
     generator: "scripts/generate-hour-release.mjs:v1",
     generatorSha256: "b".repeat(64),
   });
-  vi.spyOn(internet, "observeInternetHourClock").mockImplementation(async () => ({
+  vi.spyOn(internet, "observeTimeServiceHourClock").mockImplementation(async () => ({
     source: "internet",
     result: "unavailable",
     reason: "tls",
@@ -141,7 +141,7 @@ async function compare(
   };
 }
 async function agreed(operations: Operations, operation: Operation) {
-  vi.mocked(internet.observeInternetHourClock).mockImplementation(async () => ({
+  vi.mocked(internet.observeTimeServiceHourClock).mockImplementation(async () => ({
     source: "internet",
     result: "usable",
     instantMs: Date.now(),
@@ -344,7 +344,7 @@ it("resumes committed work without collecting fresh clocks or rewriting the jour
     const selected = await selectAfterWait(operations, operation);
     Object.assign(f.facts, { priorActivation: "committed" });
     const before = structuredClone(f.history);
-    vi.mocked(internet.observeInternetHourClock).mockImplementation(async () => {
+    vi.mocked(internet.observeTimeServiceHourClock).mockImplementation(async () => {
       throw new Error("committed replay must not call network");
     });
     await operations.resumeRecovery!(operation);
@@ -472,7 +472,7 @@ it.each(["clock-challenge", "compare-clocks", "resume"])(
     const rejected = expect(pending).rejects.toMatchObject(refusal("reauthentication_required"));
     releaseRead();
     await rejected;
-    expect(internet.observeInternetHourClock).not.toHaveBeenCalled();
+    expect(internet.observeTimeServiceHourClock).not.toHaveBeenCalled();
     expect(f.history).toEqual([]);
   },
 );
@@ -489,7 +489,7 @@ it.each(["compare-clocks", "resume"])(
     const reading = new Promise<void>((resolve) => {
       entered = resolve;
     });
-    vi.mocked(internet.observeInternetHourClock).mockImplementation(async () => {
+    vi.mocked(internet.observeTimeServiceHourClock).mockImplementation(async () => {
       entered();
       await gate;
       return { source: "internet", result: "unavailable", reason: "tls" };
@@ -865,6 +865,26 @@ it.each(["contradictory", "missing"])(
         refusal("history_invalid"),
       );
       expect(setBoxClock).not.toHaveBeenCalled();
+    });
+  },
+);
+
+it.each([
+  [true, true],
+  [false, false],
+  [undefined, false],
+] as const)(
+  "a host's time service answering %s gives the comparison an internet clock: %s",
+  async (answer, usable) => {
+    vi.mocked(internet.observeTimeServiceHourClock).mockRestore();
+    const f = fixture();
+    const host: ModuleOperationHost =
+      answer === undefined ? f.host : { ...f.host, timeServiceSynchronised: async () => answer };
+    const operations = FISCAL_OPERATIONS.configure!(host);
+    await withOperationAuthority(binding, key, async (authority) => {
+      const result = await compare(operations, { binding, authority });
+      expect(result.clock.usable.some((entry) => entry.source === "internet")).toBe(usable);
+      expect(result.clock.secondClock).toBe(usable);
     });
   },
 );

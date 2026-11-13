@@ -42,6 +42,9 @@ function createHostedHourRecovery(
   const clocks = createSetupHourClock({
     ...(clock.wall === undefined ? {} : { wall: clock.wall }),
     monotonic: monotonicNow,
+    ...(host.timeServiceSynchronised === undefined
+      ? {}
+      : { timeService: () => host.timeServiceSynchronised!() }),
   });
   const facts = async (binding: Parameters<NonNullable<typeof host.readRecoveryFacts>>[0]) => {
     const current = await host.readRecoveryFacts!(binding);

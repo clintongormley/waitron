@@ -44,12 +44,16 @@ export function createModuleOperationHost(
     readRecoveryFacts?: ModuleOperationHost["readRecoveryFacts"];
     testClock?: ModuleOperationHost["testClock"];
     setBoxClock?: ModuleOperationHost["setBoxClock"];
+    timeServiceSynchronised?: ModuleOperationHost["timeServiceSynchronised"];
   },
 ): ModuleOperationHost {
   return Object.freeze({
     environment: Object.freeze({ ...environment }),
     ...(evidence?.testClock === undefined ? {} : { testClock: evidence.testClock }),
     ...(evidence?.setBoxClock === undefined ? {} : { setBoxClock: evidence.setBoxClock }),
+    ...(evidence?.timeServiceSynchronised === undefined
+      ? {}
+      : { timeServiceSynchronised: evidence.timeServiceSynchronised }),
     ...(evidence?.readSetupFacts === undefined ? {} : { readSetupFacts: evidence.readSetupFacts }),
     ...(evidence?.readRecoveryFacts === undefined
       ? {}

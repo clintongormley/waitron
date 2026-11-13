@@ -3,7 +3,7 @@ import { ALL_MODULES } from "./modules.js";
 import { FISCAL_OPERATIONS as historicalOperations } from "@waitron/fiscal-verifactu/src/allocation-configuration.js";
 import type { ModuleOperationHost, ModuleRecoveryFacts } from "@waitron/module";
 import * as release from "@waitron/fiscal-verifactu/src/hour-release.js";
-import * as internet from "@waitron/fiscal-verifactu/src/hour-clock-internet.js";
+import * as internet from "@waitron/fiscal-verifactu/src/hour-clock-time-service.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -327,7 +327,7 @@ it("activates the current hour through production composition without signed-fil
     generator: "scripts/generate-hour-release.mjs:v1",
     generatorSha256: "b".repeat(64),
   });
-  vi.spyOn(internet, "observeInternetHourClock").mockImplementation(async () => ({
+  vi.spyOn(internet, "observeTimeServiceHourClock").mockImplementation(async () => ({
     source: "internet",
     result: "usable",
     instantMs: Date.now(),

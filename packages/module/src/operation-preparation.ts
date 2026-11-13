@@ -73,6 +73,8 @@ export interface ModuleOperationHost {
   readonly environment: Readonly<Record<string, string | undefined>>;
   /** Set only by a test; production leaves it unset and modules read the real clocks. */
   readonly testClock?: { wall(): number; monotonic(): number };
+  /** Whether the box's internet time service says its clock is synchronised; absent answers no. */
+  timeServiceSynchronised?(): Promise<boolean>;
   readPublicEvidence(
     binding: OperationBinding,
   ): Promise<{ trust: unknown; current: unknown } | undefined>;

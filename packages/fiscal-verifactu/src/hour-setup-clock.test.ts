@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import * as setup from "./hour-setup-clock.js";
 import { canSelectHour, clockRefusal, type HourClockObservation } from "./hour-clock.js";
+import * as timeService from "./hour-clock-time-service.js";
 
 const NOW = Date.parse("2026-10-16T11:40:00.000Z");
 const PHONE = { onBox: false } as const;
@@ -19,15 +20,18 @@ function fixture() {
     monotonicStartedMs: mono,
     monotonicFinishedMs: mono,
   }));
+  vi.spyOn(timeService, "observeTimeServiceHourClock").mockImplementation(internet);
+  const synchronised = async () => true;
   const clock = setup.createSetupHourClock({
     wall: () => wall,
     monotonic: () => mono,
-    internet,
+    timeService: synchronised,
     release: () => NOW - 86_400_000,
   });
   return {
     clock,
     internet,
+    synchronised,
     advance(ms: number) {
       wall += ms;
       mono += ms;
@@ -57,7 +61,7 @@ it("compares box, challenge-timed browser and authenticated internet observation
     upperMs: NOW + 150,
   });
   expect(canSelectHour(f.clock.read("owned-scope", result.id).clock)).toBe(true);
-  expect(f.internet).toHaveBeenCalledWith("production");
+  expect(f.internet).toHaveBeenCalledWith(f.synchronised, expect.anything());
 });
 it("internet disagreement cannot be hidden by box and browser agreement", async () => {
   const f = fixture();
@@ -269,7 +273,7 @@ it("an unavailable immutable release floor blocks the name", async () => {
     wall: () => NOW,
     monotonic: () => 0,
     release: () => null,
-    internet: async () => ({ source: "internet", result: "unavailable", reason: "tls" }),
+    timeService: async () => false,
   });
   const displayed = await clock.compare("owned-scope", "preproduction", null, PHONE);
   const read = clock.read("owned-scope", displayed.id);
@@ -474,4 +478,50 @@ it("a set refuses a challenge issued for another frozen scope", () => {
   expect(
     f.clock.setFromBrowser("second", { challengeId: challenge.id, instantMs: NOW }, PHONE),
   ).toEqual({ status: "refused", reason: "challenge" });
+});
+it.each([
+  ["answers false", { timeService: async () => false }],
+  ["is absent", {}],
+] as const)(
+  "with no browser, a time service that %s leaves the box without a second clock",
+  async (_label, service) => {
+    const clock = setup.createSetupHourClock({
+      wall: () => NOW,
+      monotonic: () => 10_000,
+      release: () => NOW - 86_400_000,
+      ...service,
+    });
+    const compared = await clock.compare("owned-scope", "production", null, PHONE);
+    const read = clock.read("owned-scope", compared.id).clock;
+    expect(read.secondClock).toBe(false);
+    expect(clockRefusal(read)).toBe("second_clock_missing");
+  },
+);
+it("with no browser, a synchronised time service admits a name", async () => {
+  const clock = setup.createSetupHourClock({
+    wall: () => NOW,
+    monotonic: () => 10_000,
+    release: () => NOW - 86_400_000,
+    timeService: async () => true,
+  });
+  const compared = await clock.compare("owned-scope", "production", null, PHONE);
+  const read = clock.read("owned-scope", compared.id).clock;
+  expect(read.usable.map((value) => value.source)).toEqual(["internet", "box"]);
+  expect(canSelectHour(read)).toBe(true);
+});
+it("asks the time service afresh at every comparison", async () => {
+  let answer = true;
+  const read = vi.fn(async () => answer);
+  const clock = setup.createSetupHourClock({
+    wall: () => NOW,
+    monotonic: () => 10_000,
+    release: () => NOW - 86_400_000,
+    timeService: read,
+  });
+  const first = await clock.compare("owned-scope", "production", null, PHONE);
+  answer = false;
+  const second = await clock.compare("owned-scope", "production", null, PHONE);
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(canSelectHour(clock.read("owned-scope", first.id).clock)).toBe(true);
+  expect(clockRefusal(clock.read("owned-scope", second.id).clock)).toBe("second_clock_missing");
 });

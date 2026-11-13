@@ -9,7 +9,7 @@ import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 
 const outside = vi.hoisted(() => ({ internet: vi.fn(), release: vi.fn() }));
-vi.mock("./hour-clock-internet.js", () => ({ observeInternetHourClock: outside.internet }));
+vi.mock("./hour-clock-time-service.js", () => ({ observeTimeServiceHourClock: outside.internet }));
 vi.mock("./hour-release.js", () => ({ readHourRelease: outside.release }));
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = Date.parse("2026-10-16T11:40:00Z");
@@ -51,7 +51,7 @@ afterEach(() => {
   outside.internet.mockReset();
   outside.release.mockReset();
 });
-function fixture() {
+function fixture(extra: Partial<ModuleOperationHost> = {}) {
   let value: unknown = null;
   const history: unknown[] = [];
   let key = "owned-frozen-context";
@@ -83,6 +83,7 @@ function fixture() {
         bases,
       },
     }),
+    ...extra,
   };
   const preparation = createHostedHourPreparation(host);
   return {
@@ -156,3 +157,20 @@ it("evicted frozen scopes cannot reuse their old clock reading", async () => {
   });
   expect(f.history).toEqual([]);
 });
+it.each([
+  [true, true],
+  [false, false],
+  [undefined, false],
+] as const)(
+  "a host's time service answering %s gives the comparison an internet clock: %s",
+  async (answer, usable) => {
+    const actual = await vi.importActual<typeof import("./hour-clock-time-service.js")>(
+      "./hour-clock-time-service.js",
+    );
+    outside.internet.mockImplementation(actual.observeTimeServiceHourClock);
+    const f = fixture(answer === undefined ? {} : { timeServiceSynchronised: async () => answer });
+    const compared = await f.preparation.compareClocks(binding, null, { onBox: true });
+    expect(compared.clock.usable.some((row) => row.source === "internet")).toBe(usable);
+    expect(compared.clock.secondClock).toBe(usable);
+  },
+);

@@ -76,6 +76,21 @@ describe("a name needs a second clock within 30 seconds of the box", () => {
     expect(clockRefusal(decision)).toBe("clock_disagreement");
   });
 
+  it("a synchronised time service carries on past a browser five minutes out", () => {
+    const decision = compareHourClocks(
+      [sample("box", T), sample("browser", T + 300_000), sample("internet", T)],
+      RELEASE,
+    );
+    expect(decision.disagreement).toBe(false);
+    expect(canSelectHour(decision)).toBe(true);
+  });
+
+  it("without the time service, the same browser five minutes out is refused", () => {
+    const decision = compareHourClocks([sample("box", T), sample("browser", T + 300_000)], RELEASE);
+    expect(canSelectHour(decision)).toBe(false);
+    expect(clockRefusal(decision)).toBe("clock_disagreement");
+  });
+
   it("the box's clock alone is refused second_clock_missing", () => {
     const decision = compareHourClocks(
       [sample("box", T), { source: "internet", result: "unavailable", reason: "tls" }],

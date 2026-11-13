@@ -15,7 +15,7 @@ import {
   createHourPromotionPreparation,
   createHourRecoveryPreparation,
 } from "./hour-recovery-preparation.js";
-import * as internetClock from "./hour-clock-internet.js";
+import * as internetClock from "./hour-clock-time-service.js";
 import * as hourRelease from "./hour-release.js";
 import { createSetupHourClock } from "./hour-setup-clock.js";
 import type { HourClockObservation } from "./hour-clock.js";
@@ -132,10 +132,11 @@ async function restore(c: Row): Promise<Outcome> {
           monotonicStartedMs: monotonic(),
           monotonicFinishedMs: monotonic(),
         };
+  vi.spyOn(internetClock, "observeTimeServiceHourClock").mockImplementation(internet);
   const clocks = createSetupHourClock({
     wall: () => c.box + elapsed,
     monotonic,
-    internet,
+    timeService: async () => true,
     release: () => c.release ?? RELEASE,
   });
   const facts = {
@@ -205,7 +206,7 @@ async function hostedComparison(
     generator: "scripts/generate-hour-release.mjs:v1",
     generatorSha256: "b".repeat(64),
   });
-  vi.spyOn(internetClock, "observeInternetHourClock").mockResolvedValue({
+  vi.spyOn(internetClock, "observeTimeServiceHourClock").mockResolvedValue({
     source: "internet",
     result: "unavailable",
     reason: "tls",

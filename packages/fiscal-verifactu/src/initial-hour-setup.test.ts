@@ -332,7 +332,7 @@ it("compares base values independently of their original order", () => {
 });
 
 const source = vi.hoisted(() => ({ internet: vi.fn() }));
-vi.mock("./hour-clock-internet.js", () => ({ observeInternetHourClock: source.internet }));
+vi.mock("./hour-clock-time-service.js", () => ({ observeTimeServiceHourClock: source.internet }));
 vi.mock("./hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
