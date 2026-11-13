@@ -57,20 +57,24 @@ interface MenuDocument {
 
 /** Add reviewed new products, each in a new category and menu section, to the original capture.
  * Each added row must fill one slot the declarations imply, and every slot must be filled once:
- * per category a `categories`, `category_details`, `sections` and `routing_cells` (no product or zone)
- * row and a `section_members` row placing the section in its menu's root; per product a
+ * per category a `categories`, `category_details`, `sections` and `routing_cells` (no product or
+ * zone) row and a `section_members` row placing the section in its menu's root; per product a
  * `products`, `menu_items` (its declared menu), `section_members` (its declared section),
  * `media_images`, `media_image_data` and `media_image_edits` row, and a `menu_version_images` row
  * for each published version of its menu. The declared facts (names, VAT class, price, pricing
- * unit, category, menu, image) are checked against the seeded rows, and all but the category
- * against the published offer, whose placement must be the declared section. Each declared menu's
- * published root must hold the declared section exactly once, with the declared names, listing
- * exactly the declared products once each; a declared offer in any other menu, or under another
- * key, is refused. Every other cell of an added row — its sort positions and the section-member ids
- * that carry them, colour, kitchen station, media metadata — is taken from `seeded` on trust, as is the order of the new section, its
- * products and the offers within the document. Also refused: any existing row changed or
- * removed; a published document that differs from the capture's once the new section and offers
- * are taken out. Returns the added row count per table, which the declarations fix. */
+ * unit, category, menu, image) are checked against the seeded rows, the section's names against
+ * its seeded row, and all but the category against the published offer, whose placement must be
+ * the declared section and whose variants and offered modifiers must be empty. Each declared
+ * menu's published root must hold the declared section exactly once, with the declared names,
+ * listing exactly the declared products once each; a declared product offered in any other menu,
+ * or under another key in its own, is refused. Taken from `seeded` on trust: every other cell of
+ * an added row (its sort positions and the section-member ids that carry them, colour, kitchen
+ * station, media metadata); every other field of the new section's published entry beyond its
+ * names and members; every other field of each new offer (description and colour among them); and
+ * the order of the section within the root, of its products, and of the offers in the document.
+ * Also refused: any existing row changed or removed; a published document that differs from the
+ * capture's once the new section and offers are taken out. Returns the added row count per table,
+ * which the declarations fix. */
 export function madridWithAddedRows(
   original: CanonicalMadridSemantics,
   seeded: CanonicalMadridSemantics,
@@ -219,6 +223,8 @@ export function madridWithAddedRows(
           ["menu", menuId, offer.menuId],
           ["section", [[section]], offer.placements],
           ["image", product.image, offer.image],
+          ["variants", [], offer.variants],
+          ["offeredModifiers", [], offer.offeredModifiers],
         ];
         for (const [field, want, inOffer] of facts)
           if (stable(inOffer) !== stable(want))
@@ -227,7 +233,9 @@ export function madridWithAddedRows(
     }
     for (const offer of Object.values(stripped.offers ?? {}))
       if (declaredMenuOf.has(String(offer.productId)))
-        throw new Error(`Madrid declared offer in another menu: ${String(offer.productId)}`);
+        throw new Error(
+          `Madrid declared product offered outside its declared menu item: ${String(offer.productId)} in ${versionKey}`,
+        );
     if (inMenu.length === 0) continue;
     if (stable(stripped) !== stable(version.document))
       throw new Error(`Madrid published document changed beyond the addition: ${versionKey}`);

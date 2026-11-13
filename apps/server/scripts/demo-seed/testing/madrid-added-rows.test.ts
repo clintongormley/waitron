@@ -124,6 +124,8 @@ const colaOffer = {
   unitPrice: "1.80",
   pricingUnit: "each",
   vatClass: "general",
+  variants: [] as Record<string, unknown>[],
+  offeredModifiers: [] as Record<string, unknown>[],
 };
 const drinksNames = { en: "Drinks", es: "Bebidas" };
 const seededDeli = {
@@ -336,6 +338,13 @@ it.each([
     },
     /declared addition missing: category_details \["@categories:\[\\"Drinks\\"\]"\]/,
   ],
+  [
+    "other names on the seeded section row",
+    (seeded: CanonicalMadridSemantics) => {
+      seeded.tables.sections!.rows[drinks]!.names = { en: "Drinks", es: "Refrescos" };
+    },
+    /declared section names differ: Drinks/,
+  ],
 ])("refuses %s", (_, edit, message) => {
   expect(() => madridWithAddedRows(original, seededWith(edit), [declared])).toThrow(message);
 });
@@ -404,6 +413,78 @@ it.each([
     }),
     /declared menu differs: cola.webp/,
   ],
+  [
+    "with the declared offer at another name",
+    deliWith((deli) => {
+      deli.offers[colaItem]!.name = "Coke";
+    }),
+    /declared name differs: cola.webp/,
+  ],
+  [
+    "with the declared offer at another customer name",
+    deliWith((deli) => {
+      deli.offers[colaItem]!.customerName = { en: "Cola can", es: "Cola" };
+    }),
+    /declared customerName differs: cola.webp/,
+  ],
+  [
+    "with the declared offer at another kitchen name",
+    deliWith((deli) => {
+      deli.offers[colaItem]!.kitchenName = "COLA";
+    }),
+    /declared kitchenName differs: cola.webp/,
+  ],
+  [
+    "with the declared offer at another VAT class",
+    deliWith((deli) => {
+      deli.offers[colaItem]!.vatClass = "reduced";
+    }),
+    /declared vatClass differs: cola.webp/,
+  ],
+  [
+    "with the declared offer at another price",
+    deliWith((deli) => {
+      deli.offers[colaItem]!.unitPrice = "1.60";
+    }),
+    /declared unitPrice differs: cola.webp/,
+  ],
+  [
+    "with the declared offer at another pricing unit",
+    deliWith((deli) => {
+      deli.offers[colaItem]!.pricingUnit = "weight";
+    }),
+    /declared pricingUnit differs: cola.webp/,
+  ],
+  [
+    "with the declared offer at another image",
+    deliWith((deli) => {
+      deli.offers[colaItem]!.image = "tonic.webp";
+    }),
+    /declared image differs: cola.webp/,
+  ],
+  [
+    "with the declared offer at a variant at another VAT class",
+    deliWith((deli) => {
+      deli.offers[colaItem]!.variants = [
+        { id: "large", name: "Large", unitPrice: "2.50", vatClass: "reduced" },
+      ];
+    }),
+    /declared variants differs: cola.webp/,
+  ],
+  [
+    "with the declared offer at an offered modifier",
+    deliWith((deli) => {
+      deli.offers[colaItem]!.offeredModifiers = [{ kind: "options", listId: "ice", labels: [] }];
+    }),
+    /declared offeredModifiers differs: cola.webp/,
+  ],
+  [
+    "with a declared product offered twice",
+    deliWith((deli) => {
+      deli.offers[`@menu_items:${stable([menu, cola, 2])}`] = { ...colaOffer };
+    }),
+    /declared product offered outside its declared menu item: @products:\["cola.webp"\] in @menu_versions:.*Deli/,
+  ],
 ])("refuses a deli document %s", (_, deli, message) => {
   expect(() => madridWithAddedRows(original, seededWith(undefined, deli), [declared])).toThrow(
     message,
@@ -415,7 +496,7 @@ it("refuses a declared offer published in another menu", () => {
     [`@menu_items:${stable([casa, cola])}`]: { ...colaOffer, menuId: casa },
   });
   expect(() => madridWithAddedRows(original, seeded, [declared])).toThrow(
-    /declared offer in another menu: @products:\["cola.webp"\]/,
+    /declared product offered outside its declared menu item: @products:\["cola.webp"\] in @menu_versions:.*Casa/,
   );
 });
 
@@ -463,6 +544,7 @@ it.each([
     { names: { en: "Drinks", es: "Refrescos" } },
     /declared section names differ: Drinks/,
   ],
+  ["menu", { menu: "Bar" }, /menu has no single root: Bar/],
 ])("refuses wrong declared %s", (_, change, message) => {
   expect(() => madridWithAddedRows(original, seededWith(), [{ ...declared, ...change }])).toThrow(
     message,
