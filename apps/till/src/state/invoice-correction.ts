@@ -152,9 +152,18 @@ export class InvoiceCorrectionSession {
     return this.#read(this.#key("open", saleId));
   }
 
-  /** Drops the saved Open of `saleId` once the correction it may have opened has been found. */
+  /** Drops the saved Open of `saleId` once the correction it may have opened has been found; never
+   * while a request is on its way, whose own answer removes its id. */
   forgetOpen(saleId: string): void {
-    this.#forget(this.#key("open", saleId));
+    if (this.#busy) return;
+    const key = this.#key("open", saleId);
+    let held: string | undefined;
+    try {
+      held = this.#read(key)?.submissionId;
+    } catch {
+      return;
+    }
+    if (held !== undefined) this.#forget(key, held);
   }
 
   savedCash(correctionId: string): Saved<{ amount: string }> | null {
