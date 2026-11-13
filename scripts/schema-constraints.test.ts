@@ -596,6 +596,7 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "zone_days_weekday_ck",
   "zone_day_ranges_kind_ck",
   "zone_day_ranges_step_ck",
+  "declaraciones_responsables_version_ck",
   "deployment_environment_ck",
   "deployment_singleton_ck",
   "drawer_opens_reason_ck",
