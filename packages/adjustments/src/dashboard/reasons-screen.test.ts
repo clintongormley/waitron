@@ -1689,6 +1689,11 @@ describe("the editor's messages", () => {
     expect(besideField(el, "maxPercent")).toBe("");
     expect(await bottom(el)).toBe("");
     expect(button(el, "save-editor").disabled).toBe(false);
+    await press(el, "save-editor");
+    expect(besideField(el, "maxPercent")).toBe(
+      "Enter a percentage from 0 to 100, with at most two decimals.",
+    );
+    expect(await bottom(el)).toBe(FIX_FIELDS);
   });
 
   it("marks every name in the languages when the server refuses the names", async () => {
@@ -2285,6 +2290,9 @@ describe("the bill comp limit", () => {
       await type(el, "maxBillComp", "25");
       expect(besideField(el, named)).toBe("");
       expect(limitBottom(el)).toBe("");
+      await press(el, "save-limit");
+      expect(besideField(el, named)).toBe(message);
+      expect(limitBottom(el)).toBe(FIX_FIELDS);
     },
   );
 

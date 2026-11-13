@@ -311,7 +311,6 @@ export class AdjustmentReasonsScreen extends LitElement {
   @state() private editor?: Editor;
   @state() private draft?: Draft;
   readonly #reasonFeedback = new FormFeedback(this);
-  /** The server's refusal of a field, until the operator changes that field or saves again. */
   @state() private refusedFields: FieldErrors = {};
   /** A refusal that names no field the form shows, until the operator saves again. */
   @state() private editorError?: string;
@@ -322,7 +321,6 @@ export class AdjustmentReasonsScreen extends LitElement {
    * limit without replacing a value being typed. */
   @state() private limitDraft?: LimitDraft;
   readonly #limitFeedback = new FormFeedback(this);
-  /** The field the server refused, until the operator changes it or saves again. */
   @state() private limitRefused?: LimitField;
   /** A refusal that names no field, until the operator saves again. */
   @state() private limitError?: string;
@@ -665,9 +663,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #edit(patch: Partial<Draft>, editor: Editor): void {
     if (this.editor !== editor || !this.isConnected) return;
     this.draft = { ...this.draft!, ...patch };
-    const refused = { ...this.refusedFields };
-    for (const key of Object.keys(patch)) delete refused[key as Field];
-    this.refusedFields = refused;
+    this.#reasonFeedback.dismiss(...Object.keys(patch));
     this.#reasonScope?.changed();
   }
 
@@ -721,6 +717,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #refused(error: unknown): void {
+    this.#reasonFeedback.newRefusal();
     const code = codeOf(error);
     const params = (
       error as { params?: { field?: unknown; withNote?: unknown; maxLength?: unknown } }
@@ -948,7 +945,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     if (this.limitDraft === undefined) this.#limitRevision = this.settings!.revision;
     this.limitDraft = { ...this.#limitValue(), ...patch };
     this.#limitScope?.changed();
-    if (this.limitRefused === field) this.limitRefused = undefined;
+    this.#limitFeedback.dismiss(field);
     this.limitSaved = false;
   }
 
@@ -978,6 +975,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       });
     } catch (error) {
       if (generation !== this.#limitGeneration || !this.isConnected) return;
+      this.#limitFeedback.newRefusal();
       const field = (error as { params?: { field?: unknown } }).params?.field;
       if (
         codeOf(error) === "management.request_invalid" &&
@@ -1026,10 +1024,10 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   #limitForm() {
     const own = this.#limitFeedback.attempted ? this.#limitCheck() : {};
-    const errors: LimitErrors = { ...own };
-    if (this.limitRefused && !errors[this.limitRefused]) {
-      errors[this.limitRefused] = t(LIMIT_MESSAGES[this.limitRefused]);
-    }
+    const refused = this.#limitFeedback.remaining(
+      this.limitRefused ? { [this.limitRefused]: t(LIMIT_MESSAGES[this.limitRefused]) } : {},
+    );
+    const errors: LimitErrors = { ...refused, ...own };
     const value = this.#limitValue();
     const bottom = bottomMessage(
       this.limitError ?? null,
@@ -1373,7 +1371,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     if (editor === undefined) return nothing;
     const heading = t(editor.reason ? "adjustments.edit_heading" : "adjustments.new");
     const checked = this.#reasonFeedback.attempted ? this.#check() : {};
-    const errors = { ...this.refusedFields, ...checked };
+    const errors = { ...this.#reasonFeedback.remaining(this.refusedFields), ...checked };
     const invalid = Object.keys(checked).length > 0;
     const bottom = bottomMessage(
       this.editorError ?? null,
