@@ -60,6 +60,8 @@ const strings = {
     ...clockWaitStrings.en,
     ...checkVenueStrings.en,
     place: "Place",
+    confirmWhyProceed:
+      "The server could not check its time over the internet. Check that both times below are right before you press Proceed.",
     seriesLine:
       "When you press Proceed, Waitron creates this box's invoice series. The invoice series is the code at the start of every invoice number: for example, in A-0CSQW/1 the series is A-0CSQW.",
     secondClockDo:
@@ -80,6 +82,8 @@ const strings = {
     ...clockWaitStrings.es,
     ...checkVenueStrings.es,
     place: "Lugar",
+    confirmWhyProceed:
+      "El servidor no ha podido comprobar su hora por internet. Comprueba que las dos horas de abajo son correctas antes de pulsar Continuar.",
     seriesLine:
       "Cuando pulses Continuar, Waitron creará las series de facturas de este servidor. La serie de facturas es el código al principio de cada número de factura: por ejemplo, en A-0CSQW/1 la serie es A-0CSQW.",
     secondClockDo:
@@ -268,7 +272,8 @@ export class FirstSetupHour extends LitElement {
     };
     return { api, context, current, send };
   }
-  async #run(automatic = false): Promise<void> {
+  /** `press`: Proceed, which confirms the times the step shows. */
+  async #run(automatic = false, press = false): Promise<void> {
     if (!this.api?.preparation || this.busy || this.#wait.result?.status === "selected") return;
     const { api, context, current, send } = this.#begin();
     const recorded = this.#recordedWait;
@@ -277,7 +282,7 @@ export class FirstSetupHour extends LitElement {
     // An automatic re-check leaves the current explanation up until its answer replaces it.
     if (!automatic) this.#wait.show();
     try {
-      const comparison = await readClocks(send);
+      const comparison = press ? await this.#wait.confirm(send) : await readClocks(send);
       this.comparison = comparison;
       const { clock } = comparison;
       if (clock.releaseBlocked || clock.rangeBlocked) return this.#wait.show();
@@ -286,14 +291,16 @@ export class FirstSetupHour extends LitElement {
       if (!this.#confirmed && !recorded) {
         this.#wait.show();
         if (!claimed || clock.disagreement) return;
+        this.#wait.toSelect(comparison);
         this.#wait.showPreview(await send({ action: "selection" }));
         this.#recordedWait = !this.#askedOrEdited && this.#wait.counting;
         return;
       }
-      if (claimed && clock.disagreement) return this.#wait.show({ kind: "disagreement" });
+      const select = claimed ? this.#wait.toSelect(comparison) : undefined;
+      if (claimed && !select) return;
       let result: unknown;
       this.#askedOrEdited = true;
-      if (claimed) result = await api.candidates({ comparisonId: comparison.id });
+      if (select) result = await api.candidates(select);
       else result = await api.request();
       if (!current()) return;
       if (!record(result)) throw new Error("invalid selection");
@@ -500,7 +507,7 @@ export class FirstSetupHour extends LitElement {
               @click=${() => {
                 if (this.busy) return;
                 if (action === "proceed") this.#confirmed = true;
-                void this.#run();
+                void this.#run(false, action === "proceed");
                 this.sending = this.busy ? action : undefined;
               }}
               >${t[action]}</wt-button
@@ -611,7 +618,7 @@ export class FirstSetupHour extends LitElement {
       >
       ${action === "proceed" && !sending ? html`<p data-test="series-line">${t.seriesLine}</p>` : nothing}
       ${this.#wait.renderProblem(
-        carrying ? t : { ...t, secondClockEnds: "" },
+        { ...t, confirmWhy: t.confirmWhyProceed, ...(carrying ? {} : { secondClockEnds: "" }) },
         clock,
         this.locale,
         venue.timeZone,

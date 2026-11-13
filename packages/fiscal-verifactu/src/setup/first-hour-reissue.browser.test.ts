@@ -151,7 +151,7 @@ it("offers explicit replacement after raw-key loss and delivers the new real PDF
   expect(decoded.document).not.toHaveProperty("installationCodes");
   expect(calls.filter((c) => c.action === "reissue")).toHaveLength(1);
   expect(calls.filter((c) => c.action === "select")).toEqual([
-    { action: "select", value: { comparisonId: "comparison" } },
+    { action: "select", value: { comparisonId: "comparison", confirmed: true } },
   ]);
   expect(calls.filter((c) => c.action === "input")).toEqual([{ action: "input", value: input }]);
   expect(calls.filter((c) => c.action === "keep")).toEqual([]);

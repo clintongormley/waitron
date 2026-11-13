@@ -17,6 +17,7 @@ for (const theme of ["light", "dark"] as const)
           await page.viewport(width, 2200);
           for (const state of [
             "review",
+            "confirm",
             "refused",
             "answered",
             "second-clock",
@@ -155,6 +156,7 @@ for (const theme of ["light", "dark"] as const)
               );
             };
             const marker = {
+              confirm: "clock-confirm",
               refused: "clock-refused",
               answered: "server-correct",
               "second-clock": "clock-wait",
@@ -168,7 +170,11 @@ for (const theme of ["light", "dark"] as const)
             await vi.waitFor(() =>
               expect(el.shadowRoot!.querySelector("[data-clock=read]")).not.toBeNull(),
             );
-            if (state !== "review") {
+            if (state === "confirm")
+              await vi.waitFor(() =>
+                expect(el.shadowRoot!.querySelector("[data-test=clock-confirm]")).not.toBeNull(),
+              );
+            else if (state !== "review") {
               await checked();
               await vi.waitFor(() =>
                 expect(

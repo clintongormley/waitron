@@ -2581,3 +2581,26 @@ it("a handover start sets the spare's clock from This device and carries on to t
     "select",
   ]);
 });
+it("when only this device agrees, Confirm the time compares again and selects with confirmed", async () => {
+  const { state, prepare } = scripted();
+  state.decision = {
+    ...clock,
+    usable: clock.usable.filter((r) => r.source !== "internet"),
+    unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
+  };
+  const { el } = await mount(prepare);
+  await ready(el);
+  await vi.waitFor(() =>
+    expect(button(el, "confirm-time").textContent?.trim()).toBe("Confirm the time"),
+  );
+  expect(detailRows(el, "clock-times")).toHaveLength(2);
+  expect(action(el)).toBeUndefined();
+  expect(selects(prepare)).toHaveLength(0);
+  await userEvent.click(button(el, "confirm-time"));
+  await vi.waitFor(() =>
+    expect(selects(prepare)).toEqual([
+      { action: "select", comparisonId: "comparison-2", confirmed: true },
+    ]),
+  );
+  await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+});

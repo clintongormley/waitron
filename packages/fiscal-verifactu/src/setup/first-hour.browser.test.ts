@@ -2371,10 +2371,7 @@ it("a long value wraps beside its label at phone width rather than overflowing",
     list.querySelector("dt")!.getBoundingClientRect().height * 1.5,
   );
 });
-it.each([
-  ["browser", "matches this device"],
-  ["internet", "matches the internet time"],
-] as const)(
+it.each([["internet", "matches the internet time"]] as [string, string][])(
   "when only the %s agrees, Check this venue shows no clock rows",
   async (source, words) => {
     const decision = {
@@ -2397,6 +2394,32 @@ it.each([
     expect(el.shadowRoot!.querySelector("wt-disclosure")).toBeNull();
   },
 );
+it("when only this device agrees, the step shows both times above Proceed, and Proceed confirms them", async () => {
+  const decision = {
+    ...clock,
+    usable: clock.usable.filter((r) => r.source !== "internet"),
+    unavailable: [{ source: "internet", result: "unavailable" as const, reason: "offline" }],
+  };
+  const { el, calls } = await mount({ decision });
+  await ready(el);
+  await vi.waitFor(() =>
+    expect(text(el)).toContain(
+      "The server could not check its time over the internet. Check that both times below are right before you press Proceed.",
+    ),
+  );
+  expect(detailRows(el, "clock-times")).toEqual([
+    ["Server time", "18 October 2026 at 14:30:00"],
+    ["This device", "18 October 2026 at 14:30:00"],
+  ]);
+  expect(el.shadowRoot!.querySelector("[data-test=confirm-time]")).toBeNull();
+  expect(actionsOf(calls)).not.toContain("candidates");
+  await proceed(el);
+  await vi.waitFor(() =>
+    expect(calls.filter((c) => c.action === "candidates").map((c) => c.value)).toEqual([
+      { comparisonId: "comparison-2", confirmed: true },
+    ]),
+  );
+});
 it.each(["en", "es"] as const)(
   "%s: clocks that differ show one time per clock, ask which is correct; The server and Both times are wrong send nothing",
   async (locale) => {
