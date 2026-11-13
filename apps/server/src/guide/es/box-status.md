@@ -315,7 +315,9 @@ internet ha confirmado la hora del servidor, un empleado ya no puede poner la ho
 Tras un arranque, el servidor no acepta cobros hasta que se confirma su hora. Los pedidos siguen
 llegando a cocina. La fila **Reloj** dice entonces **Esperando a que se conecten dispositivos y
 coincidan con la hora del servidor**, con la fecha y la hora del servidor, y la campana muestra un aviso
-que lo dice.
+que lo dice. El servidor también espera cuando su reloj salta más de un minuto, hacia delante o hacia
+atrás, mientras no se pone en hora por internet: la fila **Reloj** empieza entonces con **El reloj
+del servidor ha saltado**, y su hora se confirma de las mismas maneras.
 
 El servidor confirma su hora solo en cuanto llega a internet, o en cuanto dos cajas o terminales
 encendidos y conectados coinciden con su reloj, aunque estén en la pantalla de inicio de sesión.

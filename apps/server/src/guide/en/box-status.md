@@ -290,7 +290,10 @@ the internet has confirmed the box's time, a staff member can no longer set the 
 
 After a start, the box takes no payment until its time is confirmed. Orders still reach the kitchen.
 The **Clock** row then says **Waiting for devices to connect and agree with the box's time**, with
-the box's date and time, and the bell has an alert saying so.
+the box's date and time, and the bell has an alert saying so. The box also waits when its clock
+jumps by more than a minute, forwards or back, while it is not kept in time over the internet: the
+**Clock** row then starts with **The box's clock jumped**, and its time is confirmed in the same
+ways.
 
 The box confirms its time by itself as soon as it reaches the internet, or once two tills or
 handhelds that are switched on and connected agree with its clock, even at the sign-in screen.

@@ -51,8 +51,13 @@ Si no, usa **Comprobar la hora**: mantén la hora del servidor si es correcta, o
 dispositivo si lo es esa. La pantalla de inicio de sesión muestra las mismas palabras, sin
 **Comprobar la hora**: inicia sesión para usarlo.
 
+**Los cobros esperan: el reloj del servidor ha saltado y no puede comprobar la hora por internet.
+Esperando a que los dispositivos coincidan con su hora (0 de 2 por ahora) · Comprobar la hora** es
+rojo. El reloj del servidor se ha movido más de un minuto mientras no se ponía en hora por internet,
+así que los cobros esperan. Vuelven a funcionar de las mismas maneras.
+
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
-significa que el servidor arrancó con su hora en duda y no ha podido confirmarla por sí
+significa que la hora del servidor está en duda y no ha podido confirmarla por sí
 mismo. Termina cualquiera de las dos líneas rojas de la hora de arriba. Un cobro rechazado dice
 entonces que uses **Comprobar la hora** arriba de la pantalla. Pulsa **Comprobar la hora** para
 abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ahí. Puede usarlo

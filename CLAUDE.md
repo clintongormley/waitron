@@ -913,9 +913,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   missing tag is caught only once a higher version is declared.
 - **Nothing EXTERNAL may block a sale, though a start must have its time confirmed first — and a till
   needs the venue's PRIMARY.** AEAT, the card network and the internet are never on the sale path of
-  whichever node is primary, except that, on a box that files records, a start the internet cannot
-  confirm waits for two devices or a person to confirm its time before its first payment (owner,
-  2026-11-10): records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
+  whichever node is primary, except that, on a box that files records and whose time service is not
+  synchronised, a start or a clock jump of over a minute waits for two devices or a person to
+  confirm its time before the next payment (owner, 2026-11-10): records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
   inline. TODAY a venue has ONE node and no failover at all. Detail:
   [conventions-data.md](docs/developers/conventions-data.md).
@@ -948,6 +948,14 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   2026-11-10; "or on Box status" is the watcher's, 2026-11-10 and 2026-11-13, for the owner to confirm). Guards:
   `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-unconfirmed-gate.test.ts` and
   `apps/server/src/boot.start-clock-gate.test.ts`, weaker than the rule.
+  [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).
+- **While the box's internet time service is synchronised, the clock never stops a sale, whatever a
+  till's time, a jump or the latest record's time say** (owner, 2026-11-11 14:34: "we trust NTP over
+  everything else"). **When it is not synchronised, payments and records also wait after the clock
+  jumps by more than a minute against the box's steady clock, until the time is confirmed as at a
+  start** ("We only stop if we have reason to suspect that the time is wrong and we can't talk to
+  NTP"). Guards: `apps/server/src/clock-watch.start-up.test.ts` and
+  `apps/server/src/start-clock-check.test.ts`, weaker than the rule: named cases only.
   [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).
 - **A record's time is never compared with the latest record's: the start confirms the time, and
   once it is confirmed the box records with its clock however far a later sync moves it** (owner,
