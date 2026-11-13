@@ -81,17 +81,27 @@ export function main(argv, { selection, readFile, writeFile, stderr }) {
     stderr(`unknown package "${pkg}" — expected one of ${Object.keys(HEAVY_FILES).join(", ")}`);
     return 2;
   }
+  const selected = selection(pkg);
   const seconds = [];
   for (const path of reports) {
     const parsed = JSON.parse(readFile(path));
     try {
+      for (const target of parsed.config?.mutate ?? []) {
+        const file = target.replace(/:\d+-\d+$/, "");
+        if (file !== target && selected.includes(file) && !Object.hasOwn(HEAVY_FILES[pkg], file)) {
+          stderr(
+            `${file} is now mutated whole; ${path} holds only a line range; use reports from later runs; ${out} left unchanged`,
+          );
+          return 1;
+        }
+      }
       seconds.push(fileSecondsFromReport(parsed));
     } catch (error) {
       stderr(`malformed report ${path}: ${error.message}; ${out} left unchanged`);
       return 1;
     }
   }
-  const table = costTable(seconds, Object.keys(HEAVY_FILES[pkg]), selection(pkg));
+  const table = costTable(seconds, Object.keys(HEAVY_FILES[pkg]), selected);
   if (Object.keys(table).length === 0) {
     stderr(`no mutated files in the reports; ${out} left unchanged`);
     return 1;

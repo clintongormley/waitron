@@ -754,9 +754,8 @@ Four packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
 the target is 90 everywhere, and `packages/node-db` and `packages/handover` from their first commits. `packages/db`, `packages/ui` and `packages/ui-core` carry no `break` in
 their own configs, deliberately: CI splits each run into shards (thirteen for db, thirty for ui, four for
 ui-core), each passed its own `--mutate` list, so a `thresholds.break` there would gate one slice
-rather than the package. Their bars live in the `mutation-db-aggregate`, `mutation-ui-aggregate`
-and `mutation-ui-core-aggregate` jobs instead, each of which merges its package's shard reports and
-scores them once. ui held its bar in its own config from 2026-09-19 until A539 moved it to the
+rather than the package. Their bars live in the `aggregate` job of `.github/workflows/mutation-sharded.yml`,
+called once per package by `mutation.yml`. It merges that package's shard reports and scores them once. ui held its bar in its own config from 2026-09-19 until A539 moved it to the
 merged score, when one job stopped fitting its 185-minute limit; ui-core held its own from its
 extraction (#519, 2026-09-23) until A841 slice 1 added the theme derivation's mutants.
 
@@ -765,10 +764,10 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | package | what runs it | when a drop below 90 is seen |
 | --- | --- | --- |
 | `shared` | four `mutation-shared` shards and `mutation-shared-aggregate` in `.github/workflows/ci.yml` | a pull request whose resolved scope contains the package, or a full run; ordinary main pushes skip shared mutation |
-| `ui-core` | the sharded `mutation-ui-core` matrix plus `mutation-ui-core-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
-| `ui` | the sharded `mutation-ui` matrix plus `mutation-ui-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
+| `ui-core` | `mutation-ui-core` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the four shards — a branch that thins a UI test goes green and reddens the next night, and a LOCAL `pnpm --filter @waitron/ui-core mutation` prints a score and gates nothing |
+| `ui` | `mutation-ui` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirty shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/ui mutation` prints a score and gates nothing |
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
-| `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirteen shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
+| `db` | `mutation-db` in `.github/workflows/mutation.yml` calls the shared `mutation` matrix and `aggregate` jobs in `mutation-sharded.yml` | the nightly run, or a run started by hand that includes it, on the merged score of the thirteen shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 | `node-db` | the unsharded `mutation-node-db` job in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it; a LOCAL `pnpm --filter @waitron/node-db mutation` fails below 90 too, because the bar is in its own config |
 | `handover` | the unsharded `mutation-handover` job in `.github/workflows/mutation.yml` | the nightly run, or a run started by hand that includes it; a LOCAL `pnpm --filter @waitron/handover mutation` fails below 90 too, because the bar is in its own config |
 
@@ -781,13 +780,12 @@ is `src/english-only.ts`, whose only suite lives in the root vitest project and 
 `packages/db` imports, so every one of its mutants survives by construction. The receipt is `packages/db/stryker.config.json`'s `mutate` list;
 `scripts/mutation-shard.mjs` reads each sharded package's `mutate` list from that config rather than
 keeping its own copy, and `scripts/mutation-shard.test.mjs` names exactly the files db's selection
-leaves out. Nor do ui's and db's merged scores count every mutant: one whose
-span crosses a `HEAVY_FILES` range boundary is mutated by no shard — 2 in db and 26 in ui at the
-2026-10-12 splits, as counted by that day's Codex review by instrumenting each split file whole and
-by range. And `scripts/mutation-break-thresholds.test.mjs`, which pins which
-package holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for the sharded
-db, ui and ui-core bars and their shards' upload paths, so a step that reached the same command
-or path through a variable would be invisible to it. Shared's combined CI floor is checked from
+leaves out. UI still uses line ranges: a mutant spanning a `HEAVY_FILES` boundary belongs to no shard.
+The 2026-10-12 comparison counted 26 such ui mutants and two db mutants. Since 13 November,
+db mutates whole files, including `sales.ts`, instead of ranges. And `scripts/mutation-break-thresholds.test.mjs`, which pins which
+package holds which bar, is weaker than its name: it reads the local reusable workflow as TEXT for its literal floor and upload path,
+and the callers' block-style inputs through `scripts/mutation-workflow.mjs`. Other command
+wrappers, YAML forms and expressions remain outside this check. Shared's combined CI floor is checked from
 `ci.yml` by `scripts/ci-workflow.test.mjs`; the mutation-floor guard checks its local floor and
 imports its shard configuration. Neither guard runs Stryker to see a report written.
 
@@ -863,9 +861,11 @@ checks that it preserves the local mutation list and floor while disabling incre
 
 ### Mutation testing runs nightly at 05:00 UTC
 
-Nightly rather than Mondays only (owner, 2026-10-12). A run is a sharded matrix each for ui, db
-and ui-core, one aggregate job per matrix, and one unsharded job each for node-db and handover
-(`.github/workflows/mutation.yml`), after a short `select` job that decides which packages run (see
+Nightly rather than Mondays only (owner, 2026-10-12). The ui, db and ui-core callers in
+`mutation.yml` reuse one shard/aggregate pair in `mutation-sharded.yml`. Each caller supplies its
+package, shard list, browser flag and existing job limit; the aggregate derives its report count
+from the same list and retains the literal floor of 90. Node-db and handover run unsharded, after
+a short `select` job that decides which packages run (see
 rerunning by hand, below). The figures below were measured on 6–12 October, when a run was 43 jobs: ui's 30 shards, db's 10, ui-core as one job, and two aggregates. The account never ran more than 20 jobs at once from 6 to 12
 October except for one instant that read 21 (every job that held a runner, from
 `gh api 'repos/clintongormley/waitron/actions/runs?created=<day>&per_page=100' --paginate` and
@@ -999,7 +999,7 @@ largest mutation-eligible file in the package, about half as long again as
 find packages/db/src -name '*.ts' ! -name '*.test.ts' -exec wc -lc {} + | sort -k2 -nr | head
 ```
 
-That matters because `sales.ts` is db's single entry in `scripts/mutation-shard.mjs`'s `HEAVY_FILES`
+**Historical layout, superseded 2026-11-13:** `sales.ts` was db's single entry in `scripts/mutation-shard.mjs`'s `HEAVY_FILES`
 — the list of files split into line ranges so one file's cost spreads across several parallel jobs
 instead of dominating one — and the reason recorded beside it is that it "alone ran 186min while
 every other N=10 shard finished <=90min". Each range of a split file runs in a shard of its own,
@@ -1016,8 +1016,7 @@ list.
 
 ## db's mutation shards are packed by estimated cost
 
-`scripts/mutation-shard.mjs` packs `packages/db`'s whole files (every file but the `HEAVY_FILES`
-ranges) into the nightly `mutation-db` shards by `packages/db/mutation-costs.json`, a table of
+`scripts/mutation-shard.mjs` packs every `packages/db` file into thirteen nightly shards by `packages/db/mutation-costs.json`, a table of
 estimated mutation seconds per file. A file the table does not name is weighed by its bytes at the
 table's own seconds per byte. `ui`, `ui-core` and `shared` have no table and are still packed by
 bytes.
@@ -1071,16 +1070,25 @@ outcomes did not change between runs, so it had nothing to learn from.
 Same-file mutation time varies a lot from run to run (shard 4: 448 s and 768 s; shard 8: 1,170 and
 824), which is why the table takes each file's median over the reports given. Summing the table then
 built from both runs over each of those whole-file shards' files, the mutation phase measured in
-either run was 0.70 to 1.24 times the estimate, at most about 211 s off. The table now in the
-repository was built from nightly runs 43159064593 and 42963449689 and packs the ten whole-file
-shards at about 980 estimated seconds each. Nobody has yet compared those runs' measured mutation
-times with this table's estimates. If the worst ratio from runs 42356693258 and 42351739804 (1.24
-times the estimate) still held, a shard would spend about 1,215 s mutating; with the up to 166 s
-their jobs spent before mutating, that is about 23 minutes of its 25. At seven whole-file shards
+either run was 0.70 to 1.24 times the estimate, at most about 211 s off. The original table was built from nightly runs 43159064593 and 42963449689.
+Before the 13 November whole-file change it packed ten whole-file shards at about 980 estimated
+seconds each, alongside the three dedicated sales ranges. At seven whole-file shards
 (ten in all), dispatched run 42344158863 had whole-file shards 4, 8, 9 and 10 cancelled at the
 25-minute limit.
 
-**Refreshing the table.** When a db shard drifts towards its limit, after `packages/db` gains files
+**13 November whole-file packing.** The three dedicated `sales.ts` ranges are removed.
+Its cost entry is 397.2 seconds: each original table run's three range costs were summed, then
+the median of the two totals was rounded to one decimal. The six inputs are 70.2800, 160.6283
+and 101.4127 seconds in run 43159064593, and 58.9374, 218.9710 and 184.2398 in run 42963449689.
+These older range reports omit boundary-spanning mutants; their sum is a model input, not a
+measurement of a whole-file run. Every other committed cost-table entry remains unchanged.
+
+**Refreshing the table.** Use reports only from runs after this whole-file change. Earlier runs
+split `sales.ts` into three reports, and `costTable` no longer excludes it: feeding those reports
+would take the median of partial costs and understate the file's cost. The builder refuses a
+line-range report for a currently selected whole file, naming it and directing you to post-change
+reports; current UI ranges remain accepted. When a db shard drifts towards its limit, after
+`packages/db` gains files
 (a file the table does not name is weighed by its bytes), or after a change like A1309's that removes timed-out
 mutants:
 
@@ -2660,7 +2668,18 @@ mutation run `37267389722` did); a cancelled run does not. The window: ci.yml's 
 to 2026-10-08T09:03:33Z, read 2026-10-08; the other workflows' latest 30 runs; `mutation-db` only
 since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a different engine.
 
-The following measurements describe the October window above. Since 1 November 2026,
+Current sharded mutation limits are unchanged by the shared workflow:
+
+| caller in mutation.yml | job in mutation-sharded.yml | minutes |
+| --- | --- | --- |
+| mutation-ui-core | mutation | 25 |
+| mutation-ui | mutation | 50 |
+| mutation-db | mutation | 25 |
+| each selected caller | aggregate | 5 |
+
+The following measurements describe the October window above. Since 13 November, the three
+sharded mutation callers use `mutation-sharded.yml`'s `mutation` and `aggregate` jobs; the old
+job names in this table remain historical. Since 1 November 2026,
 [shared has four mutation shards and a five-minute score job](#shared-mutation-work-is-split-across-four-whole-file-shards);
 the `mutation-shared` row below records the earlier unsharded job.
 
@@ -4864,11 +4883,14 @@ The helper's entry in `ROOT_SCOPE_CONSUMERS` names every package whose merge job
 change to the helper selects those packages' jobs; the consumer guard recognises `test:merge` jobs
 as well as test shards.
 
-The mutation report downloads still use `actions/download-artifact`: the three in `mutation.yml`
-and, since 1 November 2026, shared's score job in `ci.yml`. The coverage helper accepts coverage
-blob names and writes their reports to one flat directory; the mutation score job instead counts
-separate report directories. Its bounded action retries remain. Replacing them is a separate
-[backlog item](../backlog.md).
+Mutation aggregates keep `actions/download-artifact`: one shared step in `mutation-sharded.yml`
+runs for each selected package, and shared retains its score job in `ci.yml`. The coverage helper
+accepts flat blob reports, while mutation scoring counts report directories. On 13 November the
+watcher cleared retaining the bounded action retries: fifteen aggregate downloads across runs
+42449385924, 42565346485, 42759951085, 42963449689, 43172917826 and 43384688636 all succeeded
+on their first attempt, as did the three in failed nightly 43369710774 and shared's download in
+CI 43350911465. API timestamps put them at zero to two seconds; this is a download observation,
+not a qualified performance comparison.
 
 The artifact-download cases in `scripts/ci-workflow.test.mjs` are weaker than their name: they
 read workflow text, never execute a workflow. They check the action and helper forms, matching

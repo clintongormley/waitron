@@ -194,13 +194,43 @@ describe("main", () => {
     const written = {};
     const errors = [];
     const status = main(argv, {
-      selection: (pkg) => (pkg === "db" ? selected : []),
+      selection: (pkg) => (["db", "ui"].includes(pkg) ? selected : []),
       readFile: (path) => files[path],
       writeFile: (path, text) => (written[path] = text),
       stderr: (line) => errors.push(line),
     });
     return { status, written, errors };
   };
+
+  it("refuses an old partial report for a file now selected whole without writing the table", () => {
+    const old = {
+      ...report({ "src/schema/sales.ts": [["Killed", 100]] }),
+      config: { mutate: ["src/schema/sales.ts:1-200"] },
+    };
+    const result = run(["db", "out.json", "old.json"], { "old.json": JSON.stringify(old) }, [
+      "src/schema/sales.ts",
+    ]);
+    expect(result.status).toBe(1);
+    expect(result.errors.join("\n")).toMatch(/src\/schema\/sales.ts.*use reports from later runs/);
+    expect(result.written).toEqual({});
+  });
+
+  it("keeps currently split UI reports usable alongside whole-file reports", () => {
+    const current = {
+      ...report({
+        "src/components/wt-combobox.ts": [["Killed", 100]],
+        "src/x.ts": [["Killed", 100]],
+      }),
+      config: { mutate: ["src/components/wt-combobox.ts:1-200", "src/x.ts"] },
+    };
+    const result = run(
+      ["ui", "out.json", "current.json"],
+      { "current.json": JSON.stringify(current) },
+      ["src/components/wt-combobox.ts", "src/x.ts"],
+    );
+    expect(result.status).toBe(0);
+    expect(Object.keys(JSON.parse(result.written["out.json"]))).toEqual(["src/x.ts"]);
+  });
 
   it("writes the package's table from every report it is given", () => {
     const one = JSON.stringify(report({ "src/x.ts": [["Killed", 100]] }));
@@ -219,9 +249,10 @@ describe("main", () => {
   });
 
   it("writes only the files the package's mutate selection holds", () => {
-    const one = JSON.stringify(
-      report({ "src/x.ts": [["Killed", 100]], "src/gone.ts": [["Killed", 100]] }),
-    );
+    const one = JSON.stringify({
+      ...report({ "src/x.ts": [["Killed", 100]], "src/gone.ts": [["Killed", 100]] }),
+      config: { mutate: ["src/x.ts", "src/gone.ts:1-200"] },
+    });
     const { status, written } = run(["db", "out.json", "one.json"], { "one.json": one });
     expect(status).toBe(0);
     expect(Object.keys(JSON.parse(written["out.json"]))).toEqual(["src/x.ts"]);

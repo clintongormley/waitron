@@ -301,26 +301,12 @@ never pushes with `--no-verify`"; the hook's hint (`.husky/pre-push`) says "agen
 sometimes drives and reads `CLAUDE.md`, so the docs may need "no agent". **Next action:** the owner
 decides whether the rule covers every agent, then the two docs follow.
 
-## The shard layout was measured against an engine that is gone
-
-The shard counts and their sizing arguments were all measured against PGlite. On SQLite, the
-nightly runs of 2026-10-31 to 2026-11-02 (41171151689, 41275572381, 41392057587) show
-`packages/db`'s three `src/schema/sales.ts` ranges, each in a shard of its own because of
-`HEAVY_FILES`, taking 29 to 164 s of mutation work, while the other seven shards took 270 to
-1,258 s. The whole-file shards are now packed by estimated cost (about 980 s each of ten, by the model in
-[ci-and-gates.md](../developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost)).
-**Next action:** drop `sales.ts` from `HEAVY_FILES.db` and let the cost table place it, so every
-shard shares the work; check a nightly run afterwards. The `ui` and `ui-core` splits have not been
-re-measured.
-
-
-
 ## `packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests
 
 It is test-only plumbing
 the Vitest config loads — the same class as `src/test-helpers.ts`, `src/a11y-helpers.ts` and
 `src/icon-button-test-helpers.ts`, which `packages/ui/stryker.config.json` excludes from `mutate`.
-Adding it to those exclusions is the consistent move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
+Adding it to those exclusions is the consistent move and also shrinks the denominator the ui caller’s aggregate bar of 90 in `mutation-sharded.yml` is measured against.
 Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position:
 in `packages/ui`'s coverage and `mutate` lists, loaded only by `packages/venue-service`'s Vitest
 config, so no ui test reaches it. Excluding it also needs a change to the exclusion list
@@ -593,19 +579,6 @@ A1424's live qualification was added on 7 November 2026.
   `line.length <= columnsFor(...)` holds even when a line was cut off. Assert each row's whole
   text instead, as the F1 heading-and-date case in that file does.
 
-## Bundle: The nightly mutation run: downloads, shard layout and repeated jobs
-
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The mutation report downloads still use `actions/download-artifact`** (left open by
-  A1216; shared added by A1272). Measure the mutation downloads before replacing their bounded
-  action retries.
-  [Detail](ci.md#the-mutation-report-downloads-still-use-actionsdownload-artifact).
-- **The shard layout was measured against an engine that is gone** — OPEN.
-  [Detail](ci.md#the-shard-layout-was-measured-against-an-engine-that-is-gone).
-- **`mutation.yml` repeats one shard-and-merge job pair three times** — OPEN.
-  [Detail](ci.md#mutationyml-repeats-one-shard-and-merge-job-pair-three-times).
-
 ## Bundle: apps/server's test speed: restart tests, measured speed-ups, fixed PINs
 
 3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -660,7 +633,7 @@ A1424's live qualification was added on 7 November 2026.
   [Detail](ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
 - **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests** — left behind by raising
   the `packages/ui` mutation score (#466, 2026-09-20). Adding it to the test-helper exclusions is the consistent
-  move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
+  move and also shrinks the denominator the ui caller’s aggregate bar of 90 in `mutation-sharded.yml` is measured against.
   Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
 
 ## Bundle: Tests that close a dialog and check too soon, and pressEscape
@@ -1243,15 +1216,6 @@ runs when a module loads (322 `Ignored` on run 38256003987, 229 of them in
 would cost has not been timed. Owner's call.
 
 
-## `mutation.yml` repeats one shard-and-merge job pair three times
-
-Left open by A841 slice 1, #1927.
-`mutation-ui-core`, `mutation-ui` and `mutation-db` each have their own copied
-shard job and `-aggregate` job; one reusable workflow would hold them. The root mutation guards
-also repeat the list of sharded packages. Do it on its own branch.
-[Detail](#packagesuisrcvitest-park-pointerts-is-mutated-and-has-no-tests)
-
-
 ## Loose ends left by SQLite slice 1 (#490 and the preparation tasks)
 
 - Every `maxWorkers: 1` config whose comment gives the coverage reason, apart from `payments`,
@@ -1552,15 +1516,6 @@ action. Since A1216 the merge runs `scripts/download-coverage-blobs.mjs`, which 
 highest-id copy of each report name. Check on a throwaway branch (fail one shard on purpose,
 re-run it, read which artifact id the helper downloads) that the highest id is the re-run's. If
 it is, delete this entry; if not, make the helper keep the re-run's copy.
-
-## The mutation report downloads still use `actions/download-artifact`
-
-Left open by A1216; shared added by A1272. `mutation-ui-core-aggregate`, `mutation-ui-aggregate`,
-`mutation-db-aggregate` and CI's `mutation-shared-aggregate` fetch
-`mutation-report-*-shard-*` directories. The coverage downloader accepts only coverage blob
-names and writes one flat directory, while the mutation aggregate counts report directories.
-Measure the mutation downloads before replacing their bounded action retries.
-[Receipt](../developers/ci-and-gates.md#a-completed-transfer-can-still-leave-the-download-action-alive).
 
 ## A1307 follow-up: the file-progress reporter's tests set up a page with two near-copies of one helper
 

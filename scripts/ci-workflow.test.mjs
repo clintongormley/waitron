@@ -14,6 +14,7 @@ import { join, resolve } from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
 import { runInNewContext } from "node:vm";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { mutationCallers } from "./mutation-workflow.mjs";
 import {
   LIGHT_A_PACKAGES,
   LIGHT_B_PACKAGES,
@@ -3221,73 +3222,62 @@ describe("the test shards", () => {
     );
   });
 
-  // Nightly and by hand (owner, 2026-10-12). Weaker than its name: it reads mutation.yml as TEXT.
-  it("runs mutation checks for ui, ui-core, db, node-db and handover every night and by hand", () => {
+  it("runs the nightly mutation packages through one bounded shard and score workflow", () => {
     const workflow = readFileSync(join(repoRoot, ".github/workflows/mutation.yml"), "utf8");
     expect(workflowTriggers(workflow).sort()).toEqual(["schedule", "workflow_dispatch"]);
     const crons = [...workflow.matchAll(/^ {4}- cron: "([^"]*)"/gm)].map((match) => match[1]);
-    expect(crons.length, "no cron line in mutation.yml").toBeGreaterThan(0);
-    for (const cron of crons) expect(cron, "a cron that skips a day").toMatch(/^\d+ \d+ \* \* \*$/);
-    // One job's text: from its `  <id>:` line to the next line at that indent (a job or its comment).
-    const section = (id) => {
-      const start = workflow.indexOf(`\n  ${id}:\n`);
-      expect(start, `no \`${id}\` job in mutation.yml`).toBeGreaterThan(-1);
-      const rest = workflow.slice(start + 1);
-      const end = rest.slice(1).search(/\n {2}\S/);
-      return end === -1 ? rest : rest.slice(0, end + 1);
-    };
-    const lines = (text) => text.split("\n").map((line) => line.trim());
-
-    expect(workflow, "the unsharded `mutation` matrix is back").not.toContain("\n  mutation:\n");
-    const uiCore = section("mutation-ui-core");
-    expect(uiCore).toMatch(/shard: \[1(, \d+)*\]/);
-    expect(uiCore).toContain("fail-fast: false");
-    expect(uiCore).toContain("pnpm --filter @waitron/ui-core exec playwright install chromium");
-    expect(lines(uiCore)).toContain(
-      'FILES=$(node scripts/mutation-shard.mjs ui-core "$SHARD" "$TOTAL")',
+    expect(crons.length).toBeGreaterThan(0);
+    for (const cron of crons) expect(cron).toMatch(/^\d+ \d+ \* \* \*$/);
+    const callers = mutationCallers(workflow);
+    expect(callers.map((caller) => caller.package).sort()).toEqual(["db", "ui", "ui-core"]);
+    for (const [pkg, total, browser, minutes] of [
+      ["db", 13, false, 25],
+      ["ui", 30, true, 50],
+      ["ui-core", 4, true, 25],
+    ]) {
+      const caller = callers.find((candidate) => candidate.package === pkg);
+      expect(caller.shards).toEqual(Array.from({ length: total }, (_, i) => i + 1));
+      expect(caller.browser).toBe(browser);
+      expect(caller.minutes).toBe(minutes);
+    }
+    for (const pkg of ["node-db", "handover"])
+      expect(workflow).toContain("- run: pnpm --filter @waitron/" + pkg + " mutation");
+    const common = readFileSync(join(repoRoot, ".github/workflows/mutation-sharded.yml"), "utf8");
+    expect(common).toContain("shard: ${{ fromJSON(inputs.shards) }}");
+    expect(common).toContain("fail-fast: false");
+    expect(common).toContain("PACKAGE: ${{ inputs.package }}");
+    expect(common).toContain("SHARDS: ${{ inputs.shards }}");
+    expect(common).toContain(
+      'FILES=$(node scripts/mutation-shard.mjs "$PACKAGE" "$SHARD" "$TOTAL")',
     );
-    expect(lines(uiCore)).toContain(
-      'pnpm --filter @waitron/ui-core exec stryker run --mutate "$FILES"',
+    expect(common).toContain('if [ -z "$FILES" ]; then');
+    expect(common).toContain(
+      'pnpm --filter "@waitron/$PACKAGE" exec stryker run --mutate "$FILES"',
     );
-    expect(uiCore).toContain("name: mutation-report-ui-core-shard-${{ matrix.shard }}");
-    expect(uiCore).toContain("path: packages/ui-core/reports/mutation/");
-    const uiCoreAggregate = section("mutation-ui-core-aggregate");
-    expect(uiCoreAggregate).toContain("needs: mutation-ui-core");
-    expect(uiCoreAggregate).toContain("if: always()");
-    expect(uiCoreAggregate).toContain("pattern: mutation-report-ui-core-shard-*");
-
-    const ui = section("mutation-ui");
-    expect(ui).toMatch(/shard: \[1(, \d+)*\]/);
-    expect(ui).toContain("fail-fast: false");
-    expect(ui).toContain("pnpm --filter @waitron/ui exec playwright install chromium");
-    expect(lines(ui)).toContain('FILES=$(node scripts/mutation-shard.mjs ui "$SHARD" "$TOTAL")');
-    expect(lines(ui)).toContain('pnpm --filter @waitron/ui exec stryker run --mutate "$FILES"');
-    expect(ui).toContain("name: mutation-report-ui-shard-${{ matrix.shard }}");
-    expect(ui).toContain("path: packages/ui/reports/mutation/");
-
-    const aggregate = section("mutation-ui-aggregate");
-    expect(aggregate).toContain("needs: mutation-ui");
-    expect(aggregate).toContain("if: always()");
-    expect(aggregate).toContain("pattern: mutation-report-ui-shard-*");
-
-    const db = section("mutation-db");
-    expect(db).toMatch(/shard: \[1(, \d+)*\]/);
-    expect(db).toContain("fail-fast: false");
-    expect(lines(db)).toContain('FILES=$(node scripts/mutation-shard.mjs db "$SHARD" "$TOTAL")');
-    expect(lines(db)).toContain('pnpm --filter @waitron/db exec stryker run --mutate "$FILES"');
-    expect(db).toContain("name: mutation-report-db-shard-${{ matrix.shard }}");
-    expect(db).toContain("path: packages/db/reports/mutation/");
-    const dbAggregate = section("mutation-db-aggregate");
-    expect(dbAggregate).toContain("needs: mutation-db");
-    expect(dbAggregate).toContain("if: always()");
-    expect(dbAggregate).toContain("pattern: mutation-report-db-shard-*");
-
-    expect(lines(section("mutation-node-db"))).toContain(
-      "- run: pnpm --filter @waitron/node-db mutation",
+    expect(common).toContain(
+      "name: mutation-report-${{ inputs.package }}-shard-${{ matrix.shard }}",
     );
-    expect(lines(section("mutation-handover"))).toContain(
-      "- run: pnpm --filter @waitron/handover mutation",
+    expect(common).toContain("path: packages/${{ inputs.package }}/reports/mutation/");
+    expect(common).toContain("pattern: mutation-report-${{ inputs.package }}-shard-*");
+    const aggregate = jobBlocks(common).find((job) => job.id === "aggregate");
+    expect(aggregate.lines).toContain("    needs: mutation");
+    expect(aggregate.lines).toContain("    if: always()");
+    const steps = workflowSteps(common);
+    for (const name of [
+      "Resolve installed Playwright version",
+      "Cache Playwright browsers",
+      "Install Chromium",
+    ])
+      expect(steps.find((step) => step.step === name).if).toBe("inputs.browser");
+    expect(common).toContain('pnpm --filter "@waitron/$PACKAGE" exec playwright install chromium');
+    const score = steps.find((step) => step.step === "Score the package");
+    expect(score.command.split("\n").map((line) => line.trim())).toContain(
+      `TOTAL=$(node -e 'console.log(JSON.parse(process.env.SHARDS).length)')`,
     );
+    expect(score.command).toContain(
+      'node scripts/mutation-aggregate.mjs mutation-reports --package "$PACKAGE" --shards "$TOTAL" --break 90',
+    );
+    for (const step of steps) expect(step.command).not.toContain("${{ inputs.package }}");
   });
 
   // A1428: a hand-started run can name the packages to mutate. Weaker than its name for the job
@@ -3426,14 +3416,6 @@ describe("the test shards", () => {
           .map((line) => line.trimEnd());
         expect(jobs).toContain("    needs: select");
         expect(jobs).toContain(`    if: needs.select.outputs.${key} == 'true'`);
-        if (name === "node-db" || name === "handover") return;
-        const aggregate = section(`mutation-${name}-aggregate`)
-          .split("\n")
-          .map((line) => line.trimEnd());
-        expect(aggregate).toContain(`    needs: mutation-${name}`);
-        expect(aggregate).toContain(
-          `    if: always() && needs.mutation-${name}.result != 'skipped'`,
-        );
       },
     );
 
@@ -4721,6 +4703,14 @@ const workflowFiles = readdirSync(workflowsDir)
   .filter((name) => /\.ya?ml$/.test(name))
   .sort();
 
+function workflowTexts(name) {
+  const text = readFileSync(join(workflowsDir, name), "utf8");
+  if (name !== "mutation-sharded.yml") return [text];
+  const callers = mutationCallers(readFileSync(join(workflowsDir, "mutation.yml"), "utf8"));
+  expect(callers.length).toBeGreaterThan(0);
+  return callers.map(({ minutes }) => text.replaceAll("${{ inputs.minutes }}", String(minutes)));
+}
+
 describe("the workflow step reader", () => {
   it("reads a step's id, condition, action, settings, environment and inputs", () => {
     const text =
@@ -4829,8 +4819,8 @@ describe("the workflows' token permissions", () => {
  * containing the call"; a called workflow in this repository's .github/workflows/ is read here like
  * any other, and one in another repository is not read at all.
  * Weaker than its name: it reads TEXT by indent, so a flow-style job, or a `timeout-minutes`
- * written as an expression, is reported as unbounded, and it does not judge whether the number is
- * a sensible one.
+ * written as an unsupported expression, is reported as unbounded. The local mutation workflow
+ * is checked for each caller’s literal minutes; this does not judge whether a limit is sensible.
  */
 describe("the workflows' job time limits", () => {
   const workflow = (jobs) => `on: push\njobs:\n${jobs}`;
@@ -4870,11 +4860,11 @@ describe("the workflows' job time limits", () => {
   });
 
   it("give every job a time limit", () => {
-    const unbounded = workflowFiles.flatMap((name) =>
-      jobsWithoutTimeout(readFileSync(join(workflowsDir, name), "utf8")).map(
-        (job) => `${name}: ${job}`,
-      ),
-    );
+    const unbounded = workflowFiles.flatMap((name) => {
+      return workflowTexts(name).flatMap((candidate) =>
+        jobsWithoutTimeout(candidate).map((job) => `${name}: ${job}`),
+      );
+    });
     expect(
       unbounded,
       "give each job `timeout-minutes:` at four-space indent, set from its measured durations",
@@ -6021,16 +6011,18 @@ describe("the workflows' artifact downloads", () => {
 
   it("leaves job time outside both download attempts and cleanup", () => {
     const found = workflowFiles.flatMap((name) =>
-      jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) => {
-        const steps = workflowSteps(lines.join("\n"));
-        const at = steps.findIndex(isArtifactDownload);
-        if (at === -1) return [];
-        const downloadBudget = steps
-          .slice(at, at + 3)
-          .reduce((sum, step) => sum + Number(step.timeoutMinutes), 0);
-        const jobBudget = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(lines.join("\n"))?.[1]);
-        return [{ workflow: name, job: id, fits: jobBudget > downloadBudget }];
-      }),
+      workflowTexts(name)
+        .flatMap((text) => jobBlocks(text))
+        .flatMap(({ id, lines }) => {
+          const steps = workflowSteps(lines.join("\n"));
+          const at = steps.findIndex(isArtifactDownload);
+          if (at === -1) return [];
+          const downloadBudget = steps
+            .slice(at, at + 3)
+            .reduce((sum, step) => sum + Number(step.timeoutMinutes), 0);
+          const jobBudget = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(lines.join("\n"))?.[1]);
+          return [{ workflow: name, job: id, fits: jobBudget > downloadBudget }];
+        }),
     );
     expect(found.length).toBeGreaterThan(0);
     expect(found.filter((entry) => !entry.fits)).toEqual([]);
@@ -6212,15 +6204,17 @@ describe("the workflows' artifact uploads", () => {
 
   it("leaves job time outside all upload attempts", () => {
     const found = workflowFiles.flatMap((name) =>
-      jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) => {
-        const uploads = workflowSteps(lines.join("\n")).filter((step) =>
-          step.uses?.startsWith("actions/upload-artifact@"),
-        );
-        if (uploads.length === 0) return [];
-        const budget = uploads.reduce((sum, step) => sum + Number(step.timeoutMinutes), 0);
-        const jobBudget = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(lines.join("\n"))?.[1]);
-        return [{ workflow: name, job: id, fits: jobBudget > budget }];
-      }),
+      workflowTexts(name)
+        .flatMap((text) => jobBlocks(text))
+        .flatMap(({ id, lines }) => {
+          const uploads = workflowSteps(lines.join("\n")).filter((step) =>
+            step.uses?.startsWith("actions/upload-artifact@"),
+          );
+          if (uploads.length === 0) return [];
+          const budget = uploads.reduce((sum, step) => sum + Number(step.timeoutMinutes), 0);
+          const jobBudget = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(lines.join("\n"))?.[1]);
+          return [{ workflow: name, job: id, fits: jobBudget > budget }];
+        }),
     );
     expect(found.length).toBeGreaterThan(0);
     expect(found.filter((entry) => !entry.fits)).toEqual([]);
@@ -6241,12 +6235,14 @@ describe("the workflows' artifact uploads", () => {
 // Weaker than its name: reads literal steps, not hosted execution, YAML validity or duplicate ids.
 describe("the workflows' Node setups", () => {
   const sites = workflowFiles.flatMap((name) =>
-    jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) => {
-      const steps = workflowSteps(lines.join("\n"));
-      return steps.some((step) => step.uses?.startsWith("actions/setup-node@"))
-        ? [{ name, id, steps }]
-        : [];
-    }),
+    workflowTexts(name)
+      .flatMap((text) => jobBlocks(text))
+      .flatMap(({ id, lines }) => {
+        const steps = workflowSteps(lines.join("\n"));
+        return steps.some((step) => step.uses?.startsWith("actions/setup-node@"))
+          ? [{ name, id, steps }]
+          : [];
+      }),
   );
 
   it("finds Node setup sites to check", () => {

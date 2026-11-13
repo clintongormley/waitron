@@ -117,6 +117,7 @@
   "src/schema/recovery-packs.ts": 15.2,
   "src/schema/sale-receipt-guests.ts": 24.3,
   "src/schema/sale-voids.ts": 26.2,
+  "src/schema/sales.ts": 397.2,
   "src/schema/series.ts": 41.1,
   "src/schema/settings.ts": 35.3,
   "src/schema/station-printers.ts": 24.8,
