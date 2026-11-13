@@ -32,7 +32,7 @@ useVenueDb({
     await inTx(venue, async (tx) => {
       await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
       const [manager] = await seedPersons(tx, {
-        displayName: "Marta",
+        displayName: "Martha",
         pinHash: hashPin("4444"),
         role: "manager",
       });
@@ -173,7 +173,7 @@ describe("dashboard invoice PDF download", () => {
     const after = await rowCounts();
     expect(after).toEqual({ ...before, invoice_pdf_downloads: before.invoice_pdf_downloads! + 1 });
     const [manager] = await inTx(venue, (tx) =>
-      tx.select({ id: persons.id }).from(persons).where(eq(persons.displayName, "Marta")),
+      tx.select({ id: persons.id }).from(persons).where(eq(persons.displayName, "Martha")),
     );
     expect(await downloadsOf(saleId)).toEqual([
       expect.objectContaining({ saleId, personId: manager!.id }),
