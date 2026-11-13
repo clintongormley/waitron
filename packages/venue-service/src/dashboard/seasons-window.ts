@@ -4,7 +4,8 @@ import { repeat } from "lit/directives/repeat.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
+  bottomMessage,
   saveActionState,
   submitOnEnter,
   visuallyHiddenStyles,
@@ -195,7 +196,7 @@ export class SeasonsWindow extends LitElement {
   /** Replaced whole on every change, so a restore can swap it while keeping the live `next`. */
   @state() private draft?: SeasonDraft;
   private baseline?: SeasonDraft;
-  @state() private attempted = false;
+  private readonly feedback = new FormFeedback(this);
   /** A refusal with the row keys of the request it answered, in the order of its `save` entries. */
   @state() private refusal?: { refusal: Refusal; keys: readonly string[] };
   /** Each binned season's delete impact, by id; `token` is the newest read's, and only it may answer. */
@@ -244,7 +245,7 @@ export class SeasonsWindow extends LitElement {
         // The live counter is kept, so a Discard never hands a later row a key already used.
         restore: (snapshot) => {
           this.draft = { ...snapshot, next: Math.max(this.draft!.next, snapshot.next) };
-          this.attempted = false;
+          this.feedback.reset();
           this.refusal = undefined;
         },
       });
@@ -383,14 +384,14 @@ export class SeasonsWindow extends LitElement {
     return html`<div class="notes" role="status">${notes}</div>`;
   }
   private ownErrors(): Map<string, SeasonRowErrors> {
-    return this.attempted ? rowErrors(this.rows) : new Map();
+    return this.feedback.attempted ? rowErrors(this.rows) : new Map();
   }
   private async save() {
     if (this.readOnly || this.busy || !this.api || saveActionState(this.scope).unchanged) return;
-    this.attempted = true;
+    this.feedback.press();
     this.refusal = undefined;
     if (rowErrors(this.rows).size) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      void this.feedback.focus(this.shadowRoot!);
       return;
     }
     const generation = this.generation;
@@ -660,7 +661,7 @@ export class SeasonsWindow extends LitElement {
           seasonRefusalText(this.refusal.refusal));
     return html`<wt-form-actions
       slot="footer"
-      .error=${[refusal, marked ? t("prep.fix_fields") : ""].filter(Boolean).join(" ")}
+      .error=${bottomMessage(refusal, marked ? t("prep.fix_fields") : "")}
     >
       <wt-button
         slot="cancel"
