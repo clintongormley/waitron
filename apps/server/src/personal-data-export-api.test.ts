@@ -30,7 +30,7 @@ import {
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const PATH = "/management-api/me/personal-data/export";
 const NOW = new Date("2026-10-04T22:30:00Z");
-const MARTA_PIN_HASH = "MARTA-PIN-HASH-CANARY";
+const MARTHA_PIN_HASH = "MARTA-PIN-HASH-CANARY";
 const COLLEAGUE = {
   displayName: "Colleague Canary",
   email: "COLLEAGUE-CANARY@example.test",
@@ -41,8 +41,8 @@ const COLLEAGUE = {
 
 const identityModules = ALL_MODULES.filter((m) => m.name === "identity");
 const logger = vi.fn();
-let martaId: string, colleagueId: string;
-let martaToken: string, colleagueToken: string;
+let marthaId: string, colleagueId: string;
+let marthaToken: string, colleagueToken: string;
 let order: string[];
 let subjects: PersonalDataSubject[];
 let duringBuild: (() => Promise<void>) | undefined;
@@ -78,7 +78,7 @@ function mounted(patch: Partial<PersonalDataExportDeps> = {}) {
   mountPersonalDataExportApi(app, deps(patch), logger);
   return app;
 }
-const ask = (app: Hono, token: string | null = martaToken, query = "") =>
+const ask = (app: Hono, token: string | null = marthaToken, query = "") =>
   app.request(`${PATH}${query}`, {
     headers: token === null ? {} : { cookie: `${MANAGEMENT_COOKIE}=${token}` },
   });
@@ -117,20 +117,20 @@ beforeEach(async () => {
   });
 
   await seedNode(suite.db);
-  const [marta, colleague] = await seedPersons(suite.db, [
+  const [martha, colleague] = await seedPersons(suite.db, [
     {
       displayName: "Martha Lewis",
       email: "marta@example.test",
-      pinHash: MARTA_PIN_HASH,
+      pinHash: MARTHA_PIN_HASH,
       role: "staff",
     },
     { ...COLLEAGUE, role: "staff" },
   ]);
-  martaId = marta!.id;
+  marthaId = martha!.id;
   colleagueId = colleague!.id;
-  martaToken = await withTransaction(
+  marthaToken = await withTransaction(
     suite.db,
-    async (tx) => (await startManagementSession(tx, { personId: martaId })).token,
+    async (tx) => (await startManagementSession(tx, { personId: marthaId })).token,
   );
   colleagueToken = await withTransaction(
     suite.db,
@@ -157,14 +157,14 @@ describe("GET /management-api/me/personal-data/export", () => {
     ]);
     expect(files["profile.json"]).toContain("marta@example.test");
     expect(subjects).toEqual([
-      { personId: martaId, language: "en", at: NOW, timeZone: "Europe/Madrid" },
+      { personId: marthaId, language: "en", at: NOW, timeZone: "Europe/Madrid" },
     ]);
   });
 
   it("gives the parts the README's language: her saved language over the browser's", async () => {
-    suite.db.run(sql`update persons set locale = 'es-ES' where id = ${martaId}`);
+    suite.db.run(sql`update persons set locale = 'es-ES' where id = ${marthaId}`);
     const response = await mounted().request(PATH, {
-      headers: { cookie: `${MANAGEMENT_COOKIE}=${martaToken}`, "accept-language": "en-GB" },
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${marthaToken}`, "accept-language": "en-GB" },
     });
     expect(response.status).toBe(200);
     const files = await unzipped(response);
@@ -172,7 +172,7 @@ describe("GET /management-api/me/personal-data/export", () => {
       PERSONAL_DATA_README_WORDS.es.title.replace("{venue}", "Test SL"),
     );
     expect(subjects).toEqual([
-      { personId: martaId, language: "es", at: NOW, timeZone: "Europe/Madrid" },
+      { personId: marthaId, language: "es", at: NOW, timeZone: "Europe/Madrid" },
     ]);
   });
 
@@ -187,7 +187,7 @@ describe("GET /management-api/me/personal-data/export", () => {
     ])
       expect(text).not.toContain(value);
 
-    const response = await ask(mounted(), martaToken, `?personId=${colleagueId}`);
+    const response = await ask(mounted(), marthaToken, `?personId=${colleagueId}`);
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: { code: "management.request_invalid", params: { field: "query" } },
@@ -198,8 +198,8 @@ describe("GET /management-api/me/personal-data/export", () => {
   it("carries no hash, not even the asking session's own token hash", async () => {
     const text = Object.values(await unzipped(await ask(mounted()))).join("\n");
     expect(text).toContain("marta@example.test");
-    expect(text).not.toContain(MARTA_PIN_HASH);
-    expect(text).not.toContain(hashSessionToken(martaToken));
+    expect(text).not.toContain(MARTHA_PIN_HASH);
+    expect(text).not.toContain(hashSessionToken(marthaToken));
   });
 
   it("refuses a request with no cookie, with or without a query", async () => {
@@ -212,43 +212,43 @@ describe("GET /management-api/me/personal-data/export", () => {
   });
 
   it("refuses an ended session", async () => {
-    await withTransaction(suite.db, (tx) => endManagementSession(tx, martaToken));
+    await withTransaction(suite.db, (tx) => endManagementSession(tx, marthaToken));
     await refused(await ask(mounted()), 401, "management_session.required");
   });
 
   it("refuses an ended session sent with a query as an ended session", async () => {
-    await withTransaction(suite.db, (tx) => endManagementSession(tx, martaToken));
+    await withTransaction(suite.db, (tx) => endManagementSession(tx, marthaToken));
     await refused(
-      await ask(mounted(), martaToken, `?personId=${colleagueId}`),
+      await ask(mounted(), marthaToken, `?personId=${colleagueId}`),
       401,
       "management_session.required",
     );
   });
 
   it("refuses a session idle past the limit", async () => {
-    setLastSeen(martaToken, new Date(Date.now() - IDLE_TIMEOUT_MS - 60_000));
+    setLastSeen(marthaToken, new Date(Date.now() - IDLE_TIMEOUT_MS - 60_000));
     await refused(await ask(mounted()), 401, "management_session.expired");
   });
 
   it("refuses a suspended person's live session", async () => {
-    suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, martaId)).run();
+    suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, marthaId)).run();
     await refused(await ask(mounted()), 403, "person.suspended");
   });
 
   it("refuses a pending person's live session", async () => {
-    suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, martaId)).run();
+    suite.db.update(persons).set({ status: "pending" }).where(eq(persons.id, marthaId)).run();
     await refused(await ask(mounted()), 401, "management_session.required");
   });
 
   it("leaves the session's last-seen time as it was", async () => {
-    setLastSeen(martaToken, new Date(Date.now() - 5 * 60_000));
-    const before = session(martaToken).lastSeenAt;
+    setLastSeen(marthaToken, new Date(Date.now() - 5 * 60_000));
+    const before = session(marthaToken).lastSeenAt;
     expect((await ask(mounted())).status).toBe(200);
-    expect(session(martaToken).lastSeenAt).toBe(before);
+    expect(session(marthaToken).lastSeenAt).toBe(before);
   });
 
   it("changes no row with a change waiting, so a full disk cannot refuse it", async () => {
-    setLastSeen(martaToken, new Date(Date.now() - 5 * 60_000));
+    setLastSeen(marthaToken, new Date(Date.now() - 5 * 60_000));
     suite.db.run(
       sql`insert into change_log (id, payload) values ('pd1', '{"resource":"zz","id":"1"}')`,
     );
@@ -262,7 +262,7 @@ describe("GET /management-api/me/personal-data/export", () => {
   it("checks the session again after building, and sends nothing once it has ended", async () => {
     duringBuild = () =>
       withTransaction(suite.db, async (tx) => {
-        await endManagementSession(tx, martaToken);
+        await endManagementSession(tx, marthaToken);
       });
     const response = await ask(mounted());
     expect(order).toEqual(["prepare", "build"]);
@@ -278,7 +278,7 @@ describe("GET /management-api/me/personal-data/export", () => {
     expect(response.headers.get("content-disposition")).toBe(
       'attachment; filename="martha-lewis-2026-10-04.zip"',
     );
-    expect(subjects).toEqual([{ personId: martaId, language: "en", at: NOW, timeZone: "UTC" }]);
+    expect(subjects).toEqual([{ personId: marthaId, language: "en", at: NOW, timeZone: "UTC" }]);
     expect(subjects[0]).not.toHaveProperty("locationId");
   });
 
@@ -320,7 +320,7 @@ describe("sendPersonalData", () => {
   it("runs the caller's authorisation before reading and again after building", async () => {
     const authorize = vi.fn<PersonalDataAuthorize>(async () => {
       order.push("authorize");
-      return { personId: martaId, label: "Martha Lewis", language: "en" };
+      return { personId: marthaId, label: "Martha Lewis", language: "en" };
     });
     const response = await testRoute(authorize).request("/t");
     expect(response.status).toBe(200);
@@ -331,7 +331,7 @@ describe("sendPersonalData", () => {
   it("sends nothing when the second authorisation names a different person", async () => {
     const authorize = vi
       .fn<PersonalDataAuthorize>()
-      .mockResolvedValueOnce({ personId: martaId, label: "Martha Lewis", language: "en" })
+      .mockResolvedValueOnce({ personId: marthaId, label: "Martha Lewis", language: "en" })
       .mockResolvedValueOnce({ personId: colleagueId, label: "Colleague Canary", language: "en" });
     const response = await testRoute(authorize).request("/t");
     expect(response.status).toBe(500);
@@ -341,17 +341,17 @@ describe("sendPersonalData", () => {
 });
 
 it("requires proof to export another person's data, while own export stays available", async () => {
-  await setBuiltInRoleForTest(suite.db, martaId, "admin");
+  await setBuiltInRoleForTest(suite.db, marthaId, "admin");
   const response = await mounted().request(
     `/management-api/staff/${colleagueId}/personal-data/export`,
-    { headers: { cookie: `${MANAGEMENT_COOKIE}=${martaToken}` } },
+    { headers: { cookie: `${MANAGEMENT_COOKIE}=${marthaToken}` } },
   );
   await refused(response, 400, "management_session.proof_required");
   expect(order).toEqual([]);
-  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, martaToken));
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, marthaToken));
   const permitted = await mounted().request(
     `/management-api/staff/${colleagueId}/personal-data/export`,
-    { headers: { cookie: `${MANAGEMENT_COOKIE}=${martaToken}` } },
+    { headers: { cookie: `${MANAGEMENT_COOKIE}=${marthaToken}` } },
   );
   expect(permitted.status).toBe(200);
   await permitted.arrayBuffer();
@@ -364,7 +364,7 @@ it("refuses an unproved staff session by permission before asking for proof", as
   const response = await mounted().request(
     `/management-api/staff/${colleagueId}/personal-data/export`,
     {
-      headers: { cookie: `${MANAGEMENT_COOKIE}=${martaToken}` },
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${marthaToken}` },
     },
   );
   await refused(response, 403, "authorization.not_permitted");
