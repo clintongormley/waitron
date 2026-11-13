@@ -6,7 +6,7 @@ import {
   kitchenStations,
   printJobs,
   printers,
-  stationPrinters,
+  stationPrinterPairs,
   type Transaction,
 } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED } from "@waitron/printing";
@@ -132,14 +132,14 @@ export async function printersInTrouble(tx: Transaction, now: Date): Promise<Pri
   if (rows.length === 0) return [];
 
   const kitchen = await tx
-    .select({ printerId: stationPrinters.printerId })
-    .from(stationPrinters)
-    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
+    .select({ printerId: stationPrinterPairs.printerId })
+    .from(stationPrinterPairs)
+    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinterPairs.stationId))
     .where(
       and(
         eq(kitchenStations.active, true),
         inArray(
-          stationPrinters.printerId,
+          stationPrinterPairs.printerId,
           rows.map((r) => r.id),
         ),
       ),

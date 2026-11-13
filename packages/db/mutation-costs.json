@@ -120,7 +120,6 @@
   "src/schema/sales.ts": 397.2,
   "src/schema/series.ts": 41.1,
   "src/schema/settings.ts": 35.3,
-  "src/schema/station-printers.ts": 24.8,
   "src/schema/tenants.ts": 31.2,
   "src/schema/tender-refunds.ts": 212.2,
   "src/schema/ticket-item-moves.ts": 42.7,

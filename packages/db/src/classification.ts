@@ -161,7 +161,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("table_merges", "state", STATE),
   classify("kitchen_stations", "state", STATE),
   classify("kitchen_courses", "state", STATE),
-  classify("station_printers", "state", STATE),
   classify(
     "ticket_item_moves",
     "state",

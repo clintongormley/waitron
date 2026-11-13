@@ -617,12 +617,14 @@ CREATE TABLE `kitchen_stations` (
 	`bump_mode` text DEFAULT 'line' NOT NULL,
 	`changes_after_sending` text DEFAULT 'held-or-waiting' NOT NULL,
 	`waits_for_pass` integer DEFAULT false NOT NULL,
+	`printer_ids` text DEFAULT '[]' NOT NULL,
 	`created_at` text NOT NULL,
 	`closed_on_day` text,
 	`closed_sends_to_station_id` text,
 	`when_closed_sends_to_station_id` text,
 	FOREIGN KEY (`closed_sends_to_station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`when_closed_sends_to_station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "kitchen_stations_printer_ids_ck" CHECK(json_valid("kitchen_stations"."printer_ids") and json_type("kitchen_stations"."printer_ids") = 'array'),
 	CONSTRAINT "kitchen_stations_closed_sends_to_ck" CHECK("kitchen_stations"."closed_sends_to_station_id" is null or "kitchen_stations"."closed_on_day" is not null),
 	CONSTRAINT "kitchen_stations_closed_sends_to_not_self_ck" CHECK("kitchen_stations"."closed_sends_to_station_id" <> "kitchen_stations"."id"),
 	CONSTRAINT "kitchen_stations_when_closed_sends_to_not_self_ck" CHECK("kitchen_stations"."when_closed_sends_to_station_id" <> "kitchen_stations"."id"),
@@ -903,14 +905,6 @@ CREATE TABLE `kitchen_print_jobs` (
 --> statement-breakpoint
 CREATE INDEX `kitchen_print_jobs_order_station_idx` ON `kitchen_print_jobs` (`working_order_id`,`station_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `kitchen_print_jobs_job_order_station_key` ON `kitchen_print_jobs` (`print_job_id`,`working_order_id`,`station_id`);--> statement-breakpoint
-CREATE TABLE `station_printers` (
-	`station_id` text NOT NULL,
-	`printer_id` text NOT NULL,
-	PRIMARY KEY(`station_id`, `printer_id`),
-	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`printer_id`) REFERENCES `printers`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
 CREATE TABLE `ticket_item_moves` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_line_id` text NOT NULL,

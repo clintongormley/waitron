@@ -16,7 +16,6 @@ import {
   printJobs,
   receiptReprints,
   removeChangeFeed,
-  stationPrinters,
   subscribeToChanges,
   withTransaction,
   venueLocationId,
@@ -29,6 +28,7 @@ import {
   seedNode,
   seedVenue,
   seedWorkingOrder,
+  attachStationPrinterForTest,
 } from "@waitron/db/testing/seed.js";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED, createPrinter } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
@@ -149,7 +149,14 @@ function afterDelete(
       })),
     ),
     device_profile_printers: withoutPrinter(before.device_profile_printers!),
-    station_printers: withoutPrinter(before.station_printers!),
+    kitchen_stations: resort(
+      before.kitchen_stations!.map((row) => ({
+        ...row,
+        printer_ids: JSON.stringify(
+          (JSON.parse(row.printer_ids as string) as string[]).filter((id) => id !== printerId),
+        ),
+      })),
+    ),
     printer_holders: withoutPrinter(before.printer_holders!),
   };
 }
@@ -303,10 +310,8 @@ async function seedVenueWithPrinters() {
     .insert(kitchenStations)
     .values({ name: "Drinks" })
     .returning({ id: kitchenStations.id });
-  await suite.db.insert(stationPrinters).values([
-    { stationId: grill!.id, printerId: P },
-    { stationId: drinks!.id, printerId: Q },
-  ]);
+  await attachStationPrinterForTest(suite.db, grill!.id, P);
+  await attachStationPrinterForTest(suite.db, drinks!.id, Q);
 
   const sales = [] as string[];
   for (let i = 0; i < 5; i++) sales.push(await newSale());
@@ -752,7 +757,7 @@ describe("deleting a printer", () => {
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
       .where(eq(kitchenStations.name, "Drinks"));
-    await suite.db.insert(stationPrinters).values({ stationId: drinks!.id, printerId: v.P });
+    await attachStationPrinterForTest(suite.db, drinks!.id, v.P);
     const before = await snapshot();
 
     const done = await withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW));

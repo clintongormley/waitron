@@ -1,20 +1,16 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { UNIQUE_VIOLATION } from "../sql-state.js";
-import { isRefusal } from "../unique-violation.js";
-import { captureError } from "../testing/errors.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { printers } from "./printers.js";
-import { stationPrinters } from "./station-printers.js";
+import { readStationPrinterPairs } from "../station-printer-list.js";
+import { attachStationPrinterForTest } from "../testing/seed.js";
 
-// What this suite proves is the column mapping and the composite primary key.
-
-describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
+describe("station printer list mapping", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   beforeAll(async () => {
@@ -53,35 +49,25 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
   }
 
   async function seedMapping(station: string, printer: string): Promise<void> {
-    await inTx((tx) =>
-      tx.insert(stationPrinters).values({ stationId: station, printerId: printer }),
-    );
+    await inTx((tx) => attachStationPrinterForTest(tx, station, printer));
   }
 
-  it("maps every column through the Drizzle export and detaches by DELETE … RETURNING", async () => {
+  it("reads the station/printer pair and clears the list through the Drizzle export", async () => {
     const station = await seedStation("Kitchen");
     const printer = await seedPrinter("Kitchen printer", "poll-control");
     await seedMapping(station, printer);
-    const [row] = await inTx((tx) =>
-      tx.select().from(stationPrinters).where(eq(stationPrinters.stationId, station)),
-    );
+    const [row] = await inTx((tx) => readStationPrinterPairs(tx, { stationIds: [station] }));
     expect(row!.stationId).toBe(station);
     expect(row!.printerId).toBe(printer);
-    const deleted = await inTx((tx) =>
+    const cleared = await inTx((tx) =>
       tx
-        .delete(stationPrinters)
-        .where(and(eq(stationPrinters.stationId, station), eq(stationPrinters.printerId, printer)))
-        .returning({ printerId: stationPrinters.printerId }),
+        .update(kitchenStations)
+        .set({ printerIds: [] })
+        .where(eq(kitchenStations.id, station))
+        .returning({ printerIds: kitchenStations.printerIds }),
     );
-    expect(deleted).toHaveLength(1);
-    expect(deleted[0]!.printerId).toBe(printer);
-  });
-
-  it("the primary key rejects a duplicate (station_id, printer_id) mapping", async () => {
-    const station = await seedStation("Bar");
-    const printer = await seedPrinter("Bar printer", "poll-dup");
-    await seedMapping(station, printer);
-    const e = await captureError(() => seedMapping(station, printer));
-    expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
+    expect(cleared).toHaveLength(1);
+    expect(cleared[0]!.printerIds).toEqual([]);
+    expect(await inTx((tx) => readStationPrinterPairs(tx, { stationIds: [station] }))).toEqual([]);
   });
 });

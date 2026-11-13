@@ -162,7 +162,6 @@ export { invoiceCorrections, invoiceCorrectionState } from "./schema/invoice-cor
 export { invoiceCorrectionRefunds } from "./schema/invoice-correction-refunds.js";
 export { kitchenPrintJobLines } from "./schema/kitchen-print-job-lines.js";
 export { kitchenPrintJobs } from "./schema/kitchen-print-jobs.js";
-export { stationPrinters } from "./schema/station-printers.js";
 export { ticketItemMoves } from "./schema/ticket-item-moves.js";
 export { catalogues, categories, products } from "./schema/catalogue.js";
 export type { AllergenMap } from "@waitron/shared";
@@ -526,3 +525,9 @@ export {
   LEFT_MERGE,
   type MergeMember,
 } from "./floor-today-columns.js";
+
+export {
+  stationPrinterPairs,
+  readStationPrinterPairs,
+  withPrinter,
+} from "./station-printer-list.js";

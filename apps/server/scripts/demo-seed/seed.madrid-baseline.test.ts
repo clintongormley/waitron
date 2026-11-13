@@ -861,6 +861,13 @@ for (const locale of ["en", "es"] as const) {
           },
         },
         {
+          from: "station_printers",
+          into: "kitchen_stations",
+          match: { from: "station_id", into: "id" },
+          columns: {},
+          collect: { from: "printer_id", into: "printer_ids" },
+        },
+        {
           from: "station_day_states",
           into: "kitchen_stations",
           match: { from: "station_id", into: "id" },
@@ -929,6 +936,16 @@ for (const locale of ["en", "es"] as const) {
         },
         ...stations.foreignKeys,
       ].map((key, id) => ({ ...key, id }));
+      delete phases[phase]!.station_printers;
+      const printerColumn = stations.columns.splice(
+        stations.columns.findIndex((column) => column.name === "printer_ids"),
+        1,
+      )[0]!;
+      stations.columns.splice(
+        stations.columns.findIndex((column) => column.name === "created_at"),
+        0,
+        printerColumn,
+      );
       delete phases[phase]!.floor_today_tables;
       delete phases[phase]!.floor_today_zones;
       for (const table of ["floor_zones", "kitchen_stations"])

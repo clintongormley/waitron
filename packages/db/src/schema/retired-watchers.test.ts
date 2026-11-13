@@ -19,7 +19,7 @@ describe("retired watchers", () => {
 
   it("the core configuration transfer names none of the four watcher tables", () => {
     const names = CORE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-    expect(names).toContain("station_printers");
+    expect(names).toContain("kitchen_stations");
     for (const name of RETIRED) expect(names).not.toContain(name);
   });
 });

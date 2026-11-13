@@ -1,3 +1,4 @@
+import { withPrinter } from "../station-printer-list.js";
 import { parties } from "../schema/parties.js";
 import { partyAllergyGuests } from "../schema/venue-service/party-allergy.js";
 import { persons } from "../schema/identity/persons.js";
@@ -355,4 +356,19 @@ export async function clearPartyAllergyForTest(
     .update(parties)
     .set({ allergyAnswer: null, allergyAnsweredBy: null, allergyAnsweredAt: null })
     .where(eq(parties.id, partyId));
+}
+
+export async function attachStationPrinterForTest(
+  tx: Database | Transaction,
+  stationId: string,
+  printerId: string,
+): Promise<void> {
+  const [station] = await tx
+    .select({ printerIds: kitchenStations.printerIds })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.id, stationId));
+  await tx
+    .update(kitchenStations)
+    .set({ printerIds: withPrinter(station!.printerIds, printerId) })
+    .where(eq(kitchenStations.id, stationId));
 }

@@ -14,7 +14,7 @@ import {
   printJobs,
   printerHolders,
   printers,
-  stationPrinters,
+  stationPrinterPairs,
   tenants,
   withTransaction,
   installChangeFeed,
@@ -25,7 +25,13 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments, deviceProfileServiceAccess } from "@waitron/venue-service";
-import { seedDevice, seedDeviceProfiles, seedVenue, seedZone } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  seedVenue,
+  seedZone,
+  attachStationPrinterForTest,
+} from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob, MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { nodeId as brandNodeId } from "@waitron/shared";
@@ -858,11 +864,9 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
     const suffix = randomUUID();
     const zeta = await seedStation(`Zeta ${suffix}`);
     const alpha = await seedStation(`Alpha ${suffix}`);
-    await suite.db.insert(stationPrinters).values([
-      { stationId: zeta, printerId: grill },
-      { stationId: alpha, printerId: grill },
-      { stationId: alpha, printerId: bar },
-    ]);
+    await attachStationPrinterForTest(suite.db, zeta, grill);
+    await attachStationPrinterForTest(suite.db, alpha, grill);
+    await attachStationPrinterForTest(suite.db, alpha, bar);
 
     const res = await send(app, "GET", "/management-api/printer-stations", {
       cookie: managerCookie,
@@ -886,10 +890,8 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
     const printer = await createPrinter(app, agent.agentId, "Pass printer");
     const live = await seedStation(`Live ${randomUUID()}`);
     const deleted = await seedStation(`Deleted ${randomUUID()}`);
-    await suite.db.insert(stationPrinters).values([
-      { stationId: live, printerId: printer },
-      { stationId: deleted, printerId: printer },
-    ]);
+    await attachStationPrinterForTest(suite.db, live, printer);
+    await attachStationPrinterForTest(suite.db, deleted, printer);
     await suite.db
       .update(kitchenStations)
       .set({ active: false })
@@ -1099,17 +1101,23 @@ describe("station printer selection replacement", () => {
     const old = await createPrinter(app, agent.agentId, `Old ${randomUUID()}`);
     const next = await createPrinter(app, agent.agentId, `Next ${randomUUID()}`);
     const stationId = await seedStation(`Set ${randomUUID()}`);
-    await suite.db.insert(stationPrinters).values({ stationId, printerId: old });
+    await attachStationPrinterForTest(suite.db, stationId, old);
     const path = `/management-api/stations/${stationId}/printers`;
     const mappings = () =>
-      suite.db.select().from(stationPrinters).where(eq(stationPrinters.stationId, stationId));
+      suite.db
+        .select({
+          stationId: stationPrinterPairs.stationId,
+          printerId: stationPrinterPairs.printerId,
+        })
+        .from(stationPrinterPairs)
+        .where(eq(stationPrinterPairs.stationId, stationId));
     return { app, old, next, stationId, path, mappings };
   }
 
   it("replaces the entire set, shares a printer with another station, repeats and clears", async () => {
     const f = await fixture();
     const second = await seedStation(`Other ${randomUUID()}`);
-    await suite.db.insert(stationPrinters).values({ stationId: second, printerId: f.next });
+    await attachStationPrinterForTest(suite.db, second, f.next);
     const save = (printerIds: string[]) =>
       send(f.app, "PUT", f.path, { cookie: managerCookie, body: { printerIds } });
     expect((await save([f.next, f.old])).status).toBe(204);
@@ -1120,7 +1128,13 @@ describe("station printer selection replacement", () => {
     expect((await save([])).status).toBe(204);
     expect(await f.mappings()).toEqual([]);
     expect(
-      await suite.db.select().from(stationPrinters).where(eq(stationPrinters.stationId, second)),
+      await suite.db
+        .select({
+          stationId: stationPrinterPairs.stationId,
+          printerId: stationPrinterPairs.printerId,
+        })
+        .from(stationPrinterPairs)
+        .where(eq(stationPrinterPairs.stationId, second)),
     ).toEqual([{ stationId: second, printerId: f.next }]);
   });
 
@@ -1221,7 +1235,7 @@ describe("printer delete routes (hardware.manage)", () => {
       "invoice_deliveries",
       "devices",
       "device_profile_printers",
-      "station_printers",
+      "kitchen_stations",
       "printer_holders",
       "drawer_opens",
       "receipt_reprints",
@@ -1244,7 +1258,7 @@ describe("printer delete routes (hardware.manage)", () => {
       .returning({ name: printers.name });
     const stationName = `Grill ${randomUUID()}`;
     const stationId = await seedStation(stationName);
-    await suite.db.insert(stationPrinters).values({ stationId, printerId });
+    await attachStationPrinterForTest(suite.db, stationId, printerId);
     const profileName = `Waiters ${randomUUID()}`;
     const [profile] = await seedDeviceProfiles(suite.db, {
       name: profileName,
@@ -1336,9 +1350,12 @@ describe("printer delete routes (hardware.manage)", () => {
     expect(device).toEqual({ receipt: null });
     expect(
       await suite.db
-        .select()
-        .from(stationPrinters)
-        .where(eq(stationPrinters.printerId, p.printerId)),
+        .select({
+          stationId: stationPrinterPairs.stationId,
+          printerId: stationPrinterPairs.printerId,
+        })
+        .from(stationPrinterPairs)
+        .where(eq(stationPrinterPairs.printerId, p.printerId)),
     ).toEqual([]);
     expect(
       await suite.db
@@ -1557,9 +1574,12 @@ describe("printer delete routes (hardware.manage)", () => {
       expect(row).toEqual({ active: false, portable: false });
       expect(
         await suite.db
-          .select()
-          .from(stationPrinters)
-          .where(eq(stationPrinters.printerId, p.printerId)),
+          .select({
+            stationId: stationPrinterPairs.stationId,
+            printerId: stationPrinterPairs.printerId,
+          })
+          .from(stationPrinterPairs)
+          .where(eq(stationPrinterPairs.printerId, p.printerId)),
       ).toEqual([]);
     });
   });

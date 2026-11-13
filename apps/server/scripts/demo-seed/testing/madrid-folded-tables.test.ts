@@ -89,3 +89,34 @@ it("folds side rows and their column/key metadata, defaults unmatched rows, and 
   expect(capture.tables.zones!.rows).toEqual({ a: { id: "a" }, b: { id: "b" } });
   expect(capture.tables).toHaveProperty("policies");
 });
+
+it("collects every matching child id into a sorted JSON list and defaults an unmatched parent to empty", () => {
+  const capture: CanonicalMadridSemantics = {
+    tables: {
+      stations: { columns: [], foreignKeys: [], rows: { s: { id: "s" }, t: { id: "t" } } },
+      mappings: {
+        columns: [],
+        foreignKeys: [],
+        rows: { q: { station_id: "s", printer_id: "q" }, p: { station_id: "s", printer_id: "p" } },
+      },
+    },
+  };
+  const result = madridWithFoldedTables(capture, [
+    {
+      from: "mappings",
+      into: "stations",
+      match: { from: "station_id", into: "id" },
+      columns: {},
+      collect: { from: "printer_id", into: "printer_ids" },
+    },
+  ]);
+  expect(result.tables.stations!.rows).toEqual({
+    s: { id: "s", printer_ids: ["p", "q"] },
+    t: { id: "t", printer_ids: [] },
+  });
+  expect(result.tables.stations!.columns).toEqual([
+    { name: "printer_ids", type: "TEXT", notnull: 1, dflt_value: "'[]'", pk: 0 },
+  ]);
+  expect(result.tables).not.toHaveProperty("mappings");
+  expect(capture.tables).toHaveProperty("mappings");
+});

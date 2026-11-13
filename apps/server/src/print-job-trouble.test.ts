@@ -4,11 +4,10 @@ import {
   kitchenStations,
   printJobs,
   printers,
-  stationPrinters,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED } from "@waitron/printing";
 import { printersInTrouble } from "./print-job-trouble.js";
 
@@ -67,7 +66,7 @@ async function seedStation(t: { printerId: string; active: boolean }): Promise<v
     .insert(kitchenStations)
     .values({ name: "Kitchen", isDefault: false, active: t.active })
     .returning({ id: kitchenStations.id });
-  await suite.db.insert(stationPrinters).values({ stationId: station!.id, printerId: t.printerId });
+  await attachStationPrinterForTest(suite.db, station!.id, t.printerId);
 }
 
 const exhausted = { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS } as const;

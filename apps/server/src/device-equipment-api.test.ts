@@ -1,3 +1,4 @@
+import { attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
@@ -16,7 +17,6 @@ import {
   printers,
   printJobs,
   printAgents,
-  stationPrinters,
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -1616,7 +1616,7 @@ describe("GET /api/device/equipment's notices", () => {
         .insert(kitchenStations)
         .values({ name: "Kitchen", isDefault: false })
         .returning({ id: kitchenStations.id });
-      await suite.db.insert(stationPrinters).values({ stationId: station!.id, printerId: id });
+      await attachStationPrinterForTest(suite.db, station!.id, id);
       return id;
     }
 

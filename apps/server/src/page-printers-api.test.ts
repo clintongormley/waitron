@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, pagePrinters, stationPrinters, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, pagePrinters, stationPrinterPairs, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
@@ -665,7 +665,14 @@ describe("a page printer is never a receipt printer", () => {
     );
     expect(attach.status).toBe(404);
     expect(await attach.json()).toMatchObject({ error: { code: "printer.not_found" } });
-    expect(await suite.db.select().from(stationPrinters)).toEqual([]);
+    expect(
+      await suite.db
+        .select({
+          stationId: stationPrinterPairs.stationId,
+          printerId: stationPrinterPairs.printerId,
+        })
+        .from(stationPrinterPairs),
+    ).toEqual([]);
     expect(await stored(id)).toMatchObject({ name: "Office", active: true });
   });
 });

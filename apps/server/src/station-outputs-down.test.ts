@@ -1,4 +1,4 @@
-import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { seedDeviceProfiles, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -7,7 +7,6 @@ import {
   kitchenStations,
   printJobs,
   printers,
-  stationPrinters,
   ticketItems,
   workingOrderLines,
   withTransaction,
@@ -52,7 +51,7 @@ async function setup() {
         pollId: randomUUID(),
       })
       .returning({ id: printers.id });
-    await suite.db.insert(stationPrinters).values({ stationId, printerId: p!.id });
+    await attachStationPrinterForTest(suite.db, stationId, p!.id);
     return p!.id;
   };
   return { venue, grill, bar: bar.id, printer };

@@ -18,7 +18,7 @@ import {
   partyTables,
   printers,
   products,
-  stationPrinters,
+  stationPrinterPairs,
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
@@ -2317,9 +2317,9 @@ describe("/management-api/stations (KDS-1 config)", () => {
 
     async function printersOf(stationId: string): Promise<string[]> {
       const rows = await suite.db
-        .select({ printerId: stationPrinters.printerId })
-        .from(stationPrinters)
-        .where(eq(stationPrinters.stationId, stationId));
+        .select({ printerId: stationPrinterPairs.printerId })
+        .from(stationPrinterPairs)
+        .where(eq(stationPrinterPairs.stationId, stationId));
       return rows.map((row) => row.printerId).sort();
     }
 
@@ -2549,9 +2549,9 @@ describe("/management-api/stations (KDS-1 config)", () => {
       ).toEqual([]);
       expect(
         await suite.db
-          .select({ id: stationPrinters.stationId })
-          .from(stationPrinters)
-          .where(eq(stationPrinters.printerId, a)),
+          .select({ id: stationPrinterPairs.stationId })
+          .from(stationPrinterPairs)
+          .where(eq(stationPrinterPairs.printerId, a)),
       ).toEqual([]);
     });
 
@@ -2576,9 +2576,9 @@ describe("/management-api/stations (KDS-1 config)", () => {
       ).toEqual([]);
       expect(
         await suite.db
-          .select({ id: stationPrinters.stationId })
-          .from(stationPrinters)
-          .where(eq(stationPrinters.printerId, a)),
+          .select({ id: stationPrinterPairs.stationId })
+          .from(stationPrinterPairs)
+          .where(eq(stationPrinterPairs.printerId, a)),
       ).toEqual([]);
     });
   });

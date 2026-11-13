@@ -1,3 +1,6 @@
+> 2026-11-13, A1308 fk7: `station_printers` folds into `kitchen_stations.printer_ids`.
+> The inventory below records the A760 layout before that fold.
+
 > 2026-11-12, A1002 PR3: `staff_roles` and `person_staff_roles` moved from workforce’s set
 > to core’s, owned by identity (`packages/identity/src/classification.ts`). The inventory below
 > records the A760 layout before that move.

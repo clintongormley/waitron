@@ -13,7 +13,7 @@ import {
   printAgents,
   printJobs,
   printers,
-  stationPrinters,
+  stationPrinterPairs,
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
@@ -139,9 +139,18 @@ describe("the Demo printer", () => {
     const { deviceId, profileId } = await venue();
     const [station] = await suite.db
       .insert(kitchenStations)
-      .values({ name: "Grill" })
+      .values([{ name: "Grill" }, { name: "Bar" }])
       .returning({ id: kitchenStations.id });
     const demo = await configureDemoPrinter(suite.db, true);
+    expect(
+      await suite.db
+        .select({ name: kitchenStations.name, printerIds: kitchenStations.printerIds })
+        .from(kitchenStations)
+        .orderBy(kitchenStations.name),
+    ).toEqual([
+      { name: "Bar", printerIds: [demo!.printerId] },
+      { name: "Grill", printerIds: [demo!.printerId] },
+    ]);
     await withTransaction(suite.db, (tx) =>
       enqueuePrintJob(
         tx,
@@ -174,9 +183,12 @@ describe("the Demo printer", () => {
     ).toEqual([]);
     expect(
       await suite.db
-        .select()
-        .from(stationPrinters)
-        .where(eq(stationPrinters.stationId, station!.id)),
+        .select({
+          stationId: stationPrinterPairs.stationId,
+          printerId: stationPrinterPairs.printerId,
+        })
+        .from(stationPrinterPairs)
+        .where(eq(stationPrinterPairs.stationId, station!.id)),
     ).toEqual([]);
     const [job] = await suite.db.select({ status: printJobs.status }).from(printJobs);
     expect(job?.status).toBe("failed");
@@ -264,7 +276,13 @@ describe("the Demo printer", () => {
 
     expect(await profileLists(profileId)).toEqual(lists);
     expect(
-      await suite.db.select().from(stationPrinters).where(eq(stationPrinters.printerId, gone)),
+      await suite.db
+        .select({
+          stationId: stationPrinterPairs.stationId,
+          printerId: stationPrinterPairs.printerId,
+        })
+        .from(stationPrinterPairs)
+        .where(eq(stationPrinterPairs.printerId, gone)),
     ).toEqual([]);
   });
 

@@ -9,7 +9,7 @@ import {
   kitchenStations,
   printJobs,
   products,
-  stationPrinters,
+  stationPrinterPairs,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -212,20 +212,23 @@ describe("sending split-off extras", () => {
       }
       for (const station of ["grill", "fryer", "kitchen", "bar"] as const) {
         const attached = await tx
-          .select()
-          .from(stationPrinters)
+          .select({
+            stationId: stationPrinterPairs.stationId,
+            printerId: stationPrinterPairs.printerId,
+          })
+          .from(stationPrinterPairs)
           .where(
             and(
-              eq(stationPrinters.stationId, venue.stations[station]),
-              eq(stationPrinters.printerId, venue.printers[station]),
+              eq(stationPrinterPairs.stationId, venue.stations[station]),
+              eq(stationPrinterPairs.printerId, venue.printers[station]),
             ),
           );
         expect(attached).toHaveLength(1);
       }
       const pass = await tx
-        .select({ stationId: stationPrinters.stationId })
-        .from(stationPrinters)
-        .where(eq(stationPrinters.printerId, venue.printers.pass));
+        .select({ stationId: stationPrinterPairs.stationId })
+        .from(stationPrinterPairs)
+        .where(eq(stationPrinterPairs.printerId, venue.printers.pass));
       expect(pass.map((row) => row.stationId).sort()).toEqual(
         [venue.stations.grill, venue.stations.fryer].sort(),
       );

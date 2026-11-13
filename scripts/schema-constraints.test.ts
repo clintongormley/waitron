@@ -286,8 +286,6 @@ const EXPECTED_FOREIGN_KEYS = [
   ["shifts", ["person_id"], "persons"],
   ["shifts", ["roster_version_id"], "roster_versions"],
   ["kitchen_stations", ["closed_sends_to_station_id"], "kitchen_stations"],
-  ["station_printers", ["printer_id"], "printers"],
-  ["station_printers", ["station_id"], "kitchen_stations"],
   ["tenders", ["bill_payment_id"], "bill_payments"],
   ["tenders", ["sale_id"], "sales"],
   ["ticket_item_moves", ["from_station_id"], "kitchen_stations"],

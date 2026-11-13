@@ -119,9 +119,6 @@ import type { KitchenAllergyBlock } from "@waitron/module";
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 // Pins round independence and never-block (no socket opened).
-// `station_printers`' keys are pinned in packages/db's station-printers.test.ts and the outbox shape in
-// packages/printing's outbox.test.ts. `node:sqlite` opens no socket of its own, so a spy on
-// `Socket.prototype.connect` sees only what the fire does.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

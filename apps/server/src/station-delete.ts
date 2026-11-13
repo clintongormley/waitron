@@ -16,7 +16,7 @@ import {
   orderTableLabels,
   parties,
   printers,
-  stationPrinters,
+  stationPrinterPairs,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -95,9 +95,9 @@ async function stationDeleteRules(tx: Transaction, id: string) {
     );
   const mappedPrinters = await tx
     .select({ id: printers.id, name: printers.name })
-    .from(stationPrinters)
-    .innerJoin(printers, eq(printers.id, stationPrinters.printerId))
-    .where(eq(stationPrinters.stationId, id));
+    .from(stationPrinterPairs)
+    .innerJoin(printers, eq(printers.id, stationPrinterPairs.printerId))
+    .where(eq(stationPrinterPairs.stationId, id));
   const madeHere = await tx
     .select({ id: devices.id, name: devices.label, active: devices.active })
     .from(deviceMadeHereStations)
@@ -189,7 +189,7 @@ export async function deleteStation(
       .set({ revision: sql`${orderDrafts.revision} + 1`, updatedAt: now.toISOString() })
       .where(inArray(orderDrafts.id, [...new Set(drafts.map((row) => row.draftId))]));
   }
-  await tx.delete(stationPrinters).where(eq(stationPrinters.stationId, id));
+  await tx.update(kitchenStations).set({ printerIds: [] }).where(eq(kitchenStations.id, id));
   await tx.delete(deviceMadeHereStations).where(eq(deviceMadeHereStations.stationId, id));
   await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, id));
   return impact;

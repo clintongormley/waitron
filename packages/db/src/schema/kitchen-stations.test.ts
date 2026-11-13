@@ -327,3 +327,26 @@ describe("today's station closure and station value constraints", () => {
     }
   });
 });
+
+describe("a station's printer list", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("a new station has an empty list", async () => {
+    await suite.db.insert(kitchenStations).values({ id: "station", name: "Kitchen" });
+    expect(suite.db.get(sql`select * from kitchen_stations where id = 'station'`)).toHaveProperty(
+      "printer_ids",
+      "[]",
+    );
+  });
+
+  it.each(["{}", '"p"'])("refuses a list that is not an array: %s", async (value) => {
+    await suite.db.insert(kitchenStations).values({ id: "station", name: "Kitchen" });
+    const error = await captureError(() =>
+      suite.db.execute(
+        sql`update kitchen_stations set printer_ids = ${value} where id = 'station'`,
+      ),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("kitchen_stations_printer_ids_ck");
+  });
+});

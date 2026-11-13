@@ -9,6 +9,7 @@ import {
   seedDeviceProfiles,
   seedZone,
   seedActivityActor,
+  attachStationPrinterForTest,
 } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { deleteCourse } from "./course-delete.js";
@@ -93,7 +94,7 @@ import {
   pagePrinters,
   deviceProfilePrinters,
   drawerOpens,
-  stationPrinters,
+  stationPrinterPairs,
   CORE_CONFIGURATION_TRANSFER,
   customThemes,
   products,
@@ -401,7 +402,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 27,
+  version: 28,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -3336,12 +3337,11 @@ it("transfers a printer on two stations in configuration export", async () => {
         host: "10.0.0.8",
       })
       .returning({ id: printers.id });
-    await tx
-      .insert(stationPrinters)
-      .values(stations.map(({ id }) => ({ stationId: id, printerId: printer!.id })));
+    for (const { id } of stations) await attachStationPrinterForTest(tx, id, printer!.id);
   });
   const declared = CORE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-  expect(declared).toContain("station_printers");
+  expect(declared).toContain("kitchen_stations");
+  expect(declared).not.toContain("station_printers");
   for (const retired of [
     "watchers",
     "watcher_stations",
@@ -3366,9 +3366,9 @@ it("transfers a printer on two stations in configuration export", async () => {
   });
   const imported = await targetSuite.db
     .select({ station: kitchenStations.name, printer: printers.name })
-    .from(stationPrinters)
-    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
-    .innerJoin(printers, eq(printers.id, stationPrinters.printerId))
+    .from(stationPrinterPairs)
+    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinterPairs.stationId))
+    .innerJoin(printers, eq(printers.id, stationPrinterPairs.printerId))
     .where(eq(printers.name, "Pass printer"))
     .orderBy(kitchenStations.name);
   expect(imported).toEqual([
@@ -5518,7 +5518,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(27);
+  expect(exported.version).toBe(28);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -6839,10 +6839,8 @@ describe("a deleted printer in a configuration transfer", () => {
         .values({ name: "Grill" })
         .returning({ id: kitchenStations.id });
       const [profile] = await seedDeviceProfiles(tx, { name: "Counter till", formFactor: "till" });
-      await tx.insert(stationPrinters).values([
-        { stationId: station!.id, printerId: live!.id },
-        { stationId: station!.id, printerId: old!.id },
-      ]);
+      await attachStationPrinterForTest(tx, station!.id, live!.id);
+      await attachStationPrinterForTest(tx, station!.id, old!.id);
       await setProfilePrinterLists(tx, profile!.id, {
         ...emptyPrinterLists(),
         receiptPrinterIds: [old!.id, live!.id],
@@ -6869,7 +6867,7 @@ describe("a deleted printer in a configuration transfer", () => {
       .insert(drawerOpens)
       .values({ printerId: ids.old, personId: "admin", reason: "calibration" });
     await withTransaction(suite.db, (tx) => deletePrinter(tx, ids.old));
-    await suite.db.insert(stationPrinters).values({ stationId: ids.station, printerId: ids.old });
+    await attachStationPrinterForTest(suite.db, ids.station, ids.old);
     await suite.db.insert(deviceProfilePrinters).values({
       deviceProfileId: ids.profile,
       printerId: ids.old,
@@ -6903,9 +6901,9 @@ describe("a deleted printer in a configuration transfer", () => {
     for (const row of transferred.tables.printers!)
       expect(row).not.toHaveProperty("poll_token_hash");
     expect(JSON.stringify(transferred)).not.toContain("poll-hash");
-    expect(transferred.tables.station_printers).toEqual([
-      { station_id: ids.station, printer_id: ids.live },
-    ]);
+    expect(
+      transferred.tables.kitchen_stations!.find((row) => row.id === ids.station)!.printer_ids,
+    ).toBe(JSON.stringify([ids.live]));
     expect(
       transferred.tables.device_profile_printers!.map((row) => [
         row.device_profile_id,
@@ -6952,7 +6950,9 @@ describe("a deleted printer in a configuration transfer", () => {
     const live = imported.find((row) => row.name === "Live bar")!;
     expect(
       (
-        await targetSuite.db.select({ printerId: stationPrinters.printerId }).from(stationPrinters)
+        await targetSuite.db
+          .select({ printerId: stationPrinterPairs.printerId })
+          .from(stationPrinterPairs)
       ).map((row) => row.printerId),
     ).toEqual([live.id]);
     expect(
@@ -6969,7 +6969,6 @@ describe("a deleted printer in a configuration transfer", () => {
 
   it("refuses a bundle carrying a deleted printer and a setting naming it, at staging and at import, before writing anything", async () => {
     const { ids, versions, transferred } = await venueWithDeletedPrinter("B30303033");
-    const station = transferred.tables.station_printers![0]!;
     const forged: ConfigurationBundle = {
       ...transferred,
       tables: {
@@ -6984,10 +6983,11 @@ describe("a deleted printer in a configuration transfer", () => {
             deleted_at: "2026-10-10T10:00:00.000Z",
           },
         ],
-        station_printers: [
-          ...transferred.tables.station_printers!,
-          { ...station, printer_id: ids.old },
-        ],
+        kitchen_stations: transferred.tables.kitchen_stations!.map((row) =>
+          row.id === ids.station
+            ? { ...row, printer_ids: JSON.stringify([ids.live, ids.old]) }
+            : row,
+        ),
       },
     };
     const refusal = { code: "setup.request_invalid", params: { field: "printers.deleted_at" } };
@@ -7027,7 +7027,7 @@ describe("a deleted printer in a configuration transfer", () => {
         await targetSuite.db.execute<Record<string, number>>(sql`
           select (select count(*) from tenants) as tenants,
                  (select count(*) from printers) as printers,
-                 (select count(*) from station_printers) as station_printers,
+                 (select coalesce(sum(json_array_length(printer_ids)), 0) from kitchen_stations) as station_printers,
                  (select count(*) from kitchen_stations) as kitchen_stations
         `)
       ).rows[0];

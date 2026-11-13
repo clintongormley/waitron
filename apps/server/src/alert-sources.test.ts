@@ -12,13 +12,12 @@ import {
   printJobs,
   printers,
   kitchenStations,
-  stationPrinters,
   type Database,
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import type { AlertSource } from "@waitron/module";
 import type { StreamStatus, StreamView } from "@waitron/stream";
 import {
@@ -867,7 +866,7 @@ describe("stationOutputAlertSource", () => {
       })
       .returning({ id: kitchenStations.id });
     const printerId = await seedPrinter({ locationId, name: "Epson" });
-    await suite.db.insert(stationPrinters).values({ stationId: station!.id, printerId });
+    await attachStationPrinterForTest(suite.db, station!.id, printerId);
     await seedJob({ locationId, printerId, createdAt: minsAgo(3), status: "failed", attempts: 5 });
     let open = true;
     const source = stationOutputAlertSource({

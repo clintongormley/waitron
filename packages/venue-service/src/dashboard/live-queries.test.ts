@@ -13,7 +13,6 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "category_details",
     "products",
     "floor_zones",
-    "station_printers",
     "printers",
     "devices",
     "device_kitchen_screens",

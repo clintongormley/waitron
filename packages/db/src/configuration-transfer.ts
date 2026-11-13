@@ -1,3 +1,6 @@
+import type { Transaction } from "./client.js";
+import { eq } from "drizzle-orm";
+import { kitchenStations } from "./schema/kitchen-stations.js";
 import {
   AppError,
   isBumpMode,
@@ -67,6 +70,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "catalogues" },
     {
       name: "kitchen_stations",
+      jsonReferences: [{ column: "printer_ids", paths: [["*"]] }],
       leaveBehindWhenFalse: "active",
       omit: ["closed_on_day", "closed_sends_to_station_id"],
     },
@@ -130,11 +134,19 @@ export const CORE_CONFIGURATION_TRANSFER = {
     },
     { name: "page_printers", reconnect: true },
     { name: "device_profile_printers" },
-    { name: "station_printers" },
     { name: "custom_themes" },
   ],
   validate: validateCoreConfiguration,
-  afterImport: storeTableShortNameKeys,
+  afterImport: async (tx: Transaction) => {
+    await storeTableShortNameKeys(tx);
+    for (const station of await tx
+      .select({ id: kitchenStations.id, printerIds: kitchenStations.printerIds })
+      .from(kitchenStations))
+      await tx
+        .update(kitchenStations)
+        .set({ printerIds: [...new Set(station.printerIds)].sort() })
+        .where(eq(kitchenStations.id, station.id));
+  },
 } as const;
 
 function isPrinterPickupSet(value: unknown): boolean {

@@ -1,3 +1,6 @@
+> 2026-11-13, A1308 fk7: `station_printers` is replaced by `kitchen_stations.printer_ids`;
+> its remaining UPDATE restriction no longer applies. This audit records the earlier tables.
+
 # Retirement of the old table-grants record
 
 You cannot use the old database's grants to decide what today's storage refuses. The A805 audit

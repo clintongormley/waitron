@@ -3,10 +3,14 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { kitchenStations, products, printers, stationPrinters } from "@waitron/db";
+import { kitchenStations, products, printers, stationPrinterPairs } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedDeviceProfiles,
+  attachStationPrinterForTest,
+} from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setDeviceKitchenScreens, setProfileKitchenScreens } from "@waitron/venue-service";
 import { createCourse, createStation } from "./kitchen.js";
@@ -92,7 +96,7 @@ it.each(["courses", "stations"] as const)(
           port: 9100,
         })
         .returning();
-      await suite.db.insert(stationPrinters).values({ stationId: station, printerId: printer!.id });
+      await attachStationPrinterForTest(suite.db, station, printer!.id);
     }
     const answer = await request(kind, "DELETE");
     expect(answer.status).toBe(200);
@@ -119,7 +123,15 @@ it.each(["courses", "stations"] as const)(
             .where(eq(products.id, v.productId("Burger")))
         )[0]!.courseId,
       ).toBeNull();
-    else expect(await suite.db.select().from(stationPrinters)).toEqual([]);
+    else
+      expect(
+        await suite.db
+          .select({
+            stationId: stationPrinterPairs.stationId,
+            printerId: stationPrinterPairs.printerId,
+          })
+          .from(stationPrinterPairs),
+      ).toEqual([]);
     for (const [method, suffix, body] of [
       ["GET", "/delete-impact", undefined],
       ["DELETE", "", undefined],

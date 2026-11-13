@@ -1,7 +1,12 @@
 import { staffRoles, personStaffRoles } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
-import { seedDeviceProfiles, seedVenueSettings, seedZone } from "@waitron/db/testing/seed.js";
+import {
+  seedDeviceProfiles,
+  seedVenueSettings,
+  seedZone,
+  attachStationPrinterForTest,
+} from "@waitron/db/testing/seed.js";
 import { venueMenus } from "./testing/venue-menus.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
@@ -18,7 +23,6 @@ import {
   kitchenCourses,
   printers,
   printJobs,
-  stationPrinters,
   ticketItems,
   venueLocationId,
   withTransaction,
@@ -3537,9 +3541,7 @@ describe("KDS-1 station-display operate routes", () => {
         pollId: randomUUID(),
       })
       .returning({ id: printers.id });
-    await suite.db
-      .insert(stationPrinters)
-      .values({ stationId: kitchenStation.id, printerId: printer!.id });
+    await attachStationPrinterForTest(suite.db, kitchenStation.id, printer!.id);
     await suite.db.insert(printJobs).values({
       printerId: printer!.id,
       payload: Uint8Array.of(1),
