@@ -140,6 +140,10 @@ const meResponse = {
   modules: ["bookings"],
 };
 
+function venueViewer(permissions: string[], role = meResponse.role) {
+  return { ...meResponse, role, permissions: ["venue.view", ...permissions] };
+}
+
 it.each(["prepare", "live", "demo", undefined] as const)(
   "lists Email under Settings only for eligible roles in %s",
   async (intent) => {
@@ -2509,16 +2513,14 @@ describe("dashboard-app", () => {
   });
 
   it.each([
-    { permissions: ["booking.manage", "venue.view"], canManageReaders: false },
-    { permissions: ["booking.manage", "hardware.manage", "venue.view"], canManageReaders: true },
+    { permissions: ["booking.manage"], canManageReaders: false },
+    { permissions: ["booking.manage", "hardware.manage"], canManageReaders: true },
   ])(
     "tells the devices screen whether the session may manage card readers ($permissions)",
     async ({ permissions, canManageReaders }) => {
       const api = stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", ...permissions] }),
+        getMe: vi.fn().mockResolvedValue(venueViewer(permissions)),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
       await flush(el);
@@ -2531,16 +2533,14 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    { permissions: ["booking.manage", "venue.view"], canManage: false },
-    { permissions: ["booking.manage", "hardware.manage", "venue.view"], canManage: true },
+    { permissions: ["booking.manage"], canManage: false },
+    { permissions: ["booking.manage", "hardware.manage"], canManage: true },
   ])(
     "tells the printers screen whether the session may manage printers ($permissions)",
     async ({ permissions, canManage }) => {
       const api = stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", ...permissions] }),
+        getMe: vi.fn().mockResolvedValue(venueViewer(permissions)),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
       await flush(el);
@@ -2572,17 +2572,15 @@ describe("dashboard-app", () => {
   });
 
   it.each([
-    { permissions: ["report.view", "venue.view"], canExport: false },
-    { permissions: ["report.view", "report.export", "venue.view"], canExport: true },
+    { permissions: ["report.view"], canExport: false },
+    { permissions: ["report.view", "report.export"], canExport: true },
   ])(
     "tells the orders screen whether the session may export reports ($permissions)",
     async ({ permissions, canExport }) => {
       history.replaceState(null, "", "/manage/orders");
       const api = stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", ...permissions] }),
+        getMe: vi.fn().mockResolvedValue(venueViewer(permissions)),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
       await flush(el);
@@ -2594,17 +2592,15 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    { permissions: ["report.view", "venue.view"], canExport: false },
-    { permissions: ["report.view", "report.export", "venue.view"], canExport: true },
+    { permissions: ["report.view"], canExport: false },
+    { permissions: ["report.view", "report.export"], canExport: true },
   ])(
     "tells the sales screen whether the session may export reports ($permissions)",
     async ({ permissions, canExport }) => {
       history.replaceState(null, "", "/manage/sales");
       const api = stubApi({
         listStaff: vi.fn().mockResolvedValue([]),
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", ...permissions] }),
+        getMe: vi.fn().mockResolvedValue(venueViewer(permissions)),
       });
       const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
       await flush(el);
@@ -3712,9 +3708,7 @@ describe("dashboard-app", () => {
     async (role, permissions, tag, path) => {
       history.replaceState(null, "", "/manage/servers");
       const api = stubApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, role, permissions: ["venue.view", ...permissions] }),
+        getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
         listServers: vi.fn().mockResolvedValue({ term: 0, authorityFingerprint: null, nodes: [] }),
         liveData: new LiveData(),
       });
@@ -3737,11 +3731,7 @@ describe("dashboard-app", () => {
     async (role, permissions) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({
-            ...meResponse,
-            role,
-            permissions: ["venue.view", ...permissions],
-          }),
+          getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
           listStaff: vi.fn().mockResolvedValue([]),
         }),
       });
@@ -3765,11 +3755,7 @@ describe("dashboard-app", () => {
       history.replaceState(null, "", "/manage/catalogue-defaults");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({
-            ...meResponse,
-            role,
-            permissions: ["venue.view", ...permissions],
-          }),
+          getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
           listStaff: vi.fn().mockResolvedValue([]),
         }),
       });
@@ -3810,11 +3796,7 @@ describe("dashboard-app", () => {
     async (role, permissions) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({
-            ...meResponse,
-            role,
-            permissions: ["venue.view", ...permissions],
-          }),
+          getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
           listStaff: vi.fn().mockResolvedValue([]),
         }),
       });
@@ -3839,11 +3821,7 @@ describe("dashboard-app", () => {
       history.replaceState(null, "", "/manage/content-languages");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({
-            ...meResponse,
-            role,
-            permissions: ["venue.view", ...permissions],
-          }),
+          getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
           listStaff: vi.fn().mockResolvedValue([]),
         }),
       });
@@ -3885,9 +3863,7 @@ describe("dashboard-app", () => {
     history.replaceState(null, "", "/manage/appearance");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, permissions: ["venue.view", ...permissions] }),
+        getMe: vi.fn().mockResolvedValue(venueViewer(permissions)),
         listStaff: vi.fn().mockResolvedValue([]),
         listThemes: themesStub(),
       }),
@@ -4004,11 +3980,7 @@ describe("dashboard-app", () => {
     async (role, permissions) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({
-            ...meResponse,
-            role,
-            permissions: ["venue.view", ...permissions],
-          }),
+          getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
         }),
       });
       await flush(el);
@@ -4026,11 +3998,7 @@ describe("dashboard-app", () => {
       history.replaceState(null, "", "/manage/vat-return");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
-          getMe: vi.fn().mockResolvedValue({
-            ...meResponse,
-            role,
-            permissions: ["venue.view", ...permissions],
-          }),
+          getMe: vi.fn().mockResolvedValue(venueViewer(permissions, role)),
         }),
       });
       await flush(el);
