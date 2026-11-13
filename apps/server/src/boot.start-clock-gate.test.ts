@@ -15,6 +15,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import type { BoxHostClient } from "./box-host-client.js";
 import type { clockCorrection } from "./clock-correction.js";
+import type { ClockWatch } from "./clock-watch.js";
 import type { StartClockState } from "./start-clock-check.js";
 import { provisionBillVenue, fiscalRecordCount, type BillVenue } from "./testing/bill-venue.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
@@ -47,7 +48,16 @@ vi.mock("@waitron/module", async (importOriginal) => {
 const built = vi.hoisted(() => ({
   start: undefined as StartClockState | undefined,
   correction: undefined as ReturnType<typeof clockCorrection> | undefined,
+  watch: undefined as ClockWatch | undefined,
 }));
+vi.mock("./clock-watch.js", async (original) => {
+  const actual = await original<typeof import("./clock-watch.js")>();
+  return {
+    ...actual,
+    createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) =>
+      (built.watch = actual.createClockWatch(...args)),
+  };
+});
 vi.mock("./start-clock-check.js", async (original) => {
   const actual = await original<typeof import("./start-clock-check.js")>();
   return {
@@ -250,6 +260,48 @@ describe("the start clock gate as boot wires it", () => {
 
     expect(boxHealth.start).toBeDefined();
     expect(boxHealth.start).toBe(built.start);
+  });
+
+  it("hands the clock watch this box's chain: a future-date refusal of a sale recorded since a person confirmed the time sends the box back to waiting, and one recorded before does not", async () => {
+    const heads = () =>
+      Object.fromEntries(
+        venue.db
+          .all<{ node: string; head: number }>(
+            sql`select node_id as node, max(secuencia) as head from registros_facturacion group by node_id`,
+          )
+          .map(({ node, head }) => [node, head]),
+      );
+    const refuse = (workingOrderId: string) =>
+      venue.db.run(sql`
+        update envios set estado = 'rechazado', codigo_error = '1112'
+        where registro_id in (
+          select r.id from registros_facturacion r join sales s on s.id = r.sale_id
+          where s.working_order_id = ${workingOrderId})`);
+
+    const seen = await serving(unsynchronisedHost().host, async () => {
+      const start = built.start!;
+      start.confirm("by_person", heads());
+      const earlier = await sell();
+      start.confirm("by_person", heads());
+      const later = await sell();
+      refuse(earlier.workingOrderId);
+      await built.watch!.check();
+      const afterEarlier = start.status;
+      refuse(later.workingOrderId);
+      await built.watch!.check();
+      return {
+        sold: [earlier.status, later.status],
+        afterEarlier,
+        start,
+        held: mounted.payments?.(),
+      };
+    });
+
+    expect(seen.sold).toEqual([200, 200]);
+    expect(seen.afterEarlier).toBe("by_person");
+    expect(seen.start.status).toBe("waiting");
+    expect(seen.start.cause).toBe("future_date_refused");
+    expect(seen.held).toBe(true);
   });
 
   it("sells and writes one record when the host's time service is synchronised", async () => {
