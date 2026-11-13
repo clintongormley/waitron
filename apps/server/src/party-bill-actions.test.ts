@@ -16,7 +16,6 @@ import {
 import type { Transaction } from "@waitron/db";
 import { createPinThrottle, loginWithPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
-import type { RecipientIdentifierType } from "@waitron/country-packs";
 import {
   mergeBills,
   requireUntouched,
@@ -52,6 +51,15 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import {
+  ACME,
+  BAR_SOL,
+  SIMPLIFIED,
+  fullInvoice,
+  invoiceOf,
+  invoiceTo,
+  setReceiptLanguage,
+} from "./testing/bill-invoice-fixture.js";
 import "./errors.js";
 import { joinTables, moveGuests, splitTable } from "./testing/table-action-fixture.js";
 import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
@@ -729,38 +737,6 @@ describe("a held dish on a whole table bill presented or paid before its group f
   });
 });
 
-const ACME = {
-  taxId: "12345678Z",
-  legalName: "Acme Travel SL",
-  address: "2 Main Street, 08001 Barcelona, Barcelona",
-  countryCode: "ES",
-};
-const BAR_SOL = {
-  taxId: "B12345674",
-  legalName: "Bar Sol SL",
-  address: "5 Sea Road, 28013 Madrid, Madrid",
-  countryCode: "ES",
-};
-
-/** Sets the bill for a full invoice to `recipient`, as another till's invoice choice does. */
-async function fullInvoice(
-  billId: string,
-  recipient: typeof ACME & {
-    identifierType?: RecipientIdentifierType;
-    identifierCountryCode?: string;
-  },
-  delivery?: { medium: "receipt" },
-): Promise<void> {
-  await setOrderInvoiceChoice(v.db, v.backend, v.cfg, billId, {
-    revision: (await billRow(v, billId)).revision,
-    invoiceType: "F1",
-    recipient,
-    ...(delivery === undefined ? {} : { delivery }),
-    operatorId: OPERATOR,
-    expectedEdit: await inTx(v, (tx) => readBillEditState(tx, billId)),
-  });
-}
-
 /** Sets the bill's simplified invoice to be handed over on the receipt, as another till does. */
 async function receiptDelivery(billId: string): Promise<void> {
   await setOrderInvoiceChoice(v.db, v.backend, v.cfg, billId, {
@@ -790,12 +766,6 @@ async function emailDelivery(billId: string): Promise<void> {
   );
 }
 
-async function setReceiptLanguage(billId: string, language: string): Promise<void> {
-  await inTx(v, (tx) =>
-    tx.update(workingOrders).set({ receiptLocale: language }).where(eq(workingOrders.id, billId)),
-  );
-}
-
 async function mergeChoosing(
   partyId: string,
   intoBillId: string,
@@ -806,36 +776,6 @@ async function mergeChoosing(
   await inTx(v, (tx) =>
     mergeBills(tx, v.cfg, intoBillId, fromBillId, { ...command, invoiceChoice }),
   );
-}
-
-/** The bill's invoice: its type, recipient, delivery and receipt language. */
-async function invoiceOf(billId: string) {
-  const row = await billRow(v, billId);
-  return {
-    invoiceType: row.invoiceType,
-    taxId: row.recipientTaxId,
-    legalName: row.recipientLegalName,
-    address: row.recipientAddress,
-    countryCode: row.recipientCountryCode,
-    identifierType: row.recipientIdentifierType,
-    identifierCountryCode: row.recipientIdentifierCountryCode,
-    delivery: row.invoiceDelivery,
-    language: row.receiptLocale,
-  };
-}
-
-const SIMPLIFIED = {
-  invoiceType: "F2",
-  taxId: null,
-  legalName: null,
-  address: null,
-  countryCode: null,
-  identifierType: null,
-  identifierCountryCode: null,
-};
-
-function invoiceTo(recipient: typeof ACME) {
-  return { invoiceType: "F1", ...recipient, identifierType: null, identifierCountryCode: null };
 }
 
 describe("merge bills", () => {
@@ -1041,9 +981,9 @@ describe("merge bills", () => {
 
   it("refuses when the receiving bill got a full invoice after the till asked", async () => {
     const { partyId, main, second } = await twoBills("Table merge R4 into changed");
-    await fullInvoice(second, ACME);
+    await fullInvoice(v, second, ACME);
     // The till asked with Bill 1 simplified; another till then set it for Bar Sol SL.
-    await fullInvoice(main, BAR_SOL);
+    await fullInvoice(v, main, BAR_SOL);
     const before = await snapshot(partyId, [main, second]);
 
     const error = await captureError(() =>
@@ -1063,7 +1003,7 @@ describe("merge bills", () => {
 
   it("refuses merging away a full-invoice bill without a choice, changing nothing", async () => {
     const { partyId, main, second } = await twoBills("Table merge R4 no choice");
-    await fullInvoice(second, ACME);
+    await fullInvoice(v, second, ACME);
     const before = await snapshot(partyId, [main, second]);
 
     const error = await captureError(() => merge(partyId, main, second));
@@ -1096,7 +1036,7 @@ describe("merge bills", () => {
 
   it("refuses a choice naming the customer's tax number under another kind of identifier", async () => {
     const { partyId, main, second } = await twoBills("Table merge R4 identifier kind");
-    await fullInvoice(second, ACME);
+    await fullInvoice(v, second, ACME);
     const before = await snapshot(partyId, [main, second]);
 
     const error = await captureError(() =>
@@ -1116,8 +1056,8 @@ describe("merge bills", () => {
 
   it("carries the customer and delivery, fills the language, when told to keep the merged-away bill's", async () => {
     const { partyId, main, second } = await twoBills("Table merge R4 keep from");
-    await fullInvoice(second, ACME, { medium: "receipt" });
-    await setReceiptLanguage(second, "en-GB");
+    await fullInvoice(v, second, ACME, { medium: "receipt" });
+    await setReceiptLanguage(v, second, "en-GB");
 
     await mergeChoosing(partyId, main, second, {
       keep: "from",
@@ -1125,7 +1065,7 @@ describe("merge bills", () => {
       from: { taxId: ACME.taxId },
     });
 
-    expect(await invoiceOf(main)).toEqual({
+    expect(await invoiceOf(v, main)).toEqual({
       ...invoiceTo(ACME),
       delivery: { medium: "receipt" },
       language: "en-GB",
@@ -1136,10 +1076,10 @@ describe("merge bills", () => {
 
   it("keeps the receiving bill's own customer when told to", async () => {
     const { partyId, main, second } = await twoBills("Table merge R4 keep into");
-    await fullInvoice(main, BAR_SOL);
-    await setReceiptLanguage(main, "es-ES");
-    await fullInvoice(second, ACME, { medium: "receipt" });
-    await setReceiptLanguage(second, "en-GB");
+    await fullInvoice(v, main, BAR_SOL);
+    await setReceiptLanguage(v, main, "es-ES");
+    await fullInvoice(v, second, ACME, { medium: "receipt" });
+    await setReceiptLanguage(v, second, "en-GB");
 
     await mergeChoosing(partyId, main, second, {
       keep: "into",
@@ -1147,7 +1087,7 @@ describe("merge bills", () => {
       from: { taxId: ACME.taxId },
     });
 
-    expect(await invoiceOf(main)).toEqual({
+    expect(await invoiceOf(v, main)).toEqual({
       ...invoiceTo(BAR_SOL),
       delivery: null,
       language: "es-ES",
@@ -1157,13 +1097,13 @@ describe("merge bills", () => {
 
   it("asks nothing when both bills name the same customer identity", async () => {
     const { partyId, main, second } = await twoBills("Table merge R4 same customer");
-    await fullInvoice(main, ACME);
-    await fullInvoice(second, { ...ACME, legalName: "Acme Travel" }, { medium: "receipt" });
-    await setReceiptLanguage(second, "en-GB");
+    await fullInvoice(v, main, ACME);
+    await fullInvoice(v, second, { ...ACME, legalName: "Acme Travel" }, { medium: "receipt" });
+    await setReceiptLanguage(v, second, "en-GB");
 
     await merge(partyId, main, second);
 
-    expect(await invoiceOf(main)).toEqual({
+    expect(await invoiceOf(v, main)).toEqual({
       ...invoiceTo(ACME),
       delivery: { medium: "receipt" },
       language: "en-GB",
@@ -1173,12 +1113,12 @@ describe("merge bills", () => {
 
   it("asks nothing when the bill merged away is simplified", async () => {
     const { partyId, main, second } = await twoBills("Table merge R4 simplified away");
-    await fullInvoice(main, BAR_SOL);
-    await setReceiptLanguage(second, "en-GB");
+    await fullInvoice(v, main, BAR_SOL);
+    await setReceiptLanguage(v, second, "en-GB");
 
     await merge(partyId, main, second);
 
-    expect(await invoiceOf(main)).toEqual({
+    expect(await invoiceOf(v, main)).toEqual({
       ...invoiceTo(BAR_SOL),
       delivery: null,
       language: "en-GB",
@@ -1188,19 +1128,19 @@ describe("merge bills", () => {
 
   it("keeps a simplified receiving bill simplified when merging away a simplified bill", async () => {
     const { partyId, main, second } = await twoBills("Table merge R4 both simplified");
-    await setReceiptLanguage(main, "es-ES");
-    await setReceiptLanguage(second, "en-GB");
+    await setReceiptLanguage(v, main, "es-ES");
+    await setReceiptLanguage(v, second, "en-GB");
 
     await merge(partyId, main, second);
 
-    expect(await invoiceOf(main)).toEqual({ ...SIMPLIFIED, delivery: null, language: "es-ES" });
+    expect(await invoiceOf(v, main)).toEqual({ ...SIMPLIFIED, delivery: null, language: "es-ES" });
   });
 
   it("drops the receiving bill's delivery when told to keep the merged-away bill's customer, who has none", async () => {
     const { partyId, main, second } = await twoBills("Table merge R4 keep from no delivery");
-    await fullInvoice(main, BAR_SOL);
+    await fullInvoice(v, main, BAR_SOL);
     await emailDelivery(main);
-    await fullInvoice(second, ACME);
+    await fullInvoice(v, second, ACME);
 
     await mergeChoosing(partyId, main, second, {
       keep: "from",
@@ -1208,14 +1148,18 @@ describe("merge bills", () => {
       from: { taxId: ACME.taxId },
     });
 
-    expect(await invoiceOf(main)).toEqual({ ...invoiceTo(ACME), delivery: null, language: null });
+    expect(await invoiceOf(v, main)).toEqual({
+      ...invoiceTo(ACME),
+      delivery: null,
+      language: null,
+    });
   });
 
   it("asks when both bills name one tax number under different kinds of identifier", async () => {
     const { partyId, main, second } = await twoBills("Table merge R4 identifier type only");
     const abroad = { ...ACME, taxId: "X1234567", countryCode: "FR", identifierCountryCode: "FR" };
-    await fullInvoice(main, { ...abroad, identifierType: "passport" });
-    await fullInvoice(second, { ...abroad, identifierType: "vat-number" });
+    await fullInvoice(v, main, { ...abroad, identifierType: "passport" });
+    await fullInvoice(v, second, { ...abroad, identifierType: "vat-number" });
     const before = await snapshot(partyId, [main, second]);
 
     const error = await captureError(() => merge(partyId, main, second));
@@ -1237,14 +1181,14 @@ describe("merge bills", () => {
       if (customer === null) {
         await receiptDelivery(second);
       } else {
-        await fullInvoice(main, customer);
+        await fullInvoice(v, main, customer);
         await emailDelivery(main);
-        await fullInvoice(second, customer, { medium: "receipt" });
+        await fullInvoice(v, second, customer, { medium: "receipt" });
       }
 
       await merge(partyId, main, second);
 
-      expect((await invoiceOf(main)).delivery).toEqual(kept);
+      expect((await invoiceOf(v, main)).delivery).toEqual(kept);
     },
   );
 
@@ -1261,7 +1205,7 @@ describe("merge bills", () => {
     ["a choice that is not an object", "from"],
   ])("refuses a malformed choice: %s, changing nothing", async (_, invoiceChoice) => {
     const { partyId, main, second } = await twoBills(`Table merge R4 malformed ${_}`);
-    await fullInvoice(second, ACME);
+    await fullInvoice(v, second, ACME);
     const before = await snapshot(partyId, [main, second]);
 
     const error = await captureError(() => mergeChoosing(partyId, main, second, invoiceChoice));
