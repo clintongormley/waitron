@@ -1085,22 +1085,13 @@ The catalogue save/publish APIs retain the set-lunch marker, and the order API a
 using its recorded menu prices and table-service VAT class. The editor can configure it, and the service API sends its dishes by course, permits changing an
 unsent choice and preserves service state through table moves. Dedicated till controls for later
 choices and lunch bill/receipt presentation remain unbuilt.
-Most Spanish restaurants sell a fixed-price
-lunch menu. Waitron has no way to sell one: the demo's "Set lunch" is an ordinary menu whose dishes
-each carry their own price, sold, printed and taxed one by one. The catalogue design names this
-"bundles" and leaves it undesigned (`docs/superpowers/specs/2026-09-30-catalogue-menus-routing-design.md`,
-"Bundles"); that section also sets the routing direction: each dish in it goes to its kitchen
-station as an ordinary product, and the menu itself is made by no station.
+The remaining table-service work is in slices 4–5 of the build plan:
 
-What the design has to settle:
+- till controls for choosing included dishes later on the same lunch and sending each course;
+- bill, receipt and invoice presentation with one lunch price, each premium supplement charged
+  once and included dishes shown without separate prices, including reprints after catalogue edits.
 
-- one price for the menu, with courses where the guest picks one dish from a list;
-- items included in the price (bread, a drink, coffee or dessert) and an extra charge for a premium
-  choice;
-- takeaway/delivery VAT treatment: ask the adviser; the owner directed table-service lunch at 10%;
-- what the receipt, the invoice and the kitchen ticket show (one menu line on the receipt; each
-  dish on the kitchen ticket);
-- when it can be sold: service periods already limit a menu to its times and days.
+Takeaway/delivery VAT treatment stays with S10/Lane L and adviser question T17.
 
 ## A1517. Allergen points to revisit before go-live
 
