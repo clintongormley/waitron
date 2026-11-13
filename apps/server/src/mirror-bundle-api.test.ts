@@ -66,6 +66,7 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 import { writerBesideRequest } from "./testing/watched-scrypt.js";
+import { boxHostnameFor } from "./box-name.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -146,6 +147,14 @@ let stateDir: string;
 let db: Database;
 // The main box's own key pair, set by `setupVenue`, so each chart it holds is one it signed.
 let primaryKeyPair: NodeKeyPair;
+const fixtureBoxNames = new Set<string>();
+
+function unusedFixtureNodeId(): string {
+  let id = crypto.randomUUID();
+  while (fixtureBoxNames.has(boxHostnameFor(id))) id = crypto.randomUUID();
+  fixtureBoxNames.add(boxHostnameFor(id));
+  return id;
+}
 
 async function setupVenue(): Promise<{
   designated: AdoptResult;
@@ -185,6 +194,7 @@ async function setupVenue(): Promise<{
   const designated: AdoptResult = {
     nodeId: venue.nodeId,
   };
+  fixtureBoxNames.add(boxHostnameFor(designated.nodeId));
   await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, designated.nodeId);
   const primaryPublicKey = (await readMembershipTrustSet(db))[designated.nodeId]!;
   primaryKeyPair = {
@@ -246,7 +256,7 @@ function validStandby(): {
   standbyAt: number;
 } {
   return {
-    standbyNodeId: crypto.randomUUID(),
+    standbyNodeId: unusedFixtureNodeId(),
     standbyPublicKey: STANDBY_PUB,
     standbyContactUrl: "https://cloud.deli.test",
     standbyStoreUrl: "https://cloud.deli.test:7443",
@@ -379,6 +389,7 @@ beforeAll(async () => {
 // The per-test reset wipes the deployment stamp.
 beforeEach(async () => {
   outsideReservations = [];
+  fixtureBoxNames.clear();
   await stampDeployment(db, "preproduction");
 });
 
@@ -1923,7 +1934,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     ): Promise<{ term: number; ids: string[] }> {
       const term = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
       const others: MembershipNode[] = Array.from({ length: MAX_NODES - 1 }, (_, i) => ({
-        nodeId: crypto.randomUUID(),
+        nodeId: unusedFixtureNodeId(),
         contactUrl: `https://standby-${i}.deli.test`,
         standing: i === 0 ? "evicted" : "serving-secondary",
       }));
@@ -1944,6 +1955,23 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       );
       return { term, ids: others.map((n) => n.nodeId) };
     }
+
+    it("keeps fixture box names distinct when UUID draws share a prefix", async () => {
+      const { designated } = await setupVenue();
+      const draw = vi.spyOn(crypto, "randomUUID");
+      try {
+        draw.mockReturnValueOnce(`${designated.nodeId.slice(0, 4)}0000-4000-8000-000000000001`);
+        const { ids } = await holdFullChart(designated);
+        draw.mockReturnValueOnce(`${ids[0]!.slice(0, 4)}0000-4000-8000-000000000002`);
+        const standby = validStandby();
+        const prefixes = [designated.nodeId, ...ids, standby.standbyNodeId].map((id) =>
+          id.slice(0, 4).toLowerCase(),
+        );
+        expect(new Set(prefixes).size).toBe(prefixes.length);
+      } finally {
+        draw.mockRestore();
+      }
+    });
 
     it("refuses a new standby with 409 mirror.membership_full, before reserving anything", async () => {
       const { designated, adminPersonId } = await setupVenue();

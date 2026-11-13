@@ -1,5 +1,13 @@
 # Testing guide
 
+## Distinct UUIDs can produce the same box name
+
+When a fixture needs distinct boxes, keep their derived hostnames distinct too. The mirror join
+checks the name from the first four UUID characters before the removed-id refusal. A1521's
+collision case forces two draws to reuse names and checks the fixture's resulting prefixes;
+the existing cleared-id case still asserts `mirror.standby_removed`.
+Run `pnpm --filter @waitron/server exec vitest run src/mirror-bundle-api.test.ts`.
+
 ## Read the returned box’s health through HTTPS
 
 The box-installer rig reads the returned app’s `/health` through its existing HTTPS forward,
