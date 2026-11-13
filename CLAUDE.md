@@ -992,9 +992,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   keeps time over the internet — and every step it verifies, or sees move the clock by over a
   second, is alerted and emailed (a step made before the venue exists, at its first full start that
   is neither a mirror nor fenced, unless the topic file's losses apply)** (owner, 2026-11-10).
-  **Waitron never reads AEAT's time except to warn of drift from its filing replies and, until
-  A1420 PR 4 lands, in the series check at setup, restore and promotion
-  (`hour-clock-internet.ts`)** (owner, 2026-11-11). Guards:
+  **Waitron never reads AEAT's time except to warn of drift from its filing replies** (owner,
+  2026-11-11). Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`,
   `apps/server/src/setup-clock-set.test.ts`, `apps/server/src/boot.box-emails.test.ts`, weaker than
@@ -1010,15 +1009,17 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   `scripts/ci-workflow.test.mjs`, weaker than the rule: a stand-in `docker`, never a real publish.
   [Detail](docs/developers/ci-and-gates.md#the-publish-job-requires-guards-and-checks-the-producers-settings)
 - **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion
-  use five symbols for the box's UTC minute, after another machine's clock agrees within 30 seconds
-  (no confirmation); a device that has just set the box's clock from that page is that machine
-  (A1482 plan, cleared by the watcher 2026-11-12 18:33; not owner-approved); a minute whose name is already in a history the box reads is not taken. Its
-  waits, its other refusals and when a name can repeat:
+  use five symbols for the box's UTC minute, after the box's internet time service says it is
+  synchronised, or another machine's clock agrees within 30 seconds (no confirmation); a device that
+  has just set the box's clock from that page is that machine (A1482 plan, cleared by the watcher
+  2026-11-12 18:33; not owner-approved); AEAT's time is not read for it (owner, 2026-11-11: "Instead
+  we rely on NTP"; 2026-11-13: "b", AEAT no longer counts); a minute whose name is already in a
+  history the box reads is not taken. Its waits, its other refusals and when a name can repeat:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
   preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.
   Restore takes one source; working-time chain continues from its head. Guards:
-  hour-selection/hour-clock/minute-selection-unknown-name suites (the last weaker than its name)
-  and `packages/workforce/src/restore-continuation.test.ts`.
+  hour-selection/hour-clock/hour-clock-time-service/minute-selection-unknown-name suites (the last
+  weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`.
 - **A box holding a `node_handover_restriction` row starts restricted, before every worker; a
   background duty is stopped through `apps/server/src/background-duties.ts`, or is a job on the
   runner whose mark in `apps/server/src/job-catalogue.ts` says it stops at a stepdown or why it

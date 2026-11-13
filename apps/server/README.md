@@ -195,8 +195,8 @@ seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one t
 writes the stamp" above for why that file was removed).
 
 On the A679 candidate, set `WAITRON_STATE_DIR` and choose an absolute `--recovery-pdf`
-destination outside state and venue storage. The command owns the setup attempt and compares the box's
-clock with the internet's; it asks nothing about the clock or recent setups, and when the name
+destination outside state and venue storage. The command owns the setup attempt and asks the box's
+internet time service whether it is synchronised; it asks nothing about the clock or recent setups, and when the name
 must wait it prints the time it carries on at and waits in the same run. The destination must not
 already hold a file: the command never writes over one, and refuses before it records anything. It
 requires password and kept-PDF confirmation; `--yes` does not answer the retention question, and a supplied JSON allocation is

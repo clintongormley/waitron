@@ -542,8 +542,8 @@ volumes is wiped, and that includes the venue's databases, because they live in 
 
 A reset during an unfinished first setup forgets the series name that setup chose, as Start again
 does; the clock check and setup's 90–150 second wait still guard it (outside the preproduction
-throwaway, a new name is the current UTC minute, taken only after a clock on another machine agrees
-with the box's within 30 seconds), unless the box and the machine that confirms its clock are wrong
+throwaway, a new name is the current UTC minute, taken only after the box's internet time service says it
+is synchronised or a clock on another machine agrees with the box's within 30 seconds), unless the box and the machine that confirms its clock are wrong
 by the same amount.
 
 At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
@@ -682,6 +682,10 @@ command against it treat that entrypoint differently:
   backup's server key, a fresh allocation and current outside evidence. The source examples below
   show archive and bucket access only; add that procedure's recovery override and credentials
   when restoring Veri*Factu. The recovery key alone does not authorise activation.
+  When the series check refuses because the box's time is unconfirmed (`sif.allocation_invalid`
+  with reason `second_clock_missing`, `clock_disagreement` or `clock_unconfirmed`), the command
+  prints "The box could not confirm its time, so it made no invoice series. Let the box keep its time over the internet, or
+  restore from the restore page on a phone or laptop on the venue's network."
 
   ```bash
   docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \

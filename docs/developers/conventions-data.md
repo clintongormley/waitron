@@ -4283,9 +4283,12 @@ Authenticate with the recovery key matching the selected backup and confirm that
 seller is stopped and no parallel recovery is underway. No installation code is typed
 (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no installation-code
 field"). The module names the new series from the box's clock, five symbols for the UTC minute,
-after a second clock on another machine agrees within 30 seconds
-(`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
-seconds of the box"). A minute a name in the history it can read already holds is not taken: a
+after the box's internet time service says it is synchronised
+(`packages/fiscal-verifactu/src/hour-clock-time-service.test.ts`, "a synchronised answer is a usable
+internet clock at the box's own time"; `packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
+synchronised time service carries on past a browser five minutes out"), or a second clock on
+another machine agrees within 30 seconds (the same file's "a name needs a second clock within 30
+seconds of the box"). AEAT's time is not read for it. A minute a name in the history it can read already holds is not taken: a
 restore's first choice is then refused with how long until the next free minute is taken and when
 to check again (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a name at
 the settle target in the surviving database"; `packages/fiscal-verifactu/src/hour-selection.test.ts`,
@@ -6314,9 +6317,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   clock by over a second, is alerted and emailed (a step made before the venue exists, at its first
   full start that is neither a mirror nor fenced, unless the topic file's losses apply)** (owner,
   2026-11-10: "we rely on NTP only, we don't bother about AEAT"). **Waitron never reads AEAT's time
-  except to warn of drift from its filing replies and, until A1420 PR 4 lands, in the series check
-  at setup, restore and promotion (`hour-clock-internet.ts`)** (owner, 2026-11-11 14:34: "Instead
-  we rely on NTP"). Guards:
+  except to warn of drift from its filing replies** (owner, 2026-11-11 14:34: "Instead we rely on
+  NTP"). Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`,
   `apps/server/src/setup-clock-set.test.ts`, `apps/server/src/boot.box-emails.test.ts`, weaker than
@@ -6325,23 +6327,24 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ### An installation name's minute: waits, refusals and repeats
 
-- **Restore and promotion start a new chain under a new installation name.**
-  Setup/restore/promotion use five symbols for the box's UTC minute, after another machine's clock
-  agrees within 30 seconds (no confirmation); a device that has just set the box's clock from that
-  page is that machine (A1482 plan, cleared by the watcher 2026-11-12 18:33; not owner-approved); a
-  minute whose name is already in a history the box
-  reads is not taken (the box waits for the next free one if it starts within 150 seconds, and
-  otherwise refuses with when it can; the setup and restore pages count that down and check again by
-  themselves; owner, 2026-10-30, A1207), and no other name or record
-  refuses or moves it (owner, 2026-10-29, A1207), except that an attempt whose own pick is ahead of
-  the box's clock is refused until the clock reaches it. Start again keeps no record of the names
-  it deletes (owner, 2026-10-29, A1206): a box and the machine confirming its clock, wrong by the
-  same amount, can repeat a name. Setup/restore wait 90–150 seconds; promotion does not.
-  [Detail](conventions-data.md). Only preproduction throwaway skips
+- **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion
+  use five symbols for the box's UTC minute, after the box's internet time service says it is
+  synchronised, or another machine's clock agrees within 30 seconds (no confirmation); a device that
+  has just set the box's clock from that page is that machine (A1482 plan, cleared by the watcher
+  2026-11-12 18:33; not owner-approved); AEAT's time is not read for it (owner, 2026-11-11: "Instead
+  we rely on NTP"; 2026-11-13: "b", AEAT no longer counts); a minute whose name is already in a
+  history the box reads is not taken (the box waits for the next free one if it starts within 150
+  seconds, and otherwise refuses with when it can; the setup and restore pages count that down and
+  check again by themselves; owner, 2026-10-30, A1207), and no other name or record refuses or moves
+  it (owner, 2026-10-29, A1207), except that an attempt whose own pick is ahead of the box's clock is
+  refused until the clock reaches it. Start again keeps no record of the names it deletes (owner,
+  2026-10-29, A1206): a box and the machine confirming its clock, wrong by the same amount, can
+  repeat a name. Setup/restore wait 90–150 seconds; promotion does not. [Detail](conventions-data.md).
+  Only preproduction throwaway skips
   second-clock/history checks; refuse it outside preproduction. Restore takes one source;
-  working-time chain continues from its head. Guards: hour-selection/hour-clock/minute-selection-
-  unknown-name suites (the last weaker than its name) and
-  `packages/workforce/src/restore-continuation.test.ts`.
+  working-time chain continues from its head. Guards:
+  hour-selection/hour-clock/hour-clock-time-service/minute-selection-unknown-name suites (the
+  last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`.
 
 
 ## A module's settings are one document in the shared settings table
