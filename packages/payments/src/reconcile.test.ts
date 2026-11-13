@@ -114,6 +114,54 @@ function settlement(over: Partial<SettlementRecord> = {}): SettlementRecord {
 }
 
 describe("reconcilePayments", () => {
+  it("audits both exact and drifting orphans without claiming, holding or reversing them", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "audit-exact", "exact");
+    await capture(seeded, "audit-drift", "drift");
+    await setOrderStatus(seeded, "abandoned");
+    const before = await suite.db.execute(sql`select * from payments order by payment_ref`);
+    const reverse = recordingReverse();
+    const result = await reconcilePayments(
+      {
+        ...deps(
+          new FakeSettlementReport([
+            settlement({ references: ["exact"] }),
+            settlement({ references: ["drift"], amount: decimal("12.00") }),
+          ]),
+          reverse.fn,
+        ),
+        mode: "audit-only",
+      },
+      PERIOD,
+      NOW,
+    );
+    expect(result.orphan.map((row) => row.paymentRef).sort()).toEqual([
+      "audit-drift",
+      "audit-exact",
+    ]);
+    expect(result.drift.map((row) => row.paymentRef)).toEqual(["audit-drift"]);
+    expect(result.remediated).toBe(0);
+    expect(reverse.calls).toEqual([]);
+    expect(await suite.db.execute(sql`select * from payments order by payment_ref`)).toEqual(
+      before,
+    );
+    expect(await listOpenHolds(suite.db)).toEqual([]);
+    expect(await suite.db.execute(sql`select * from payment_refunds`)).toMatchObject({ rows: [] });
+    expect(await openIncidentCodes()).toEqual([
+      "payment.reconcile_drift",
+      "payment.reconcile_orphan",
+    ]);
+    const { rows } = parseParams<{ payments: { remediation: string }[] }>(
+      await suite.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
+      ),
+    );
+    expect(rows[0].params.payments.map((row) => row.remediation)).toEqual([
+      "auditOnly",
+      "auditOnly",
+    ]);
+  });
+
   it("answers all-empty for a tenant with nothing to check", async () => {
     const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);
     expect(result).toMatchObject({

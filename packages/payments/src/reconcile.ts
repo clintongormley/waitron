@@ -24,7 +24,7 @@ export interface ReconcilePeriod {
 }
 
 /**
- * One settlement the processor says actually cleared.
+ * One completed charge reported by the processor; this need not establish bank arrival.
  *
  * `references` is a list because our `external_ref` holds whichever identifier the inbound path
  * carried — for a hosted payment, the hosted session id — while settlement data keys by the
@@ -47,7 +47,7 @@ export interface SettlementRecord {
  * every returned settlement with no local row lands in `missingLocal`.
  */
 export interface SettlementReportSource {
-  fetch(window: ReconcilePeriod): Promise<SettlementRecord[]>;
+  fetch(window: ReconcilePeriod, localReferences?: readonly string[]): Promise<SettlementRecord[]>;
 }
 
 /** Reverse one payment in full at the processor. Throws when the payment cannot be addressed at the
@@ -85,6 +85,8 @@ export interface PaymentReconcileResult {
   period: ReconcilePeriod;
   /** LOCAL rows examined, not report entries. */
   checked: number;
+  unlinkedCharges?: number;
+  resweepAfter?: Date;
   unsettled: PaymentMismatch[];
   lostSettlement: PaymentMismatch[];
   orphan: PaymentMismatch[];
@@ -191,15 +193,14 @@ export function classify(
  * surfaces the same week. */
 export const DEFAULT_SETTLEMENT_LAG_MS = 7 * 24 * 60 * 60 * 1000;
 
-export interface ReconcileDeps {
+export type ReconcileDeps = {
   db: Database;
   provider: string;
   report: SettlementReportSource;
-  reverse: ReversalFn;
   incidents: IncidentSink;
   heldAlerts: HeldAlertSink;
   settlementLagMs: number;
-}
+} & ({ mode: "audit-only"; reverse?: ReversalFn } | { mode?: "remediate"; reverse: ReversalFn });
 
 const CODE = {
   unsettled: "payment.reconcile_unsettled",
@@ -221,7 +222,8 @@ const SEVERITY = {
 
 /**
  * Audit one period's payments against the processor's settlement report, raise one incident per
- * class (a held payment only in the held alert), and reverse the orphans that pass every gate.
+ * class (a held payment only in the held alert). Audit-only mode leaves money and holds unchanged.
+ * Remediation mode reverses the orphans that pass every gate.
  *
  * T1 refreshes the held alert and reads, the report fetch runs outside every transaction, T2
  * writes incidents and markers, and the reversals run outside every transaction (each is a network
@@ -244,10 +246,13 @@ export async function reconcilePayments(
   });
 
   // Widened by the settlement lag: a payment captured at the end of the period settles days after.
-  const records = await deps.report.fetch({
-    from: period.from,
-    to: new Date(period.to.getTime() + deps.settlementLagMs),
-  });
+  const records = await deps.report.fetch(
+    {
+      from: period.from,
+      to: new Date(period.to.getTime() + deps.settlementLagMs),
+    },
+    rows.flatMap((row) => (row.externalRef === null ? [] : [row.externalRef])),
+  );
 
   const classified = classify(rows, records, now, deps.settlementLagMs);
   const result: PaymentReconcileResult = {
@@ -311,6 +316,10 @@ export async function reconcilePayments(
     for (const entry of findings) {
       if (entry.klass !== "orphan") continue;
       const ref = entry.row.paymentRef;
+      if (deps.mode === "audit-only") {
+        remediation.set(ref, "auditOnly");
+        continue;
+      }
       if (entry.row.workingOrderStatus !== "abandoned") {
         remediation.set(ref, "workingOrderNotAbandoned");
         continue;
@@ -375,7 +384,7 @@ export async function reconcilePayments(
   // failures go on the result as well as into an incident.
   const failures: RemediationFailure[] = [];
   for (const row of remediable) {
-    const reason = await remediate(deps, row);
+    const reason = await remediate(deps.reverse!, row);
     if (reason === null) result.remediated += 1;
     else {
       failures.push({ row, reason });
@@ -535,9 +544,9 @@ function missingLocalMismatch(record: SettlementRecord): PaymentMismatch {
 
 /** Returns `null` when the money went back, else the refusal's `AppError` code or `"unknown"`. Never
  * retried: the marker was stamped in T2. */
-async function remediate(deps: ReconcileDeps, row: ReconcilableRow): Promise<string | null> {
+async function remediate(reverse: ReversalFn, row: ReconcilableRow): Promise<string | null> {
   try {
-    await deps.reverse(row.paymentRef);
+    await reverse(row.paymentRef);
     return null;
   } catch (error) {
     return isAppError(error) ? error.code : "unknown";

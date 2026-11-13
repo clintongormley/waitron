@@ -1,3 +1,4 @@
+import type { Purpose } from "@waitron/credentials";
 import type {
   DutyOutcome,
   PaymentReconcileResult,
@@ -27,7 +28,11 @@ export function reconcilerAsDuty(reconciler: PaymentReconciler): PeriodDuty {
         // A paymentRef in BOTH lists is an orphan whose amount also drifted. Deliberately a SUPERSET of
         // the strictly-gated set: exactness would mean widening a money-path package for one extra
         // harmless re-sweep.
-        ...(gatedDriftOrphan(result) ? { resweepAfter: new Date(now.getTime() + DAY_MS) } : {}),
+        ...(result.resweepAfter !== undefined
+          ? { resweepAfter: result.resweepAfter }
+          : gatedDriftOrphan(result)
+            ? { resweepAfter: new Date(now.getTime() + DAY_MS) }
+            : {}),
       };
     },
   };
@@ -44,6 +49,7 @@ function summaryOf(result: PaymentReconcileResult): Record<string, unknown> {
   return {
     period: { from: result.period.from.toISOString(), to: result.period.to.toISOString() },
     checked: result.checked,
+    ...(result.unlinkedCharges === undefined ? {} : { unlinkedCharges: result.unlinkedCharges }),
     unsettled: result.unsettled,
     lostSettlement: result.lostSettlement,
     orphan: result.orphan,
@@ -69,14 +75,19 @@ export interface ReconcilePassDeps {
   /** With payments switched off its tables, `scheduled_runs` among them, are not migrated. */
   paymentsEnabled: boolean;
   /** Asked per pass, so a credential provisioned while the host runs is served on the next pass. */
-  credentialProvisioned: () => Promise<boolean>;
-  runDue: (now: Date) => Promise<TickResult>;
+  duties: readonly { duty: PeriodDuty; credentialPurpose: Purpose }[];
+  credentialProvisioned: (purpose: Purpose) => Promise<boolean>;
+  runDue: (now: Date, duties: PeriodDuty[]) => Promise<TickResult>;
 }
 
-/** A pass's reconcile step: runs the duty only while payments is on and its credential is there. */
+/** Select each provisioned provider's duty while payments is on. */
 export function reconcilePassFor(deps: ReconcilePassDeps): (now: Date) => Promise<TickResult> {
   return async (now) => {
     if (!deps.paymentsEnabled) return NOTHING_TO_RECONCILE;
-    return (await deps.credentialProvisioned()) ? deps.runDue(now) : NOTHING_TO_RECONCILE;
+    const duties: PeriodDuty[] = [];
+    for (const entry of deps.duties) {
+      if (await deps.credentialProvisioned(entry.credentialPurpose)) duties.push(entry.duty);
+    }
+    return duties.length === 0 ? NOTHING_TO_RECONCILE : deps.runDue(now, duties);
   };
 }

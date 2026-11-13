@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
+  withTransaction,
   UNIQUE_VIOLATION,
   billPayments,
   captureError,
@@ -34,6 +35,7 @@ import {
   insertFailedPayment,
   insertInitiated,
   listAttempting,
+  listAuditCandidates,
   listReconcilable,
   markReconcileRemediated,
   recordFailedRefund,
@@ -1687,5 +1689,57 @@ describe("rows written within one millisecond", () => {
     }
 
     expect(await suite.db.transaction((tx) => recordedRefundRefs(tx, bill!.id))).toEqual(refs);
+  });
+});
+
+describe("audit candidates", () => {
+  it("selects failed and pending payments by provider and half-open creation period", async () => {
+    expect(listAuditCandidates).toBeTypeOf("function");
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    for (const [paymentRef, provider] of [
+      ["failed", "sumup"],
+      ["pending", "sumup"],
+      ["other", "fake"],
+      ["end", "sumup"],
+    ]) {
+      await withTransaction(suite.db, (tx) =>
+        insertFailedPayment(tx, {
+          origin: deviceOrigin(seeded.deviceId),
+          nodeId: seeded.nodeId,
+          workingOrderId: seeded.workingOrderId,
+          provider,
+          paymentRef,
+          amount: decimal("10.00"),
+        }),
+      );
+    }
+    await suite.db.execute(sql`update payments set created_at = '2026-07-01T00:00:00.000Z'`);
+    await suite.db.execute(
+      sql`update payments set state = 'attempting', external_ref = 'client' where payment_ref = 'pending'`,
+    );
+    await suite.db.execute(
+      sql`update payments set created_at = '2026-07-02T00:00:00.000Z' where payment_ref = 'end'`,
+    );
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        listAuditCandidates(tx, "sumup", {
+          from: new Date("2026-07-01T00:00:00Z"),
+          to: new Date("2026-07-02T00:00:00Z"),
+        }),
+      ),
+    ).toEqual([
+      {
+        paymentRef: "failed",
+        externalRef: null,
+        workingOrderId: seeded.workingOrderId,
+        state: "failed",
+      },
+      {
+        paymentRef: "pending",
+        externalRef: "client",
+        workingOrderId: seeded.workingOrderId,
+        state: "attempting",
+      },
+    ]);
   });
 });

@@ -2,7 +2,7 @@
 
 **Claude read and sole reread completed; watcher cleared this slice on 13 November at 20:43, with stray-charge clarification at 20:45 (Lane F questions.md). No owner design approval claimed.** One build slice, at most three working hours. Full-refund manager release landed in #3081.
 
-**Request**, recorded in `~/waitron-campaign-f/queue.md`: “Next: write the smallest settlement-report audit slice as a one-page plan, get the Claude read, then watcher clearance. No implementation branch remains. Retained-money allocation needs a separate decision.”
+**Request**, recorded in `~/waitron-campaign-f/queue.md`: “settlement-report audit and orphan self-heal match a payment whose reply was lost from SumUp’s own record.” The watcher cleared only the gross-charge audit slice here; the other remainders stay open.
 
 **Smallest usable result.** You see charge discrepancies in existing alerts, with report results in `scheduled_runs.summary`. SumUp’s gross EUR charges are compared with local captures; a charge’s supplied Waitron reference identifies a lost-reply payment and its order without settling it. Unattributed app/reader charges stay summary-only. A refund made outside Waitron goes unnoticed by this gross audit. Retained net, refund reconciliation, bank payout/fee proof, orphan self-heal, W44, backup-machine matching, signature qualification and retained-money allocation remain open. No new table/record type, screen, scheduler, timer or health mechanism.
 

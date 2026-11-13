@@ -157,8 +157,7 @@ refund rows/events, and phone-app samples. The raw 19-row history response from 
 read-only follow-up has no foreign-reference key; two original details do. Both raw details
 retain refund ids, and their real-adapter replays match the corresponding refund. The earlier
 projection omitted ids; it is not evidence for a parser change. A first missing lookup does not
-license another charge; ambiguous matches stay visible. No reconciler was built. Its design may
-continue against [the 9 November cross-account session](../research/2026-09-10-sumup-solo-experiments.md#11-a949-cross-account-session-2026-11-09).
+license another charge; ambiguous matches stay visible. The gross-charge audit is separate from bank-payout proof and refund reconciliation. Further work can use [the 9 November cross-account session](../research/2026-09-10-sumup-solo-experiments.md#11-a949-cross-account-session-2026-11-09).
 The A1308 table-work hold was lifted on 7 November; any new schema work regenerates on the
 current main baseline. The first A949 slice uses `WAITRON_SUMUP_AFFILIATE` in
 `packages/payments-sumup/src/affiliate.ts` for the app ID and public partner key together.
@@ -170,10 +169,10 @@ that fallback is not live-qualified. A lost fallback reply has no supplied refer
 Recovery records the gross capture and identified completed refunds together. Uncertain refund
 evidence stays attempting for another check; a failed refund alone leaves the charge. A partly
 refunded unfiled charge keeps the order held. Retaining and allocating the remaining charge after
-a partial refund is still unavailable. Report audit, orphan self-heal, durable reversal attempts
+a partial refund is still unavailable. Bank-payout audit, refund reconciliation, orphan self-heal, durable reversal attempts
 and all three backup-machine cases remain open, along with signature handling.
 
-Settlement-report audit and orphan self-heal remain to build. The original transaction can stay
+Bank-payout audit, refund reconciliation and orphan self-heal remain to build. The original transaction can stay
 `SUCCESSFUL` while identified `REFUND` events in `events` and `transaction_events` show money
 returned; its status alone cannot establish what remains collected.
 

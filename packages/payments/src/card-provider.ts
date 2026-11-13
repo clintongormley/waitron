@@ -5,6 +5,8 @@ import type { KeyRing, Purpose } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import type { PaymentProvider } from "./provider.js";
 import type { CaptureMismatchSink } from "./capture-mismatch.js";
+import type { HeldAlertSink } from "./held-alert.js";
+import type { PaymentReconciler } from "./reconcile.js";
 import type { IncidentSink } from "./reconcile.js";
 
 /** A browser-safe field descriptor for the generic connect form. `secret` fields are password inputs
@@ -64,6 +66,9 @@ export interface CardProviderContribution {
   ): Promise<ConnectResult>;
   /** Build the live PaymentProvider from the sealed credential (called by the pool). */
   build(deps: CardProviderBuildDeps): PaymentProvider;
+  createReconciler?(
+    deps: CardProviderBuildDeps & { heldAlerts: HeldAlertSink; settlementLagMs?: number },
+  ): PaymentReconciler;
   readers: {
     /** Whether remove releases the device registration at the provider. */
     readonly canUnpair: boolean;

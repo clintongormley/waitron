@@ -12,3 +12,5 @@ export type { SumUpCloudProviderOptions } from "./provider.js";
 export { sumupClient } from "./sumup-client.js";
 export type { SumUpClientOptions } from "./sumup-client.js";
 export { SUMUP_CARD_PROVIDER } from "./card-provider.js";
+export { sumupSettlementReport } from "./report-source.js";
+export { SumUpReconciler } from "./reconciler.js";

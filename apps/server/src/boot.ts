@@ -121,7 +121,7 @@ import {
   type ReaderStatus,
   runDue,
 } from "@waitron/payments";
-import { recordIncidentOnce, markIncidentHandled } from "@waitron/core";
+import { recordIncidentOnce, markIncidentHandled, currentIncidentsOf } from "@waitron/core";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertOperationalVenue, hasOperationalVenue } from "@waitron/provisioning";
@@ -2523,7 +2523,35 @@ async function bootServer(
     }),
     ...(timings.settlementLagMs === undefined ? {} : { settlementLagMs: timings.settlementLagMs }),
   });
-  const duty = reconcilerAsDuty(reconciler);
+  const auditDuties = [
+    { duty: reconcilerAsDuty(reconciler), credentialPurpose: "payments.stripe" as const },
+    ...CARD_PROVIDERS.flatMap((provider) =>
+      provider.createReconciler === undefined
+        ? []
+        : [
+            {
+              duty: reconcilerAsDuty(
+                provider.createReconciler({
+                  db,
+                  ring,
+                  environment: config.environment,
+                  incidents: recordIncidentOnce,
+                  captureAlerts: { raise: recordIncidentOnce, handle: markIncidentHandled },
+                  heldAlerts: {
+                    raise: recordIncidentOnce,
+                    current: currentIncidentsOf,
+                    handle: markIncidentHandled,
+                  },
+                  ...(timings.settlementLagMs === undefined
+                    ? {}
+                    : { settlementLagMs: timings.settlementLagMs }),
+                }),
+              ),
+              credentialPurpose: provider.credentialPurpose,
+            },
+          ],
+    ),
+  ];
 
   // Registered before the API mounts so it wraps them.
   app.use("/api/*", corsForVenue(allowOrigin));
@@ -4095,12 +4123,13 @@ async function bootServer(
             drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
             reconcile: reconcilePassFor({
               paymentsEnabled: setsToMigrate.some((module) => module.name === "payments"),
-              credentialProvisioned: () => credentialProvisioned(db, "payments.stripe"),
-              runDue: (at2) =>
+              duties: auditDuties,
+              credentialProvisioned: (purpose) => credentialProvisioned(db, purpose),
+              runDue: (at2, duties) =>
                 runDue(
                   {
                     db,
-                    duties: [duty],
+                    duties,
                     horizonDays: timings.scheduler.horizonDays,
                     maxPeriodsPerTick: timings.scheduler.maxPeriodsPerTick,
                     maxAttempts: timings.scheduler.maxAttempts,

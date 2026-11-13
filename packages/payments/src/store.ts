@@ -710,6 +710,30 @@ export async function listReconcilable(
   });
 }
 
+export async function listAuditCandidates(
+  tx: Transaction,
+  provider: string,
+  period: { from: Date; to: Date },
+) {
+  return tx
+    .select({
+      paymentRef: payments.paymentRef,
+      externalRef: payments.externalRef,
+      workingOrderId: payments.workingOrderId,
+      state: payments.state,
+    })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.provider, provider),
+        inArray(payments.state, ["failed", "attempting"]),
+        gte(payments.createdAt, period.from.toISOString()),
+        lt(payments.createdAt, period.to.toISOString()),
+      ),
+    )
+    .orderBy(payments.paymentRef);
+}
+
 /** Keeps an `IN` list under the engine's bind-parameter ceiling however large the input. */
 export const CHUNK_SIZE = 1000;
 

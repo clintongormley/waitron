@@ -1242,11 +1242,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   same moment (an accepted race); Stripe's reader list is one page; status never refreshes by
   itself, and polling must go through the passive-session controller.
 
-- **The SumUp reconciler** — settlement-report audit and orphan self-heal. A949 also includes
+- **The SumUp reconciler** — bank-payout audit, refund reconciliation and orphan self-heal. A949 also includes
   durable reversal attempts (W44) and the owner's backup-machine matching contract. The November
   results now include cross-account affiliate acceptance, pending/paid references, REFUNDED events
   and unpaid cancellation. The first recovery slice supplies Waitron's partner key and records
-  identified refunds. Retained-money allocation after a partial refund, report audit, orphan self-heal,
+  identified refunds. Retained-money allocation after a partial refund, bank-payout audit, orphan self-heal,
   durable reversals and backup-machine matching remain to build.
   [Detail](backlog/payments.md#the-sumup-reconciler)
 

@@ -985,3 +985,44 @@ describe("a correction whose automatic filing was refused", () => {
     );
   });
 });
+
+it.each([
+  [
+    "payment.reconcile_unsettled",
+    "not confirmed in the card provider's records",
+    "no constan en los registros del proveedor",
+  ],
+  ["payment.reconcile_lost_settlement", "never finished here", "aquí no se completaron"],
+  [
+    "payment.reconcile_orphan",
+    "may not be refunded automatically",
+    "pueden no devolverse automáticamente",
+  ],
+  [
+    "payment.reconcile_missing_local",
+    "no matching completed payment here",
+    "sin un pago completado correspondiente aquí",
+  ],
+  [
+    "payment.reconcile_drift",
+    "different amount in the card provider's records",
+    "importe distinto en los registros del proveedor",
+  ],
+  [
+    "payment.reconcile_held",
+    "different amount in the card provider's records",
+    "importe distinto en los registros del proveedor",
+  ],
+])("describes provider-record finding %s without asserting a bank payout", (code, en, es) => {
+  expect(alertMessage(code, { count: 2 }, "en")).toContain(en);
+  expect(alertMessage(code, { count: 2 }, "es")).toContain(es);
+});
+
+it("names the payment audit without asserting a bank payout", () => {
+  expect(alertMessage("job.failing", { job: "payments.reconcile" }, "en")).toContain(
+    "checking card provider records",
+  );
+  expect(alertMessage("job.failing", { job: "payments.reconcile" }, "es")).toContain(
+    "los registros del proveedor de pagos",
+  );
+});

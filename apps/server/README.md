@@ -1,8 +1,8 @@
 # `@waitron/server`
 
 The host process. It boots from environment config, loads the credential vault's key ring, applies
-every migration set behind the venue directory's own migration lock, resolves the AEAT transport and the Stripe
-account, then runs the fiscal submission and Stripe reconciliation loop. An independent card loop
+every migration set behind the venue directory's own migration lock, resolves the AEAT transport and the card-provider
+accounts, then runs fiscal submission and payment audits. An independent card loop
 checks pending provider outcomes, recovers automatic captures through the existing till path,
 releases stale payment marks and completes pending bill payments. It runs immediately and sleeps
 at most one minute between passes; slow provider requests can extend a pass. Sale recovery and bill
@@ -15,7 +15,7 @@ This document is written for whoever deploys this process, not whoever reads its
 **The one thing worth remembering before anything else:** `drain` carries a legal, hourly submission
 duty under Spain's Veri\*Factu regulation (art. 16.4). A `/health` that reports `200` with a `duties` object is a claim that
 the pass was not wholesale abandoned and each duty had a clean pass within its budget; a parked
-Stripe settlement-audit period is not in the status code, and the body's `parked` count shows it
+payment-audit period is not in the status code, and the body's `parked` count shows it
 only until the next recorded pass replaces it. The error-level `reconcile.run_parked` log line,
 written by the pass that parks, is the signal to look for afterwards. It is **not** a claim that
 every individual fiscal record has actually been accepted by AEAT. A database whose records reach AEAT but are individually rejected reads `200` with
@@ -712,7 +712,7 @@ things — two visible in the body above without needing the logs, one that need
 **`parked` > 0, `payments.reconcile.stripe` only, is not a `503` by itself.** The pass that parks
 counts as a failure (`consecutiveFailures` goes up and `lastOkAt` does not advance), but the next
 clean pass clears it, so the status code turns `503` only when no clean pass comes within the
-duty's 26-hour budget. A park means a Stripe reconcile run exhausted
+duty's 26-hour budget. A park means a payment-audit run exhausted
 `DEFAULT_DUTY_TIMINGS.scheduler.maxAttempts` (default 3) for that (duty, period), and a fresh run of the same
 period is queued for a day later (`retryParkedAfterMs`, `src/reconcile-duty.ts`), unlike a
 `skipped` pair (which retries within one
@@ -730,9 +730,15 @@ carries the duty, period and `errorCode`.
 
 `payments.reconcile.stripe` uses the identical `skipped`/`parked` mechanism with a 26-hour staleness
 budget (a daily period plus slack) rather than drain's ~75 minutes, so the same reading applies to
-it for Stripe settlement reconciliation instead of a fiscal submission. It runs only while the
-`payments` module is on and the Stripe credential is provisioned; otherwise each pass reports it
-with nothing to do.
+it for payment audits instead of a fiscal submission. This health label covers the selected
+Stripe and SumUp duties together, retaining its existing name and budget. `scheduled_runs.duty`
+keeps `payments.reconcile.stripe` or `payments.reconcile.sumup`. Each runs only while the
+`payments` module is on and its own credential is provisioned; credentials are checked each pass.
+
+The SumUp audit compares gross EUR charges with local captures and looks up locally failed
+payments by their saved references. An alert can identify a charge whose reply was lost, but the
+audit makes no refund, hold, payment or sale change. Unlinked app/reader charges appear only in
+the run summary. This check establishes neither bank arrival nor refunds made outside Waitron.
 
 **What to do about a `503`:** read the body first — it names which duty and how many skipped or
 parked runs. Then grep stdout for that duty's own `duty.degraded` line — it names the duty, its
@@ -782,7 +788,7 @@ The ones worth grepping for:
   (`src/restart-reset.ts`), so no drain ran. Logged once per failed attempt; each pass that waited
   on it also logs `drain.tenant_skipped` with the same `errorCode` (`unknown` for a raw database
   error), and the next pass tries the reset again.
-- **`reconcile.pair_skipped`** (`warn`) — `{ duty, errorCode }`. The Stripe reconcile
+- **`reconcile.pair_skipped`** (`warn`) — `{ duty, errorCode }`. The payment-audit
   equivalent, one duty abandoned mid-sweep — an infrastructure failure, a credential
   code as above, or `payment.credential_environment_mismatch` (the `payments.stripe` key's
   `sk_live_`/`sk_test_` prefix disagrees with this host's `WAITRON_ENV`).

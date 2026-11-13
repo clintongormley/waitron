@@ -983,3 +983,47 @@ describe("SumUp refund evidence", () => {
     expect((await client.findTransaction({ id: "txn" }))?.refundEvidenceInvalid).toBe(true);
   });
 });
+
+describe("SumUp history transport", () => {
+  it("uses merchant-scoped query strings and exposes audit detail fields", async () => {
+    const seen: string[] = [];
+    const client = sumupClient({
+      apiKey: "test",
+      merchantCode: "MC/test",
+      fetch: async (url) => {
+        seen.push(String(url));
+        return Response.json(
+          String(url).includes("/history")
+            ? { items: [], links: [] }
+            : {
+                id: "tx",
+                status: "REFUNDED",
+                amount: 10,
+                currency: "EUR",
+                timestamp: "2026-07-01T12:00:00Z",
+                foreign_transaction_id: "lost",
+              },
+        );
+      },
+    });
+    expect(client.historyPage).toBeTypeOf("function");
+    expect(await client.historyPage("limit=100&oldest_ref=next")).toEqual({ items: [], links: [] });
+    expect(seen[0]).toBe(
+      "https://api.sumup.com/v2.1/merchants/MC%2Ftest/transactions/history?limit=100&oldest_ref=next",
+    );
+    expect(await client.findTransaction({ id: "tx" })).toMatchObject({
+      currency: "EUR",
+      timestamp: "2026-07-01T12:00:00Z",
+      foreignTransactionId: "lost",
+    });
+  });
+  it.each([302, 401, 500])("refuses history HTTP %s", async (status) => {
+    const client = sumupClient({
+      apiKey: "test",
+      merchantCode: "MC",
+      fetch: async () => new Response("{}", { status }),
+    });
+    expect(client.historyPage).toBeTypeOf("function");
+    await expect(client.historyPage("limit=100")).rejects.toThrow();
+  });
+});
