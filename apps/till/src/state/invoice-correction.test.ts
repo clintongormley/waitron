@@ -17,6 +17,7 @@ const openAsk = {
   expectedSplit: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
 };
 const correction = { id: "correction-1" } as never;
+const cashGiven = { correction, refunds: [], replayed: false };
 const refusal = (code: string, status = 409, params = {}) => ({ ...params, code, status });
 const lost = () => new TypeError("Failed to fetch");
 
@@ -272,3 +273,154 @@ it.each([
     expect(session.read("sale-1")?.request.appliedAmount).toBe("4.00");
   },
 );
+
+/** An api whose every call waits until the test answers it. */
+function waitingApi() {
+  const calls: Array<{
+    request: { submissionId: string };
+    answer: (value: unknown) => void;
+    refuse: (error: unknown) => void;
+  }> = [];
+  const call = (request: { submissionId: string }) =>
+    new Promise<never>((answer, refuse) =>
+      calls.push({ request: structuredClone(request), answer: answer as never, refuse }),
+    );
+  return {
+    calls,
+    api: {
+      openInvoiceCorrection: vi.fn((_sale: string, request: InvoiceCorrectionRequest) =>
+        call(request),
+      ),
+      giveInvoiceCorrectionCash: vi.fn((_id: string, request: InvoiceCorrectionCashRequest) =>
+        call(request),
+      ),
+    },
+  };
+}
+
+it.each(kinds)(
+  "$kind: refuses a second send while one waits for its answer",
+  async ({ send, ok }) => {
+    const w = waitingApi();
+    const session = new InvoiceCorrectionSession(scope, w.api);
+    const first = send(session);
+    await expect(send(session)).rejects.toMatchObject({ kind: "busy" });
+    expect(w.calls).toHaveLength(1);
+    w.calls[0]!.answer(ok);
+    await first;
+    const next = send(session);
+    expect(w.calls).toHaveLength(2);
+    w.calls[1]!.answer(ok);
+    await next;
+  },
+);
+
+it.each([
+  { label: "answer", late: (call: { answer: (v: unknown) => void }) => call.answer(cashGiven) },
+  {
+    label: "correction refusal",
+    late: (call: { refuse: (e: unknown) => void }) =>
+      call.refuse(refusal("invoice_correction.not_open")),
+  },
+])(
+  "a late $label to an earlier send leaves a newer request's saved id in place",
+  async ({ late }) => {
+    const w = waitingApi();
+    const tab = new InvoiceCorrectionSession(scope, w.api);
+    const otherTab = new InvoiceCorrectionSession(scope, w.api);
+    const ask = { amount: "1.00" };
+    const first = tab.giveCash("correction-1", ask);
+    const repeat = otherTab.giveCash("correction-1", ask);
+    expect(w.calls[1]!.request.submissionId).toBe(w.calls[0]!.request.submissionId);
+    w.calls[0]!.answer(cashGiven);
+    await first;
+    const next = tab.giveCash("correction-1", ask);
+    const nextId = w.calls[2]!.request.submissionId;
+    expect(nextId).not.toBe(w.calls[0]!.request.submissionId);
+    late(w.calls[1]!);
+    await repeat.catch(() => undefined);
+    w.calls[2]!.refuse(lost());
+    await expect(next).rejects.toThrow("Failed to fetch");
+    expect(tab.savedCash("correction-1")?.submissionId).toBe(nextId);
+  },
+);
+
+it("retries an open rebuilt in another key, line and split order under its first id, sending the saved request", async () => {
+  const h = harness([lost(), { correction, replayed: true }]);
+  const first = {
+    gross: "12.10",
+    lineIds: ["line-1", "line-2"],
+    reasonId: "reason-1",
+    note: null,
+    expectedSplit: [
+      { rate: "10.00", base: "5.00", tax: "0.50" },
+      { rate: "21.00", base: "5.37", tax: "1.13" },
+    ],
+  };
+  await expect(h.session.open("sale-1", first)).rejects.toThrow("Failed to fetch");
+  const rebuilt = {
+    expectedSplit: [
+      { tax: "1.13", base: "5.37", rate: "21.00" },
+      { rate: "10.00", base: "5.00", tax: "0.50" },
+    ],
+    note: null,
+    reasonId: "REASON-1",
+    lineIds: ["LINE-2", "line-1"],
+    gross: "12.10",
+  };
+  await expect(h.session.open("sale-1", rebuilt)).resolves.toMatchObject({
+    correctionId: "correction-1",
+  });
+  expect(h.sent[1]).toEqual(h.sent[0]);
+});
+
+it("retries a cash leg whose amount is written another way under its first id", async () => {
+  const h = harness([lost(), cashGiven]);
+  await expect(h.session.giveCash("correction-1", { amount: "5.00" })).rejects.toThrow();
+  await h.session.giveCash("correction-1", { amount: "5" });
+  expect(h.sent[1]).toEqual(h.sent[0]);
+});
+
+it.each([
+  { label: "amount", change: { gross: "12.00" } },
+  { label: "lines", change: { lineIds: ["line-1", "line-2"] } },
+  { label: "split", change: { expectedSplit: [{ rate: "10.00", base: "11.00", tax: "1.10" }] } },
+  { label: "reason", change: { reasonId: "reason-2" } },
+  { label: "note", change: { note: "Wrong dish" } },
+])("still refuses an open whose $label changed while one waits", async ({ change }) => {
+  const h = harness([lost()]);
+  await expect(h.session.open("sale-1", openAsk)).rejects.toThrow("Failed to fetch");
+  await expect(h.session.open("sale-1", { ...openAsk, ...change })).rejects.toMatchObject({
+    kind: "locked",
+  });
+  expect(h.api.openInvoiceCorrection).toHaveBeenCalledTimes(1);
+});
+
+it("answers a served open even when its saved entry turned unreadable meanwhile, and keeps that entry", async () => {
+  const h = harness([]);
+  const unreadable = JSON.stringify({ version: 2, request: {} });
+  let key = "";
+  h.api.openInvoiceCorrection.mockImplementationOnce(async () => {
+    key = Object.keys(localStorage).find((k) => k.includes("invoice-correction-open"))!;
+    localStorage.setItem(key, unreadable);
+    return { correction, replayed: false } as never;
+  });
+  await expect(h.session.open("sale-1", openAsk)).resolves.toEqual({
+    correctionId: "correction-1",
+    opened: { correction, replayed: false },
+  });
+  expect(localStorage.getItem(key)).toBe(unreadable);
+});
+
+it("refuses to send over a saved entry whose request it cannot compare", async () => {
+  const h = harness([lost()]);
+  await expect(h.session.open("sale-1", openAsk)).rejects.toThrow();
+  const key = Object.keys(localStorage).find((k) => k.includes("invoice-correction-open"))!;
+  const saved = JSON.parse(localStorage.getItem(key)!) as { request: object };
+  localStorage.setItem(
+    key,
+    JSON.stringify({ ...saved, request: { ...saved.request, reasonId: 7 } }),
+  );
+  await expect(h.session.open("sale-1", openAsk)).rejects.toMatchObject({ kind: "storage" });
+  expect(h.api.openInvoiceCorrection).toHaveBeenCalledTimes(1);
+});
