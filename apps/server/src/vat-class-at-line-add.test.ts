@@ -777,10 +777,19 @@ it.each([false, true])(
   "a table lunch files one 10% service with coffee chosen: %s",
   async (includeCoffee) => {
     const v = await setupVenue();
-    const { main, coffee } = await withTransaction(suite.db, async (tx) => {
+    const { main, coffee, coffeeId } = await withTransaction(suite.db, async (tx) => {
       await updateProduct(tx, v.products.burger, { setLunch: true, unitPrice: "18.00" });
       await updateProduct(tx, v.products.cheese, { vatClass: "general" });
-      await updateProduct(tx, v.products.coffee, { vatClass: "general" });
+      const includedCoffee = await createProduct(tx, {
+        catalogueId: v.counter.menuId,
+        categoryId: null,
+        name: "Included coffee",
+        customerName: { es: "Included guest coffee" },
+        kitchenName: "COFFEE",
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
       const main = await createExtraList(
         tx,
         {
@@ -806,7 +815,7 @@ it.each([false, true])(
           minPicks: 1,
           maxPicks: 1,
           items: [
-            { productId: v.products.bread, maxQuantity: 1, preselected: false, price: "0.00" },
+            { productId: includedCoffee.id, maxQuantity: 1, preselected: false, price: "0.00" },
           ],
         },
         LOCALE,
@@ -815,7 +824,7 @@ it.each([false, true])(
         { kind: "extras", id: main.id },
         { kind: "extras", id: coffee.id },
       ]);
-      return { main, coffee };
+      return { main, coffee, coffeeId: includedCoffee.id };
     });
     await republish(v);
     const tabId = await openTableTab(v, [
@@ -825,7 +834,7 @@ it.each([false, true])(
         extras: [
           { listId: main.id, picks: [{ productId: v.products.cheese, quantity: 1 }] },
           ...(includeCoffee
-            ? [{ listId: coffee.id, picks: [{ productId: v.products.bread, quantity: 1 }] }]
+            ? [{ listId: coffee.id, picks: [{ productId: coffeeId, quantity: 1 }] }]
             : []),
         ],
       },
@@ -841,7 +850,7 @@ it.each([false, true])(
     expect(sale.lines.map((line) => [line.productId, line.vatRate, line.lineGross])).toEqual([
       [v.products.burger, 1000, 1800],
       [v.products.cheese, 1000, 300],
-      ...(includeCoffee ? [[v.products.bread, 1000, 0]] : []),
+      ...(includeCoffee ? [[coffeeId, 1000, 0]] : []),
     ]);
   },
 );
