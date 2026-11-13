@@ -2337,7 +2337,7 @@ describe("prepare & collect — zone payment timing", () => {
 // `ticket_items`. `payWorkingOrder` (Mode P, at payment) and `placeOrder` (Modes I/T) are the fires
 
 describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
-  it("advanceTicketItem walks a line queued → preparing → ready; a skip, a repeat, a backwards move and to='queued' are all refused", async () => {
+  it("advanceTicketItem walks a line queued → preparing → ready and back to preparing; a skip, a repeat and to='queued' are all refused", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
     await payWorkingOrder(
@@ -2368,19 +2368,19 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
     await asTenant((tx) => advanceTicketItem(tx, item!, "ready"));
     expect(await ticketStateOf(id)).toBe("ready");
 
-    // A repeat (ready → ready) and a backwards move (ready → preparing) both match no row now.
-    for (const to of ["ready", "preparing"] as const) {
-      await expect(asTenant((tx) => advanceTicketItem(tx, item!, to))).rejects.toMatchObject({
-        code: "ticket.invalid_transition",
-        params: { ticketItemId: item },
-      });
-    }
+    await expect(asTenant((tx) => advanceTicketItem(tx, item!, "ready"))).rejects.toMatchObject({
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: item },
+    });
     // No kitchen state advances INTO `queued` — refused before any query (reaching queued is a fire's job).
     await expect(asTenant((tx) => advanceTicketItem(tx, item!, "queued"))).rejects.toMatchObject({
       code: "management.request_invalid",
       params: { field: "to" },
     });
     expect(await ticketStateOf(id)).toBe("ready"); // every refusal left the item untouched
+
+    await asTenant((tx) => advanceTicketItem(tx, item!, "preparing"));
+    expect(await ticketStateOf(id)).toBe("preparing");
   });
 
   it("listStationQueue lists this station's items grouped by order oldest-first, dropping collected and abandoned orders", async () => {

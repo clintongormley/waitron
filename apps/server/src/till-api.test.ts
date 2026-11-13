@@ -3564,6 +3564,36 @@ describe("KDS-1 station-display operate routes", () => {
     });
   });
 
+  it("a Ready item sent back to preparing answers 200 and reads preparing on the queue", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
+    const id = await placeFired(app, cookie);
+    const kitchenStation = await defaultStation(app, cookie);
+    const queue = async () => {
+      const q = await app.request(`/api/stations/${kitchenStation.id}/queue`, {
+        headers: { cookie },
+      });
+      const { items: groups } = (await q.json()) as {
+        items: { orderId: string; items: { id: string; state: string }[] }[];
+      };
+      return groups.find((g) => g.orderId === id)!.items[0]!;
+    };
+    const advance = (itemId: string, to: string) =>
+      app.request(`/api/ticket-items/${itemId}/advance`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ to, stationId: kitchenStation.id }),
+      });
+    const itemId = (await queue()).id;
+    expect((await advance(itemId, "preparing")).status).toBe(200);
+    expect((await advance(itemId, "ready")).status).toBe(200);
+
+    const back = await advance(itemId, "preparing");
+    expect(back.status).toBe(200);
+    expect(await queue()).toMatchObject({ id: itemId, state: "preparing" });
+  });
+
   it("POST /api/ticket-items/:id/advance with an unknown or malformed id is 404 ticket_item.not_found, not a 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));

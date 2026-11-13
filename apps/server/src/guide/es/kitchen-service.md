@@ -184,11 +184,13 @@ minutos cuentan desde que su primer plato se envió a esta estación para prepar
 ella. Toca la cabecera de una columna, que muestra cuántas tarjetas tiene, para plegarla en una
 franja estrecha que conserva su nombre y su número (**Listo · 3**); tócala otra vez para abrirla.
 Toca un plato para avanzarlo un paso, o toca la cabecera de la tarjeta para avanzar la tarjeta: solo
-avanzan los platos que la retienen, así que un plato que ya va más adelante se queda donde está. En
-una tarjeta de **Toda la comanda**, un toque en un plato avanza los platos de la tarjeta que están
-en la misma fase. El borde superior de una tarjeta pasa de verde a ámbar mientras espera, y después
-todo el borde a rojo, según los avisos de demora de la estación, y el borde de una tarjeta olvidada
-late; en un dispositivo configurado para reducir el movimiento se queda quieto.
+avanzan los platos que la retienen, así que un plato que ya va más adelante se queda donde está.
+Toca un plato **Listo** para devolverlo a **Preparando**, por ejemplo tras un toque por error; se
+puede hasta que se sirve. En una tarjeta de **Toda la comanda**, un toque en un plato avanza los
+platos de la tarjeta que están en la misma fase. El borde superior de una tarjeta pasa de verde a
+ámbar mientras espera, y después todo el borde a rojo, según los avisos de demora de la estación, y
+el borde de una tarjeta olvidada late; en un dispositivo configurado para reducir el movimiento se
+queda quieto.
 
 Una tarjeta cuyos platos están todos en espera tiene el borde discontinuo y no muestra minutos. Dice
 **En espera, sin marchar** hasta que el camarero [pida la

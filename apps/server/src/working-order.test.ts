@@ -5173,7 +5173,7 @@ async function ticketItemRows(
 }
 
 describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
-  it("bumps a line queued→preparing→ready, refuses illegal moves", async () => {
+  it("bumps a line queued→preparing→ready, and a Ready line still to serve back to preparing", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
@@ -5191,12 +5191,9 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
       await advanceTicketItem(tx, items[0]!.id, "preparing");
       await advanceTicketItem(tx, items[0]!.id, "ready");
 
-      // Backwards (ready → preparing) is refused via the empty `returning` — the state predicate no
-      // longer matches — naming the offending ticket item.
-      await expect(advanceTicketItem(tx, items[0]!.id, "preparing")).rejects.toMatchObject({
-        code: "ticket.invalid_transition",
-        params: { ticketItemId: items[0]!.id },
-      });
+      await advanceTicketItem(tx, items[0]!.id, "preparing");
+      expect((await ticketItemRows(tx, orderId))[0]!.state).toBe("preparing");
+      await advanceTicketItem(tx, items[0]!.id, "ready");
 
       await advanceTicketItem(tx, items[1]!.id, "preparing");
 

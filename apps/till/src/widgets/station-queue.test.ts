@@ -845,13 +845,45 @@ describe("till-station-queue", () => {
     expect(spy).toHaveBeenCalledWith({ itemId: "ti-2", stationId: "st-1", to: "ready" });
   });
 
-  it("a ready line renders no bump control (its kitchen state is terminal)", async () => {
+  it("line mode: tapping a ready line emits advance-ticket-item { to: 'preparing' } and says so", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
       stationId: "st-1",
     });
-    expect(el.shadowRoot!.querySelector('[data-item="ti-3"]')).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('button[data-item="ti-3"]')).toBeNull();
+    const spy = vi.fn();
+    el.addEventListener("advance-ticket-item", (e) => spy((e as CustomEvent).detail));
+    const ready = el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-3"]')!;
+    expect(ready.querySelector(".visually-hidden")!.textContent).toBe("Back to Preparing #6");
+    ready.click();
+    expect(spy).toHaveBeenCalledExactlyOnceWith({
+      itemId: "ti-3",
+      stationId: "st-1",
+      to: "preparing",
+    });
+  });
+
+  it("ticket mode: tapping a Ready dish sends the card's Ready dishes back together; its heading does nothing", async () => {
+    const second = { ...groupB.items[0]!, id: "ti-3b", workingOrderLineId: "wol-3b" };
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [{ ...groupB, bumpMode: "ticket" as const, items: [...groupB.items, second] }],
+      stationId: "st-1",
+    });
+    const item = vi.fn();
+    const dishes = vi.fn();
+    el.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
+    el.addEventListener("advance-dishes", (e) => dishes((e as CustomEvent).detail));
+    const card = el.shadowRoot!.querySelector('article[data-order="6"]')!;
+    expect(card.querySelector("button[data-card-head]")).toBeNull();
+    card.querySelector<HTMLElement>(".ticket-head")!.click();
+    expect(dishes).not.toHaveBeenCalled();
+
+    el.shadowRoot!.querySelector<HTMLElement>('button[data-item="ti-3"]')!.click();
+    expect(dishes).toHaveBeenCalledExactlyOnceWith({
+      itemIds: ["ti-3", "ti-3b"],
+      stationId: "st-1",
+      to: "preparing",
+    });
+    expect(item).not.toHaveBeenCalled();
   });
 
   it("ticket mode: tapping a line emits advance-dishes { itemIds, stationId, to } for its card's dishes at its stage", async () => {
