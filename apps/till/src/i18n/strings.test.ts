@@ -375,6 +375,13 @@ it("says plainly what Send again does to a correction whose answer was lost, in 
   ]);
 });
 
+it("says Send again got no answer either, in both languages", () => {
+  expect([en["invoice_correction.still_lost"], es["invoice_correction.still_lost"]]).toEqual([
+    "Still no answer. Check this till's connection, then send again.",
+    "Sigue sin respuesta. Comprueba la conexión de esta caja y vuelve a enviar.",
+  ]);
+});
+
 it("says why a till that cannot give cash back stops after opening a correction, in both languages", () => {
   expect(en["invoice_correction.no_cash_here"]).toBe(
     "This till cannot give cash back. Give the cash back from a till that can; while nothing has been given back, Discard ends the correction.",

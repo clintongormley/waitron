@@ -164,6 +164,8 @@ export class TillInvoiceCorrectionDialog extends LitElement {
   /** An Open whose answer never arrived; while it exists the window sends only it again. */
   @state() private savedOpen: ReturnType<InvoiceCorrectionSession["savedOpen"]> = null;
   @state() private lostKey: StringKey = "invoice_correction.unknown";
+  /** Send again's own answer was lost too. */
+  @state() private stillLost = false;
   @property({ attribute: false }) capabilities: readonly string[] = [];
   @state() private loaded: (InvoiceCorrectionLines & { tenders: RefundableTender[] }) | null = null;
   @state() private loadRefusal: PayRefusal | null = null;
@@ -267,8 +269,11 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     await dialog?.updateComplete;
     const active = this.shadowRoot!.activeElement;
     if (active !== null && active !== dialog) return;
-    this.shadowRoot!.querySelector<HTMLElement>(
-      ".body :is(wt-switch, wt-price-input, wt-combobox, wt-button):not([disabled])",
+    (
+      this.shadowRoot!.querySelector<HTMLElement>("[data-resend]") ??
+      this.shadowRoot!.querySelector<HTMLElement>(
+        ".body :is(wt-switch, wt-price-input, wt-combobox, wt-button):not([disabled])",
+      )
     )?.focus();
   }
   #reload(): void {
@@ -850,6 +855,13 @@ export class TillInvoiceCorrectionDialog extends LitElement {
             : "invoice_correction.saved",
         ).replace(/\{amount\}/g, () => this.#money(saved.gross))}
       </p>
+      ${
+        this.stillLost
+          ? html`<p class="error" data-still-lost role="alert">
+              ${t("invoice_correction.still_lost")}
+            </p>`
+          : nothing
+      }
       <wt-form-actions
         .error=${
           this.sendRefusal === null || this.sendRefusal.code === "network"
@@ -862,10 +874,16 @@ export class TillInvoiceCorrectionDialog extends LitElement {
           data-resend
           .loading=${this.busy}
           .disabled=${this.busy}
-          @click=${() => void this.#run(() => this.#open(null))}
+          @click=${() => void this.#resend()}
           >${t("invoice_correction.resend")}</wt-button
         >
       </wt-form-actions>`;
+  }
+  async #resend(): Promise<void> {
+    if (!this.isConnected || !this.active || this.busy) return;
+    this.stillLost = false;
+    await this.#run(() => this.#open(null));
+    this.stillLost = this.savedOpen !== null && this.sendRefusal?.code === "network";
   }
   #sendText(refusal: PayRefusal): string {
     return refusal.code === "network"

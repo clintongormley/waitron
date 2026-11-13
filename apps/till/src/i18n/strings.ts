@@ -183,6 +183,8 @@ export const en = {
   "invoice_correction.saved_cash":
     "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and gives {amount} back in cash, opening the cash drawer. If it did, Send again shows what happened. Nothing happens twice.",
   "invoice_correction.resend": "Send again",
+  "invoice_correction.still_lost":
+    "Still no answer. Check this till's connection, then send again.",
   "invoice_correction.unknown_end":
     "The server's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
   "tender_refund.left": "{amount} left to refund from another payment",
@@ -2250,6 +2252,8 @@ export const es: Record<StringKey, string> = {
   "invoice_correction.saved_cash":
     "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y devuelve {amount} en efectivo, abriendo el cajón. Si llegó, al pulsar Enviar de nuevo verás lo que pasó. Nada ocurre dos veces.",
   "invoice_correction.resend": "Enviar de nuevo",
+  "invoice_correction.still_lost":
+    "Sigue sin respuesta. Comprueba la conexión de esta caja y vuelve a enviar.",
   "invoice_correction.unknown_end":
     "No ha llegado la respuesta del servidor. Pulsa Volver a consultar para ver si se hizo antes de pulsar nada más.",
   "tender_refund.left": "Quedan {amount} por devolver de otro pago",

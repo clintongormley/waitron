@@ -705,6 +705,38 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
     ]);
   });
 
+  it("says the till is still not getting answers only once Send again is lost too, and stops once one arrives", async () => {
+    const api = sendingApi();
+    api.openInvoiceCorrection.mockRejectedValueOnce(lost()).mockRejectedValueOnce(lost());
+    const { el } = await mountSending(api);
+    const stillLost = () => root(el).querySelector("[data-still-lost]");
+
+    await confirmCorrection(el);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-saved]")).not.toBeNull());
+    expect(stillLost()).toBeNull();
+
+    resend(el).click();
+    await vi.waitFor(() => expect(api.openInvoiceCorrection).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(text(stillLost())).toBe(t("invoice_correction.still_lost")));
+
+    resend(el).click();
+    await vi.waitFor(() => expect(root(el).querySelector("[data-back]")).not.toBeNull());
+    expect(stillLost()).toBeNull();
+  });
+
+  it("opens a saved Open with focus on Send again", async () => {
+    const session = new InvoiceCorrectionSession(SCOPE, {
+      openInvoiceCorrection: () => Promise.reject(lost()),
+      giveInvoiceCorrectionCash: () => Promise.reject(lost()),
+    });
+    await session
+      .open("sale-1", { gross: "2.00", reasonId: "overcharged", note: null, expectedSplit: SPLIT })
+      .catch(() => {});
+    const { el } = await mountSending();
+
+    await vi.waitFor(() => expect(resend(el).shadowRoot!.contains(focused())).toBe(true));
+  });
+
   it("offers a saved Open from an earlier visit, and forgets it once the correction it may have opened is found", async () => {
     const session = new InvoiceCorrectionSession(SCOPE, {
       openInvoiceCorrection: () => Promise.reject(lost()),
