@@ -1,8 +1,9 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, persons, startManagementSession, type PersonRoleValue } from "@waitron/identity";
+import { hashPin, startManagementSession, type BuiltInRoleKey } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -18,12 +19,9 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 const PATH = "/management-api/fiscal-filing";
 
-async function sessionCookie(role: PersonRoleValue): Promise<string> {
+async function sessionCookie(role: BuiltInRoleKey): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: role, pinHash: hashPin("1234"), role })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, { displayName: role, pinHash: hashPin("1234"), role });
     const session = await startManagementSession(tx, { personId: person!.id });
     return `${MANAGEMENT_COOKIE}=${session.token}`;
   });
