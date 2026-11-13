@@ -55,9 +55,13 @@ export const resolvedDates = {
   from: "2026-10-15",
   to: "2026-10-15",
 };
-export function findBillApi(answer?: (url: URL, signal?: AbortSignal | null) => Promise<Response>) {
+export function findBillApi(
+  answer?: (url: URL, signal?: AbortSignal | null) => Promise<Response>,
+  corrections: unknown[] = [],
+) {
   const fetcher = vi.fn<typeof fetch>(async (url, init) => {
     const parsed = new URL(String(url), location.origin);
+    if (parsed.pathname === "/api/invoice-corrections") return json({ corrections });
     if (answer) return answer(parsed, init?.signal);
     return json(
       parsed.pathname.endsWith("options")

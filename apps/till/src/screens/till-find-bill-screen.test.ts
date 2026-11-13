@@ -753,3 +753,45 @@ it("filters actual completed refund rows without changing their identity, sign o
   );
   expect(grid.shadowRoot!.textContent).toContain("-€13.75");
 });
+
+it("lists the corrections under way and opens the one chosen", async () => {
+  const correction = {
+    id: "correction-1",
+    saleId: "sale-1",
+    state: "open",
+    gross: "6.05",
+    moneyBack: "2.00",
+    pending: "0.00",
+    left: "4.05",
+    reason: "Overcharged",
+    openedAt: "2026-10-15T12:00:00Z",
+    correctiveSaleId: null,
+    legs: [],
+  };
+  const { el, fetcher } = await mount(findBillApi(undefined, [correction]));
+  await ready(el);
+  const button = await vi.waitFor(() => {
+    const found = el.shadowRoot!.querySelector<HTMLElement>('[data-correction="correction-1"]');
+    expect(found).not.toBeNull();
+    return found!;
+  });
+  expect(el.shadowRoot!.querySelector("[data-corrections] h2")!.textContent).toBe(
+    "Corrections under way",
+  );
+  expect(button.textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "15/10/2026, 14:00:00 · Overcharged · €4.05 of €6.05 left to give back",
+  );
+  expect(requests(fetcher, "/api/invoice-corrections")).toHaveLength(1);
+  const opened = vi.fn();
+  el.addEventListener("find-correction-open", opened);
+  await userEvent.click(button);
+  expect(opened.mock.calls[0]![0].detail).toEqual({ correction });
+});
+
+it("shows no corrections section when none is under way", async () => {
+  const { el, fetcher } = await mount();
+  await ready(el);
+  await vi.waitFor(() => expect(requests(fetcher, "/api/invoice-corrections")).toHaveLength(1));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-corrections]")).toBeNull();
+});

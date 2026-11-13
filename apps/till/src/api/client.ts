@@ -39,6 +39,7 @@ import type {
   InvoiceCorrectionPreviewRequest,
   InvoiceCorrectionRequest,
   InvoiceCorrectionView,
+  OpenInvoiceCorrection,
 } from "./invoice-correction-types.js";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 import type {
@@ -4047,6 +4048,16 @@ export class TillApi {
       "POST",
       request,
     );
+  }
+
+  async listInvoiceCorrections(options: ReadOptions = {}): Promise<OpenInvoiceCorrection[]> {
+    const { corrections } = await this.#request<{ corrections: OpenInvoiceCorrection[] }>(
+      "/api/invoice-corrections",
+      "GET",
+      undefined,
+      options.signal,
+    );
+    return corrections;
   }
 
   getInvoiceCorrection(

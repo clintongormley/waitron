@@ -47,6 +47,9 @@ export interface InvoiceCorrectionView {
     | null;
 }
 
+/** A correction under way, as Find bill lists it. */
+export type OpenInvoiceCorrection = Omit<InvoiceCorrectionView, "fileNow">;
+
 export interface InvoiceCorrectionOpened {
   correction: InvoiceCorrectionView;
   replayed: boolean;

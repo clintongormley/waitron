@@ -289,6 +289,36 @@ you to refund it at a till.
 If the card provider cannot refund the payment yet, this attempt returned no money.
 You can close the window and start a new refund later.
 
+## Correct an invoice {#correct-invoice}
+
+When a paid bill charged too much, correct its invoice: the guest gets the difference back and
+Waitron files a corrective invoice for it. On a past receipt, choose **Correct invoice**, beside
+**Refund a payment**.
+
+If the overcharge was on particular dishes, tick them under **Dishes to correct (optional)**;
+otherwise leave them all unticked. Enter the **Money back, VAT included**, and check the VAT shown
+for each rate. Choose a **Reason**, then **Correct and refund**. If you may not correct invoices,
+someone who may enters their PIN.
+
+When the bill was paid only in cash, the cash drawer opens and the corrective invoice is filed at
+once: give the customer the amount the window shows. Otherwise the window shows what is left to
+give back, with a step for each payment. **Give back €6.05 in cash** opens the cash drawer.
+**Refund to card** opens **Refund a payment** filled in for that card; refund the cards one at a
+time. While a card refund waits for the card company, choose **Check again** to see its answer.
+
+If you close the window before the money is all back, the correction stays open. **Find a bill**
+lists it under **Corrections under way**; choose it to carry on, then choose one of these:
+
+- **Record correction**, once everything is back, files the corrective invoice.
+- **Finish now** files a corrective invoice for what has been given back so far, and gives no more
+  back.
+- **Discard** ends a correction that has given nothing back.
+- **Close keeping the refunds** ends it without a corrective invoice, when the window says one
+  cannot be filed. The money given back stays given back.
+
+If the window says an earlier request got no answer, choose **Send again**. It sends that same
+request, so nothing happens twice.
+
 ## Refund a card payment on a separate terminal {#separate-terminal}
 
 For a card payment keyed from a separate terminal, Waitron asks you to refund it on that terminal

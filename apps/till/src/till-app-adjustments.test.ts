@@ -4527,6 +4527,34 @@ describe("till-app: service cancellation consent", () => {
       expect(correcting().session).toBeDefined();
     });
 
+    it("opens a correction chosen in Find bill on its receipt, even with nothing left to refund", async () => {
+      const getInvoiceCorrection = vi.fn(() => new Promise(() => {}));
+      const methods = paidMethods({
+        getRefundableTenders: vi.fn().mockResolvedValue([]),
+        getInvoiceCorrection,
+      });
+      const { el } = await mountApp(methods);
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      emit(shell(el), "find-bill");
+      const findBill = () => el.shadowRoot!.querySelector("till-find-bill-screen");
+      await expect.poll(findBill).not.toBeNull();
+      emit(findBill()!, "find-correction-open", {
+        correction: { id: "correction-1", saleId: "own-sale" },
+      });
+      await flush(el);
+      const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
+      await expect.poll(() => correcting()).not.toBeNull();
+      expect(api.getTransactionReceipt).toHaveBeenCalledWith("own-sale", expect.anything());
+      expect(ticket(el)).not.toBeNull();
+      expect([correcting()!.saleId, correcting()!.correctionId]).toEqual([
+        "own-sale",
+        "correction-1",
+      ]);
+      expect(getInvoiceCorrection).toHaveBeenCalledWith("correction-1", {});
+    });
+
     it("reports a transaction load failure after the kitchen write without reopening a cancellation", async () => {
       const methods = paidMethods({
         getTransactionReceipt: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),

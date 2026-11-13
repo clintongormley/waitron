@@ -304,6 +304,38 @@ devuelvas en una caja.
 Si el proveedor de pagos aún no puede hacer la devolución, este intento no ha devuelto dinero.
 Puedes cerrar la ventana e iniciar una nueva devolución más tarde.
 
+## Rectificar una factura {#correct-invoice}
+
+Cuando a una cuenta pagada se le cobró de más, rectifica su factura: el cliente recibe la
+diferencia y Waitron presenta una factura rectificativa por ella. En un recibo anterior, elige
+**Rectificar factura**, junto a **Devolver un pago**.
+
+Si el cobro de más fue en platos concretos, márcalos en **Platos que se rectifican (opcional)**; si
+no, déjalos todos sin marcar. Escribe el **Dinero a devolver, IVA incluido** y revisa el IVA que se
+muestra para cada tipo. Elige un **Motivo** y después **Rectificar y devolver**. Si no puedes
+rectificar facturas, alguien que pueda introduce su PIN.
+
+Cuando la cuenta se pagó solo en efectivo, se abre el cajón y la factura rectificativa se presenta
+en el momento: da al cliente el importe que muestra la ventana. Si no, la ventana muestra lo que
+queda por devolver, con un paso para cada pago. **Devolver 6,05 € en efectivo** abre el cajón.
+**Devolver a la tarjeta** abre **Devolver un pago** ya rellenado para esa tarjeta; devuelve las
+tarjetas de una en una. Mientras una devolución a la tarjeta espera la respuesta de la entidad,
+elige **Volver a consultar** para ver su respuesta.
+
+Si cierras la ventana antes de devolver todo el dinero, la rectificación sigue abierta. **Buscar
+cuenta** la muestra en **Rectificaciones en curso**; elígela para seguir y después elige una de
+estas opciones:
+
+- **Registrar la rectificación**, cuando todo está devuelto, presenta la factura rectificativa.
+- **Terminar ahora** presenta una factura rectificativa por lo devuelto hasta ahora y no devuelve
+  más.
+- **Descartar** termina una rectificación que no ha devuelto nada.
+- **Cerrar y conservar las devoluciones** la termina sin factura rectificativa, cuando la ventana
+  dice que no se puede presentar. El dinero devuelto queda devuelto.
+
+Si la ventana dice que una petición anterior no recibió respuesta, elige **Enviar de nuevo**. Envía
+esa misma petición, así que nada ocurre dos veces.
+
 ## Devolver una tarjeta en un datáfono aparte {#separate-terminal}
 
 Para un pago con tarjeta registrado desde un datáfono aparte, Waitron te pide que lo devuelvas

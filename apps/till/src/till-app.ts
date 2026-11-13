@@ -58,6 +58,7 @@ import {
 import type { PayEquipmentPick, PayEquipmentRole } from "./widgets/pay-equipment.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
+import type { OpenInvoiceCorrection } from "./api/invoice-correction-types.js";
 import "./screens/till-find-bill-screen.js";
 import { EMPTY_MENU_FILTERS, type MenuFilters } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
@@ -3456,6 +3457,7 @@ export class TillApp extends LitElement {
   @state() private refundableTenders: RefundableTender[] = [];
   @state() private invoiceCorrecting: {
     saleId: string;
+    correctionId: string;
     session: InvoiceCorrectionSession;
     legsRevision: number;
   } | null = null;
@@ -8780,7 +8782,19 @@ export class TillApp extends LitElement {
     });
   }
 
-  #openInvoiceCorrection(): void {
+  async #onFindCorrectionOpen(
+    event: CustomEvent<{ correction: OpenInvoiceCorrection }>,
+  ): Promise<void> {
+    if (this.drill?.kind !== "find-bill") return;
+    const { id, saleId } = event.detail.correction;
+    await this.#openHistoricalReceipt({ saleId, workingOrderId: null, refundId: null });
+    if (this.historicalReceipt?.kind === "invoice" && this.historicalReceipt.saleId === saleId)
+      this.#openInvoiceCorrection(id);
+  }
+
+  /** With `correctionId`, carries on with that open correction, which may have nothing left to
+   * refund. */
+  #openInvoiceCorrection(correctionId = ""): void {
     const receipt = this.historicalReceipt;
     if (
       !this.isConnected ||
@@ -8788,11 +8802,12 @@ export class TillApp extends LitElement {
       receipt?.kind !== "invoice" ||
       this.invoiceCorrecting ||
       this.#tenderRefundScope === undefined ||
-      !this.#hasRefundableTenders()
+      (correctionId === "" && !this.#hasRefundableTenders())
     )
       return;
     this.invoiceCorrecting = {
       saleId: receipt.saleId,
+      correctionId,
       session: new InvoiceCorrectionSession(this.#tenderRefundScope, this.api),
       legsRevision: 0,
     };
@@ -8804,6 +8819,7 @@ export class TillApp extends LitElement {
     return html`<till-invoice-correction-dialog
       .api=${this.api}
       .saleId=${open.saleId}
+      .correctionId=${open.correctionId}
       .invoiceNumber=${this.result?.invoiceNumber ?? ""}
       .namesLocale=${this.result?.namesLocale ?? this.result?.locale ?? ""}
       .session=${open.session}
@@ -8935,6 +8951,7 @@ export class TillApp extends LitElement {
         @find-bill-open=${(event: CustomEvent<{ row: BillRow }>) => void this.#onFindBillOpen(event)}
         @find-bill-back=${() => this.#requestLeave(() => this.#onBackToCounter())}
         @find-transaction-open=${(event: CustomEvent<{ row: TransactionRow }>) => void this.#onFindTransactionOpen(event)}
+        @find-correction-open=${(event: CustomEvent<{ correction: OpenInvoiceCorrection }>) => void this.#onFindCorrectionOpen(event)}
       ></till-find-bill-screen>
     </div>`;
   }

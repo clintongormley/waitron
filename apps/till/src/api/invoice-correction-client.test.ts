@@ -140,3 +140,15 @@ it("files a correction with the split shown, and closes one, each with the PIN w
     ["/api/invoice-corrections/correction%2F1/close", post({})],
   ]);
 });
+
+it("lists the open corrections, passing the signal", async () => {
+  const corrections = [{ id: "correction-1", saleId: "sale-1", state: "open", left: "4.05" }];
+  const fetcher = vi.fn().mockResolvedValue(response({ corrections }));
+  const signal = new AbortController().signal;
+  expect(await new TillApi("", fetcher).listInvoiceCorrections({ signal })).toEqual(corrections);
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/invoice-corrections", {
+    method: "GET",
+    credentials: "include",
+    signal,
+  });
+});

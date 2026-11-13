@@ -17,6 +17,7 @@ import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { trackDialog } from "./track-dialog.js";
+import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import "./supervisor-override-dialog.js";
 import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -93,6 +94,7 @@ const AMOUNT_REFUSALS = new Set([
 export class TillInvoiceCorrectionDialog extends LitElement {
   static override styles = [
     baseStyles,
+    helpAnchorStyles,
     css`
       .body {
         display: flex;
@@ -866,7 +868,13 @@ export class TillInvoiceCorrectionDialog extends LitElement {
             submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-confirm]"))}
         >
           <p>${this.invoiceNumber}</p>
-          <p class="muted">${t("invoice_correction.explain")}</p>
+          <p class="muted help-anchor">
+            ${t("invoice_correction.explain")}${helpBadge(
+              "help.correct_invoice",
+              t("invoice_correction.title"),
+              { guide: "table-service.correct-invoice" },
+            )}
+          </p>
           ${this.#body()}
         </div> </wt-dialog
       >${

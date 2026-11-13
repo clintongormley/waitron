@@ -901,7 +901,7 @@ should instead cancel the original and issue a new invoice (`TipoRectificativa` 
 today's path files by differences, "I", in `packages/fiscal-verifactu/src/backend.ts`) — asked as
 asesor Q31 (2026-09-30), not decided.
 
-- **A802: design approved 2026-10-21; implementation remains open.** The
+- **A802: design approved 2026-10-21; staff can correct part of a paid invoice since slice 5b.** The
   [design](../superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md)
   covers paid-receipt corrections, their money-back workflow and A758's same-step correction.
   The owner approved both permissions with explicit refund links and the proposed source-history
@@ -912,14 +912,14 @@ asesor Q31 (2026-09-30), not decided.
   required before the dependent money workflow.
   **2026-11-12:** the [reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md) replaces it
   for the remaining work.
-  The owner's 2026-10-18 scope follows:
-  - A server route that issues a partial correction through `recordCorrection`
-    (`packages/core/src/record-correction.ts`), filing by differences as today.
-  - A till action on a paid receipt, where staff already find one (the find-a-bill page, beside
-    Refund): pick the wrong lines and how many, or enter an amount; the amount entered is what the
-    customer gets back, VAT included (owner, 2026-09-29); print the corrective receipt.
-  - Settle in the spec how a correction and the existing Refund relate, by reading the code paths:
-    whether money goes back in the same step, and what each files.
+  **2026-11-13:** staff can now correct part of a paid invoice at the till (slices 5a and 5b):
+  **Correct invoice** on a past receipt, beside Refund a payment, takes the money to give back, VAT
+  included, optionally the dishes, and a reason, and prints the corrective receipt when a person
+  files it; Find a bill lists the corrections under way. What the owner's 2026-10-18 scope still
+  leaves open:
+  - Picking how many of a dish to correct: the window ticks whole dishes.
+  - Counting an earlier ordinary refund towards a correction: the design's assignment of earlier
+    refunds is not built, so such a refund stays unrelated.
   - Asesor Q31 (difference vs. substitution) changes only the filing type; build for differences.
   - A758 §3.8 (revised 2026-10-19 for the owner's Q43 notes): a dish cancelled on a paid bill with
     its Refund tick on is refunded through the ordinary refund, with no correction of its own.
