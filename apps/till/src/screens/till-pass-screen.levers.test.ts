@@ -560,7 +560,7 @@ describe("A773 pass screen: levers on a till's All stations", () => {
   const allBoard = () =>
     passBoard({ held: [heldCard], toFire: [fireCard()], inProgress: [groupCard(), passCard()] });
 
-  it("draws a released course's Ready and no Fire on a held or To fire card, though it runs the pass", async () => {
+  it("draws a bill card's Ready and no Fire on a held or To fire card, though it runs the pass", async () => {
     const api = allApi(allBoard());
     const el = await mountTill(api);
     expect(boardOf(el)!.mode).toBe("all_stations");

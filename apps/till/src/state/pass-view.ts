@@ -28,7 +28,7 @@ export interface CardView {
   ageWord: "minutes" | "ready" | null;
   band: TimingBand | null;
   allergy: boolean;
-  /** The dishes drawn; a dish Hide hid counts for `band`, `allergy` and `billReady`, undrawn. */
+  /** The dishes drawn; a dish Hide hid counts for `band` and `allergy`, undrawn. */
   items: ItemView[];
   fire: { shown: boolean; enabled: boolean };
   groupReady: boolean;

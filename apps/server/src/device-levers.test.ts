@@ -468,7 +468,7 @@ describe("a kitchen display's retained Ready actions", () => {
     expect(await itemsOf(held.tabId)).toEqual(fired);
   });
 
-  it("readies the counter's released course on a pass limited to the counter zone", async () => {
+  it("readies the counter's bill card on a pass limited to the counter zone", async () => {
     const f = await fixture();
     const display = await f.device("Counter pass", f.runner, {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.counter.zoneId] },

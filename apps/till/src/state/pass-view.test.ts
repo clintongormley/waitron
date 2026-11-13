@@ -367,16 +367,6 @@ describe("A773 pass view", () => {
     ).toBe(false);
   });
 
-  it("keeps bill Ready whether Hide hides a dish or draws it", () => {
-    const cold = passItem({ id: "cold", informational: true, passControlled: false });
-    const main = passItem({ id: "main" });
-    for (const card of [
-      passCard({ items: [cold, main] }),
-      passCard({ items: [main], hiddenItems: [cold] }),
-    ])
-      expect(onlyView("inProgress", card).billReady).toBe(true);
-  });
-
   it("counts the pass's own dishes for Overview, requested as held and ready left out", () => {
     const board = passBoard({
       overview: [
