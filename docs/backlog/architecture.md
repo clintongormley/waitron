@@ -1161,7 +1161,9 @@ the helper's constant status is not evidence of the write.
   There is one state-folder layout, and a box keeps its venue under that state folder.
   A first setup has no venue claim or separate setup lock; its record and attachments live
   in `flows/setup/`. The attempt, initial node-key verifier, public evidence and recovery-document
-  metadata share one record. Start again removes its listed files and then the empty folders,
+  metadata share one record. A completed setup folder ends after the trading start stays up for
+  two minutes; unknown top-level files and nested attachment folders are kept, and a refused cleanup
+  is logged without stopping the start. Start again removes its listed files and then the empty folders,
   and sets unknown files aside under the state folder. The box certificate and key
   share one PEM file, and a completed certificate repair ends after a start stays healthy. It keeps
   the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror

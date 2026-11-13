@@ -1,3 +1,4 @@
+import { endFinishedSetup } from "@waitron/provisioning";
 import { endFinishedTlsRepair } from "./box-tls-repair.js";
 import { LOGS_DIR, venueDirOf } from "@waitron/store";
 import {
@@ -747,6 +748,9 @@ async function runAdmittedEntry(
   }
   deps.scheduleStayedUp(STAYED_UP_MS, () => {
     void persistState(deps, stayedUpClear);
+    void endFinishedSetup(deps.stateDir).catch((error: unknown) => {
+      deps.log("warn", "setup.finished_cleanup_failed", { errorCode: codeOf(error) });
+    });
     void endFinishedTlsRepair(deps.stateDir).catch((error: unknown) => {
       deps.log("warn", "tls.repair_cleanup_failed", { errorCode: codeOf(error) });
     });

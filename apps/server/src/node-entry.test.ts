@@ -1,3 +1,7 @@
+import { createFirstSetupStore, createFirstSetupCoordinator } from "@waitron/provisioning";
+import { firstFiscalFixture } from "../test/first-fiscal.js";
+import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
+import { loadConfig } from "./config.js";
 import * as firstSetupEntry from "./first-setup-entry.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
@@ -2602,6 +2606,126 @@ describe("the box's spare file", () => {
     await runEntry(deps({ stateDir, statfs: free(1024 * MiB), spareBytes: 0 }));
     expect(existsSync(spareIn(stateDir))).toBe(false);
   });
+});
+
+describe("finished setup cleanup", () => {
+  afterEach(() => vi.restoreAllMocks());
+  async function finishedSetup() {
+    const f = await firstFiscalFixture();
+    vi.spyOn(firstSetupEntry, "resolveFirstSetupEntry").mockResolvedValue({
+      kind: "normal",
+      roots: { stateDir: f.stateDir, venueDir: f.venueDir },
+      run: async (body) => body(false),
+    });
+    let state = (await f.store.read())!;
+    for (const change of [
+      { kind: "activation-started" },
+      { kind: "committed", result: { venue: { nodeId: f.context.binding.targetNodeId } } },
+      { kind: "publication" },
+      { kind: "complete" },
+    ] as const)
+      state = await f.store.update(f.context.attemptId, state.revision, change);
+    for (const name of [
+      "readiness.json",
+      "operation.json",
+      "start-again-guesses.json",
+      "documents/part",
+      "import/artifact",
+    ]) {
+      const path = join(f.stateDir, "flows/setup", name);
+      await mkdir(join(path, ".."), { recursive: true });
+      await writeFile(path, "setup attachment");
+    }
+    return f;
+  }
+
+  it("a finished setup's folder is removed once a trading start stays up", async () => {
+    const f = await finishedSetup();
+    try {
+      const scheduleStayedUp = vi.fn<(ms: number, onStayedUp: () => void) => void>(() => {});
+      await runEntry(deps({ stateDir: f.stateDir, scheduleStayedUp }));
+      expect(existsSync(join(f.stateDir, "flows/setup/record.json"))).toBe(true);
+      expect(scheduleStayedUp.mock.calls[0]![0]).toBe(120_000);
+      scheduleStayedUp.mock.calls[0]![1]();
+      await vi.waitFor(() => expect(existsSync(join(f.stateDir, "flows/setup"))).toBe(false));
+      const store = createFirstSetupStore({
+        stateDir: f.stateDir,
+        venueDir: f.venueDir,
+        coordinator: createFirstSetupCoordinator(),
+      });
+      const config = loadConfig(
+        { WAITRON_NODE_ID: f.context.binding.targetNodeId },
+        "/migrations",
+        f.stateDir,
+      );
+      const node = config.node;
+      await reconcileFirstSetupBeforeMode(config, store);
+      expect(config.node).toEqual(node);
+      expect(await store.readResumable()).toBeNull();
+    } finally {
+      await f.dispose();
+    }
+  });
+
+  it("a start that ends before the hook keeps the finished setup folder", async () => {
+    const f = await finishedSetup();
+    try {
+      const scheduleStayedUp = vi.fn();
+      const failure = new Error("start failed");
+      await expect(
+        runEntry(
+          deps({
+            stateDir: f.stateDir,
+            scheduleStayedUp,
+            startServer: async () => {
+              throw failure;
+            },
+          }),
+        ),
+      ).rejects.toBe(failure);
+      expect(scheduleStayedUp).not.toHaveBeenCalled();
+      expect((await f.store.read())?.status).toBe("complete");
+      expect(await readFile(join(f.stateDir, "flows/setup/documents/part"), "utf8")).toBe(
+        "setup attachment",
+      );
+    } finally {
+      await f.dispose();
+    }
+  });
+
+  it.each(["stray.json", "documents/nested/stray.json"])(
+    "a finished setup keeps %s and logs the refused folder removal",
+    async (name) => {
+      const f = await finishedSetup();
+      try {
+        const path = join(f.stateDir, "flows/setup", name);
+        await mkdir(join(path, ".."), { recursive: true });
+        await writeFile(path, "keep this");
+        const scheduleStayedUp = vi.fn<(ms: number, onStayedUp: () => void) => void>(() => {});
+        const log = vi.fn();
+        const close = vi.fn(async () => {});
+        await runEntry(
+          deps({
+            stateDir: f.stateDir,
+            scheduleStayedUp,
+            log,
+            startServer: async () => ({ close }),
+          }),
+        );
+        scheduleStayedUp.mock.calls[0]![1]();
+        await vi.waitFor(() =>
+          expect(log).toHaveBeenCalledWith("warn", "setup.finished_cleanup_failed", {
+            errorCode: expect.any(String),
+          }),
+        );
+        expect(await readFile(path, "utf8")).toBe("keep this");
+        expect(existsSync(join(f.stateDir, "flows/setup/record.json"))).toBe(false);
+        expect(close).not.toHaveBeenCalled();
+      } finally {
+        await f.dispose();
+      }
+    },
+  );
 });
 
 async function finishedTlsRepair(stateDir: string) {

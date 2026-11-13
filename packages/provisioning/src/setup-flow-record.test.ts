@@ -7,7 +7,11 @@ import { afterEach, expect, it, vi } from "vitest";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { request, PASSWORD } from "../test/first-setup-request.js";
 import { type FirstSetupState } from "./first-setup-state.js";
-import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
+import {
+  endFinishedSetup,
+  readSetupFlowRecord,
+  updateSetupFlowSection,
+} from "./setup-flow-record.js";
 vi.mock("node:fs/promises", { spy: true });
 const roots: string[] = [];
 afterEach(async () => {
@@ -155,4 +159,15 @@ it("two spellings of one folder share the section turn", async () => {
   const record = await readSetupFlowRecord(f.stateDir);
   expect(record?.nodeKey).toEqual({ stageId: "one" });
   expect(record?.publicEvidence).toEqual({ modules: {} });
+});
+
+it("an unfinished setup keeps its record and attachments", async () => {
+  const f = await fixture();
+  await updateSetupFlowSection(f.stateDir, "attempt", () => f.attempt);
+  const attachment = join(f.stateDir, "flows/setup/readiness.json");
+  await writeFile(attachment, "readiness evidence");
+  const before = await readFile(f.path);
+  await endFinishedSetup(f.stateDir);
+  expect(await readFile(f.path)).toEqual(before);
+  expect(await readFile(attachment, "utf8")).toBe("readiness evidence");
 });

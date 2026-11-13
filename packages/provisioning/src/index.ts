@@ -248,6 +248,7 @@ export {
 } from "./starter-content.js";
 
 export {
+  endFinishedSetup,
   readSetupFlowRecord,
   updateSetupFlowSection,
   type SetupFlowRecord,
