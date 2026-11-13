@@ -2482,9 +2482,11 @@ CI's font rather than the bar. Such a check now sets `--wt-font-family` to `PHON
 `loadPhoneFont()` (`apps/till/src/widgets/test-helpers.ts`), which loads the server's variable
 Noto Sans file. Measured that day for the three entries beside "Ready 10 min" at 390 px: Noto Sans
 164 px of the 172 the strip has, San Francisco 166 of 172, Roboto 164 of 181, DejaVu Sans 189 of
-150. With the branch's narrower padding and gap reverted, the Noto Sans check failed all six
+150. With A1105's narrower padding and gap reverted, the Noto Sans check failed all six
 warning cases (196 px against 164 to 183). With it pinned, the file passed on macOS and in a
 `node:26-trixie` container with Playwright's Chromium, where `fc-match system-ui` names DejaVu Sans.
+
+## A check of what an observer's first report does polls for it, never counts frames
 
 On 2026-10-29 "shows the first tab at the strip's start when the strip comes back after the Floor
 had one zone" (`apps/till/src/screens/till-floor-screen.zone-tabs.test.ts`) failed two of #2238's
