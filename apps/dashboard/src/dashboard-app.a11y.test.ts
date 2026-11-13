@@ -47,7 +47,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
-      permissions: [],
+      permissions: ["venue.view", "catalogue.manage", "hardware.manage", "system.manage"],
       modules: [],
     }),
     forgetLocales: () => {},
@@ -330,7 +330,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
         venueLocale: "es-ES",
         sessionDefault: "es-ES",
         venueName: "Deli Test SL",
-        permissions: [],
+        permissions: ["venue.view", "catalogue.manage", "hardware.manage", "system.manage"],
         modules: [],
       }),
     });

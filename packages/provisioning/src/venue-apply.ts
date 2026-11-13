@@ -23,7 +23,12 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { foldForUniqueness, persons, startManagementSession } from "@waitron/identity";
+import {
+  foldForUniqueness,
+  listAdminHolders,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
 import { createDeviceProfile, listDeviceProfiles } from "@waitron/layouts";
 import {
   AppError,
@@ -103,11 +108,7 @@ async function assertActionOrder(actions: readonly VenueAction[], db: Database):
         break;
       case "seed-device-profiles":
         if (!administrator) {
-          const [existing] = await db
-            .select({ id: persons.id })
-            .from(persons)
-            .where(eq(persons.role, "admin"))
-            .limit(1);
+          const [existing] = await listAdminHolders(db);
           if (existing === undefined)
             throw new Error("applyVenue: seed-device-profiles before seed-admin");
         }
@@ -219,11 +220,7 @@ export async function applyVenue(
           break;
         }
         case "seed-admin": {
-          const seededAdmin = await tx
-            .select({ id: persons.id })
-            .from(persons)
-            .where(eq(persons.role, "admin"))
-            .limit(1);
+          const seededAdmin = await listAdminHolders(tx);
           if (seededAdmin.length === 0) {
             const [created] = await tx
               .insert(persons)
@@ -376,14 +373,10 @@ export async function applyVenue(
           if (input === undefined) {
             report = await seed.run(tx, node, undefined, { staffLanguage: action.staffLanguage });
           } else {
-            const [operator] =
-              createdAdministrator === undefined
-                ? []
-                : await tx
-                    .select({ id: persons.id, role: persons.role, status: persons.status })
-                    .from(persons)
-                    .where(eq(persons.id, createdAdministrator));
-            if (operator?.role !== "admin" || operator.status !== "active")
+            const operator = (await listAdminHolders(tx, { status: "active" })).find(
+              (person) => person.id === createdAdministrator,
+            );
+            if (operator === undefined)
               throw new AppError("provisioning.initial_operator_required", {});
             const binding = Object.freeze({
               module: action.module,
@@ -524,11 +517,7 @@ export async function applyVenue(
   if (collecting.length === 0) return transact(new Map());
   const [existingVenue] = await deps.db.select({ id: locations.id }).from(locations).limit(1);
   if (existingVenue !== undefined) return transact(new Map());
-  const [existingAdministrator] = await deps.db
-    .select({ id: persons.id })
-    .from(persons)
-    .where(eq(persons.role, "admin"))
-    .limit(1);
+  const [existingAdministrator] = await listAdminHolders(deps.db);
   if (existingAdministrator !== undefined)
     throw new AppError("provisioning.initial_operator_required", {});
   // The seed checks that this planned operator is the newly inserted active administrator.
@@ -566,11 +555,7 @@ async function seedDeviceProfiles(
   const toCreate = profiles.filter((p) => !existing.has(p.name));
   if (toCreate.length === 0) return;
 
-  const admin = await tx
-    .select({ id: persons.id })
-    .from(persons)
-    .where(eq(persons.role, "admin"))
-    .limit(1);
+  const admin = await listAdminHolders(tx);
   const personId = admin[0]?.id;
   if (personId === undefined) {
     throw new Error("applyVenue: seed-device-profiles before seed-admin");

@@ -297,6 +297,21 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
 
+  it("refuses --person naming a real suspended manager without changing their credentials", async () => {
+    await setupTenant();
+    const [manager] = await seedPersons(suite.db, {
+      displayName: "Locked manager",
+      role: "manager",
+      status: "suspended",
+      passwordHash: hashPassword(OLD_PASSWORD),
+    });
+    const before = await readPerson(manager!.id);
+    const { code } = await run(baseEnv(), ["--person", manager!.id]);
+    expect(code).toBe(1);
+    expect(await readPerson(manager!.id)).toEqual(before);
+    expect(before!.status).toBe("suspended");
+  });
+
   it("--person naming a non-admin/absent id → returns 1, nothing reset", async () => {
     const { adminId } = await setupTenant();
     const { code } = await run(baseEnv(), ["--person", "33333333-3333-4333-8333-333333333333"]);

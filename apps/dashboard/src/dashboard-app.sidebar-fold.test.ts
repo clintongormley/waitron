@@ -48,7 +48,13 @@ function stubApi(me: Record<string, unknown> = {}): DashboardApi {
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
       onboardingIntent: "prepare",
-      permissions: ["booking.manage"],
+      permissions: [
+        "booking.manage",
+        "venue.view",
+        "catalogue.manage",
+        "hardware.manage",
+        "system.manage",
+      ],
       modules: ["bookings"],
       ...me,
     }),
@@ -384,7 +390,7 @@ it("the strip lists each section with a page the person may open, in order, name
 it("the strip leaves out a section with no page the person may open", async () => {
   await atSize(1280, 800, async () => {
     localStorage.setItem(FOLDED_KEY, "true");
-    const { el } = await mountApp({ modules: [], permissions: [] });
+    const { el } = await mountApp({ modules: [], permissions: ["venue.view"] });
     expect(stripButton(el, "menu")).not.toBeNull();
     expect(stripButton(el, "service")).toBeNull();
   });

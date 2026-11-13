@@ -157,6 +157,13 @@ async function mount(
     },
     theme,
   );
+  if (!permissions.includes("venue.view")) {
+    await expect
+      .poll(() => app.shadowRoot!.querySelector("[data-test=account-menu]"))
+      .not.toBeNull();
+    expect(app.shadowRoot!.querySelector("dashboard-venue-settings-screen")).toBeNull();
+    return { app, host, logouts: () => logouts, locales };
+  }
   if (!permissions.includes("venue.configure")) {
     await expect
       .poll(() => app.shadowRoot!.querySelector("dashboard-venue-settings-screen"))
@@ -949,7 +956,11 @@ it("a failed banner read keeps the name the banner shows", async () => {
 
 type DefaultsPanel = HTMLElementTagNameMap["dashboard-venue-defaults-panel"];
 function defaultsPanel(app: DashboardApp) {
-  return settings(app).shadowRoot!.querySelector("dashboard-venue-defaults-panel");
+  return (
+    app
+      .shadowRoot!.querySelector("dashboard-venue-settings-screen")
+      ?.shadowRoot!.querySelector("dashboard-venue-defaults-panel") ?? null
+  );
 }
 async function readyDefaults(app: DashboardApp) {
   await expect

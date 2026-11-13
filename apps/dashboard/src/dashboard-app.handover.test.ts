@@ -32,7 +32,7 @@ it.each([true, false])(
         sessionDefault: "en-GB",
         venueName: "Test venue",
         modules: [],
-        permissions: allowed ? ["node.manage"] : [],
+        permissions: allowed ? ["venue.view", "node.manage"] : ["venue.view"],
         sessionExpiresInSeconds: 1800,
         sessionIdleTimeoutSeconds: 1800,
       }),

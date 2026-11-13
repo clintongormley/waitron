@@ -32,7 +32,13 @@ const meResponse = {
   sessionDefault: "es-ES",
   venueName: "Deli Test SL",
   onboardingIntent: "prepare",
-  permissions: ["booking.manage"],
+  permissions: [
+    "booking.manage",
+    "venue.view",
+    "catalogue.manage",
+    "hardware.manage",
+    "system.manage",
+  ],
   modules: ["bookings"],
 };
 
@@ -218,7 +224,7 @@ afterEach(() => {
 describe("the shell's full-disk bar", () => {
   it("shows a manager the red bar under the banner, naming the recent deletion", async () => {
     const { api } = shellApi(vi.fn().mockResolvedValue(stopped), {
-      getMe: vi.fn().mockResolvedValue(me("manager", ["system.manage"])),
+      getMe: vi.fn().mockResolvedValue(me("manager", ["venue.view", "system.manage"])),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await expect.poll(() => diskBar(el)?.message).toBe(MANAGER_EN);
@@ -426,7 +432,7 @@ describe("the full-disk bar's button", () => {
   }
 
   it("opens Box status for a manager, and draws no button on Box status itself", async () => {
-    const { el } = await mountAs("manager", ["system.manage"]);
+    const { el } = await mountAs("manager", ["venue.view", "system.manage"]);
     expect(diskBar(el)!.actionLabel).toBe("Open Box status");
     await pressButton(el);
     await expect
@@ -440,7 +446,7 @@ describe("the full-disk bar's button", () => {
   });
 
   it("moves keyboard focus to the page area when Open Box status takes its own button away", async () => {
-    const { el } = await mountAs("manager", ["system.manage"]);
+    const { el } = await mountAs("manager", ["venue.view", "system.manage"]);
     await diskBar(el)!.updateComplete;
     actionButton(el).focus();
     expect(deepActiveElement()).toBe(actionButton(el));
@@ -460,7 +466,7 @@ describe("the full-disk bar's button", () => {
   });
 
   it("asks before Open Box status leaves unsaved changes, and Keep editing stays", async () => {
-    const { el } = await mountAs("manager", ["system.manage"]);
+    const { el } = await mountAs("manager", ["venue.view", "system.manage"]);
     const before = location.pathname;
     pageDraft(el);
     await pressButton(el);
@@ -473,7 +479,7 @@ describe("the full-disk bar's button", () => {
   });
 
   it("leaves focus where it was when Keep editing keeps the person on the page", async () => {
-    const { el } = await mountAs("manager", ["system.manage"]);
+    const { el } = await mountAs("manager", ["venue.view", "system.manage"]);
     await diskBar(el)!.updateComplete;
     pageDraft(el);
     actionButton(el).focus();
@@ -488,7 +494,7 @@ describe("the full-disk bar's button", () => {
 
   it.each([
     ["a manager", "manager", ["system.manage"], "dashboard-box-status-screen"],
-    ["a supervisor", "supervisor", [], "dashboard-overview-screen"],
+    ["a supervisor", "supervisor", ["venue.view"], "dashboard-overview-screen"],
   ])(
     "signs a supervisor out with Box status kept for the next sign-in; %s then lands on it or their usual page",
     async (_who, role, permissions, landing) => {
@@ -623,7 +629,9 @@ describe("the full-disk bar's button", () => {
   it("leaves the staff screen's administrator sign-in clearing the address as before", async () => {
     history.replaceState(null, "", "/manage/staff");
     const logout = vi.fn().mockResolvedValue(undefined);
-    const { el } = await mountAs("manager", ["system.manage", "person.view"], { logout });
+    const { el } = await mountAs("manager", ["system.manage", "person.view", "venue.view"], {
+      logout,
+    });
     const staff = await vi.waitFor(() => {
       const screen = el.shadowRoot!.querySelector("dashboard-staff-screen");
       expect(screen).not.toBeNull();

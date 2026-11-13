@@ -27,11 +27,14 @@ const NAME_SIZE: Record<number, string> = { 100: "14px", 130: "18px" };
 /** The section with the most pages a manager with no modules sees. */
 const OPEN_GROUP = "configuration";
 const OPEN_GROUP_ITEMS = [
+  "Appearance",
   "Devices",
   "Printers",
+  "Modules",
   "Card payments",
   "Email",
   "Device profiles",
+  "Box status",
   "Diagnostics",
   "Backups",
   "Cloud services",

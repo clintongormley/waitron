@@ -1405,7 +1405,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   Comp reasons and the bill limit use Apply comps and Approve comps without role lists.
   Legacy raw SQL role reads remain for PR11. Permission declarations now list their default
   holders; Managers can restart the box, while clock and email changes use Box administration
-  (Admin by default). Job roles and their holders now live in core under identity; staffing and workforce are permanent. Used job roles can be hidden without losing shift names, memberships are logged, and each person’s editor saves job-role tags separately. Setup administrators now hold Team, imports give them the source administrator’s job roles or all visible imported roles, with Team when neither exists, and demo and shared fixture staff hold job roles. Device profiles now select visible job roles, with an empty selection admitting nobody; setup, demo, bench and imports retain sign-in. Job membership changes now refresh the till sign-in list, and deleting a job names profiles left with nobody. Permission checks now read one authority through identity; editable access roles remain to be built.
+  (Admin by default). Job roles and their holders now live in core under identity; staffing and workforce are permanent. Used job roles can be hidden without losing shift names, memberships are logged, and each person’s editor saves job-role tags separately. Setup administrators now hold Team, imports give them the source administrator’s job roles or all visible imported roles, with Team when neither exists, and demo and shared fixture staff hold job roles. Device profiles now select visible job roles, with an empty selection admitting nobody; setup, demo, bench and imports retain sign-in. Job membership changes now refresh the till sign-in list, and deleting a job names profiles left with nobody. Permission checks and Admin-holder reads now go through identity. Dashboard pages follow permissions and signed-in state follows the person id; editable access roles remain to be built.
   Cut 1's permission names (#2578) have landed.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
@@ -2373,9 +2373,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   (A1384). Left open by A261-2e's review (#1277); whether a shipped build can reach it is unverified.
 
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
-  dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat and off
-  the coarse `requiresManager` gate. A core nav item can now also name a `requiresPermission`
-  (`apps/dashboard/src/dashboard-app.ts`); Servers (`node.manage`) is the first to use it.
+  dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat.
 
 ### Data protection and legal compliance
 

@@ -126,7 +126,6 @@ import type {
   AlertsResponse,
   DashboardApi,
   DiskStopResponse,
-  PersonRole,
   TradingAdmissionView,
 } from "./api/client.js";
 import { diskStopMessage } from "./i18n/disk-stop-words.js";
@@ -207,7 +206,6 @@ function storeFold(folded: boolean): void {
 }
 
 type AccessRule = {
-  requiresManager?: boolean;
   requiresPermission?: string;
 };
 type ScreenRule = AccessRule & { screen: ScreenId };
@@ -260,8 +258,8 @@ const NAV_GROUPS: NavGroup[] = [
     icon: "section-menu",
     items: [
       { screen: "catalogue", labelKey: "nav.catalogue" },
-      { screen: "menus", labelKey: "nav.menus", requiresManager: true },
-      { screen: "modifiers", labelKey: "nav.modifiers", requiresManager: true },
+      { screen: "menus", labelKey: "nav.menus", requiresPermission: "catalogue.manage" },
+      { screen: "modifiers", labelKey: "nav.modifiers", requiresPermission: "catalogue.manage" },
       { screen: "courses", labelKey: "nav.courses", requiresPermission: "venue.view" },
       { screen: "units", labelKey: "nav.units" },
     ],
@@ -303,14 +301,14 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
       { screen: "modules", labelKey: "nav.modules", requiresPermission: "hardware.manage" },
-      { screen: "payments", labelKey: "nav.payments", requiresManager: true },
-      { screen: "email", labelKey: "nav.email", requiresManager: true },
+      { screen: "payments", labelKey: "nav.payments", requiresPermission: "hardware.manage" },
+      { screen: "email", labelKey: "nav.email", requiresPermission: "person.manage" },
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "box-status", labelKey: "nav.box_status", requiresPermission: "system.manage" },
-      { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
-      { screen: "backup", labelKey: "nav.backup", requiresManager: true },
+      { screen: "diagnostics", labelKey: "nav.diagnostics", requiresPermission: "system.manage" },
+      { screen: "backup", labelKey: "nav.backup", requiresPermission: "system.manage" },
       { screen: "servers", labelKey: "nav.servers", requiresPermission: "node.manage" },
-      { screen: "cloud", labelKey: "nav.cloud", requiresManager: true },
+      { screen: "cloud", labelKey: "nav.cloud", requiresPermission: "system.manage" },
     ],
   },
 ];
@@ -318,7 +316,7 @@ const NAV_GROUPS: NavGroup[] = [
 /** Core screens with no sidebar entry whose access rule #permittedScreen reads from here. */
 const UNLISTED_SCREENS: ScreenRule[] = [
   { screen: "my-schedule" },
-  { screen: "demo-printer", requiresManager: true },
+  { screen: "demo-printer", requiresPermission: "hardware.manage" },
   { screen: "floor-plan", requiresPermission: "venue.configure" },
 ];
 
@@ -364,10 +362,6 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
 
 /**
  * Owns session discovery, permitted URL navigation and language preferences.
- * The login screen stays visible until getMe confirms a session. Staff can open My schedule and
- * Orders; other roles can restore a destination from their visible sidebar entries, the alerts
- * screen, and the UNLISTED_SCREENS entries their role may open.
- *
  * A locale change recreates the screen subtree so translated text updates. Disconnect guards
  * prevent late responses from changing browser history or the shared locale after teardown.
  * Each screen owns its heading; the shell supplies navigation, logout, and the language and Theme
@@ -970,8 +964,7 @@ export class DashboardApp extends LitElement {
     if (!e.matches) this.drawerOpen = false;
   };
 
-  /** NOT named `role`: that collides with `HTMLElement.role`, which a `@state` cannot override. */
-  @state() private sessionRole?: PersonRole;
+  @state() private sessionPersonId?: string;
 
   @state() private myPersonId = "";
 
@@ -1036,7 +1029,7 @@ export class DashboardApp extends LitElement {
   readonly #permissionContinuation = new PermissionContinuation({
     epoch: () => this.sessionEpoch,
     identity: () => ({
-      authenticated: this.isConnected && this.sessionRole !== undefined,
+      authenticated: this.isConnected && this.sessionPersonId !== undefined,
       permissions: this.isConnected ? this.#sessionPermissions : [],
     }),
     prepare: async () => {
@@ -1062,7 +1055,7 @@ export class DashboardApp extends LitElement {
     changed: () => {
       if (
         this.isConnected &&
-        this.sessionRole !== undefined &&
+        this.sessionPersonId !== undefined &&
         this.sessionExpiryTimer !== undefined
       ) {
         this.#scheduleSessionExpiry(Math.max(0, (this.#sessionDeadline - Date.now()) / 1000));
@@ -1091,7 +1084,7 @@ export class DashboardApp extends LitElement {
     // a session the login screen holds unannounced.
     if (
       code === "management_session.required" &&
-      (this.sessionRole === undefined || this.#signingOut)
+      (this.sessionPersonId === undefined || this.#signingOut)
     )
       return;
     if (
@@ -1127,14 +1120,14 @@ export class DashboardApp extends LitElement {
   readonly #onSessionActive = (event: Event): void => {
     const generation = (event as CustomEvent<{ generation?: number }>).detail?.generation;
     if (generation !== undefined && generation !== this.sessionGeneration) return;
-    if (this.sessionRole !== undefined) {
+    if (this.sessionPersonId !== undefined) {
       this.#scheduleSessionExpiry(this.sessionIdleTimeoutSeconds);
       this.#broadcastSessionDeadline(Date.now() + this.sessionIdleTimeoutSeconds * 1000);
     }
   };
 
   readonly #onSessionStorage = (event: StorageEvent): void => {
-    if (event.key !== "waitron-management-session-deadline" || this.sessionRole === undefined)
+    if (event.key !== "waitron-management-session-deadline" || this.sessionPersonId === undefined)
       return;
     const deadline = Number(event.newValue);
     if (!Number.isFinite(deadline) || deadline <= Date.now()) {
@@ -1234,7 +1227,7 @@ export class DashboardApp extends LitElement {
       return;
     }
     await this.#probeSession(preference);
-    if (googleCallback && this.sessionRole !== undefined) void signalAcceptedPasskeys(this.api);
+    if (googleCallback && this.sessionPersonId !== undefined) void signalAcceptedPasskeys(this.api);
     if (this.screen === "login") await this.#seedLocale();
   }
 
@@ -1274,14 +1267,10 @@ export class DashboardApp extends LitElement {
     }
   }
 
-  /**
-   * `getMe()` resolves for every role, staff included. The catch is total: any rejection means no
-   * usable session, and dropping to login is the safe default for every failure.
-   */
   async #probeSession(preference?: PendingLoginPreference): Promise<void> {
     const generation = this.sessionGeneration;
     const localeChoice = this.#sessionLocaleChoice;
-    const wasAuthenticated = this.sessionRole !== undefined;
+    const wasAuthenticated = this.sessionPersonId !== undefined;
     const read = ++this.#sessionRead;
     try {
       const me = await this.api.getMe();
@@ -1313,7 +1302,6 @@ export class DashboardApp extends LitElement {
   #applyMe(
     me: {
       personId: string;
-      role: PersonRole;
       email: string | null;
       locale: string | null;
       venueLocale: string;
@@ -1333,7 +1321,6 @@ export class DashboardApp extends LitElement {
     const changedAccount = this.myPersonId !== me.personId;
     const changedIdentity =
       changedAccount ||
-      this.sessionRole !== me.role ||
       this.#sessionPermissions.length !== me.permissions.length ||
       this.#sessionPermissions.some((permission) => !me.permissions.includes(permission)) ||
       this.#enabledModules.length !== me.modules.length ||
@@ -1343,7 +1330,7 @@ export class DashboardApp extends LitElement {
       this.#moduleAccountEpoch = this.sessionGeneration;
       if (changedAccount) {
         this.#screenAccountEpoch = this.sessionGeneration;
-        if (this.sessionRole !== undefined) this.#suspendIdentity();
+        if (this.sessionPersonId !== undefined) this.#suspendIdentity();
       }
     }
     this.sessionNoticeCode = null;
@@ -1356,7 +1343,7 @@ export class DashboardApp extends LitElement {
         preference.rememberedEmail,
       );
     }
-    this.sessionRole = me.role;
+    this.sessionPersonId = me.personId;
     this.#sessionPermissions = me.permissions;
     this.#permissionContinuation.notify();
     // A plain field: redraw so the screens given a permission see the change.
@@ -1431,7 +1418,7 @@ export class DashboardApp extends LitElement {
   }
 
   #watchAlerts(): void {
-    if (this.sessionRole === "staff") {
+    if (this.#ownPagesOnly()) {
       this.#clearAlerts();
       return;
     }
@@ -1519,7 +1506,7 @@ export class DashboardApp extends LitElement {
     this.#placeStripPanel();
     if (
       (changed.has("contentLanguagesReady") || changed.has("contentLanguageError")) &&
-      this.sessionRole !== undefined
+      this.sessionPersonId !== undefined
     )
       this.#startLiveUpdates();
     // An open pop-up whose new text equals the old changes no toast property, so its countdown
@@ -1608,7 +1595,7 @@ export class DashboardApp extends LitElement {
     this.#liveAccountEpoch = undefined;
     clearTimeout(this.sessionExpiryTimer);
     this.sessionExpiryTimer = undefined;
-    this.sessionRole = undefined;
+    this.sessionPersonId = undefined;
     this.screen = "login";
     this.myPersonId = "";
     this.#sessionPermissions = [];
@@ -1748,8 +1735,9 @@ export class DashboardApp extends LitElement {
           rememberedEmail: detail?.rememberedEmail,
         };
     await this.#probeSession(preference);
-    if (this.sessionRole !== undefined && this.isConnected) void signalAcceptedPasskeys(this.api);
-    if (accountSetup && this.sessionRole !== undefined && this.isConnected) {
+    if (this.sessionPersonId !== undefined && this.isConnected)
+      void signalAcceptedPasskeys(this.api);
+    if (accountSetup && this.sessionPersonId !== undefined && this.isConnected) {
       this.#openProfile();
     }
   }
@@ -1892,7 +1880,7 @@ export class DashboardApp extends LitElement {
 
   #renderPage(): TemplateResult {
     if (
-      this.sessionRole === undefined &&
+      this.sessionPersonId === undefined &&
       (this.#permissionContinuation.open || this.#permissionContinuation.unresolved)
     ) {
       return html`<div class="login-page">
@@ -2380,11 +2368,14 @@ export class DashboardApp extends LitElement {
   }
 
   #mayOpen(item: AccessRule): boolean {
-    if (item.requiresManager && this.sessionRole !== "manager" && this.sessionRole !== "admin")
-      return false;
+    return this.#sessionPermissions.includes(item.requiresPermission ?? "venue.view");
+  }
+
+  #ownPagesOnly(): boolean {
     return (
-      item.requiresPermission === undefined ||
-      this.#sessionPermissions.includes(item.requiresPermission)
+      !NAV_GROUPS.flatMap(coreItems).some(
+        (item) => item.screen !== "orders" && this.#mayOpen(item),
+      ) && ![...this.#activeScreens.values()].some(({ screen }) => this.#mayRead(screen))
     );
   }
 
@@ -2413,23 +2404,28 @@ export class DashboardApp extends LitElement {
   }
 
   #permittedScreen(requested: string | null): ScreenId {
-    if (this.sessionRole === "staff") return requested === "orders" ? "orders" : "my-schedule";
+    if (requested === "orders" || requested === "my-schedule") return requested;
+    const item = [...NAV_GROUPS.flatMap(coreItems), ...UNLISTED_SCREENS].find(
+      (entry) => entry.screen === requested,
+    );
+    if (this.#ownPagesOnly() && (item === undefined || !this.#mayOpen(item))) return "my-schedule";
     if (requested === "alerts") return "alerts";
+    const fallback =
+      NAV_GROUPS.flatMap(coreItems).find((entry) => this.#mayOpen(entry))?.screen ??
+      [...this.#activeScreens.values()].find(({ screen }) => this.#mayRead(screen))?.screen.id ??
+      "my-schedule";
     if (
       requested === "demo-printer" &&
       this.onboardingIntent !== "demo" &&
       this.onboardingIntent !== "prepare"
     )
-      return "overview";
-    const item = [...NAV_GROUPS.flatMap(coreItems), ...UNLISTED_SCREENS].find(
-      (entry) => entry.screen === requested,
-    );
+      return fallback;
     if (item && this.#mayOpen(item)) return item.screen;
     if (requested !== null) {
       const active = this.#activeScreens.get(requested);
       if (active && this.#mayRead(active.screen)) return requested;
     }
-    return "overview";
+    return fallback;
   }
 
   readonly #url = new UrlStateController(this, () => this.#onHistory(), {
@@ -2544,7 +2540,7 @@ export class DashboardApp extends LitElement {
   readonly #onHistory = (): void => {
     if (
       this.screen === "login" ||
-      this.sessionRole === undefined ||
+      this.sessionPersonId === undefined ||
       this.tradingAdmission.state !== "ready"
     )
       return;
@@ -2562,7 +2558,7 @@ export class DashboardApp extends LitElement {
   /** The pages this person may open, group by group in nav order, each labelled in the current
    * language. */
   #permittedNav(): { group: NavGroup; pages: NavPage[] }[] {
-    if (this.sessionRole === "staff")
+    if (this.#ownPagesOnly())
       return [
         {
           group: NAV_GROUPS.find((group) => group.id === "overview")!,
@@ -2580,7 +2576,7 @@ export class DashboardApp extends LitElement {
             this.onboardingIntent === "prepare" ||
             this.onboardingIntent === "live",
         )
-        .filter((item) => this.#mayOpen(item))
+        .filter((item) => item.screen === "orders" || this.#mayOpen(item))
         .map((item) => ({ screen: item.screen, label: t(item.labelKey) }));
     return NAV_GROUPS.map((group) => {
       const among = [...(this.#navGroups.get(group.id) ?? [])]
@@ -2596,7 +2592,7 @@ export class DashboardApp extends LitElement {
   /** `#permittedNav` narrowed by the search; `pages` is undefined when none is left. */
   #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
     const permitted = this.#permittedNav();
-    if (this.sessionRole === "staff") return permitted;
+    if (this.#ownPagesOnly()) return permitted;
     return permitted.map(({ group, pages }) => {
       const heading = group.headerKey === undefined ? "" : t(group.headerKey);
       const matched = navMatches(this.navSearch, pages, heading);
@@ -2789,7 +2785,7 @@ export class DashboardApp extends LitElement {
     const sections = this.#permittedNav().filter(({ pages }) => pages.length > 0);
     return html`<nav class="strip" aria-label=${t("nav.sections")}>
       ${
-        this.sessionRole === "staff"
+        this.#ownPagesOnly()
           ? nothing
           : this.#stripButton(
               "search",
@@ -2846,7 +2842,7 @@ export class DashboardApp extends LitElement {
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
         ${
-          this.sessionRole === "staff"
+          this.#ownPagesOnly()
             ? nothing
             : html`<wt-input
                 type="search"
@@ -2923,7 +2919,7 @@ export class DashboardApp extends LitElement {
             </button>`,
         )}
         ${
-          this.sessionRole === "staff"
+          this.#ownPagesOnly()
             ? nothing
             : html`<p class="nav-search-empty" role="status" data-test="nav-search-empty">
                 ${noMatch ? t("nav.no_matches") : nothing}
