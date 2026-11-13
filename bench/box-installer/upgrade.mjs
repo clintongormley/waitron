@@ -21,6 +21,7 @@ for attempt in $(seq 1 180); do
  sleep 1
 done
 test "$(timedatectl show -p NTPSynchronized --value)" = yes
+systemctl start waitron-app.service
 /usr/local/sbin/waitron-dev-start
 ${stayed}
 [ -f /opt/waitron/before.json ] || ${fingerprint} >/opt/waitron/before.json

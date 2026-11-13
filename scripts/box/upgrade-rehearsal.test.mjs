@@ -29,7 +29,7 @@ it("rejects changed rows after reboot without replacing the original comparison 
       "#!/bin/sh\nprintf '%s\\n' '{\"checksum\":\"changed\"}'\n",
       { mode: 0o700 },
     );
-    for (const name of ["jq", "docker", "start"])
+    for (const name of ["jq", "docker", "start", "systemctl"])
       writeFileSync(join(bin, name), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
     writeFileSync(join(bin, "timedatectl"), "#!/bin/sh\necho yes\n", { mode: 0o700 });
     const payload = upgradePayload("reopened")
@@ -102,7 +102,17 @@ esac
     );
     for (const name of ["jq", "docker"])
       writeFileSync(join(bin, name), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
-    writeFileSync(join(bin, "start"), '#!/bin/sh\ntouch "$START_PENDING"\n', { mode: 0o700 });
+    writeFileSync(join(root, "boot-pending"), "pending");
+    writeFileSync(
+      join(bin, "systemctl"),
+      '#!/bin/sh\n[ "$*" = "start waitron-app.service" ] || exit 2\nrm "$BOOT_PENDING"\n',
+      { mode: 0o700 },
+    );
+    writeFileSync(
+      join(bin, "start"),
+      '#!/bin/sh\n[ ! -e "$BOOT_PENDING" ] || exit 1\ntouch "$START_PENDING"\n',
+      { mode: 0o700 },
+    );
     writeFileSync(join(bin, "timedatectl"), "#!/bin/sh\necho yes\n", { mode: 0o700 });
     const payload = upgradePayload("reopened")
       .replaceAll("/opt/waitron", box)
@@ -112,6 +122,7 @@ esac
         ...process.env,
         PATH: `${bin}:${process.env.PATH}`,
         START_PENDING: join(root, "pending"),
+        BOOT_PENDING: join(root, "boot-pending"),
       },
       encoding: "utf8",
       timeout: 5000,
