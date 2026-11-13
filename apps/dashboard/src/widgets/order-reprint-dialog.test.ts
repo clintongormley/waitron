@@ -270,7 +270,7 @@ it("keeps Print quiet with no printers and lets staff refresh without printing",
       { value: "new", label: "New printer" },
     ]),
   );
-  expect(el.shadowRoot!.querySelector("wt-combobox")?.value).toBe("");
+  expect(el.shadowRoot!.querySelector("wt-combobox")?.value).toBe("new");
   expect(api.reprintOrder).not.toHaveBeenCalled();
   expect(readDocumentPrinter("receipt")).toBeNull();
 });
@@ -327,13 +327,13 @@ it("keeps Print blue while its copy is being sent, even if the printers vanish m
 const texts = {
   "en-GB": {
     loading: "Loading printers…",
-    none: "There is no active printer to print on",
+    none: "No printer is available for this document",
     retry: "Try again",
     refresh: "Refresh printers",
   },
   "es-ES": {
     loading: "Cargando impresoras…",
-    none: "No hay ninguna impresora activa",
+    none: "No hay ninguna impresora disponible para este documento",
     retry: "Reintentar",
     refresh: "Actualizar impresoras",
   },
@@ -759,6 +759,7 @@ describe("printing a full invoice", () => {
     await vi.waitFor(() =>
       expect(chooser(el)?.options).toEqual([{ value: BAR_PRINTER.id, label: BAR_PRINTER.name }]),
     );
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Print the receipt");
     expect(api.getOrder).toHaveBeenCalledWith(fullRow.id);
     expect(api.getOrderPrinters).not.toHaveBeenCalled();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=print]")!.click();
@@ -770,6 +771,49 @@ describe("printing a full invoice", () => {
       ),
     );
     expect(api.reprintOrder).not.toHaveBeenCalled();
+  });
+
+  it("waits for the first eligible offer without rejecting its remembered printer while busy", async () => {
+    setLocale("en-GB");
+    localStorage.setItem("waitron-dashboard-document-printer:invoice", OFFICE_PRINTER.id);
+    const api = invoiceApi(withCurrent(invoiceDetail(null, OFFICE_PRINTER.id), "queued"));
+    const el = await openInvoice(api);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=print-busy]")).not.toBeNull(),
+    );
+    expect(el.shadowRoot!.textContent).not.toContain(
+      "Your previous printer is no longer available",
+    );
+    api.getOrder.mockResolvedValue(invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id));
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe(OFFICE_PRINTER.id));
+    expect(el.shadowRoot!.textContent).not.toContain(
+      "Your previous printer is no longer available",
+    );
+  });
+
+  it("drops the previous full invoice's Receipt list before a new simplified bill loads", async () => {
+    const api = invoiceApi(invoiceDetail([BAR_PRINTER], null));
+    const { el } = await mountWidget<OrderReprintDialog>("dashboard-order-reprint-dialog", {
+      api,
+      row: fullRow,
+      mode: "receipt",
+    });
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe(BAR_PRINTER.id));
+    el.row = null;
+    await el.updateComplete;
+    let arrive!: (printers: { id: string; name: string }[]) => void;
+    api.getOrderPrinters.mockReturnValue(
+      new Promise((resolve) => {
+        arrive = resolve;
+      }),
+    );
+    el.row = row;
+    await el.updateComplete;
+    expect(chooser(el)).toBeNull();
+    expect(loadingLine(el)).not.toBeNull();
+    arrive([{ id: "new", name: "New printer" }]);
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe("new"));
   });
 
   it("keeps independent browser printer memories for Receipt and Invoice", async () => {
@@ -925,7 +969,7 @@ describe("printing a full invoice", () => {
     );
     await vi.waitFor(() => expect(chooser(el)).toBeNull());
     expect(el.shadowRoot!.querySelector("[data-test=print-busy]")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain("There is no active printer to print on");
+    expect(el.shadowRoot!.textContent).not.toContain("No printer is available for this document");
     expect(el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading")).toBe(
       "Print the invoice",
     );
@@ -1006,9 +1050,9 @@ describe("printing a full invoice", () => {
   );
 
   it.each([
-    ["en-GB", null, "There is no active printer to print on"],
-    ["en-GB", "sent", "There is no active printer to print on"],
-    ["es-ES", "failed", "No hay ninguna impresora activa"],
+    ["en-GB", null, "No printer is available for this document"],
+    ["en-GB", "sent", "No printer is available for this document"],
+    ["es-ES", "failed", "No hay ninguna impresora disponible para este documento"],
   ] as const)(
     "says there is no active printer, not that the invoice is on its way, when the server offers no print and nothing is on its way (%s, current %s)",
     async (locale, current, words) => {
@@ -1127,8 +1171,16 @@ describe("printing a full invoice", () => {
     choose(el, "printer-1");
     await el.updateComplete;
     expect(printButton(el).textContent?.trim()).toBe("Print on Office printer");
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=document-back]")
+        ?.disabled,
+    ).toBe(true);
     held.answer(deliveryAttempt("queued"));
     await vi.waitFor(() => expect(printButton(el).loading).toBe(false));
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=document-back]")
+        ?.disabled,
+    ).toBe(false);
     expect(el.shadowRoot!.textContent).toContain("Invoice sent to Office printer");
     expect(el.shadowRoot!.textContent).not.toContain("sent to Bar printer");
   });
@@ -1210,6 +1262,9 @@ describe("printing a full invoice", () => {
       settle(held);
       await held.request.mock.results[0]!.value.catch(() => undefined);
       await el.updateComplete;
+      expect(localStorage.getItem("waitron-dashboard-document-printer:invoice")).toBe(
+        _name === "answers" ? OFFICE_PRINTER.id : null,
+      );
       expect(el.shadowRoot!.textContent).not.toContain("sent to");
       expect(await errorMessage(el)).toBeNull();
       expect(chooser(el)!.error).toBe("");

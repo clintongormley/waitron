@@ -72,6 +72,7 @@ export class OrderReprintDialog extends LitElement {
     this.printers = printers;
     const offered = (id: string) => printers.some((printer) => printer.id === id);
     if (this.#firstOffer) {
+      if (printers.length === 0) return;
       const remembered = readDocumentPrinter(this.mode === "invoice" ? "invoice" : "receipt");
       this.printerId =
         remembered && offered(remembered)
@@ -100,11 +101,8 @@ export class OrderReprintDialog extends LitElement {
     this.sentTo = null;
     this.printerError = null;
     this.#showError(null);
-    // Another bill's offer, or the other mode's list, is never a printer this one may use.
-    if (changed.has("mode") || this.mode === "invoice") {
-      this.printers = null;
-      this.deliveryBusy = false;
-    }
+    this.printers = null;
+    this.deliveryBusy = false;
     if (this.row === null || this.mode === "choose" || this.row.invoiceType === "F1")
       this.#queries.release("getOrderPrinters");
     if (this.row === null || this.mode === "choose" || this.row.invoiceType !== "F1")
@@ -143,7 +141,8 @@ export class OrderReprintDialog extends LitElement {
             (attempt) => attempt.status === "queued" || attempt.status === "sending",
           );
         if (print === null) {
-          this.#setPrinters([]);
+          this.printers = [];
+          if (!this.deliveryBusy) this.#setPrinters([]);
           return;
         }
         this.designation = print.designation;
@@ -240,7 +239,12 @@ export class OrderReprintDialog extends LitElement {
 
   #heading(): string {
     if (this.mode === "choose") return t("orders.print_document.title");
-    if (this.mode === "receipt") return t("orders.reprint.title");
+    if (this.mode === "receipt")
+      return t(
+        this.row?.invoiceType === "F1" && this.designation === "original"
+          ? "orders.print_document.receipt_title"
+          : "orders.reprint.title",
+      );
     return t(
       this.designation === "original"
         ? "orders.print_invoice.title"
@@ -290,7 +294,7 @@ export class OrderReprintDialog extends LitElement {
             ></wt-combobox>`
           : this.#renderPrinters()
       }
-      ${this.unavailablePrinter ? html`<p role="status">${t("orders.print_document.unavailable")}</p>` : nothing}
+      ${this.unavailablePrinter && !this.deliveryBusy ? html`<p role="status">${t("orders.print_document.unavailable")}</p>` : nothing}
       ${this.sentTo === null ? nothing : html`<p role="status">${fill(this.#sentKey, { printer: this.sentTo })}</p>`}
       ${
         this.printersFailed ||
@@ -316,6 +320,7 @@ export class OrderReprintDialog extends LitElement {
                 slot="cancel"
                 variant="secondary"
                 data-test="document-back"
+                ?disabled=${this.printing}
                 @click=${() => {
                   this.mode = "choose";
                 }}
