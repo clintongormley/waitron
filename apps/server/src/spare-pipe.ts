@@ -14,6 +14,7 @@ import type { Logger } from "./logger.js";
 
 const LISTENER = "spare_store";
 const REFUSAL_LOG_INTERVAL_MS = 60_000;
+const CONNECT_TIMEOUT_MS = 5_000;
 
 export interface StoreListenerDeps {
   port: number;
@@ -141,12 +142,14 @@ export interface StorePipeDeps {
   /** The addresses a host name answers to; the venue network's answer, kept while it lives, when absent. */
   lookup?: (hostname: string) => Promise<BoxAddresses>;
   log: Logger;
+  /** How long one address has to complete the handshake before the next is tried. */
+  connectTimeoutMs?: number;
 }
 
 export interface StorePipe {
   /** Where Litestream and the object store speak plain HTTP, on this box's loopback. */
   loopbackUrl: string;
-  /** Why the last connection could not reach the spare's store; null once one does. */
+  /** Why the last connection got no answer from the spare's store; null once one does. */
   problem(): { reason: string; since: string } | null;
   close(): Promise<void>;
 }
@@ -156,6 +159,9 @@ export interface StorePipe {
  * carried over TLS pinned to the venue authority, under this box's client certificate, to the first
  * of the store host's addresses that completes the handshake. The client files are read for each
  * connection, so a reissued pair is picked up without a restart.
+ *
+ * The spare judges the client certificate only after the handshake completes, so a connection is
+ * counted as answered at the store's first byte; one the store ends before then is a refusal.
  */
 export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
   const store = new URL(deps.storeUrl);
@@ -163,27 +169,40 @@ export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
   const port = Number(store.port || 443);
   const remembered = new RememberedAnswers();
   const lookup = deps.lookup ?? ((name: string) => lookupBoxName(name, { remembered }));
+  const connectTimeoutMs = deps.connectTimeoutMs ?? CONNECT_TIMEOUT_MS;
   let problem: { reason: string; since: string } | null = null;
-  const refused = (reason: string) => {
-    if (problem?.reason === reason) return;
+  // Each failure reason is logged once while connections keep meeting it.
+  let warned = new Set<string>();
+  const failedWith = (reasons: Set<string>, reason: string) => {
+    reasons.add(reason);
+    if (warned.has(reason)) return;
+    warned.add(reason);
     deps.log("warn", "stream.spare_store_refused", { reason });
-    problem = { reason, since: new Date().toISOString() };
+  };
+  const refused = (reasons: Set<string>, reason: string) => {
+    failedWith(reasons, reason);
+    if (problem?.reason !== reason) problem = { reason, since: new Date().toISOString() };
+  };
+  const answered = (reasons: Set<string>) => {
+    problem = null;
+    warned = new Set([...warned].filter((reason) => reasons.has(reason)));
   };
   const reasonOf = (error: unknown) =>
     isAppError(error) ? error.code : ((error as NodeJS.ErrnoException).code ?? "unknown");
 
-  const reach = async (): Promise<TLSSocket | undefined> => {
+  const reach = async (reasons: Set<string>): Promise<TLSSocket | undefined> => {
     let addresses: string[];
     try {
       ({ addresses } = await lookup(host));
     } catch (error) {
-      refused(reasonOf(error));
+      refused(reasons, reasonOf(error));
       return undefined;
     }
     const [cert, key] = await Promise.all([
       readFile(deps.clientCertFile, "utf8"),
       readFile(deps.clientKeyFile, "utf8"),
     ]);
+    let last: string | undefined;
     for (const address of addresses) {
       const reached = await new Promise<TLSSocket | string>((resolve) => {
         const socket = connectTls({
@@ -195,19 +214,24 @@ export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
           key,
           rejectUnauthorized: true,
         });
-        const failed = (error: NodeJS.ErrnoException) => {
+        const timer = setTimeout(() => failed({ code: "ETIMEDOUT" }), connectTimeoutMs);
+        const failed = (error: { code?: string }) => {
+          clearTimeout(timer);
           socket.destroy();
           resolve(error.code ?? "unknown");
         };
         socket.once("error", failed);
         socket.once("secureConnect", () => {
+          clearTimeout(timer);
           socket.off("error", failed);
           resolve(socket);
         });
       });
       if (typeof reached !== "string") return reached;
-      refused(reached);
+      failedWith(reasons, reached);
+      last = reached;
     }
+    if (last !== undefined) refused(reasons, last);
     return undefined;
   };
 
@@ -219,22 +243,37 @@ export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
   const server = createTcpServer({ pauseOnConnect: true }, (local) => {
     track(local);
     local.on("error", () => local.destroy());
-    void reach().then(
+    const reasons = new Set<string>();
+    void reach(reasons).then(
       (remote) => {
         if (remote === undefined || local.destroyed) {
           remote?.destroy();
           local.destroy();
           return;
         }
-        problem = null;
         track(remote);
-        remote.on("error", () => local.destroy());
+        let replied = false;
+        let localLeft = false;
+        let remoteError: string | undefined;
+        remote.once("data", () => {
+          replied = true;
+          answered(reasons);
+        });
+        local.once("close", () => (localLeft = true));
+        remote.on(
+          "error",
+          (error: NodeJS.ErrnoException) => (remoteError = error.code ?? "unknown"),
+        );
+        remote.once("close", () => {
+          if (!replied && !localLeft) refused(reasons, remoteError ?? "store_closed_before_answer");
+          local.destroy();
+        });
         local.on("error", () => remote.destroy());
         local.pipe(remote).pipe(local);
         local.resume();
       },
       (error: unknown) => {
-        refused(reasonOf(error));
+        refused(reasons, reasonOf(error));
         local.destroy();
       },
     );

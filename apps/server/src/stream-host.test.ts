@@ -1240,14 +1240,14 @@ describe("the live copy's wiring", () => {
       await rm(certDir, { recursive: true, force: true });
     });
 
-    async function startSpare(leafFile: string): Promise<string> {
+    async function startSpare(leafFile: string, peerHostname = MAIN_NAME): Promise<string> {
       spare = await startStoreListener({
         port: 0,
         host: "127.0.0.1",
         certFile: join(certDir, leafFile),
         keyFile: join(certDir, leafFile),
         caFile: join(certDir, "ca.crt"),
-        peerHostname: MAIN_NAME,
+        peerHostname,
         upstreamPort: (upstream.address() as AddressInfo).port,
         log: () => {},
       });
@@ -1366,6 +1366,29 @@ describe("the live copy's wiring", () => {
         expect(rt.status()).toMatchObject({
           bucketProblem: { reason: "CERT_SIGNATURE_FAILURE", since: expect.any(String) },
         });
+        expect(reached).toEqual([]);
+      } finally {
+        await rt.stop();
+      }
+    });
+
+    it("a pipe refused by the spare's store (wrong client certificate) puts the stream's bucket problem in its status", async () => {
+      await pair(await startSpare("spare.pem", "box-9e0d.waitron.local"));
+      const litestream = new FakeLitestream();
+      const rt = pairedRuntime(litestream);
+      try {
+        await rt.start();
+        await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+        expect(rt.status()).toMatchObject({ bucketProblem: null });
+
+        const endpoint = new URL(await replicaUrl()).searchParams.get("endpoint")!;
+        expect(await getThrough(endpoint)).not.toBe("200 stored");
+
+        await vi.waitFor(() =>
+          expect((rt.status() as StreamStatus).bucketProblem?.reason).toMatch(
+            /^(ECONNRESET|store_closed_before_answer)$/,
+          ),
+        );
         expect(reached).toEqual([]);
       } finally {
         await rt.stop();

@@ -7,7 +7,7 @@ import {
 } from "node:http";
 import { request } from "node:https";
 import { connect } from "node:tls";
-import { connect as connectTcp, type AddressInfo } from "node:net";
+import { connect as connectTcp, createServer as createTcpServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
@@ -400,6 +400,72 @@ describe("startStorePipe", () => {
     for (let i = 0; i < 3; i++) expect(await getThrough(loopbackUrl)).not.toBe("200 stored");
 
     expect(logged.filter((line) => line.event === "stream.spare_store_refused")).toHaveLength(1);
+  });
+
+  it("a pipe refused by the spare's store (wrong client certificate) keeps why; the right certificate clears it", async () => {
+    const port = await listen({ peerHostname: "box-9e0d.waitron.local" });
+    const { loopbackUrl, problem } = await open();
+
+    expect(await getThrough(loopbackUrl)).not.toBe("200 stored");
+
+    await vi.waitFor(() => expect(problem()).not.toBeNull());
+    // A reset or a plain close, by the operating system; macOS gave the plain close (2026-11-13).
+    expect(problem()!.reason).toMatch(/^(ECONNRESET|store_closed_before_answer)$/);
+    expect(logged.filter((line) => line.event === "stream.spare_store_refused")).toHaveLength(1);
+    expect(seen).toEqual([]);
+
+    await listener!.close();
+    listener = undefined;
+    await listen({ port });
+    expect(await getThrough(loopbackUrl)).toBe("200 stored");
+    expect(problem()).toBeNull();
+  });
+
+  it("logs an address that keeps failing once, while the next one answers", async () => {
+    await listen();
+    const { loopbackUrl, problem } = await open({
+      lookup: async () => ({ addresses: ["::1", "127.0.0.1"], remembered: false }),
+    });
+
+    for (let i = 0; i < 5; i++) expect(await getThrough(loopbackUrl)).toBe("200 stored");
+
+    expect(logged.filter((line) => line.event === "stream.spare_store_refused")).toEqual([
+      { level: "warn", event: "stream.spare_store_refused", fields: { reason: "ECONNREFUSED" } },
+    ]);
+    expect(problem()).toBeNull();
+  });
+
+  it("moves on from an address that never completes the handshake", async () => {
+    const port = await listen();
+    const silent = createTcpServer(() => {});
+    await new Promise<void>((resolve) => silent.listen(port, "::1", resolve));
+    try {
+      const { loopbackUrl, problem } = await open({
+        connectTimeoutMs: 200,
+        lookup: async () => ({ addresses: ["::1", "127.0.0.1"], remembered: false }),
+      });
+
+      expect(await getThrough(loopbackUrl)).toBe("200 stored");
+
+      expect(logged).toContainEqual({
+        level: "warn",
+        event: "stream.spare_store_refused",
+        fields: { reason: "ETIMEDOUT" },
+      });
+      expect(problem()).toBeNull();
+    } finally {
+      silent.close();
+    }
+  });
+
+  it("keeps a missing client certificate file as the problem", async () => {
+    await listen();
+    const { loopbackUrl, problem } = await open({ clientCertFile: join(dir, "absent.crt") });
+
+    expect(await getThrough(loopbackUrl)).not.toBe("200 stored");
+
+    expect(problem()?.reason).toBe("ENOENT");
+    expect(seen).toEqual([]);
   });
 
   it("close ends a held connection and stops accepting", async () => {
