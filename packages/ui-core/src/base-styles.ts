@@ -3,7 +3,6 @@ import { css } from "lit";
 export const pageTitleStyles = css`
   h1 {
     font-size: var(--wt-font-size-xl);
-    font-weight: var(--wt-font-weight-bold);
   }
 `;
 
