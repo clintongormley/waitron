@@ -5,7 +5,7 @@ import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql, getTableColumns } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   captureError,
@@ -1432,7 +1432,8 @@ describe("A803 split: what the kitchen is told", () => {
       const [{ firedAt }] = (await db
         .select({ firedAt: ticketItems.firedAt })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, tabId))) as [{ firedAt: string }];
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId))) as [{ firedAt: string }];
       await db
         .update(partyTables)
         .set({ joinedAt: firedAt })
@@ -2181,7 +2182,14 @@ describe("A803 split: what the kitchen is told", () => {
       expect(await billRow(v, tabId)).toMatchObject({ partyId, status: "open" });
       expect(await linesOf(tabId)).toEqual([]);
       expect(
-        await db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+        await db
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, tabId)),
       ).toEqual([]);
       expect(decimalToCents(await inTx(v, (tx) => storedOrderTotal(tx, tabId)))).toBe(0);
       expect(await paymentsOf(v, tabId)).toEqual([]);
@@ -2581,9 +2589,10 @@ describe("A1378 MOVED follows station grouping and preserves portion boundaries"
     ).toEqual([["2 x BURG"]]);
     before = (await printedBy(grill)).length;
     const items = await v.db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, p.tabId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, p.tabId));
     expect(items.map((item) => item.quantity)).toEqual([1000, 1000]);
     await inTx(v, (tx) =>
       enqueueCorrectionSlips(
@@ -2944,7 +2953,8 @@ describe("a station's print-MOVED-slips choice", () => {
           stationId: ticketItems.stationId,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, tabId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId));
       await enqueueCorrectionSlips(
         tx,
         v.cfg,

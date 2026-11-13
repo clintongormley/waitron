@@ -1,6 +1,6 @@
 import { seedDeviceProfiles, attachStationPrinterForTest } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   devices,
@@ -226,7 +226,12 @@ describe("station output status", () => {
     await suite.db
       .update(ticketItems)
       .set({ state: "ready" })
-      .where(eq(ticketItems.workingOrderId, orderId));
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          sql`(select id from working_order_lines where working_order_id = ${orderId})`,
+        ),
+      );
     expect(await withTransaction(suite.db, (tx) => stationScreensDark(tx, at))).toEqual([]);
   });
 
@@ -339,7 +344,8 @@ describe("station output status", () => {
     const [item] = await suite.db
       .select({ state: ticketItems.state })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, orderId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, orderId));
     expect(item!.state).toBe("queued");
     expect(
       await withTransaction(suite.db, (tx) => stationsWithWaitingDishes(tx, at, [f.grill])),
@@ -367,7 +373,8 @@ describe("station output status", () => {
     const [item] = await suite.db
       .select({ state: ticketItems.state })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, orderId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, orderId));
     expect(item!.state).toBe("queued");
     expect(
       await withTransaction(suite.db, (tx) => stationsWithWaitingDishes(tx, at, [f.grill])),
@@ -597,7 +604,12 @@ describe("passScreensDark", () => {
     await suite.db
       .update(ticketItems)
       .set({ firedAt: null, requestedAt: null })
-      .where(eq(ticketItems.workingOrderId, orderId));
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          sql`(select id from working_order_lines where working_order_id = ${orderId})`,
+        ),
+      );
     await passDevice(f, "pass");
     expect(await read()).toEqual([]);
   });
@@ -608,7 +620,12 @@ describe("passScreensDark", () => {
     await suite.db
       .update(ticketItems)
       .set({ madeHere: true })
-      .where(eq(ticketItems.workingOrderId, orderId));
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          sql`(select id from working_order_lines where working_order_id = ${orderId})`,
+        ),
+      );
     await passDevice(f, "pass");
     expect(await read()).toEqual([]);
   });
@@ -645,7 +662,12 @@ describe("passScreensDark", () => {
       await suite.db
         .update(ticketItems)
         .set({ state: "ready" })
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .where(
+          inArray(
+            ticketItems.workingOrderLineId,
+            sql`(select id from working_order_lines where working_order_id = ${orderId})`,
+          ),
+        );
       await suite.db
         .update(workingOrderLines)
         .set({ servedQuantity: 500, servedAt: "2026-10-02T18:00:00.000Z" })

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
@@ -390,7 +390,12 @@ describe("A773 requested lifecycle: serving", () => {
       await tx
         .update(ticketItems)
         .set({ requestedAt: null })
-        .where(eq(ticketItems.workingOrderId, venue.party.tabId));
+        .where(
+          inArray(
+            ticketItems.workingOrderLineId,
+            sql`(select id from working_order_lines where working_order_id = ${venue.party.tabId})`,
+          ),
+        );
       const burger = await lineOf(tx, venue, "burger");
       const chips = await lineOf(tx, venue, "chips");
       expect(await item(tx, burger.itemId!)).toMatchObject({ requestedAt: null, firedAt: AT });

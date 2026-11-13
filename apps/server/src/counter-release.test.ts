@@ -1,6 +1,6 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -62,7 +62,14 @@ describe("A773 counter release", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id))
         .orderBy(workingOrderLines.lineNo),
-      items: await tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id)),
+      items: await tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, id)),
       groups: await tx.select().from(orderGroups),
     }));
     expect(after.order.partyId).toBeNull();
@@ -100,13 +107,27 @@ describe("A773 counter release", () => {
       OPERATOR,
     );
     const before = await inTx(v, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, id)),
     );
     expect(before).toHaveLength(lines.length);
     expect(before.every(({ firedAt }) => firedAt !== null)).toBe(true);
     expect(
       await inTx(v, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id)),
+        tx
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, id)),
       ),
     ).toEqual(before);
   });
@@ -125,7 +146,14 @@ describe("A773 counter release", () => {
       }),
     );
     const items = await inTx(v, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     // The held Burger ×2 is two portions, each its own line and ticket item (A803).
     const [fired, held] = placed.groups.map((group) => group.lineIds);
@@ -152,7 +180,14 @@ describe("A773 counter release", () => {
       );
     });
     const items = await inTx(v, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, id)),
     );
     expect(items).toHaveLength(lines.length);
     expect(items.every(({ firedAt }) => firedAt !== null)).toBe(true);

@@ -71,7 +71,8 @@ async function rows(tx: Transaction, tabId: string) {
       state: ticketItems.state,
     })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, tabId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, tabId));
   return { lines, items };
 }
 async function fryerTickets(tx: Transaction, venue: Venue) {

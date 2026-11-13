@@ -246,7 +246,7 @@ async function kitchenItems(workingOrderId: string) {
       .select({ productId: workingOrderLines.productId, stationId: ticketItems.stationId })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(ticketItems.workingOrderId, workingOrderId))
+      .where(eq(workingOrderLines.workingOrderId, workingOrderId))
       .orderBy(workingOrderLines.lineNo),
   );
 }

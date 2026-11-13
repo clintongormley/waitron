@@ -11,6 +11,7 @@ import {
   ticketItems,
   withTransaction,
   workingOrders,
+  workingOrderLines,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -507,7 +508,8 @@ describe("A773 station policy: pass coverage", () => {
     const [item] = await db
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, counterId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, counterId));
     expect(await release(venue, pass.by, card)).toEqual({ releasedTicketItemIds: [item!.id] });
   });
 
@@ -578,8 +580,9 @@ const burgerAtTable = (venue: Venue, release: "fire" | "hold") =>
       })
     ).groups[0]!;
     const [item] = await tx
-      .select({ orderId: ticketItems.workingOrderId, requestedAt: ticketItems.requestedAt })
+      .select({ orderId: workingOrderLines.workingOrderId, requestedAt: ticketItems.requestedAt })
       .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
       .where(eq(ticketItems.workingOrderLineId, group.lineIds[0]!));
     expect(item!.requestedAt === null).toBe(release === "hold");
     return { lineId: group.lineIds[0]!, orderId: item!.orderId };

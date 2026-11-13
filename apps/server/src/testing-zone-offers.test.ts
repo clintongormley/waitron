@@ -363,7 +363,7 @@ describe("offerProducts", () => {
       .select({ productId: workingOrderLines.productId, stationId: ticketItems.stationId })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(ticketItems.workingOrderId, tabId))
+      .where(eq(workingOrderLines.workingOrderId, tabId))
       .orderBy(workingOrderLines.lineNo);
     expect(fired).toEqual([
       { productId: venue.coffee, stationId: venue.stations.counter },

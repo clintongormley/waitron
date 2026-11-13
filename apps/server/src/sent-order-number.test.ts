@@ -142,7 +142,7 @@ function kitchenItems(billId: string) {
   return v.db.all<{ name: string; quantity: number; sent: number | null }>(sql`
     select l.name as name, t.quantity as quantity, t.sent_order_number as sent
     from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
-    where t.working_order_id = ${billId} and l.name <> 'Water'
+    where l.working_order_id = ${billId} and l.name <> 'Water'
     order by l.line_no`);
 }
 
@@ -153,7 +153,7 @@ function madeHereOf(billId: string, name: string): boolean[] {
       sql`
       select t.made_here as madeHere
       from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
-      where t.working_order_id = ${billId} and l.name = ${name}`,
+      where l.working_order_id = ${billId} and l.name = ${name}`,
     )
     .map((row) => row.madeHere === 1);
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { adjustments } from "@waitron/adjustments";
 import {
@@ -67,7 +67,14 @@ async function requestedPizzas(release: "fire" | "hold" = "fire") {
       return line!;
     });
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, order.billId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, order.billId)),
     );
     expect(items).toMatchObject([
       { workingOrderLineId: parent.id, requestedAt: expect.any(String), firedAt: null },

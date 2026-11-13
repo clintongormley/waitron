@@ -1,6 +1,6 @@
 import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   kitchenStations,
@@ -81,7 +81,14 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
     async (mixed) => {
       const { tabId } = await seatedWith(venue, "Paella", "Caña");
       const items = await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+        tx
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, tabId)),
       );
       const [dish, extra] = items as [(typeof items)[0], (typeof items)[0]];
       await inTx(venue, (tx) =>
@@ -92,7 +99,14 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
       );
       const snapshot = () =>
         inTx(venue, async (tx) => ({
-          items: await tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+          items: await tx
+            .select({
+              ...getTableColumns(ticketItems),
+              workingOrderId: workingOrderLines.workingOrderId,
+            })
+            .from(ticketItems)
+            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+            .where(eq(workingOrderLines.workingOrderId, tabId)),
           lines: await tx
             .select()
             .from(workingOrderLines)
@@ -122,7 +136,14 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   it("records the session's device and person as the mover", async () => {
     const { tabId } = await seatedWith(venue, "Paella");
     const [item] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     const answer = await call(`/api/working-orders/${tabId}/lines/move-station`, {
       submissionId: randomUUID(),
@@ -149,7 +170,14 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   it("moves a queued dish and exposes its station and move eligibility", async () => {
     const { tabId } = await seatedWith(venue, "Paella");
     const [item] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     expect(item!.stationId).toBe(bar);
     const before = await send(venue.app, venue.cookie, "GET", `/api/working-orders/${tabId}/lines`);
@@ -219,7 +247,14 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
   ] as const)("maps %s to 409 %s", async (state, code) => {
     const { tabId } = await seatedWith(venue, "Paella");
     const [item] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     await inTx(venue, (tx) =>
       tx
@@ -267,10 +302,24 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
     const first = await seatedWith(venue, "Paella");
     const second = await seatedWith(venue, "Paella");
     const [firstItem] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, first.tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, first.tabId)),
     );
     const [otherItem] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, second.tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, second.tabId)),
     );
     const request = (lineId: string, stationId: string) =>
       call(`/api/working-orders/${first.tabId}/lines/move-station`, {
@@ -324,7 +373,14 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
     async (path) => {
       const { tabId } = await seatedWith(venue, "Paella");
       const [item] = await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+        tx
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, tabId)),
       );
       const moved = await call(`/api/working-orders/${tabId}/lines/move-station`, {
         submissionId: randomUUID(),
@@ -391,7 +447,14 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
         await fireLines(tx, venue.cfg, tabId, lines);
       });
       const [item] = await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+        tx
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, tabId)),
       );
       expect(item!.stationId).toBe(bar);
       const moved = await call(`/api/working-orders/${tabId}/lines/move-station`, {
@@ -455,7 +518,14 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
       await fireLines(tx, venue.cfg, tabId, lines);
     });
     const [item] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     const moved = await call(`/api/working-orders/${tabId}/lines/move-station`, {
       submissionId: randomUUID(),
@@ -475,7 +545,8 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
       tx
         .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     expect(records.find((row) => row.lineId === item!.workingOrderLineId)!.stationId).toBe(grill);
     expect(records.find((row) => row.lineId !== item!.workingOrderLineId)!.stationId).toBe(bar);
@@ -486,7 +557,14 @@ describe("station queue move attribution", () => {
   it("reads the latest move at its receiving station for a till and a dashboard actor", async () => {
     const { tabId } = await seatedWith(venue, "Paella");
     const [item] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     const before = await send(venue.app, venue.cookie, "GET", `/api/stations/${bar}/queue`);
     const group = (body: unknown) =>

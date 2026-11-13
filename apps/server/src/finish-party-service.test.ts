@@ -1,6 +1,6 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, getTableColumns } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   billPaymentRefunds,
@@ -118,9 +118,10 @@ async function snapshot(p: Fixture) {
     tables: await venue.db.select().from(partyTables).where(eq(partyTables.partyId, p.partyId)),
     bill: await venue.db.select().from(workingOrders).where(eq(workingOrders.id, p.billId)),
     tickets: await venue.db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, p.billId)),
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, p.billId)),
     lines: await venue.db
       .select()
       .from(workingOrderLines)

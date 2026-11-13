@@ -6,7 +6,7 @@ import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
@@ -582,9 +582,13 @@ describe("department transfer till writes", () => {
           .from(workingLineContexts)
           .where(eq(workingLineContexts.workingOrderLineId, lineRows[0]!.id));
         const kitchen = await tx
-          .select()
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, f.tab));
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, f.tab));
         const recordedSales = await tx.select().from(sales).where(eq(sales.workingOrderId, f.tab));
         const recordedLines = await tx
           .select()
@@ -870,9 +874,10 @@ describe("department transfer durable reads", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, f.tab));
     const [ticket] = await suite.db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, f.tab));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, f.tab));
     await suite.db.update(workingOrders).set({ revision: 7 }).where(eq(workingOrders.id, f.tab));
     await suite.db
       .update(ticketItems)
@@ -1036,9 +1041,10 @@ describe("department transfer read boundaries", () => {
     );
     const id = await pending(f);
     const [ticket] = await suite.db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, f.tab));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, f.tab));
     expect(
       (await get(f.desk.cookie, `/api/department-transfers/${id}`)).body.outstandingWork,
     ).toEqual([expect.objectContaining({ id: ticket!.id })]);
@@ -1076,9 +1082,10 @@ describe("department transfer read boundaries", () => {
     );
     const id = await pending(f);
     const [ticket] = await suite.db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, f.tab));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, f.tab));
     const requestedAt = "2026-11-03T10:00:00.000Z";
     await suite.db
       .update(ticketItems)
@@ -1122,9 +1129,13 @@ describe("department transfer read boundaries", () => {
       );
       const id = await pending(f);
       const [ticket] = await suite.db
-        .select()
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, f.tab));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, f.tab));
       await suite.db
         .update(workingOrderLines)
         .set({ servedQuantity: served })
@@ -1139,9 +1150,13 @@ describe("department transfer read boundaries", () => {
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, f.tab)),
         tickets: await suite.db
-          .select()
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, f.tab)),
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, f.tab)),
         transfer: await state(f.tab),
       };
       const detail = await get(f.desk.cookie, `/api/department-transfers/${id}`);
@@ -1155,9 +1170,13 @@ describe("department transfer read boundaries", () => {
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, f.tab)),
         tickets: await suite.db
-          .select()
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, f.tab)),
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, f.tab)),
         transfer: await state(f.tab),
       }).toEqual(before);
     },
@@ -1658,9 +1677,10 @@ describe("human transfer identities", () => {
     );
     const id = await pending(f);
     const [ticket] = await suite.db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, f.tab));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, f.tab));
     const [station] = await suite.db
       .select()
       .from(kitchenStations)
@@ -1703,7 +1723,7 @@ describe("human transfer identities", () => {
       .select({ id: ticketItems.id, name: workingOrderLines.name })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(ticketItems.workingOrderId, f.tab));
+      .where(eq(workingOrderLines.workingOrderId, f.tab));
     expect(items.map((item) => item.name).sort()).toEqual(["Burger", "Paella"]);
     for (const item of items)
       await suite.db

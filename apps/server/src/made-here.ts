@@ -161,9 +161,10 @@ export async function storePrepayMadeHere(
   const rows = await tx
     .select({ lineId: ticketItems.workingOrderLineId })
     .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(
       and(
-        eq(ticketItems.workingOrderId, orderId),
+        eq(workingOrderLines.workingOrderId, orderId),
         eq(ticketItems.madeHere, true),
         inArray(ticketItems.workingOrderLineId, [...lineIds]),
       ),

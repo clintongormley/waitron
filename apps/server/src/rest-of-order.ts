@@ -22,7 +22,7 @@ export function restOfOrderQuery(tx: Transaction, orderIds: readonly string[]) {
   return tx
     .select({
       ticketItemId: ticketItems.id,
-      orderId: ticketItems.workingOrderId,
+      orderId: workingOrderLines.workingOrderId,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       stationName: kitchenStations.name,
@@ -41,7 +41,7 @@ export function restOfOrderQuery(tx: Transaction, orderIds: readonly string[]) {
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     .where(
       and(
-        inArray(ticketItems.workingOrderId, [...orderIds]),
+        inArray(workingOrderLines.workingOrderId, [...orderIds]),
         eq(ticketItems.madeHere, false),
         gt(firedQuantity, workingOrderLines.servedQuantity),
       ),

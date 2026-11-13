@@ -61,13 +61,9 @@ describe("station queue rest of the order", () => {
       vatClass: "general",
       lineTotal: 121,
     });
-    await db.insert(ticketItems).values({
-      workingOrderId: orderId,
-      workingOrderLineId: ownLineId,
-      stationId,
-      state: "ready",
-      firedAt: nowIso(),
-    });
+    await db
+      .insert(ticketItems)
+      .values({ workingOrderLineId: ownLineId, stationId, state: "ready", firedAt: nowIso() });
     const otherStations = await db
       .insert(kitchenStations)
       .values([{ name: "A Freidora" }, { name: "Z Parrilla" }])
@@ -145,7 +141,6 @@ describe("station queue rest of the order", () => {
       const [ticket] = await db
         .insert(ticketItems)
         .values({
-          workingOrderId: orderId,
           workingOrderLineId: lineId,
           stationId: station(item.station),
           state: item.state,
@@ -170,13 +165,9 @@ describe("station queue rest of the order", () => {
       vatClass: "general",
       lineTotal: 121,
     });
-    await db.insert(ticketItems).values({
-      workingOrderId: ownOnlyOrderId,
-      workingOrderLineId: ownOnlyLineId,
-      stationId,
-      state: "queued",
-      firedAt: nowIso(),
-    });
+    await db
+      .insert(ticketItems)
+      .values({ workingOrderLineId: ownOnlyLineId, stationId, state: "queued", firedAt: nowIso() });
 
     const read = () => withTransaction(db, (tx) => listStationQueue(tx, stationId));
     const disabled = await read();
@@ -281,13 +272,9 @@ describe("station queue bump mode", () => {
         vatClass: "general",
         lineTotal: 121,
       });
-      await db.insert(ticketItems).values({
-        workingOrderId: orderId,
-        workingOrderLineId: lineId,
-        stationId,
-        state: "queued",
-        firedAt: nowIso(),
-      });
+      await db
+        .insert(ticketItems)
+        .values({ workingOrderLineId: lineId, stationId, state: "queued", firedAt: nowIso() });
     }
     const app = new Hono();
     mountTillApi(

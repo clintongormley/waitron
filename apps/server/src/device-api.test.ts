@@ -143,7 +143,7 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     select ti.id from ticket_items ti
     join working_order_lines wol on wol.id = ti.working_order_line_id
-    where ti.working_order_id = ${orderId}
+    where wol.working_order_id = ${orderId}
     order by wol.line_no`);
   return { orderId, items: rows.map((r) => r.id) };
 }

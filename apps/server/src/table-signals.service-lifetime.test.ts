@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   kitchenStations,
@@ -49,9 +49,10 @@ async function snapshot(billId: string) {
       .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(workingOrderLines.lineNo),
     items: await tx
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, billId))
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(ticketItems.id),
   }));
 }

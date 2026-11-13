@@ -177,7 +177,8 @@ async function itemsOf(orderId: string) {
   return suite.db
     .select({ state: ticketItems.state, firedAt: ticketItems.firedAt })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, orderId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, orderId));
 }
 
 describe("waiter cooking authority", () => {

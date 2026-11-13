@@ -7,9 +7,9 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, getTableColumns } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { openVenueDatabase, orderGroups, ticketItems } from "@waitron/db";
+import { openVenueDatabase, orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashSessionToken, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -248,9 +248,16 @@ describe("A669 consideration through a server process restart", () => {
           if (noPreparation)
             expect(
               await inspected.venue
-                .select()
+                .select({
+                  ...getTableColumns(ticketItems),
+                  workingOrderId: workingOrderLines.workingOrderId,
+                })
                 .from(ticketItems)
-                .where(eq(ticketItems.workingOrderId, party.tabId)),
+                .innerJoin(
+                  workingOrderLines,
+                  eq(workingOrderLines.id, ticketItems.workingOrderLineId),
+                )
+                .where(eq(workingOrderLines.workingOrderId, party.tabId)),
             ).toEqual([]);
         } finally {
           await inspected.close();

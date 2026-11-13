@@ -3,9 +3,9 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { kitchenStations, ticketItems } from "@waitron/db";
+import { kitchenStations, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashSessionToken, sessions } from "@waitron/identity";
@@ -69,9 +69,10 @@ async function fixture() {
     }),
   );
   const [ticket] = await v.db
-    .select()
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, party.tabId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, party.tabId));
   const [station] = await v.db
     .select()
     .from(kitchenStations)

@@ -7,7 +7,7 @@ import { writeContentLanguages } from "@waitron/catalogue";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, getTableColumns } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { markIncidentHandled } from "@waitron/core";
 import {
@@ -223,7 +223,11 @@ async function burger() {
   const { partyId, tabId } = await seat(venue, tableId);
   await orderForParty(venue, partyId, ["Burger"], tabId);
   const [item] = await inTx(venue, (tx) =>
-    tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+    tx
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, tabId)),
   );
   return { partyId, tabId, item: item! };
 }
@@ -933,7 +937,14 @@ describe("release", () => {
       }),
     );
     const itemsBefore = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     const madeHere = itemsBefore.find((item) => item.madeHere)!;
     const dishItem = itemsBefore.find((item) => !item.madeHere)!;
@@ -958,7 +969,14 @@ describe("release", () => {
         }),
       );
       const itemsAfter = await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+        tx
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, tabId)),
       );
       expect(itemsAfter.find((item) => item.id === madeHere.id)).toEqual(madeHere);
       expect(itemsAfter.find((item) => item.id === dishItem.id)).toMatchObject({
@@ -1260,7 +1278,14 @@ describe("moveDishesToStation", () => {
     const { partyId, tabId } = await seat(venue, tableId);
     await orderForParty(venue, partyId, ["Burger", "Water"], tabId);
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     expect(items.map((item) => item.stationId)).toEqual([bar, bar]);
     const [first, second] = items.map((item) => item.workingOrderLineId);
@@ -1356,7 +1381,14 @@ describe("moveDishesToStation", () => {
     const { partyId, tabId } = await seat(venue, tableId);
     await orderForParty(venue, partyId, ["Burger", "Water"], tabId);
     const items = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     expect(items.map((item) => item.stationId)).toEqual([bar, bar]);
     const asked: string[] = [];
@@ -1383,7 +1415,14 @@ describe("moveDishesToStation", () => {
     await orderForParty(venue, partyId, ["Burger", "Water"], tabId);
     const lineIds = (
       await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+        tx
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, tabId)),
       )
     ).map((item) => item.workingOrderLineId);
     await inTx(venue, (tx) =>
@@ -2026,7 +2065,8 @@ describe("moveDishesToStation", () => {
       tx
         .select({ stationId: ticketItems.stationId, lineId: ticketItems.workingOrderLineId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     expect(records).toHaveLength(2);
     expect(records.map((row) => row.stationId)).toEqual([grill, grill]);
@@ -2070,7 +2110,8 @@ describe("moveDishesToStation", () => {
       tx
         .select({ stationId: ticketItems.stationId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     expect(records.map((row) => row.stationId).sort()).toEqual([bar, grill].sort());
   });
@@ -2394,7 +2435,14 @@ describe("moveDishesToStation", () => {
       ]),
     );
     const [item] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     expect(item!.firedAt).toBeNull();
     const before = await snapshot(tabId, item!.id);
@@ -2432,7 +2480,14 @@ describe("moveDishesToStation", () => {
         ]),
       );
       const [item] = await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+        tx
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, tabId)),
       );
       const moved = await inTx(venue, (tx) =>
         moveDishesToStation(
@@ -2527,7 +2582,14 @@ describe("moveDishesToStation", () => {
       await carveOffLines(tx, venue.cfg, tabId, checkId, [...cut.splitLines.values()], {});
     });
     const [copied] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, checkId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, checkId)),
     );
     expect(copied).toMatchObject({ stationId: grill, stationChosenAt: marked!.stationChosenAt });
     expect(copied!.stationChosenAt).not.toBeNull();
@@ -2577,7 +2639,14 @@ describe("moveDishesToStation", () => {
       await carveOffLines(tx, venue.cfg, tabId, checkId, [...cut.splitLines.values()], {});
     });
     const copied = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, checkId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, checkId)),
     );
     const moves = await inTx(venue, (tx) =>
       readStationQueueMoves(tx, [lineId, copied[0]!.workingOrderLineId]),
@@ -2943,7 +3012,8 @@ describe("moveDishesToStation", () => {
       tx
         .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, split.party.tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, split.party.tabId)),
     );
     expect(records.find((row) => row.lineId === dish.id)!.stationId).toBe(downstairs.stationId);
     expect(records.find((row) => row.lineId === chips.id)!.stationId).toBe(split.stations.fryer);
@@ -2955,9 +3025,13 @@ describe("moveDishesToStation", () => {
     );
     const beforeExtraMove = await splitTx(async (tx) => ({
       items: await tx
-        .select()
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, split.party.tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, split.party.tabId)),
       lines: await tx
         .select()
         .from(workingOrderLines)
@@ -2984,9 +3058,13 @@ describe("moveDishesToStation", () => {
     }
     const afterExtraMove = await splitTx(async (tx) => ({
       items: await tx
-        .select()
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, split.party.tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, split.party.tabId)),
       lines: await tx
         .select()
         .from(workingOrderLines)
@@ -3020,7 +3098,8 @@ describe("moveDishesToStation", () => {
       tx
         .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     expect(items.map((item) => item.stationId).sort()).toEqual([bar, fryer].sort());
     const before = (await jobs(grillPrinter)).length;

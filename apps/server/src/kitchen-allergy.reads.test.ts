@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, getTableColumns } from "drizzle-orm";
 import { kitchenStations, ticketItems, workingOrderLines, products } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -106,9 +106,10 @@ async function sent(
     }),
   );
   const tickets = await v.db
-    .select()
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, party.tabId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, party.tabId));
   // The unticked Burger ×2 is two portions, each with its own ticket item.
   expect(tickets).toHaveLength(extras === undefined ? 3 : 4);
   return { ...party, tickets };

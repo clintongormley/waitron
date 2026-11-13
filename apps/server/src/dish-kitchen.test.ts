@@ -76,7 +76,6 @@ async function seed() {
   await db.insert(ticketItems).values([
     {
       id: records.burger,
-      workingOrderId: orderId,
       workingOrderLineId: ids.burger,
       stationId: station("Grill"),
       quantity: 1500,
@@ -84,14 +83,12 @@ async function seed() {
     },
     {
       id: records.chips,
-      workingOrderId: orderId,
       workingOrderLineId: ids.chips,
       stationId: station("Fryer"),
       quantity: null,
     },
     {
       id: records.secondExtra,
-      workingOrderId: orderId,
       workingOrderLineId: ids.secondExtra,
       stationId: station("Fryer"),
       quantity: 400,

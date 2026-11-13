@@ -16,7 +16,7 @@ import { fireDishesAtPayment } from "./till-sale.js";
 import { VENUE_SERVICE_PROVISIONING, setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, sql, getTableColumns } from "drizzle-orm";
 import { beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   billPaymentRefunds,
@@ -402,7 +402,8 @@ async function ticketsOf(partyId: string) {
       quantity: ticketItems.quantity,
     })
     .from(ticketItems)
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(eq(workingOrders.partyId, partyId));
 }
 
@@ -452,9 +453,10 @@ async function snapshot(v: Venue, partyId: string) {
       .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(workingOrderLines.id),
     tickets: await db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(inArray(ticketItems.workingOrderId, billIds))
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(ticketItems.id),
     groups: await db
       .select()
@@ -1080,7 +1082,8 @@ describe("country starter courses in service", () => {
     const tickets = await db
       .select({ firedAt: ticketItems.firedAt })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, id));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, id));
     expect(tickets).toHaveLength(3);
     expect(tickets.every((ticket) => ticket.firedAt !== null)).toBe(true);
   });
@@ -2927,14 +2930,14 @@ async function splitToCheck(
 async function dishTickets(partyId: string, productId: string) {
   return db
     .select({
-      workingOrderId: ticketItems.workingOrderId,
+      workingOrderId: workingOrderLines.workingOrderId,
       lineId: ticketItems.workingOrderLineId,
       firedAt: ticketItems.firedAt,
       quantity: ticketItems.quantity,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(and(eq(workingOrders.partyId, partyId), eq(workingOrderLines.productId, productId)))
     .orderBy(ticketItems.workingOrderLineId);
 }
@@ -2951,9 +2954,10 @@ function sortedByBill<T extends { workingOrderId: string }>(
 
 async function ticketsOfBill(billId: string) {
   return db
-    .select()
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, billId))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(ticketItems.id);
 }
 
@@ -3704,7 +3708,7 @@ async function groupTickets(groupId: string) {
   return db
     .select({
       id: ticketItems.id,
-      workingOrderId: ticketItems.workingOrderId,
+      workingOrderId: workingOrderLines.workingOrderId,
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
       readyAt: ticketItems.readyAt,
@@ -4275,9 +4279,13 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     const rows = async () => ({
       events: await eventsOf(s.partyId),
       tickets: await db
-        .select()
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, s.tabId))
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, s.tabId))
         .orderBy(ticketItems.id),
       sent: (await linesOf(s.partyId)).map((row) => [row.id, row.sentAt]),
     });

@@ -181,7 +181,8 @@ function ticketsOf(billId: string) {
   return v.db
     .select({ id: ticketItems.id, lineId: ticketItems.workingOrderLineId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, billId))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(asc(ticketItems.id));
 }
 
@@ -195,7 +196,7 @@ function kitchenOf(lineIds: readonly string[]) {
       stationId: string;
       state: string;
     }>(
-      sql`select id, working_order_line_id as lineId, working_order_id as billId, station_id as stationId, state from ticket_items order by id`,
+      sql`select t.id, t.working_order_line_id as lineId, l.working_order_id as billId, t.station_id as stationId, t.state from ticket_items t join working_order_lines l on l.id = t.working_order_line_id order by t.id`,
     )
     .filter((item) => lineIds.includes(item.lineId));
 }

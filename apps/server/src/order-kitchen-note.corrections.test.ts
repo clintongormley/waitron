@@ -5,7 +5,7 @@ import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   kitchenStations,
@@ -316,7 +316,12 @@ describe("saved kitchen note corrections", () => {
           await tx
             .update(ticketItems)
             .set({ madeHere: true })
-            .where(eq(ticketItems.workingOrderId, p.tabId));
+            .where(
+              inArray(
+                ticketItems.workingOrderLineId,
+                sql`(select id from working_order_lines where working_order_id = ${p.tabId})`,
+              ),
+            );
       });
       if (kind === "collected") {
         await pay(v, p.tabId, "12.00");
@@ -345,7 +350,12 @@ describe("saved kitchen note corrections", () => {
         await tx
           .update(ticketItems)
           .set({ state: "ready", quantity: active })
-          .where(eq(ticketItems.workingOrderId, p.tabId));
+          .where(
+            inArray(
+              ticketItems.workingOrderLineId,
+              sql`(select id from working_order_lines where working_order_id = ${p.tabId})`,
+            ),
+          );
         await tx
           .update(workingOrderLines)
           .set({ servedQuantity: served })

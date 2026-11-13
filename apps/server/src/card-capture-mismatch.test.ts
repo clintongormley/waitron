@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { invoiceSeries, sales, ticketItems, withTransaction, workingOrders } from "@waitron/db";
+import {
+  invoiceSeries,
+  sales,
+  ticketItems,
+  withTransaction,
+  workingOrders,
+  workingOrderLines,
+} from "@waitron/db";
 import { currentIncidentsOf, recordCorrection } from "@waitron/core";
 import { startManagementSession } from "@waitron/identity";
 import { computeDailyClose, currentBusinessDay } from "@waitron/reporting";
@@ -85,7 +92,8 @@ it.each([
     const sentDishes = await suite.db
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, id));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, id));
     if (mode !== "open") expect(sentDishes).toHaveLength(1);
     let actual = captured;
     const client = new FakeStripe();
@@ -211,7 +219,8 @@ it.each([
         await suite.db
           .select({ id: ticketItems.id })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, id)),
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, id)),
       ).toEqual(sentDishes);
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.calls[0]![0].idempotencyKey).not.toBe(

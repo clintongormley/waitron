@@ -24,6 +24,7 @@ import {
   floorZones,
   todayColumns,
   todaySet,
+  workingOrderLines,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -187,7 +188,15 @@ async function delivery(tableId: string, dish = "Paella"): Promise<string> {
 /** Its items were all made on the spot, so no food is on its way. */
 async function madeHereOnly(orderId: string): Promise<void> {
   await inTx(v, (tx) =>
-    tx.update(ticketItems).set({ madeHere: true }).where(eq(ticketItems.workingOrderId, orderId)),
+    tx
+      .update(ticketItems)
+      .set({ madeHere: true })
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          sql`(select id from working_order_lines where working_order_id = ${orderId})`,
+        ),
+      ),
   );
 }
 
@@ -196,7 +205,8 @@ async function kitchenItemsOf(orderId: string): Promise<number> {
     tx
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(and(eq(ticketItems.workingOrderId, orderId), eq(ticketItems.madeHere, false))),
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(and(eq(workingOrderLines.workingOrderId, orderId), eq(ticketItems.madeHere, false))),
   );
   return rows.length;
 }

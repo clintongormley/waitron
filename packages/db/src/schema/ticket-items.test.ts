@@ -101,16 +101,24 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(ticketItems)
-        .values({
-          workingOrderId: orderId,
-          workingOrderLineId: lineId,
-          stationId: station,
-          state,
-        })
+        .values({ workingOrderLineId: lineId, stationId: station, state })
         .returning({ id: ticketItems.id });
       return row!.id;
     });
   }
+
+  it("ticket_items has no bill column or copied-bill index", () => {
+    expect(
+      suite.db.all(
+        sql`select name from pragma_table_info('ticket_items') where name = 'working_order_id'`,
+      ),
+    ).toEqual([]);
+    expect(
+      suite.db.all(
+        sql`select name from pragma_index_list('ticket_items') where name = 'ticket_items_order_idx'`,
+      ),
+    ).toEqual([]);
+  });
 
   it("exposes every column through the Drizzle export across the queued → preparing → ready lifecycle", async () => {
     const { orderId, lineId } = await seedOrderLine(nodeA, productA);
@@ -130,7 +138,11 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     const [row] = await inTx((tx) => tx.select().from(ticketItems).where(eq(ticketItems.id, id)));
     expect(row!.state).toBe("ready");
     expect(row!.workingOrderLineId).toBe(lineId);
-    expect(row!.workingOrderId).toBe(orderId);
+    const [owner] = await suite.db
+      .select({ id: workingOrderLines.workingOrderId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, row!.workingOrderLineId));
+    expect(owner!.id).toBe(orderId);
     expect(row!.stationId).toBe(stationA);
     expect(row!.queuedAt).not.toBeNull();
     expect(row!.readyAt).not.toBeNull();
@@ -214,11 +226,11 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     expect(row).toEqual({ sent_order_number: null });
   });
 
-  it("indexes the items of an order", () => {
+  it("does not index a copied bill id", () => {
     const indexes = suite.db.all<{ name: string }>(
       sql`select name from pragma_index_list('ticket_items')`,
     );
-    expect(indexes.map((row) => row.name)).toContain("ticket_items_order_idx");
+    expect(indexes.map((row) => row.name)).not.toContain("ticket_items_order_idx");
   });
 
   it("A773 retired storage: a migrated database has no pass marks table", () => {
@@ -267,13 +279,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     const [statedRow] = await inTx((tx) =>
       tx
         .insert(ticketItems)
-        .values({
-          workingOrderId: stated.orderId,
-          workingOrderLineId: stated.lineId,
-          stationId: stationA,
-          // Two units, in whole thousandths.
-          quantity: 2000,
-        })
+        .values({ workingOrderLineId: stated.lineId, stationId: stationA, quantity: 2000 })
         .returning({ id: ticketItems.id }),
     );
     const read = await inTx((tx) =>

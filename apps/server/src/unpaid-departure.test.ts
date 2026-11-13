@@ -15,7 +15,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, getTableColumns } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -206,7 +206,14 @@ it("stops the lunch dishes, without treating its priced shell as kitchen work, o
   });
   expect(
     await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, party.tabId)),
     ),
   ).toHaveLength(2);
   const answer = await depart(party.partyId, {
@@ -223,7 +230,14 @@ it("stops the lunch dishes, without treating its priced shell as kitchen work, o
   expect(cancelled.map((row) => row.lineId).sort()).toEqual(children.children.sort());
   expect(
     await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+      tx
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, party.tabId)),
     ),
   ).toEqual([]);
 });
@@ -1180,7 +1194,14 @@ describe("a bill that owes nothing", () => {
     expect(await statusOf(venue, party.tabId)).toBe("settled");
     expect(
       await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
+        tx
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, party.tabId)),
       ),
     ).toEqual([]);
     expect(
@@ -2079,7 +2100,8 @@ describe("A773 requested lifecycle", () => {
       tx
         .select({ requestedAt: ticketItems.requestedAt, firedAt: ticketItems.firedAt })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, billId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, billId)),
     );
   }
 

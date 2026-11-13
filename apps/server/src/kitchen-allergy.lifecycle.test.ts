@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, getTableColumns } from "drizzle-orm";
 import { kitchenStations, products, printJobs, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -107,9 +107,10 @@ async function sent(
         }),
   );
   const [ticket] = await v.db
-    .select()
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, p.tabId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, p.tabId));
   return { ...p, ticket: ticket! };
 }
 type Sent = Awaited<ReturnType<typeof sent>>;
@@ -145,9 +146,10 @@ async function edit(p: Sent, remove = false) {
 }
 async function copies(p: Sent) {
   const tickets = await v.db
-    .select()
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, p.tabId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, p.tabId));
   const rows = await inTx(v, (tx) =>
     VENUE_SERVICE.readTicketAllergies(
       tx,

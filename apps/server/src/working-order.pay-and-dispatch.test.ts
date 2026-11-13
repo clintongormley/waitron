@@ -459,7 +459,7 @@ async function readAmendments(id: string): Promise<VerifiableAmendment[]> {
  *  exists. */
 async function ticketStateOf(id: string): Promise<string | null> {
   const { rows } = await suite.db.execute<{ state: string }>(sql`
-    select state from ticket_items where working_order_id = ${id}
+    select state from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${id})
   `);
   return rows[0]?.state ?? null;
 }
@@ -492,7 +492,7 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
     from ticket_items ti
     join working_order_lines wol
       on wol.id = ti.working_order_line_id
-    where ti.working_order_id = ${orderId}
+    where wol.working_order_id = ${orderId}
     order by wol.line_no
   `);
   return rows.map((r) => r.id);

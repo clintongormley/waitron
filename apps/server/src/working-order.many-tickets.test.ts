@@ -1,6 +1,12 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, inArray } from "drizzle-orm";
 import { beforeAll, expect, it } from "vitest";
-import { kitchenPrintJobLines, printJobs, ticketItems, withTransaction } from "@waitron/db";
+import {
+  kitchenPrintJobLines,
+  printJobs,
+  ticketItems,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -42,7 +48,8 @@ it("A1208 one send of 2,400 burgers each with chips writes a kitchen item for ev
       await suite.db
         .select({ count: sql<number>`count(*)` })
         .from(ticketItems)
-        .where(and(eq(ticketItems.workingOrderId, id), eq(ticketItems.stationId, stationId)))
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(and(eq(workingOrderLines.workingOrderId, id), eq(ticketItems.stationId, stationId)))
     )[0]!.count;
   expect(await count(venue.stations.grill)).toBe(2400);
   expect(await count(venue.stations.fryer)).toBe(2400);
@@ -72,7 +79,15 @@ it("A1208 one send of 5,462 burgers each with chips links every burger and every
       ticketItems,
       eq(ticketItems.workingOrderLineId, kitchenPrintJobLines.workingOrderLineId),
     )
-    .where(and(eq(printJobs.printerId, venue.printers.pass), eq(ticketItems.workingOrderId, id)));
+    .where(
+      and(
+        eq(printJobs.printerId, venue.printers.pass),
+        inArray(
+          ticketItems.workingOrderLineId,
+          sql`(select id from working_order_lines where working_order_id = ${id})`,
+        ),
+      ),
+    );
   expect(linked!.count).toBe(10924);
 });
 
@@ -97,7 +112,7 @@ it("A1208 a table bill firing 11,880 burgers at once records an allergy snapshot
   });
 
   const [snapshots] = suite.db.all<{ count: number }>(
-    sql`select count(*) as count from ticket_items t where t.allergy_frozen = 1 and t.working_order_id = ${id}`,
+    sql`select count(*) as count from ticket_items t where t.allergy_frozen = 1 and t.working_order_line_id in (select id from working_order_lines where working_order_id = ${id})`,
   );
   expect(snapshots!.count).toBe(11880);
 });

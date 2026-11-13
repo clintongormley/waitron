@@ -4,7 +4,7 @@ import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { receiptDateTime } from "./receipt-dates.js";
 import { formatMoney } from "./receipt-money.js";
 import { payments } from "@waitron/payments";
-import { sql } from "drizzle-orm";
+import { sql, getTableColumns } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -119,9 +119,13 @@ describe("A964 language boundaries", () => {
       expect(before).toHaveLength(2);
       expect(before.every((j) => text(j.payload).includes("Pass roast"))).toBe(true);
       const tickets = await v.db
-        .select()
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, p.tabId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, p.tabId));
       const recorded = await inTx(v, (tx) =>
         VENUE_SERVICE.readTicketAllergies(
           tx,

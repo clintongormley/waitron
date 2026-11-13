@@ -226,7 +226,7 @@ async function wholeBillAtReader(billId: string) {
 function kitchenItems(billId: string): { items: number; fired: number } {
   const [row] = venue.db.all<{ items: number; fired: number }>(
     sql`select count(*) as items, count(fired_at) as fired from ticket_items
-        where working_order_id = ${billId}`,
+        where working_order_line_id in (select id from working_order_lines where working_order_id = ${billId})`,
   );
   return row!;
 }

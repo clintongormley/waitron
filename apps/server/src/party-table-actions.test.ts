@@ -1,7 +1,7 @@
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql, getTableColumns } from "drizzle-orm";
 import { describe, expect, it, onTestFinished } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -269,7 +269,7 @@ async function ticketsOf(billId: string) {
       })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(ticketItems.workingOrderId, billId))
+      .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(asc(workingOrderLines.lineNo)),
   );
 }
@@ -2819,9 +2819,13 @@ describe("A803 split", () => {
     function kitchenRows(billId: string) {
       return act((tx) =>
         tx
-          .select()
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, billId))
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, billId))
           .orderBy(asc(ticketItems.workingOrderLineId)),
       );
     }

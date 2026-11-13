@@ -2,7 +2,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import {
   orderDraftLines,
   orderDrafts,
@@ -71,9 +71,10 @@ export async function kitchenFixture(db: Database) {
   );
   // Burger ×3 is three portions, each with its own ticket item; `ticket` is the first.
   const tickets = await db
-    .select()
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, party.tabId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, party.tabId));
   const ticket = tickets[0];
   await inTx(v, async (tx) => {
     const printer = await createPrinter(tx, {

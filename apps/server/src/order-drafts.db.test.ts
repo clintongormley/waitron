@@ -1,3 +1,4 @@
+import { getTableColumns } from "drizzle-orm";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readBillEditState } from "./bill-editing.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
@@ -2605,7 +2606,15 @@ describe("navigation sends nothing", () => {
     expect(
       await db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, tabId)),
     ).toEqual([]);
-    expect(await db.select().from(ticketItems)).toEqual([]);
+    expect(
+      await db
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId)),
+    ).toEqual([]);
     expect(await db.select().from(serviceCommands)).toMatchObject([{ kind: "draft.take-over" }]);
   });
 });
@@ -3961,7 +3970,12 @@ it("A669 rolls back the draft, created lines and moved ticks when submission fai
   expect(await storedLines(draft.id)).toHaveLength(1);
   expect(await db.select().from(workingOrderLines)).toEqual([]);
   expect(await db.select().from(orderGroups)).toEqual([]);
-  expect(await db.select().from(ticketItems)).toEqual([]);
+  expect(
+    await db
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId)),
+  ).toEqual([]);
 });
 
 it("A669 writes draft line batches in one insert while preserving their contents", async () => {
@@ -4376,7 +4390,13 @@ describe("fresh drafts alongside existing bill families", () => {
             }),
           );
         const freshBefore = await storedLines(draft.id);
-        const itemsBefore = await db.select().from(ticketItems);
+        const itemsBefore = await db
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId));
         const familyBefore = await db
           .select()
           .from(workingOrderLines)
@@ -4413,7 +4433,15 @@ describe("fresh drafts alongside existing bill families", () => {
           revision: draft.revision + 1,
         });
         expect(await storedLines(draft.id)).toEqual(freshBefore);
-        expect(await db.select().from(ticketItems)).toEqual(itemsBefore);
+        expect(
+          await db
+            .select({
+              ...getTableColumns(ticketItems),
+              workingOrderId: workingOrderLines.workingOrderId,
+            })
+            .from(ticketItems)
+            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId)),
+        ).toEqual(itemsBefore);
         const arrivingGroups = await db
           .select()
           .from(orderGroups)
@@ -4704,7 +4732,15 @@ describe("fresh drafts alongside existing bill families", () => {
     expect(await draftsOf(v, moving.from.partyId)).toEqual([]);
     expect((await inTx((tx) => readPartyAllergy(tx, target.partyId))).ticks).toHaveLength(2);
     expect(
-      (await db.select().from(ticketItems)).every((item) => item.workingOrderId !== moving.billId),
+      (
+        await db
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      ).every((item) => item.workingOrderId !== moving.billId),
     ).toBe(true);
   });
 
@@ -4924,7 +4960,15 @@ describe("fresh drafts alongside existing bill families", () => {
       ),
     ).toEqual(before);
     expect(
-      (await db.select().from(ticketItems)).some((line) => line.workingOrderLineId === parentId),
+      (
+        await db
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      ).some((line) => line.workingOrderLineId === parentId),
     ).toBe(false);
   });
 
@@ -5066,7 +5110,15 @@ describe("send-time fresh combining", () => {
       { quantity: 1000, groupId: held, cohort: "b" },
       { quantity: 1000, groupId: held, cohort: "b" },
     ]);
-    expect(await db.select().from(ticketItems)).toHaveLength(5);
+    expect(
+      await db
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId)),
+    ).toHaveLength(5);
     expect(sent.draft).toBeNull();
   });
 

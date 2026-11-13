@@ -79,7 +79,7 @@ async function items(tx: Transaction, orderId: string) {
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(eq(ticketItems.workingOrderId, orderId));
+    .where(eq(workingOrderLines.workingOrderId, orderId));
 }
 
 async function slips(tx: Transaction, printerId: string) {
@@ -199,7 +199,7 @@ describe("A773 requested lifecycle: alerts and slips", () => {
     expect(await read()).toEqual([]);
     // Control: the same dish released makes the same dark screen an alert.
     await db.execute(
-      sql`update ticket_items set fired_at = requested_at where working_order_id = ${venue.party.tabId}`,
+      sql`update ticket_items set fired_at = requested_at where working_order_line_id in (select id from working_order_lines where working_order_id = ${venue.party.tabId})`,
     );
     expect(await read()).toEqual([expect.objectContaining({ stationId: venue.stations.grill })]);
   });

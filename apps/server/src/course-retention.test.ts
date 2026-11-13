@@ -4,7 +4,7 @@ import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, getTableColumns } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import {
@@ -352,9 +352,10 @@ it("saved draft keeps and submits its deleted course", async () => {
       { name: "K-SAUCE", perDish: 1, addAllergens: null, suitableFor: [] },
     ]);
   const tickets = await v.db
-    .select()
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, v.tabId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, v.tabId));
   expect(tickets.map((row) => [row.courseId, row.quantity, row.firedAt])).toEqual([
     [v.late.id, 1000, null],
     [v.late.id, 1000, null],
@@ -585,7 +586,11 @@ it("routed child extras inherit and release their dish's retained deleted course
   ]);
   await v.remove();
   expect((await v.submit(draft)).status).toBe(200);
-  const rows = await v.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, v.tabId));
+  const rows = await v.db
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, v.tabId));
   expect(rows.map((row) => [row.stationId, row.courseId, row.quantity, row.firedAt])).toEqual([
     [v.stationId, v.late.id, 1000, null],
     [station.id, v.late.id, 1000, null],
@@ -593,9 +598,10 @@ it("routed child extras inherit and release their dish's retained deleted course
   expect(rows[0]!.stationId).not.toBe(station.id);
   expect((await v.fireHeldDish()).status).toBe(200);
   const released = await v.db
-    .select()
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, v.tabId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, v.tabId));
   expect(released.map((row) => [row.id, row.courseId, row.firedAt === null])).toEqual(
     rows.map((row) => [row.id, v.late.id, false]),
   );

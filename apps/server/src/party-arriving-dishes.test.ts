@@ -160,7 +160,8 @@ async function firedTicketsOf(billId: string) {
     tx
       .select({ lineId: ticketItems.workingOrderLineId, state: ticketItems.state })
       .from(ticketItems)
-      .where(and(eq(ticketItems.workingOrderId, billId), isNotNull(ticketItems.firedAt))),
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(and(eq(workingOrderLines.workingOrderId, billId), isNotNull(ticketItems.firedAt))),
   );
 }
 

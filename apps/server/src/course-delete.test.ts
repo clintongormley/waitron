@@ -1,7 +1,7 @@
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   kitchenCourses,
@@ -136,7 +136,12 @@ describe("permanent course deletion", () => {
               ? tx
                   .update(ticketItems)
                   .set({ courseId: null })
-                  .where(eq(ticketItems.workingOrderId, tabId))
+                  .where(
+                    inArray(
+                      ticketItems.workingOrderLineId,
+                      sql`(select id from working_order_lines where working_order_id = ${tabId})`,
+                    ),
+                  )
               : tx
                   .update(workingOrderLines)
                   .set({ courseId: null })

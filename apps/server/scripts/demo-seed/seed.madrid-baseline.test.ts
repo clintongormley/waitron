@@ -1037,7 +1037,7 @@ for (const locale of ["en", "es"] as const) {
       for (const row of Object.values(tickets.rows))
         row.allergy_frozen = frozenTickets.has(row.id) ? 1 : 0;
       expected[phase] = madridWithDroppedColumns(expected[phase], {
-        ticket_items: ["node_id"],
+        ticket_items: ["node_id", "working_order_id"],
         routing_cell_periods: ["department_id"],
       });
       const notices = expected[phase].tables.kitchen_notices!;

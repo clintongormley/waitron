@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
-import { ticketItems, withTransaction, workingOrders } from "@waitron/db";
+import { ticketItems, withTransaction, workingOrders, workingOrderLines } from "@waitron/db";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "@waitron/fiscal-verifactu";
 import { quoteIdent } from "@waitron/provisioning";
 import { computeDailyClose, recordDailyClose, resolveVenueClock } from "@waitron/reporting";
@@ -385,8 +385,9 @@ async function newTickets(venue: BenchVenue, bill: LiveBill) {
   const tickets = await venue.db
     .select({ id: ticketItems.id, stationId: ticketItems.stationId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, bill.tabId!))
-    .orderBy(sql`rowid`);
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, bill.tabId!))
+    .orderBy(sql`${ticketItems}.rowid`);
   return tickets.filter((ticket) => !known.has(ticket.id));
 }
 

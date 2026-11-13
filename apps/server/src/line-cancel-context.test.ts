@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   lineServiceCancellations,
@@ -93,9 +93,10 @@ async function snapshot(order: Fixture) {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, order.billId)),
     tickets: await tx
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, order.billId)),
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, order.billId)),
     cancellations: await tx
       .select()
       .from(lineServiceCancellations)

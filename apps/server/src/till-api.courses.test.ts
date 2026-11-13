@@ -3,7 +3,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, eq, getTableColumns } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   ticketItems,
@@ -609,7 +609,14 @@ describe("KDS-3 expo routes: the All stations board + whole-card ready", () => {
             .select()
             .from(workingOrderLines)
             .where(eq(workingOrderLines.workingOrderId, orderId)),
-          items: await tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId)),
+          items: await tx
+            .select({
+              ...getTableColumns(ticketItems),
+              workingOrderId: workingOrderLines.workingOrderId,
+            })
+            .from(ticketItems)
+            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+            .where(eq(workingOrderLines.workingOrderId, orderId)),
         }));
       const before = await stored();
       expect(before.items).toHaveLength(2);

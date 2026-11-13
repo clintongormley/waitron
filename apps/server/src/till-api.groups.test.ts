@@ -10,7 +10,7 @@ import { deleteCourse } from "./course-delete.js";
 import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
 import { sessions, setProfileAdmission } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, getTableColumns } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   orderGroupEvents,
@@ -1652,9 +1652,13 @@ describe("the pass routes, one after the other", () => {
           party: await tx.select().from(parties).where(eq(parties.id, party.partyId)),
           groups: await tx.select().from(orderGroups).where(eq(orderGroups.partyId, party.partyId)),
           items: await tx
-            .select()
+            .select({
+              ...getTableColumns(ticketItems),
+              workingOrderId: workingOrderLines.workingOrderId,
+            })
             .from(ticketItems)
-            .where(eq(ticketItems.workingOrderId, party.tabId)),
+            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+            .where(eq(workingOrderLines.workingOrderId, party.tabId)),
           events: await tx
             .select()
             .from(orderGroupEvents)
@@ -2242,9 +2246,13 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       ),
       tickets: await inTx(venue, (tx) =>
         tx
-          .select()
+          .select({
+            ...getTableColumns(ticketItems),
+            workingOrderId: workingOrderLines.workingOrderId,
+          })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, party.tabId))
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, party.tabId))
           .orderBy(ticketItems.id),
       ),
     });
@@ -2573,9 +2581,13 @@ describe("one held dish rechecks admission after reading its request", () => {
         .where(eq(orderGroups.partyId, party.partyId))
         .orderBy(orderGroups.id),
       tickets: await venue.db
-        .select()
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, party.tabId))
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, party.tabId))
         .orderBy(ticketItems.id),
       events: await eventCount(party.partyId),
       commands: await commandCount(party.partyId),

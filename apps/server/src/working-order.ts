@@ -2102,7 +2102,16 @@ export async function fireLines(
     .from(kitchenCourses)
     .leftJoin(
       ticketItems,
-      and(eq(ticketItems.courseId, kitchenCourses.id), eq(ticketItems.workingOrderId, orderId)),
+      and(
+        eq(ticketItems.courseId, kitchenCourses.id),
+        inArray(
+          ticketItems.workingOrderLineId,
+          tx
+            .select({ id: workingOrderLines.id })
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, orderId)),
+        ),
+      ),
     )
     .groupBy(kitchenCourses.id, kitchenCourses.displayOrder);
 
@@ -2167,7 +2176,6 @@ export async function fireLines(
       return {
         initiated: courseFired,
         value: {
-          workingOrderId: orderId,
           workingOrderLineId: line.id,
           stationId,
           courseId,
@@ -2471,7 +2479,8 @@ async function releaseHeld(
   const pending = await tx
     .select({ id: ticketItems.id })
     .from(ticketItems)
-    .where(and(eq(ticketItems.workingOrderId, orderId), ticketScope, heldItem()))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(and(eq(workingOrderLines.workingOrderId, orderId), ticketScope, heldItem()))
     .limit(1);
   const pendingNoRoute = await heldNoRouteLines(tx, orderId, noRouteScope, routing);
   if (pending.length > 0 || pendingNoRoute.lines.length > 0) {
@@ -2751,7 +2760,8 @@ async function releasedCourses(
   const stillHeld = await tx
     .selectDistinct({ courseId: ticketItems.courseId })
     .from(ticketItems)
-    .where(and(eq(ticketItems.workingOrderId, orderId), heldItem()));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(and(eq(workingOrderLines.workingOrderId, orderId), heldItem()));
   const held = new Set(stillHeld.map((row) => row.courseId));
   return candidates.filter((courseId) => !held.has(courseId));
 }
@@ -2787,12 +2797,12 @@ export async function bumpBillReady(
         isNotNull(ticketItems.firedAt),
       ),
     )
-    .returning({ orderId: ticketItems.workingOrderId });
+    .returning({ lineId: ticketItems.workingOrderLineId });
   await captureKitchenActivity(
     tx,
     attendance,
     firer && "personId" in firer ? firer.personId : undefined,
-    changed.map((row) => row.orderId),
+    changed.length === 0 ? [] : [orderId],
   );
 }
 
@@ -4041,10 +4051,7 @@ export async function moveOrderLines(
   if (source.length > 0) {
     const lineIds = source.map((line) => line.id);
     await stampSentOrderNumber(tx, lineIds, from.orderNumber);
-    await tx
-      .update(ticketItems)
-      .set({ workingOrderId: toTabId })
-      .where(inArray(ticketItems.workingOrderLineId, lineIds));
+
     await recordPortionEvents(tx, lineIds, {
       kind: "moved",
       fromOrderId: fromTabId,
@@ -4812,7 +4819,6 @@ async function carveLines(
               tx,
               child.row.ticketItemId,
               child.row.quantity,
-              toTabId,
               splitChildId,
               child.moved,
             );
@@ -4824,7 +4830,6 @@ async function carveLines(
             tx,
             line.ticketItemId,
             line.quantity,
-            toTabId,
             splitLineId,
             quantity,
           );
@@ -4921,7 +4926,6 @@ async function splitTicketItem(
   tx: Transaction,
   ticketItemId: string,
   lineQuantity: string,
-  toOrderId: string,
   splitLineId: string,
   moved: string,
 ): Promise<string | null> {
@@ -4935,13 +4939,9 @@ async function splitTicketItem(
     .set({ quantity: asked - movedThousandths })
     .where(eq(ticketItems.id, ticketItemId));
   const id = randomUUID();
-  await tx.insert(ticketItems).values({
-    ...ticket!,
-    id,
-    workingOrderId: toOrderId,
-    workingOrderLineId: splitLineId,
-    quantity: movedThousandths,
-  });
+  await tx
+    .insert(ticketItems)
+    .values({ ...ticket!, id, workingOrderLineId: splitLineId, quantity: movedThousandths });
   await VENUE_SERVICE.copyTicketAllergy(tx, ticketItemId, id);
   const moves = await tx
     .select()
@@ -7431,10 +7431,10 @@ async function cancelPlaced(
       })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+      .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
       .where(
         and(
-          eq(ticketItems.workingOrderId, id),
+          eq(workingOrderLines.workingOrderId, id),
           isNotNull(ticketItems.firedAt),
           isNull(workingOrders.collectedAt),
           isNull(workingOrderLines.servedAt),
@@ -7537,7 +7537,8 @@ async function handOver(
   const [fired] = await tx
     .select({ id: ticketItems.id })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, id))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, id))
     .limit(1);
   if (fired === undefined) {
     throw new AppError("ticket.not_fired", { workingOrderId: id });
@@ -7605,7 +7606,10 @@ export interface CounterWaitingOrder {
  */
 export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<CounterWaitingOrder[]> {
   return withTransaction(deps.db, async (tx) => {
-    const firedOrders = tx.selectDistinct({ id: ticketItems.workingOrderId }).from(ticketItems);
+    const firedOrders = tx
+      .selectDistinct({ id: workingOrderLines.workingOrderId })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId));
     const rows = await tx
       .select({
         id: workingOrders.id,
@@ -7658,7 +7662,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
         ? []
         : await tx
             .select({
-              orderId: ticketItems.workingOrderId,
+              orderId: workingOrderLines.workingOrderId,
               lineId: workingOrderLines.id,
               stationId: ticketItems.stationId,
               state: ticketItems.state,
@@ -7670,7 +7674,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
             .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
             .where(
               and(
-                inArray(ticketItems.workingOrderId, settledIds),
+                inArray(workingOrderLines.workingOrderId, settledIds),
                 await serviceDishCondition(
                   tx,
                   inArray(workingOrderLines.workingOrderId, settledIds),
@@ -7849,7 +7853,17 @@ export async function advanceTicketItem(
     tx,
     attendance,
     attendance?.personId,
-    updated.map((row) => row.orderId),
+    (
+      await tx
+        .select({ orderId: workingOrderLines.workingOrderId })
+        .from(workingOrderLines)
+        .where(
+          inArray(
+            workingOrderLines.id,
+            updated.map((row) => row.lineId),
+          ),
+        )
+    ).map((row) => row.orderId),
   );
 }
 
@@ -8255,7 +8269,7 @@ function onStationQueues(stationIds: readonly string[]): SQL | undefined {
     // Read tickets by bill; a station's index range includes its collected history. Never narrower
     // than kitchenWork()'s bill tests.
     inArray(
-      ticketItems.workingOrderId,
+      workingOrderLines.workingOrderId,
       sql`(select ${workingOrders.id} from ${workingOrders} where ${workingOrders.collectedAt} is null and ${workingOrders.status} <> ${"abandoned"})`,
     ),
     inArray(sql`+${ticketItems.stationId}`, [...stationIds]),
@@ -8268,8 +8282,8 @@ export async function stationHasWork(tx: Transaction, stationId: string): Promis
   const [item] = await tx
     .select({ id: ticketItems.id })
     .from(ticketItems)
-    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .innerJoin(workingOrders, eq(workingOrderLines.workingOrderId, workingOrders.id))
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     .where(onStationQueues([stationId]))
     .limit(1);
@@ -8333,8 +8347,8 @@ export async function listStationQueues(
       bumpMode: kitchenStations.bumpMode,
     })
     .from(ticketItems)
-    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .innerJoin(workingOrders, eq(workingOrderLines.workingOrderId, workingOrders.id))
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     // Not filtered by `active`: a course deleted after the item was fired still names its header.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
@@ -8545,8 +8559,8 @@ export async function passStationsByGroup(
       name: kitchenStations.name,
     })
     .from(ticketItems)
-    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .innerJoin(workingOrders, eq(workingOrderLines.workingOrderId, workingOrders.id))
     .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
     .where(
       and(
@@ -8638,8 +8652,8 @@ export async function readPassRows(
       label: workingOrders.label,
     })
     .from(ticketItems)
-    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .innerJoin(workingOrders, eq(workingOrderLines.workingOrderId, workingOrders.id))
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     // Not filtered by `active`, as in `listStationQueue`.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))

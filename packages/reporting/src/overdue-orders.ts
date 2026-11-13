@@ -50,8 +50,8 @@ export async function computeOverdueOrders(tx: Transaction): Promise<OverdueOrde
       label: workingOrders.label,
     })
     .from(ticketItems)
-    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .innerJoin(workingOrders, eq(workingOrderLines.workingOrderId, workingOrders.id))
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     .where(
       and(

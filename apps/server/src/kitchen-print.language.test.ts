@@ -7,7 +7,7 @@ import { nameParty } from "./testing/party-venue.js";
 import * as kitchenLanguage from "./kitchen-language.js";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createOpenOrder, fireLines, fireableLineColumns } from "./working-order.js";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, getTableColumns } from "drizzle-orm";
 import {
   kitchenPrintJobs,
   printers,
@@ -63,9 +63,10 @@ it("uses the saved venue zone for every new paper and keeps already queued bytes
     expect(original).toHaveLength(2);
     for (const job of original) expect(printedLines(job.payload)).toContain("00:30");
     const [fired] = await suite.db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, id));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, id));
     await withTransaction(suite.db, async (tx) => {
       await tx.run(
         sql`update settings set doc = json_set(doc, '$.timeZone', ${"Asia/Tokyo"}) where module = 'business_day'`,
@@ -153,7 +154,15 @@ describe("A964 venue language", () => {
       );
       await fireNewOrder(tx, v.cfg, [{ productId: v.products.burger, quantity: "1" }]);
     });
-    const id = (await suite.db.select().from(ticketItems))[0]!.workingOrderId;
+    const id = (
+      await suite.db
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    )[0]!.workingOrderId;
     await withTransaction(suite.db, (tx) => reprintOrderTickets(tx, v.cfg, id));
     expect(
       (await jobs())
@@ -173,9 +182,10 @@ describe("A964 venue language", () => {
       VENUE_SERVICE.writeKitchenNote(tx, { workingOrderId: id }, 0, "Recorded order note"),
     );
     const [fired] = await suite.db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, id));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, id));
     const target = {
       workingOrderLineId: fired!.workingOrderLineId,
       stationId: fired!.stationId!,
@@ -232,9 +242,10 @@ it("A964 venue language reads once per rendering root, outside printer loops", a
     fireNewOrder(tx, v.cfg, [{ productId: v.products.burger, quantity: "2" }]),
   );
   const [fired] = await suite.db
-    .select()
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, id));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, id));
   const item = {
     workingOrderLineId: fired!.workingOrderLineId,
     stationId: fired!.stationId!,
@@ -411,9 +422,10 @@ it.each(["grouped", "portions"] as const)(
       fire(tx, cfg, [{ productId: v.products.burger, quantity: "1" }]),
     );
     const [fired] = await suite.db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, id));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, id));
     const target = {
       workingOrderLineId: fired!.workingOrderLineId,
       stationId: fired!.stationId!,
@@ -478,7 +490,15 @@ it.each(["en", "es"] as const)(
         { fire: true },
       );
     });
-    const fired = (await suite.db.select().from(ticketItems)).filter(
+    const fired = (
+      await suite.db
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    ).filter(
       (item) => item.workingOrderId === v.party.tabId && item.stationId === v.stations.grill,
     );
     expect(fired).toHaveLength(2);

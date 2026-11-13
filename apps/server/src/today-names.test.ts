@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { printJobs, ticketItems, floorZones } from "@waitron/db";
+import { printJobs, ticketItems, floorZones, workingOrderLines } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { createPrinter, prepareText } from "@waitron/printing";
 import { kitchenNotices, setZoneSalePolicyOverride } from "@waitron/venue-service";
@@ -662,7 +662,8 @@ async function sentCount(orderId: string): Promise<number> {
     tx
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, orderId)),
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, orderId)),
   );
   return rows.length;
 }

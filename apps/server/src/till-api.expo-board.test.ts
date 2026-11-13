@@ -99,7 +99,8 @@ async function itemsOf(f: Fixture, workingOrderId: string): Promise<string[]> {
     tx
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, workingOrderId)),
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, workingOrderId)),
   );
   return rows.map((row) => row.id);
 }

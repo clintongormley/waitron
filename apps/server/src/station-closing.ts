@@ -11,7 +11,7 @@ export async function openDishCount(tx: Transaction, stationId: string): Promise
     .select({ count: count() })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(unfinishedAtStation(stationId));
   return row!.count;
 }
@@ -41,7 +41,7 @@ export async function withStationDishes(
   const dishes = await tx
     .select({
       id: ticketItems.id,
-      orderId: ticketItems.workingOrderId,
+      orderId: workingOrderLines.workingOrderId,
       lineId: ticketItems.workingOrderLineId,
       state: ticketItems.state,
       madeHere: ticketItems.madeHere,
@@ -50,7 +50,7 @@ export async function withStationDishes(
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(unfinishedAtStation(id));
   if (dishes.length > 0 && choice === undefined) throw invalid("openDishes");
   await close(at);

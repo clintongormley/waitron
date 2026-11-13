@@ -12,6 +12,15 @@
 > index choice), check that plan with `EXPLAIN QUERY PLAN` on the box image's SQLite (CLAUDE.md §4).
 > See [when the bench runs](../../developers/testing-guide.md#when-the-bench-runs).
 
+> **2026-11-13, watcher clearance (Lane E `questions.md`, 22:54 and 23:40):** Branch A
+> is selected under the periodic-bench amendment: remove the copied bill column and its index;
+> add the two bench cases without a timing claim. Keep the moved/split checks and protection
+> comparison. The box-SQLite probe searches the existing bill/line-number index and the ticket's
+> unique line index; the watcher cleared either existing line index when it searches by bill and
+> neither table is scanned. Fixture ports and the two cases' setup raised the forecast to
+> 950–1,000 counted additions, with a stop at 1,050. This clearance is the watcher's, inside the
+> queued scope; no separate owner approval of these implementation choices is claimed.
+
 **Goal:** settle appendix §8 item 1. `ticket_items.working_order_id` is a copy of its line's bill
 (`working_order_lines.working_order_id`) with no key ("Denormalised grouping key",
 `packages/db/src/schema/ticket-items.ts:42-45`), rewritten on every line move

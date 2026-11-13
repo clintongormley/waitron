@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, getTableColumns } from "drizzle-orm";
 import {
   orderDraftLines,
   orderGroups,
@@ -311,7 +311,14 @@ describe("A669 candidate sets", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, p.tabId)),
       groups: await v.db.select().from(orderGroups).where(eq(orderGroups.partyId, p.partyId)),
-      tickets: await v.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, p.tabId)),
+      tickets: await v.db
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, p.tabId)),
     };
     await view(p.partyId, { kind: "draft", draftId: d.id, lineIds: [d.lines[0]!.id] });
     await view(p.partyId, { kind: "group", groupId: line!.groupId! });
@@ -322,7 +329,14 @@ describe("A669 candidate sets", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, p.tabId)),
       groups: await v.db.select().from(orderGroups).where(eq(orderGroups.partyId, p.partyId)),
-      tickets: await v.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, p.tabId)),
+      tickets: await v.db
+        .select({
+          ...getTableColumns(ticketItems),
+          workingOrderId: workingOrderLines.workingOrderId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, p.tabId)),
     }).toEqual(before);
   });
 
@@ -434,9 +448,10 @@ describe("A669 candidate sets", () => {
       expect.objectContaining({ name: n.egg.name, offeredBefore: true, sentAt: null }),
     ]);
     const tickets = await v.db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, p.tabId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, p.tabId));
     expect(tickets).toEqual([]);
     expect(
       (

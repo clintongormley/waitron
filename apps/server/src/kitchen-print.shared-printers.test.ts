@@ -183,7 +183,8 @@ it.each(["Cold", "Pastry", "both"])(
           stationId: ticketItems.stationId,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId));
       const before = new Set((await sentJobs(tx)).map((job) => job.id));
       const heldPaper = new Set(
         recorded === "both" ? [venue.x, venue.z] : [recorded === "Cold" ? venue.x : venue.z],
@@ -658,7 +659,8 @@ describe("a printer shared by several stations, and dishes made at the till", ()
         items: await tx
           .select({ stationId: ticketItems.stationId, madeHere: ticketItems.madeHere })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, orderId)),
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(workingOrderLines.workingOrderId, orderId)),
       };
     });
     expect(result.items).toContainEqual({ stationId: stations.fryer, madeHere: true });

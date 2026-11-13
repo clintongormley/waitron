@@ -169,7 +169,7 @@ async function ticketsOf(billId: string) {
       })
       .from(ticketItems)
       .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(ticketItems.workingOrderId, billId))
+      .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(asc(workingOrderLines.lineNo)),
   );
 }
@@ -222,7 +222,7 @@ function noticesOn(billIds: string[]) {
 /** A new printer at every station the bill's sent work went to; answers its id. */
 async function printerFor(billId: string): Promise<string> {
   const stations = v.db.all<{ stationId: string }>(sql`
-    select distinct station_id as stationId from ticket_items where working_order_id = ${billId}`);
+    select distinct station_id as stationId from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${billId})`);
   return inTx(v, async (tx) => {
     const { id } = await createPrinter(tx, {
       name: `P-${randomUUID().slice(0, 8)}`,
@@ -1219,7 +1219,8 @@ describe("A773 waiter request", () => {
           passControlled: ticketItems.passControlled,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, orderId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, orderId)),
     );
 
   it("requests a counter order's dish when it is seated at a free table and every station waits", async () => {

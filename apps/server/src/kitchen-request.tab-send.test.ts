@@ -38,7 +38,7 @@ async function items(tx: Transaction, orderId: string) {
     .select(getTableColumns(ticketItems))
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(eq(ticketItems.workingOrderId, orderId))
+    .where(eq(workingOrderLines.workingOrderId, orderId))
     .orderBy(asc(workingOrderLines.lineNo));
 }
 

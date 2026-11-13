@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { ticketItems, withTransaction } from "@waitron/db";
+import { ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { TicketState } from "./kitchen-print.js";
@@ -55,7 +55,8 @@ describe("A773 phases", () => {
     const items = await suite.db
       .select({ id: ticketItems.id })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, orderId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, orderId));
     expect(items).toHaveLength(4);
     const stamps: { requestedAt: string | null; firedAt: string | null; state: TicketState }[] = [
       { requestedAt: null, firedAt: null, state: "queued" },
@@ -75,7 +76,8 @@ describe("A773 phases", () => {
         state: ticketItems.state,
       })
       .from(ticketItems)
-      .where(eq(ticketItems.workingOrderId, orderId));
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, orderId));
     const ids = items.map((item) => item.id);
     const matching = async (condition: ReturnType<typeof heldItem>) =>
       (

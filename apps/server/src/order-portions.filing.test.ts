@@ -1482,7 +1482,7 @@ describe("A803 portions: raising a dish", () => {
     const items = venue.db.all<{ lineNo: number; quantity: number; fired: number }>(
       sql`select l.line_no as lineNo, t.quantity, t.fired_at is not null as fired
           from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
-          where t.working_order_id = ${bound.billId} and l.parent_line_id is null
+          where l.working_order_id = ${bound.billId} and l.parent_line_id is null
           order by l.line_no`,
     );
     expect(items).toEqual([
@@ -1534,7 +1534,10 @@ describe("A803 portions: raising a dish", () => {
           .from(ticketItems)
           .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
           .where(
-            and(eq(ticketItems.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
+            and(
+              eq(workingOrderLines.workingOrderId, billId),
+              isNull(workingOrderLines.parentLineId),
+            ),
           )
           .orderBy(workingOrderLines.lineNo);
         const blocks = await resolveKitchenAllergyBlocks(
@@ -1633,7 +1636,7 @@ describe("A803 portions: raising a dish", () => {
     const items = venue.db.all<{ lineNo: number; quantity: number; fired: number }>(
       sql`select l.line_no as lineNo, t.quantity, t.fired_at is not null as fired
           from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
-          where t.working_order_id = ${bound.billId} and l.parent_line_id is null
+          where l.working_order_id = ${bound.billId} and l.parent_line_id is null
           order by l.line_no`,
     );
     expect(items.map(({ quantity, fired }) => [quantity, fired])).toEqual([
@@ -1766,7 +1769,7 @@ describe("A803 portions: raising a dish", () => {
     const items = venue.db.all<{ name: string; quantity: number; dish: number }>(
       sql`select l.name, t.quantity, l.parent_line_id is null as dish
           from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
-          where t.working_order_id = ${bill.billId} and l.name = 'Burger'
+          where l.working_order_id = ${bill.billId} and l.name = 'Burger'
           order by l.line_no`,
     );
     expect(items).toEqual([1, 2, 3].map(() => ({ name: "Burger", quantity: 1000, dish: 1 })));

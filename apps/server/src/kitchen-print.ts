@@ -992,7 +992,7 @@ async function readKitchenChangeItems(
   if (orderIds.length === 0) return new Map();
   const rows = await tx
     .select({
-      orderId: ticketItems.workingOrderId,
+      orderId: workingOrderLines.workingOrderId,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: firedQuantity,
@@ -1003,7 +1003,7 @@ async function readKitchenChangeItems(
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(
       orderGroupHoldStations,
@@ -1014,7 +1014,7 @@ async function readKitchenChangeItems(
     )
     .where(
       and(
-        inArray(ticketItems.workingOrderId, [...orderIds]),
+        inArray(workingOrderLines.workingOrderId, [...orderIds]),
         kitchenWork(),
         isNull(workingOrderLines.servedAt),
         or(
@@ -1715,9 +1715,12 @@ async function readSentItems(
   orderIds: readonly string[],
 ): Promise<Map<string, { ticketItemIds: Set<string>; heldItemIds: Set<string> }>> {
   const fired = await tx
-    .select({ id: ticketItems.id, workingOrderId: ticketItems.workingOrderId })
+    .select({ id: ticketItems.id, workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
-    .where(and(inArray(ticketItems.workingOrderId, [...orderIds]), isNotNull(ticketItems.firedAt)));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(
+      and(inArray(workingOrderLines.workingOrderId, [...orderIds]), isNotNull(ticketItems.firedAt)),
+    );
   const held = [
     ...(await readOnHoldTickets(tx, orderIds)),
     ...(await readWaitingOnHoldPaper(tx, orderIds)),
@@ -1775,7 +1778,7 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
   return tx
     .select({
       id: ticketItems.id,
-      workingOrderId: ticketItems.workingOrderId,
+      workingOrderId: workingOrderLines.workingOrderId,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: ticketItems.quantity,
@@ -1786,7 +1789,7 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
       and(
-        inArray(ticketItems.workingOrderId, [...orderIds]),
+        inArray(workingOrderLines.workingOrderId, [...orderIds]),
         isNull(ticketItems.firedAt),
         eq(orderGroups.state, "held"),
         isNotNull(orderGroups.holdPrintedAt),
@@ -1800,7 +1803,7 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
  */
 async function readWaitingOnHoldPaper(tx: Transaction, orderIds: readonly string[]) {
   return tx
-    .select({ id: ticketItems.id, workingOrderId: ticketItems.workingOrderId })
+    .select({ id: ticketItems.id, workingOrderId: workingOrderLines.workingOrderId })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .innerJoin(
@@ -1812,7 +1815,7 @@ async function readWaitingOnHoldPaper(tx: Transaction, orderIds: readonly string
     )
     .where(
       and(
-        inArray(ticketItems.workingOrderId, [...orderIds]),
+        inArray(workingOrderLines.workingOrderId, [...orderIds]),
         isNotNull(ticketItems.requestedAt),
         isNull(ticketItems.firedAt),
       ),
@@ -1916,7 +1919,7 @@ async function readTicketItemsOn(
 ): Promise<Map<string, ItemOnOrder[]>> {
   const rows = await tx
     .select({
-      orderId: ticketItems.workingOrderId,
+      orderId: workingOrderLines.workingOrderId,
       id: ticketItems.id,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
@@ -1926,7 +1929,7 @@ async function readTicketItemsOn(
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(inArray(ticketItems.workingOrderId, [...orderIds]))
+    .where(inArray(workingOrderLines.workingOrderId, [...orderIds]))
     .orderBy(workingOrderLines.lineNo, ticketItems.id);
   const byOrder = new Map<string, ItemOnOrder[]>();
   for (const { orderId, ...item } of rows) {
@@ -2210,7 +2213,7 @@ export async function readNamesOnPaper(
   const items = await tx
     .select({
       id: ticketItems.id,
-      billId: ticketItems.workingOrderId,
+      billId: workingOrderLines.workingOrderId,
       stationId: ticketItems.stationId,
       firedAt: ticketItems.firedAt,
       holdPrintedAt: orderGroups.holdPrintedAt,
@@ -2223,9 +2226,9 @@ export async function readNamesOnPaper(
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(inArray(ticketItems.workingOrderId, billIds));
+    .where(inArray(workingOrderLines.workingOrderId, billIds));
   const noticeKey = (ticketItemId: string, stationId: string) =>
     JSON.stringify([ticketItemId, stationId]);
   const lastNotice = new Map<string, number>();
@@ -2419,16 +2422,17 @@ async function readReprintParts(
 ): Promise<Map<string, readonly [fired: ReprintPart, held: ReprintPart]>> {
   const fired = await tx
     .select({
-      workingOrderId: ticketItems.workingOrderId,
+      workingOrderId: workingOrderLines.workingOrderId,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       quantity: ticketItems.quantity,
       sentAt: ticketItems.firedAt,
     })
     .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(
       and(
-        inArray(ticketItems.workingOrderId, [...orderIds]),
+        inArray(workingOrderLines.workingOrderId, [...orderIds]),
         isNotNull(ticketItems.firedAt),
         eq(ticketItems.madeHere, false),
       ),

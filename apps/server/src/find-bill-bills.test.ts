@@ -390,7 +390,9 @@ describe("Find Bills SQL paging", () => {
     const paid = await placedIssuedBill(venue, "Croquettes");
     expect((await collect(venue, paid, "10.00")).status).toBe(200);
     expect(
-      venue.db.all(sql`select id from ticket_items where working_order_id = ${deferredBill}`),
+      venue.db.all(
+        sql`select id from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${deferredBill})`,
+      ),
     ).not.toEqual([]);
 
     const found = await list();

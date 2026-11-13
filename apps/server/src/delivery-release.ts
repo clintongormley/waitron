@@ -1,5 +1,5 @@
 import { eq, sql, type SQL } from "drizzle-orm";
-import { ticketItems, workingOrders } from "@waitron/db";
+import { ticketItems, workingOrders, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 
 /**
@@ -26,5 +26,6 @@ export function foodOnItsWay(): SQL {
   return sql`(${workingOrders.status} <> 'abandoned' and ${workingOrders.collectedAt} is null
     and exists (
       select 1 from ${ticketItems}
-      where ${ticketItems.workingOrderId} = ${workingOrders.id} and ${ticketItems.madeHere} = 0))`;
+      join ${workingOrderLines} on ${workingOrderLines.id} = ${ticketItems.workingOrderLineId}
+      where ${workingOrderLines.workingOrderId} = ${workingOrders.id} and ${ticketItems.madeHere} = 0))`;
 }

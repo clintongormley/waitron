@@ -180,7 +180,8 @@ describe("A773 pass fields", () => {
           firedAt: ticketItems.firedAt,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, venue.party.tabId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, venue.party.tabId));
       const chips = await lineOf(tx, venue, "chips");
       expect(stamps.find((s) => s.lineId === burger.id)).toMatchObject({
         requestedAt: LATER,

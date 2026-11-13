@@ -5,7 +5,7 @@ import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { asc, eq, inArray, sql, getTableColumns } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   assignCatalogueToVenue,
@@ -375,9 +375,10 @@ async function snapshot(partyId: string) {
       .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(workingOrderLines.id),
     tickets: await suite.db
-      .select()
+      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
       .from(ticketItems)
-      .where(inArray(ticketItems.workingOrderId, billIds))
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(ticketItems.id),
     commands: await suite.db
       .select()

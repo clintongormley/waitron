@@ -99,7 +99,8 @@ async function state(tx: Transaction, id: string) {
       state: ticketItems.state,
     })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, id));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, id));
   return { lines, items };
 }
 async function slips(tx: Transaction, printerId: string) {

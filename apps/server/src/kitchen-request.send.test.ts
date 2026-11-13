@@ -69,7 +69,8 @@ async function items(tx: Transaction, orderId: string) {
       readyAt: ticketItems.readyAt,
     })
     .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, orderId));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(workingOrderLines.workingOrderId, orderId));
 }
 
 async function jobsAt(tx: Transaction, printerId: string) {

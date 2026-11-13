@@ -1,7 +1,7 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   orderGroupEvents,
@@ -84,7 +84,11 @@ async function topLines(billIds: string[]) {
 }
 
 async function ticketsOf(billIds: string[]) {
-  return venue.db.select().from(ticketItems).where(inArray(ticketItems.workingOrderId, billIds));
+  return venue.db
+    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(inArray(workingOrderLines.workingOrderId, billIds));
 }
 
 /** Print job ids are random, so the jobs since a point are told by rowid. */

@@ -79,7 +79,7 @@ export async function rerouteHeldAtRelease(
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(
       and(
-        eq(ticketItems.workingOrderId, orderId),
+        eq(workingOrderLines.workingOrderId, orderId),
         scope,
         heldItem(),
         eq(ticketItems.state, "queued"),

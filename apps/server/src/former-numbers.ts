@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, ne } from "drizzle-orm";
-import { ticketItems, workingOrders } from "@waitron/db";
+import { ticketItems, workingOrders, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 
 /**
@@ -14,14 +14,15 @@ export async function readFormerNumbers(
   if (orderIds.length === 0) return former;
   const rows = await tx
     .selectDistinct({
-      orderId: ticketItems.workingOrderId,
+      orderId: workingOrderLines.workingOrderId,
       number: ticketItems.sentOrderNumber,
     })
     .from(ticketItems)
-    .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(
       and(
-        inArray(ticketItems.workingOrderId, [...new Set(orderIds)]),
+        inArray(workingOrderLines.workingOrderId, [...new Set(orderIds)]),
         isNotNull(ticketItems.sentOrderNumber),
         ne(ticketItems.sentOrderNumber, workingOrders.orderNumber),
       ),

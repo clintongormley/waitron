@@ -2,7 +2,7 @@ import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, getTableColumns } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   orderGroupHoldStations,
@@ -128,7 +128,8 @@ async function firedFromHold(
   const items = await tx
     .select({ stationId: ticketItems.stationId, requestedAt: ticketItems.requestedAt })
     .from(ticketItems)
-    .where(and(eq(ticketItems.workingOrderId, venue.party.tabId)));
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(and(eq(workingOrderLines.workingOrderId, venue.party.tabId)));
   expect(items).toEqual(
     expect.arrayContaining([{ stationId: venue.stations.grill, requestedAt: AT }]),
   );
@@ -200,7 +201,14 @@ describe("A773 hold paper: cancel", () => {
         });
         expect(lines).toHaveLength(shape === "grouped" ? 1 : 3);
         const items = await inTx(venue, (tx) =>
-          tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, order.billId)),
+          tx
+            .select({
+              ...getTableColumns(ticketItems),
+              workingOrderId: workingOrderLines.workingOrderId,
+            })
+            .from(ticketItems)
+            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+            .where(eq(workingOrderLines.workingOrderId, order.billId)),
         );
         expect(items.length).toBeGreaterThan(0);
         for (const item of items)
@@ -1023,7 +1031,7 @@ describe("A773 hold paper: added work", () => {
           })
           .from(ticketItems)
           .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(ticketItems.workingOrderId, venue.party.tabId))
+          .where(eq(workingOrderLines.workingOrderId, venue.party.tabId))
           .orderBy(workingOrderLines.lineNo);
         const requestedAt = (at: string) => (state === "fired" ? at : null);
         expect(chips).toEqual([
@@ -1351,7 +1359,8 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
           firedAt: ticketItems.firedAt,
         })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, venue.party.tabId));
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, venue.party.tabId));
       expect(items).toEqual(
         expect.arrayContaining([
           { stationId: venue.stations.grill, state: "ready", requestedAt: AT, firedAt: AT },
@@ -1398,7 +1407,8 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
       await tx
         .select({ requestedAt: ticketItems.requestedAt, firedAt: ticketItems.firedAt })
         .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, venue.party.tabId)),
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(workingOrderLines.workingOrderId, venue.party.tabId)),
     ).toEqual([
       { requestedAt: AT, firedAt: AT },
       { requestedAt: AT, firedAt: AT },
