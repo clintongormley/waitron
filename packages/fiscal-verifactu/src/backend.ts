@@ -12,6 +12,7 @@ import { AppError, decimal, readSaleOrigin, sumDecimals } from "@waitron/shared"
 import type { NodeId, SaleId } from "@waitron/shared";
 import type {
   ClockStep,
+  FutureDateRefusal,
   ClockStepRecorded,
   ClockStepRequest,
   CorrectionAdmission,
@@ -53,6 +54,7 @@ import { registrosFacturacion } from "./schema/registros.js";
 import { verifyChain } from "./verify.js";
 import { refuseBeforeFirstIssueDate } from "./first-issue-date.js";
 import { chainHeads, refuseUntilRecordable } from "./clock-behind.js";
+import { latestFutureDateRefusal } from "./clock-future-refusal.js";
 import { confirmClockStep, latestClockStep } from "./clock-step.js";
 import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import {
@@ -221,6 +223,10 @@ export class VerifactuBackend implements FiscalBackend {
 
   recordHeads(tx: Transaction): Promise<Record<string, number>> {
     return chainHeads(tx);
+  }
+
+  latestFutureDateRefusal(tx: Transaction, nodeId: string): Promise<FutureDateRefusal | null> {
+    return latestFutureDateRefusal(tx, nodeId);
   }
 
   /**

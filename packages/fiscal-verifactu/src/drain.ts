@@ -64,7 +64,7 @@ const deferredBatch = new Error("Wait for a full sending batch");
 export const SAME_CODE_REFUSAL_LIMIT = 3;
 /** AEAT's future-date refusal: a run of it starts no claim hold, so correctly dated sales never
  * wait behind a refused future-dated one (owner, 2026-11-10; A1420 D11). */
-const FUTURE_DATE_REFUSAL = 1112;
+export const FUTURE_DATE_REFUSAL = 1112;
 
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
 export const BACKOFF_BASE_MS = 60_000;

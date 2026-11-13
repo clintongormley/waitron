@@ -40,6 +40,7 @@ export type {
   ClockStep,
   ClockStepRecorded,
   ClockStepRequest,
+  FutureDateRefusal,
   CorrectionAdmission,
   Counterparty,
   DrainResult,

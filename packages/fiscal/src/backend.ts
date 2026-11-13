@@ -284,6 +284,13 @@ export interface ClockStep {
   stepMs: number;
 }
 
+/** A record AEAT refused as dated in the future: its position on its chain and its issue date
+ * (`YYYY-MM-DD`). */
+export interface FutureDateRefusal {
+  position: number;
+  issuedOn: string;
+}
+
 export interface ClockConfirmation {
   id: string;
   seq: number;
@@ -376,6 +383,10 @@ export interface FiscalBackend {
 
   /** Each node's highest record position. Absent when the regime keeps no record positions. */
   recordHeads?(tx: Transaction): Promise<Record<string, number>>;
+
+  /** The highest position on `nodeId`'s chain AEAT refused as dated in the future, with its issue
+   * date; null when none. Absent when the regime files nothing. */
+  latestFutureDateRefusal?(tx: Transaction, nodeId: string): Promise<FutureDateRefusal | null>;
 
   registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
 
