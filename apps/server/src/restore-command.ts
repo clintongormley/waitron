@@ -1,4 +1,4 @@
-import { VENUE_DIR_NAME } from "@waitron/store";
+import { venueDirOf } from "@waitron/store";
 import {
   assertNoStartAgainDeletion,
   assertVenueFirstSetupAllowed,
@@ -315,7 +315,7 @@ async function resolveRestoreTarget(
   }
   const migrationsDir = deps.env.WAITRON_MIGRATIONS_DIR;
   const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
-  const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, VENUE_DIR_NAME));
+  const venueDir = venueDirOf(deps.env, stateDir);
   const setupRefusal = (error: unknown) =>
     deps.out(
       error instanceof AppError && error.code === "restore.request_waiting"

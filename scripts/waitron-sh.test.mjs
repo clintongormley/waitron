@@ -2695,15 +2695,17 @@ describe("the venue stamp reader inside waitron.sh", () => {
   // stamp row only when the box has been stamped. Built with node:sqlite rather than with the
   // product's own opener, because the reader must work against the FILE, not against our schema.
   function venueDir({ migrated = true, stamp = "" } = {}) {
-    const dir = mkdtempSync(join(tmpdir(), "waitron-venue-"));
-    dirs.push(dir);
+    const state = mkdtempSync(join(tmpdir(), "waitron-state-"));
+    dirs.push(state);
+    const dir = join(state, "venue");
+    mkdirSync(dir);
     const db = new DatabaseSync(join(dir, "venue.db"));
     if (migrated) {
       db.exec("create table deployment (id integer primary key, environment text not null)");
       if (stamp) db.prepare("insert into deployment values (1, ?)").run(stamp);
     }
     db.close();
-    return dir;
+    return state;
   }
 
   const readStamp = (env) =>
@@ -2713,7 +2715,7 @@ describe("the venue stamp reader inside waitron.sh", () => {
     });
 
   it("prints the environment a stamped box carries", () => {
-    const r = readStamp({ WAITRON_VENUE_DIR: venueDir({ stamp: "production" }) });
+    const r = readStamp({ WAITRON_STATE_DIR: venueDir({ stamp: "production" }) });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe("production");
   });
@@ -2731,17 +2733,33 @@ describe("the venue stamp reader inside waitron.sh", () => {
     expect(r.stdout.trim()).toBe("production");
   });
 
+  it("reads the fixed venue under state even when a development override names another venue", () => {
+    const state = mkdtempSync(join(tmpdir(), "waitron-state-"));
+    dirs.push(state);
+    mkdirSync(join(state, "venue"));
+    const db = new DatabaseSync(join(state, "venue", "venue.db"));
+    db.exec("create table deployment (id integer primary key, environment text not null)");
+    db.prepare("insert into deployment values (1, ?)").run("production");
+    db.close();
+    const r = readStamp({
+      WAITRON_STATE_DIR: state,
+      WAITRON_VENUE_DIR: join(venueDir({ stamp: "preproduction" }), "venue"),
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("production");
+  });
+
   // "Nothing there", both shapes of it: a box that has never booted has no venue file at all, and a
   // box that booted but was never provisioned has the table and no row. Both are reads that
   // SUCCEEDED and found nothing, so reset stays open on them.
   it("succeeds with no output when the box has no venue database yet", () => {
-    const r = readStamp({ WAITRON_VENUE_DIR: mkdtempSync(join(tmpdir(), "waitron-venue-")) });
+    const r = readStamp({ WAITRON_STATE_DIR: mkdtempSync(join(tmpdir(), "waitron-venue-")) });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe("");
   });
 
   it("succeeds with no output when the box is migrated but not stamped", () => {
-    const r = readStamp({ WAITRON_VENUE_DIR: venueDir() });
+    const r = readStamp({ WAITRON_STATE_DIR: venueDir() });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe("");
   });
@@ -2752,7 +2770,7 @@ describe("the venue stamp reader inside waitron.sh", () => {
   // failed sits with the file present and the `deployment` table absent. That box has no records to
   // protect and must stay resettable with no extra flag.
   it("succeeds with no output when the venue file exists but was never migrated", () => {
-    const r = readStamp({ WAITRON_VENUE_DIR: venueDir({ migrated: false }) });
+    const r = readStamp({ WAITRON_STATE_DIR: venueDir({ migrated: false }) });
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe("");
   });
@@ -2764,13 +2782,14 @@ describe("the venue stamp reader inside waitron.sh", () => {
   it("fails when the venue file is not a database", () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-venue-"));
     dirs.push(dir);
-    writeFileSync(join(dir, "venue.db"), "these bytes are not a SQLite database");
-    const r = readStamp({ WAITRON_VENUE_DIR: dir });
+    mkdirSync(join(dir, "venue"));
+    writeFileSync(join(dir, "venue", "venue.db"), "these bytes are not a SQLite database");
+    const r = readStamp({ WAITRON_STATE_DIR: dir });
     expect(r.status).not.toBe(0);
     expect(r.stdout.trim()).toBe("");
   });
 
-  it("fails when neither the venue directory nor the state directory is set", () => {
+  it("fails when the state directory is unset", () => {
     const r = readStamp({});
     expect(r.status).not.toBe(0);
   });

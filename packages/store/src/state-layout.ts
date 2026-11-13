@@ -1,3 +1,5 @@
+import { join, resolve } from "node:path";
+
 export type ResetFate = "kept" | "deleted";
 export interface StateEntry {
   readonly name: string;
@@ -291,3 +293,11 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
 export const RESET_KEPT: readonly string[] = STATE_LAYOUT.filter(
   (entry) => entry.reset === "kept",
 ).map((entry) => entry.name);
+
+export function venueDirOf(
+  env: Readonly<Record<string, string | undefined>>,
+  stateDir: string,
+): string {
+  const value = env.WAITRON_VENUE_DIR;
+  return value === undefined || value === "" ? join(stateDir, VENUE_DIR_NAME) : resolve(value);
+}

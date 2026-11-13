@@ -614,9 +614,8 @@ announce_ready() {
 }
 
 # Reads the deployment stamp out of the venue database. It runs inside the app image, which carries
-# both the node that has node:sqlite and, as that compose service, the state volume; it resolves the
-# venue directory from the same two variables `apps/server/src/config.ts` resolves `venueDir` from,
-# so a box whose server was pointed elsewhere is read where that server writes.
+# both node:sqlite and the state volume. The venue folder on a box is always `venue` under
+# its state folder.
 #
 # Three answers, because is_production needs three. The environment on stdout; nothing at all, exit
 # 0, when there is no venue file, no deployment TABLE, or no stamp row — a read that SUCCEEDED and
@@ -641,8 +640,8 @@ const { DatabaseSync } = require("node:sqlite");
 const { existsSync } = require("node:fs");
 const { join } = require("node:path");
 const state = process.env.WAITRON_STATE_DIR;
-const dir = process.env.WAITRON_VENUE_DIR || (state ? join(state, "venue") : "");
-if (!dir) throw new Error("neither WAITRON_VENUE_DIR nor WAITRON_STATE_DIR is set");
+if (!state) throw new Error("WAITRON_STATE_DIR is not set");
+const dir = join(state, "venue");
 const file = join(dir, "venue.db");
 if (!existsSync(file)) process.exit(0);
 const db = new DatabaseSync(file, { readOnly: true });

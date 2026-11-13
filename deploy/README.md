@@ -621,7 +621,7 @@ command against it treat that entrypoint differently:
   # break-glass resets the first admin's dashboard password (the lockout IS the password). Its
   # secrets come from the ENVIRONMENT, never argv (an argv element leaks into `ps`): the new password
   # is WAITRON_BREAKGLASS_PASSWORD. It needs no connection setting at all — it finds the venue
-  # directory the way the server does, from WAITRON_VENUE_DIR or `venue` under WAITRON_STATE_DIR,
+  # directory at `venue` under WAITRON_STATE_DIR,
   # and the image already sets the latter. `--person <id>` only disambiguates a venue with more than
   # one admin; WAITRON_BREAKGLASS_PIN also resets the PIN.
   docker compose exec -e WAITRON_BREAKGLASS_PASSWORD="a-new-dashboard-password" \
