@@ -3232,6 +3232,7 @@ export class TillTableOrderScreen extends LitElement {
   @state() private lunchRefusal: string | TemplateResult | typeof nothing = nothing;
 
   #lunchChoices(): TemplateResult {
+    if (!this.lines.some((line) => line.lunchOffer !== undefined)) return html``;
     const paid = this.#paidDishes();
     return html`${this.lines
       .filter((line) => line.lunchOffer !== undefined)
