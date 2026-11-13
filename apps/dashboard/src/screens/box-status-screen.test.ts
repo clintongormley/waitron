@@ -221,6 +221,21 @@ describe("dashboard-box-status-screen", () => {
     expect(text(q(el, "[data-test=fillers]"))).toBe(t("box_status.fillers"));
   });
 
+  it("never breaks the Updated line's time across two lines", async () => {
+    const { el } = await mount(stubApi());
+    const legend = q(el, "[data-test=legend]") as HTMLElement;
+    const broken: string[] = [];
+    let checked = 0;
+    for (let width = 260; width >= 40; width -= 1) {
+      legend.style.width = `${width}px`;
+      const found = timesAcrossLines([legend]);
+      checked += found.checked;
+      broken.push(...found.broken.map((time) => `${width}px: ${time}`));
+    }
+    expect(checked).toBe(221);
+    expect(broken).toEqual([]);
+  });
+
   it("paints each state's dot in its own colour and says the state in words", async () => {
     const answer = health({
       notices: [

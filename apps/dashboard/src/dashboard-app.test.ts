@@ -6395,10 +6395,10 @@ describe("alerts in the shell", () => {
   };
 
   /** Runs `body` at a real viewport size inside the real page's outer margin (`index.html` pads the
-   * body by 24px), then restores the size. */
+   * body by 24px, and by nothing at 48rem or narrower), then restores the size. */
   async function atViewport(host: HTMLElement, width: number, body: () => Promise<void>) {
     const before = { width: window.innerWidth, height: window.innerHeight };
-    host.style.padding = "24px";
+    host.style.padding = width > 768 ? "24px" : "0";
     try {
       await page.viewport(width, 800);
       await vi.waitFor(() => expect(window.innerWidth).toBe(width));

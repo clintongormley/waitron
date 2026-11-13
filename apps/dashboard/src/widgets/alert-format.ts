@@ -15,6 +15,14 @@ export function wholeTimes(text: string): (string | TemplateResult)[] {
     .map((part, i) => (i % 2 === 1 ? html`<span class="time" part="time">${part}</span>` : part));
 }
 
+/** `wholeTimes` for text that can only be a string, such as `wt-toast`'s message: a no-break
+ * space and no-break hyphens, since Chromium also breaks a line after a hyphen between digits. */
+export function wholeTimesText(text: string): string {
+  return text.replace(new RegExp(WRITTEN_TIME.source, "g"), (time) =>
+    time.replace(" ", "\u00a0").replaceAll("-", "\u2011"),
+  );
+}
+
 /** For the styles of any element that draws `wholeTimes`; the part reaches a span drawn inside a
  * `wt-data-table` cell's shadow root. */
 export const wholeTimesStyles = css`

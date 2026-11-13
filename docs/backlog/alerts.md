@@ -61,18 +61,6 @@ separate follow-ups.
     slice 7 so does the Box status page's Free button (`deleteLeftovers`,
     `apps/server/src/free-space-now.ts`).
 
-## The Alerts table makes long station warnings hard to read on a phone
-
-- A 390 px mounted
-  dashboard fixture for `route.released_at_closed_station` showed only the start of its warning at
-  first; its 340 px table viewport had 906 px of scrollable content, and a 566 px horizontal pan
-  reached the remaining text. Give the alert text more room at phone width while keeping its
-  handling action reachable.
-  W41s-3d qualification (2026-10-11) also shows the repeated-refusals message's line ends
-  cut beside pinned Actions in mounted 390 px fixtures, in English and Spanish and both themes.
-  Desktop 1280 px fixtures show the complete message. These are controlled alert-data fixtures,
-  not an authenticated server session; the table's phone readability remains open.
-
 ## A1047. Send a problem report to Waitron Cloud
 
 (owner, 2026-10-24). The follow-up A982
@@ -92,23 +80,3 @@ code and source, the version, counts and masked log lines (A980 O9; the log's ow
 free text), is signed with the box's
 Cloud installation credentials, and is kept while Cloud cannot be reached. Cloud groups them
 by version to catch a bad release (design section 10).
-
-## The alert pop-up can split a written time across two lines
-
-- The Box status page's rows, its
-  clock check dialog and its list of wrongly dated sales, the bell and the Alerts screen keep each
-  `YYYY-MM-DD HH:MM` whole (`wholeTimes`, `apps/dashboard/src/widgets/alert-format.ts`); the pop-up
-  (`wt-toast`) takes a plain string, so keeping times whole there needs `wt-toast` to take more than
-  a string, or no-break characters in the text. The page's 'Updated' line does not use `wholeTimes`
-  either (`apps/dashboard/src/screens/box-status-screen.ts`). Left open by A798-B slice 9 (#2025).
-
-## Bundle: Alerts text display
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The Alerts table makes long station warnings hard to read on a phone.** — left open by the
-  product folders work. Give the alert text more room at phone width while keeping its handling
-  action reachable.
-  [Detail](alerts.md#the-alerts-table-makes-long-station-warnings-hard-to-read-on-a-phone)
-- **The alert pop-up can split a written time across two lines.** Left open by A798-B slice 9
-  (#2025). [Detail](alerts.md#the-alert-pop-up-can-split-a-written-time-across-two-lines)

@@ -3930,7 +3930,7 @@ language chooser still in the banner): a 44 px stand-in for the help switch left
 wide at 360 px and 53 px at 390 px, in English. With the language chooser in the account menu
 instead, the "add no height to the banner" cases in `apps/dashboard/src/dashboard-app.help.test.ts`
 check, signed in at 320, 360, 390 and 480 px, in English and Spanish, for a Demo and a Live venue,
-that the lockup is at least 60 px wide at 360, 390 and 480 px and at least 31 px at 320, that the
+that the lockup is at least 60 px wide at every one of those widths, that the
 logo is no taller than the menu toggle, and that the banner's height does not change when the bell,
 the help switch and the account menu are collapsed to no height at their own width. They pin no
 height in pixels: measured locally on a68cc3661, before the switch, the banner was 94 px for a Demo

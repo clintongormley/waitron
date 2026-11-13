@@ -599,15 +599,17 @@ export function serveLogos(references: readonly string[]): void {
   afterEach(() => vi.restoreAllMocks());
 }
 
-/** Every time `formatIsoMinute` wrote inside `elements`, and those whose characters are drawn on
- * more than one line. */
+/** Every time `formatIsoMinute` wrote inside `elements`, including after `wholeTimesText` made it
+ * unbreakable, and those whose characters are drawn on more than one line. */
 export function timesAcrossLines(elements: readonly Node[]): { checked: number; broken: string[] } {
   const broken: string[] = [];
   let checked = 0;
   for (const element of elements) {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-      for (const match of node.textContent!.matchAll(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/g)) {
+      for (const match of node.textContent!.matchAll(
+        /\d{4}[-\u2011]\d{2}[-\u2011]\d{2}[ \u00a0]\d{2}:\d{2}/g,
+      )) {
         checked += 1;
         const range = document.createRange();
         range.setStart(node, match.index);
