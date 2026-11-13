@@ -15,7 +15,7 @@ import {
   isAppError,
   type SupportedLocale,
 } from "@waitron/shared";
-import { FULL_DISK_BYTES } from "./boot-failure.js";
+import { FULL_DISK_BYTES, fullDiskFailure } from "./boot-failure.js";
 import "./errors.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
@@ -384,6 +384,10 @@ async function refusalFor(error: unknown, deps: StartAgainDeps, log?: Logger): P
         });
       }
     }
+  }
+  if (!isAppError(error)) {
+    const free = await lowestFreeBytes([deps.roots.stateDir, deps.roots.venueDir], deps.statfs);
+    if (fullDiskFailure(error, free)) return new Refusal(409, { kind: "diskFull" });
   }
   logChoiceFailed(error, deps, log);
   return new Refusal(409, { kind: "notFinished" });
