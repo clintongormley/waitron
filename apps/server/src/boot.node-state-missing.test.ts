@@ -177,13 +177,8 @@ describe("a box that lost its own node.db", () => {
     const mainId = venue.cfg.nodeId;
     const main = generateNodeKeyPair();
     await suite.db.update(nodes).set({ publicKey: main.publicKey }).where(eq(nodes.id, mainId));
-    const [own] = await suite.db
-      .select({ locationId: nodes.locationId })
-      .from(nodes)
-      .where(eq(nodes.id, mainId));
     await suite.db.insert(nodes).values({
       id: SPARE_ID,
-      locationId: own!.locationId,
       name: "Spare",
       publicKey: generateNodeKeyPair().publicKey,
     });

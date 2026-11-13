@@ -12,7 +12,6 @@ import {
   nodes,
   readNodeMembership,
   stampDeployment,
-  venueLocationId,
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
@@ -250,11 +249,9 @@ async function joinedPair() {
   expect(await readPendingAdoption(spareState)).not.toBeNull();
 
   const [main] = await mainBox.db.select().from(nodes).where(eq(nodes.id, mainId));
-  const locationId = await venueLocationId(mainBox.db);
   await withTransaction(mainBox.db, (tx) =>
     insertReservedNodeTx(tx, {
       id: spareId,
-      locationId,
       name: `${main!.name} (standby)`,
       filingModule: main!.filingModule,
       taxModule: main!.taxModule,
