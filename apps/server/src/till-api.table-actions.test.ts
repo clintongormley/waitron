@@ -128,8 +128,8 @@ describe("the table action routes", () => {
   it("move guests to another party's table keeps every bill, for each of two moves sending the same request", async () => {
     const anna = await seatedWith(venue, "Tarta");
     const lewis = await seatedWith(venue, "Caña");
-    const bea = await seatedWith(venue, "Octopus");
-    const cris = await seatedWith(venue, "Caña");
+    const beth = await seatedWith(venue, "Octopus");
+    const chris = await seatedWith(venue, "Caña");
 
     const merged = await post(`/api/parties/${anna.partyId}/move`, {
       toTableId: lewis.tableId,
@@ -137,11 +137,11 @@ describe("the table action routes", () => {
       otherPartyId: lewis.partyId,
       expectedOtherPartyRevision: lewis.revision,
     });
-    const separate = await post(`/api/parties/${bea.partyId}/move`, {
-      toTableId: cris.tableId,
-      expectedPartyRevision: bea.revision,
-      otherPartyId: cris.partyId,
-      expectedOtherPartyRevision: cris.revision,
+    const separate = await post(`/api/parties/${beth.partyId}/move`, {
+      toTableId: chris.tableId,
+      expectedPartyRevision: beth.revision,
+      otherPartyId: chris.partyId,
+      expectedOtherPartyRevision: chris.revision,
     });
 
     expect(merged.status).toBe(200);
@@ -149,8 +149,8 @@ describe("the table action routes", () => {
     expect(await statusOf(venue, anna.tabId)).toBe("open");
     expect(await statusOf(venue, lewis.tabId)).toBe("open");
     expect(separate.status).toBe(200);
-    expect(separate.json).toEqual({ partyId: cris.partyId, billIds: [cris.tabId, bea.tabId] });
-    expect(await statusOf(venue, bea.tabId)).toBe("open");
+    expect(separate.json).toEqual({ partyId: chris.partyId, billIds: [chris.tabId, beth.tabId] });
+    expect(await statusOf(venue, beth.tabId)).toBe("open");
   });
 
   it("join tables, answering the party that holds them all", async () => {
@@ -843,7 +843,7 @@ describe("A803 action results:", () => {
   it("no answer carries mainBillId", async () => {
     const { anna, second, billId } = await annaAtTwo();
     const lewis = await seatedWith(venue, "Caña");
-    const bea = await seatedWith(venue, "Octopus");
+    const beth = await seatedWith(venue, "Octopus");
 
     const answers = [
       await post(`/api/parties/${anna.partyId}/split-table`, {
@@ -856,10 +856,10 @@ describe("A803 action results:", () => {
         expectedPartyRevision: revisionOf(anna.partyId),
       }),
       await post(`/api/parties/${lewis.partyId}/move`, {
-        toTableId: bea.tableId,
+        toTableId: beth.tableId,
         expectedPartyRevision: lewis.revision,
-        otherPartyId: bea.partyId,
-        expectedOtherPartyRevision: bea.revision,
+        otherPartyId: beth.partyId,
+        expectedOtherPartyRevision: beth.revision,
       }),
     ];
 
