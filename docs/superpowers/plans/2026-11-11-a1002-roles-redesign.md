@@ -900,12 +900,15 @@ leaves nobody able to sign in on: {profiles}." / ES "Al eliminarlo nadie podrá 
 - [ ] **Step 1–4:** a fresh venue's "Team" names all three starter profiles; a role ticked beside
   another names none. **Step 5: Commit**, `/finish-branch`.
 
----
 
 **2026-11-13 addition (watcher 04:02 and 04:06, Lane K questions.md):** when an import must
 create Team and no target starter name exists, resolve its translated name through the existing
 starter-language resolver using the bundle's country, area and receipt language. Add the
 no-target-job case to the import tests moved by NIGHTLY-1113; that repair lands first.
+
+The size note was written under `OVER BUDGET` in Lane K questions.md before this addition;
+watcher 04:06 cleared forecast 465 changed lines and the next outside-opinion stop at 700.
+---
 
 ## PR 9 — One authority reading for every permission check (A1002 cut 10)
 

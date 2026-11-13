@@ -60,17 +60,23 @@ for (const mode of [true, false, "empty", "no-target-job"] as const) {
       new Date("2026-11-12T12:00:00Z"),
       versions,
     );
-    await applyVenue(planVenue(venue("B42086431"), ALL_MODULES), {
-      db: targetSuite.db,
-      modules: ALL_MODULES,
-      beforeCommit: async (tx) => {
-        if (mode === "no-target-job") {
-          await tx.execute(sql`delete from person_staff_roles`);
-          await tx.execute(sql`delete from staff_roles`);
-        }
-        await importConfigurationTables(tx, bundle, ALL_MODULES, versions);
+    await applyVenue(
+      planVenue(
+        { ...venue("B42086431"), invoiceLocales: mode === "no-target-job" ? ["en-GB"] : ["es-ES"] },
+        ALL_MODULES,
+      ),
+      {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: async (tx) => {
+          if (mode === "no-target-job") {
+            await tx.execute(sql`delete from person_staff_roles`);
+            await tx.execute(sql`delete from staff_roles`);
+          }
+          await importConfigurationTables(tx, bundle, ALL_MODULES, versions);
+        },
       },
-    });
+    );
     const held = targetSuite.db.all<{
       id: string;
       name: string;
