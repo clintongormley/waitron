@@ -65,7 +65,7 @@ describe("a spare joins a main box that does not file with Veri*Factu", () => {
   });
 
   it(
-    "the main box starts trading, and a spare in setup mode reads the main box's authority at its own name",
+    "a spare is refused while the main box copies to a bucket, then joins over the venue's network and starts as a mirror holding the main box's sale",
     async (ctx) => {
       if (!litestream.ok || !versitygw.ok) {
         if (REQUIRED) {
@@ -93,7 +93,12 @@ describe("a spare joins a main box that does not file with Veri*Factu", () => {
         litestreamBin: litestream.bin,
         versitygwBin: versitygw.bin,
         signal: stop.signal,
-        record: (event) => events.push(event),
+        record: (event) => {
+          events.push(event);
+          console.log(
+            `spare join phase ${event.phase}: ${event.outcome}, ${Math.round(event.elapsedMs)} ms`,
+          );
+        },
       });
       await running;
       expect(events.map(({ phase, outcome }) => [phase, outcome])).toEqual(
