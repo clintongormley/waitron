@@ -57,9 +57,11 @@ computes (`setup-first-fiscal-api.ts:474`, `setup-recovery-preparation-api.ts:24
 - **The setup note** `<state>/setup-clock-step.json` (named in `packages/store/src/state-layout.ts`,
   `reset: "deleted"`, written with `writeFileDurable`) holds a list: each step, verified or not, is
   one entry with its own id, since `clockCorrection` records a step that moved the clock by over a
-  second even when unverified (`:359-392`). The venue's first full start inserts one open
-  `clock.corrected` per entry under that id (a repeat after a crash inserts nothing), then deletes
-  the note; the email duty mails every open `clock.corrected` once the box is primary
+  second even when unverified (`:359-392`). The venue's first full start inserts one
+  `clock.corrected` per entry under that id, each later one marking the earlier handled, since only
+  one open `clock.corrected` with the same source, device and sale may exist (`incidents_open_dedup`,
+  `packages/db/src/schema/incidents.ts`), as on a running box (a repeat after a crash inserts
+  nothing), hands each to the email duty, then deletes the note; the email duty mails every open `clock.corrected` once the box is primary
   (`box-alert-email.ts:51-56,195-206,379`). Start again leaves the note: the step was made on this
   box. Setup abandoned, or a restore that never starts fully: the note stays until a full start
   or a reset; the host's journal line (`deploy/box/waitron-box.sh:129`, written only after its
@@ -184,3 +186,26 @@ browser reading `unavailable: challenge` (`:115,127`). The history checks still 
   host journal and Waitron's log keep it).
 - The deferred alert, the setup note and the 30-second "agrees" are the lane's and the watcher's
   design, not the owner's.
+
+## As built (2026-11-13)
+
+- **No handover fallback.** T2's survival test ("a clock step made while the handover page is open",
+  `apps/server/src/handover-activation.test.ts`) passed at `filing_assumed` and at
+  `emergency_declared`: the row stays open through activation and its restart, and the box, then
+  primary, queues its email. The handover writes no setup note.
+- **`not_mirror`.** The handover seat sets the clock only while the box is still a mirror. The older
+  promote preparation route reaches the same seat on any box; on a box that is now primary it
+  answers `not_mirror` (`apps/server/src/node-operation-preparation.ts`); on a mirror that route
+  answers only a request from the box itself, so it reaches `same_machine`.
+- **The module sends `AGREEMENT_MS`** as the set's `agreesWithinMs`
+  (`packages/fiscal-verifactu/src/hour-setup-clock.ts`); the server does not bound it. On restore,
+  with nobody to carry the reading, the setup setter takes the reading's uncertainty off the window
+  instead (`apps/server/src/setup-clock-set.ts`).
+- **The before-set `later` line** (Q1), EN: "The server's time was not changed: this device's time
+  is earlier than a time already used for this venue's invoice series, so it is probably wrong.
+  Correct the time on this device, reconnect to the server and choose which time is correct again."
+  (`packages/fiscal-verifactu/src/setup/clock-wait.ts`, `deviceLater`). The §2 after-set line stays
+  as `laterAfterSet`.
+- **The environment-mismatch Move** sets the note aside with the other `reset: "deleted"` entries
+  (`packages/provisioning/src/environment-recovery-move.ts`), so a step made before that Move is
+  never alerted, as in Q4.

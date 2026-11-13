@@ -954,9 +954,13 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   internet time service keeps its clock; Waitron sets it only through the host service, from a till's
   time (a staff member's while the start waits for its time, or during a stop until the internet
   confirms that start or during start-up; a Box administration holder's at any time), a Box
-  administration holder's own device, or AEAT only inside the clock-behind stop — never from devices alone and never while it
+  administration holder's own device, the device showing the clock step of the setup page (under its
+  owner's pass), the restore page (under its recovery key or kit) or the handover page (signed in as
+  a `node.manage` holder), when that person chooses **This device** (owner, 2026-11-10: "yes";
+  2026-11-12: "add \"This device\" to #2693 now"), or AEAT only inside the clock-behind stop — never from devices alone and never while it
   keeps time over the internet — and every step it verifies, or sees move the clock by over a second,
-  is alerted and emailed** (owner, 2026-11-10: "we rely on NTP only, we don't bother about AEAT").
+  is alerted and emailed (a step made before the venue exists, at its first full start)** (owner,
+  2026-11-10: "we rely on NTP only, we don't bother about AEAT").
   Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
@@ -973,7 +977,9 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   [Detail](docs/developers/ci-and-gates.md#the-publish-job-requires-guards-and-checks-the-producers-settings)
 - **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion
   use five symbols for the box's UTC minute, after another machine's clock agrees within 30 seconds
-  (no confirmation); a minute whose name is already in a history the box reads is not taken. Its
+  (no confirmation); a device that has just set the box's clock from that page is that machine
+  (owner, 2026-11-11: "if somebody has confirmed the time on their device, then we trust that time
+  and move forward"); a minute whose name is already in a history the box reads is not taken. Its
   waits, its other refusals and when a name can repeat:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
   preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.

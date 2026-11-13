@@ -4750,8 +4750,8 @@ The app's container cannot set the clock, so a small root program on the box's o
 the container — the **host service** — sets it when the server asks. The box sets its clock
 inside a stop it already has (the clock behind the latest record, or before 28-10-2024,
 `clock.unusable`), and, from a till's time, while a start waits for its time to be
-confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)). It opens no stop of its
-own.
+confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), and from the setup,
+restore and handover pages' clock step. It opens no stop of its own.
 
 _2026-11-12, B3:_ the installed recipe also forwards `tag.write` (up to 4096 characters) and
 `network.read` (up to 700) to their installed adapters. An absent adapter keeps `unknown_request`
@@ -4801,7 +4801,7 @@ reply, not `lost`; the routes in `apps/server/src/box-host-api.ts` call it for e
 clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
 
 **Who may set it** (`apps/server/src/clock-correction.ts`, one correction per server, built in
-`boot.ts`):
+`boot.ts`; setup mode builds its own, in the last item):
 
 - the clock watch, from AEAT's time, by itself, when AEAT disagrees during the clock-behind stop
   (`setFromAuthority`, `apps/server/src/clock-watch.ts`); `clock.unusable` has no automatic set;
@@ -4812,7 +4812,34 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
   (`apps/server/src/till-box-clock-api.ts`): any staff member the till's profile admits, while
   the start has not been confirmed by the internet (during a stop, or while the start waits) or
   during the start-up window (below), or an administrator signed in on the till or named with their
-  PIN, at any time.
+  PIN, at any time;
+- the person on the first-setup, restore or handover page, from their own device, when the clocks
+  differ and they choose **This device** (A1482,
+  [plan](../superpowers/plans/2026-11-12-a1482-this-device-in-setup.md)). The page sends
+  `clock-challenge` then `set-clock` through the preparation path it already uses for
+  `compare-clocks`, so each page's own authority admits it: the setup owner's pass on first setup,
+  the recovery key or kit on restore, a `node.manage` sign-in on handover
+  (`packages/fiscal-verifactu/src/initial-hour-setup.ts`, `hosted-hour-recovery.ts`). The module
+  (`packages/fiscal-verifactu/src/hour-setup-clock.ts`) refuses `same_machine` for a page on the
+  box itself, and `later` when the device's time is earlier than when the hour already chosen for
+  the page's event was issued (`chosenHourIssuedAtMs`), before the host is asked; it sends `AGREEMENT_MS` (30 seconds) as
+  the set's `agreesWithinMs`, so a device within 30 seconds answers `agrees`, not a minute. The set
+  is at reason `start`. On handover it is boot's own correction, source `admin`, and only while the
+  spare is still a mirror: the older promote preparation route reaches the same seat on any box, and
+  on a box that is now primary it answers `not_mirror` (`apps/server/src/node-operation-preparation.ts`);
+  on a mirror that route answers only a request from the box itself
+  (`apps/server/src/read-only-exemptions.ts`), so it reaches `same_machine`. On first setup and
+  restore there is no venue database, so setup mode builds a second correction
+  (`createSetupClockSet`, `apps/server/src/setup-clock-set.ts`), source `setup`, naming the
+  administrator on first setup and nobody on restore, whose step goes into the note
+  `<state>/setup-clock-step.json` (`reset: "deleted"`), one entry per step. At the first full start
+  that is neither a mirror nor fenced, `raiseSetupClockSteps` makes each entry a `clock.corrected`
+  alert under its id, each later one marking the earlier handled as on a running box, hands each to
+  the email duty, then deletes the note; an id already present is not inserted again. A step on a
+  setup or restore that never fully starts, or one made before an environment-mismatch Move sets the
+  note aside with the other `reset: "deleted"` entries
+  (`packages/provisioning/src/environment-recovery-move.ts`), is never alerted: the host's journal
+  line and Waitron's `clock_correction.stepped` log line are its only record.
 
 Never from devices alone, never while the host says the clock is synchronised, and never when the
 host service does not answer. A person's set hands the correction no witnesses: what set the clock
@@ -4837,8 +4864,8 @@ Inside the turn, each refusal asking nothing further:
 4. the host's status: `host_unavailable`, then `synchronised`;
 5. for a person: `witnessed` when AEAT has a reading taken during this stop, agreeing or not, so the
    box sets or confirms from AEAT itself (at reason `start`, only while the clock-behind stop also
-   holds); then `agrees` when the device is within a minute, so
-   confirming is the way;
+   holds); then `agrees` when the device is within a minute (or the caller's
+   `agreesWithinMs`), so confirming is the way;
 6. each anchor's `stepComing` (a throw refuses `pending_disproofs`); then steps 3 and 5 again,
    because AEAT can answer or the stop end during the waits (a refusal there re-anchors every
    anchor; so does an error thrown there, which is then passed on); then `stale` again;
@@ -5017,6 +5044,14 @@ Guards: `apps/server/src/clock-correction.test.ts`, `clock-watch.correction.test
 `timedatectl`, `systemctl` and the rest, never systemd; the route suites cover the routes they name.
 Nothing checks that a new caller takes the turn outside its transaction, or that a new job comparing
 a stored time with the clock is in the table below.
+The page's **This device** (A1482): `apps/server/src/setup-clock-set.test.ts`, weaker than its name:
+a stub host, and it calls `raiseSetupClockSteps` directly rather than through a start;
+`packages/fiscal-verifactu/src/clock-step.setup-source.test.ts`, that the regime's step refuses a
+`setup` source whatever person it names, and nothing else; and "a clock step made while the
+handover page is open" in `apps/server/src/handover-activation.test.ts`, which writes the alert with
+`recordCorrected` rather than through the page's set, at `filing_assumed` and `emergency_declared`
+only, and checks it stays open through activation and its restart and that the box, then primary,
+queues its email.
 
 #### Jobs that compare a stored time with the clock, across a step of days
 
