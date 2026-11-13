@@ -458,8 +458,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta factura ya se ha rectificado, así que no se puede abonar por completo",
   },
   "sale.correction_unsupported": {
-    en: "A full invoice needs a reviewed manual correction. Ask a manager for help",
-    es: "Una factura completa necesita una rectificación manual revisada. Pide ayuda a un responsable",
+    en: "This is a full invoice naming a customer, so it cannot be corrected at the till. Refund a payment still gives money back.",
+    es: "Es una factura completa a nombre de un cliente, así que no se puede rectificar en la caja. Devolver un pago sigue permitiendo devolver dinero.",
   },
   "bill.presented": {
     en: "This bill has been presented, so it cannot be changed",
@@ -882,7 +882,6 @@ const DEFERRED_INELIGIBLE: Record<string, { en: string; es: string }> = {
   },
 };
 
-/** Always a readable sentence, never the raw code. `locale` may be a full BCP-47 tag ("es-ES"). */
 const FIGURES_UNCHECKED = {
   en: "This invoice's filed figures cannot be checked, so it cannot be corrected. Refund a payment still gives money back.",
   es: "No se pueden comprobar las cifras presentadas de esta factura, así que no se puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
@@ -923,6 +922,7 @@ const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
   filed_figures_changed: FIGURES_UNCHECKED,
 };
 
+/** Always a readable sentence, never the raw code. `locale` may be a full BCP-47 tag ("es-ES"). */
 export function codeMessage(
   code: string,
   locale: string = currentLocale(),

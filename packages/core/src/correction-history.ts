@@ -61,7 +61,6 @@ export async function previewCorrectionAmounts(
 
 export interface CorrectableLine {
   id: string;
-  lineNo: number;
   descriptions: Record<string, string>;
   rate: Decimal;
   gross: Decimal;
@@ -81,7 +80,6 @@ export async function readCorrectableLines(
   const byId = new Map(invoiceLines.map((line) => [line.id, line]));
   return history.lines.map((line) => ({
     id: line.id,
-    lineNo: line.lineNo,
     descriptions: byId.get(line.id)!.descriptions,
     rate: line.rate,
     gross: line.gross,

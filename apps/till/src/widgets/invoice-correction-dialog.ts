@@ -5,6 +5,7 @@ import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
+  formatDecimalInput,
   focusFirstInvalid,
   submitOnEnter,
   type DraftScope,
@@ -110,6 +111,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     | null = null;
   @state() private active = true;
   @state() private attempted = false;
+  @state() private confirming = false;
   #previewRequest = 0;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
@@ -231,15 +233,20 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     return codeMessage(refusal.code, currentLocale(), refusal);
   }
   async #confirm(): Promise<void> {
-    if (!this.active || this.busy) return;
+    if (!this.active || this.busy || this.confirming) return;
     this.attempted = true;
     if (this.#errors().size > 0) {
       await this.updateComplete;
       await focusFirstInvalid(this.shadowRoot!);
       return;
     }
+    if (this.#answer() === null) {
+      this.confirming = true;
+      await this.#preview();
+      this.confirming = false;
+    }
     const answer = this.#answer();
-    if (answer === null) return;
+    if (answer === null || this.#errors().size > 0) return;
     const reason = this.#reason()!;
     const ask: InvoiceCorrectionAsk = {
       gross: answer.gross,
@@ -327,7 +334,9 @@ export class TillInvoiceCorrectionDialog extends LitElement {
         (line) =>
           html`<p data-split>
             ${t("invoice_correction.split")
-              .replace("{rate}", () => String(Number(line.rate)))
+              .replace("{rate}", () =>
+                formatDecimalInput(String(Number(line.rate)), currentLocale()),
+              )
               .replace("{base}", () => this.#money(line.base))
               .replace("{tax}", () => this.#money(line.tax))}
           </p>`,
@@ -365,18 +374,19 @@ export class TillInvoiceCorrectionDialog extends LitElement {
         },
       })}
       <wt-form-actions
-        .error=${[
-          own.size > 0 ? t("form.fix_fields") : "",
-          refusal !== null && field === null ? this.#refusalText(refusal) : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        .error=${
+          own.size > 0
+            ? t("form.fix_fields")
+            : refusal !== null && field === null
+              ? this.#refusalText(refusal)
+              : ""
+        }
         >${this.#cancelButton()}
         <wt-button
           .variant=${answer !== null && this.#reason() ? "primary" : "secondary"}
           data-confirm
-          .loading=${this.busy}
-          .disabled=${this.busy || own.size > 0}
+          .loading=${this.busy || this.confirming}
+          .disabled=${this.busy || this.confirming || own.size > 0}
           @click=${() => void this.#confirm()}
           >${
             gross !== null && this.#key() !== null

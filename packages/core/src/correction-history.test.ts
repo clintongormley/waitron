@@ -507,7 +507,6 @@ it("reads each invoice line with what earlier corrections left of it, refusing a
   expect(await lines()).toEqual([
     {
       id: ids[0],
-      lineNo: 1,
       descriptions: { "es-ES": "Rice bowl" },
       rate: "10.00",
       gross: "11.00",
@@ -515,7 +514,6 @@ it("reads each invoice line with what earlier corrections left of it, refusing a
     },
     {
       id: ids[1],
-      lineNo: 2,
       descriptions: { "es-ES": "Steak" },
       rate: "21.00",
       gross: "12.10",
@@ -523,7 +521,6 @@ it("reads each invoice line with what earlier corrections left of it, refusing a
     },
     {
       id: ids[2],
-      lineNo: 3,
       descriptions: { "es-ES": "Sauce" },
       rate: "10.00",
       gross: "1.10",

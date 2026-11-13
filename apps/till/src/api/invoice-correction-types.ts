@@ -56,7 +56,6 @@ export interface InvoiceCorrectionCashGiven {
 /** A line of the invoice with what earlier corrections left of it, `left`. */
 export interface InvoiceCorrectionLine {
   id: string;
-  lineNo: number;
   descriptions: Record<string, string>;
   rate: string;
   gross: string;

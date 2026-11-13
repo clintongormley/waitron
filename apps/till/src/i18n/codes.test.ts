@@ -908,11 +908,14 @@ it.each([
   "sale.correction_scope_invalid",
   "sale.correction_history_unusable",
   "sale.correction_not_admitted",
+  "sale.correction_unsupported",
 ])("explains the correction preview's refusal %s in English and Spanish", (code) => {
   for (const locale of ["en", "es"]) {
     expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown", locale));
     expect(codeMessage(code, locale)).not.toContain(code);
   }
+  expect(codeMessage(code, "en")).not.toMatch(/ask a manager/i);
+  expect(codeMessage(code, "es")).not.toMatch(/responsable/i);
 });
 
 it("words each reason a correction is not admitted, and any other reason as the general one", () => {

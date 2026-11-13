@@ -10,8 +10,8 @@ import type {
 } from "./invoice-correction-dialog.js";
 
 const reasons = [
-  { id: "overcharged", name: "Cobrado de más", noteRequired: false },
-  { id: "other", name: "Otro", noteRequired: true },
+  { id: "overcharged", name: "Overcharged", noteRequired: false },
+  { id: "other", name: "Other", noteRequired: true },
 ].map(
   (reason) =>
     ({
@@ -27,7 +27,6 @@ const api = (over: Partial<InvoiceCorrectionApi> = {}): InvoiceCorrectionApi => 
     lines: [
       {
         id: "rice",
-        lineNo: 1,
         descriptions: { es: "Arroz" },
         rate: "10.00",
         gross: "11.00",
@@ -35,7 +34,6 @@ const api = (over: Partial<InvoiceCorrectionApi> = {}): InvoiceCorrectionApi => 
       },
       {
         id: "steak",
-        lineNo: 2,
         descriptions: { es: "Entrecot" },
         rate: "21.00",
         gross: "12.10",

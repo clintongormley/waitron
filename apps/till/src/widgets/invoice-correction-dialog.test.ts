@@ -30,7 +30,6 @@ const LINES: InvoiceCorrectionLines = {
   lines: [
     {
       id: "rice",
-      lineNo: 1,
       descriptions: { en: "Rice" },
       rate: "10.00",
       gross: "11.00",
@@ -38,7 +37,6 @@ const LINES: InvoiceCorrectionLines = {
     },
     {
       id: "steak",
-      lineNo: 2,
       descriptions: { en: "Steak" },
       rate: "21.00",
       gross: "12.10",
@@ -249,4 +247,94 @@ it("marks the missing money and reason, then confirms the previewed split once t
   expect(asks).toEqual([
     { gross: "6.05", reasonId: "other", note: "Wrong price", expectedSplit: SPLIT },
   ]);
+});
+
+it("asks for the preview again when pressed after one failed, and confirms once it answers", async () => {
+  const api = fakeApi();
+  api.previewInvoiceCorrection.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  const { el } = await mount(api);
+  const asks: InvoiceCorrectionAsk[] = [];
+  el.addEventListener("invoice-correction-confirm", (event) =>
+    asks.push((event as CustomEvent<InvoiceCorrectionAsk>).detail),
+  );
+  await type(el, "6.05");
+  await choose(el, "overcharged");
+  await vi.waitFor(() =>
+    expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+      t("invoice_correction.read_failed"),
+    ),
+  );
+
+  confirm(el).click();
+  await vi.waitFor(() => expect(asks).toHaveLength(1));
+  expect(api.previewInvoiceCorrection).toHaveBeenCalledTimes(2);
+  expect(asks[0]).toEqual({
+    gross: "6.05",
+    reasonId: "overcharged",
+    note: null,
+    expectedSplit: SPLIT,
+  });
+});
+
+it("offers Retry when the invoice could not be read on opening, and shows the window once read", async () => {
+  const api = fakeApi();
+  api.readInvoiceCorrectionLines.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  const { el } = await mount(api);
+  expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+    t("invoice_correction.read_failed"),
+  );
+  expect(grossField(el)).toBeNull();
+
+  root(el).querySelector<HTMLElement>("[data-reload]")!.click();
+  await vi.waitFor(() => expect(grossField(el)).not.toBeNull());
+  expect(api.readInvoiceCorrectionLines).toHaveBeenCalledTimes(2);
+});
+
+it("shows a refusal of the dishes chosen under the dishes", async () => {
+  const api = fakeApi();
+  api.previewInvoiceCorrection.mockRejectedValue({
+    code: "sale.correction_scope_invalid",
+    reason: "required",
+  });
+  const { el } = await mount(api);
+
+  await type(el, "5");
+  await vi.waitFor(() =>
+    expect(text(root(el).querySelector("[data-lines-error]"))).toBe(
+      codeMessage("sale.correction_scope_invalid"),
+    ),
+  );
+  expect(root(el).querySelector("wt-form-actions")!.error).toBe("");
+});
+
+it("shows a refusal about the invoice above the buttons, giving way to the fields' message", async () => {
+  const api = fakeApi();
+  api.previewInvoiceCorrection.mockRejectedValue({ code: "invoice_correction.chain_unsound" });
+  const { el } = await mount(api);
+  const actions = () => root(el).querySelector("wt-form-actions")!;
+
+  await type(el, "5");
+  await vi.waitFor(() =>
+    expect(actions().error).toBe(codeMessage("invoice_correction.chain_unsound")),
+  );
+  confirm(el).click();
+  await el.updateComplete;
+  expect(actions().error).toBe(t("form.fix_fields"));
+});
+
+it("writes the split's VAT rate with the language's decimal mark", async () => {
+  setLocale("es");
+  const api = fakeApi();
+  api.previewInvoiceCorrection.mockResolvedValue({
+    ...answer("1.06"),
+    vatBreakdown: [{ rate: "5.50", base: "1.00", tax: "0.06" }],
+  });
+  const { el } = await mount(api);
+
+  await type(el, "1,06");
+  await vi.waitFor(() =>
+    expect(text(root(el).querySelector("[data-split]"))).toContain(
+      t("invoice_correction.split").split("{base}")[0]!.replace("{rate}", "5,5"),
+    ),
+  );
 });

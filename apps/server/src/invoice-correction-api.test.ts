@@ -238,7 +238,6 @@ describe("GET /api/transactions/:saleId/corrections/lines", () => {
       lines: [
         {
           id: expect.any(String),
-          lineNo: 1,
           descriptions: expect.any(Object),
           rate: "21.00",
           gross: "10.00",

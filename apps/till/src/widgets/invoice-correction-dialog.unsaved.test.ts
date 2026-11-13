@@ -25,7 +25,6 @@ const api: InvoiceCorrectionApi = {
     lines: [
       {
         id: "steak",
-        lineNo: 1,
         descriptions: { en: "Steak" },
         rate: "21.00",
         gross: "12.10",

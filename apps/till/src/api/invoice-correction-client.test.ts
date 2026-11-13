@@ -74,7 +74,6 @@ it("reads a correction's lines on the encoded invoice, passing the signal", asyn
     lines: [
       {
         id: "line-1",
-        lineNo: 1,
         descriptions: { en: "Steak" },
         rate: "21.00",
         gross: "12.10",
