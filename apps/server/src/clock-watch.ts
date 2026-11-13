@@ -7,31 +7,50 @@ import type { ClockStartUp } from "./clock-start-up.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
 import type { JobDefinition } from "./job-runner.js";
-import { lookAtClockService, type ChainHeads, type StartClockState } from "./start-clock-check.js";
+import {
+  backToWaitingUnlessSynchronised,
+  lookAtClockService,
+  type ChainHeads,
+  type StartClockState,
+} from "./start-clock-check.js";
 
 export const CLOCK_WATCH_MS = 15_000;
+/** How far the wall clock may move against the steady clock between looks, with no set, before
+ * the watch counts it as a jump. */
+export const JUMP_MS = 60_000;
 
 export function createClockWatch(deps: {
   backend: Pick<FiscalBackend, "assertRecordableAt">;
   store: Pick<ClockWitnessStore, "witnesses">;
   clock: Pick<TrustedClock, "now">;
   read: <T>(fn: (tx: Transaction) => Promise<T>) => Promise<T>;
-  /** The correction's one-at-a-time turn, taken around the devices' confirmation; each look also
-   * writes the rows of steps whose rows could not be written when they happened. */
-  correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "writePending">;
+  /** The correction's one-at-a-time turn, taken around the devices' confirmation and the jump
+   * check, whose set count tells a set from a jump; each look also writes the rows of steps whose
+   * rows could not be written when they happened. */
+  correction?: Pick<ReturnType<typeof clockCorrection>, "inTurn" | "writePending" | "steps">;
   /** Closed by a look at a reading a record could carry. */
   startUp?: Pick<ClockStartUp, "noStop">;
   /** The start check: until the internet confirms it, each look reads the time service through
-   * `clockStatus`, and while it waits, offers it the device readings. Never asks AEAT. */
+   * `clockStatus`, and while it waits, offers it the device readings. After a jump it reads the
+   * time service afresh, whatever the status, and sends the box back to waiting unless it is
+   * synchronised. Never asks AEAT. */
   start?: {
     state: StartClockState;
     clockStatus: () => Promise<ClockServiceStatus>;
+    /** Forgets a cached `clockStatus` reading, which may predate a jump. */
+    clearClockStatus?: () => void;
     heads: (tx: Transaction) => Promise<ChainHeads>;
   };
   log: Logger;
+  wall?: () => number;
+  monotonic?: () => number;
 }): { check(): Promise<void>; halt(): void } {
   let stopped = false;
   const inTurn = deps.correction?.inTurn ?? (<T>(fn: () => Promise<T>) => fn());
+  const wall = deps.wall ?? Date.now;
+  const monotonic = deps.monotonic ?? (() => performance.now());
+  const steps = () => deps.correction?.steps() ?? 0;
+  let baseline = { wallMs: wall(), monoMs: monotonic(), steps: steps() };
 
   function recordable(): boolean {
     try {
@@ -72,6 +91,28 @@ export function createClockWatch(deps: {
     });
   }
 
+  /** In the correction's turn, so no set moves the clock between the readings and its count. A
+   * jump sends a box whose time service is not synchronised back to waiting. */
+  async function lookForJump(): Promise<void> {
+    await inTurn(async () => {
+      const before = baseline;
+      baseline = { wallMs: wall(), monoMs: monotonic(), steps: steps() };
+      if (baseline.steps !== before.steps) return;
+      const steadyMs = baseline.monoMs - before.monoMs;
+      if (Math.abs(baseline.wallMs - before.wallMs - steadyMs) <= JUMP_MS) return;
+      const start = deps.start;
+      start?.clearClockStatus?.();
+      const backToWaiting =
+        start === undefined ? null : await backToWaitingUnlessSynchronised(start, "clock_jumped");
+      deps.log(backToWaiting === true ? "warn" : "info", "clock_watch.jumped", {
+        wallBefore: new Date(before.wallMs).toISOString(),
+        wallAfter: new Date(baseline.wallMs).toISOString(),
+        steadyMs,
+        backToWaiting,
+      });
+    });
+  }
+
   async function check(): Promise<void> {
     try {
       await lookForStart();
@@ -80,7 +121,13 @@ export function createClockWatch(deps: {
     }
     if (stopped) return;
     if (recordable()) deps.startUp?.noStop();
-    // Last, because it waits for the correction's turn, which a set in flight holds.
+    // Last, because both wait for the correction's turn, which a set in flight holds.
+    try {
+      await lookForJump();
+    } catch (error) {
+      deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+    }
+    if (stopped) return;
     try {
       await deps.correction?.writePending();
     } catch (error) {

@@ -3687,7 +3687,15 @@ async function bootServer(
     read: (fn) => db.withWriteLock(() => fn(db)),
     correction,
     startUp: clockStart,
-    start: { state: startClock, clockStatus: readClockService, heads: recordHeads },
+    start: {
+      state: startClock,
+      clockStatus: readClockService,
+      clearClockStatus: () => {
+        clockService.clear();
+        timeHealthCache.clear();
+      },
+      heads: recordHeads,
+    },
     log,
   });
   jobRunner.add(clockWatchJob(clockWatch, CLOCK_WATCH_MS));
