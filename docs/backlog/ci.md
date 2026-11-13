@@ -994,22 +994,6 @@ help tooltip, row actions) report their toggle late too, and were not looked at.
 on a close-driven effect, and for a close followed by a poll of the dialog's `open` and a check on
 what the closed screen refuses (A927), and decide whether the popovers need the same treatment.
 
-## The browser-purity guard checks only some of venue-service's dashboard files
-
-`scripts/dashboard-browser-purity.test.ts` checks venue-service's `src/dashboard/painter.ts` and
-the files it reaches by relative imports, beside bookings', adjustments' and staffing's dashboard
-folders. Nothing else in venue-service's dashboard folder is checked, including the
-`./dashboard/season-tint` export staffing uses, because the whole folder fails the guard: the scan
-reached `@waitron/db` or `drizzle-orm` from many of its files (receipt: the Task 4.0 corrections in
-`docs/superpowers/plans/2026-10-13-a585-staffing-and-rota.md`). **Next action:** list each
-browser-safe venue-service export as a file. Left open by the reviews of A261 step 5 (Hours,
-#1298) and by A585-4.
-
-Checked 2026-10-16 (A774): the guard's list now also names
-`packages/venue-service/src/dashboard/calendar-day-box.ts` and `fixed-title.ts`; `season-tint.ts`
-and `live-queries.ts`, both exported by `packages/venue-service/package.json`, are still not named,
-and no file the guard names imports `season-tint`.
-
 ## The runner's action-repository download at job setup remains unqualified (A935)
 
 The 13 November 2026 [action limits](../developers/ci-and-gates.md#cache-docker-and-codeql-steps-have-measured-limits)

@@ -2061,9 +2061,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **Tests that close a dialog and check too soon, and pressEscape** (bundle of 2, size M). [Detail](backlog/ci.md#bundle-tests-that-close-a-dialog-and-check-too-soon-and-pressescape)
 
-- **`scripts/dashboard-browser-purity.test.ts` checks only some of venue-service's dashboard files**
-  [Detail](backlog/ci.md#the-browser-purity-guard-checks-only-some-of-venue-services-dashboard-files).
-
 - **The server holds two separate 100-character limits for text a request sends**
   [Detail](backlog/ci.md#the-server-holds-two-separate-100-character-limits-for-text-a-request-sends).
 
