@@ -41,14 +41,14 @@ import { inTx, setupPartyVenue } from "./testing/party-venue.js";
 import { plannedZone, withRevision } from "./testing/floor-today-venue.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 
-const MARTA_EMAIL = "marta.soler@example.test";
-const MARTA_NAME = "Marta Soler";
+const MARTHA_EMAIL = "martha.lewis@example.test";
+const MARTHA_NAME = "Martha Lewis";
 const VENUE_LEGAL_NAME = "Jordi Puig Ferrer";
 const VENUE_TAX_ID = "12345678Z";
 const LOCATION_NAME = "Bar del Port";
 const TODAY_NAME = "Soler";
-const JORDI_EMAIL = "jordi.puig@example.test";
-const JORDI_NAME = "Jordi Puig";
+const GEORGE_EMAIL = "george.hill@example.test";
+const GEORGE_NAME = "George Hill";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -179,8 +179,8 @@ async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
   return withTransaction(suite.db, async (tx) => {
     const [admin] = await tx.select({ id: persons.id }).from(persons).limit(1);
     await seedPersons(tx, {
-      displayName: MARTA_NAME,
-      email: MARTA_EMAIL,
+      displayName: MARTHA_NAME,
+      email: MARTHA_EMAIL,
       pinHash: hashPin("1111"),
       passwordHash: hashPassword("martaPass123"),
       role: "staff",
@@ -305,13 +305,13 @@ async function refusingRelay(at: "rcpt" | "data"): Promise<Relay> {
   };
 }
 
-/** What nodemailer itself hands over when this relay refuses Jordi: the control that the reply carries his address. */
+// The relay refusal must carry the address for the checks that omit it to be meaningful.
 async function relayRefusal(relay: Relay): Promise<string> {
   const transport = nodemailer.createTransport({ url: relay.url });
   try {
     await transport.sendMail({
       from: "venue@example.test",
-      to: JORDI_EMAIL,
+      to: GEORGE_EMAIL,
       subject: "s",
       text: "t",
     });
@@ -325,11 +325,11 @@ async function relayRefusal(relay: Relay): Promise<string> {
 
 const EMAIL_TAKEN = {
   status: 409,
-  body: { error: { code: "person.email_taken", params: { email: MARTA_EMAIL } } },
+  body: { error: { code: "person.email_taken", params: { email: MARTHA_EMAIL } } },
 };
 const NAME_TAKEN = {
   status: 409,
-  body: { error: { code: "person.display_name_taken", params: { displayName: MARTA_NAME } } },
+  body: { error: { code: "person.display_name_taken", params: { displayName: MARTHA_NAME } } },
 };
 
 describe("the recovery page, the log file and stdout carry no person's details", () => {
@@ -348,12 +348,12 @@ describe("the recovery page, the log file and stdout carry no person's details",
         lastNames: "Else",
         telephone: null,
         role: "staff",
-        email: MARTA_EMAIL,
+        email: MARTHA_EMAIL,
       },
     );
 
     expect(answer).toEqual(EMAIL_TAKEN);
-    await expectLogged(r, "person.email_taken", { email: "m***r@e***e.test" }, [MARTA_EMAIL]);
+    await expectLogged(r, "person.email_taken", { email: "m***s@e***e.test" }, [MARTHA_EMAIL]);
   });
 
   it("masks the display name a new staff member was refused for", async () => {
@@ -366,9 +366,9 @@ describe("the recovery page, the log file and stdout carry no person's details",
       "/management-api/staff",
       await cookieFor(adminId),
       {
-        displayName: MARTA_NAME,
-        firstNames: "Marta",
-        lastNames: "Soler",
+        displayName: MARTHA_NAME,
+        firstNames: "Martha",
+        lastNames: "Lewis",
         telephone: null,
         role: "staff",
         email: "another@example.test",
@@ -376,8 +376,8 @@ describe("the recovery page, the log file and stdout carry no person's details",
     );
 
     expect(answer).toEqual(NAME_TAKEN);
-    await expectLogged(r, "person.display_name_taken", { displayName: "M***a S***r" }, [
-      MARTA_NAME,
+    await expectLogged(r, "person.display_name_taken", { displayName: "M***a L***s" }, [
+      MARTHA_NAME,
     ]);
   });
 
@@ -395,17 +395,17 @@ describe("the recovery page, the log file and stdout carry no person's details",
         ...change,
       });
 
-    expect(await edit({ email: MARTA_EMAIL, displayName: "Clerk" })).toEqual(EMAIL_TAKEN);
-    expect(await edit({ email: "clerk@example.test", displayName: MARTA_NAME })).toEqual(
+    expect(await edit({ email: MARTHA_EMAIL, displayName: "Clerk" })).toEqual(EMAIL_TAKEN);
+    expect(await edit({ email: "clerk@example.test", displayName: MARTHA_NAME })).toEqual(
       NAME_TAKEN,
     );
-    await expectLogged(r, "person.email_taken", { email: "m***r@e***e.test" }, [
-      MARTA_EMAIL,
-      MARTA_NAME,
+    await expectLogged(r, "person.email_taken", { email: "m***s@e***e.test" }, [
+      MARTHA_EMAIL,
+      MARTHA_NAME,
     ]);
-    await expectLogged(r, "person.display_name_taken", { displayName: "M***a S***r" }, [
-      MARTA_EMAIL,
-      MARTA_NAME,
+    await expectLogged(r, "person.display_name_taken", { displayName: "M***a L***s" }, [
+      MARTHA_EMAIL,
+      MARTHA_NAME,
     ]);
   });
 
@@ -423,17 +423,17 @@ describe("the recovery page, the log file and stdout carry no person's details",
         ...change,
       });
 
-    expect(await profile({ displayName: MARTA_NAME, email: "clerk@example.test" })).toEqual(
+    expect(await profile({ displayName: MARTHA_NAME, email: "clerk@example.test" })).toEqual(
       NAME_TAKEN,
     );
-    expect(await profile({ displayName: "Clerk", email: MARTA_EMAIL })).toEqual(EMAIL_TAKEN);
-    await expectLogged(r, "person.display_name_taken", { displayName: "M***a S***r" }, [
-      MARTA_EMAIL,
-      MARTA_NAME,
+    expect(await profile({ displayName: "Clerk", email: MARTHA_EMAIL })).toEqual(EMAIL_TAKEN);
+    await expectLogged(r, "person.display_name_taken", { displayName: "M***a L***s" }, [
+      MARTHA_EMAIL,
+      MARTHA_NAME,
     ]);
-    await expectLogged(r, "person.email_taken", { email: "m***r@e***e.test" }, [
-      MARTA_EMAIL,
-      MARTA_NAME,
+    await expectLogged(r, "person.email_taken", { email: "m***s@e***e.test" }, [
+      MARTHA_EMAIL,
+      MARTHA_NAME,
     ]);
   });
 
@@ -455,9 +455,13 @@ describe("the recovery page, the log file and stdout carry no person's details",
       [
         "owner",
         () =>
-          new AppError("draft.taken_over", { draftId: "d1", ownerId: "p1", ownerName: MARTA_NAME }),
+          new AppError("draft.taken_over", {
+            draftId: "d1",
+            ownerId: "p1",
+            ownerName: MARTHA_NAME,
+          }),
         "draft.taken_over",
-        { draftId: "d1", ownerId: "p1", ownerName: "Marta Soler" },
+        { draftId: "d1", ownerId: "p1", ownerName: "Martha Lewis" },
       ],
       [
         "editor",
@@ -470,7 +474,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
             edit: {
               billId: "b1",
               editorId: "p2",
-              editorName: MARTA_NAME,
+              editorName: MARTHA_NAME,
               editorVersion: 3,
               draftId: null,
               draftRevision: null,
@@ -485,7 +489,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
           edit: {
             billId: "b1",
             editorId: "p2",
-            editorName: "Marta Soler",
+            editorName: "Martha Lewis",
             editorVersion: 3,
             draftId: null,
             draftRevision: null,
@@ -499,14 +503,14 @@ describe("the recovery page, the log file and stdout carry no person's details",
             field: "receiptPrinterId",
             holderDeviceId: "dev1",
             holderDeviceName: "Bar till",
-            holderPersonName: MARTA_NAME,
+            holderPersonName: MARTHA_NAME,
           }),
         "device.equipment_held",
         {
           field: "receiptPrinterId",
           holderDeviceId: "dev1",
           holderDeviceName: "Bar till",
-          holderPersonName: "Marta Soler",
+          holderPersonName: "Martha Lewis",
         },
       ],
       [
@@ -538,14 +542,14 @@ describe("the recovery page, the log file and stdout carry no person's details",
           new AppError("payment.provider_merchant_ambiguous", {
             merchants: [
               { code: "MC1", name: VENUE_LEGAL_NAME },
-              { code: "MC2", name: MARTA_NAME },
+              { code: "MC2", name: MARTHA_NAME },
             ],
           }),
         "payment.provider_merchant_ambiguous",
         {
           merchants: [
             { code: "MC1", name: "Jordi Puig Ferrer" },
-            { code: "MC2", name: "Marta Soler" },
+            { code: "MC2", name: "Martha Lewis" },
           ],
         },
       ],
@@ -570,7 +574,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
     const stdout = r.stdout.join("").split("\n").filter(Boolean);
     const file = (await r.file()).split("\n").filter(Boolean);
     const expected = [
-      { draftId: "d1", ownerId: "p1", ownerName: "M***a S***r", event: "draft.taken_over" },
+      { draftId: "d1", ownerId: "p1", ownerName: "M***a L***s", event: "draft.taken_over" },
       {
         billId: "b1",
         draftId: null,
@@ -579,7 +583,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
         edit: {
           billId: "b1",
           editorId: "p2",
-          editorName: "M***a S***r",
+          editorName: "M***a L***s",
           editorVersion: 3,
           draftId: null,
           draftRevision: null,
@@ -590,7 +594,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
         field: "receiptPrinterId",
         holderDeviceId: "dev1",
         holderDeviceName: "Bar till",
-        holderPersonName: "M***a S***r",
+        holderPersonName: "M***a L***s",
         event: "device.equipment_held",
       },
       { todayName: "S***r", field: "name", event: "table.label_taken" },
@@ -604,7 +608,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
       {
         merchants: [
           { code: "MC1", name: "J***i P***g F***r" },
-          { code: "MC2", name: "M***a S***r" },
+          { code: "MC2", name: "M***a L***s" },
         ],
         event: "payment.provider_merchant_ambiguous",
       },
@@ -623,9 +627,9 @@ describe("the recovery page, the log file and stdout carry no person's details",
       expect(page).toContain(code);
     }
     for (const [key, masked] of [
-      ["ownerName", "M***a S***r"],
-      ["editorName", "M***a S***r"],
-      ["holderPersonName", "M***a S***r"],
+      ["ownerName", "M***a L***s"],
+      ["editorName", "M***a L***s"],
+      ["holderPersonName", "M***a L***s"],
       ["todayName", "S***r"],
       ["legalName", "J***i P***g F***r"],
       ["taxId", "1***Z"],
@@ -633,12 +637,12 @@ describe("the recovery page, the log file and stdout carry no person's details",
       expect(page).toContain(`&quot;${key}&quot;:&quot;${masked}&quot;`);
     }
     expect(page).toContain(
-      "&quot;code&quot;:&quot;MC2&quot;,&quot;name&quot;:&quot;M***a S***r&quot;",
+      "&quot;code&quot;:&quot;MC2&quot;,&quot;name&quot;:&quot;M***a L***s&quot;",
     );
     for (const visible of [LOCATION_NAME, "MC1", "Patio 1", "Bar till"]) {
       expect(page).toContain(visible);
     }
-    for (const hidden of [MARTA_NAME, VENUE_LEGAL_NAME, VENUE_TAX_ID, TODAY_NAME]) {
+    for (const hidden of [MARTHA_NAME, VENUE_LEGAL_NAME, VENUE_TAX_ID, TODAY_NAME]) {
       expect(r.stdout.join("")).not.toContain(hidden);
       expect(file.join("\n")).not.toContain(hidden);
       expect(page).not.toContain(hidden);
@@ -698,9 +702,9 @@ describe("the recovery page, the log file and stdout carry no person's details",
     const { adminId } = await setupVenue();
     const r = await rig();
     await send(management(r.log), "POST", "/management-api/staff", await cookieFor(adminId), {
-      displayName: MARTA_NAME,
-      firstNames: "Marta",
-      lastNames: "Soler",
+      displayName: MARTHA_NAME,
+      firstNames: "Martha",
+      lastNames: "Lewis",
       telephone: null,
       role: "staff",
       email: "another@example.test",
@@ -749,12 +753,12 @@ describe("the recovery page, the log file and stdout carry no person's details",
           "/management-api/staff",
           await cookieFor(adminId),
           {
-            displayName: JORDI_NAME,
-            firstNames: "Jordi",
-            lastNames: "Puig",
+            displayName: GEORGE_NAME,
+            firstNames: "George",
+            lastNames: "Hill",
             telephone: null,
             role: "staff",
-            email: JORDI_EMAIL,
+            email: GEORGE_EMAIL,
           },
         );
 
@@ -773,8 +777,8 @@ describe("the recovery page, the log file and stdout carry no person's details",
           timeZone: "Europe/Madrid",
           smtp: { url: relay.url, from: "venue@example.test" },
         });
-        expect(relay.recipients).toEqual([JORDI_EMAIL]);
-        expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
+        expect(relay.recipients).toEqual([GEORGE_EMAIL]);
+        expect(await relayRefusal(relay)).toContain(GEORGE_EMAIL);
         await expectLogged(
           r,
           "mail.send_failed",
@@ -785,7 +789,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
             )!.id,
             errorCode: "email.test_refused",
           },
-          [JORDI_EMAIL, JORDI_NAME],
+          [GEORGE_EMAIL, GEORGE_NAME],
           "error",
         );
       } finally {
@@ -811,7 +815,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
           telephone: null,
           locale: "en-GB",
           currentPassword: "clerkPass123",
-          email: JORDI_EMAIL,
+          email: GEORGE_EMAIL,
         },
       );
 
@@ -825,8 +829,8 @@ describe("the recovery page, the log file and stdout carry no person's details",
         timeZone: "Europe/Madrid",
         smtp: { url: relay.url, from: "venue@example.test" },
       });
-      expect(relay.recipients).toEqual([JORDI_EMAIL]);
-      expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
+      expect(relay.recipients).toEqual([GEORGE_EMAIL]);
+      expect(await relayRefusal(relay)).toContain(GEORGE_EMAIL);
       await expectLogged(
         r,
         "mail.send_failed",
@@ -837,7 +841,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
           )!.id,
           errorCode: "email.test_refused",
         },
-        [JORDI_EMAIL],
+        [GEORGE_EMAIL],
         "error",
       );
       expect(await r.page()).toContain("&quot;errorCode&quot;:&quot;email.test_refused&quot;");
@@ -852,7 +856,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
       try {
         const message = {
           smtp: { url: relay.url, from: "venue@example.test" },
-          recipient: JORDI_EMAIL,
+          recipient: GEORGE_EMAIL,
           locale: "en" as const,
           businessDay: "2026-10-25",
           venueName: LOCATION_NAME,
@@ -868,8 +872,8 @@ describe("the recovery page, the log file and stdout carry no person's details",
         });
         expect(outcome.status).toBe("rejected");
         expect(reported).toMatchObject({ status: "rejected", reason: "email.test_refused" });
-        expect(relay.recipients).toEqual([JORDI_EMAIL, JORDI_EMAIL]);
-        expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
+        expect(relay.recipients).toEqual([GEORGE_EMAIL, GEORGE_EMAIL]);
+        expect(await relayRefusal(relay)).toContain(GEORGE_EMAIL);
       } finally {
         await relay.close();
       }
