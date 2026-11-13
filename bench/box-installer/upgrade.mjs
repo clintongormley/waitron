@@ -25,6 +25,7 @@ jq -e '.sales.count==1 and .registros_facturacion.count==1 and .working_orders.c
 `;
 const compare = `${fingerprint} >/opt/waitron/after.json
 cmp /opt/waitron/before.json /opt/waitron/after.json
+docker inspect $(docker compose --project-directory /opt/waitron -f /opt/waitron/compose.yml ps -q) | jq -e 'all(.[]; .HostConfig.RestartPolicy.Name=="unless-stopped")'
 `;
 const apply = `flock -n /opt/waitron.upgrade.lock ${cli} apply /opt/waitron /bin/bash /opt/waitron-host/prepare-fixture.sh`;
 const shim = String.raw`#!/bin/bash
@@ -94,6 +95,12 @@ ${failed}
 ${shell} keep
 ${compare}
 echo A950_MANUAL_OK
+`;
+  if (mode === "reopened")
+    return `set -euxo pipefail
+${start}
+${compare}
+echo A950_REOPENED_OK
 `;
   if (mode === "copy")
     return `set -euxo pipefail

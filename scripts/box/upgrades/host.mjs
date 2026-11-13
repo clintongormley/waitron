@@ -488,6 +488,17 @@ async function reopenImages(compose, images, run) {
     "--wait-timeout",
     "180",
   ]);
+  const config = JSON.parse(
+    (await run("docker", [...compose, "--profile", "*", "config", "--format", "json"])).stdout,
+  );
+  for (const [name, service] of Object.entries(config.services)) {
+    const ids = (await run("docker", [...compose, "--profile", "*", "ps", "-a", "-q", name])).stdout
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (ids.length > 0)
+      await run("docker", ["update", `--restart=${service.restart ?? "no"}`, ...ids]);
+  }
 }
 
 async function candidateReference(image, run) {

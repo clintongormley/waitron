@@ -134,8 +134,10 @@ async function imageFixture({
   if (!noEnv) await fs.writeFile(join(root, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/first\n");
   const created = new Set();
   const resolved = new Map();
+  let opened = false;
   const run = async (file, args, input) => {
     calls.push([file, ...args]);
+    if (args.includes("up")) opened = true;
     if (pullFailure && args[0] === "pull" && resolved.get(args[1]) === "agent:old")
       throw new Error("registry offline");
     if (cleanupFailure && args[0] === "image" && args[1] === "rm")
@@ -192,7 +194,11 @@ async function imageFixture({
             ? "tunnel-id\n"
             : writers && args.at(-1) === "-q"
               ? "app-id\nagent-id\n"
-              : "",
+              : writers && opened && ["app", "print-agent"].includes(args.at(-1))
+                ? args.at(-1) === "app"
+                  ? "app-id\n"
+                  : "agent-id\n"
+                : "",
       };
     if (args[0] === "inspect")
       return {
@@ -289,7 +295,7 @@ it("pins all old images before pulling any candidate, and resumes only recorded 
   await f.host.resume(images.old);
   const pinned = JSON.parse(await fs.readFile(join(root, "compose.yml"), "utf8"));
   expect(pinned.services.app.image).toBe("sha256:app:old");
-  expect(calls.at(-1)).toEqual([
+  expect(calls.findLast((args) => args.includes("up"))).toEqual([
     "docker",
     "compose",
     "--project-directory",
@@ -715,7 +721,13 @@ it("relays only the real clock status line and refuses a clock change without co
 it.each([false, true])(
   "disables container restart before the marker and restores policies on reopen (%s)",
   async (realCompose) => {
-    const t = await imageFixture({ realCompose, writers: true, prepare: false, stage: false });
+    const t = await imageFixture({
+      realCompose,
+      writers: true,
+      stoppedTunnel: true,
+      prepare: false,
+      stage: false,
+    });
     const path = t.join(t.root, "compose.yml");
     if (!realCompose) {
       for (const service of Object.values(t.config.services)) service.restart = "unless-stopped";
@@ -726,6 +738,10 @@ it.each([false, true])(
     expect(t.calls).toContainEqual(["docker", "update", "--restart=no", "app-id", "agent-id"]);
     expect(await t.fs.readFile(path, "utf8")).toBe(original);
     await t.f.host.resume(images.old);
+    expect(t.calls).toContainEqual(["docker", "update", "--restart=unless-stopped", "app-id"]);
+    expect(t.calls).toContainEqual(["docker", "update", "--restart=unless-stopped", "agent-id"]);
+    expect(t.calls).toContainEqual(["docker", "update", "--restart=unless-stopped", "tunnel-id"]);
+    expect(t.calls.findLast((args) => args.includes("up"))).not.toContain("staff-tunnel");
     const resolved = JSON.parse(
       (await t.run("docker", ["compose", "-f", path, "config", "--format", "json"])).stdout,
     );

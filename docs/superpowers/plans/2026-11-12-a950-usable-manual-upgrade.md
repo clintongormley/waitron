@@ -123,3 +123,7 @@ B3's pending guard reopened all three running containers before stop, but held a
 stopped copy. A control adding policy-disable must hold at both boundaries before the one
 fresh fixes read. No new review wave. Mandatory copy-sale and manual/interrupted-restore
 qualification remain. This amendment supersedes the policy-removal/monitor references above.
+
+**13 November, runtime correction:** actual `compose up --wait` left an unchanged container's
+policy at `no`; reopen therefore explicitly restores the Compose-declared policies after up.
+The owned Docker probe is retained as `compose-policy-reopen-probe.json` in the lane receipts.

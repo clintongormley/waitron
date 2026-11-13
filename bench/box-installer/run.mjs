@@ -805,7 +805,10 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       await stage.finish();
       const modes =
         caseName === "upgrade-manual"
-          ? [["manual", "A950_MANUAL_OK"]]
+          ? [
+              ["manual", "A950_MANUAL_OK"],
+              ["reopened", "A950_REOPENED_OK"],
+            ]
           : [
               ["copy", "A950_CUT"],
               ["held", "A950_HELD_OK"],

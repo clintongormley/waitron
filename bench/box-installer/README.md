@@ -174,7 +174,8 @@ After building the recipe above, run `upgrade-manual` or `upgrade-power-cut` wit
 `B3_INSTALLER_IMAGE=/work/output/waitron-install-dev.img` and
 `B3_UPGRADE_STATE=/inputs/source-state.tar`. Use a separate `--run-dir` for each case.
 The manual case requires a successful disposable-copy sale, then exercises Restore and
-Keep after an owned port blocker refuses readiness. The power-cut case kills QEMU during
+Keep after an owned port blocker refuses readiness, then checks a normal reboot and the
+restored container restart policies. The power-cut case kills QEMU during
 the initial copy and during restore, then checks the held boot and repeated restore.
 The guest needs real internet time synchronisation; no clock confirmation is fabricated.
 These current-build synthetic checks create no qualified historical release in the index.
