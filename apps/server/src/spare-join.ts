@@ -21,7 +21,7 @@ import { caCertPath } from "./box-secrets.js";
 import "./errors.js";
 import type { Logger } from "./logger.js";
 import { readNodeIdentityKey } from "./node-identity.js";
-import { startStorePipe } from "./spare-pipe.js";
+import { startStorePipe, type StorePipe } from "./spare-pipe.js";
 import { SPARE_STORE_BUCKET, SPARE_STORE_REGION } from "./spare-store.js";
 import type { StreamHost } from "./stream-host.js";
 
@@ -36,7 +36,7 @@ export interface SpareJoinDeps {
   stateDir: string;
   stream: Pick<StreamHost, "reload">;
   /** Whether the spare's store answers the pair's key; through a store pipe when absent. */
-  probe?: (link: PairLink, signal: AbortSignal) => Promise<boolean>;
+  probe?: Probe;
   /** The default probe's pipe's address lookup; the venue network's answer when absent. */
   storeLookup?: (hostname: string) => Promise<BoxAddresses>;
   intervalMs?: number;
@@ -71,13 +71,10 @@ export async function runSpareJoin(deps: SpareJoinDeps): Promise<void> {
   while (!deps.signal.aborted) {
     try {
       const link = await readPairLink(deps.node, deps.nodeId);
-      if (
-        link?.role === "streams" &&
-        link.state === "pending" &&
-        !sameLink(link, refused) &&
-        (await probe(link, deps.signal)) &&
-        !deps.signal.aborted
-      ) {
+      const asking =
+        link?.role === "streams" && link.state === "pending" && !sameLink(link, refused);
+      if (!asking) await probe.close?.();
+      if (asking && (await probe(link, deps.signal)) && !deps.signal.aborted) {
         try {
           if (await recordSpare(deps, link)) {
             deps.log("info", "spare.joined", { peerNodeId: link.peerNodeId });
@@ -94,6 +91,7 @@ export async function runSpareJoin(deps: SpareJoinDeps): Promise<void> {
     }
     await sleep(intervalMs, deps.signal);
   }
+  await probe.close?.();
 }
 
 function sameLink(link: PairLink, other: PairLink | undefined): boolean {
@@ -141,39 +139,55 @@ async function recordSpare(deps: SpareJoinDeps, probed: PairLink): Promise<boole
   });
 }
 
-/** Writes, reads, lists and deletes one object in the spare's store under the pair's key. */
-function storeProbe(
-  deps: SpareJoinDeps,
-): (link: PairLink, signal: AbortSignal) => Promise<boolean> {
+interface Probe {
+  (link: PairLink, signal: AbortSignal): Promise<boolean>;
+  close?(): Promise<void>;
+}
+
+/**
+ * Writes, reads, lists and deletes one object in the spare's store under the pair's key. Probes of
+ * the same link share one pipe until one succeeds, so the pipe's once-per-reason warning is not
+ * repeated each pass.
+ */
+function storeProbe(deps: SpareJoinDeps): Probe {
   let lastReason: string | undefined;
-  return async (link, signal) => {
-    const pipe = await startStorePipe({
-      storeUrl: link.storeUrl,
-      authorityPem: await readFile(caCertPath(deps.stateDir), "utf8"),
-      clientCertFile: join(deps.stateDir, TLS_CLIENT_CERT_FILE),
-      clientKeyFile: join(deps.stateDir, TLS_CLIENT_KEY_FILE),
-      lookup: deps.storeLookup,
-      log: deps.log,
-    });
-    try {
-      const store = createS3ObjectStore({
-        endpoint: pipe.loopbackUrl,
-        region: SPARE_STORE_REGION,
-        bucket: SPARE_STORE_BUCKET,
-        prefix: "",
-        accessKeyId: link.accessKeyId,
-        secretAccessKey: await readPairSecret(deps.node, deps.ring, deps.nodeId),
-      });
-      const result = await probeBucket(store, undefined, { signal }).catch(
-        (error: unknown) => ({ ok: false, reason: codeOf(error) }) as const,
-      );
-      const reason = result.ok ? undefined : result.reason;
-      if (reason !== undefined && reason !== lastReason)
-        deps.log("info", "spare.store_probe_refused", { reason });
-      lastReason = reason;
-      return result.ok;
-    } finally {
-      await pipe.close();
-    }
+  let open: { link: PairLink; pipe: StorePipe } | undefined;
+  const close = async () => {
+    const pipe = open?.pipe;
+    open = undefined;
+    await pipe?.close();
   };
+  const probe: Probe = async (link, signal) => {
+    if (open !== undefined && !sameLink(link, open.link)) await close();
+    open ??= {
+      link,
+      pipe: await startStorePipe({
+        storeUrl: link.storeUrl,
+        authorityPem: await readFile(caCertPath(deps.stateDir), "utf8"),
+        clientCertFile: join(deps.stateDir, TLS_CLIENT_CERT_FILE),
+        clientKeyFile: join(deps.stateDir, TLS_CLIENT_KEY_FILE),
+        lookup: deps.storeLookup,
+        log: deps.log,
+      }),
+    };
+    const store = createS3ObjectStore({
+      endpoint: open.pipe.loopbackUrl,
+      region: SPARE_STORE_REGION,
+      bucket: SPARE_STORE_BUCKET,
+      prefix: "",
+      accessKeyId: link.accessKeyId,
+      secretAccessKey: await readPairSecret(deps.node, deps.ring, deps.nodeId),
+    });
+    const result = await probeBucket(store, undefined, { signal }).catch(
+      (error: unknown) => ({ ok: false, reason: codeOf(error) }) as const,
+    );
+    const reason = result.ok ? undefined : result.reason;
+    if (reason !== undefined && reason !== lastReason)
+      deps.log("info", "spare.store_probe_refused", { reason });
+    lastReason = reason;
+    if (result.ok) await close();
+    return result.ok;
+  };
+  probe.close = close;
+  return probe;
 }

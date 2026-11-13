@@ -1454,7 +1454,8 @@ declare module "@waitron/shared" {
     "spare.settings_invalid": { reason: string };
     /**
      * This box's `nodes` row for its spare holds another public key than the pair link names: a
-     * fault in Waitron, logged only. The link stays `pending` and is not asked again.
+     * fault in Waitron, logged only. The link stays `pending` and is not asked again until the
+     * server next starts or the link is replaced.
      */
     "spare.join_key_mismatch": { peerNodeId: string };
     /**

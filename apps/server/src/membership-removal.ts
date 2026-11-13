@@ -45,13 +45,6 @@ export type ClearanceVerdict =
  * Whether the serving primary may remove `targetNodeId` from its chart. The rule: the target is
  * `serving-secondary` and this database holds no `nodes` row with its id — a standby that never
  * finished joining.
- *
- * The rule's gap: a remote standby that DID finish writes its `nodes` row in its OWN database
- * (`insertReservedNodeTx`, via `establishReservedStandbyIdentity`, which only that machine's own
- * boot runs: `runFinishAdoption`), not in this one, and today no adopt can finish at all
- * (`PendingAdoption` in `finish-adoption.ts`). So every remote `serving-secondary` reads as
- * never-finished here. Removing one marks it `evicted` in this node's chart, so tills stop routing
- * to it; the removed machine acts on that only if it reads this chart.
  */
 export function judgeRemoval(
   held: SignedMembershipDocument | null,

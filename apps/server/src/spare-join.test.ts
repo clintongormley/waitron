@@ -1,11 +1,12 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, type IncomingMessage, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import { Server as NetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  deletePairLinkTx,
   loadKeyRing,
   sealNodeSigningKeyTx,
   writePairLinkTx,
@@ -305,6 +306,17 @@ describe("runSpareJoin", () => {
     let listener: StoreListener | undefined;
     let upstream: Server | undefined;
 
+    /** The servers listening now that were not when it was called. A closed server stops
+     *  `listening` at once, where Node's public resource list keeps it for a moment. */
+    function openedServers(): () => NetServer[] {
+      const servers = () =>
+        (process as unknown as { _getActiveHandles(): unknown[] })
+          ._getActiveHandles()
+          .filter((handle): handle is NetServer => handle instanceof NetServer && handle.listening);
+      const before = new Set(servers());
+      return () => servers().filter((server) => !before.has(server));
+    }
+
     afterEach(async () => {
       await listener?.close();
       await new Promise((resolve) => (upstream ? upstream.close(resolve) : resolve(undefined)));
@@ -333,6 +345,81 @@ describe("runSpareJoin", () => {
       });
       expect(await nodeRow(SPARE)).toBeNull();
       expect((await readPairLink(suite.node, MAIN))?.state).toBe("pending");
+    });
+
+    it("a store that stays silent is warned about once, however often it is asked", async () => {
+      await mkdir(join(stateDir, TLS_DIR), { recursive: true });
+      await writeFile(caCertPath(stateDir), "not reached");
+      await link(SPARE, spareKeys.publicKey, "https://box-5c21.waitron.local:7443");
+      let lookups = 0;
+      const r = run({
+        storeLookup: async () => {
+          lookups += 1;
+          throw new AppError("mirror.peer_unresolved", {});
+        },
+        intervalMs: 1,
+      });
+      // One probe makes at most three requests (the bucket client's `maxAttempts`), each looking
+      // the name up once, so ten lookups span at least four probes.
+      await vi.waitFor(() => expect(lookups).toBeGreaterThanOrEqual(10), { timeout: 10_000 });
+      await r.stop();
+
+      expect(logs.filter((l) => l.event === "stream.spare_store_refused")).toEqual([
+        {
+          level: "warn",
+          event: "stream.spare_store_refused",
+          fields: { reason: "mirror.peer_unresolved" },
+        },
+      ]);
+      expect(logs.filter((l) => l.event === "spare.store_probe_refused")).toHaveLength(1);
+    });
+
+    it("stopping leaves no pipe listening", async () => {
+      await mkdir(join(stateDir, TLS_DIR), { recursive: true });
+      await writeFile(caCertPath(stateDir), "not reached");
+      await link(SPARE, spareKeys.publicKey, "https://box-5c21.waitron.local:7443");
+      const opened = openedServers();
+      const r = run({
+        storeLookup: async () => {
+          throw new AppError("mirror.peer_unresolved", {});
+        },
+        intervalMs: 60_000,
+      });
+      await vi.waitFor(
+        () => expect(logs.map((l) => l.event)).toContain("spare.store_probe_refused"),
+        { timeout: 10_000 },
+      );
+      expect(opened()).toHaveLength(1);
+      await r.stop();
+
+      expect(opened()).toHaveLength(0);
+    });
+
+    it("a link replaced or removed closes its pipe", async () => {
+      await mkdir(join(stateDir, TLS_DIR), { recursive: true });
+      await writeFile(caCertPath(stateDir), "not reached");
+      await link(SPARE, spareKeys.publicKey, "https://box-5c21.waitron.local:7443");
+      const opened = openedServers();
+      const asked: string[] = [];
+      const r = run({
+        storeLookup: async (hostname) => {
+          asked.push(hostname);
+          throw new AppError("mirror.peer_unresolved", {});
+        },
+        intervalMs: 1,
+      });
+      await vi.waitFor(() => expect(asked).toContain("box-5c21.waitron.local"), {
+        timeout: 10_000,
+      });
+      await link(OTHER_SPARE, otherKeys.publicKey, "https://box-9d04.waitron.local:7443");
+      await vi.waitFor(() => expect(asked).toContain("box-9d04.waitron.local"), {
+        timeout: 10_000,
+      });
+      expect(opened()).toHaveLength(1);
+
+      await withNodeTransaction(suite.node, (tx) => deletePairLinkTx(tx, MAIN));
+      await vi.waitFor(() => expect(opened()).toHaveLength(0));
+      await r.stop();
     });
 
     it("asks the spare's store with the pair's key, and an answer refusing it is no join", async () => {
