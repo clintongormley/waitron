@@ -1308,11 +1308,11 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       });
     }
 
-    // Every table's row count, the chart, the reservations and the `nodes` rows. The credential is
-    // checked before these refusals, and its sign-in leaves an ended `management_sessions` row.
+    // Every table's row count, how many sign-ins are live, the chart, the reservations and the
+    // `nodes` rows.
     async function venueState() {
       const tables = await db.execute<{ name: string }>(
-        sql`select name from sqlite_master where type = 'table' and name not like '__drizzle%' and name != 'management_sessions' order by name`,
+        sql`select name from sqlite_master where type = 'table' and name not like '__drizzle%' order by name`,
       );
       const counts: Record<string, unknown> = {};
       for (const { name } of tables.rows) {
@@ -1322,7 +1322,29 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
           )
         ).rows[0]!.n;
       }
-      return { counts, ...(await reservedAndListed()), nodes: await db.select().from(nodes) };
+      const liveSessions = (
+        await db.execute<{ n: number }>(
+          sql`select count(*) as n from management_sessions where ended_at is null`,
+        )
+      ).rows[0]!.n;
+      return {
+        counts,
+        liveSessions,
+        ...(await reservedAndListed()),
+        nodes: await db.select().from(nodes),
+      };
+    }
+
+    // The credential is checked before these refusals: its sign-in adds one session row, ended,
+    // so the live count stays as it was. Nothing else changes.
+    async function expectOnlyAnEndedSignIn(before: Awaited<ReturnType<typeof venueState>>) {
+      expect(await venueState()).toEqual({
+        ...before,
+        counts: {
+          ...before.counts,
+          management_sessions: Number(before.counts["management_sessions"]) + 1,
+        },
+      });
     }
 
     describe("this box's recovery key", () => {
@@ -1346,7 +1368,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         expect(await res.json()).toEqual({
           error: { code: "backup.recovery_key_missing", params: {} },
         });
-        expect(await venueState()).toEqual(before);
+        await expectOnlyAnEndedSignIn(before);
         expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
       });
 
@@ -1366,7 +1388,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         expect(await res.json()).toEqual({
           error: { code: "backup.recovery_key_missing", params: {} },
         });
-        expect(await venueState()).toEqual(before);
+        await expectOnlyAnEndedSignIn(before);
       });
 
       it("a key in backup.env lets the join through", async () => {

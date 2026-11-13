@@ -1440,12 +1440,13 @@ declare module "@waitron/shared" {
     /** Saving bucket settings was asked while this box holds a pair link: the venue copies to its
      * standby. */
     "backup.spare_stream_active": Record<string, never>;
-    /** WAITRON_BACKUP_RECOVERY_KEY is unset where one is needed: a backup destination is configured
-     * (refused at load so an unattended backup can never write an unencrypted or box-key-encrypted
-     * artifact), or a recovery pack's bucket or archives page is drawn
-     * (`backup-recovery-pack-parts.ts`), where it fails that page alone; or a spare asks this box
-     * to join while its `backup.env` holds no usable key (`mirror-bundle-api.ts`), refused before
-     * anything is reserved and passed on by the spare's adopt route. */
+    /** WAITRON_BACKUP_RECOVERY_KEY is unset (or, for a join, too short to use) where one is
+     * needed: a backup destination is configured (refused at load so an unattended backup can
+     * never write an unencrypted or box-key-encrypted artifact), or a recovery pack's bucket or
+     * archives page is drawn (`backup-recovery-pack-parts.ts`), where it fails that page alone;
+     * or a spare asks this box to join while its `backup.env` holds no usable key
+     * (`mirror-bundle-api.ts`), refused before anything is reserved and passed on by the spare's
+     * adopt route. */
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };

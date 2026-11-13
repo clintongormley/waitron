@@ -259,7 +259,7 @@ export function mountMirrorBundleApi(
           managementSessionId: session.token,
           permission: "node.manage",
         });
-        // The session only authorised this request; ending it leaves no dead row behind.
+        // The session only authorised this request.
         await endManagementSession(tx, session.token);
       });
 
