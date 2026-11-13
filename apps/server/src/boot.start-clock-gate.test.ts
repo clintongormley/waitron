@@ -63,17 +63,6 @@ vi.mock("./clock-correction.js", async (original) => {
   };
 });
 
-// A test policy: production enables no record-correction outside a returned box's records.
-vi.mock("@waitron/fiscal-verifactu/src/record-remedy-routes.js", async (original) => {
-  const actual =
-    await original<typeof import("@waitron/fiscal-verifactu/src/record-remedy-routes.js")>();
-  return {
-    ...actual,
-    mountRecordRemedies: (...args: Parameters<typeof actual.mountRecordRemedies>) =>
-      actual.mountRecordRemedies(args[0], args[1], args[2], new Set(["record-correction"])),
-  };
-});
-
 /** The `clockUnconfirmed` boot last handed `mountTillApi` and `mountPaymentsApi`. */
 const mounted = vi.hoisted(() => ({
   till: undefined as (() => boolean) | undefined,

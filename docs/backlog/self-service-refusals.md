@@ -946,7 +946,7 @@ The product referrals remain open.
 
 ### fiscal-cases
 
-**Fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. It decides nothing, so the decision step still waits for W41s-8's remedies to be enabled (`ENABLED_REMEDIES` is empty); until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
+**Fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. It decides nothing, so the decision step still waits for the page to offer W41s-8's remedies, of which production enables only the correction record; until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
 
 ### fiscal-reply
 

@@ -9,9 +9,11 @@ import { hashPin, registerModulePermissions, startManagementSession } from "@wai
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, nodeId } from "@waitron/shared";
 import { steadyClock } from "../test/write-path-fixtures.js";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
+import { REMEDY_KINDS } from "./record-remedy.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 let token: string;
@@ -58,20 +60,60 @@ it.each(["staff", "supervisor", "manager"] as const)(
   },
 );
 
-it.each([
-  "record-correction",
-  "corrective-invoice",
-  "absent-original-cancellation",
-  "release-brake",
-])("refuses disabled %s even when the administrator sends a claimed enablement", async (kind) => {
-  const res = await send({
-    kind,
-    enabledRemedies: [kind],
-    operatorId: personId,
-    reason: "Claimed authorisation",
-  });
-  expect(res.status).toBe(409);
-  expect(await res.json()).toEqual({ error: { code: "fiscal.remedy_disabled", params: { kind } } });
+it.each(["corrective-invoice", "absent-original-cancellation", "release-brake"])(
+  "refuses disabled %s even when the administrator sends a claimed enablement",
+  async (kind) => {
+    const res = await send({
+      kind,
+      enabledRemedies: [kind],
+      operatorId: personId,
+      reason: "Claimed authorisation",
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "fiscal.remedy_disabled", params: { kind } },
+    });
+  },
+);
+
+it("the default policy enables exactly record-correction", async () => {
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
+  const sendDefault = (kind: string) => {
+    const app = new Hono();
+    mountRecordRemedies(
+      app,
+      {
+        db: suite.db,
+        recordGeneration: {
+          nodeId: nodeId(crypto.randomUUID()),
+          environment: "preproduction",
+          clock: steadyClock,
+          requireWritable() {},
+          requireClockConfirmed() {},
+        },
+      },
+      () => {},
+    );
+    return app.request("/management-api/fiscal-records/remedy", {
+      method: "POST",
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ kind }),
+    });
+  };
+  for (const kind of REMEDY_KINDS) {
+    const res = await sendDefault(kind);
+    if (kind === "record-correction") {
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "fiscal.remedy_request_invalid", params: {} },
+      });
+    } else {
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "fiscal.remedy_disabled", params: { kind } },
+      });
+    }
+  }
 });
 
 it.each([

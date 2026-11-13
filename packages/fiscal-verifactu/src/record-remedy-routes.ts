@@ -19,7 +19,7 @@ import { applyCorrectiveInvoiceRequest } from "./record-remedy-corrective-http.j
 import { releaseRecordBrake } from "./record-remedy-brake.js";
 
 // Legal enablement belongs to server policy; a client request cannot grant it.
-const ENABLED_REMEDIES: ReadonlySet<RemedyKind> = new Set();
+const ENABLED_REMEDIES: ReadonlySet<RemedyKind> = new Set(["record-correction"]);
 
 const run = createErrorBoundary(
   {

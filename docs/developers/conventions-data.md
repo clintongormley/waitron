@@ -4763,8 +4763,9 @@ pending and raises no `payment.bill_settle_failed` for it, also when the gate st
 partway through a pass; it records it at its first pass once the gate opens (`bill-payments-loop.test.ts`). The gate holds while the box files records (`filesRecords()`) and the start
 is `waiting` or a clock set is with the host, each asked at each call, so a box that starts filing while it waits is gated from
 that call. Orders still reach the kitchen (the owner's "Orders still go"): sending one is not among
-the wrapped calls (read, not run). The administrator's record remedies call the chain directly and are outside the gate;
-production enables none of them (plan R7, run).
+the wrapped calls (read, not run). The administrator's record remedies call the chain directly, so their route asks the gate before
+any remedy runs (`packages/fiscal-verifactu/src/record-remedy-routes.ts`, `requireClockConfirmed`;
+`boot.start-clock-gate.test.ts` sends one through boot); production enables only the correction record.
 
 **"Check the time" on a till while the start waits** (`apps/server/src/till-box-clock-api.ts`,
 `apps/server/src/clock-start-up.ts`). While the start is `waiting` on a box that files records,

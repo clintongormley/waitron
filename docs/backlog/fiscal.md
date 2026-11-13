@@ -426,7 +426,8 @@ The generated storage migration adds the column and replaces indexes; it does no
 the table.
 Correction payload persistence, administrator-only remedy operations, held-case
 resolution and the real AEAT second-correction proof remain part of Task 8 before publication.
-Disputed production remedies stay disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision.
+Disputed production remedies stay disabled pending Q35/Q38/Q40 or a case-specific owner decision;
+Q37-FIX enables the correction record.
 
 **1 November 2026, Task 8 receipt replay check.** The receipt lookup explicitly selects the
 original issued alta by its empty correction link. `record-version-receipt.test.ts` stores
