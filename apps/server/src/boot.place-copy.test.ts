@@ -5,8 +5,10 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { PAIR_COPY_DIR } from "@waitron/store";
 import { assertNotAhead } from "./node-entry.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
+import { PAIR_COPY_READY_FILE } from "./spare-copy.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import {
   ACCEPTED_VERSION,
@@ -587,5 +589,30 @@ describe("a spare that takes over filing", () => {
     );
     expect(order).toContain("handlers in");
     await start.started!.close();
+  }, 120_000);
+});
+
+describe("a box with a node identity whose first copy is ready in pair-copy/", () => {
+  it("a real entry start serves from the copy and removes pair-copy/", async () => {
+    // Not a mirror, so the handover's own placement leaves the live file alone.
+    const b = await buildBox({ mode: "primary" });
+    const folder = join(b.stateDir, PAIR_COPY_DIR);
+    mkdirSync(folder);
+    const copy = join(folder, "venue.db");
+    const raw = new DatabaseSync(b.live, { readOnly: true });
+    raw.exec(`vacuum into '${copy}'`);
+    raw.close();
+    holdChart(copy, b.chartNamingOldBox(9));
+    writeFileSync(join(folder, PAIR_COPY_READY_FILE), JSON.stringify({ generation: "g1" }));
+
+    const start = await entryStart(b);
+    expect(start.thrown).toBeUndefined();
+    const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+    const answer = (await node.json()) as { term?: number };
+    await start.started!.close();
+
+    // Failing case, the start not placing the copy: 3, the term the box's own file holds.
+    expect(answer.term).toBe(9);
+    expect(existsSync(folder)).toBe(false);
   }, 120_000);
 });

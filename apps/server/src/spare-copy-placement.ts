@@ -11,7 +11,7 @@ import { PAIR_COPY_READY_FILE } from "./spare-copy.js";
 import { reachDisk } from "./sync-path.js";
 
 /**
- * Puts the first copy a spare's latch start took in place as its live `venue.db`, before anything
+ * Puts the first copy a spare's latch start took in place as its live `venue.db`, before this start
  * opens the store. `ready.json` is removed last, so a start that stops part way repeats this; a
  * repeat that finds the copy gone has already renamed it and leaves the live files alone, which
  * entry's ahead check may have opened since.

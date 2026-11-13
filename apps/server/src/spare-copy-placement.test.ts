@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,6 +30,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   };
 });
 
+const lockHolders: ChildProcess[] = [];
 let root: string;
 let stateDir: string;
 let venueDir: string;
@@ -43,6 +45,7 @@ beforeEach(async () => {
   log.mockReset();
 });
 afterEach(async () => {
+  for (const holder of lockHolders.splice(0)) holder.kill("SIGKILL");
   renames.before = undefined;
   renames.after = undefined;
   await rm(root, { recursive: true, force: true });
@@ -67,6 +70,8 @@ function spareWithReadyCopy(): void {
   writeFileSync(note(), "{}");
   mkdirSync(copyFolder());
   writeFileSync(join(copyFolder(), VENUE_FILE), "the main box's venue");
+  // As Litestream's restore leaves it.
+  chmodSync(join(copyFolder(), VENUE_FILE), 0o644);
   writeFileSync(join(copyFolder(), `${VENUE_FILE}-wal`), "");
   writeFileSync(join(copyFolder(), `${VENUE_FILE}-shm`), "read-only open's shm");
   mkdirSync(join(copyFolder(), ".litestream-restore"));
@@ -81,6 +86,7 @@ describe("placeFirstCopy", () => {
     expect(await place()).toBe(true);
 
     expect(readFileSync(live(), "utf8")).toBe("the main box's venue");
+    expect(statSync(live()).mode & 0o777).toBe(0o600);
     expect(existsSync(`${live()}-wal`)).toBe(false);
     expect(existsSync(`${live()}-shm`)).toBe(false);
     expect(existsSync(join(venueDir, ".venue.db-litestream"))).toBe(false);
@@ -113,6 +119,51 @@ describe("placeFirstCopy", () => {
     expect(existsSync(note())).toBe(true);
     expect(existsSync(join(copyFolder(), VENUE_FILE))).toBe(true);
     expect(log).not.toHaveBeenCalled();
+  });
+
+  it("is refused, changing nothing, while another process holds the folder, and releases its own hold", async () => {
+    spareWithReadyCopy();
+    const lockFile = join(venueDir, "venue.lock");
+    const holder = spawn(
+      process.execPath,
+      [
+        "-e",
+        `const { DatabaseSync } = require("node:sqlite");
+         const c = new DatabaseSync(process.argv[1]);
+         c.exec("begin immediate");
+         console.log("held");
+         setInterval(() => {}, 1000);`,
+        lockFile,
+      ],
+      { stdio: ["ignore", "pipe", "inherit"] },
+    );
+    lockHolders.push(holder);
+    await new Promise<void>((resolve) => holder.stdout!.once("data", () => resolve()));
+
+    await expect(place()).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+    expect(readFileSync(live(), "utf8")).toBe("the spare's own empty venue");
+    expect(readFileSync(note(), "utf8")).toBe("{}");
+    expect(readFileSync(join(copyFolder(), PAIR_COPY_READY_FILE), "utf8")).toBe(
+      '{"generation":"g1"}',
+    );
+
+    holder.kill("SIGKILL");
+    await new Promise((resolve) => holder.once("exit", resolve));
+    expect(await place()).toBe(true);
+
+    // Failing case, a hold never released: `begin immediate` here answers "database is locked".
+    const taken = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        `const { DatabaseSync } = require("node:sqlite");
+         new DatabaseSync(process.argv[1]).exec("begin immediate");`,
+        lockFile,
+      ],
+      { encoding: "utf8" },
+    );
+    expect(taken.stderr).toBe("");
+    expect(taken.status).toBe(0);
   });
 
   it("deletes the backup-room note before replacing venue.db", async () => {

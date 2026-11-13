@@ -1238,13 +1238,12 @@ async function bootServer(
   } catch (error) {
     log("error", "cloud.refresh_failed", { errorCode: codeOf(error) });
   }
+  if (config.node !== undefined)
+    await placeFirstCopy({ stateDir: config.stateDir, venueDir: config.venueDir, log });
   // Here and not in entry so that `startServer`-based starts and the dev entry place too. It follows
   // entry's ahead check, whose close drains the old file's -wal before placing removes it (pinned in
   // `boot.place-copy.test.ts`). A box with no identity has no node id to read an operation by, and
   // nothing is placed.
-  // The latch start that took this copy restarts into here.
-  if (config.node !== undefined)
-    await placeFirstCopy({ stateDir: config.stateDir, venueDir: config.venueDir, log });
   const placement =
     config.node === undefined
       ? null
