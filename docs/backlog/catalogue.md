@@ -702,7 +702,7 @@ Cloud forwards guest requests to the box and serves its hosted published read-on
 that box is unreachable; ordering remains outside this first build. Fixed A4 presets come first,
 without blocks or uploads. Customer names fall back from guest language to venue default to
 internal name, never kitchen. The [build plan](../superpowers/plans/2026-11-13-a670-guest-menu-build.md)
-awaits Claude's read and watcher clearance. Cloud readiness and printed-output delivery are
+has had Claude’s reads and awaits watcher clearance. Cloud readiness and printed-output delivery are
 not established. These decisions supersede the open delivery/template/name choices above.
 
 ## The products' made-at read has no screen since A655

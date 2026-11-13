@@ -485,7 +485,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A670 — read-only online menu, then fixed A4 presets (owner decisions, 2026-11-13).**
   Forward guest reads to the box, with a Cloud-hosted published copy when it is unreachable.
   Customer names fall back through guest language, venue default, then internal name; never kitchen.
-  The [build plan](superpowers/plans/2026-11-13-a670-guest-menu-build.md) awaits review and watcher
+  The [build plan](superpowers/plans/2026-11-13-a670-guest-menu-build.md) has had Claude’s reads and awaits watcher
   clearance. Cloud delivery, printing and PDF-method acceptance remain unfinished; no ordering.
   [Detail](backlog/catalogue.md#a670--printed-menus-owner-2026-10-14-open-not-designed)
 
