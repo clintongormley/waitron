@@ -66,7 +66,6 @@ export const spicyPotatoes = row("l-bravas", "Bravas", "1.000", {
     movable: false,
     state: "ready",
     firedAt: fired,
-    ...{ awayAt: "2026-09-28T20:10:00.000Z" },
   },
 });
 export const steak = row("l-steak", "Steak", "1.000", { kitchen: null });

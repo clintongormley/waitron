@@ -25,7 +25,7 @@ beforeEach(async () => {
 });
 
 // Distinct invoice number per sale, so successive `seedSale` calls in one test never collide on the
-// series' number — each `seedTill` mints its own series, but a test may seed more than one sale.
+// series' number — each `seedNode` mints its own series, but a test may seed more than one sale.
 let invoiceSequence = 0;
 
 /**

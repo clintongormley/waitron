@@ -776,8 +776,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   zones (`apps/server/src/till-api.ts`); a till's holds every profile zone. Unchanged by A797 slice
   4 (its plan's D4).
 
-- **Small till test renames** (bundle of 4, size S). Holds A1054, A1128. [Detail](backlog/till.md#bundle-small-till-test-renames)
-
 - **A1421. Three till oddities seen once and not looked into.** At phone width the Downstairs
   bar's map is drawn tiny; a reload on a table's order lands on an empty order page; and a slow
   first read at sign-in leaves the PIN pad up with no sign of waiting.

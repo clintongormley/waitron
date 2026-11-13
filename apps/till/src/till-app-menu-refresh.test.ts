@@ -1845,8 +1845,6 @@ describe("a round the server adds to another tab", () => {
     expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
     expect(round.lineCount).toBe(0);
     expect(banner(el)).toBeNull();
-    // The whole draft went, so the till is on the floor; its Order tab shows the tab it landed on.
-    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "order" });
     await flush(el);
     expect(shownTab(el)).toBe("wo-next");
   });

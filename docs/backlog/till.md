@@ -1459,15 +1459,6 @@ so that dish could land under the bar. Run it first (add the first dish of an em
 1024×768 and 390 px and check the line is wholly above the bar); fix only if it reproduces.
 
 
-## A1128. Till tests that press a handheld's retired Order tab.
-
-Since A797 slice 3 a handheld's
-bar draws no Order tab, yet some `till-app-*` tests emit `screen-select` for `order`, a tap nobody
-can make. Each should reach the order screen by the table's bar button or `/tabs/order`; on a counter
-till, where `order` resolves to Counter, drop the emit or replace it with the tap the test means
-(table-service, parties, menu-refresh, drafts, boot-and-counter).
-
-
 ## A1140. Splitting a counter order delivered to a table leaves the new bill with no delivery table.
 
 The split bill takes its table's name as its label but not its delivery table
@@ -2241,23 +2232,6 @@ the remaining till unit and tab edges joined on 2026-11-12.
   pass monitor's and All stations' own layouts, a board switching between columns and tabs live when
   a course is fired, and a pass layout saved before B4b.
   [Detail](till.md#look-at-what-a773-2-b4bs-look-at-the-running-app-did-not-reach)
-
-## Bundle: Small till test renames
-
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1054. A Lit "change-in-update" warning in "live device zones > recovers a floor-only device
-  without needing a counter poll"** (`apps/till/src/till-app-device-zones.test.ts`). The case
-  passes; the build's ledger saw the warning on `dc7ac4b50`, and it prints on A797 slice 4's tip.
-  What sets a property inside the update is not traced.
-- **Two till fixtures still pass the dropped `awayAt` field (left open by A773-2 PR D).** Nothing
-  reads it: `apps/till/src/screens/till-table-order-screen.test.ts:2406` and
-  `apps/till/src/screens/till-table-order-screen.current-orders.test-helpers.ts:69`.
-- **A1128. Till tests that press a handheld's retired Order tab.** Since A797 slice 3 a handheld's
-  bar draws no Order tab, yet some `till-app-*` tests emit `screen-select` for `order`, a tap nobody
-  can make.
-  [Detail](till.md#a1128-till-tests-that-press-a-handhelds-retired-order-tab)
-- **Rename the `seedTill` test fixtures** — deferred in the PR of A238 (a till is a device, #1164).
 
 ## Bundle: The "Goes with" line
 

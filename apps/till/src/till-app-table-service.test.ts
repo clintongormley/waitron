@@ -1,3 +1,4 @@
+import { openOrderAddress } from "../test/order-address.js";
 import { userEvent } from "vitest/browser";
 import type { TillCancelItemDialog } from "./widgets/cancel-item-dialog.js";
 import { balanceOf, cash, takenOf } from "../test/bill-pay-app.js";
@@ -1109,8 +1110,7 @@ describe("till-app table ordering: a handheld's order screen with no table opene
         .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
     });
     await logIn(el);
-    history.pushState(null, "", "/tabs/order");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    openOrderAddress();
     await flush(el);
     const screen = tableOrder(el)!;
     expect(screen.orderId).toBeUndefined();
@@ -2446,7 +2446,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
 
       emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
-      emit(shell(el), "screen-select", { screen: "order" });
+      openOrderAddress();
       await flush(el);
       await flush(el);
 
@@ -2677,7 +2677,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const { el, settle, saved, reads } = await changeHeld(phoneFormFactor);
       emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
-      emit(shell(el), "screen-select", { screen: "order" });
+      openOrderAddress();
       await flush(el);
       const readsBack = reads();
 
@@ -2695,7 +2695,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const { el, settle, reads } = await changeHeld(phoneFormFactor);
       emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
-      emit(shell(el), "screen-select", { screen: "order" });
+      openOrderAddress();
       await flush(el);
       const readsBack = reads();
 
@@ -2786,7 +2786,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
       await openFromFloor(el, otherTable);
-      emit(shell(el), "screen-select", { screen: "order" });
       await flush(el);
       expect(tableOrder(el)!.orderId).toBe("wo-7");
 

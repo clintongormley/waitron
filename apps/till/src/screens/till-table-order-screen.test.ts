@@ -2317,7 +2317,7 @@ describe("till-table-order-screen", () => {
         expect(state(panel, "l-beer")).toBe(t("table.row_ready_ago").replace("{n}", "6"));
       });
 
-      it("keeps the dish ready in its window and retains its ready age despite a legacy Away stamp", async () => {
+      it("keeps the dish ready in its window and retains its ready age", async () => {
         const { el, panel } = await mountProgress(
           {
             readyAt: "2026-09-27T10:14:00.000Z",
@@ -2328,7 +2328,6 @@ describe("till-table-order-screen", () => {
               phase: "ready",
               requestedAt: firedAt,
               firedAt,
-              ...{ awayAt: "2026-09-27T10:16:00.000Z" },
             },
           },
           { now: minutesLater(20) },

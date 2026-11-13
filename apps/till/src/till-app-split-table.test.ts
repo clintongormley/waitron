@@ -1,3 +1,4 @@
+import { openOrderAddress } from "../test/order-address.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { BillBalance, Draft, PartyBill, SplitSources, TabLine } from "./api/client.js";
@@ -2745,7 +2746,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         emit(shell(el), "screen-select", { screen: "floor" });
         await flush(el);
         expect(tableOrder(el)).toBeNull();
-        emit(shell(el), "screen-select", { screen: "order" });
+        openOrderAddress();
         await flush(el);
 
         expect(tableOrder(el)).not.toBeNull();
@@ -4044,7 +4045,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         await pressSplit(el);
         emit(shell(el), "screen-select", { screen: "floor" });
         await flush(el);
-        emit(shell(el), "screen-select", { screen: "order" });
+        openOrderAddress();
         await flush(el);
         expect(tableOrder(el)).not.toBeNull();
 

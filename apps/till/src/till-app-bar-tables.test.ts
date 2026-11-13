@@ -1,3 +1,4 @@
+import { openOrderAddress } from "../test/order-address.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -881,8 +882,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await flush(el);
     await signIn(el);
     await toFloor(el);
-    history.pushState(null, "", "/tabs/order");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    openOrderAddress();
     await flush(el);
     expect(tableOrder(el)).not.toBeNull();
     expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
@@ -895,8 +895,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await flush(el);
     await signIn(el);
     await toFloor(el);
-    history.pushState(null, "", "/tabs/order");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    openOrderAddress();
     await flush(el);
     expect(floor(el)).toBeNull();
     shell(el).shadowRoot!.querySelector<HTMLButtonElement>("header .tab")!.click();

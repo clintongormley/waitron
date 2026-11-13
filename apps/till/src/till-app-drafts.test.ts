@@ -1,3 +1,4 @@
+import { openOrderAddress } from "../test/order-address.js";
 import { balanceOf, invoiceOf } from "../test/bill-pay-app.js";
 import {
   current,
@@ -4241,7 +4242,7 @@ describe("till-app: a table open that another overtakes", () => {
     answerOffers();
     await flush(el);
     await signIn(el, "p2", "Sam");
-    emit(shell(el), "screen-select", { screen: "order" });
+    openOrderAddress();
     await flush(el);
 
     expect(browser(el)?.store.lines ?? []).toEqual([]);
@@ -4347,7 +4348,7 @@ describe("till-app: a table open that the session outlives", () => {
     answerOffers();
     await flush(el);
     await signIn(el, "p2", "Sam");
-    emit(shell(el), "screen-select", { screen: "order" });
+    openOrderAddress();
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBeUndefined();
@@ -4414,7 +4415,7 @@ describe("till-app: seating a free table while something else happens", () => {
     seat.answer();
     await flush(el, 6);
     await signIn(el, "p2", "Sam");
-    emit(shell(el), "screen-select", { screen: "order" });
+    openOrderAddress();
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBeUndefined();
@@ -4547,7 +4548,7 @@ describe("till-app: the next person after an ordinary sign-out", () => {
     await flush(el, 6);
 
     await signIn(el, "p2", "Sam");
-    emit(shell(el), "screen-select", { screen: "order" });
+    shell(el).shadowRoot!.querySelector<HTMLElement>('[data-bar-table="t4"]')!.click();
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-4");
@@ -5328,7 +5329,6 @@ describe("till-app: other people's drafts and taking one over", () => {
     const { el } = await mountApp({ getTill: vi.fn().mockResolvedValue(till(orderTabFormFactor)) });
     savedBy(ALEX, "Alex", "offer-beer");
     await openAs(el, SAM, "Sam");
-    emit(shell(el), "screen-select", { screen: "order" });
     await flush(el);
 
     await onOrder(el);
