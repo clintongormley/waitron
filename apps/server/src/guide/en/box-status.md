@@ -226,7 +226,10 @@ This device says …**
 - Otherwise it says **The box could not show that its clock is within a minute of your device's.
   Check that your device's time is right; if it is, connect the box to the internet so it can
   correct its clock.** and offers only **Close**. Because of the time the answer takes, two times a
-  little under a minute apart can still get this message.
+  little under a minute apart can still get this message. While payments
+  [wait for the box's time](box-status.md#clock-waiting) and the part of the box that reads its
+  internet time is not answering, it says instead that the box's time cannot be corrected until that
+  part answers.
 
 Setting the clock can sign you out of the dashboard. When the clock moves by more than half an
 hour, either way, every dashboard session that was in use just before ends, so the dialog adds
@@ -295,8 +298,8 @@ An administrator can confirm it sooner on this page:
 
 - If the date and time the **Clock** row shows are right, press **The date and time are right**.
 - Or press **Check with this device's time**. When your device is within a minute of the box, that
-  confirms the box's time. When they are further apart, the dialog offers **Use this time**, which
-  sets the box's clock from your device and confirms it.
+  confirms the box's time. When they are further apart and the box can set its clock, the dialog
+  offers **Use this time**, which sets the box's clock from your device and confirms it.
 
 While the part of the box that reads its internet time is not answering, the **Clock** row says so,
 and the box waits like this at every start. Its time can then be confirmed, but not corrected, until

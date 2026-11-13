@@ -761,7 +761,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(tooltip.getAttribute("aria-label")).toBe("What this check does");
     expect(tooltip.getAttribute("aria-label")).toBe(t("box_status.clock_check_help_label"));
     expect(text(tooltip)).toBe(
-      "Compares the box's clock with this device's. While payments wait for the box's time, a match within a minute confirms it and payments start again; otherwise you can set the box from this device. Check that this device shows the right time first. It does not work on the box's own screen.",
+      "Compares the box's clock with this device's. While payments wait for the box's time, a match within a minute confirms it and payments start again; otherwise, if the box can set its own clock, you can set it from this device. Check that this device shows the right time first. It does not work on the box's own screen.",
     );
     expect(tooltip.getAttribute("guide-label")).toBe(t("box_status.clock_check_help_guide"));
   });

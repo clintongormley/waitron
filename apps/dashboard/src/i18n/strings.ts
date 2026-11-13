@@ -4122,7 +4122,7 @@ export const en = {
     "The box moved its clock but could not confirm it landed on your device's time. Close this and check again.",
   "box_status.clock_check_help_label": "What this check does",
   "box_status.clock_check_help":
-    "Compares the box's clock with this device's. While payments wait for the box's time, a match within a minute confirms it and payments start again; otherwise you can set the box from this device. Check that this device shows the right time first. It does not work on the box's own screen.",
+    "Compares the box's clock with this device's. While payments wait for the box's time, a match within a minute confirms it and payments start again; otherwise, if the box can set its own clock, you can set it from this device. Check that this device shows the right time first. It does not work on the box's own screen.",
   "box_status.clock_check_help_guide": "More about checking the clock",
   "box_status.disk.free": "{free} free of {total}",
   "box_status.disk.unreadable": "The box can't measure its disk",
@@ -8364,7 +8364,7 @@ export const es: Record<StringKey, string> = {
     "El servidor ha movido su reloj, pero no ha podido confirmar que haya quedado en la hora de tu dispositivo. Cierra esto y vuelve a comprobarlo.",
   "box_status.clock_check_help_label": "Qué hace esta comprobación",
   "box_status.clock_check_help":
-    "Compara la hora del servidor con la de este dispositivo. Mientras los cobros esperan la hora del servidor, si coinciden con menos de un minuto de diferencia queda confirmada y se vuelve a cobrar; si no, puedes poner el servidor en hora con este dispositivo. Comprueba antes que este dispositivo tiene la hora bien. No funciona en la pantalla del propio servidor.",
+    "Compara la hora del servidor con la de este dispositivo. Mientras los cobros esperan la hora del servidor, si coinciden con menos de un minuto de diferencia queda confirmada y se vuelve a cobrar; si no, y si el servidor puede poner su propio reloj en hora, puedes ponerlo en hora con este dispositivo. Comprueba antes que este dispositivo tiene la hora bien. No funciona en la pantalla del propio servidor.",
   "box_status.clock_check_help_guide": "Más sobre comprobar la hora",
   "box_status.disk.free": "Quedan {free} libres de {total}",
   "box_status.disk.unreadable": "El servidor no puede medir su disco",

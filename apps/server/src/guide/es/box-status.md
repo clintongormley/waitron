@@ -245,6 +245,9 @@ Este dispositivo marca …**
   dispositivo. Comprueba que tu dispositivo tiene la hora bien; si la tiene, conecta el servidor a
   internet para que corrija la hora.** y solo ofrece **Cerrar**. Por el tiempo que tarda la
   respuesta, dos horas separadas por algo menos de un minuto también pueden recibir este mensaje.
+  Mientras los cobros [esperan la hora del equipo](box-status.md#clock-waiting) y no responde la
+  parte del equipo que lee su hora de internet, dice en cambio que la hora del equipo no se puede
+  corregir hasta que esa parte responda.
 
 Poner la hora puede cerrar tu sesión en el panel de gestión. Cuando el reloj se mueve más de media
 hora, en cualquier sentido, termina toda sesión del panel que se estaba usando justo antes, así que
@@ -321,8 +324,9 @@ Un administrador puede confirmarla antes en esta página:
 - Si la fecha y la hora que muestra la fila **Reloj** son correctas, pulsa **La fecha y la hora son
   correctas**.
 - O pulsa **Comprobar con la hora de este dispositivo**. Si tu dispositivo está a menos de un minuto
-  del servidor, eso confirma la hora del servidor. Si la diferencia es mayor, el diálogo ofrece **Usar
-  esta hora**, que pone el reloj del servidor a la hora de tu dispositivo y la confirma.
+  del servidor, eso confirma la hora del servidor. Si la diferencia es mayor y el servidor puede poner su
+  reloj en hora, el diálogo ofrece **Usar esta hora**, que pone el reloj del servidor a la hora de tu
+  dispositivo y la confirma.
 
 Mientras no responda la parte del servidor que lee su hora de internet, la fila **Reloj** lo dice y el
 servidor espera así en cada arranque. Su hora se puede confirmar entonces, pero no corregir, hasta que
