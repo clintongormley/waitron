@@ -1325,6 +1325,36 @@ describe("the live copy's wiring", () => {
       }
     });
 
+    it("a copy to the spare that could not start says it was going to the spare", async () => {
+      await pair(await startSpare("spare.pem"));
+      const notSealed = runtime({ refreshSealedState: async () => "failed" });
+      try {
+        await notSealed.start();
+        expect(notSealed.status()).toEqual({
+          state: "off",
+          reason: "reseal_required",
+          stateSince: expect.any(String),
+          toSpare: true,
+        });
+      } finally {
+        await notSealed.stop();
+      }
+      // An address the pipe cannot parse: its start throws, after the target was read.
+      await pair("not a store address");
+      const broken = pairedRuntime(new FakeLitestream());
+      try {
+        await broken.start();
+        expect(broken.status()).toEqual({
+          state: "off",
+          reason: "start_failed",
+          stateSince: expect.any(String),
+          toSpare: true,
+        });
+      } finally {
+        await broken.stop();
+      }
+    });
+
     it("streams to the bucket when there is no pair link", async () => {
       await withTransaction(db, (tx) =>
         putCredential(tx, RING, {

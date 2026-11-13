@@ -19,7 +19,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { signBytes, verifyEndorsement } from "@waitron/membership";
-import { readPairLink } from "@waitron/node-db";
+import { type PairLink, readPairLink } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { TLS_CLIENT_CERT_FILE, TLS_CLIENT_KEY_FILE, VENUE_FILE, WAL_SUFFIX } from "@waitron/store";
@@ -157,8 +157,9 @@ export async function readNewerBucketMain(
   }
 }
 
-/** The copy's status; `toSpare` is set while it goes to the standby's store, which has no bucket. */
-export type HostStreamView = StreamView | (StreamStatus & { toSpare: true });
+/** The copy's status; `toSpare` is set while it goes, or was to go, to the standby's store, which
+ * has no bucket. */
+export type HostStreamView = StreamView | ((StreamStatus | StreamNotStarted) & { toSpare: true });
 
 interface PairTarget {
   venueId: string;
@@ -203,6 +204,8 @@ export class StreamHost {
   #pipe: StorePipe | undefined;
   /** Set when the settings are stored but no supervisor could start, so the status can say why. */
   #notStarted: StreamNotStarted | undefined;
+  /** Whether the last start's target was the spare's store. */
+  #notStartedToSpare = false;
   #reloading = false;
   #reloadCount = 0;
   #stopped = false;
@@ -266,13 +269,17 @@ export class StreamHost {
     const reloadCount = this.#reloadCount;
     if (this.#stopped || this.#supervisor !== undefined) return;
     this.#notStarted = undefined;
+    this.#notStartedToSpare = false;
     const { db, ring, log } = this.#deps;
     if (!this.#deps.isPrimary()) {
       log("info", "stream.not_primary", {});
       return;
     }
     try {
-      const target = await this.#target();
+      const link = await this.#streamingLink();
+      this.#notStartedToSpare = link !== null;
+      const target =
+        link === null ? await readStreamSettings(db, ring) : await this.#pairTarget(link);
       if (target === null) {
         log("info", "stream.not_configured", {});
         return;
@@ -362,16 +369,15 @@ export class StreamHost {
     }
   }
 
-  /**
-   * Where the copy goes: the spare's store while this box's pair link streams to it, otherwise the
-   * owner's bucket; null when neither is set up.
-   */
-  async #target(): Promise<StreamSettings | PairTarget | null> {
-    const { db, node, ring, nodeId, stateDir } = this.#deps;
-    const link = await readPairLink(node, nodeId);
-    if (link?.role !== "streams" || link.state !== "streaming") {
-      return readStreamSettings(db, ring);
-    }
+  /** This box's pair link while it streams to the spare's store; the copy goes there, not to the
+   * owner's bucket. */
+  async #streamingLink(): Promise<PairLink | null> {
+    const link = await readPairLink(this.#deps.node, this.#deps.nodeId);
+    return link?.role === "streams" && link.state === "streaming" ? link : null;
+  }
+
+  async #pairTarget(link: PairLink): Promise<PairTarget> {
+    const { node, ring, nodeId, stateDir } = this.#deps;
     return {
       venueId: link.venueId,
       pair: {
@@ -452,7 +458,11 @@ export class StreamHost {
 
   status(): HostStreamView {
     const view = this.#supervisor?.status();
-    if (view === undefined) return this.#notStarted ?? { state: "off" };
+    if (view === undefined) {
+      const notStarted = this.#notStarted;
+      if (notStarted === undefined) return { state: "off" };
+      return this.#notStartedToSpare ? { ...notStarted, toSpare: true } : notStarted;
+    }
     const pipe = this.#pipe;
     if (pipe === undefined) return view;
     const pipeProblem = pipe.problem();

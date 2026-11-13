@@ -376,6 +376,24 @@ describe("the copy when it goes to the standby server, which has no bucket", () 
       "No up-to-date copy of your data is being kept: there are no scheduled backups, and the standby server is not receiving the restaurant's data. Check that the standby server is switched on and connected to the restaurant's network, or set up scheduled backups on the Backups page.",
       "No se está guardando ninguna copia al día de tus datos: no hay copias de seguridad programadas, y el servidor en espera no está recibiendo los datos del restaurante. Comprueba que el servidor en espera esté encendido y conectado a la red del restaurante, o configura copias programadas en la página de Copias.",
     ],
+    [
+      "backup.stream_stopped",
+      { reason: "start_failed" },
+      "The copy to the standby server is not running, so new changes are not reaching the standby server. Sales continue. This box tries again each time it starts, so open Box status and press Restart the box.",
+      "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este equipo lo vuelve a intentar cada vez que arranca, así que abre Estado del equipo y pulsa Reiniciar el equipo.",
+    ],
+    [
+      "backup.stream_refused",
+      {},
+      "The copy to the standby server has stopped because another box is writing this venue's copy to the standby server. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
+      "La copia en el servidor en espera se ha detenido porque otro equipo está escribiendo la copia de este local en el servidor en espera. Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
+    ],
+    [
+      "backup.stream_settings_unusable",
+      {},
+      "The copy to the standby server has not started because this box's own configuration could not be used safely. Sales continue. This is a fault in Waitron or this box's installation, and restarting the box does not change it. Scheduled backups on the Backups page can still keep copies of your data.",
+      "La copia en el servidor en espera no se ha iniciado porque no se ha podido usar de forma segura la configuración del propio equipo. Las ventas continúan. Es un fallo de Waitron o de la instalación de este equipo, y reiniciar el equipo no lo cambia. Las copias programadas de la página de Copias de seguridad pueden seguir guardando copias de tus datos.",
+    ],
   ])("words %s for the standby, never naming a bucket or the internet", (code, params, en, es) => {
     expect(alertMessage(code, { ...params, toSpare: true }, "en")).toBe(en);
     expect(alertMessage(code, { ...params, toSpare: true }, "es")).toBe(es);
@@ -390,6 +408,9 @@ describe("the copy when it goes to the standby server, which has no bucket", () 
       "backup.stream_paused",
       "backup.stream_bucket_unusable",
       "backup.disabled",
+      "backup.stream_stopped",
+      "backup.stream_refused",
+      "backup.stream_settings_unusable",
     ]) {
       expect(alertMessage(code, {}, "en")).toBe(ALERT_MESSAGES[code]!.en);
       expect(alertMessage(code, {}, "es")).toBe(ALERT_MESSAGES[code]!.es);

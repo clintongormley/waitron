@@ -79,7 +79,7 @@ function streamAlerts(stream: HostStreamView, now: Date): OngoingAlert[] {
   if (stream.reason === FIRST_START_PENDING) return [];
   const stopped = streamAlert({
     code: "backup.stream_stopped",
-    params: { reason: stream.reason },
+    params: { reason: stream.reason, ...spare },
     since: stream.stateSince,
   });
   if (!("lagMs" in stream)) return [stopped];
@@ -88,13 +88,13 @@ function streamAlerts(stream: HostStreamView, now: Date): OngoingAlert[] {
   if (refused && (stream.reason === "pointer_changed" || stream.reason === "pointer_newer_term")) {
     explained = streamAlert({
       code: "backup.stream_refused",
-      params: {},
+      params: spare,
       since: stream.stateSince,
     });
   } else if (refused && stream.reason === "config_unsafe") {
     explained = streamAlert({
       code: "backup.stream_settings_unusable",
-      params: {},
+      params: spare,
       since: stream.stateSince,
     });
   } else if (refused || (stream.state === "off" && STOPPED_BY_ITSELF.has(stream.reason))) {

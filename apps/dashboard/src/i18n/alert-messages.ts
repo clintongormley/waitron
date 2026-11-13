@@ -141,10 +141,24 @@ export const ALERT_MESSAGES: Readonly<
   "backup.stream_refused": {
     en: "The bucket copy has stopped because another box is writing this venue's copy to the same bucket. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
     es: "La copia en el bucket se ha detenido porque otro equipo está escribiendo la copia de este local en el mismo bucket. Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
+    variants: {
+      toSpare: {
+        mode: "replace",
+        en: "The copy to the standby server has stopped because another box is writing this venue's copy to the standby server. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
+        es: "La copia en el servidor en espera se ha detenido porque otro equipo está escribiendo la copia de este local en el servidor en espera. Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
+      },
+    },
   },
   "backup.stream_settings_unusable": {
     en: "The bucket copy has not started because its settings could not be used safely. In Backups, Change bucket lets you edit them. Test checks the bucket without saving settings; Save and turn on applies them; Cancel keeps the saved settings. This form cannot diagnose faults in the box's own configuration.",
     es: "La copia en el bucket no se ha iniciado porque no se han podido usar sus ajustes de forma segura. En Copias de seguridad, Cambiar de bucket permite editarlos. Probar comprueba el bucket sin guardar ajustes; Guardar y activar los aplica; Cancelar conserva los ajustes guardados. Este formulario no puede diagnosticar fallos de configuración del propio equipo.",
+    variants: {
+      toSpare: {
+        mode: "replace",
+        en: "The copy to the standby server has not started because this box's own configuration could not be used safely. Sales continue. This is a fault in Waitron or this box's installation, and restarting the box does not change it. Scheduled backups on the Backups page can still keep copies of your data.",
+        es: "La copia en el servidor en espera no se ha iniciado porque no se ha podido usar de forma segura la configuración del propio equipo. Las ventas continúan. Es un fallo de Waitron o de la instalación de este equipo, y reiniciar el equipo no lo cambia. Las copias programadas de la página de Copias de seguridad pueden seguir guardando copias de tus datos.",
+      },
+    },
   },
   "backup.stream_bucket_unusable": {
     en: "Your bucket is refusing this box: its access key may no longer work, or the bucket may no longer support the check Waitron uses to stop two boxes overwriting each other's copy. Check the bucket settings on the Backups page.",
@@ -160,6 +174,13 @@ export const ALERT_MESSAGES: Readonly<
   "backup.stream_stopped": {
     en: "The bucket copy is not running, so new changes are not reaching your bucket. Sales continue. Open Backups and press Start the copy again. If it stops again, choose Change bucket there and press Test to check the bucket.",
     es: "La copia en el bucket no está en marcha, así que los cambios nuevos no llegan a tu bucket. Las ventas continúan. Abre Copias de seguridad y pulsa Volver a iniciar la copia. Si se vuelve a detener, elige allí Cambiar de bucket y pulsa Probar para comprobar el bucket.",
+    variants: {
+      toSpare: {
+        mode: "replace",
+        en: "The copy to the standby server is not running, so new changes are not reaching the standby server. Sales continue. This box tries again each time it starts, so open Box status and press Restart the box.",
+        es: "La copia en el servidor en espera no está en marcha, así que los cambios nuevos no llegan al servidor en espera. Las ventas continúan. Este equipo lo vuelve a intentar cada vez que arranca, así que abre Estado del equipo y pulsa Reiniciar el equipo.",
+      },
+    },
   },
   "backup.sealed_state_failed": {
     en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved. {errorCode:sealed_state}",
