@@ -106,14 +106,12 @@ it.each(["added", "removed"])(
   "only Admin may have Admin %s, even with every current permission",
   async (change) => {
     const { actor, target, input, builtIns } = await fixture();
-    await suite.db
-      .insert(roles)
-      .values({
-        id: "all-current",
-        name: "All current",
-        nameFolded: "all current",
-        permissions: declaredPermissions(),
-      });
+    await suite.db.insert(roles).values({
+      id: "all-current",
+      name: "All current",
+      nameFolded: "all current",
+      permissions: declaredPermissions(),
+    });
     await suite.db.delete(personRoles).where(eq(personRoles.personId, actor.personId));
     await suite.db.insert(personRoles).values({ personId: actor.personId, roleId: "all-current" });
     if (change === "removed")
