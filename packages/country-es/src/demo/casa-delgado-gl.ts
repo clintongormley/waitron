@@ -136,7 +136,7 @@ const WINE = {
   },
   image: "galicia-albarino.png",
   unitPrice: "4.50",
-  vatClass: "general",
+  vatClass: "reduced",
   pricingUnit: "each",
 } as const;
 const REGIONAL_SECTION = {

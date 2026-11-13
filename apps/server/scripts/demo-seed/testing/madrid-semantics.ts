@@ -74,6 +74,68 @@ export function stable(value: unknown): string {
   }
   return JSON.stringify(value);
 }
+/** Recompute every published menu fingerprint (`content_hash`) from its document, including the
+ * fingerprints one menu's document holds for another. `alias` maps each other string, and
+ * `editDocumentRow` edits a copy of each object inside a document before it is hashed. */
+export function recomputeMadridHashes(
+  result: CanonicalMadridSemantics,
+  {
+    alias = (value) => value,
+    editDocumentRow = () => {},
+  }: {
+    alias?: (value: string) => string;
+    editDocumentRow?: (row: Record<string, unknown>) => void;
+  } = {},
+): void {
+  const documents = new Map<string, unknown>();
+  for (const row of Object.values(result.tables.menu_versions!.rows))
+    documents.set(String(row.content_hash), row.document);
+  const hashes = new Map<string, string>();
+  const visiting = new Set<string>();
+  function rewrite(value: unknown, document = false): unknown {
+    if (typeof value === "string") {
+      if (documents.has(value)) {
+        const cached = hashes.get(value);
+        if (cached) return cached;
+        if (visiting.has(value)) throw new Error("cyclic Madrid document hash");
+        visiting.add(value);
+        const next = createHash("sha256")
+          .update(stable(rewrite(documents.get(value), true)))
+          .digest("hex");
+        hashes.set(value, next);
+        visiting.delete(value);
+        return next;
+      }
+      return alias(value);
+    }
+    if (Array.isArray(value)) return value.map((child) => rewrite(child, document));
+    if (value !== null && typeof value === "object") {
+      const row = { ...value } as Record<string, unknown>;
+      if (document) editDocumentRow(row);
+      return Object.fromEntries(
+        Object.entries(row).map(([key, child]) => [alias(key), rewrite(child, document)]),
+      );
+    }
+    return value;
+  }
+  for (const table of Object.values(result.tables)) {
+    const rows: typeof table.rows = {};
+    for (const originalRow of Object.values(table.rows)) {
+      const row = Object.fromEntries(
+        Object.entries(originalRow).map(([key, value]) => [
+          key,
+          rewrite(value, key === "document"),
+        ]),
+      );
+      const key = typeof row.id === "string" ? row.id : stable(row);
+      if (Object.hasOwn(rows, key))
+        throw new Error(`duplicate Madrid identity after a reviewed change: ${key}`);
+      rows[key] = row;
+    }
+    table.rows = Object.fromEntries(Object.entries(rows).sort(([a], [b]) => a.localeCompare(b)));
+  }
+}
+
 function digest(value: unknown): string {
   return createHash("sha256").update(stable(value)).digest("hex");
 }

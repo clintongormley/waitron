@@ -1,5 +1,10 @@
 import type { CountryDemoData } from "@waitron/country";
-import { CASA_DELGADO_ES } from "./index.js";
+import {
+  CASA_DELGADO_CA,
+  CASA_DELGADO_ES,
+  CASA_DELGADO_GL,
+  CASA_DELGADO_VALENCIA,
+} from "./index.js";
 import { readFileSync, existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -301,5 +306,61 @@ describe("Casa Delgado customer text", () => {
       list.map((value) => `${language}:${value}`),
     );
     expect(allowed.filter((entry) => !values.includes(entry))).toEqual([]);
+  });
+});
+
+describe("Casa Delgado VAT classes", () => {
+  const sets: CountryDemoData[] = [
+    CASA_DELGADO_ES,
+    CASA_DELGADO_CA,
+    CASA_DELGADO_VALENCIA,
+    CASA_DELGADO_GL,
+  ];
+
+  // LIVA art. 91.Uno.2.2.º: food and drink served to consume on the spot is taxed at the reduced rate.
+  it("puts every product sold to eat or drink in at the reduced rate, in every regional variant", () => {
+    const offenders = sets.flatMap((set) =>
+      [set.menus.restaurant, set.menus.lunch].flatMap((menu) =>
+        menu.categories.flatMap((category) =>
+          category.products
+            .filter((product) => product.vatClass !== "reduced")
+            .map((product) => `${set.id}: ${product.staffName?.en ?? product.image}`),
+        ),
+      ),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  // LIVA art. 91.Dos.1.1.º d puts cheese sold as goods at 4%; the other deli goods are food at 10% (art. 91.Uno.1.1.º).
+  it("sells the takeaway cheeses at the super-reduced rate and the other deli goods at the reduced rate", () => {
+    const expected = {
+      "Iberian ham": "reduced",
+      Chorizo: "reduced",
+      "Pork loin": "reduced",
+      Salchichón: "reduced",
+      Cecina: "reduced",
+      Sobrasada: "reduced",
+      Manchego: "super_reduced",
+      Cabrales: "super_reduced",
+      Idiazábal: "super_reduced",
+      "Torta cheese": "super_reduced",
+      Mahón: "super_reduced",
+      Anchovies: "reduced",
+      Olives: "reduced",
+      "Octopus in oil": "reduced",
+      "Tuna belly": "reduced",
+    };
+    for (const set of sets)
+      expect(
+        Object.fromEntries(
+          set.menus.deli.categories.flatMap((category) =>
+            category.products.map((product) => [
+              product.staffName?.en ?? product.image,
+              product.vatClass,
+            ]),
+          ),
+        ),
+        set.id,
+      ).toEqual(expected);
   });
 });
