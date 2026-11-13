@@ -6,7 +6,7 @@ import { decimal, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS, insertCapturedPayment, insertFailedPayment } from "@waitron/payments";
 import { seedWorkingOrder, freshNif } from "@waitron/payments/test/seed.js";
 import { captureAlerts, heldAlerts } from "@waitron/payments/test/capture-alerts.js";
-import * as sumup from "./index.js";
+import { SumUpReconciler } from "./reconciler.js";
 import { FakeSumUp } from "./testing/fake-sumup.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 const period = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-02T00:00:00Z") };
@@ -30,7 +30,6 @@ async function failedPayment(paymentRef: string) {
 
 describe("SumUp audit", () => {
   it("persists the failed-payment hint without changing the payment and resolves credentials anew each sweep", async () => {
-    expect(sumup.SumUpReconciler).toBeTypeOf("function");
     const seeded = await failedPayment("lost");
     const client = new FakeSumUp();
     vi.spyOn(client, "findTransaction").mockResolvedValue({
@@ -45,7 +44,7 @@ describe("SumUp audit", () => {
       .fn()
       .mockResolvedValueOnce(client)
       .mockResolvedValueOnce(new FakeSumUp());
-    const reconciler = new sumup.SumUpReconciler({
+    const reconciler = new SumUpReconciler({
       db: suite.db,
       resolveClient,
       incidents: captureAlerts.raise,
@@ -108,7 +107,7 @@ describe("SumUp audit", () => {
               timestamp,
             },
       );
-      const result = await new sumup.SumUpReconciler({
+      const result = await new SumUpReconciler({
         db: suite.db,
         resolveClient: async () => client,
         incidents: captureAlerts.raise,
@@ -135,7 +134,7 @@ describe("SumUp audit", () => {
       ],
       links: [],
     });
-    const audit = new sumup.SumUpReconciler({
+    const audit = new SumUpReconciler({
       db: suite.db,
       resolveClient: async () => client,
       incidents: captureAlerts.raise,
@@ -149,12 +148,11 @@ describe("SumUp audit", () => {
   });
 
   it("asks for a resweep while recovery owns a pending candidate", async () => {
-    expect(sumup.SumUpReconciler).toBeTypeOf("function");
     await failedPayment("pending");
     await suite.db.execute(sql`update payments set state = 'attempting'`);
     const client = new FakeSumUp();
     const lookup = vi.spyOn(client, "findTransaction");
-    const result = await new sumup.SumUpReconciler({
+    const result = await new SumUpReconciler({
       db: suite.db,
       resolveClient: async () => client,
       incidents: captureAlerts.raise,

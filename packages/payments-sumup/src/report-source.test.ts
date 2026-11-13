@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { decimal } from "@waitron/shared";
-import * as sumup from "./index.js";
+import { sumupSettlementReport as source } from "./report-source.js";
 import { FakeSumUp } from "./testing/fake-sumup.js";
 import type { SumUpHistoryItem } from "./client.js";
 
@@ -14,14 +14,6 @@ const item = (over: Partial<SumUpHistoryItem> = {}): SumUpHistoryItem => ({
   timestamp: "2026-07-01T12:00:00Z",
   ...over,
 });
-function source(
-  client = new FakeSumUp(),
-  candidates: Parameters<typeof sumup.sumupSettlementReport>[1] = [],
-) {
-  expect(sumup.sumupSettlementReport).toBeTypeOf("function");
-  return sumup.sumupSettlementReport(client, candidates);
-}
-
 describe("SumUp gross charge report", () => {
   it("reads every page once, deduplicates gross originals and never detail-reads app charges", async () => {
     const client = new FakeSumUp();
