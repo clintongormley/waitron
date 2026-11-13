@@ -302,7 +302,7 @@ async function joinedPair() {
         checked,
         lookup: async () => ({ addresses: ["127.0.0.1"], remembered: false }),
       });
-      expect(JSON.parse(status.text)).toEqual({ adoption: "pending" });
+      expect(JSON.parse(status.text)).toEqual({ adoption: "pending", copy: "waiting" });
     } finally {
       await letGo();
     }

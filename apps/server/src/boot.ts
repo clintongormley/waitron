@@ -79,10 +79,17 @@ import {
   readNodeMode,
   readNodeModeRow,
   readPairLink,
+  readPinnedPrimaryKey,
   setSingletonRole,
 } from "@waitron/node-db";
 import { readVenueAuthority } from "./boot-peer-check.js";
-import { startSpareStore } from "./spare-store.js";
+import { startSpareStore, type SpareStore } from "./spare-store.js";
+import {
+  mountLatchBoxStatus,
+  takeFirstCopy,
+  whenCopyNeeded,
+  type FirstCopyStatus,
+} from "./spare-copy.js";
 import { startStoreListener } from "./spare-pipe.js";
 import { runSpareJoin } from "./spare-join.js";
 import { finishPromotedRole } from "./promoted-role.js";
@@ -1852,7 +1859,7 @@ async function bootServer(
   // `undoOnFailure` here, so the caller registers neither. Called after `checkLeaf` where the start
   // runs it: the listener reads the leaf once, when it starts.
   const ownNodeId = config.node.nodeId;
-  const startServedStore = async (): Promise<{ stop(): Promise<void> } | undefined> => {
+  const startServedStore = async (): Promise<SpareStore | undefined> => {
     const link = await readPairLink(store.node, ownNodeId);
     if (link?.role !== "serves") return undefined;
     const spareStore = await startSpareStore({
@@ -1877,6 +1884,7 @@ async function bootServer(
     });
     undoOnFailure.push(() => listener.close());
     return {
+      loopbackUrl: spareStore.loopbackUrl,
       async stop() {
         await listener.close();
         await spareStore.stop();
@@ -1886,7 +1894,8 @@ async function bootServer(
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     spare = true;
-    app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
+    let copyStatus: FirstCopyStatus | undefined;
+    mountLatchBoxStatus(app, () => copyStatus);
     mountPeerStatusApi(
       app,
       { db, node: store.node, ring, nodeId: config.node.nodeId, joining: true },
@@ -1906,6 +1915,41 @@ async function bootServer(
     undoOnFailure.push(() => finishWorker.catch(() => {}));
     await checkLeaf();
     const latchStore = await startServedStore();
+    const copyAbort = new AbortController();
+    const firstCopy =
+      latchStore &&
+      (await whenCopyNeeded({ db, node: store.node, nodeId: ownNodeId }, (link) => ({
+        done: (async () => {
+          const pin = await readPinnedPrimaryKey(store.node, ownNodeId);
+          // Adopt pins the main box's key in the transaction that writes the link.
+          if (pin === null) throw new Error("a joining spare holds no pinned main-box key");
+          return takeFirstCopy({
+            stateDir: config.stateDir,
+            node: store.node,
+            ring,
+            nodeId: ownNodeId,
+            litestreamBin: config.litestreamBin,
+            store: latchStore,
+            pinnedPrimaryKey: pin.publicKey,
+            venueId: link.venueId,
+            now,
+            log,
+            signal: copyAbort.signal,
+            readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv(base, config.stateDir)),
+            migrationsRoot: config.migrationsRoot,
+            restart,
+            report: (status) => (copyStatus = status),
+          });
+        })().catch((error: unknown) => {
+          if (!copyAbort.signal.aborted)
+            log("error", "spare.first_copy_failed", { errorCode: codeOf(error) });
+        }),
+      })));
+    const stopFirstCopy = async () => {
+      copyAbort.abort();
+      await firstCopy?.done;
+    };
+    undoOnFailure.push(stopFirstCopy);
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
@@ -1924,6 +1968,7 @@ async function bootServer(
       {
         stopWork: async () => {
           await finishWorker.catch(() => {});
+          await stopFirstCopy();
           await latchStore?.stop();
         },
         settleRequests: () => Promise.resolve(),
