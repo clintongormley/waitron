@@ -68,7 +68,7 @@ export const en = {
   "cancel_item.started": "Already being prepared or served",
   "cancel_item.refund_at_till":
     "Refund the payment at a till: choose Refund a payment on the receipt.",
-  "cancel_item.paid": "This bill is paid",
+  "cancel_item.paid": "This bill is closed",
   "cancel_item.choice": "What happens to the charge?",
   "cancel_item.still_charge": "Cancel, still charge",
   "cancel_item.dont_charge": "Cancel, don't charge",
@@ -1069,6 +1069,7 @@ export const en = {
   "floor.guests": "Guests",
   "floor.bills": "Bills",
   "floor.paid": "Paid",
+  "floor.deferred": "Deferred payment",
   "floor.nothing_needed": "Nothing needed",
   "floor.details_owed": "Owes {amount}",
   "floor.details_close": "Close",
@@ -1592,6 +1593,7 @@ export const en = {
   "table.bill_of_unnumbered": "{party} · Bill",
   "table.bill_of_unnumbered_named": "{party} · Bill · {name}",
   "table.bill_paid": "Paid",
+  "table.bill_deferred": "Deferred payment",
   "table.bill_to_pay": "{amount} to pay",
   "table.bill_receipt": "Receipt copy",
   "table.take_payment": "Take payment",
@@ -1617,6 +1619,25 @@ export const en = {
   "sale.over_simplified_limit":
     "This would take the order over {amount}, the limit for a simplified invoice. Choose Full invoice, or remove items.",
   "bill.take_rest": "Take the rest",
+  // The confirmation before closing a whole bill as a deferred payment.
+  "deferred_close.title": "Close as deferred payment",
+  "deferred_close.bill": "Bill",
+  "deferred_close.invoice": "Invoice",
+  "deferred_close.simplified": "Simplified invoice",
+  "deferred_close.final":
+    "The customer will pay later. This closes the bill now, and Waitron will not record the payment when it arrives.",
+  "deferred_close.issue_and_close": "Issue invoice and close",
+  "deferred_close.close": "Close bill",
+  "deferred_close.unserved": "Mark every dish served or cancel it first",
+  "deferred_close.orders_unread":
+    "Current orders could not be read, so the till cannot check every dish is served. Open the table again to retry.",
+  "deferred_close.payment_unconfirmed":
+    "A payment on this bill could not be confirmed and may have gone through. Look at the bill's payments, then take what is still owed here instead.",
+  "deferred_close.unanswered": "The server did not answer. Confirm again to try once more.",
+  "deferred_close.ticket_unread":
+    "Bill closed as a deferred payment. The receipt could not be loaded. You can continue serving.",
+  "deferred_close.already_closed":
+    "This bill is already closed as a deferred payment. The bill on screen shows it.",
   // The bill payment dialog: paying for items, contributing an amount, or an equal share.
   "bill_pay.unsent": "Send or remove the unsent dishes before paying.",
   "bill_pay.title": "Pay",
@@ -2040,7 +2061,7 @@ export const es: Record<StringKey, string> = {
   "cancel_item.no": "No",
   "cancel_item.started": "Ya se está preparando o se ha servido",
   "cancel_item.refund_at_till": "Devuelve el dinero en una caja: Devolver un pago, en el recibo.",
-  "cancel_item.paid": "Esta cuenta está pagada",
+  "cancel_item.paid": "Esta cuenta ya está cerrada",
   "cancel_item.choice": "¿Qué pasa con el cobro?",
   "cancel_item.still_charge": "Cancelar y cobrar",
   "cancel_item.dont_charge": "Cancelar sin cobrar",
@@ -3021,6 +3042,7 @@ export const es: Record<StringKey, string> = {
   "floor.guests": "Comensales",
   "floor.bills": "Cuentas",
   "floor.paid": "Pagada",
+  "floor.deferred": "Pago aplazado",
   "floor.nothing_needed": "Nada pendiente",
   "floor.details_owed": "Debe {amount}",
   "floor.details_close": "Cerrar",
@@ -3533,6 +3555,7 @@ export const es: Record<StringKey, string> = {
   "table.bill_of_unnumbered": "{party} · Cuenta",
   "table.bill_of_unnumbered_named": "{party} · Cuenta · {name}",
   "table.bill_paid": "Pagada",
+  "table.bill_deferred": "Pago aplazado",
   "table.bill_to_pay": "{amount} por pagar",
   "table.bill_receipt": "Copia del ticket",
   "table.take_payment": "Cobrar esta cuenta",
@@ -3558,6 +3581,25 @@ export const es: Record<StringKey, string> = {
   "sale.over_simplified_limit":
     "El pedido pasaría de {amount}, el límite de una factura simplificada. Elige Factura completa o quita artículos.",
   "bill.take_rest": "Cobrar el resto",
+  "deferred_close.title": "Cerrar como pago aplazado",
+  "deferred_close.bill": "Cuenta",
+  "deferred_close.invoice": "Factura",
+  "deferred_close.simplified": "Factura simplificada",
+  "deferred_close.final":
+    "El cliente pagará más tarde. Esto cierra la cuenta ahora y Waitron no registrará el pago cuando llegue.",
+  "deferred_close.issue_and_close": "Emitir factura y cerrar",
+  "deferred_close.close": "Cerrar cuenta",
+  "deferred_close.unserved": "Marca todos los platos como servidos o cancélalos primero",
+  "deferred_close.orders_unread":
+    "No se pudieron leer los pedidos en curso, así que la caja no puede comprobar que todos los platos estén servidos. Vuelve a abrir la mesa para reintentarlo.",
+  "deferred_close.payment_unconfirmed":
+    "Un pago de esta cuenta no se ha podido confirmar y puede que se haya cobrado. Mira los pagos de la cuenta y cobra aquí lo que quede pendiente.",
+  "deferred_close.unanswered":
+    "El servidor no ha respondido. Vuelve a confirmar para intentarlo de nuevo.",
+  "deferred_close.ticket_unread":
+    "Cuenta cerrada como pago aplazado. No se ha podido cargar el recibo. Puedes seguir atendiendo.",
+  "deferred_close.already_closed":
+    "Esta cuenta ya está cerrada como pago aplazado. La cuenta en pantalla lo muestra.",
   "bill_pay.unsent": "Envía o quita los platos sin enviar antes de cobrar.",
   "bill_pay.title": "Cobrar",
   "bill_pay.title_table": "Cobrar · {table}",

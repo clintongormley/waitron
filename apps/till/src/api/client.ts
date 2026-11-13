@@ -2163,6 +2163,8 @@ export interface PartyBill {
   /** Its sale's total plus its credit notes, whether or not the bill has been paid; absent while no
    * sale is filed. */
   amountDue?: string;
+  /** The bill was closed as a deferred payment: the customer pays outside Waitron. */
+  deferred?: true;
 }
 
 export interface JoinMerge {
@@ -2292,6 +2294,8 @@ export interface TableState {
   today: TableToday | null;
   party: TableParty | null;
   hasAllergy?: true;
+  /** One of the party's bills was closed as a deferred payment. */
+  hasDeferredBill?: true;
   /** What wants attention at the table; several at once. */
   signals: TableSignal[];
 }

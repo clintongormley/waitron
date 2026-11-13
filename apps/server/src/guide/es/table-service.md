@@ -199,7 +199,7 @@ Cuando una mesa ha pagado un plato que no va a llegar, cancélalo para que la co
 prepararlo y el cliente pueda recuperar el dinero. Entre los platos enviados de la mesa, elige
 **Cancelar…** en el menú **Más** del plato. En una cuenta pagada solo se ofrece para lo que aún no se ha servido.
 
-La ventana **Cancelar plato** indica **Esta cuenta está pagada**. Elige **Cuántos**, hasta los que
+La ventana **Cancelar plato** indica **Esta cuenta ya está cerrada**. Elige **Cuántos**, hasta los que
 aún no se han servido. Si el plato ha pasado a cocina pero nadie lo ha marcado como empezado,
 responde a **En preparación**. Después elige un **Motivo**.
 
@@ -411,7 +411,8 @@ Descartar su última cuenta deja la mesa ocupada con una cuenta nueva y vacía. 
 usa **Cerrar mesa**.
 
 Toca el selector para ver las cuentas de la mesa por orden de número. Cada fila muestra el número y
-el nombre de la cuenta, lo que queda por pagar o **Pagada ✓**, y una línea como **Ana tiene un
+el nombre de la cuenta, lo que queda por pagar o **Pagada ✓** (**Pago aplazado** si se cerró
+como pago aplazado), y una línea como **Ana tiene un
 pedido sin enviar: 3 artículos** por cada persona con platos sin enviar en esa cuenta. Cuando otra
 cuenta tiene platos tuyos sin enviar, el selector lo indica, como **✎ Cuenta 2 sin enviar**, y la
 lista marca esa cuenta con **✎ Sin enviar**. Elige una fila para poner esa cuenta en pantalla. Una cuenta pagada también se abre, para que puedas ponerle
@@ -525,7 +526,7 @@ mueve nada. Si el cambio dejara la cuenta por debajo de lo que ya se ha pagado, 
 y ofrece un botón **Devolver** por ese importe. Si se rechaza el cambio porque la cuenta que
 elegiste tiene un cobro o una devolución con tarjeta en curso, o porque entretanto se ha presentado
 o pagado, la caja nombra esa cuenta antes del motivo, por ejemplo **Cuenta 2: Esta cuenta ya está
-pagada**. Si otra persona tiene platos sin enviar en alguna de las dos cuentas, toma antes su
+cerrada**. Si otra persona tiene platos sin enviar en alguna de las dos cuentas, toma antes su
 pedido. Abre otra vez **Mover platos…** para elegir de nuevo.
 
 ## Separar una mesa {#split-table}
@@ -690,3 +691,18 @@ usa **Cobrar al siguiente** para continuar.
 
 Una cuenta ya presentada para su cobro solo permite cobrar el importe completo. Cerrar la mesa es
 una acción aparte, después del cobro.
+
+## Cerrar una cuenta como pago aplazado {#deferred-payment}
+
+Úsalo cuando el cliente vaya a pagar toda la cuenta más tarde, fuera de Waitron. En una cuenta
+abierta (aún no presentada), abre **Cobrar**, elige **Toda la cuenta** y luego **Cerrar como pago
+aplazado**. Comprueba la cuenta, la factura y el total, y confirma. Waitron emite la factura si aún no se ha emitido y cierra la cuenta
+definitivamente. No registra ningún pago de la cuenta, ni ahora ni después, y la cuenta muestra
+**Pago aplazado** desde entonces.
+
+El botón solo aparece en una cuenta sin ningún pago. Todos los platos de la cuenta tienen que estar
+servidos o cancelados antes. Un responsable lo permite en un dispositivo activando **Cierra cuentas
+como pago aplazado** en el perfil del dispositivo, en **Perfiles de dispositivo** del panel.
+
+Tu gestor obtiene la lista de estas cuentas con **Exportar pagos aplazados (CSV)**, en la página
+**Ventas y recaudación** del panel.

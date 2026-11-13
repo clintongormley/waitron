@@ -225,6 +225,15 @@ import {
   type AdjustTarget,
 } from "./widgets/adjustment-dialog.js";
 import "./widgets/bill-pay-dialog.js";
+import "./widgets/deferred-close-dialog.js";
+import type { DeferredCloseBill } from "./widgets/deferred-close-dialog.js";
+import type { CloseDeferredResult } from "./api/deferred-close-types.js";
+import {
+  deferredCloseRequest,
+  deferredGoneReason,
+  deferredOffered,
+  type DeferredOffer,
+} from "./state/deferred-close.js";
 import "./widgets/presented-pay-dialog.js";
 import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/presented-pay-dialog.js";
 import "./widgets/invoice-recipient-dialog.js";
@@ -1337,6 +1346,45 @@ interface BillPaying extends PayingOrder {
   busy: boolean;
 }
 
+/** The window asking before a bill is closed as a deferred payment: the bill row it shows, read
+ * when it opened or again after a refusal, from which every confirm builds a new request. */
+interface DeferredClosing {
+  id: number;
+  billId: string;
+  visit: number;
+  bill: PartyBill;
+  busy: boolean;
+  refusal: string;
+  /** The last send got no answer, so the next confirm reads the bill again first. */
+  reread: boolean;
+  /** Every submission id this window has sent. */
+  sent: string[];
+}
+
+/** A deferred close's refusal: its code, the server's reason, and the sentence for both. */
+function deferredRefusal(error: unknown): {
+  code: string;
+  reason: string | undefined;
+  said: string;
+} {
+  const refused = error as { code?: unknown; reason?: unknown } | undefined;
+  const code = typeof refused?.code === "string" ? refused.code : "server.internal";
+  const reason = typeof refused?.reason === "string" ? refused.reason : undefined;
+  return { code, reason, said: codeMessage(code, undefined, { reason }) };
+}
+
+/** One confirm of the window asking before a deferred close: what it was sent with, and whether
+ * the till is still where it was. */
+interface DeferredSend {
+  api: TillApi;
+  party: TableParty | null;
+  sent: Sent;
+  /** The same server and the same signed-in session. */
+  same: () => boolean;
+  /** As `same`, and the bill is still the one on screen. */
+  live: () => boolean;
+}
+
 /** A refund of one payment, opened from the bill payment dialog `payId`: what was asked, and
  * whether staff are to give a card back on its terminal first. */
 interface BillRefunding extends PayingOrder {
@@ -1526,6 +1574,8 @@ type CounterError =
       recoveryUrl?: string;
       manualCard?: true;
       dishes?: string;
+      /** The refusal's `reason`, for a code worded by it. */
+      reason?: string;
     }
   | { billPayments: string }
   | { replacedGroups: string }
@@ -1648,7 +1698,7 @@ function errorText(
     }
     const message =
       error.dishes === undefined
-        ? codeMessage(error.code)
+        ? codeMessage(error.code, undefined, { reason: error.reason })
         : fill(t("station.no_default_named"), { dishes: error.dishes });
     const bill = error.bill;
     if (bill !== undefined) return fill(t("table.refused_on_bill"), { bill, message });
@@ -3783,6 +3833,8 @@ export class TillApp extends LitElement {
   #billBalanceRead = 0;
   /** The open bill payment dialog, with what the server last answered it. */
   @state() private billPaying: BillPaying | null = null;
+  @state() private deferredClosing: DeferredClosing | null = null;
+  #deferredCloses = 0;
   @state() private settlementDocument: SettlementDocument | null = null;
   #billPays = 0;
   #unansweredPayments = new Map<string, PendingBillPayment>();
@@ -11090,6 +11142,7 @@ export class TillApp extends LitElement {
         .busy=${open.busy}
         .confirmationLocked=${pending?.unconfirmed === true || this.#paymentOutElsewhere(open.billId, open.id)}
         .tipsEnabled=${this.tipsEnabled}
+        .deferredOffered=${this.#deferredOfferFor(open)}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
         .readers=${this.#payReaders()}
@@ -11119,6 +11172,7 @@ export class TillApp extends LitElement {
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
         @bill-pay-confirm=${(event: Event) => void this.#onBillPayConfirm(event)}
         @bill-pay-edit=${() => this.#onBillPayEdit()}
+        @bill-pay-deferred=${() => this.#onBillPayDeferred()}
         @bill-pay-close=${() => {
           const open = this.billPaying;
           this.#closeBillPaying();
@@ -11128,6 +11182,333 @@ export class TillApp extends LitElement {
         @bill-refund=${(event: Event) => this.#onBillRefund(event)}
       ></till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
+  }
+
+  /** Whether the open bill's Pay window offers Close as deferred payment. */
+  #deferredOfferFor(open: PayingOrder & { billId: string }): DeferredOffer {
+    const bill = this.partyBills.find((row) => row.workingOrderId === open.billId);
+    if (open.surface !== "table" || bill === undefined) return { state: "hidden" };
+    return this.#deferredOfferOn(bill);
+  }
+
+  #deferredOfferOn(bill: PartyBill): DeferredOffer {
+    const id = bill.workingOrderId;
+    return deferredOffered({
+      capabilities: this.capabilities,
+      bill,
+      paymentUnconfirmed:
+        this.#billPaymentHeld(id) ||
+        this.#unknownCardOutcome.has(id) ||
+        this.#unansweredWholePayments.has(id),
+      currentOrders: this.currentOrders,
+      currentOrdersUnread: this.currentOrdersUnread,
+    });
+  }
+
+  #deferredView(bill: PartyBill): DeferredCloseBill {
+    const recipient = bill.invoiceType === "F1" ? bill.recipient : null;
+    return {
+      label: this.#paymentBillLabel(bill.workingOrderId) ?? billLabel(bill),
+      total: bill.total,
+      customer:
+        recipient === null ? null : { legalName: recipient.legalName, taxId: recipient.taxId },
+      issued: bill.invoiceNumber !== undefined,
+    };
+  }
+
+  #renderDeferredClosing(): TemplateResult | typeof nothing {
+    const open = this.deferredClosing;
+    if (open === null) return nothing;
+    return html`<till-deferred-close-dialog
+      .open=${true}
+      .bill=${this.#deferredView(open.bill)}
+      .busy=${open.busy}
+      .refusal=${open.refusal}
+      @deferred-close-confirm=${(event: Event) => void this.#onDeferredConfirm(event)}
+      @deferred-close-cancel=${() => this.#onDeferredCancel()}
+    ></till-deferred-close-dialog>`;
+  }
+
+  /** Cancel goes back to Pay on the bill. After a send that got no answer, or while the bill is
+   * blocked or could not be read again, it reads the bills again instead. */
+  #onDeferredCancel(): void {
+    const open = this.deferredClosing;
+    if (open === null || open.busy) return;
+    this.deferredClosing = null;
+    if (this.#hasLeftOrder(open.billId, open.visit)) return;
+    if (open.reread) void this.#loadPartyBills();
+    else
+      void this.#openBillPaying("whole", this.#payLinesOnScreen(), undefined, {
+        surface: "table",
+        billId: open.billId,
+        visit: open.visit,
+      });
+  }
+
+  /** Pay's Close as deferred payment: Pay closes and the window asking before the close opens. */
+  #onBillPayDeferred(): void {
+    const open = this.billPaying;
+    const bill = this.partyBills.find((row) => row.workingOrderId === open?.billId);
+    if (open === null || bill === undefined || this.#deferredOfferFor(open).state !== "offered")
+      return;
+    this.#closeBillPaying();
+    this.deferredClosing = {
+      id: ++this.#deferredCloses,
+      billId: bill.workingOrderId,
+      visit: open.visit,
+      bill,
+      busy: false,
+      refusal: "",
+      reread: false,
+      sent: [],
+    };
+  }
+
+  #deferredNow(id: number): DeferredClosing | null {
+    const open = this.deferredClosing;
+    return open?.id === id ? open : null;
+  }
+
+  /** Sets the open window's fields, when it is still window `id`. */
+  #setDeferred(id: number, fields: Partial<DeferredClosing>): void {
+    const now = this.#deferredNow(id);
+    if (now !== null) this.deferredClosing = { ...now, ...fields };
+  }
+
+  /** Closes window `id` when it is still open. */
+  #dropDeferred(id: number): void {
+    if (this.#deferredNow(id) !== null) this.deferredClosing = null;
+  }
+
+  /**
+   * Closes the bill as a deferred payment. Every confirm builds a new request from the bill the
+   * window shows. After a send that got no answer, the bill is read first: closed as a deferred
+   * payment, it is not sent again ({@link #onDeferredFound}). Once a request is sent, its answer
+   * settles the window even when the till has since left the bill; a refusal is then shown without
+   * reading the bill again. A confirm from a window whose bill the till has left sends nothing and
+   * closes it. Only a confirm refused at once for unsent dishes, before the window goes busy, cancels
+   * `event`, so the window takes the next one; any later answer re-arms it through `busy` or
+   * `refusal`.
+   */
+  async #onDeferredConfirm(event: Event): Promise<void> {
+    const asked = this.deferredClosing;
+    if (asked === null || asked.busy) return;
+    let open: DeferredClosing = asked;
+    const { id, billId, visit } = asked;
+    const api = this.api;
+    const session = this.#operatorSession;
+    const same = () => this.isConnected && this.api === api && this.#operatorSession === session;
+    const live = () => same() && !this.#hasLeftOrder(billId, visit);
+    const send: DeferredSend = { api, party: this.orderParty, sent: this.#sentNow(), same, live };
+    if (!live()) {
+      this.deferredClosing = null;
+      return;
+    }
+    if (this.#unsentOnScreen(billId)) {
+      event.preventDefault();
+      this.deferredClosing = { ...open, refusal: billUnsentText(this.#paymentBillLabel(billId)) };
+      return;
+    }
+    this.deferredClosing = { ...open, busy: true, refusal: "" };
+    let request;
+    try {
+      if (open.reread) {
+        const shown = await this.#rereadDeferred(id, null);
+        if (shown === "deferred") return await this.#onDeferredFound(id, send);
+        if (shown === null || shown === undefined) return;
+        if (!live()) return this.#dropDeferred(id);
+        open = shown;
+      }
+      if (!(await this.#flushDraft())) {
+        this.#setDeferred(id, { busy: false, refusal: this.#deferredSaid() });
+        return;
+      }
+      if (!live()) return this.#dropDeferred(id);
+      const expectedEdit = this.#draftSync?.expectedEditFor(billId);
+      const composition = this.#partyComposition(
+        this.partyBills.map((bill) => bill.workingOrderId),
+      );
+      const { party } = send;
+      if (expectedEdit == null || composition === null || party === null)
+        throw { code: "draft.out_of_date" };
+      request = deferredCloseRequest({
+        bill: open.bill,
+        offeredLanguages: this.receiptLanguages,
+        expectedEdit,
+        party: {
+          id: party.id,
+          revision: this.orderParty?.revision ?? party.revision,
+          expectedEdits: composition.expectedEdits,
+        },
+      });
+    } catch (error) {
+      if (live()) await this.#onDeferredRefused(id, error, send);
+      else this.#dropDeferred(id);
+      return;
+    }
+    const now = this.#deferredNow(id);
+    if (now === null) return;
+    this.deferredClosing = { ...now, sent: [...now.sent, request.submissionId] };
+    let result;
+    try {
+      result = await api.closeDeferred(billId, request);
+    } catch (error) {
+      if (isNetworkFailure(error))
+        this.#setDeferred(id, {
+          busy: false,
+          refusal: t("deferred_close.unanswered"),
+          reread: true,
+        });
+      else if (live()) await this.#onDeferredRefused(id, error, send);
+      else this.#setDeferred(id, { busy: false, refusal: deferredRefusal(error).said });
+      return;
+    }
+    await this.#onDeferredClosed(id, result, send);
+  }
+
+  /**
+   * The bill is closed as a deferred payment, as `result` says: the window closes and, as after a
+   * bill payment, the documents window opens on the closed bill. Back on the bill's screen, a party
+   * the close finished leaves the screen as Finish table does, and the bills are read again.
+   */
+  async #onDeferredClosed(id: number, result: CloseDeferredResult, send: DeferredSend) {
+    const open = this.#deferredNow(id);
+    if (open === null) return;
+    this.deferredClosing = null;
+    const { api, party, live } = send;
+    const { billId, visit } = open;
+    let unread = false;
+    try {
+      const ticket = await api.getFiledTicket(billId);
+      if (send.same()) {
+        this.result = ticket;
+        this.#showTicket(billId, open.bill.invoiceNumber === undefined, {
+          surface: "table",
+          cashChange: null,
+        });
+      }
+    } catch {
+      // The bill is closed: nothing is sent again.
+      unread = live();
+      if (unread) this.errorKey = "deferred_close.ticket_unread";
+    }
+    if (result.party.state === "closed" && party !== null) {
+      await this.#onTableClosed(party.id, visit, send.sent);
+      // Returning to the floor can clear the screen's error.
+      if (unread && send.same()) this.errorKey = "deferred_close.ticket_unread";
+    } else if (live()) await this.#loadPartyBills();
+  }
+
+  /**
+   * The bill re-read for window `id` is closed as a deferred payment. Its closure is read: a close
+   * this window sent is taken as the answer it never got; any other, or a closure that cannot be
+   * read, closes the window saying the bill is already closed. Nothing is sent again.
+   */
+  async #onDeferredFound(id: number, send: DeferredSend): Promise<void> {
+    const open = this.#deferredNow(id);
+    if (open === null) return;
+    let closure: CloseDeferredResult | null = null;
+    try {
+      ({ closure } = await send.api.getDeferredClosure(open.billId));
+    } catch {
+      // A load failure: the re-read already shows the bill closed this way.
+    }
+    const now = this.#deferredNow(id);
+    if (now === null) return;
+    const ours = closure?.submissionId.toLowerCase();
+    if (closure !== null && ours !== undefined && now.sent.includes(ours))
+      return await this.#onDeferredClosed(id, closure, send);
+    this.deferredClosing = null;
+    if (send.live()) this.errorKey = "deferred_close.already_closed";
+  }
+
+  /** The till's own error from a failed draft save, as the window shows it. */
+  #deferredSaid(): string {
+    const said = this.#saidInDialog();
+    return said?.text ?? codeMessage("draft.out_of_date");
+  }
+
+  /** A coded refusal: the bill is read again. The window stays open, showing why, while the bill
+   * can still be closed this way, is blocked only for now, or could not be read; closed as a
+   * deferred payment, the closure is read; otherwise the window closes and the screen says why. */
+  async #onDeferredRefused(id: number, error: unknown, send: DeferredSend): Promise<void> {
+    const { code, reason, said } = deferredRefusal(error);
+    const shown = await this.#rereadDeferred(id, said);
+    if (shown === "deferred") await this.#onDeferredFound(id, send);
+    else if (shown === undefined)
+      this.errorKey = reason === undefined ? { code } : { code, reason };
+  }
+
+  /**
+   * Reads the party's bills again for window `id`. Returns the window on the re-read bill when it
+   * can still be closed this way, `said` is null and nothing the request carries changed;
+   * `"deferred"`, with the window untouched, when the bill is closed as a deferred payment; null
+   * when window `id` had closed or been replaced, or when the window stays open showing why: `said`
+   * or a conflict on the re-read bill, the read failing, or something on the till blocking the
+   * close for now (its reason, on the bill last shown); after the last two the next confirm reads
+   * the bill again. Undefined when the window closed, the screen saying why when `said` is null.
+   */
+  async #rereadDeferred(
+    id: number,
+    said: string | null,
+  ): Promise<DeferredClosing | "deferred" | null | undefined> {
+    const before = this.#deferredNow(id);
+    if (before === null) return null;
+    const { bills } = await this.#loadPartyBills();
+    const now = this.#deferredNow(id);
+    if (now === null) return null;
+    if (bills === null) {
+      this.deferredClosing = {
+        ...now,
+        busy: false,
+        refusal: said ?? t("deferred_close.unanswered"),
+        reread: true,
+      };
+      return null;
+    }
+    const bill = bills.find((row) => row.workingOrderId === now.billId);
+    if (bill?.deferred === true) return "deferred";
+    const offer = bill === undefined ? undefined : this.#deferredOfferOn(bill);
+    if (bill === undefined || offer?.state !== "offered") {
+      if (offer?.state === "off") {
+        // The bill stays as the window last showed it, so the next confirm's re-read still
+        // compares against it.
+        this.deferredClosing = {
+          ...now,
+          busy: false,
+          refusal: t(offer.reason),
+          reread: true,
+        };
+        return null;
+      }
+      this.deferredClosing = null;
+      if (said === null) {
+        const reason = deferredGoneReason(bill);
+        this.errorKey =
+          reason === undefined
+            ? { code: "deferred_close.ineligible" }
+            : { code: "deferred_close.ineligible", reason };
+      }
+      return undefined;
+    }
+    const changed =
+      bill.revision !== now.bill.revision ||
+      bill.total !== now.bill.total ||
+      bill.invoiceType !== now.bill.invoiceType ||
+      bill.invoiceNumber !== now.bill.invoiceNumber;
+    if (said !== null || changed) {
+      this.deferredClosing = {
+        ...now,
+        bill,
+        busy: false,
+        refusal: said ?? codeMessage("deferred_close.conflict"),
+        reread: false,
+      };
+      return null;
+    }
+    const shown = { ...now, bill, reread: false };
+    this.deferredClosing = shown;
+    return shown;
   }
 
   #renderPresentedPaying(): TemplateResult | typeof nothing {
@@ -18849,6 +19230,7 @@ export class TillApp extends LitElement {
     this.receiptLanguageAsking = null;
     this.#closeAdjust();
     this.#closeBillPaying();
+    this.deferredClosing = null;
     this.#closePresented();
     this.#closeDeparting();
     this.#closeCancelCrediting();
@@ -21646,8 +22028,9 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.#renderCancelItem()} ${this.#renderFinishTable()} ${this.#renderAdjusting()}
-        ${this.#renderBillPaying()} ${this.#renderPresentedPaying()} ${this.#renderDeparting()}
-        ${this.#renderTenderRefund()} ${this.#renderCancelCrediting()}
+        ${this.#renderBillPaying()} ${this.#renderDeferredClosing()}
+        ${this.#renderPresentedPaying()} ${this.#renderDeparting()} ${this.#renderTenderRefund()}
+        ${this.#renderCancelCrediting()}
         ${
           this.settlementDocument === null
             ? nothing

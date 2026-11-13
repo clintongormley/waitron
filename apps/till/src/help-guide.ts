@@ -9,6 +9,7 @@ export const GUIDE_LINKS = {
   "kitchen-service.after-period": { page: "kitchen-service", section: "after-period" },
   "table-service.ready-bar": { page: "table-service", section: "ready-bar" },
   "table-service.service-steps": { page: "table-service", section: "service-steps" },
+  "table-service.deferred-payment": { page: "table-service", section: "deferred-payment" },
 } as const;
 
 export type GuideLink = keyof typeof GUIDE_LINKS;

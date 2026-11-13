@@ -310,8 +310,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta cuenta no se puede cerrar como pago aplazado: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
   },
   "deferred_close.conflict": {
-    en: "This bill's total or invoice details have changed since you opened it. Reload the bill, check them and try again",
-    es: "El total o los datos de factura de esta cuenta han cambiado desde que la abriste. Vuelve a cargarla, revísalos e inténtalo de nuevo",
+    en: "This bill's total or invoice changed since you opened this window. Check the new details and confirm again.",
+    es: "El total o la factura de esta cuenta han cambiado desde que abriste esta ventana. Revisa los datos nuevos y vuelve a confirmar.",
   },
   "deferred_close.day_frozen": {
     en: "This business day already has its daily close. Close the bill as a deferred payment once the next business day starts",
@@ -450,8 +450,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esa cuenta ya no está abierta. Elige otra cuenta y vuelve a enviar el pedido",
   },
   "bill.paid": {
-    en: "This bill is paid",
-    es: "Esta cuenta ya está pagada",
+    en: "This bill is closed",
+    es: "Esta cuenta ya está cerrada",
   },
   "bill.other_party": {
     en: "That bill belongs to other guests",
@@ -822,6 +822,30 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
 // error both mean something failed, retry.
 const GENERIC = CODE_MESSAGES["server.internal"]!;
 
+const DEFERRED_TAKEN = {
+  en: "Someone has already taken a payment on this bill, closed it or cancelled it. The bill on screen now shows what happened.",
+  es: "Alguien ya ha cobrado un pago de esta cuenta, la ha cerrado o la ha anulado. La cuenta en pantalla ya muestra lo que ha pasado.",
+};
+const DEFERRED_CORRECTED = {
+  en: "This bill's invoice has been corrected or replaced, so it can't be closed as a deferred payment. Take payment with Pay instead.",
+  es: "La factura de esta cuenta se ha rectificado o sustituido, así que no se puede cerrar como pago aplazado. Cobra la cuenta con Cobrar.",
+};
+
+/** `deferred_close.ineligible`'s words by the server's `reason` (apps/server/src/deferred-close.ts);
+ * `other_node` keeps the code's general sentence. */
+const DEFERRED_INELIGIBLE: Record<string, { en: string; es: string }> = {
+  prior_payment: DEFERRED_TAKEN,
+  prior_tender: DEFERRED_TAKEN,
+  final_without_deferral: DEFERRED_TAKEN,
+  void: DEFERRED_TAKEN,
+  correction: DEFERRED_CORRECTED,
+  substitution: DEFERRED_CORRECTED,
+  non_positive: {
+    en: "This bill owes nothing now, so there is nothing to close.",
+    es: "Esta cuenta ya no debe nada, así que no hay nada que cerrar.",
+  },
+};
+
 /** Always a readable sentence, never the raw code. `locale` may be a full BCP-47 tag ("es-ES"). */
 export function codeMessage(
   code: string,
@@ -829,6 +853,11 @@ export function codeMessage(
   params?: { reason?: unknown },
 ): string {
   if (code === "venue.time_zone_not_ready") return zoneAdmissionMessage(params?.reason, locale);
+  if (code === "deferred_close.ineligible") {
+    const reason = typeof params?.reason === "string" ? params.reason : "";
+    if (Object.hasOwn(DEFERRED_INELIGIBLE, reason))
+      return pickLocale(DEFERRED_INELIGIBLE[reason]!, locale);
+  }
   // Own-key check, not `?? GENERIC`: a code such as `constructor` would resolve an inherited
   // Object.prototype member under a bare lookup.
   const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code]! : GENERIC;

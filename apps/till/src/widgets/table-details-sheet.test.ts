@@ -322,6 +322,18 @@ describe("till-table-details-sheet", () => {
     expect(find(el, "[data-kitchen]")).toBeNull();
   });
 
+  it("says Deferred payment when the party owes nothing and a bill was closed that way", async () => {
+    const el = await mount({
+      table: table({
+        ...seated,
+        hasOpenTab: false,
+        hasDeferredBill: true,
+        party: party({ outstanding: "0.00" }),
+      }),
+    });
+    expect(text(el, "[data-paid]")).toBe("Deferred payment");
+  });
+
   it("says Time to fire when the held group is due, and not before", async () => {
     const due = Date.parse("2026-10-10T12:00:00Z");
     const held = table({

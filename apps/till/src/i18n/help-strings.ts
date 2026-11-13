@@ -8,6 +8,8 @@ export const helpEn = {
   "help.guide_link": "Read more in the guide",
   "help.guide_title": "Guide",
   "help.guide_close": "Close",
+  "help.deferred_close":
+    "For a customer who pays the whole bill later, outside Waitron. Confirming closes the bill for good with its invoice, and records no payment. Your accountant gets these bills from Export deferred payments (CSV) on the dashboard's Sales & takings page.",
   "help.payment":
     "Choose an amount, an equal share, items, or the whole amount left. Split equally asks how many people are still to pay. After a part payment, go on to the next guest.",
   "help.counter.park":
@@ -71,6 +73,8 @@ export const helpEs: Record<HelpKey, string> = {
   "help.guide_link": "Más información en la guía",
   "help.guide_title": "Guía",
   "help.guide_close": "Cerrar",
+  "help.deferred_close":
+    "Para un cliente que paga toda la cuenta más tarde, fuera de Waitron. Al confirmar, la cuenta se cierra definitivamente con su factura y no se registra ningún pago. Tu gestor obtiene estas cuentas con Exportar pagos aplazados (CSV), en la página Ventas y recaudación del panel.",
   "help.payment":
     "Elige una cantidad, una parte igual, artículos o todo lo que queda. Dividir a partes iguales pregunta cuántas personas quedan por pagar. Tras un pago parcial, sigue con el siguiente comensal.",
   "help.counter.park":

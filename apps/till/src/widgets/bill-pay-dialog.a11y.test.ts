@@ -241,6 +241,15 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations offering Close as deferred payment, and with it switched off", async () => {
+    const { el, host } = await mount({ way: "whole", deferredOffered: { state: "offered" } });
+    await expectNoA11yViolations(host);
+    el.deferredOffered = { state: "off", reason: "deferred_close.unserved" };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-pay-deferred-reason]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations on a device that does not take cash", async () => {
     const { host } = await mount({ way: "contribution", takesCash: false });
     await expectNoA11yViolations(host);

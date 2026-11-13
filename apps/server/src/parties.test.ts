@@ -13,6 +13,7 @@ import {
   diningTables,
   sales,
   serviceCommands,
+  sessions,
   parties,
   partyTables,
   saleSettlements,
@@ -21,7 +22,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
+import { MONEY_SCALE, decimal, deviceId, sumDecimals, toScale } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
@@ -62,6 +63,7 @@ import {
   tendersOfBill,
 } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { deferredCloseVenue } from "./testing/deferred-close-fixture.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { splitBill, mergeBills } from "./testing/bill-action-fixture.js";
@@ -1832,5 +1834,66 @@ describe("A803 bill order:", () => {
       [late.tabId, late.partyId, 1],
       [early.tabId, late.partyId, 2],
     ]);
+  });
+});
+
+describe("a bill closed as a deferred payment", () => {
+  /** One party whose bill was closed as a deferred payment, and one whose bill was paid in cash. */
+  async function deferredAndPaid() {
+    const kit = await deferredCloseVenue(suite.db);
+    const venue = kit.venue;
+    const deferred = await seatedWith(venue, "House salad");
+    await kit.close(
+      await kit.requestFor(deferred.tabId, "12.00", deferred.partyId, { partyFinish: null }),
+    );
+    const paid = await seatedWith(venue, "House salad");
+    const [session] = await venue.db
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.deviceId, venue.deviceId), isNull(sessions.endedAt)));
+    await takeBillPayment(
+      {
+        admission: testTradingAdmission(),
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+      },
+      { ...venue.cfg, origin: { ...venue.cfg.origin, deviceId: deviceId(venue.deviceId) } },
+      paid.tabId,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "12.00",
+        method: "cash",
+        tendered: "12.00",
+        addedTip: "0.00",
+        applied: "12.00",
+        tip: "0.00",
+      },
+      { personId: venue.operatorId, sessionId: session!.id },
+    );
+    return { venue, deferred, paid };
+  }
+
+  it("marks the bill in the party's bills, and a bill paid in cash reads as before", async () => {
+    const { venue, deferred, paid } = await deferredAndPaid();
+
+    const [deferredBill] = await inTx(venue, (tx) => readPartyBills(tx, deferred.partyId));
+    const [paidBill] = await inTx(venue, (tx) => readPartyBills(tx, paid.partyId));
+
+    expect(deferredBill).toMatchObject({ status: "settled", deferred: true });
+    expect(paidBill!.status).toBe("settled");
+    expect(paidBill).not.toHaveProperty("deferred");
+  });
+
+  it("marks the party on the floor, and a party whose bill was paid in cash reads as before", async () => {
+    const { venue, deferred, paid } = await deferredAndPaid();
+
+    const deferredRow = await floorRow(venue, deferred.tableId);
+    const paidRow = await floorRow(venue, paid.tableId);
+
+    expect(deferredRow).toMatchObject({ hasOpenTab: false, hasDeferredBill: true });
+    expect(paidRow.hasOpenTab).toBe(false);
+    expect(paidRow).not.toHaveProperty("hasDeferredBill");
   });
 });

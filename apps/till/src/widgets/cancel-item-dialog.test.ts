@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { CancellationRead } from "../api/line-cancel-types.js";
+import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./cancel-item-dialog.js";
@@ -162,6 +163,14 @@ it.each(["not_started", "started"] as const)(
     expect(Object.keys(calls[0] as object)).not.toContain("amount");
   },
 );
+it.each([
+  ["en", "This bill is closed"],
+  ["es", es["cancel_item.paid"]],
+] as const)("says in %s that a paid dish's bill is closed", async (locale, words) => {
+  setLocale(locale);
+  const el = await mount({ consent: read("settled") });
+  expect(root(el).querySelector("[data-stage]")?.textContent?.trim()).toBe(words);
+});
 it("requires paid keep-payment consent even when refund is unavailable", async () => {
   const el = await mount({ consent: read("settled") });
   expect(button(el).disabled).toBe(true);

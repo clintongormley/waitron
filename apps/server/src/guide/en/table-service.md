@@ -189,7 +189,7 @@ When a table has paid for a dish that is not coming, cancel it so the kitchen st
 the guest can have the money back. Among the table's sent dishes, choose **Void…** from the dish's **More** menu.
 On a paid bill, it is offered only for what has not been served yet.
 
-The **Cancel item** window says **This bill is paid**. Choose **How many**, up to the number not
+The **Cancel item** window says **This bill is closed**. Choose **How many**, up to the number not
 yet served. If the dish has gone to the kitchen but nobody has marked it started, answer **Has
 preparation started?**. Then choose a **Reason**.
 
@@ -386,8 +386,8 @@ At the counter, use **Parked orders** to retrieve or discard a table's bill. Dis
 bill leaves a seated table with a fresh empty bill. To free the table, use **Finish table**.
 
 Tap the switcher to list the table's bills in number order. Each row shows the bill's number and
-name, what it still owes or **Paid ✓**, and a line such as **Ana has an unsent order: 3 items** for
-each person with dishes on that bill not yet sent. When another bill holds dishes you have not
+name, what it still owes or **Paid ✓** (**Deferred payment** for a bill closed as a deferred
+payment), and a line such as **Ana has an unsent order: 3 items** for each person with dishes on that bill not yet sent. When another bill holds dishes you have not
 sent, the switcher says so, such as **✎ Bill 2 unsent**, and the list marks that bill **✎ Unsent**.
 Choose a row to put that bill on screen. A paid
 bill opens too, so you can name it or, when it has a receipt, print a copy, but it takes no new
@@ -494,7 +494,7 @@ cannot be changed, moved or charged again. Refund its payment first**, and nothi
 move would leave the bill owing less than has been paid, the till says how much and offers a
 **Refund** button for that amount. If the move is refused because a card payment or refund is
 still going through on the bill you chose, or because that bill was presented or paid in the
-meantime, the till names that bill before the reason, such as **Bill 2: This bill is paid**. If
+meantime, the till names that bill before the reason, such as **Bill 2: This bill is closed**. If
 someone else has unsent dishes on either bill, take over their order first. Open **Move dishes…**
 again to choose afresh.
 
@@ -649,3 +649,17 @@ remains and take the next guest's payment. On a phone, use **Take the next** to 
 
 A bill already presented for collection offers the whole amount only. Finishing the table is a
 separate action after payment.
+
+## Close a bill as a deferred payment {#deferred-payment}
+
+Use this when the customer will pay the whole bill later, outside Waitron. On an open bill (not yet
+presented), open **Pay**, choose **Whole bill**, then **Close as deferred payment**. Check the bill,
+the invoice and the total, then confirm. Waitron issues the invoice if it has not been issued yet and closes the bill for good. It
+records no payment for the bill, now or later, and the bill shows **Deferred payment** from then on.
+
+The button is there only on a bill with nothing paid yet. Every dish on the bill must be served or
+cancelled first. A manager allows it for a device by switching on **Closes bills as deferred
+payments** in the device's profile, under **Device profiles** on the dashboard.
+
+Your accountant gets the list of these bills from **Export deferred payments (CSV)**, on the
+dashboard's **Sales & takings** page.

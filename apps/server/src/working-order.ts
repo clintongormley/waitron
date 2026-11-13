@@ -137,6 +137,7 @@ import {
   checkAndBumpParty,
   ensureFamilyBill,
   readBillsOfParties,
+  readDeferredBillIds,
   type FamilyBill,
   runServiceCommand,
   tableHeld,
@@ -186,7 +187,6 @@ import {
   parties,
   ticketItemMoves,
   partyTableLabels,
-  deferredClosures,
   withTransaction,
   workingLinePortions,
   workingOrderLines,
@@ -7698,16 +7698,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
               ),
             )
             .orderBy(workingOrderLines.lineNo);
-    const deferredIds = new Set(
-      settledIds.length === 0
-        ? []
-        : (
-            await tx
-              .select({ id: deferredClosures.workingOrderId })
-              .from(deferredClosures)
-              .where(inArray(deferredClosures.workingOrderId, settledIds))
-          ).map((row) => row.id),
-    );
+    const deferredIds = await readDeferredBillIds(tx, settledIds);
     const former = await readFormerNumbers(
       tx,
       rows.map((row) => row.id),
@@ -8910,6 +8901,8 @@ export interface TableState {
   nextReservation: { time: string } | null;
   party: TableParty | null;
   hasAllergy?: true;
+  /** One of the party's bills was closed as a deferred payment. */
+  hasDeferredBill?: true;
   /** What wants attention at the table: its party's signals, then its own clearing. */
   signals: TableSignal[];
 }
@@ -9082,6 +9075,9 @@ export async function listTablesWithState(
       party: party ?? null,
       ...(party !== undefined && allergicParties.has(party.id)
         ? { hasAllergy: true as const }
+        : {}),
+      ...(party !== undefined && facts.get(party.id)!.bills.some((bill) => bill.deferred)
+        ? { hasDeferredBill: true as const }
         : {}),
       signals: tableSignals(
         party === undefined ? undefined : partySignals.get(party.id),

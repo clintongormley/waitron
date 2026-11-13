@@ -61,6 +61,7 @@ import {
   typedMoney,
 } from "../state/bill-payment.js";
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
+import type { DeferredOffer } from "../state/deferred-close.js";
 import {
   heldForEquipment,
   payRowWantsOpen,
@@ -232,6 +233,20 @@ export class TillBillPayDialog extends LitElement {
       .balance dd {
         margin: 0;
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      .deferred {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin: 0 0 var(--wt-space-3);
+      }
+
+      .deferred p {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
 
       .scope,
@@ -526,6 +541,7 @@ export class TillBillPayDialog extends LitElement {
   /** The phone is picking up a reader by itself; the row does not open for the missing reader
    * until that pick has answered. */
   @property({ type: Boolean }) autoPicking = false;
+  @property({ attribute: false }) deferredOffered: DeferredOffer = { state: "hidden" };
 
   @state() private chosenWay: PayWay = "whole";
   @state() private picks = new Map<number, number>();
@@ -1579,7 +1595,7 @@ export class TillBillPayDialog extends LitElement {
         </div>
       </fieldset>
       <p class="scope" data-pay-scope>${this.#scope()}</p>
-      ${this.#wayFields(errors)} ${this.#methodFields(errors)}
+      ${this.#deferred()} ${this.#wayFields(errors)} ${this.#methodFields(errors)}
       ${this.askingSecondCard ? this.#secondCardAsk() : nothing}
       ${this.#methods().length === 0 ? this.#notice() : nothing}`;
     const actions = html`<wt-form-actions slot="footer" .error=${bottom}
@@ -1610,6 +1626,27 @@ export class TillBillPayDialog extends LitElement {
       </wt-button>
     </wt-form-actions>`;
     return { body, actions };
+  }
+
+  #deferred(): TemplateResult | typeof nothing {
+    const offer = this.deferredOffered;
+    if (this.chosenWay !== "whole" || offer.state === "hidden") return nothing;
+    const reason = offer.state === "off" ? t(offer.reason) : null;
+    return html`<div class="deferred">
+      <wt-button
+        variant="secondary"
+        data-pay-deferred
+        aria-description=${reason ?? nothing}
+        .disabled=${this.busy || reason !== null}
+        @click=${() => {
+          if (this.isConnected && this.#active && !this.busy && reason === null)
+            this.#emit("bill-pay-deferred");
+        }}
+      >
+        ${t("deferred_close.title")}
+      </wt-button>
+      ${reason === null ? nothing : html`<p data-pay-deferred-reason>${reason}</p>`}
+    </div>`;
   }
 
   #wayFields(errors: ReadonlyMap<Field, string>): TemplateResult | typeof nothing {

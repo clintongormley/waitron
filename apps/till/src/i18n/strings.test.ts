@@ -72,7 +72,12 @@ describe("the till's Spanish Clear snooze label, and no aplazar for snooze in th
   // "Pago aplazado" is the owner's word for a deferred payment (2026-11-11), not snooze.
   const DEFERRED_PAYMENT_KEYS = new Set<StringKey>([
     "find_page.deferred",
+    "floor.deferred",
+    "table.bill_deferred",
     "waiting.deferred_not_handed_over",
+    "deferred_close.title",
+    "deferred_close.ticket_unread",
+    "deferred_close.already_closed",
   ]);
 
   it("has no Spanish catalogue string that says aplazar, other than a deferred payment", () => {
@@ -81,7 +86,7 @@ describe("the till's Spanish Clear snooze label, and no aplazar for snooze in th
     );
     expect(snoozeTermEntries).toEqual([]);
     for (const key of DEFERRED_PAYMENT_KEYS) {
-      expect(catalogues["es-ES"]?.[key]).toMatch(/^Pago aplazado/);
+      expect(catalogues["es-ES"]?.[key]).toMatch(/pago aplazado/i);
     }
   });
 });
