@@ -799,7 +799,7 @@ export async function submitDraft(
             .filter((line) => selected.has(line.id))
             .map((line) => ({
               ...line,
-              noMerge: offers.get(line.menuItemId)?.setLunch === true || assigned.has(line.id),
+              noMerge: assigned.has(line.id),
               measured: soldMeasured(offers.get(line.menuItemId)),
               slot: 0,
               joinGroupId: null,

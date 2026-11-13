@@ -9,9 +9,9 @@ contribution, and confirms. This ends the practice attempt without recording a c
 ## Take a set-lunch order {#set-lunch}
 
 Add one lunch for each diner and choose the dishes they want now. **Choose later** marks a
-course they have not picked yet. Each lunch stays separate so you can return to the right diner.
+course they have not picked yet. Each lunch stays separate so you can return to it later.
 
-To hold chosen courses, send the order as held. Beside that lunch, use **Send to prep** for the
+To hold chosen courses, send the order as held. In that lunch’s panel, use **Send to prep** for the
 course you want to send now. Open **Lunch choices** when the diner chooses another course, save
 it, then send that course. You can change a choice until it is sent; dishes already sent stay put.
 

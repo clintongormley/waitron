@@ -1172,6 +1172,7 @@ export interface VenueServiceContribution {
     tx: Transaction,
     workingOrderId: string,
     lineIds: readonly string[],
+    knownContexts?: Awaited<ReturnType<VenueServiceContribution["listLineContexts"]>>,
   ): Promise<ReadonlyMap<string, { offer: ZoneMenuOffer; versionId: string }>>;
   listLineContexts(
     tx: Transaction,

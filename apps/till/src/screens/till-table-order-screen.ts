@@ -3236,7 +3236,10 @@ export class TillTableOrderScreen extends LitElement {
     return html`${this.lines
       .filter((line) => line.lunchOffer !== undefined)
       .map((line) => {
-        const children = this.#linesIndex().children.get(line.lineNo) ?? [];
+        const children = (this.#linesIndex().children.get(line.lineNo) ?? []).filter(
+          (child) =>
+            compareDecimal(decimal(child.quantity), decimal(child.cancelledQuantity ?? "0")) > 0,
+        );
         const unsentByCourse = new Map<string | null, TabLine[]>();
         for (const child of children) {
           if (
@@ -3316,7 +3319,25 @@ export class TillTableOrderScreen extends LitElement {
                   data-lunch-send=${courseId ?? ""}
                   variant="primary"
                   ?disabled=${this.busy || this.groupCommandBusy}
-                  @click=${() => this.#dispatch("send-lines", { lineNos: choices.map((choice) => choice.lineNo), expectedEdit: this.billEdit })}
+                  @click=${() => {
+                    if (
+                      choices.every(
+                        (choice) =>
+                          choice.groupId !== null && heldGroupIds(this.groups).has(choice.groupId),
+                      )
+                    )
+                      this.#dispatch("fire-held-line", {
+                        lineId: choices[0]!.id,
+                        ...(choices.length > 1
+                          ? { lineIds: choices.map((choice) => choice.id) }
+                          : {}),
+                      });
+                    else
+                      this.#dispatch("send-lines", {
+                        lineNos: choices.map((choice) => choice.lineNo),
+                        expectedEdit: this.billEdit,
+                      });
+                  }}
                   >${t("action.send_to_prep")} ·
                   ${this.#courseName(courseId, choices[0]!.course)}</wt-button
                 >`,
@@ -3340,7 +3361,7 @@ export class TillTableOrderScreen extends LitElement {
         .quantity=${pending.line.quantity}
         .initialSelections=${pending.selection}
         .draftParent=${this}
-        .lockedExtras=${(this.#linesIndex().children.get(pending.line.lineNo) ?? []).filter((line) => line.sentAt !== null).map((line) => ({ listId: line.listId!, productId: line.productId! }))}
+        .lockedExtras=${(this.#linesIndex().children.get(pending.line.lineNo) ?? []).filter((line) => line.sentAt !== null && compareDecimal(decimal(line.quantity), decimal(line.cancelledQuantity ?? "0")) > 0).map((line) => ({ listId: line.listId!, productId: line.productId! }))}
         .disabled=${this.busy || this.lunchSaving}
         .refusal=${this.lunchRefusal}
         @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {

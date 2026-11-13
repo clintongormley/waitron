@@ -820,6 +820,7 @@ it.each([false, true])(
       });
       const course = await createCourse(tx, { name: "Lunch main" });
       await setProductCourse(tx, venue.products.chips, course.id);
+      await setProductCourse(tx, venue.products.onionRings, course.id);
       const main = await createExtraList(
         tx,
         {
@@ -831,6 +832,12 @@ it.each([false, true])(
           active: true,
           items: [
             { productId: venue.products.chips, maxQuantity: 1, preselected: false, price: "3.00" },
+            {
+              productId: venue.products.onionRings,
+              maxQuantity: 1,
+              preselected: false,
+              price: "0.00",
+            },
           ],
         },
         venue.cfg.locale,
@@ -906,11 +913,39 @@ it.each([false, true])(
         zone: { zoneId: venue.tables.zoneId },
         orderStart: "table",
       });
-      const shown = (await readTabLines(tx, id)).find((row) => row.id === before.id)!;
+      const session = (
+        tx as unknown as {
+          session: {
+            prepareQuery(query: { sql: string; params: unknown[] }, ...args: unknown[]): unknown;
+          };
+        }
+      ).session;
+      const queries = vi.spyOn(session, "prepareQuery");
+      let shown: Awaited<ReturnType<typeof readTabLines>>[number];
+      try {
+        shown = (await readTabLines(tx, id)).find((row) => row.id === before.id)!;
+        expect(
+          queries.mock.calls.filter(
+            ([query]) =>
+              query.sql.includes('from "working_line_contexts"') &&
+              query.sql.includes('"menu_item_id"'),
+          ),
+        ).toHaveLength(1);
+        expect(
+          queries.mock.calls
+            .filter(([query]) => query.sql.includes('from "products"'))
+            .flatMap(([query]) => query.params),
+        ).not.toContain(venue.products.cheese);
+      } finally {
+        queries.mockRestore();
+      }
       expect(shown.lunchOffer?.setLunch).toBe(true);
       expect(shown.lunchOffer?.offeredModifiers.find((list) => list.id === main.id)).toMatchObject({
         minPicks: 1,
-        items: [expect.objectContaining({ price: "3.00" })],
+        items: [
+          expect.objectContaining({ productId: venue.products.chips, price: "3.00" }),
+          expect.objectContaining({ productId: venue.products.onionRings, price: "0.00" }),
+        ],
       });
       await edit(tx, venue, before.lineNo, {
         portionLineNos: [],
@@ -963,6 +998,35 @@ it.each([false, true])(
       expect(completed.find((row) => row.id === child.id)?.lineTotal).toBe(300);
       expect(completed.map((row) => row.lineTotal).sort((a, b) => a - b)).toEqual([0, 300, 1800]);
       expect((await state(tx, id)).items).toEqual(initialItems);
+      await cancelLine(
+        tx,
+        venue.cfg,
+        id,
+        completed.find((row) => row.id === child.id)!.lineNo,
+        undefined,
+        OPERATOR,
+      );
+      const currentParent = (await readTabLines(tx, id)).find((row) => row.id === parent.id);
+      expect(currentParent).toBeDefined();
+      await edit(tx, venue, currentParent!.lineNo, {
+        portionLineNos: [],
+        extras: [
+          { listId: main.id, picks: [{ productId: venue.products.onionRings, quantity: 1 }] },
+          { listId: coffee.id, picks: [{ productId: venue.products.water, quantity: 1 }] },
+        ],
+      });
+      const after = await readTabLines(tx, id);
+      expect(
+        after
+          .filter((row) => Number(row.quantity) > Number(row.cancelledQuantity ?? "0"))
+          .map((row) => row.productId)
+          .sort(),
+      ).toEqual([venue.products.burger, venue.products.onionRings, venue.products.water].sort());
+      expect(after.find((row) => row.id === parent.id)?.unitPriceGross).toBe("18.00");
+      expect(after.find((row) => row.productId === venue.products.onionRings)).toMatchObject({
+        quantity: "1.000",
+        sentAt: null,
+      });
     });
   },
 );

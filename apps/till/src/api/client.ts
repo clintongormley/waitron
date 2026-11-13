@@ -4434,7 +4434,7 @@ export class TillApi {
   /**
    * Fire SPECIFIC held lines of an open tab → `POST /api/working-orders/:orderId/lines/send`.
    * NON-FISCAL; idempotent — an unknown or already-fired line matches nothing. Rejects `tab.not_open`,
-   * and `group.line_held` for an ordinary dish in a held group. Named lunch choices release independently.
+   * and `group.line_held` for a named line in a held group, which only firing its group releases.
    */
   async sendLines(
     orderId: string,

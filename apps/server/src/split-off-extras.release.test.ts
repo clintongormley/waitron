@@ -18,7 +18,8 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { bumpCourseReady, markServed } from "./working-order.js";
-import { fireGroup, readCurrentOrders } from "./order-groups.js";
+import { partyRevision } from "./parties.js";
+import { fireGroup, fireHeldLine, readCurrentOrders, readHeldCounts } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
@@ -451,7 +452,15 @@ it("sends one lunch course from a held group without releasing the other course"
     const before = await rows(tx, venue.party.tabId);
     const chips = before.lines.find((line) => line.productId === venue.products.chips)!;
     const rings = before.lines.find((line) => line.productId === venue.products.onionRings)!;
-    await sendLines(tx, venue.cfg, venue.party.tabId, [chips.lineNo]);
+    const beforeCount = await readHeldCounts(tx, [venue.party.partyId]);
+    await fireHeldLine(tx, venue.cfg, venue.party.partyId, chips.id, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+      operatorId: OPERATOR,
+    });
+    expect((await readHeldCounts(tx, [venue.party.partyId])).get(venue.party.partyId)).toBe(
+      beforeCount.get(venue.party.partyId)! - 1,
+    );
     const sent = await rows(tx, venue.party.tabId);
     expect(sent.items.find((item) => item.lineId === chips.id)?.firedAt).toEqual(
       expect.any(String),

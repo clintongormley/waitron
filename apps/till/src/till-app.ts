@@ -13625,20 +13625,27 @@ export class TillApp extends LitElement {
   }
 
   async #onFireHeldLine(event: Event): Promise<void> {
-    const { lineId } = (event as CustomEvent<{ lineId: string }>).detail;
-    await this.#onGroupCommand(async (party) => {
-      const allergy = await this.#prepareTableAllergy(
-        party.id,
-        { kind: "held-line", lineId },
-        () => true,
-      );
-      if (allergy === null) return;
-      const written = await this.#writeTableAllergy(allergy, (command, signal) =>
-        allergy.api.fireHeldLine(party.id, lineId, command, { signal }),
-      );
-      if (written === null || !allergy.current()) return;
-      this.#notePartyRevision(party.id, written.value.revision);
-    });
+    const { lineId: firstLineId, lineIds } = (
+      event as CustomEvent<{ lineId: string; lineIds?: string[] }>
+    ).detail;
+    for (const lineId of lineIds ?? [firstLineId]) {
+      let sent = false;
+      await this.#onGroupCommand(async (party) => {
+        const allergy = await this.#prepareTableAllergy(
+          party.id,
+          { kind: "held-line", lineId },
+          () => true,
+        );
+        if (allergy === null) return;
+        const written = await this.#writeTableAllergy(allergy, (command, signal) =>
+          allergy.api.fireHeldLine(party.id, lineId, command, { signal }),
+        );
+        if (written === null || !allergy.current()) return;
+        this.#notePartyRevision(party.id, written.value.revision);
+        sent = true;
+      });
+      if (!sent) break;
+    }
   }
 
   async #onReorderGroups(event: Event): Promise<void> {

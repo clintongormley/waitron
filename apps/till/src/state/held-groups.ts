@@ -5,7 +5,7 @@ export function heldGroupIds(groups: readonly Pick<OrderGroup, "id" | "state">[]
   return new Set(groups.filter((group) => group.state === "held").map((group) => group.id));
 }
 
-/** Whether the line belongs to a held group, regardless of any individual lunch-course release. */
+/** Its group releases it: the server refuses a held-group line's own Send (`group.line_held`). */
 export function inHeldGroup(line: Pick<TabLine, "groupId">, heldIds: ReadonlySet<string>): boolean {
   return line.groupId !== null && heldIds.has(line.groupId);
 }

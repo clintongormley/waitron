@@ -1366,6 +1366,10 @@ it("opens each lunch from its recorded choices while a main cooks, then saves on
   await screen.updateComplete;
   await picker.updateComplete;
   expect(picker.shadowRoot!.textContent).toContain("The server is offline");
+  const refusal = picker.shadowRoot!.querySelector<HTMLElement>(".request-refusal")!;
+  expect(refusal.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.getBoundingClientRect().top,
+  );
   expect(picker.shadowRoot!.querySelector<HTMLInputElement>("#pick-coffee-coffee")!.checked).toBe(
     true,
   );
@@ -1430,13 +1434,71 @@ it("sends only the chosen lunch course and leaves an open choice payable", async
   });
   await resized(el);
   const sends: unknown[] = [];
-  el.addEventListener("send-lines", (event) => sends.push((event as CustomEvent).detail));
+  el.addEventListener("fire-held-line", (event) => sends.push((event as CustomEvent).detail));
   const sendMain = el.shadowRoot!.querySelector<HTMLElement>('[data-lunch-send="mains"]');
   expect(sendMain).not.toBeNull();
   await userEvent.click(sendMain!);
-  expect(sends).toEqual([{ lineNos: [2], expectedEdit: billEdit }]);
+  expect(sends).toEqual([{ lineId: "main" }]);
   const payments: unknown[] = [];
   el.addEventListener("bill-pay", (event) => payments.push((event as CustomEvent).detail));
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!);
   expect(payments).toHaveLength(1);
+});
+
+it("reopens a cancelled lunch course for a replacement without keeping the cancelled pick", async () => {
+  const offer = {
+    ...lunchOffer,
+    offeredModifiers: lunchOffer.offeredModifiers.map((list) =>
+      list.kind === "extras" && list.id === "main"
+        ? { ...list, items: [...list.items, { ...list.items[0]!, productId: "cod", name: "Cod" }] }
+        : list,
+    ),
+  };
+  const { el } = await mount({
+    lines: [
+      line({
+        id: "lunch",
+        name: "House lunch",
+        lunchOffer: offer,
+        quantity: "1",
+        unitPriceGross: "18.00",
+        state: null,
+        stationId: null,
+        parentLineNo: null,
+      }),
+      line({
+        id: "hake",
+        name: "Hake",
+        quantity: "1",
+        cancelledQuantity: "1",
+        lineNo: 2,
+        parentLineNo: 1,
+        listId: "main",
+        productId: "hake",
+        sentAt: sent,
+        firedAt: sent,
+      }),
+    ],
+    currentOrders: current(),
+    billEdit,
+  });
+  await resized(el);
+  const lunch = el.shadowRoot!.querySelector("[data-lunch]")!;
+  expect(lunch.textContent).toContain(`Main: ${t("lunch.choose_later")}`);
+  const changes: ChangeLineDetail[] = [];
+  el.addEventListener("change-line", (event) =>
+    changes.push((event as CustomEvent<ChangeLineDetail>).detail),
+  );
+  await userEvent.click(lunch.querySelector<HTMLElement>("[data-lunch-choices]")!);
+  await el.updateComplete;
+  const picker = el.shadowRoot!.querySelector<TillModifierPicker>("[data-lunch-picker]")!;
+  await picker.updateComplete;
+  const cod = picker.shadowRoot!.querySelector<HTMLInputElement>("#pick-main-cod")!;
+  expect(cod.disabled).toBe(false);
+  await userEvent.click(cod);
+  await picker.updateComplete;
+  await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+  expect(changes[0]!.patch.extras).toEqual([
+    { listId: "main", picks: [{ productId: "cod", quantity: 1 }] },
+  ]);
 });

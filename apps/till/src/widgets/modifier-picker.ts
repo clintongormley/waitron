@@ -129,9 +129,16 @@ export class TillModifierPicker extends LitElement {
       .min-quantity-action {
         margin-block: calc(-1 * var(--wt-space-2)) var(--wt-space-3);
       }
+      .picker-actions {
+        width: 100%;
+      }
+      .picker-action-row {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+      }
       .request-refusal {
-        flex-basis: 100%;
-        margin: 0;
+        margin: 0 0 var(--wt-space-2);
         color: var(--wt-color-danger);
       }
       .group {
@@ -1006,29 +1013,31 @@ export class TillModifierPicker extends LitElement {
       @wt-close=${(event: Event) => this.#closed(event)}
     >
       ${fields}
-      ${this.refusal === nothing ? nothing : html`<p slot="footer" role="alert" class="request-refusal">${this.refusal}</p>`}
-      ${!this.readOnly && this.attempted && this.lineDetails && this.#quantityInvalid() ? html`<p slot="footer" role="alert">${t("form.fix_fields")}</p>` : nothing}
-      <wt-button
-        slot="footer"
-        class="cancel"
-        variant="secondary"
-        @click=${(event: Event) => this.#cancel(event)}
-      >
-        ${t(this.lineDetails ? "table.submitted_close" : "action.cancel")}
-      </wt-button>
-      ${
-        this.readOnly
-          ? nothing
-          : html`<wt-button
-              slot="footer"
-              class="confirm"
-              variant=${this.initialSelections === undefined && !satisfied ? "secondary" : saveAction.variant}
-              ?disabled=${this.disabled || saveAction.unchanged || !satisfied || (this.attempted && this.lineDetails && this.#quantityInvalid())}
-              @click=${(e: Event) => this.#confirm(e)}
-            >
-              ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
-            </wt-button>`
-      }
+      <div slot="footer" class="picker-actions">
+        ${this.refusal === nothing ? nothing : html`<p role="alert" class="request-refusal">${this.refusal}</p>`}
+        ${!this.readOnly && this.attempted && this.lineDetails && this.#quantityInvalid() ? html`<p slot="footer" role="alert">${t("form.fix_fields")}</p>` : nothing}
+        <div class="picker-action-row">
+          <wt-button
+            class="cancel"
+            variant="secondary"
+            @click=${(event: Event) => this.#cancel(event)}
+          >
+            ${t(this.lineDetails ? "table.submitted_close" : "action.cancel")}
+          </wt-button>
+          ${
+            this.readOnly
+              ? nothing
+              : html`<wt-button
+                  class="confirm"
+                  variant=${this.initialSelections === undefined && !satisfied ? "secondary" : saveAction.variant}
+                  ?disabled=${this.disabled || saveAction.unchanged || !satisfied || (this.attempted && this.lineDetails && this.#quantityInvalid())}
+                  @click=${(e: Event) => this.#confirm(e)}
+                >
+                  ${t(this.initialSelections === undefined ? "action.add" : "modifier.save")}
+                </wt-button>`
+          }
+        </div>
+      </div>
     </wt-modal>`;
     return keyed(this.#connection, modal);
   }
