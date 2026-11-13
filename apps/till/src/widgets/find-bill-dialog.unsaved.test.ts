@@ -13,7 +13,7 @@ const debt: BillLookupRow = {
   orderNumber: 12,
   label: "Birthday",
   partyName: "Familia Ruiz",
-  tables: ["Mesa 4"],
+  tables: ["Table 4"],
   invoiceNumber: "A/12",
   openedAt: "2026-10-01T18:00:00.000Z",
   departedAt: null,

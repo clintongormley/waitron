@@ -770,7 +770,7 @@ describe("a pay refused because the menu changed", () => {
     });
     await toCounter(el);
     add(el, "Lemonade");
-    emit(counter(el), "park-order", { label: "Mesa 4" });
+    emit(counter(el), "park-order", { label: "Table 4" });
     await flush(el);
 
     expect(api.parkOrder.mock.calls.map((call) => call[0].lines)).toEqual([
@@ -1086,7 +1086,7 @@ function tableStubs(
     listZones: vi.fn().mockResolvedValue([
       {
         id: "zone-dining",
-        name: "Comedor",
+        name: "Dining room",
         displayOrder: 0,
         active: true,
         serviceMode: "table_tab",

@@ -1375,20 +1375,6 @@ full name — and never its short name (`tableLabel`, from `orderTableLabels` in
 `packages/db/src/party-table-labels.ts`). Ask the owner first.
 
 
-## A1102. The till's tests name tables in Spanish.
-
-`apps/till/src/till-app.test.ts`'s counter
-move cases use "Mesa 9" and "Mesa 7", and many other till test files use "Mesa …" labels
-(`git grep -l '"Mesa ' -- 'apps/till/src/*.test.ts'`), against the English-only rule (CLAUDE.md
-§3). This is the till's share of the Spanish test data the
-[English-only audit](english-only-audit.md) counts in its `apps/till` row; A976 covers
-the server's test venues, and `scripts/english-only-still-to-clean.ts`, the list of files still to
-clean, is where this joins. A797
-slice 1's till test fixtures copy labels into `shortName` (`apps/till/src/api/client.test.ts`'s
-"Mesa 1" and "Mesa 2" among them), so renaming a label means renaming its short name too. Low
-priority.
-
-
 ## A1103. At 390 px the floor plan editor leaves a refused Name field half under the panel's heading.
 
 Seen, 2026-10-25 (the A797 slice 1 look, `r-refusal-390-light-en.png` in
@@ -3709,6 +3695,12 @@ Receipt: Lane D `receipts/a432/task5-ci-till-coverage-green.log`, PR #1463. Caus
 `Cannot read properties of null (reading 'approvedProfiles')` through `#holdIdentity`,
 `#readIdentity` and `#enterSwitchedProfile`. The cause remains unverified. Receipt: Lane K
 `receipts/a1002-cut1-20261108/till-focused.log`; the same reproduction question above remains open.
+
+2026-11-13 occurrence: A1102's review ran `pnpm --filter @waitron/till exec vitest run
+src/till-app.test.ts --maxWorkers=1` alone on main at `b8c0b7513b`; every case passed while Chromium
+logged the same rejection through `#holdIdentity`, `#readIdentity`, `#enterSwitchedProfile`,
+`#switchProfile` and `#onProfileSwitch`, so a case in `apps/till/src/till-app.test.ts` reaches it.
+The cause remains unverified. Receipt: the A1102 pull request thread.
 
 ## Loose ends left by A718
 

@@ -263,10 +263,13 @@ describe("till-today-name-dialog", () => {
 
   it("speaks Spanish", async () => {
     setLocale("es-ES");
-    const el = await mountDialog({ heading: "Cambiar el nombre de Mesa 4", normalName: "Mesa 4" });
+    const el = await mountDialog({
+      heading: "Cambiar el nombre de Table 4",
+      normalName: "Table 4",
+    });
 
     expect(field(el).label).toBe("Nombre");
-    expect(field(el).placeholder).toBe("Mesa 4");
+    expect(field(el).placeholder).toBe("Table 4");
     expect(field(el).hint).toBe("");
     expect(save(el).textContent!.trim()).toBe("Guardar");
     expect(cancelButton(el).textContent!.trim()).toBe("Cancelar");

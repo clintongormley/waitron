@@ -10,7 +10,7 @@ beforeEach(() => setLocale("en"));
 
 async function mount(props: Partial<TillPartyNameDialog>): Promise<TillPartyNameDialog> {
   const { el } = await mountWidget<TillPartyNameDialog>("till-party-name-dialog", {
-    tables: "Mesa 4, 5",
+    tables: "Table 4, 5",
     ...props,
   });
   return el;

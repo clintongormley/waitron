@@ -1056,11 +1056,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   HTTP probe. Validate the missing fields and assert the domain refusal.
   [Detail](backlog/till.md#malformed-sale-and-cancellation-bodies)
 
-- **A1102. The till's tests name tables in Spanish.** `apps/till/src/till-app.test.ts`'s counter
-  move cases use "Mesa 9" and "Mesa 7", and many other till test files use "Mesa …" labels (`git
-  grep -l '"Mesa ' -- 'apps/till/src/*.test.ts'`), against the English-only rule (CLAUDE.md §3).
-  [Detail](backlog/till.md#a1102-the-tills-tests-name-tables-in-spanish)
-
 - **A1112. The server, the API and a configuration file still accept a "+" in a short name.** The
   dashboard's floor plan editor refuses a "+" in a short name it would save, unless the table
   already had it stored (`refusesPlus`, `apps/dashboard/src/screens/floor-plan-draft.ts`; A797 slice

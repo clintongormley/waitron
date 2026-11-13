@@ -22,7 +22,7 @@ const groups: StationQueueGroup[] = [
     kitchenNote: null,
     orderId: "wo-1",
     orderNumber: 5,
-    label: "Mesa 4",
+    label: "Table 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "placed", // awaiting the fiscal collect — no handover button
     thresholds: DEFAULT_THRESHOLDS,
@@ -122,7 +122,7 @@ const coursedGroups: StationQueueGroup[] = [
     kitchenNote: null,
     orderId: "wo-c",
     orderNumber: 7,
-    label: "Mesa 2",
+    label: "Table 2",
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "placed",
     thresholds: DEFAULT_THRESHOLDS,
@@ -357,7 +357,7 @@ const baseNotice: KitchenNotice = {
   id: "kn-void",
   stationId: "st-1",
   workingOrderId: "wo-1",
-  orderLabel: "#5 · Mesa 4",
+  orderLabel: "#5 · Table 4",
   kind: "void",
   lineName: "Burger",
   unitName: null,
@@ -431,7 +431,7 @@ const partyGroups: StationQueueGroup[] = [
     kitchenNote: null,
     orderId: "wo-p",
     orderNumber: 9,
-    label: "Mesa 4",
+    label: "Table 4",
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "open",
     thresholds: DEFAULT_THRESHOLDS,
@@ -516,7 +516,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
   });
 
   it("a board with Overview has no violations", async () => {
-    const held = { ...groups[0]!, orderId: "wo-held", orderNumber: 7, label: "Mesa 7" };
+    const held = { ...groups[0]!, orderId: "wo-held", orderNumber: 7, label: "Table 7" };
     const { el, host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       {
@@ -559,7 +559,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
       part: false,
     },
   ] as const)("a board showing $name has no violations", async ({ order, part }) => {
-    const held = { ...groups[0]!, orderId: "wo-held", orderNumber: 7, label: "Mesa 7" };
+    const held = { ...groups[0]!, orderId: "wo-held", orderNumber: 7, label: "Table 7" };
     const { el, host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       {
@@ -589,7 +589,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
 
   it("the board's narrow tabs: Waiting's panel with its Held part has no violations", async () => {
     await page.viewport(390, 844);
-    const held = { ...groups[0]!, orderId: "wo-held", orderNumber: 7, label: "Mesa 7" };
+    const held = { ...groups[0]!, orderId: "wo-held", orderNumber: 7, label: "Table 7" };
     const { el, host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       {

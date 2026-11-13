@@ -579,7 +579,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     mount({
       handheld: true,
       way: undefined,
-      tableName: "Mesa 4",
+      tableName: "Table 4",
       cardReader: "stripe_terminal",
       takesReaderCard: true,
       takesCash: true,
@@ -645,7 +645,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     const mounted = await mount({
       handheld: true,
       way: "share",
-      tableName: "Mesa 4",
+      tableName: "Table 4",
       cardReader: "stripe_terminal",
       takesReaderCard: true,
       takesCash: true,
@@ -859,7 +859,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     mount({
       handheld: true,
       way: "share",
-      tableName: "Mesa 4",
+      tableName: "Table 4",
       cardReader: "stripe_terminal",
       takesReaderCard: true,
       takesCash: true,
@@ -1304,7 +1304,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
   };
   const handheldProps: Partial<TillBillPayDialog> = {
     handheld: true,
-    tableName: "Mesa 4",
+    tableName: "Table 4",
     cardReader: "stripe_terminal",
     takesReaderCard: true,
     takesCash: true,

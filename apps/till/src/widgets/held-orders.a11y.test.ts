@@ -9,7 +9,7 @@ const orders: HeldOrderSummary[] = [
     items: [],
     id: "wo-1",
     orderNumber: 5,
-    label: "Mesa 4",
+    label: "Table 4",
     counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
     total: "3.00",
     outstanding: "3.00",
@@ -120,7 +120,7 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
     ...over,
   });
   const tables: TableState[] = [
-    tableRow("t7", "Mesa 7", {
+    tableRow("t7", "Table 7", {
       state: "open-tab",
       condition: "held",
       party: {
@@ -139,8 +139,8 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
         reminder: null,
       },
     }),
-    tableRow("t6", "Mesa 6", { condition: "needs_clearing" }),
-    tableRow("t9", "Mesa 9"),
+    tableRow("t6", "Table 6", { condition: "needs_clearing" }),
+    tableRow("t9", "Table 9"),
   ];
 
   it("a partly paid order and Move to table have no violations", async () => {

@@ -57,8 +57,8 @@ it("Enter in the hold-label field parks the order under that label", async () =>
   el.addEventListener("park-order", (e) => parked((e as CustomEvent).detail));
   click(el, ".hold");
   await el.updateComplete;
-  const enter = await typeAndPressEnter(el, ".label-input", "Mesa 7");
-  expect(parked).toHaveBeenCalledWith({ label: "Mesa 7" });
+  const enter = await typeAndPressEnter(el, ".label-input", "Table 7");
+  expect(parked).toHaveBeenCalledWith({ label: "Table 7" });
   expect(enter.defaultPrevented).toBe(true);
 });
 

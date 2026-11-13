@@ -4089,7 +4089,7 @@ describe("till-app: moving a bill", () => {
   });
 
   const movedFloor = () => [seated({}, { revision: 4 }), table7, table9];
-  /** Mesa 4's row, the table the order was opened from, in the order screen's tables. */
+  /** Table 4's row, the table the order was opened from, in the order screen's tables. */
   const table4Row = (el: TillApp) => tableOrder(el)!.tables.find((row) => row.id === "t4")!;
 
   it("Move a bill's floor read is not replaced by an older poll that answers later", async () => {
@@ -5948,7 +5948,7 @@ function floorThat(before: TableState[], after: TableState[]) {
 
 describe("till-app: the bill request", () => {
   const requestedAt = "2026-09-30T20:00:00.000Z";
-  /** Mesa 4 as the floor reads it once the party has asked for the bill. */
+  /** Table 4 as the floor reads it once the party has asked for the bill. */
   const asked = (revision: number) => ({
     ...seated({}, { revision }),
     signals: [{ kind: "bill_requested" as const, requestedAt }],
@@ -12192,7 +12192,7 @@ describe("till-app: table relocation editing observations", () => {
       expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("draft.taken_over"));
     });
   }
-  /** Picks Mesa 7 for `verb` through the screen, which asks no bill question. */
+  /** Picks Table 7 for `verb` through the screen, which asks no bill question. */
   async function relocationPrompt(el: TillApp, verb: string): Promise<void> {
     const order = tableOrder(el)!;
     for (const selector of ["[data-move-split]", `[data-action="${verb}"]`, '[data-target="t7"]']) {

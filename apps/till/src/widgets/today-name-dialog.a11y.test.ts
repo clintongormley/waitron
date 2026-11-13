@@ -10,8 +10,8 @@ afterEach(cleanupWidgets);
 const saveButton = (el: TillTodayNameDialog) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-rename-save]")!;
 const props = {
-  heading: "Cambiar el nombre de Mesa 4",
-  normalName: "Mesa 4",
+  heading: "Cambiar el nombre de Table 4",
+  normalName: "Table 4",
   value: "Cumpleaños García",
 };
 
@@ -39,7 +39,7 @@ describe.each(["light", "dark"] as const)("till-today-name-dialog a11y (%s theme
     const field = el.shadowRoot!.querySelector("wt-input")!;
     await userEvent.fill(
       page.elementLocator(field.shadowRoot!.querySelector("input")!),
-      "Mesa larga",
+      "Long table",
     );
     await el.updateComplete;
     expect(saveButton(el).variant).toBe("primary");

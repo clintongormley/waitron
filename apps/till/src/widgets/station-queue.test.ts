@@ -26,7 +26,7 @@ const groupA: StationQueueGroup = {
   kitchenNote: null,
   orderId: "wo-1",
   orderNumber: 5,
-  label: "Mesa 4",
+  label: "Table 4",
   queuedAt: "2026-08-17T10:00:00.000Z",
   status: "placed",
   thresholds: DEFAULT_THRESHOLDS,
@@ -242,7 +242,7 @@ describe("till-station-queue", () => {
     const tickets = el.shadowRoot!.querySelectorAll(".ticket");
     expect(tickets).toHaveLength(2);
     expect(tickets[0]!.textContent).toContain("5");
-    expect(tickets[0]!.textContent).toContain("Mesa 4");
+    expect(tickets[0]!.textContent).toContain("Table 4");
     expect(tickets[0]!.querySelector('[data-item="ti-1"]')).not.toBeNull();
     expect(tickets[0]!.querySelector('[data-item="ti-2"]')).not.toBeNull();
   });
@@ -380,7 +380,7 @@ describe("till-station-queue", () => {
         await page.viewport(width, 844);
         try {
           const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-            groups: [{ ...moved(formerNumbers), label: "Mesa 91" }],
+            groups: [{ ...moved(formerNumbers), label: "Table 91" }],
             stationId: "st-1",
           });
           el.shadowRoot!.querySelector<HTMLButtonElement>('[data-column-tab="waiting"]')!.click();
@@ -1098,7 +1098,7 @@ const coursedOrder: StationQueueGroup = {
   kitchenNote: null,
   orderId: "wo-c",
   orderNumber: 7,
-  label: "Mesa 2",
+  label: "Table 2",
   queuedAt: "2026-08-17T10:00:00.000Z",
   status: "placed",
   thresholds: DEFAULT_THRESHOLDS,
@@ -1378,7 +1378,7 @@ describe("till-station-queue — kitchen notices strip", () => {
     id: "kn-1",
     stationId: "st-1",
     workingOrderId: "wo-1",
-    orderLabel: "#5 · Mesa 4",
+    orderLabel: "#5 · Table 4",
     kind: "void",
     lineName: "Burger",
     unitName: null,
@@ -1398,7 +1398,7 @@ describe("till-station-queue — kitchen notices strip", () => {
     notice({ id: "kn-void", kind: "void", wasStarted: true }),
     notice({ id: "kn-recalled", kind: "recalled", lineName: "Paella", quantity: "2.000" }),
     notice({ id: "kn-changed", kind: "changed", note: "no onions" }),
-    notice({ id: "kn-moved", kind: "moved", movedTo: "Mesa 9", orderLabel: "#7" }),
+    notice({ id: "kn-moved", kind: "moved", movedTo: "Table 9", orderLabel: "#7" }),
   ];
 
   const rows = (el: TillStationQueue) => [
@@ -1466,7 +1466,7 @@ describe("till-station-queue — kitchen notices strip", () => {
     });
     const [first, second] = rows(el);
     expect(first!.querySelector(".notice-line")!.textContent!.trim()).toBe("1× Burger");
-    expect(first!.querySelector(".notice-order")!.textContent!.trim()).toBe("#5 · Mesa 4");
+    expect(first!.querySelector(".notice-order")!.textContent!.trim()).toBe("#5 · Table 4");
     expect(second!.querySelector(".notice-line")!.textContent!.trim()).toBe("0.25× Jamón");
   });
 
@@ -1564,7 +1564,7 @@ describe("till-station-queue — kitchen notices strip", () => {
     const [voided, , changed, moved] = rows(el);
     expect(changed!.querySelector(".notice-note")!.textContent!.trim()).toBe("no onions");
     expect(moved!.querySelector(".notice-moved")!.textContent!.trim()).toBe(
-      t("station.notice.moved_to").replace("{table}", "Mesa 9"),
+      t("station.notice.moved_to").replace("{table}", "Table 9"),
     );
     expect(voided!.querySelector(".notice-note")).toBeNull();
     expect(voided!.querySelector(".notice-moved")).toBeNull();
@@ -1619,7 +1619,7 @@ describe("till-station-queue — kitchen notices strip", () => {
           stationId: "st-1",
           notices: [
             notice({ id: "kn-rerouted", kind: "rerouted", reroutedTo: "Grill" }),
-            notice({ id: "kn-moved", kind: "moved", movedTo: "Mesa 9" }),
+            notice({ id: "kn-moved", kind: "moved", movedTo: "Table 9" }),
           ],
         });
         const row = rows(el)[0]!;
@@ -1695,7 +1695,7 @@ describe("till-station-queue — kitchen notices strip", () => {
     expect(label.startsWith(t("station.notice.acknowledge"))).toBe(true);
     expect(label).toContain(t("station.notice.void"));
     expect(label).toContain("1× Burger");
-    expect(label).toContain("#5 · Mesa 4");
+    expect(label).toContain("#5 · Table 4");
   });
 
   // Fails if a change that took an extra off a dish does not say which extra, on screen and to a
@@ -1765,7 +1765,7 @@ const partyOrder: StationQueueGroup = {
   kitchenNote: null,
   orderId: "wo-p",
   orderNumber: 9,
-  label: "Mesa 4",
+  label: "Table 4",
   queuedAt: "2026-08-17T10:00:00.000Z",
   status: "open",
   thresholds: DEFAULT_THRESHOLDS,
@@ -2386,7 +2386,7 @@ describe("till-station-queue — moving a dish to another station", () => {
     kitchenNote: null,
     orderId: "wo-m",
     orderNumber: 8,
-    label: "Mesa 3",
+    label: "Table 3",
     queuedAt: "2026-08-17T10:00:00.000Z",
     status: "placed",
     thresholds: DEFAULT_THRESHOLDS,

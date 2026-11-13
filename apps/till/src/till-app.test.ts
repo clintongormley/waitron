@@ -128,7 +128,7 @@ const heldSummary: HeldOrderSummary = {
   items: [],
   id: "wo-1",
   orderNumber: 5,
-  label: "Mesa 4",
+  label: "Table 4",
   counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
   total: "3.00",
   outstanding: "3.00",
@@ -291,7 +291,7 @@ const placedResult = {
 const stationGroup = {
   orderId: "wo-1",
   orderNumber: 5,
-  label: "Mesa 4",
+  label: "Table 4",
   queuedAt: "2026-08-17T10:00:00.000Z",
   status: "settled" as const,
   thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
@@ -488,7 +488,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 3 },
       id,
       orderNumber: 5,
-      label: "Mesa 4",
+      label: "Table 4",
       revision: 3,
       lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
     })),
@@ -1232,7 +1232,7 @@ describe("till-app", () => {
         },
         id: "wo-1",
         orderNumber: 5,
-        label: "Mesa 4",
+        label: "Table 4",
         revision: 3,
         lines: [
           {
@@ -1343,7 +1343,7 @@ describe("till-app", () => {
           },
           id: "wo-1",
           orderNumber: 5,
-          label: "Mesa 4",
+          label: "Table 4",
           revision: 3,
           lines: [
             {
@@ -1375,7 +1375,7 @@ describe("till-app", () => {
       c.store.setLineMakeAt(0, "retired");
       if (action === "cash") emit(c, "confirm-payment", { method: "cash", amount: "5" });
       else if (action === "integrated card") emit(c, "collect-card", {});
-      else if (action === "Hold") emit(c, "park-order", { label: "Mesa 4" });
+      else if (action === "Hold") emit(c, "park-order", { label: "Table 4" });
       else emit(c, "place-order");
       await flush(el);
 
@@ -1457,7 +1457,7 @@ describe("till-app", () => {
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
     c.store.addProduct(coffee, "1");
-    emit(c, "park-order", { label: "Mesa 4" });
+    emit(c, "park-order", { label: "Table 4" });
     await flush(el);
     expect(c.store.lines).toHaveLength(2);
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
@@ -6460,7 +6460,7 @@ describe("till-app", () => {
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
-      label: "Mesa 4",
+      label: "Table 4",
       revision: 3,
       expectedEdit: null,
     });
@@ -6495,7 +6495,7 @@ describe("till-app", () => {
       kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
       id: "wo-1",
       orderNumber: 5,
-      label: "Mesa 4",
+      label: "Table 4",
       revision,
       lines: quantities.map((quantity, index) => ({
         workingOrderLineId: `wl-${index + 1}`,
@@ -6536,7 +6536,7 @@ describe("till-app", () => {
       kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
       id: "wo-1",
       orderNumber: 5,
-      label: "Mesa 4",
+      label: "Table 4",
       revision: 3,
       lines: [
         {
@@ -6625,7 +6625,7 @@ describe("till-app", () => {
         },
         id: "wo-1",
         orderNumber: 5,
-        label: "Mesa 4",
+        label: "Table 4",
         revision: 3,
         lines: [
           {
@@ -6742,7 +6742,7 @@ describe("till-app", () => {
         },
         id: "wo-1",
         orderNumber: 5,
-        label: "Mesa 4",
+        label: "Table 4",
         revision: 3,
         lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
       })
@@ -6755,7 +6755,7 @@ describe("till-app", () => {
         },
         id: "wo-1",
         orderNumber: 5,
-        label: "Mesa 4",
+        label: "Table 4",
         revision: 4,
         lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "5.000" }],
       });
@@ -7375,7 +7375,7 @@ describe("till-app", () => {
       },
       id: "wo-answered",
       orderNumber: 11,
-      label: "Mesa 2",
+      label: "Table 2",
       lines: [
         {
           workingOrderLineId: "line-answered",
@@ -7415,7 +7415,7 @@ describe("till-app", () => {
     emit(counter, "confirm-payment", { method: "cash", amount: "10" });
     await flush(el);
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-answered", {
-      label: "Mesa 2",
+      label: "Table 2",
       revision: 0,
       lines: [
         {
@@ -7656,13 +7656,13 @@ describe("till-app", () => {
     await el.updateComplete;
     const parkedId = store.id; // captured BEFORE the park — clear() re-mints it on success
 
-    emit(c, "park-order", { label: "Mesa 4" });
+    emit(c, "park-order", { label: "Table 4" });
     await flush(el);
 
     expect(currentApi.parkOrder).toHaveBeenCalledWith({
       id: parkedId,
       lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
-      label: "Mesa 4",
+      label: "Table 4",
     });
     // The basket is emptied and its id re-minted, ready for the next customer; still on the counter.
     expect(store.lines).toHaveLength(0);
@@ -7764,7 +7764,7 @@ describe("till-app", () => {
     store.addProduct(coffee, "2");
     await el.updateComplete;
 
-    emit(c, "park-order", { label: "Mesa 4" });
+    emit(c, "park-order", { label: "Table 4" });
     await flush(el);
 
     expect(currentApi.parkOrder).toHaveBeenCalledOnce();
@@ -7784,9 +7784,9 @@ describe("till-app", () => {
     c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
-    emit(c, "park-order", { label: "Mesa 4" }); // first — raises the guard, awaits
+    emit(c, "park-order", { label: "Table 4" }); // first — raises the guard, awaits
     await el.updateComplete;
-    emit(c, "park-order", { label: "Mesa 4" }); // second — guarded, a no-op
+    emit(c, "park-order", { label: "Table 4" }); // second — guarded, a no-op
     await el.updateComplete;
 
     expect(parkOrder).toHaveBeenCalledOnce();
@@ -7807,7 +7807,7 @@ describe("till-app", () => {
     c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
-    emit(c, "park-order", { label: "Mesa 4" });
+    emit(c, "park-order", { label: "Table 4" });
     await flush(el);
 
     // once on entering the counter, once after the successful park.
@@ -7832,7 +7832,7 @@ describe("till-app", () => {
     store.addProduct(coffee, "1"); // the edit AFTER retrieve → the basket is dirty
     await el.updateComplete;
 
-    emit(c, "park-order", { label: "Mesa 4" });
+    emit(c, "park-order", { label: "Table 4" });
     await flush(el);
 
     // The edit is re-locked via updateWorkingOrder (café×2 retrieved + café×1 edit), under the order's
@@ -7842,7 +7842,7 @@ describe("till-app", () => {
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
-      label: "Mesa 4",
+      label: "Table 4",
       revision: 3,
       expectedEdit: null,
     });
@@ -7911,7 +7911,7 @@ describe("till-app", () => {
     await flush(el);
     expect(store.lines).toHaveLength(1);
     expect(store.revision).toBe(3);
-    expect(store.label).toBe("Mesa 4");
+    expect(store.label).toBe("Table 4");
   });
 
   it("a stale label-only Hold reloads the order without clearing it", async () => {
@@ -7929,7 +7929,7 @@ describe("till-app", () => {
     );
   });
 
-  it.each([undefined, "Mesa 4"])(
+  it.each([undefined, "Table 4"])(
     "an unchanged label %s re-holds without a label write",
     async (label) => {
       const setWorkingOrderLabel = vi.fn().mockResolvedValue({ revision: 4 });
@@ -7955,7 +7955,7 @@ describe("till-app", () => {
     await flush(el);
     expect(setWorkingOrderLabel).toHaveBeenCalledOnce();
     expect(c.store.lines).toHaveLength(1);
-    expect(c.store.label).toBe("Mesa 4");
+    expect(c.store.label).toBe("Table 4");
     expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
       t("held.park_error"),
@@ -7997,7 +7997,7 @@ describe("till-app", () => {
     expect(store.persisted).toBe(true);
     expect(store.dirty).toBe(false); // retrieved but never edited
 
-    emit(c, "park-order", { label: "Mesa 4" });
+    emit(c, "park-order", { label: "Table 4" });
     await flush(el);
 
     expect(parkOrder).not.toHaveBeenCalled();
@@ -8008,7 +8008,7 @@ describe("till-app", () => {
 
   it("retrieve → edit → Hold with a BLANK label keeps the retrieved order's name, does not wipe it (P6)", async () => {
     // The Hold field opens BLANK, so `park-order` carries `label: undefined`. `updateWorkingOrder` writes
-    // `label ?? null`, so forwarding that undefined would WIPE the retrieved order's name ("Mesa 4" → NULL)
+    // `label ?? null`, so forwarding that undefined would WIPE the retrieved order's name ("Table 4" → NULL)
     // — anonymising it in the cross-till held list. The persisted branch falls back to the STORED label,
     // so a blank re-hold preserves the name. (A typed label still renames — the case above.)
     const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
@@ -8019,7 +8019,7 @@ describe("till-app", () => {
 
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    expect(store.label).toBe("Mesa 4"); // loadFrom adopted the retrieved order's name
+    expect(store.label).toBe("Table 4"); // loadFrom adopted the retrieved order's name
 
     store.addProduct(coffee, "1"); // edit AFTER retrieve → dirty
     await el.updateComplete;
@@ -8027,13 +8027,13 @@ describe("till-app", () => {
     emit(c, "park-order", { label: undefined }); // the blank Hold field
     await flush(el);
 
-    // The stored "Mesa 4" is preserved, NOT wiped — updateWorkingOrder carries the name, not undefined.
+    // The stored "Table 4" is preserved, NOT wiped — updateWorkingOrder carries the name, not undefined.
     expect(updateWorkingOrder).toHaveBeenCalledWith("wo-1", {
       lines: [
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
         { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
       ],
-      label: "Mesa 4",
+      label: "Table 4",
       revision: 3,
       expectedEdit: null,
     });
@@ -8055,7 +8055,7 @@ describe("till-app", () => {
     store.addProduct(coffee, "1"); // edit → dirty, so #syncIfDirty attempts the update
     await el.updateComplete;
 
-    emit(c, "park-order", { label: "Mesa 4" });
+    emit(c, "park-order", { label: "Table 4" });
     await flush(el);
 
     expect(updateWorkingOrder).toHaveBeenCalledOnce();
@@ -8077,7 +8077,7 @@ describe("till-app", () => {
     expect(currentApi.retrieveWorkingOrder).toHaveBeenCalledWith("wo-1");
     // the retrieved order's own id is adopted (so paying it later keys the same idempotency slot)
     expect(store.id).toBe("wo-1");
-    expect(store.label).toBe("Mesa 4");
+    expect(store.label).toBe("Table 4");
     expect(store.lines).toHaveLength(1);
     expect(store.lines[0]!.product).toMatchObject({
       id: "cafe",
@@ -8300,7 +8300,7 @@ describe("till-app", () => {
         },
         id: "wo-1",
         orderNumber: 5,
-        label: "Mesa 4",
+        label: "Table 4",
         lines: [
           { menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "1.000" },
           { menuItemId: "menu-item-ghost", productId: "ghost", quantity: "1.000" }, // deactivated since the order was parked
@@ -11170,7 +11170,7 @@ describe("till-app", () => {
       });
 
       // Switch tender instead of retrying the card: park the (still-declined) basket for later.
-      emit(counter(el)!, "park-order", { label: "Mesa 4" });
+      emit(counter(el)!, "park-order", { label: "Table 4" });
       await flush(el);
 
       // store.clear() re-minted a fresh id — this is now an UNRELATED next-customer basket, and it
@@ -11662,7 +11662,7 @@ describe("till-app", () => {
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
         ],
-        label: "Mesa 4",
+        label: "Table 4",
         revision: 3,
         expectedEdit: null,
       });
@@ -11943,7 +11943,7 @@ describe("till-app", () => {
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }, // retrieved
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" }, // the edit
         ],
-        label: "Mesa 4",
+        label: "Table 4",
         revision: 3,
         expectedEdit: null,
       });
@@ -15355,7 +15355,7 @@ describe("till-app", () => {
       expect(selected(el)).toBe("cat-drinks");
 
       // Parking clears the basket and retains the menu preference.
-      emit(c, "park-order", { label: "Mesa 4" });
+      emit(c, "park-order", { label: "Table 4" });
       await flush(el);
       expect(c.store.lines).toHaveLength(0);
       expect(selected(el)).toBe("cat-drinks");
@@ -16374,7 +16374,7 @@ describe("a failed list refresh after a successful write", () => {
     const c = await toCounterFake(el);
     c.store.addProduct(coffee, "2");
     await el.updateComplete;
-    emit(c, "park-order", { label: "Mesa 4" });
+    emit(c, "park-order", { label: "Table 4" });
     await settle(el);
     return { el, c, listWorkingOrders };
   }
@@ -16452,7 +16452,7 @@ describe("a failed list refresh after a successful write", () => {
     await tick(el, 2000);
     c.store.addProduct(coffee, "1");
     await el.updateComplete;
-    emit(c, "park-order", { label: "Mesa 5" });
+    emit(c, "park-order", { label: "Table 5" });
     await settle(el);
     expect(listWorkingOrders).toHaveBeenCalledTimes(3);
     expect(countdown(el, "held")).toBe(secondsLeft(3));
@@ -16533,7 +16533,7 @@ describe("a failed list refresh after a successful write", () => {
     const c = await toCounterFake(el);
     c.store.addProduct(coffee, "2");
     await el.updateComplete;
-    emit(c, "park-order", { label: "Mesa 4" });
+    emit(c, "park-order", { label: "Table 4" });
     await settle(el);
 
     await tick(el, 15_000); // retries at 5 s and 15 s, both failing
@@ -16568,7 +16568,7 @@ describe("a failed list refresh after a successful write", () => {
       const c = await toCounterFake(el);
       c.store.addProduct(coffee, "2");
       await el.updateComplete;
-      emit(c, "park-order", { label: "Mesa 4" });
+      emit(c, "park-order", { label: "Table 4" });
       await settle(el);
       expect(listWorkingOrders).toHaveBeenCalledTimes(2);
 
@@ -16648,7 +16648,7 @@ describe("a failed list refresh after a successful write", () => {
     );
     c.store.addProduct(coffee, "1");
     await el.updateComplete;
-    emit(c, "park-order", { label: "Mesa 5" });
+    emit(c, "park-order", { label: "Table 5" });
     await settle(el);
     listWorkingOrders.mockResolvedValueOnce([heldSummary]);
     tryNow(el, "held")!.click();
@@ -16674,7 +16674,7 @@ describe("a failed list refresh after a successful write", () => {
 
     c.store.addProduct(coffee, "1");
     await el.updateComplete;
-    emit(c, "park-order", { label: "Mesa 5" });
+    emit(c, "park-order", { label: "Table 5" });
     await settle(el);
 
     expect(countdown(el, "held")).toBe(secondsLeft(10));
@@ -16742,7 +16742,7 @@ describe("a failed list refresh after a successful write", () => {
 
       c.store.addProduct(coffee, "2");
       await el.updateComplete;
-      emit(c, "park-order", { label: "Mesa 4" });
+      emit(c, "park-order", { label: "Table 4" });
       await settle(el);
       await tick(el, 2000);
       emit(c, "discard-order", { id: "wo-1" });
@@ -17033,7 +17033,7 @@ describe("a failed list refresh after a successful write", () => {
               );
               const c = await toCounterFake(el);
               c.store.addProduct(coffee, "1");
-              emit(c, "park-order", { label: "Mesa 4" });
+              emit(c, "park-order", { label: "Table 4" });
               await settle(el);
               expect(counter(el)!.store.lines).toEqual([]);
               await page.screenshot({
@@ -17064,14 +17064,14 @@ describe("a failed list refresh after a successful write", () => {
       const c = await toCounterFake(el);
       c.store.addProduct(coffee, "2");
       const id = c.store.id;
-      emit(c, "park-order", { label: "Mesa 4" });
+      emit(c, "park-order", { label: "Table 4" });
       await settle(el);
 
       expect(c.store.id).not.toBe(id);
       expect(c.store.lines).toEqual([]);
       expect(counter(el)!.busy).toBe(false);
       counter(el)!.store.addProduct(coffee, "1");
-      emit(counter(el)!, "park-order", { label: "Mesa 5" });
+      emit(counter(el)!, "park-order", { label: "Table 5" });
       await settle(el);
       expect(currentApi.parkOrder).toHaveBeenCalledTimes(2);
       expect(counter(el)!.store.lines).toEqual([]);
@@ -17319,7 +17319,7 @@ describe("a counter pay, place or hold refused for a reason the operator can act
       c.store.addProduct(coffee, "1");
       await el.updateComplete;
 
-      emit(c, "park-order", { label: "Mesa 4" });
+      emit(c, "park-order", { label: "Table 4" });
       await flush(el);
 
       expect(updateWorkingOrder).toHaveBeenCalledOnce();
@@ -17450,12 +17450,12 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     unsentDrafts: [],
     reminder: null,
   };
-  const table9: TableState = { ...freeTable, id: "t9", label: "Mesa 9", shortName: "Mesa 9" };
+  const table9: TableState = { ...freeTable, id: "t9", label: "Table 9", shortName: "Table 9" };
   const table7: TableState = {
     ...openTable,
     id: "t7",
-    label: "Mesa 7",
-    shortName: "Mesa 7",
+    label: "Table 7",
+    shortName: "Table 7",
     condition: "held",
     party: luisParty,
   };
@@ -17985,7 +17985,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     );
     expect(counter(el)).not.toBeNull();
     expect(toast(el).open).toBe(true);
-    expect(toast(el).message).toBe(t("counter.moved_to_table").replace("{table}", "Mesa 9"));
+    expect(toast(el).message).toBe(t("counter.moved_to_table").replace("{table}", "Table 9"));
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads + 1);
     expect(alert(el)).toBeNull();
   });
@@ -18066,7 +18066,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       { submissionId: expect.any(String), allergy: { ticks: [] } },
       { signal: expect.any(AbortSignal) },
     );
-    expect(toast(el).message).toBe(t("counter.moved_to_table").replace("{table}", "Mesa 7"));
+    expect(toast(el).message).toBe(t("counter.moved_to_table").replace("{table}", "Table 7"));
   });
 
   it("sends the party the waiter picked, though the floor read since seats another there", async () => {
@@ -21886,7 +21886,7 @@ describe("W69 held move basket protection", () => {
       {
         getTablesState: vi
           .fn()
-          .mockResolvedValue([{ ...freeTable, id: "t9", label: "Mesa 9", shortName: "Mesa 9" }]),
+          .mockResolvedValue([{ ...freeTable, id: "t9", label: "Table 9", shortName: "Table 9" }]),
         askOrderDeadEnds: vi.fn().mockResolvedValue({ sends: false, deadEnds: [] }),
         previewBillMoveAllergy: counterMovePreview(),
         moveBill: vi.fn().mockResolvedValue({ partyId: "party-new", billId: "wo-1" }),
@@ -22036,11 +22036,11 @@ describe("W69 held move basket protection", () => {
     await flush(el);
     await answerCounterMoveIfAsked(el);
     await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
-    c.store.loadFrom("wo-1", [...c.store.lines], "Mesa 4", 3);
+    c.store.loadFrom("wo-1", [...c.store.lines], "Table 4", 3);
     release({ partyId: "party-new", billId: "wo-1" });
     await flush(el);
     expect(c.store.id).toBe("wo-1");
-    expect(c.store.label).toBe("Mesa 4");
+    expect(c.store.label).toBe("Table 4");
     expect(c.store.lines[0]!.quantity).toBe("2");
   });
   it("a replaced basket makes its pending move decision inert", async () => {
@@ -22077,7 +22077,7 @@ describe("W69 held move basket protection", () => {
     target.addEventListener(
       "click",
       () => {
-        c.store.loadFrom("wo-1", lines, "Mesa 4", 3);
+        c.store.loadFrom("wo-1", lines, "Table 4", 3);
         c.store.label = "Local lunch";
       },
       { once: true },
@@ -22238,7 +22238,7 @@ describe("basket unsaved replacement", () => {
     c.store.label = "New label";
     expect(c.store.dirty).toBe(false);
     expect(unloadCancelled()).toBe(true);
-    c.store.label = "Mesa 4";
+    c.store.label = "Table 4";
     expect(unloadCancelled()).toBe(false);
     c.store.setLineQuantity(0, "3");
     expect(unloadCancelled()).toBe(true);
@@ -22371,7 +22371,7 @@ describe("basket protection lifetimes", () => {
       kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
       id: "wo-1",
       orderNumber: 5,
-      label: "Mesa 4",
+      label: "Table 4",
       revision: note === undefined ? 3 : 4,
       lines: [
         {
@@ -22399,7 +22399,7 @@ describe("basket protection lifetimes", () => {
     await expect.poll(() => currentApi.recordSale).toHaveBeenCalledOnce();
     expect(currentApi.updateWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1", {
       lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2", makeAt: null, note: "No sugar" }],
-      label: "Mesa 4",
+      label: "Table 4",
       revision: 3,
       expectedEdit: null,
     });
@@ -22893,7 +22893,7 @@ describe("till-app: a box update while a kitchen display's dish move still waits
               {
                 orderId: "wo-1",
                 orderNumber: 5,
-                label: "Mesa 4",
+                label: "Table 4",
                 queuedAt: "2026-08-17T10:00:00.000Z",
                 status: "placed",
                 thresholds: {
@@ -24173,7 +24173,7 @@ describe("A767 card outcome belongs to its order", () => {
     await flush(el);
     emit(c, "collect-card", { readerId: "reader-41", tip: "0.50" });
     await flush(el);
-    emit(c, "park-order", { label: "Mesa 4" });
+    emit(c, "park-order", { label: "Table 4" });
     await flush(el);
     expect(tenderPay(el).shadowRoot!.querySelector(".retry")).toBeNull();
     emit(c, "retrieve-order", { id: "wo-1" });
@@ -24201,7 +24201,7 @@ describe("A767 card outcome belongs to its order", () => {
     c.store.loadFrom("other-order", [{ product: coffee, quantity: "1" }]);
     await flush(el);
     expect(tenderPay(el).shadowRoot!.querySelector(".retry")).toBeNull();
-    c.store.loadFrom("wo-1", lines, "Mesa 4", 3);
+    c.store.loadFrom("wo-1", lines, "Table 4", 3);
     await flush(el);
     expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
   });

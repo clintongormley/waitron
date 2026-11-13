@@ -689,9 +689,9 @@ describe("WorkingOrderStore", () => {
       { product: coffee, quantity: "2" }, // 1.50 × 2 = 3.00 (general)
       { product: ham, quantity: "0.320" }, // 10.00 × 0.320 = 3.20 (reduced)
     ];
-    s.loadFrom("held-123", lines, "Mesa 4");
+    s.loadFrom("held-123", lines, "Table 4");
     expect(s.id).toBe("held-123");
-    expect(s.label).toBe("Mesa 4");
+    expect(s.label).toBe("Table 4");
     expect(s.lines).toEqual(lines);
     expect(s.total).toBe("6.20");
   });
@@ -724,8 +724,8 @@ describe("WorkingOrderStore", () => {
     let n = 0;
     s.subscribe(() => n++);
     expect(s.label).toBeUndefined();
-    s.label = "Mesa 7";
-    expect(s.label).toBe("Mesa 7");
+    s.label = "Table 7";
+    expect(s.label).toBe("Table 7");
     expect(n).toBe(1);
   });
 
@@ -775,14 +775,14 @@ describe("WorkingOrderStore", () => {
     const s = new WorkingOrderStore();
     s.addProduct(ham, "0.100"); // a prior edit → dirty
     expect(s.dirty).toBe(true);
-    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }], "Mesa 4");
+    s.loadFrom("held-1", [{ product: coffee, quantity: "1" }], "Table 4");
     expect(s.dirty).toBe(false);
   });
 
   it("a label change is NOT a line edit — it does not mark the basket dirty", () => {
     const s = new WorkingOrderStore();
     s.loadFrom("held-1", [{ product: coffee, quantity: "1" }]);
-    s.label = "Mesa 9";
+    s.label = "Table 9";
     expect(s.dirty).toBe(false);
   });
 
@@ -971,7 +971,7 @@ describe("WorkingOrderStore", () => {
 
     it("a label change keeps them, because it is not an edit", () => {
       const s = loaded();
-      s.label = "Mesa 9";
+      s.label = "Table 9";
       expect(s.lines[0]!.notOfferedExtras).toEqual([milk]);
       expect(s.total).toBe("7.50");
     });
@@ -1529,7 +1529,7 @@ describe("WorkingOrderStore.lockEdits", () => {
     s.loadFrom("wo-2", [{ product: coffee, quantity: "1" }]);
     expect(s.loadGeneration).toBe(first + 2);
     s.setLineQuantity(0, "2");
-    s.label = "Mesa 4";
+    s.label = "Table 4";
     s.lockEdits()();
     expect(s.loadGeneration).toBe(first + 2);
     s.clear();

@@ -1038,7 +1038,7 @@ describe("TillApi", () => {
     const r = await api.parkOrder({
       id: "wo1",
       lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
-      label: "Mesa 4",
+      label: "Table 4",
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -1050,7 +1050,7 @@ describe("TillApi", () => {
         body: JSON.stringify({
           id: "wo1",
           lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
-          label: "Mesa 4",
+          label: "Table 4",
         }),
       }),
     );
@@ -1062,7 +1062,7 @@ describe("TillApi", () => {
       {
         id: "wo1",
         orderNumber: 7,
-        label: "Mesa 4",
+        label: "Table 4",
         counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
         total: "3.00",
         openedAt: "2026-08-06T10:00:00.000Z",
@@ -1086,7 +1086,7 @@ describe("TillApi", () => {
       kitchenNote: { scope: { workingOrderId: "wo1" }, note: null, revision: 0, ownerRevision: 0 },
       id: "wo1",
       orderNumber: 7,
-      label: "Mesa 4",
+      label: "Table 4",
       lines: [{ productId: "cafe", quantity: "2.000" }],
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(order));
@@ -1126,7 +1126,7 @@ describe("TillApi", () => {
       api.updateWorkingOrder("wo1", {
         expectedEdit: null,
         lines: [{ menuItemId: "mi-cafe", quantity: "3" }],
-        label: "Mesa 5",
+        label: "Table 5",
         revision: 4,
       }),
     ).resolves.toEqual({ revision: 4 });
@@ -1140,7 +1140,7 @@ describe("TillApi", () => {
         body: JSON.stringify({
           expectedEdit: null,
           lines: [{ menuItemId: "mi-cafe", quantity: "3" }],
-          label: "Mesa 5",
+          label: "Table 5",
           revision: 4,
         }),
       }),
@@ -1347,7 +1347,7 @@ describe("TillApi", () => {
       {
         orderId: "wo-1",
         orderNumber: 7,
-        label: "Mesa 4",
+        label: "Table 4",
         queuedAt: "2026-08-17T10:00:00.000Z",
         items: [
           {
@@ -1372,7 +1372,7 @@ describe("TillApi", () => {
         id: "kn-1",
         stationId: "st-1",
         workingOrderId: "wo-1",
-        orderLabel: "Mesa 4",
+        orderLabel: "Table 4",
         kind: "void",
         lineName: "Paella kitchen",
         unitName: null,
@@ -2241,8 +2241,8 @@ describe("TillApi", () => {
     const rows: TableState[] = [
       {
         id: "t1",
-        label: "Mesa 1",
-        shortName: "Mesa 1",
+        label: "Table 1",
+        shortName: "Table 1",
         zoneId: "z1",
         state: "open-tab",
         condition: "free",
@@ -2268,8 +2268,8 @@ describe("TillApi", () => {
       },
       {
         id: "t2",
-        label: "Mesa 2",
-        shortName: "Mesa 2",
+        label: "Table 2",
+        shortName: "Table 2",
         zoneId: null,
         state: "free",
         condition: "needs_clearing",
@@ -3402,7 +3402,7 @@ describe("TillApi", () => {
               kitchenNote: null,
               orderId: "wo-1",
               orderNumber: 7,
-              label: "Mesa 4",
+              label: "Table 4",
               queuedAt: "2026-08-17T10:00:00.000Z",
               status: "settled",
               thresholds: {
@@ -5637,7 +5637,7 @@ describe("TillApi: a bill's payments", () => {
         receiptTrim: {},
         venueAddress: [],
         receiptSettings: { printAddress: false },
-        orderLabel: "Mesa 4",
+        orderLabel: "Table 4",
         orderNumber: 7,
         invoiceNumber: "A/9",
         issuedAt: "2026-09-30T20:01:00.000Z",

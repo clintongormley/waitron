@@ -377,8 +377,8 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
   it("has no violations with the bill requested, in the table menu and the status pin's details", async () => {
     const asked: TableState = {
       id: "t4",
-      label: "Mesa 4",
-      shortName: "Mesa 4",
+      label: "Table 4",
+      shortName: "Table 4",
       zoneId: null,
       state: "open-tab",
       condition: "held",
@@ -827,11 +827,11 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       tableIds: ["t7"],
     };
     const tables = [
-      tableRow("t4", "Mesa 4", { state: "open-tab", condition: "held", party: ana }),
-      tableRow("t5", "Mesa 5", { state: "open-tab", condition: "held", party: ana }),
-      tableRow("t7", "Mesa 7", { state: "open-tab", condition: "held", party: luis }),
-      tableRow("t6", "Mesa 6", { condition: "needs_clearing" }),
-      tableRow("t9", "Mesa 9"),
+      tableRow("t4", "Table 4", { state: "open-tab", condition: "held", party: ana }),
+      tableRow("t5", "Table 5", { state: "open-tab", condition: "held", party: ana }),
+      tableRow("t7", "Table 7", { state: "open-tab", condition: "held", party: luis }),
+      tableRow("t6", "Table 6", { condition: "needs_clearing" }),
+      tableRow("t9", "Table 9"),
     ];
 
     async function toAction(action: string, orderId = "wo-1") {

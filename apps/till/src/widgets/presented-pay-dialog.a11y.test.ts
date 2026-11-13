@@ -19,8 +19,8 @@ const item = (id: string, name: string, extra: Partial<EquipmentItem> = {}): Equ
   heldBy: null,
   ...extra,
 });
-const READER_2 = item("r2", "Lector 2", { portable: true, provider: "sumup" });
-const BAR_PRINTER = item("p1", "Barra");
+const READER_2 = item("r2", "Reader 2", { portable: true, provider: "sumup" });
+const BAR_PRINTER = item("p1", "Bar");
 const role = (name: RoleEquipment["role"], chosen: EquipmentItem): RoleEquipment => ({
   role: name,
   selection: "item",
@@ -83,7 +83,7 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
       {
         open: true,
         amount: "62.40",
-        tableName: "Mesa 4",
+        tableName: "Table 4",
         takesReaderCard: true,
         takesCash: true,
         takesManualCard: true,
@@ -156,7 +156,7 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
 
   it("has no violations with a tap's notice above the row, and a refusal on the locked sheet", async () => {
     const picked = await mount({
-      notice: { message: t("equipment.picked_up").replace("{item}", "Lector 3"), tone: "info" },
+      notice: { message: t("equipment.picked_up").replace("{item}", "Reader 3"), tone: "info" },
     });
     expect(picked.el.shadowRoot!.querySelector("[data-pay-notice]")).not.toBeNull();
     await expectNoA11yViolations(picked.host);
@@ -183,7 +183,7 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
         view === "form"
           ? {
               notice: {
-                message: t("equipment.picked_up").replace("{item}", "Lector 3"),
+                message: t("equipment.picked_up").replace("{item}", "Reader 3"),
                 tone: "info",
               },
             }
@@ -331,7 +331,7 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
     }
   });
 
-  /** Take payment pressed on Lector 2 and the card out at the reader; declined, the reader
+  /** Take payment pressed on Reader 2 and the card out at the reader; declined, the reader
    * answered. */
   async function atTheTable(state: "waiting" | "declined") {
     const mounted = await mount();
