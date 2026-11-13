@@ -3629,6 +3629,47 @@ their connection check), `box-leaf-names.test.ts`, the start-up reissue cases in
 `boot.restore.test.ts` and `boot.reconcile.test.ts`. Weaker than the rule: nothing checks that a
 NEW entry point which reads `tls/` calls `finishTlsInstall` first.
 
+## A venue's changes stream to one place: the spare's store or the owner's bucket
+
+**The rule.** A main box with a spare streams `venue.db` to the spare's store and never to the
+owner's bucket, so the two are never configured together. Saving bucket settings is refused with
+`backup.spare_stream_active` while `node.db` holds a pair link (`refuseWhilePaired`,
+`apps/server/src/stream-api.ts:160-164`), and a join is refused with `mirror.bucket_stream_active`
+while bucket settings are stored (`refuseWhileBucketStream`, `apps/server/src/mirror-bundle-api.ts:318-325`).
+Each check is repeated under `node.db`'s write lock, where the other side writes
+(`stream-api.ts:254-255`, `mirror-bundle-api.ts:189-195`), so of two requests at once one sees the
+other. The stream host reads the pair link first and the bucket settings only when there is no
+streaming link (`apps/server/src/stream-host.ts:279-282`). Passing the spare's copy on to the
+bucket is not built (the 3b plan's "copy-up", slice 5e).
+
+**The pair link.** `node_pair_link` (`packages/node-db/src/schema/node-pair-link.ts`) is one row per
+box, keyed by its own node id, so a box has at most one spare; a join is refused with
+`mirror.spare_already_joined` while the link is `streaming` (`mirror-bundle-api.ts:191-192`), and a
+`pending` one is replaced. The main box's row has role `streams` and moves `pending` → `streaming`
+when it writes the spare's `nodes` row, which happens when the spare's store first answers it, not
+when the bundle is handed out (`recordSpare`, `apps/server/src/spare-join.ts:157-186`; decision D6
+in [the 3b plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)). The spare's row
+has role `serves` and moves `awaiting_copy` → `copied` (`apps/server/src/adopt.ts:262`,
+`finish-adoption.ts:86`). The table's check refuses any other role and state pair. The store's
+secret key is sealed under the key ring, bound to both boxes' ids
+(`packages/credentials/src/node-pair-link.ts`), which is why the key ring is not rotated while a
+link exists (see the write-path entry above, decision D7).
+
+**The store and its folders.** Only a box whose link `serves` runs the store, versitygw on
+loopback, behind a TLS listener on `WAITRON_SPARE_STORE_PORT` (7443 by default) that admits only a
+client certificate under the venue authority naming the paired main box (`startServedStore`,
+`apps/server/src/boot.ts:1889-1920`; `apps/server/src/spare-pipe.ts:60-92`). The store keeps its
+data in `<state>/pair-store/` (`apps/server/src/spare-store.ts:74`). The spare's first copy is
+restored from that store into `<state>/pair-copy/`, outside `scratch/` because it must survive the
+restart that puts it in place of `venue.db` (`apps/server/src/spare-copy.ts`,
+`spare-copy-placement.ts`). Both folders are named in `packages/store/src/state-layout.ts` and
+deleted by a plain reset.
+
+**Guards.** `apps/server/src/spare-join.test.ts` (the row and link states), the two-box test
+`apps/server/src/spare-join.e2e.test.ts` (a join refused while the main box copies to a bucket,
+then joined, copied and kept to loopback), and `scripts/state-layout.test.ts`. Weaker than the
+rule: nothing checks that a new writer of bucket settings or of a pair link makes the other's check.
+
 ## The box's spare file
 
 **The rule.** The box keeps `<state>/spare-space` (`SPARE_SPACE_FILE`, `@waitron/provisioning`;

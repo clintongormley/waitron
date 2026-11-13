@@ -1902,9 +1902,6 @@ outstanding on code that exists.
   check refused Servers, alerts and disk-stop reads with `ERR_CERT_AUTHORITY_INVALID`.
   [Detail](backlog/replication-cloud.md#a1282-browser-trust-after-a-connection-repair-replaces-the-certificate-authority)
 
-- **A1283: spare-joining guide belongs to A947 Task 6.10**, alongside the joining feature.
-  [Detail](backlog/replication-cloud.md#a1283-spare-joining-guide-owned-by-a947-task-610)
-
 The membership, promotion and rejoin arc remains in the tree. What remains, largest first:
 
 - **Status, alarms and the operator surface for replication.** An operator needs to see whether the

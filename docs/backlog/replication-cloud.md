@@ -1279,13 +1279,6 @@ Evidence: `~/waitron-campaign-d/receipts/a1282/refresh.log`, `browser-events.jso
 The Chromium check accepted only the original served leaf key through a temporary SPKI exemption,
 with `ignoreHTTPSErrors: false`; it did not install an authority in the operating system.
 
-## A1283: spare-joining guide owned by A947 Task 6.10
-
-[A947 Task 6.10](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md#task-610-the-guide-the-docs-and-final-checks)
-owns the English and Spanish “Adding a spare box” section and its fingerprint comparison, alongside
-the joining feature. The existing Servers guide covers handover and returning a former main box;
-no separate guide or help bubble is needed before spare joining is available.
-
 ## Loose ends left by the Cloud connection integration
 
 - Customer remote setup UI and production deployment remain open.
