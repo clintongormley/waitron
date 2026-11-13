@@ -2844,28 +2844,28 @@ describe("the party's name on a kitchen ticket", () => {
     const v = await setupPartyVenue(db);
     const printer = await kitchenPrinter(v);
     const table72 = await v.table("Table 72");
-    const ana = await seat(v, await v.table("Table 73"));
-    await nameParty(v, ana.partyId, "Ana");
+    const anna = await seat(v, await v.table("Table 73"));
+    await nameParty(v, anna.partyId, "Ana");
     await nextMillisecond();
-    const luis = await seat(v, table72);
-    await nameParty(v, luis.partyId, "Luis");
-    await order(v, ana.tabId, "Burger");
-    await pay(v, ana.tabId, "12.00");
-    const expectedPartyRevision = await revisionOf(v, ana.partyId);
-    const expectedOtherPartyRevision = await revisionOf(v, luis.partyId);
+    const lewis = await seat(v, table72);
+    await nameParty(v, lewis.partyId, "Luis");
+    await order(v, anna.tabId, "Burger");
+    await pay(v, anna.tabId, "12.00");
+    const expectedPartyRevision = await revisionOf(v, anna.partyId);
+    const expectedOtherPartyRevision = await revisionOf(v, lewis.partyId);
     await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, ana.partyId, table72, {
+      moveGuests(tx, v.cfg, anna.partyId, table72, {
         expectedPartyRevision,
-        otherPartyId: luis.partyId,
+        otherPartyId: lewis.partyId,
         expectedOtherPartyRevision,
         operatorId: OPERATOR,
       }),
     );
     const before = (await ticketsSince(printer)).length;
 
-    await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, ana.tabId));
+    await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, anna.tabId));
 
-    const { orderNumber } = await billRow(v, ana.tabId);
+    const { orderNumber } = await billRow(v, anna.tabId);
     const tickets = await ticketsSince(printer, before);
     expect(tickets.map((lines) => lines.slice(0, 4))).toEqual([
       [
