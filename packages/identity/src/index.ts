@@ -6,6 +6,7 @@ export {
   ensureBuiltInRoles,
   heldBuiltInKey,
   setBuiltInMembership,
+  setPersonAccessRoles,
 } from "./roles.js";
 export {
   readPersonAuthority,

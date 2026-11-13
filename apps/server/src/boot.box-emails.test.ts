@@ -356,6 +356,9 @@ describe("the running server's managers' email check", () => {
       expect(holder.mail!.owners).toContainEqual(
         expect.objectContaining({ kind: "email_changed", deliveryRule: "notice" }),
       );
+      expect(holder.mail!.owners).toContainEqual(
+        expect.objectContaining({ kind: "role_membership_changed", deliveryRule: "notice" }),
+      );
       await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe("smtp");
       await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("smtp");
       expect(
