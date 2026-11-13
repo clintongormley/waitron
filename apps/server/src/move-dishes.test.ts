@@ -1012,7 +1012,7 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     });
   }
 
-  it("refuses moving every dish of a full-invoice bill onto a simplified bill without a choice, changing nothing", async () => {
+  it("A1519 move dishes refuses: every dish of a full-invoice bill onto a simplified bill without a choice is bill.merge_invoice_choice_required", async () => {
     const p = await party([dish("Caña"), dish("Burger")]);
     await fullInvoice(v, p.bill1, ACME);
     const dishes = await dishIds(p.bill1);
@@ -1024,7 +1024,7 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     );
   });
 
-  it("carries the customer, delivery and language onto the bill the dishes join when told to keep the moved-from bill's", async () => {
+  it("A1519 move dishes: carries the customer, delivery and language onto the bill the dishes join when told to keep the moved-from bill's", async () => {
     const p = await party([dish("Caña"), dish("Burger")]);
     await fullInvoice(v, p.bill1, ACME, { medium: "receipt" });
     await setReceiptLanguage(v, p.bill1, "en-GB");
@@ -1041,7 +1041,7 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     });
   });
 
-  it("moving every dish to a new bill carries the customer when told to, and refuses without a choice, leaving no new bill", async () => {
+  it("A1519 move dishes: every dish to a new bill carries the customer when told to, and without a choice is bill.merge_invoice_choice_required, leaving no new bill", async () => {
     const p = await party([dish("Caña"), dish("Burger")]);
     await fullInvoice(v, p.bill1, ACME);
     const dishes = await dishIds(p.bill1);
@@ -1057,7 +1057,7 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     expect(await invoiceOf(v, billId)).toMatchObject(invoiceTo(ACME));
   });
 
-  it("keeps the receiving bill's own customer when told to", async () => {
+  it("A1519 move dishes: keeps the receiving bill's own customer when told to", async () => {
     const p = await party([dish("Caña")], "fire", [dish("Water")]);
     await fullInvoice(v, p.bill1, ACME);
     await fullInvoice(v, p.bill2, BAR_SOL);
@@ -1073,7 +1073,7 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     expect(await invoiceOf(v, p.bill2)).toMatchObject(invoiceTo(BAR_SOL));
   });
 
-  it("refuses when the receiving bill's invoice changed after the till asked", async () => {
+  it("A1519 move dishes refuses: the receiving bill's invoice changed after the till asked is bill.merge_invoice_choice_required", async () => {
     const p = await party([dish("Caña")]);
     await fullInvoice(v, p.bill1, ACME);
     // The till asked with Bill 2 simplified; another till then set it for Bar Sol SL.
@@ -1087,7 +1087,7 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     );
   });
 
-  it("asks nothing when one dish stays on the full-invoice bill", async () => {
+  it("A1519 move dishes: asks nothing when one dish stays on the full-invoice bill", async () => {
     const p = await party([dish("Caña"), dish("Burger")]);
     await fullInvoice(v, p.bill1, ACME);
     const [cana, burger] = await dishIds(p.bill1);
@@ -1099,7 +1099,7 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     expect(await invoiceOf(v, p.bill2)).toMatchObject(SIMPLIFIED);
   });
 
-  it("asks nothing when the receiving bill names the same customer", async () => {
+  it("A1519 move dishes: asks nothing when the receiving bill names the same customer", async () => {
     const p = await party([dish("Caña")]);
     await fullInvoice(v, p.bill1, ACME, { medium: "receipt" });
     await setReceiptLanguage(v, p.bill1, "en-GB");
@@ -1116,7 +1116,7 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     });
   });
 
-  it("refuses a choice sent with a move that leaves a dish on the bill, changing nothing", async () => {
+  it("A1519 move dishes refuses: a choice sent with a move that leaves a dish on the bill is bill.merge_invoice_choice_required", async () => {
     const p = await party([dish("Caña"), dish("Burger")]);
     await fullInvoice(v, p.bill1, ACME);
     const [cana] = await dishIds(p.bill1);
@@ -1154,7 +1154,7 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     },
   );
 
-  it("every dish, one with an extra, counts as emptying", async () => {
+  it("A1519 move dishes refuses: every dish, one with an extra, counts as emptying and is bill.merge_invoice_choice_required", async () => {
     const p = await party([{ ...dish("Burger"), cheese: 1 }, dish("Caña")]);
     await fullInvoice(v, p.bill1, ACME);
     expect((await rowsOf(p.bill1)).some((row) => row.parentLineId !== null)).toBe(true);
@@ -1167,7 +1167,7 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     );
   });
 
-  it("moves every dish of a full-invoice bill over the simplified limit onto a simplified bill once its invoice is kept", async () => {
+  it("A1519 move dishes: moves every dish of a full-invoice bill over the simplified limit onto a simplified bill once its invoice is kept", async () => {
     const p = await party([dish("Red wine bottle")]);
     await fullInvoice(v, p.bill1, ACME);
     const dishes = await dishIds(p.bill1);
