@@ -58,7 +58,7 @@ it("the shared fixture is a real setup a Start again left: its record parses, it
   const record = JSON.parse(
     await readFile(join(roots.stateDir, "flows/setup/record.json"), "utf8"),
   );
-  const parsed = parseState(record, roots.venueDir, roots.stateDir);
+  const parsed = parseState(record.attempt, roots.venueDir, roots.stateDir);
   expect(parsed.frozen.attemptId).toBe(attempt.attemptId);
   expect(parsed.frozen.administratorId).toBe(attempt.administratorId);
   expect(parsed.frozenDigest).toBe(attempt.frozenDigest);

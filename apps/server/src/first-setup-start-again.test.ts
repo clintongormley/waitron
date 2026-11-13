@@ -1,3 +1,4 @@
+import { readSetupFlowRecord, updateSetupFlowSection } from "@waitron/provisioning";
 import { dirname, join } from "node:path";
 import { modulesWithSets } from "@waitron/module";
 import { createHash } from "node:crypto";
@@ -749,8 +750,9 @@ it.each([
   "with the database present and empty, a %s public fiscal record refuses the summary and Start again setup.not_ready, and nothing is written",
   async (_label, bytes) => {
     const { f, actions } = await abandonedAttempt();
-    await mkdir(dirname(join(f.stateDir, "flows/setup/public-evidence.json")), { recursive: true });
-    await writeFile(join(f.stateDir, "flows/setup/public-evidence.json"), bytes);
+    await updateSetupFlowSection(f.stateDir, "publicEvidence", () =>
+      _label === "damaged" ? bytes : JSON.parse(bytes),
+    );
     const current = await f.host.resolution.inspectFirstSetupResolution();
     expect(current.database).toBe("no-venue-rows");
     const ids = {
@@ -768,12 +770,15 @@ it.each([
 );
 
 function recoveryRecord(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
-  return join(f.stateDir, "flows/setup/documents", `${f.module}.recovery.json`);
+  return join(f.stateDir, "flows/setup/record.json");
 }
 
 async function damageRecoveryRecord(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
   await expect(lstat(recoveryRecord(f))).resolves.toMatchObject({ size: expect.any(Number) });
-  await writeFile(recoveryRecord(f), "{damaged");
+  await updateSetupFlowSection(f.stateDir, "recoveryManifests", (current) => ({
+    ...current,
+    [f.module]: "{damaged",
+  }));
 }
 
 function sendStartAgain(app: Hono, body: unknown) {
@@ -958,6 +963,7 @@ async function stampAfterName(f: Awaited<ReturnType<typeof abandonedAttempt>>["f
 }
 
 async function createDamaged(path: string) {
+  await mkdir(dirname(path), { recursive: true });
   await expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
   await writeFile(path, "{damaged");
 }
@@ -1095,7 +1101,7 @@ it("an unused attempt whose database cannot be read, beside saved trading settin
 it("an unused attempt whose database cannot be read, beside a public record, is refused setup.not_ready before the database is read, and nothing changes", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   await writeFile(join(f.venueDir, "venue.db"), "not a database");
-  await createDamaged(join(f.stateDir, "flows/setup/public-evidence.json"));
+  await updateSetupFlowSection(f.stateDir, "publicEvidence", () => "{damaged");
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   expect(inspected.database).toBe("corrupt");
   const ids = {
@@ -1135,11 +1141,13 @@ it("an unused attempt whose database the inspection could not show empty, read w
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
-it.each(["flows/setup/public-evidence.json", "flows/setup/documents/stray.json"])(
+it.each(["publicEvidence", "flows/setup/documents/stray.json"])(
   "with the database present, a damaged %s still refuses Start again setup.not_ready, and nothing changes",
   async (file) => {
     const { f, actions, startRequest } = await abandonedAttempt();
-    await createDamaged(join(f.stateDir, file));
+    if (file === "publicEvidence")
+      await updateSetupFlowSection(f.stateDir, "publicEvidence", () => "{damaged");
+    else await createDamaged(join(f.stateDir, file));
     const inspected = await f.host.resolution.inspectFirstSetupResolution();
     await expectRefusedUnchanged(
       f,
@@ -1295,8 +1303,6 @@ const ATTEMPT_STATE = [
   "flows/setup/record.json",
   "module-preparation-state.json",
   "flows/setup/documents/",
-  "flows/setup/node-key.json",
-  "flows/setup/public-evidence.json",
   "first-setup-resolutions/",
   "first-setup-workspaces/",
 ];
@@ -1310,8 +1316,7 @@ async function expectAttemptGone(f: { stateDir: string; venueDir: string }) {
 it("start again leaves no workspace and none of the attempt's files, node.db included", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   await expect(access(join(f.venueDir, "node.db"))).resolves.toBeUndefined();
-  const before = await folderTrees(f);
-  expect(before.state["flows/setup/documents/"]).toBeDefined();
+  expect((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[f.module]).toBeDefined();
   await actions.startAgainFirstSetup(startRequest);
   await expectAttemptGone(f);
 });

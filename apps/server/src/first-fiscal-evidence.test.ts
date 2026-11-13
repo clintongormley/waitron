@@ -1,5 +1,6 @@
+import { readSetupFlowRecord, updateSetupFlowSection } from "@waitron/provisioning";
 import { dirname, join } from "node:path";
-import { mkdir, readFile, writeFile, rm, symlink } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import { firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fiscal.js";
 import { historicalFirstFiscalDocuments } from "../test/historical-first-fiscal.js";
@@ -27,7 +28,7 @@ async function fixture() {
     evidence,
     enrol,
     confirm,
-    path: join(f.stateDir, "flows/setup/public-evidence.json"),
+    path: join(f.stateDir, "flows/setup/record.json"),
   };
 }
 afterEach(async () => {
@@ -63,7 +64,7 @@ it.each(["trust", "currentRegisterConfirmed", "privateKey"])(
     await expect(
       f.evidence.enrol(f.ownerAttempt, MODULE, { ...f.key, [field]: true }, f.key.fingerprint),
     ).rejects.toMatchObject({ code: "sif.allocation_invalid" });
-    await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await readSetupFlowRecord(f.stateDir))?.publicEvidence).toBeUndefined();
   },
 );
 it("refuses a fingerprint mismatch and a foreign owner before writing trust", async () => {
@@ -79,7 +80,7 @@ it("refuses a fingerprint mismatch and a foreign owner before writing trust", as
       f.key.fingerprint,
     ),
   ).rejects.toMatchObject({ code: "setup.owner_required" });
-  await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await readSetupFlowRecord(f.stateDir))?.publicEvidence).toBeUndefined();
 });
 it.each([
   ["allocationId", "other"],
@@ -129,25 +130,24 @@ it.each(["restart", "invalidate", "revision", "expired"])(
     await expect(evidence.read(f.context.binding)).rejects.toMatchObject(missing);
   },
 );
-it.each(["missing", "corrupt", "replaced", "symlink", "oversize"])(
+it.each(["missing", "corrupt", "replaced", "oversize"])(
   "rereads %s enrolled trust without fallback",
   async (why) => {
     const f = await fixture();
     await f.enrol();
     await f.confirm();
-    if (why === "missing") await rm(f.path);
-    if (why === "corrupt") await writeFile(f.path, "{bad");
+    if (why === "missing")
+      await updateSetupFlowSection(f.stateDir, "publicEvidence", () => undefined);
+    if (why === "corrupt") await updateSetupFlowSection(f.stateDir, "publicEvidence", () => "{bad");
     if (why === "replaced") {
-      const data = JSON.parse(await readFile(f.path, "utf8"));
+      const data = JSON.parse(
+        JSON.stringify((await readSetupFlowRecord(f.stateDir))!.publicEvidence),
+      );
       data.modules[MODULE].comparison = "0".repeat(64);
-      await writeFile(f.path, JSON.stringify(data));
+      await updateSetupFlowSection(f.stateDir, "publicEvidence", () => data);
     }
-    if (why === "symlink") {
-      await rm(f.path);
-      await writeFile(join(f.root, "copy.json"), "{}");
-      await symlink(join(f.root, "copy.json"), f.path);
-    }
-    if (why === "oversize") await writeFile(f.path, " ".repeat(65537));
+    if (why === "oversize")
+      await updateSetupFlowSection(f.stateDir, "publicEvidence", () => " ".repeat(65537));
     await expect(f.evidence.read(f.context.binding)).rejects.toMatchObject({
       code: expect.stringMatching(/setup.attempt_invalid|sif.allocation_invalid/),
     });
@@ -259,19 +259,21 @@ it.each([
 ])("refuses %s in durable enrolment rather than overwriting it", async (_label, data) => {
   const f = await fixture();
   const text = JSON.stringify(data);
-  await writeFile(f.path, text);
+  await updateSetupFlowSection(f.stateDir, "publicEvidence", () => data);
   await expect(f.enrol()).rejects.toMatchObject({ code: "sif.allocation_invalid" });
-  expect(await readFile(f.path, "utf8")).toBe(text);
+  expect(JSON.stringify((await readSetupFlowRecord(f.stateDir))?.publicEvidence)).toBe(text);
 });
 it.each(["attempt", "trust"])(
   "checks the retained enrolment's %s again on consultation",
   async (why) => {
     const f = await fixture();
     await f.enrol();
-    const data = JSON.parse(await readFile(f.path, "utf8"));
+    const data = JSON.parse(
+      JSON.stringify((await readSetupFlowRecord(f.stateDir))!.publicEvidence),
+    );
     if (why === "attempt") data.modules[MODULE].attemptId = "other";
     else data.modules[MODULE].trust.fingerprint = "0".repeat(64);
-    await writeFile(f.path, JSON.stringify(data));
+    await updateSetupFlowSection(f.stateDir, "publicEvidence", () => data);
     await expect(f.confirm()).rejects.toMatchObject(missing);
   },
 );
@@ -305,13 +307,13 @@ it("does not create an activation grant before consumption intent", async () => 
   await f.enrol();
   const path = join(f.stateDir, "flows/setup/record.json");
   const saved = JSON.parse(await readFile(path, "utf8"));
-  saved.history.pop();
-  saved.revision--;
-  saved.status = "claimed";
-  saved.consumptionIntent = false;
+  saved.attempt.history.pop();
+  saved.attempt.revision--;
+  saved.attempt.status = "claimed";
+  saved.attempt.consumptionIntent = false;
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(saved));
-  const owner = { ...f.ownerAttempt, revision: saved.revision };
+  const owner = { ...f.ownerAttempt, revision: saved.attempt.revision };
   const token = await f.owner.reconfirm(owner, PASSWORD, "activation");
   await expect(f.evidence.confirm(owner, MODULE, f.current, token)).rejects.toMatchObject(missing);
 });
@@ -341,7 +343,7 @@ it.each(["wrong binding", "changed input", "abandoned", "uncertain", "complete"]
     if (why === "changed input") {
       const path = join(f.stateDir, "flows/setup/record.json");
       const state = JSON.parse(await readFile(path, "utf8"));
-      state.inputs[MODULE].approval.incidentEvidence = "other";
+      state.attempt.inputs[MODULE].approval.incidentEvidence = "other";
       await mkdir(dirname(path), { recursive: true });
       await writeFile(path, JSON.stringify(state));
     }
@@ -370,5 +372,15 @@ it("participates in an already held complete callback without queueing itself", 
   await f.coordinator.run(async (hold) => {
     await f.evidence.confirm(f.ownerAttempt, MODULE, f.current, token, hold);
     expect(await f.evidence.read(f.context.binding)).toEqual({ trust: f.key, current: f.current });
+  });
+});
+
+it("stores enrolled evidence inside the setup record", async () => {
+  const f = await fixture();
+  await f.enrol();
+  expect((await readSetupFlowRecord(f.stateDir))?.publicEvidence).toMatchObject({
+    version: 1,
+    modules: { [MODULE]: { attemptId: f.ownerAttempt.attemptId } },
+    history: [],
   });
 });

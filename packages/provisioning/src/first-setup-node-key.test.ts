@@ -1,5 +1,6 @@
+import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -79,7 +80,7 @@ async function fixture(stage = true) {
     coordinator,
     grant,
     staged,
-    path: join(stateDir, "flows/setup/node-key.json"),
+    path: join(stateDir, "flows/setup/record.json"),
     async committed(result: unknown = { venue: { nodeId: access.nodeId } }) {
       let state = (await store.read())!;
       for (const change of [
@@ -173,7 +174,7 @@ it("refuses to recreate a delivered secret after its process-local copy is lost"
 it("refuses a replaced but well-formed stage instead of returning the old transient secret", async () => {
   const f = await fixture();
   const changed = { ...f.staged!.stage, stageId: randomUUID() };
-  await writeFile(f.path, JSON.stringify(changed));
+  await updateSetupFlowSection(f.options.stateDir, "nodeKey", () => changed);
   await expect(f.keys.stageInitialNodeKey(f.access, await f.grant())).rejects.toMatchObject({
     code: "setup.attempt_conflict",
   });
@@ -239,7 +240,10 @@ it.each(["stale state", "supplied stage", "stored stage", "changed frozen reques
     else if (part === "supplied stage")
       stage.name = stage.name.slice(0, -1) + (stage.name.endsWith("A") ? "C" : "A");
     else if (part === "stored stage")
-      await writeFile(f.path, JSON.stringify({ ...stage, stageId: randomUUID() }));
+      await updateSetupFlowSection(f.options.stateDir, "nodeKey", () => ({
+        ...stage,
+        stageId: randomUUID(),
+      }));
     else state.frozen.request.legalName = "Another business";
     const retained = await readFile(f.path);
     await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
@@ -401,7 +405,7 @@ it("reissues a lost unfinished key only after a separate password confirmation, 
   expect(await verifySecretAsync(replacement.key.secret, original.stage.verifier)).toBe(false);
   expect(await verifySecretAsync(original.key.secret, original.stage.verifier)).toBe(true);
   expect(await f.store.read()).toEqual(before);
-  expect(JSON.parse(await readFile(f.path, "utf8"))).toEqual(replacement.stage);
+  expect((await readSetupFlowRecord(f.options.stateDir))?.nodeKey).toEqual(replacement.stage);
   expect(await readFile(f.path, "utf8")).not.toContain(replacement.key.secret);
   expect(await restarted.stageInitialNodeKey(f.access, await f.grant())).toEqual(replacement);
 });
@@ -454,7 +458,7 @@ it("requires an existing valid stage before reissue", async () => {
       await f.owner.reconfirm(f.access, PASSWORD, "node-key-reissue"),
     ),
   ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await readSetupFlowRecord(f.options.stateDir))?.nodeKey).toBeUndefined();
 });
 
 it("throttles repeated wrong reissue passwords without changing the retained key", async () => {
@@ -507,3 +511,8 @@ it.each(["committed", "publication"] as const)(
     expect(await f.store.read()).toEqual(state);
   },
 );
+
+it("stages its verifier in the setup record", async () => {
+  const f = await fixture();
+  expect((await readSetupFlowRecord(f.options.stateDir))?.nodeKey).toEqual(f.staged!.stage);
+});

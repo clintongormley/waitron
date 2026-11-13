@@ -1,3 +1,4 @@
+import { updateSetupFlowSection } from "./setup-flow-record.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -635,7 +636,7 @@ it("derives the complete frozen provision request and preserves configuration-im
 
 it("a missing retained key stops publication before selection or identity work", async () => {
   const f = await publicationFixture();
-  await rm(join(f.root, "state", "flows/setup/node-key.json"));
+  await updateSetupFlowSection(join(f.root, "state"), "nodeKey", () => undefined);
   await expect(f.publish(f.state, f.checked)).rejects.toMatchObject({
     code: "setup.attempt_uncertain",
   });

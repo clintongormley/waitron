@@ -297,7 +297,7 @@ it("retires an attempt whose saved committed result no longer matches the actual
   expect((await f.activate()).status).toBe(500);
   const path = join(f.stateDir, "flows/setup/record.json"),
     disk = JSON.parse(await readFile(path, "utf8"));
-  disk.result.modules[MODULE].sifId = "wrong-sif";
+  disk.attempt.result.modules[MODULE].sifId = "wrong-sif";
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(disk));
   await f.refresh();

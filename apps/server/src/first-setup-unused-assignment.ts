@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
-import type { FirstSetupOriginal, FirstSetupState } from "@waitron/provisioning";
+import type { FirstSetupOriginal, FirstSetupState, SetupFlowRecord } from "@waitron/provisioning";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { readDeliveryManifest, readFirstFiscalDeliverySnapshot } from "./first-fiscal-delivery.js";
 import { readFirstSetupStagedKey } from "./first-setup-node-key.js";
@@ -46,7 +46,6 @@ export async function firstSetupUnusedAssignment(
     "state/flows/setup/record.json",
     "venue/venue.db",
     "venue/venue.db-wal",
-    "state/flows/setup/node-key.json",
     "directory:state/flows/setup/documents",
   ]);
   if (
@@ -65,8 +64,10 @@ export async function firstSetupUnusedAssignment(
     return bytes == null ? null : (JSON.parse(Buffer.from(bytes).toString("utf8")) as unknown);
   };
   try {
-    const staged = read("state/flows/setup/node-key.json");
-    const key = staged === null ? null : readFirstSetupStagedKey(staged, state);
+    const flow = read("state/flows/setup/record.json") as SetupFlowRecord | null;
+    if (flow?.publicEvidence !== undefined) return false;
+    const staged = flow?.nodeKey;
+    const key = staged === undefined ? null : readFirstSetupStagedKey(staged, state);
     let assignments = 0;
     let recoveryRecordDamaged = false;
     const names = new Set<string>();
@@ -86,6 +87,7 @@ export async function firstSetupUnusedAssignment(
       }
       const imported = seat.inspect(context, state.inputs[module.module]);
       if (seat.recoveryDocument !== undefined) {
+        names.add(module.module);
         let manifest: ReturnType<typeof readFirstSetupRecoveryDeliverySnapshot>;
         try {
           manifest = readFirstSetupRecoveryDeliverySnapshot(
@@ -97,10 +99,8 @@ export async function firstSetupUnusedAssignment(
         } catch (error) {
           if (
             !(error instanceof AppError) ||
-            originals.find(
-              (original) =>
-                original.name === `state/flows/setup/documents/${module.module}.recovery.json`,
-            )?.bytes == null
+            originals.find((original) => original.name === "state/flows/setup/record.json")
+              ?.bytes == null
           )
             throw error;
           // A damaged recovery record proves nothing about this attempt, so the caller requires that
@@ -108,13 +108,11 @@ export async function firstSetupUnusedAssignment(
           // included; only the record's stage comparison is skipped.
           if (key === null) return false;
           recoveryRecordDamaged = true;
-          names.add(`${module.module}.recovery.json`);
           assignments++;
           continue;
         }
         if (manifest !== null) {
           if (key === null || !isDeepStrictEqual(manifest.stage, key)) return false;
-          names.add(`${module.module}.recovery.json`);
         }
         assignments++;
         continue;
@@ -148,6 +146,7 @@ export async function firstSetupUnusedAssignment(
       assignments++;
     }
     return assignments > 0 &&
+      Object.keys(flow?.recoveryManifests ?? {}).every((module) => names.has(module)) &&
       originals.every(
         (original) =>
           !original.name.startsWith("state/flows/setup/documents/") ||

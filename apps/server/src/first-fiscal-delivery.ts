@@ -1,4 +1,4 @@
-import { FIRST_FISCAL_DOCUMENTS_DIR, FIRST_SETUP_NODE_KEY_FILE } from "@waitron/store";
+import { FIRST_FISCAL_DOCUMENTS_DIR } from "@waitron/store";
 import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -7,6 +7,7 @@ import { AppError } from "@waitron/shared";
 import { initialSetupFor, type OperationBinding, type WaitronModule } from "@waitron/module";
 import {
   readDurableHostJson,
+  readSetupFlowRecord,
   writeDurableHostJson,
   type FirstSetupCoordinator,
   type FirstSetupHold,
@@ -393,10 +394,7 @@ export function createFirstFiscalDelivery(options: Options) {
         !equal(binding, firstSetupModuleContext(state, binding.module).binding)
       )
         refuse();
-      const stage = await readDurableHostJson(
-        join(options.stateDir, FIRST_SETUP_NODE_KEY_FILE),
-        4096,
-      );
+      const stage = (await readSetupFlowRecord(options.stateDir))?.nodeKey;
       if (!equal(stage, manifest.stage)) refuse();
       const current = await checked(state, manifest);
       if (!equal(state, await options.store.read()) || performance.now() >= grant.expires) refuse();

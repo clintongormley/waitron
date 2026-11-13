@@ -150,7 +150,7 @@ it.each(["restore", "reset"])(
     );
   },
 );
-it.each(["flows/setup/record.json", "flows/setup/public-evidence.json"])(
+it.each(["flows/setup/record.json"])(
   "does not accept %s from an authenticated restore source",
   async (name) => {
     const f = await fixture();
@@ -184,7 +184,7 @@ it.each(["flows/setup/record.json", "flows/setup/public-evidence.json"])(
 it("does not import host claim or enrolment files through the generic state-secrets writer", async () => {
   const f = await fixture();
   const { unpackStateFiles } = await import("./state-secrets.js");
-  for (const name of ["flows/setup/record.json", "flows/setup/public-evidence.json"]) {
+  for (const name of ["flows/setup/record.json"]) {
     await expect(
       unpackStateFiles({ "trading.env": "SHOULD-NOT-WRITE", [name]: "{}" }, f.stateDir),
     ).rejects.toMatchObject({ code: "recovery.archive_path_unsafe", params: {} });
@@ -429,7 +429,7 @@ it.each(["pre-consumption-abandoned", "complete"])(
 
 it.each([
   "flows/restore/record.json",
-  "flows/setup/node-key.json",
+  "flows/setup/documents/probe.json",
   "flows/setup/documents/manifest.json",
   "flows/setup/documents/0-0.json",
   "flows/setup/record.json",

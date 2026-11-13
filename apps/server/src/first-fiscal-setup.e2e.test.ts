@@ -1,5 +1,6 @@
+import { STATE_LAYOUT } from "@waitron/store";
 import { dirname, join } from "node:path";
-import { mkdtemp, readFile, rm, writeFile, mkdir, readdir } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, mkdir, readdir, cp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { Agent } from "undici";
@@ -416,8 +417,8 @@ it.each([
           },
         });
         const disk = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
-        expect(disk.status).toBe("consumption-intent");
-        expect(disk.consumptionIntent).toBe(true);
+        expect(disk.attempt.status).toBe("consumption-intent");
+        expect(disk.attempt.consumptionIntent).toBe(true);
         expect(await readFile(join(stateDir, "flows/setup/import/artifact"))).not.toHaveLength(0);
         await server!.close();
         server = undefined;
@@ -495,8 +496,8 @@ it.each([
       const persisted = JSON.parse(
         await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
       );
-      expect(persisted.status).toBe("complete");
-      expect(persisted.frozen.configurationImport).toEqual({
+      expect(persisted.attempt.status).toBe("complete");
+      expect(persisted.attempt.frozen.configurationImport).toEqual({
         digest: expect.stringMatching(/^[a-f0-9]{64}$/),
         newTaxpayer,
       });
@@ -509,6 +510,24 @@ it.each([
       server = await startServer(merged, env, { testClock: time.clock });
       const health = await fetch(url + "/health", { dispatcher: agent } as RequestInit);
       expect(health.status).toBe(200);
+      const undeclared = async (directory: string) =>
+        (await readdir(directory)).filter(
+          (name) =>
+            !STATE_LAYOUT.some((entry) =>
+              entry.kind === "prefix" ? name.startsWith(entry.name) : name === entry.name,
+            ),
+        );
+      expect(await undeclared(stateDir)).toEqual([]);
+      if (launch === "direct" && !newTaxpayer && change === "none") {
+        const copy = await mkdtemp(join(tmpdir(), "setup-layout-control-"));
+        try {
+          await cp(stateDir, copy, { recursive: true });
+          await writeFile(join(copy, "stray.json"), "{}");
+          expect(await undeclared(copy)).toEqual(["stray.json"]);
+        } finally {
+          await rm(copy, { recursive: true, force: true });
+        }
+      }
       const setup = await fetch(url + "/setup-api/first-setup/status", {
         dispatcher: agent,
       } as RequestInit);
@@ -518,8 +537,8 @@ it.each([
       const restarted = JSON.parse(
         await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
       );
-      expect(restarted.frozen).toEqual(persisted.frozen);
-      expect(restarted.result).toEqual(persisted.result);
+      expect(restarted.attempt.frozen).toEqual(persisted.attempt.frozen);
+      expect(restarted.attempt.result).toEqual(persisted.attempt.result);
     } finally {
       await server?.close();
       await agent?.close();
@@ -663,8 +682,8 @@ it("accepts real retained readiness before the wizard collects email settings", 
       body: { status: "accepted", testedAt: expect.any(String) },
     });
     const retained = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
-    expect(retained.status).toBe("claimed");
-    expect(retained.consumptionIntent).toBe(false);
+    expect(retained.attempt.status).toBe("claimed");
+    expect(retained.attempt.consumptionIntent).toBe(false);
   } finally {
     await server.close();
     await agent.close();

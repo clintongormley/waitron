@@ -1,3 +1,4 @@
+import { readSetupFlowRecord, updateSetupFlowSection } from "@waitron/provisioning";
 import { dirname, join } from "node:path";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { vi } from "vitest";
@@ -165,11 +166,9 @@ it("a changed public history or stage on disk invalidates the grant", async () =
   const f = await fixture();
   await f.register();
   await f.kept();
-  const path = join(f.stateDir, "flows/setup/node-key.json"),
-    stage = JSON.parse(await readFile(path, "utf8"));
+  const stage = JSON.parse(JSON.stringify((await readSetupFlowRecord(f.stateDir))?.nodeKey));
   stage.name = "2026-10-16 · 3333";
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(stage));
+  await updateSetupFlowSection(f.stateDir, "nodeKey", () => stage);
   await expect(f.delivery.read(f.context.binding)).rejects.toMatchObject(missing);
 });
 it("consumes a grant before concurrent readers can both prepare", async () => {
@@ -321,7 +320,7 @@ it("keeps a public history larger than the legacy grant file in separately bound
   // This fixture imports a larger valid input before the immutable delivery is registered.
   const path = join(f.stateDir, "flows/setup/record.json");
   const saved = JSON.parse(await readFile(path, "utf8"));
-  saved.inputs[f.module] = input;
+  saved.attempt.inputs[f.module] = input;
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(saved));
   const deliveryInput = { ...f.input, statement, inputDigest: publicDigest(input), historyDigest };
@@ -340,28 +339,24 @@ it("keeps a public history larger than the legacy grant file in separately bound
   expect(files.filter((p) => /-\d+\.json$/.test(p)).length).toBeGreaterThan(1);
   for (const path of files)
     expect(Buffer.byteLength(await readFile(join(root, path), "utf8"))).toBeLessThanOrEqual(48000);
-  await expect(
-    readFile(join(f.stateDir, "flows/setup/public-evidence.json")),
-  ).rejects.toMatchObject({
-    code: "ENOENT",
-  });
+  expect((await readSetupFlowRecord(f.stateDir))?.publicEvidence).toBeUndefined();
 });
 it("cannot register a successor before the durable consumption intent", async () => {
   const f = await fixture();
   const path = join(f.stateDir, "flows/setup/record.json"),
     saved = JSON.parse(await readFile(path, "utf8"));
-  saved.history = saved.history.filter(
+  saved.attempt.history = saved.attempt.history.filter(
     (event: { kind: string }) => event.kind !== "consumption-intent" && event.kind !== "import",
   );
-  saved.revision = saved.history.length;
-  saved.status = "claimed";
-  saved.consumptionIntent = false;
-  saved.inputs = {};
+  saved.attempt.revision = saved.attempt.history.length;
+  saved.attempt.status = "claimed";
+  saved.attempt.consumptionIntent = false;
+  saved.attempt.inputs = {};
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(saved));
   await expect(
     f.delivery.registerFirstFiscalDelivery(
-      { ...f.ownerAttempt, revision: saved.revision },
+      { ...f.ownerAttempt, revision: saved.attempt.revision },
       f.input,
     ),
   ).rejects.toMatchObject(missing);
@@ -401,7 +396,7 @@ it.each(["secret", "privateKey", "nodeKeys"])(
     };
     const path = join(f.stateDir, "flows/setup/record.json"),
       saved = JSON.parse(await readFile(path, "utf8"));
-    saved.inputs[f.module] = input;
+    saved.attempt.inputs[f.module] = input;
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, JSON.stringify(saved));
     const statement = {

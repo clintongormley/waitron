@@ -355,8 +355,8 @@ it.each([
         disk.close();
       }
       const saved = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
-      expect(saved.status).toBe(change === "none" ? "complete" : "consumption-intent");
-      expect(saved.frozen.configurationImport).toEqual({
+      expect(saved.attempt.status).toBe(change === "none" ? "complete" : "consumption-intent");
+      expect(saved.attempt.frozen.configurationImport).toEqual({
         digest: expect.stringMatching(/^[a-f0-9]{64}$/),
         newTaxpayer,
       });
@@ -374,8 +374,8 @@ it.each([
         const restarted = JSON.parse(
           await readFile(join(stateDir, "flows/setup/record.json"), "utf8"),
         );
-        expect(restarted.frozen).toEqual(saved.frozen);
-        expect(restarted.result).toEqual(saved.result);
+        expect(restarted.attempt.frozen).toEqual(saved.attempt.frozen);
+        expect(restarted.attempt.result).toEqual(saved.attempt.result);
       }
     } finally {
       await server?.close();

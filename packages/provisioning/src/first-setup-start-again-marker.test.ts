@@ -49,8 +49,8 @@ const STATE_FILES: Record<string, string> = {
   "module-preparation-state.json": "{}",
   "flows/setup/documents/a.json": "document",
   [`flows/setup/documents/.first-setup-${randomUUID()}.tmp`]: "half-written",
-  "flows/setup/node-key.json": "key",
-  "flows/setup/public-evidence.json": "public",
+  "flows/setup/key.json": "key",
+  "flows/setup/public.json": "public",
   [`first-setup-resolutions/${RECORD}/000001.json`]: "record",
   [`first-setup-resolutions/${RECORD}/manifest.json`]: "manifest",
   [`first-setup-resolutions/${RECORD}/.first-setup-${randomUUID()}.tmp`]: "half-written",
@@ -890,12 +890,12 @@ it.each<[string, boolean, (f: Awaited<ReturnType<typeof pendingDeletion>>) => Pr
 
 it("a listed file the marker cannot hash is refused as a failed check, naming the file", async () => {
   const roots = await attemptFolders();
-  const file = join(roots.stateDir, "flows/setup/public-evidence.json");
+  const file = join(roots.stateDir, "flows/setup/public.json");
   await fs.chmod(file, 0o000);
   try {
     await expect(startAgainMarkerFor(roots, ATTEMPT)).rejects.toMatchObject({
       ...incomplete,
-      reason: `check failed: EACCES ${join(await fs.realpath(roots.stateDir), "flows/setup/public-evidence.json")}`,
+      reason: `check failed: EACCES ${join(await fs.realpath(roots.stateDir), "flows/setup/public.json")}`,
     });
   } finally {
     await fs.chmod(file, 0o600);

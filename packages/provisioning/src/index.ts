@@ -246,3 +246,10 @@ export {
   STARTER_JOB_ROLE_NAMES,
   DEMO_JOB_ROLE_NAMES,
 } from "./starter-content.js";
+
+export {
+  readSetupFlowRecord,
+  updateSetupFlowSection,
+  type SetupFlowRecord,
+  type SetupFlowSection,
+} from "./setup-flow-record.js";

@@ -1,3 +1,4 @@
+import { readSetupFlowRecord, updateSetupFlowSection } from "@waitron/provisioning";
 import { dirname, join } from "node:path";
 import { mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
@@ -190,30 +191,36 @@ it.each([
   "missing-db",
   "unknown-input",
   "orphan-document",
+  "orphan-manifest",
 ] as const)("unused-PDF reset refuses %s evidence", async (why) => {
   const f = await fixture();
   const directory = join(f.stateDir, "flows/setup/documents");
+  if (why === "orphan-manifest")
+    await updateSetupFlowSection(f.stateDir, "recoveryManifests", (current) => ({
+      ...current,
+      unknown: {},
+    }));
   if (why === "key") {
-    await mkdir(dirname(join(f.stateDir, "flows/setup/node-key.json")), { recursive: true });
-    await writeFile(join(f.stateDir, "flows/setup/node-key.json"), "{}");
+    await updateSetupFlowSection(f.stateDir, "nodeKey", () => ({}));
   }
   if (why === "stage") {
-    const path = join(f.stateDir, "flows/setup/node-key.json");
-    const key = JSON.parse(await readFile(path, "utf8"));
+    const key = JSON.parse(JSON.stringify((await readSetupFlowRecord(f.stateDir))?.nodeKey));
     key.stageId = "11111111-1111-4111-8111-111111111111";
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify(key));
+    await updateSetupFlowSection(f.stateDir, "nodeKey", () => key);
   }
   if (why === "modules") await writeFile(join(f.stateDir, "modules.json"), "{}");
   if (why === "missing-db") await rm(join(f.venueDir, "venue.db"));
   if (why === "unknown-input") {
     const path = join(f.stateDir, "flows/setup/record.json");
     const state = JSON.parse(await readFile(path, "utf8"));
-    state.inputs.unknown = { evidence: "not understood" };
+    state.attempt.inputs.unknown = { evidence: "not understood" };
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, JSON.stringify(state));
   }
-  if (why === "orphan-document") await writeFile(join(directory, "unknown.json"), "{}");
+  if (why === "orphan-document") {
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "unknown.json"), "{}");
+  }
   const unchanged = await startAgainUnchanged(f);
   await expect(
     f.start(why === "no-master" ? { kind: "no-current-master", confirmed: true } : f.answer()),
@@ -271,22 +278,29 @@ async function damageRecord(
   f: Awaited<ReturnType<typeof fixture>>,
   why: "manifest" | "binding" | "rehashed",
 ) {
-  const directory = join(f.stateDir, "flows/setup/documents");
-  if (why === "manifest") await writeFile(join(directory, `${f.module}.recovery.json`), "{}");
+  if (why === "manifest")
+    await updateSetupFlowSection(f.stateDir, "recoveryManifests", () => ({ [f.module]: {} }));
   if (why === "binding") {
-    const path = join(directory, `${f.module}.recovery.json`);
-    const manifest = JSON.parse(await readFile(path, "utf8"));
+    const manifest = JSON.parse(
+      JSON.stringify((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[f.module]),
+    );
     manifest.bindingDigest = "0".repeat(64);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, JSON.stringify(manifest));
+    await updateSetupFlowSection(f.stateDir, "recoveryManifests", (current) => ({
+      ...current,
+      [f.module]: manifest,
+    }));
   }
   if (why === "rehashed") {
-    const manifestPath = join(directory, `${f.module}.recovery.json`);
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const manifest = JSON.parse(
+      JSON.stringify((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[f.module]),
+    );
     expect(manifest.kind).toBe("recovery-key-delivery");
     manifest.statement.nodeKey.name = "different-recovery-key";
     manifest.bindingDigest = publicDigest(manifest.statement);
-    await writeFile(manifestPath, JSON.stringify(manifest));
+    await updateSetupFlowSection(f.stateDir, "recoveryManifests", (current) => ({
+      ...current,
+      [f.module]: manifest,
+    }));
   }
 }
 /** The ids a page holds after reading the inspection, with the venue database left in place. */
@@ -300,13 +314,16 @@ async function inspectionIds(f: Awaited<ReturnType<typeof fixture>>) {
 }
 it("a rehashed document with an invalid module confirmation is refused without the warning shown, and starts again with it", async () => {
   const f = await fixture();
-  const directory = join(f.stateDir, "flows/setup/documents");
-  const manifestPath = join(directory, `${f.module}.recovery.json`);
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  const manifest = JSON.parse(
+    JSON.stringify((await readSetupFlowRecord(f.stateDir))?.recoveryManifests?.[f.module]),
+  );
   expect(manifest.kind).toBe("recovery-key-delivery");
   manifest.statement.nodeKey.name = "different-recovery-key";
   manifest.bindingDigest = publicDigest(manifest.statement);
-  await writeFile(manifestPath, JSON.stringify(manifest));
+  await updateSetupFlowSection(f.stateDir, "recoveryManifests", (current) => ({
+    ...current,
+    [f.module]: manifest,
+  }));
   const unchanged = await startAgainUnchanged(f);
   await expect(f.start()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   await unchanged();
@@ -375,24 +392,24 @@ it.each(["key", "stage", "unknown-input", "orphan-document"] as const)(
     const f = await fixture();
     const directory = join(f.stateDir, "flows/setup/documents");
     if (why === "key") {
-      await mkdir(dirname(join(f.stateDir, "flows/setup/node-key.json")), { recursive: true });
-      await writeFile(join(f.stateDir, "flows/setup/node-key.json"), "{}");
+      await updateSetupFlowSection(f.stateDir, "nodeKey", () => ({}));
     }
     if (why === "stage") {
-      const path = join(f.stateDir, "flows/setup/node-key.json");
-      const key = JSON.parse(await readFile(path, "utf8"));
+      const key = JSON.parse(JSON.stringify((await readSetupFlowRecord(f.stateDir))?.nodeKey));
       key.stageId = "11111111-1111-4111-8111-111111111111";
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, JSON.stringify(key));
+      await updateSetupFlowSection(f.stateDir, "nodeKey", () => key);
     }
     if (why === "unknown-input") {
       const path = join(f.stateDir, "flows/setup/record.json");
       const state = JSON.parse(await readFile(path, "utf8"));
-      state.inputs.unknown = { evidence: "not understood" };
+      state.attempt.inputs.unknown = { evidence: "not understood" };
       await mkdir(dirname(path), { recursive: true });
       await writeFile(path, JSON.stringify(state));
     }
-    if (why === "orphan-document") await writeFile(join(directory, "unknown.json"), "{}");
+    if (why === "orphan-document") {
+      await mkdir(directory, { recursive: true });
+      await writeFile(join(directory, "unknown.json"), "{}");
+    }
     const ids = await inspectionIds(f);
     const unchanged = await startAgainUnchanged(f);
     await expect(
@@ -408,7 +425,7 @@ it.each(["key", "stage", "unknown-input", "orphan-document"] as const)(
 it("a damaged record and no staged node key is refused setup.not_ready, and nothing changes", async () => {
   const f = await fixture();
   await damageRecord(f, "manifest");
-  await rm(join(f.stateDir, "flows/setup/node-key.json"));
+  await updateSetupFlowSection(f.stateDir, "nodeKey", () => undefined);
   const ids = await inspectionIds(f);
   const unchanged = await startAgainUnchanged(f);
   const before = await readFile(join(f.stateDir, "flows/setup/record.json"));

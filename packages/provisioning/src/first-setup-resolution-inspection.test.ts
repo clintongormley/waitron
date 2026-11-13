@@ -151,8 +151,7 @@ it.each([
   "flows/restore/record.json",
   "reset-request.json",
   "flows/setup/operation.json",
-  "flows/setup/node-key.json",
-  "flows/setup/public-evidence.json",
+  "modules.json",
 ])("does not call %s evidence empty", async (name) => {
   const f = await fixture();
   await mkdir(join(f.stateDir, name, ".."), { recursive: true });
@@ -336,7 +335,7 @@ it.each(["symlink", "directory", "oversize", "array"] as const)(
   "retains an unreadable or invalid %s artifact as evidence",
   async (kind) => {
     const f = await fixture();
-    const path = join(f.stateDir, "flows/setup/node-key.json");
+    const path = join(f.stateDir, "modules.json");
     if (kind === "symlink") await symlink(join(f.root, "lost.json"), path);
     if (kind === "directory") await mkdir(path);
     if (kind === "oversize") {
@@ -350,7 +349,7 @@ it.each(["symlink", "directory", "oversize", "array"] as const)(
     const inspected = await f.service.inspectFirstSetupResolution();
     expect(inspected.artifacts).toContainEqual(
       expect.objectContaining({
-        name: "flows/setup/node-key.json",
+        name: "modules.json",
         status: kind === "array" ? "invalid" : "unreadable",
       }),
     );
@@ -539,7 +538,7 @@ it.each(["directory", "oversize", "removed"])(
   "does not archive a state artifact replaced by %s after inspection",
   async (fault) => {
     const f = await fixture("active");
-    const path = join(f.stateDir, "flows/setup/public-evidence.json");
+    const path = join(f.stateDir, "modules.json");
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, '{"retained":true}');
     const inspect = f.service.inspectFirstSetupResolution.bind(f.service);
@@ -604,7 +603,7 @@ it.each([
   ["a delivery folder over the file count", "too-large"],
 ] as const)("names the cause when %s after inspection", async (fault, cause) => {
   const f = await fixture("active");
-  const artifact = join(f.stateDir, "flows/setup/public-evidence.json");
+  const artifact = join(f.stateDir, "modules.json");
   const delivery = join(f.stateDir, "flows/setup/documents");
   await mkdir(dirname(artifact), { recursive: true });
   await writeFile(artifact, '{"retained":true}');

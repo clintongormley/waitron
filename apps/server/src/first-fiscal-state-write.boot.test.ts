@@ -36,13 +36,13 @@ it("boots with the retained setup record after abandoning it", async () => {
     );
     await store.update(claimed.frozen.attemptId, claimed.revision, { kind: "abandoned" });
     const stateBefore = await fs.readFile(statePath);
-    expect(JSON.parse(stateBefore.toString())).toMatchObject({
+    expect(JSON.parse(stateBefore.toString()).attempt).toMatchObject({
       status: "abandoned",
       consumptionIntent: false,
     });
     const retained = JSON.parse(stateBefore.toString());
-    expect(await verifyPassword(PASSWORD, retained.ownerVerifier)).toBe(true);
-    expect(await verifyPassword(`${PASSWORD}-wrong`, retained.ownerVerifier)).toBe(false);
+    expect(await verifyPassword(PASSWORD, retained.attempt.ownerVerifier)).toBe(true);
+    expect(await verifyPassword(`${PASSWORD}-wrong`, retained.attempt.ownerVerifier)).toBe(false);
     const migrations = join(f.root, "migrations");
     await copyMigrationsRoot(migrations);
     const [port] = await freePorts(1);

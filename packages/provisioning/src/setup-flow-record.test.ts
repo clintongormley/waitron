@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -97,4 +97,21 @@ it("a failed write leaves the previous record", async () => {
   });
   expect(await readFile(f.path)).toEqual(before);
   expect(await readSetupFlowRecord(f.stateDir)).toEqual({ version: 1, attempt: f.attempt });
+});
+
+it("refuses a linked record without changing its target", async () => {
+  const f = await fixture();
+  await updateSetupFlowSection(f.stateDir, "attempt", () => f.attempt);
+  const bytes = await readFile(f.path);
+  const target = join(f.stateDir, "target.json");
+  await writeFile(target, bytes);
+  await rm(f.path);
+  await symlink(target, f.path);
+  await expect(readSetupFlowRecord(f.stateDir)).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+  await expect(updateSetupFlowSection(f.stateDir, "nodeKey", () => ({}))).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+  expect(await readFile(target)).toEqual(bytes);
 });

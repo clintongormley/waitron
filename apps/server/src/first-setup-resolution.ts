@@ -127,7 +127,7 @@ function recoveryRecordDamagedOf(
     try {
       readFirstSetupRecoveryDeliverySnapshot(module, state, originals, modules);
     } catch (error) {
-      const recoveryName = `state/flows/setup/documents/${module}.recovery.json`;
+      const recoveryName = "state/flows/setup/record.json";
       if (
         !(error instanceof AppError) ||
         originals.find((entry) => entry.name === recoveryName)?.bytes == null
@@ -147,11 +147,27 @@ async function presentAttemptEligibility(
   register: RegisterAnswer | undefined,
   cutOff: boolean,
 ) {
-  const noOtherHistory = inspection.artifacts.every(
-    (artifact) =>
-      [FIRST_SETUP_FILE, "venue.db", "venue.db-wal"].includes(artifact.name) ||
-      (!artifact.name.startsWith("outside-") && artifact.status === "missing"),
-  );
+  const bytes = originals.find((entry) => entry.name === `state/${FIRST_SETUP_FILE}`)?.bytes;
+  const flow =
+    bytes == null
+      ? null
+      : (JSON.parse(Buffer.from(bytes).toString("utf8")) as {
+          nodeKey?: unknown;
+          publicEvidence?: unknown;
+          recoveryManifests?: Record<string, unknown>;
+        });
+  const noOtherSections =
+    flow !== null &&
+    flow.nodeKey === undefined &&
+    flow.publicEvidence === undefined &&
+    flow.recoveryManifests === undefined;
+  const noOtherHistory =
+    noOtherSections &&
+    inspection.artifacts.every(
+      (artifact) =>
+        [FIRST_SETUP_FILE, "venue.db", "venue.db-wal"].includes(artifact.name) ||
+        (!artifact.name.startsWith("outside-") && artifact.status === "missing"),
+    );
   const emptyWorkspace = inspection.emptyDatabase && unused(state) && noOtherHistory;
   const assignment =
     inspection.emptyDatabase &&
