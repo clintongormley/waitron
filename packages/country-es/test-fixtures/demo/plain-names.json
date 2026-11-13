@@ -494,6 +494,39 @@
         "es": "MERLUZA · MENÚ"
       },
       "customerEnglish": "Battered hake"
+    },
+    "coca-cola-lata.png": {
+      "staff": {
+        "en": "Coca-Cola",
+        "es": "Coca-Cola"
+      },
+      "kitchen": {
+        "en": "COCA-COLA · DELI",
+        "es": "COCA-COLA · CHARCUTERÍA"
+      },
+      "customerEnglish": "Coca-Cola can (33 cl)"
+    },
+    "coca-cola-zero-lata.png": {
+      "staff": {
+        "en": "Coca-Cola Zero",
+        "es": "Coca-Cola Zero"
+      },
+      "kitchen": {
+        "en": "COCA-COLA ZERO · DELI",
+        "es": "COCA-COLA ZERO · CHARCUTERÍA"
+      },
+      "customerEnglish": "Coca-Cola Zero can (33 cl)"
+    },
+    "botellin-cerveza.png": {
+      "staff": {
+        "en": "Bottled beer",
+        "es": "Botellín"
+      },
+      "kitchen": {
+        "en": "BOTTLED BEER · DELI",
+        "es": "BOTELLÍN · CHARCUTERÍA"
+      },
+      "customerEnglish": "Bottle of lager (33 cl)"
     }
   },
   "variants": [

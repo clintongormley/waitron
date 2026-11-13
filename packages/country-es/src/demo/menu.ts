@@ -1406,10 +1406,106 @@ export const DELI_TAKEAWAY = {
     "ca-ES-valencia": "Embotits i formatges per a emportar",
     gl: "Embutidos e queixos para levar",
   },
-  categories: COMBINED_CASA_DELGADO_CATEGORIES.slice(0, 3).map((category) => ({
-    ...category,
-    station: "deli",
-  })),
+  categories: [
+    ...COMBINED_CASA_DELGADO_CATEGORIES.slice(0, 3).map((category) => ({
+      ...category,
+      station: "deli" as const,
+    })),
+    {
+      name: {
+        en: "Drinks to take away",
+        es: "Bebidas para llevar",
+        ca: "Begudes per emportar",
+        "ca-ES-valencia": "Begudes per a emportar",
+        gl: "Bebidas para levar",
+      },
+      station: "deli",
+      color: "#a8d8e0",
+      products: [
+        {
+          kitchenName: {
+            en: "COCA-COLA · DELI",
+            es: "COCA-COLA · CHARCUTERÍA",
+            ca: "Coca-Cola · xarcuteria",
+            "ca-ES-valencia": "Coca-Cola · xarcuteria",
+            gl: "COCA-COLA · CHARCUTARÍA",
+          },
+          staffName: {
+            en: "Coca-Cola",
+            es: "Coca-Cola",
+            ca: "Coca-Cola",
+            "ca-ES-valencia": "Coca-Cola",
+            gl: "Coca-Cola",
+          },
+          customerName: {
+            en: "Coca-Cola can (33 cl)",
+            es: "Coca-Cola en lata (33 cl)",
+            ca: "Llauna de Coca-Cola (33 cl)",
+            "ca-ES-valencia": "Llanda de Coca-Cola (33 cl)",
+            gl: "Lata de Coca-Cola (33 cl)",
+          },
+          pricingUnit: "each",
+          unitPrice: "1.80",
+          vatClass: "general",
+          image: "coca-cola-lata.png",
+        },
+        {
+          kitchenName: {
+            en: "COCA-COLA ZERO · DELI",
+            es: "COCA-COLA ZERO · CHARCUTERÍA",
+            ca: "Coca-Cola Zero · xarcuteria",
+            "ca-ES-valencia": "Coca-Cola Zero · xarcuteria",
+            gl: "COCA-COLA ZERO · CHARCUTARÍA",
+          },
+          staffName: {
+            en: "Coca-Cola Zero",
+            es: "Coca-Cola Zero",
+            ca: "Coca-Cola Zero",
+            "ca-ES-valencia": "Coca-Cola Zero",
+            gl: "Coca-Cola Zero",
+          },
+          customerName: {
+            en: "Coca-Cola Zero can (33 cl)",
+            es: "Coca-Cola Zero en lata (33 cl)",
+            ca: "Llauna de Coca-Cola Zero (33 cl)",
+            "ca-ES-valencia": "Llanda de Coca-Cola Zero (33 cl)",
+            gl: "Lata de Coca-Cola Zero (33 cl)",
+          },
+          pricingUnit: "each",
+          unitPrice: "1.80",
+          vatClass: "general",
+          image: "coca-cola-zero-lata.png",
+        },
+        {
+          kitchenName: {
+            en: "BOTTLED BEER · DELI",
+            es: "BOTELLÍN · CHARCUTERÍA",
+            ca: "Cervesa d'ampolla · xarcuteria",
+            "ca-ES-valencia": "Cervesa de botella · xarcuteria",
+            gl: "BOTELLÍN · CHARCUTARÍA",
+          },
+          staffName: {
+            en: "Bottled beer",
+            es: "Botellín",
+            ca: "Cervesa d'ampolla",
+            "ca-ES-valencia": "Cervesa de botella",
+            gl: "Botellín",
+          },
+          customerName: {
+            en: "Bottle of lager (33 cl)",
+            es: "Botellín de cerveza (33 cl)",
+            ca: "Ampolla de cervesa (33 cl)",
+            "ca-ES-valencia": "Botella de cervesa (33 cl)",
+            gl: "Botella de cervexa (33 cl)",
+          },
+          pricingUnit: "each",
+          unitPrice: "1.60",
+          vatClass: "general",
+          image: "botellin-cerveza.png",
+        },
+      ],
+    },
+  ],
 } as const satisfies CountryDemoCatalogue<CasaDelgadoLanguage>;
 
 export const MENU_DEL_DIA = {
