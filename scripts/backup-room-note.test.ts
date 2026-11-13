@@ -42,6 +42,8 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
   "apps/server/src/backup-verification.ts":
     "places a backup in a scratch folder and removes that folder",
   "apps/server/src/cloud-snapshot-archive.ts": "removes its own staging folder",
+  "apps/server/src/finish-adoption.ts":
+    "reads the live database; removes only the pending-adoption marker",
   "apps/server/src/first-setup-database-holdings.ts":
     "reads the live database; removes only its scratch folder",
   "apps/server/src/handover-capture.ts":
