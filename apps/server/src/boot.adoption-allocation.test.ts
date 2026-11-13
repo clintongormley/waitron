@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { invoiceSeries, locations, nodes, stampDeployment, tenants } from "@waitron/db";
-import { setNodeMode } from "@waitron/node-db";
+import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing, nodeSigningPublicKey, sealNodeSigningKeyTx } from "@waitron/credentials";
 import { signEnvelope, verifyEnvelope } from "@waitron/handover";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -37,6 +37,8 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { startServer, httpPort } = ephemeralServerFixture();
+// Whether `fiscal-none` stands in for a module whose spare needs its own allocation.
+const allocation = vi.hoisted(() => ({ dependent: true }));
 
 vi.mock("./modules.js", async (original) => {
   const real = await original<typeof import("./modules.js")>();
@@ -47,13 +49,16 @@ vi.mock("./modules.js", async (original) => {
         ? module
         : ({
             ...module,
-            operations: {
-              async prepare<T>(
-                operation: ModuleOperationInput,
-                run: (prepared: ModuleOperationInput) => Promise<T>,
-              ): Promise<T> {
-                return run(operation);
-              },
+            get operations() {
+              if (!allocation.dependent) return undefined;
+              return {
+                async prepare<T>(
+                  operation: ModuleOperationInput,
+                  run: (prepared: ModuleOperationInput) => Promise<T>,
+                ): Promise<T> {
+                  return run(operation);
+                },
+              };
             },
             provisioning: {
               standby: {
@@ -295,6 +300,91 @@ it("the pending-adoption start is handed a chart through its own route", async (
       body: { accepted: false },
     });
   } finally {
+    await server?.close();
+    await rm(scratch, { recursive: true, force: true });
+  }
+}, 60_000);
+
+it("joining finishes when the copy holds this box's row, and the next start is a mirror", async () => {
+  await suite.db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
+  await suite.db.insert(locations).values({ id: LOCATION });
+  await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
+  await seedBusinessDay(suite.db, {});
+  const standby = generateNodeKeyPair();
+  const main = { nodeId: PRIMARY, ...generateNodeKeyPair() };
+  await suite.db.insert(nodes).values([
+    { id: PRIMARY, name: "Primary", filingModule: "none", taxModule: "vat" },
+    { id: STANDBY, name: "Spare", publicKey: standby.publicKey },
+  ]);
+  await stampDeployment(suite.db, "preproduction");
+  await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror");
+  const keyEnv = {
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  };
+  await withNodeTransaction(suite.node, (tx) =>
+    sealNodeSigningKeyTx(tx, loadKeyRing(keyEnv), STANDBY, standby.privateKey),
+  );
+  await pinMainBoxKey(suite.node, STANDBY, main);
+  await writeMirrorLink(suite.node, STANDBY, {
+    originUrl: "http://127.0.0.1:1/",
+    boxHostname: "main-box.local",
+    boxCaPem: "unused",
+    originNodeId: PRIMARY,
+  });
+  const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-finishes-"));
+  let server: StartedServer | undefined;
+  allocation.dependent = false;
+  try {
+    for (const [index, set] of manifestSets().entries())
+      await cp(migrations[index]!.migrationsFolder, join(scratch, "migrations", set.name), {
+        recursive: true,
+      });
+    await writeFile(
+      join(scratch, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-verifactu": false } }),
+    );
+    await writePendingAdoption(scratch, {
+      originNodeId: PRIMARY,
+      standby: { nodeId: STANDBY, publicKey: standby.publicKey },
+      nodeName: "Spare",
+      filingModule: "none",
+      taxModule: "vat",
+      reserved: { modules: { "fiscal-none": {} }, series: [], endorsement: {} as never },
+    });
+    const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+    const [port] = await freePorts(1);
+    const env = {
+      ...keyEnv,
+      WAITRON_VENUE_DIR: dirname(database),
+      WAITRON_STATE_DIR: scratch,
+      WAITRON_LOG_DIR: join(scratch, "logs"),
+      WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_NODE_ID: STANDBY,
+      WAITRON_ENV: "dev",
+    };
+    let restarts = 0;
+    server = await startServer(
+      env,
+      {},
+      { stepdown: { mount() {}, restart: () => (restarts += 1) } },
+    );
+    await vi.waitFor(() => expect(restarts).toBe(1));
+    expect(await readPendingAdoption(scratch)).toBeNull();
+    await server.close();
+    server = undefined;
+
+    server = await startServer(env);
+    const probe = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+    expect(probe.status).toBe(200);
+    expect(await probe.json()).toMatchObject({ acceptingSales: false });
+    expect((await readNodeMode(suite.node, STANDBY)).mode).toBe("mirror");
+  } finally {
+    allocation.dependent = true;
     await server?.close();
     await rm(scratch, { recursive: true, force: true });
   }

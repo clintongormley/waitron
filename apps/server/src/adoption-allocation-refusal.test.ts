@@ -233,8 +233,17 @@ it("a pending allocated adoption refuses without creating a selling identity and
   for (let retry = 0; retry < 2; retry += 1) {
     await runFinishAdoption({
       ownerDb: suite.db,
+      node: suite.node,
+      ring: loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      }),
+      nodeId: STANDBY,
       stateDir,
       modules,
+      restart: () => {
+        throw new Error("a refused latch asks for no restart");
+      },
       log: (level, event, fields) => {
         events.push({ level, event, fields });
       },

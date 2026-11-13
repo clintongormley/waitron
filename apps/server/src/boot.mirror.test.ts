@@ -878,8 +878,8 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       join(stateDir, "modules.json"),
       JSON.stringify({ modules: { "fiscal-none": false } }),
     );
-    // Inert: establishing the standby needs a `locations` row this database does not hold, and
-    // `runFinishAdoption` logs `adoption.establish_failed` rather than failing the boot.
+    // Inert: this database holds no row for this box, so `runFinishAdoption` logs
+    // `adoption.establish_failed` and keeps the latch rather than failing the boot.
     writeFileSync(
       join(stateDir, "pending-adoption.json"),
       JSON.stringify({

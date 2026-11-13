@@ -1907,8 +1907,12 @@ async function bootServer(
     mountNodeMembershipApi(app, { db, node: store.node, nodeId: config.node.nodeId }, log);
     const finishWorker = runFinishAdoption({
       ownerDb: db,
+      node: store.node,
+      ring,
+      nodeId: ownNodeId,
       stateDir: config.stateDir,
       modules: setsToMigrate,
+      restart,
       log,
     });
     // A rejection before close() must not become a process-level unhandled rejection.

@@ -1321,8 +1321,8 @@ declare module "@waitron/shared" {
      */
     "mirror.not_provisioned": Record<string, never>;
     /**
-     * An adopted mirror's standby identity was not established because this database holds no venue
-     * row; nothing copies the main box's rows to a mirror yet.
+     * This `venue.db` holds no venue row, or a joining spare's holds no `nodes` row for it: the main
+     * box's copy is not in place yet.
      */
     "mirror.venue_not_copied": Record<string, never>;
     /**

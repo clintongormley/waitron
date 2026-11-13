@@ -1,19 +1,19 @@
 import { PENDING_ADOPTION_FILE } from "@waitron/store";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { Database } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { nodeSigningPublicKey, setPairLinkStateTx, type KeyRing } from "@waitron/credentials";
+import { nodes, withNodeTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import "@waitron/module";
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { writeFileDurable } from "./fs-atomic.js";
-import {
-  establishReservedStandbyIdentity,
-  type StandbyPublicIdentity,
-} from "./reserved-identity.js";
+import type { StandbyPublicIdentity } from "./reserved-identity.js";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import type { Logger } from "./logger.js";
+import { readNodeIdentityKey } from "./node-identity.js";
 
 export function assertAdoptionModules(modules: readonly WaitronModule[]): void {
   for (const module of modules) {
@@ -23,12 +23,7 @@ export function assertAdoptionModules(modules: readonly WaitronModule[]): void {
   }
 }
 
-/**
- * The pending standby identity a boot establishes. Establishing refuses with
- * `mirror.venue_not_copied` while this database holds no venue row (`reserved-identity.ts`), and
- * nothing copies the main box's rows to a mirror yet, so an adopted mirror stays adoption-pending
- * until a replacement copy mechanism lands (`docs/backlog.md` → Replication, membership & failover).
- */
+/** What a joining spare records when it adopts; the file stays until the spare finishes joining. */
 export interface PendingAdoption {
   standby: StandbyPublicIdentity;
   nodeName: string;
@@ -60,44 +55,40 @@ export async function readPendingAdoption(stateDir: string): Promise<PendingAdop
   return JSON.parse(raw) as PendingAdoption;
 }
 
-/** The argument shape `establishReservedStandbyIdentity` takes — hoisted so the injectable `establish`
- * seat below matches it exactly. */
-type EstablishArgs = {
-  standby: StandbyPublicIdentity;
-  nodeName: string;
-  filingModule: string | null;
-  taxModule: string | null;
-  modules: readonly WaitronModule[];
-  reserved: ReservedIdentity;
-};
-
+/**
+ * Finishes joining once `venue.db` (the placed first copy) holds this box's `nodes` row with the
+ * public half of the key this box's `node.db` seals; until then the latch stays and the next start
+ * tries again. The link is marked `copied` before the latch goes, so a start between the two finds
+ * the latch, takes no second copy, and finishes here.
+ */
 export async function runFinishAdoption(deps: {
   ownerDb: Database;
+  node: NodeDatabase;
+  ring: KeyRing;
+  nodeId: string;
   stateDir: string;
   modules: readonly WaitronModule[];
-  establish?: (args: EstablishArgs) => Promise<void>;
+  restart: () => void;
   log: Logger;
 }): Promise<void> {
-  const establish =
-    deps.establish ?? ((args) => establishReservedStandbyIdentity({ ownerDb: deps.ownerDb }, args));
-
   const pending = await readPendingAdoption(deps.stateDir);
-  if (pending === null) return; // established (file unlinked) or never pending — nothing to finish.
+  if (pending === null) return;
   try {
     assertAdoptionModules(deps.modules);
-    await establish({
-      standby: pending.standby,
-      nodeName: pending.nodeName,
-      filingModule: pending.filingModule,
-      taxModule: pending.taxModule,
-      modules: deps.modules,
-      reserved: pending.reserved,
-    });
+    const [row] = await deps.ownerDb
+      .select({ publicKey: nodes.publicKey })
+      .from(nodes)
+      .where(eq(nodes.id, deps.nodeId));
+    if (row === undefined) throw new AppError("mirror.venue_not_copied", {});
+    const own = nodeSigningPublicKey(await readNodeIdentityKey(deps.node, deps.ring, deps.nodeId));
+    // Only a fault in Waitron produces this: the main box wrote the key this box sent it.
+    if (row.publicKey !== own) throw new AppError("node.identity_mismatch", {});
+    await withNodeTransaction(deps.node, (tx) => setPairLinkStateTx(tx, deps.nodeId, "copied"));
     await rm(pendingPath(deps.stateDir), { force: true });
-    deps.log("info", "adoption.established", { nodeId: pending.standby.nodeId });
+    deps.log("info", "adoption.established", { nodeId: deps.nodeId });
+    deps.restart();
   } catch (error) {
-    // Never fatal here: log and leave the latch file, so the next boot re-enters adoption-pending
-    // mode and retries the whole step.
+    // Never fatal here: the latch stays, so the next start re-enters it and retries.
     deps.log("error", "adoption.establish_failed", { code: codeOf(error) });
   }
 }
