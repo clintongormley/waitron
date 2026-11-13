@@ -243,6 +243,7 @@ export class TillLockScreen extends LitElement {
       this.staff = staff;
     } catch {
       if (!this.isConnected || connection !== this.#connection) return;
+      if (!initial) return;
       this.staff = [];
       this.errorKey = "login.load_failed";
       return;
