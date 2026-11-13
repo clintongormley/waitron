@@ -10,7 +10,7 @@
 
    Replace the three copied pairs in `.github/workflows/mutation.yml` with calls to new `.github/workflows/mutation-sharded.yml`. Inputs: package, JSON shard list, browser flag, numeric job minutes (ui 50, db/ui-core 25). Pass shell values through `env`, derive aggregate count from that same list, and keep literal `--break 90` inside the called workflow. Reuse `scripts/mutation-aggregate.mjs` unchanged. Preserve selection, skipping, failure propagation, nonempty selections, complete reports, artifact names/directories/retention, browser setup, permissions and every bounded retry. Keep shared in `ci.yml`, node-db/handover unsharded. No application/fiscal/schema/exclusion/cache changes.
 
-3. **Tests and explicit guard clearance.** Read TDD before code; observe failing behavior, implement minimally, then pass. Add narrow `scripts/mutation-workflow.mjs` and `.test.mjs` to read these local calls, derive their package list and resolve known inputs; include it in root coverage in `vitest.config.ts`. No general expression evaluator. Changed guards:
+3. **Tests and explicit guard clearance.** Read TDD before code; observe failing behavior, implement minimally, then pass. Add narrow `scripts/mutation-workflow.mjs` and `.test.mjs` to read these local calls, derive their package list and resolve known inputs; keep it under the existing `scripts/**/*.mjs` root coverage include in `vitest.config.ts`. No general expression evaluator. Changed guards:
    - `scripts/mutation-shard.test.mjs`: sales whole exactly once, cost placement and complete nonempty partitions; preserve range/refusal behavior with ui fixtures; resolve shard counts.
    - `scripts/mutation-break-thresholds.test.mjs`: resolved callers, literal combined 90 floor and reporter/upload containment; retain local floors and independent package membership.
    - `scripts/mutation-aggregate.test.mjs`: remove the obsolete count-agreement guard: the aggregate now derives its count from the same shard list. Keep only the merge script’s behavioral checks; workflow wiring owns count derivation once.
@@ -22,3 +22,5 @@
 **Expected diff:** workflow/implementation +250–350 / −500–650; tests +150–220 / −100–180, documentation separate. Watcher clearance includes retained downloads, the four named guard files (including job-limit expression handling), single-entry sales costing, 13 db shards, and branch dispatch as nightly evidence.
 
 Watcher directions: refresh the cost table only from post-change runs; old range reports would understate sales. Round its one new entry to one decimal and give the two run IDs and all six range costs in the PR. No further plan read required (questions.md, watcher 09:47).
+
+Watcher 10:16 cleared one additional builder refusal for a currently selected whole file supplied as an old line range. Preserve UI range support; no conversion, format or record.

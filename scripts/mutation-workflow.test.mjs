@@ -41,6 +41,7 @@ describe("mutation workflow callers", () => {
     ["package: db", "package: ../db"],
     ["package: db", "# package absent"],
     ["shards: '[1, 2, 3]'", "# shards absent"],
+    ["shards: '[1, 2, 3]'", "shards: [1, 2, 3]"],
     ["shards: '[1, 2, 3]'", "shards: invalid"],
     ["shards: '[1, 2, 3]'", "shards: '{}'"],
     ["shards: '[1, 2, 3]'", "shards: '[]'"],

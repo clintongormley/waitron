@@ -12,7 +12,8 @@ export function mutationCallers(text) {
     const minutes = value("minutes");
     let shards;
     try {
-      shards = JSON.parse((value("shards") ?? "").replace(/^['"]|['"]$/g, ""));
+      const quoted = /^(['"])(.*)\1$/.exec(value("shards") ?? "");
+      shards = JSON.parse(quoted?.[2] ?? "");
     } catch {
       throw new Error(id + ": invalid shard list");
     }

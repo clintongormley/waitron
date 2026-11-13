@@ -3259,8 +3259,9 @@ describe("the test shards", () => {
     );
     expect(common).toContain("path: packages/${{ inputs.package }}/reports/mutation/");
     expect(common).toContain("pattern: mutation-report-${{ inputs.package }}-shard-*");
-    expect(common).toContain("    needs: mutation");
-    expect(common).toContain("    if: always()");
+    const aggregate = jobBlocks(common).find((job) => job.id === "aggregate");
+    expect(aggregate.lines).toContain("    needs: mutation");
+    expect(aggregate.lines).toContain("    if: always()");
     const steps = workflowSteps(common);
     for (const name of [
       "Resolve installed Playwright version",
@@ -3270,7 +3271,9 @@ describe("the test shards", () => {
       expect(steps.find((step) => step.step === name).if).toBe("inputs.browser");
     expect(common).toContain('pnpm --filter "@waitron/$PACKAGE" exec playwright install chromium');
     const score = steps.find((step) => step.step === "Score the package");
-    expect(score.command).toContain("JSON.parse(process.env.SHARDS).length");
+    expect(score.command.split("\n").map((line) => line.trim())).toContain(
+      `TOTAL=$(node -e 'console.log(JSON.parse(process.env.SHARDS).length)')`,
+    );
     expect(score.command).toContain(
       'node scripts/mutation-aggregate.mjs mutation-reports --package "$PACKAGE" --shards "$TOTAL" --break 90',
     );

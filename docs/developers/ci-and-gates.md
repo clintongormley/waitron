@@ -1070,12 +1070,9 @@ outcomes did not change between runs, so it had nothing to learn from.
 Same-file mutation time varies a lot from run to run (shard 4: 448 s and 768 s; shard 8: 1,170 and
 824), which is why the table takes each file's median over the reports given. Summing the table then
 built from both runs over each of those whole-file shards' files, the mutation phase measured in
-either run was 0.70 to 1.24 times the estimate, at most about 211 s off. The table now in the
-repository was built from nightly runs 43159064593 and 42963449689 and packs the ten whole-file
-shards at about 980 estimated seconds each. Nobody has yet compared those runs' measured mutation
-times with this table's estimates. If the worst ratio from runs 42356693258 and 42351739804 (1.24
-times the estimate) still held, a shard would spend about 1,215 s mutating; with the up to 166 s
-their jobs spent before mutating, that is about 23 minutes of its 25. At seven whole-file shards
+either run was 0.70 to 1.24 times the estimate, at most about 211 s off. The original table was built from nightly runs 43159064593 and 42963449689.
+Before the 13 November whole-file change it packed ten whole-file shards at about 980 estimated
+seconds each, alongside the three dedicated sales ranges. At seven whole-file shards
 (ten in all), dispatched run 42344158863 had whole-file shards 4, 8, 9 and 10 cancelled at the
 25-minute limit.
 
@@ -1088,7 +1085,9 @@ measurement of a whole-file run. Every other cost remains unchanged.
 
 **Refreshing the table.** Use reports only from runs after this whole-file change. Earlier runs
 split `sales.ts` into three reports, and `costTable` no longer excludes it: feeding those reports
-would take the median of partial costs and understate the file's cost. When a db shard drifts towards its limit, after `packages/db` gains files
+would take the median of partial costs and understate the file's cost. The builder refuses a
+line-range report for a currently selected whole file, naming it and directing you to post-change
+reports; current UI ranges remain accepted. When a db shard drifts towards its limit, after `packages/db` gains files
 (a file the table does not name is weighed by its bytes), or after a change like A1309's that removes timed-out
 mutants:
 
@@ -4880,7 +4879,7 @@ accepts flat blob reports, while mutation scoring counts report directories. On 
 watcher cleared retaining the bounded action retries: fifteen aggregate downloads across runs
 42449385924, 42565346485, 42759951085, 42963449689, 43172917826 and 43384688636 all succeeded
 on their first attempt, as did the three in failed nightly 43369710774 and shared's download in
-CI43350911465. API timestamps put them at zero to two seconds; this is a download observation,
+CI 43350911465. API timestamps put them at zero to two seconds; this is a download observation,
 not a qualified performance comparison.
 
 The artifact-download cases in `scripts/ci-workflow.test.mjs` are weaker than their name: they

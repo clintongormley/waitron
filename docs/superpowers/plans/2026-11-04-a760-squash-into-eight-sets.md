@@ -1,5 +1,7 @@
 # A760: squash the migration history into eight sets — Implementation Plan
 
+> 2026-11-13: the nightly sharded callers now use `mutation-sharded.yml` and its `aggregate` job. The old aggregate names below describe the earlier workflow. See [the current workflow guide](../../developers/ci-and-gates.md#mutation-floors-and-where-each-one-actually-bites).
+
 > **2026-11-07 (A1422):** `scripts/fixtures/a760-history/` and the tests that replayed it were
 > deleted on the owner's word; the files are readable at commit f519799de0.
 

@@ -306,7 +306,7 @@ decides whether the rule covers every agent, then the two docs follow.
 It is test-only plumbing
 the Vitest config loads — the same class as `src/test-helpers.ts`, `src/a11y-helpers.ts` and
 `src/icon-button-test-helpers.ts`, which `packages/ui/stryker.config.json` excludes from `mutate`.
-Adding it to those exclusions is the consistent move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
+Adding it to those exclusions is the consistent move and also shrinks the denominator the ui caller’s aggregate bar of 90 in `mutation-sharded.yml` is measured against.
 Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position:
 in `packages/ui`'s coverage and `mutate` lists, loaded only by `packages/venue-service`'s Vitest
 config, so no ui test reaches it. Excluding it also needs a change to the exclusion list
@@ -635,7 +635,7 @@ A1424's live qualification was added on 7 November 2026.
   [Detail](ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
 - **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests** — left behind by raising
   the `packages/ui` mutation score (#466, 2026-09-20). Adding it to the test-helper exclusions is the consistent
-  move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
+  move and also shrinks the denominator the ui caller’s aggregate bar of 90 in `mutation-sharded.yml` is measured against.
   Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
 
 ## Bundle: Tests that close a dialog and check too soon, and pressEscape

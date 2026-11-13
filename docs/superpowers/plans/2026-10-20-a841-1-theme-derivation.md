@@ -1,5 +1,7 @@
 # A841 slice 1 — the theme derivation and the shared contrast checks: implementation plan
 
+> 2026-11-13: the nightly sharded callers now use `mutation-sharded.yml` and its `aggregate` job. The old aggregate names below describe the earlier workflow. See [the current workflow guide](../../developers/ci-and-gates.md#mutation-floors-and-where-each-one-actually-bites).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Review path: FULL.** Design section 16 puts the whole build on it, and this slice creates the
