@@ -1568,7 +1568,7 @@ describe("the corrective invoice (R5)", () => {
     "prints the title, both numbers and dates, its lines, its own split and the QR on %s in %s",
     (paperWidth, locale) => {
       const label = receiptLabelsFor(locale);
-      const [title, correctsLabel] = [label.correctiveInvoice, label.correctedInvoice];
+      const [title, correctsLabel] = [label.correctiveInvoice, label.correctsInvoice];
       const dish = CORRECTIVE.lines[0]!.descriptions[locale]!;
       const date = paperWidth === "58mm" ? receiptDateTimeNumeric : receiptDateTime;
       const { lines, qrs } = corrective(paperWidth, locale);

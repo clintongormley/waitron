@@ -253,7 +253,7 @@ export function buildReceiptDocument({
     if (result.corrects) text(label.correctiveInvoice, 0, { bold: true });
     dated(result);
     if (result.corrects) {
-      text(label.correctedInvoice);
+      text(label.correctsInvoice);
       dated(result.corrects);
     }
   } else {
