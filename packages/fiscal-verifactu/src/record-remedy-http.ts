@@ -6,7 +6,7 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, compareDecimal, decimal, readSaleOrigin, saleId } from "@waitron/shared";
 import type { AltaInput } from "@waitron/verifactu";
-import { applyRecordCorrection, type RemedyKind } from "./record-remedy.js";
+import { applyRecordCorrection, caseIdForRecord, type RemedyKind } from "./record-remedy.js";
 import { readCorrectedRecordFacts, type CorrectedRecordFacts } from "./record-remedy-facts.js";
 import { currentSif } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -125,8 +125,9 @@ export async function applyCorrectedRecordFacts(
   const priorOutcome = body.priorOutcome === undefined ? "rejected" : body.priorOutcome;
   if (priorOutcome !== "rejected" && priorOutcome !== "accepted-with-errors") invalid();
   const facts = readCorrectedRecordFacts(body.facts);
-  const caseId = text(body.caseId);
   const registroId = text(body.registroId);
+  const caseId =
+    body.caseId === undefined ? await caseIdForRecord(tx, registroId) : text(body.caseId);
   const actionKey = text(body.actionKey);
   const reason = text(body.reason);
   generation.requireWritable();

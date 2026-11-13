@@ -441,6 +441,37 @@ it("appends a description correction through HTTP with the server's clock, insta
   });
 });
 
+it("names the case by its record when the body sends no caseId", async () => {
+  const { caseId, ...withoutCase } = body;
+  const res = await send(withoutCase);
+  expect(res.status).toBe(200);
+  const result = (await res.json()) as { registroId: string; eventId: string };
+  expect(await suite.db.select().from(filingCaseEvents)).toEqual([
+    expect.objectContaining({ id: result.eventId, caseId, remedyRegistroId: result.registroId }),
+  ]);
+});
+
+it("refuses a body with no caseId whose record has no case, writing nothing", async () => {
+  const first = await send();
+  const saved = (await first.json()) as { registroId: string };
+  await suite.db
+    .update(envios)
+    .set({ estado: "rechazado", codigoError: "1161" })
+    .where(eq(envios.registroId, saved.registroId));
+  const before = await snapshot();
+  const res = await send({
+    ...body,
+    caseId: undefined,
+    registroId: saved.registroId,
+    actionKey: "http-no-case",
+  });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toMatchObject({
+    error: { code: "fiscal.remedy_invalid", params: { registroId: saved.registroId } },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
 it("replays an HTTP decision after the clock advances without a second record or case event", async () => {
   const first = await send();
   expect(first.status).toBe(200);

@@ -294,6 +294,16 @@ it("creates one R5 through HTTP with host generation and operator origin, keepin
   );
 });
 
+it("names the case by its record when the body sends no caseId", async () => {
+  const { caseId, ...withoutCase } = body;
+  const res = await send(withoutCase);
+  expect(res.status).toBe(200);
+  const result = (await res.json()) as { registroId: string; eventId: string };
+  expect(await suite.db.select().from(filingCaseEvents)).toEqual([
+    expect.objectContaining({ id: result.eventId, caseId, remedyRegistroId: result.registroId }),
+  ]);
+});
+
 it("replays the saved HTTP decision after clock, outcome and JSON key order change", async () => {
   const first = await send();
   expect(first.status).toBe(200);

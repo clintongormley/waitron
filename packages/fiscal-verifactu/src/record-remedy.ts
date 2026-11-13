@@ -47,6 +47,16 @@ export async function isInHistory(
   return (await readHistoryNodes(tx, nodeId)).some((id) => id === recordNodeId);
 }
 
+/** A record has at most one case (`filing_cases_registro_uq`), so its id names the case. */
+export async function caseIdForRecord(tx: Transaction, registroId: string): Promise<string> {
+  const [filingCase] = await tx
+    .select({ id: filingCases.id })
+    .from(filingCases)
+    .where(eq(filingCases.registroId, registroId));
+  if (filingCase === undefined) throw new AppError("fiscal.remedy_invalid", { registroId });
+  return filingCase.id;
+}
+
 export interface RecordCorrectionRequest {
   caseId: string;
   registroId: string;
