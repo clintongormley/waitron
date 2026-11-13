@@ -302,7 +302,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "printers", labelKey: "nav.printers" },
       { screen: "modules", labelKey: "nav.modules", requiresPermission: "hardware.manage" },
       { screen: "payments", labelKey: "nav.payments", requiresPermission: "hardware.manage" },
-      { screen: "email", labelKey: "nav.email", requiresPermission: "system.manage" },
+      { screen: "email", labelKey: "nav.email", requiresPermission: "person.manage" },
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "box-status", labelKey: "nav.box_status", requiresPermission: "system.manage" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresPermission: "system.manage" },
@@ -2405,7 +2405,10 @@ export class DashboardApp extends LitElement {
 
   #permittedScreen(requested: string | null): ScreenId {
     if (requested === "orders" || requested === "my-schedule") return requested;
-    if (this.#ownPagesOnly()) return "my-schedule";
+    const item = [...NAV_GROUPS.flatMap(coreItems), ...UNLISTED_SCREENS].find(
+      (entry) => entry.screen === requested,
+    );
+    if (this.#ownPagesOnly() && (item === undefined || !this.#mayOpen(item))) return "my-schedule";
     if (requested === "alerts") return "alerts";
     const fallback =
       NAV_GROUPS.flatMap(coreItems).find((entry) => this.#mayOpen(entry))?.screen ??
@@ -2417,9 +2420,6 @@ export class DashboardApp extends LitElement {
       this.onboardingIntent !== "prepare"
     )
       return fallback;
-    const item = [...NAV_GROUPS.flatMap(coreItems), ...UNLISTED_SCREENS].find(
-      (entry) => entry.screen === requested,
-    );
     if (item && this.#mayOpen(item)) return item.screen;
     if (requested !== null) {
       const active = this.#activeScreens.get(requested);

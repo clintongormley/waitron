@@ -974,7 +974,9 @@ under the watcher's 04:48 clearance. The remaining readers below stay in PR10.
 The watcher cleared `listAdminHolders` accepting `BackupQuery` as well as the live database on
 2026-11-13 at 06:59 in Lane K's `questions.md`: the recovery password reader moved to
 `restore-request.ts` and reads the offered copy. Workforce's correction reader and bill-venue's
-level read were already removed by earlier slices.
+level read were already removed by earlier slices. At 07:43 the watcher cleared dropping the
+unused `isAdminHolder` interface and its dedicated test after both reviewers found no caller;
+a later PR adds it with its first caller if needed.
 
 
 **Files:** `packages/identity/src/authority.ts` (new readers); `apps/server/src/recovery-environment.ts:133`,

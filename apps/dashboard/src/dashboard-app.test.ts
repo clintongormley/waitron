@@ -135,6 +135,7 @@ const meResponse = {
     "catalogue.manage",
     "hardware.manage",
     "system.manage",
+    "person.manage",
   ],
   modules: ["bookings"],
 };
@@ -152,9 +153,9 @@ it.each(["prepare", "live", "demo", undefined] as const)(
             onboardingIntent: intent,
             permissions:
               role === "admin"
-                ? ["system.manage", "person.admin"]
+                ? ["person.manage", "person.admin"]
                 : role === "manager"
-                  ? ["system.manage"]
+                  ? ["person.manage"]
                   : [],
           }),
           getEmailInbox: vi.fn(() => new Promise(() => undefined)),
@@ -1029,6 +1030,25 @@ describe("dashboard-app", () => {
     expect(overview(el)).toBeTruthy();
     expect(staff(el)).toBeNull();
     expect(mySchedule(el)).toBeNull();
+    expect(login(el)).toBeNull();
+  });
+
+  it.each([
+    [["person.manage"], true],
+    [["system.manage"], false],
+  ] as const)("gates Email by its first read permission: %j", async (permissions, shown) => {
+    history.replaceState(null, "", "/manage/email");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, role: undefined, permissions, modules: [] }),
+        getEmailInbox: vi.fn().mockResolvedValue({ mode: "unconfigured", count: 0, messages: [] }),
+      }),
+    });
+    await flush(el);
+    expect(navItem(el, "email") !== null).toBe(shown);
+    expect(el.shadowRoot!.querySelector("dashboard-email-screen") !== null).toBe(shown);
     expect(login(el)).toBeNull();
   });
 
@@ -4069,7 +4089,7 @@ describe("dashboard-app", () => {
           getMe: vi.fn().mockResolvedValue({
             ...meResponse,
             role,
-            permissions: ["venue.view", ...permissions],
+            permissions,
           }),
           getFloorPlan: vi.fn(() => new Promise(() => undefined)),
           listZones: vi.fn().mockResolvedValue([]),
@@ -6119,7 +6139,13 @@ describe("the banner's email inbox link", () => {
           getMe: vi.fn().mockResolvedValue({
             ...meResponse,
             role: "admin",
-            permissions: ["person.admin", "system.manage", "hardware.manage", "venue.view"],
+            permissions: [
+              "person.admin",
+              "person.manage",
+              "system.manage",
+              "hardware.manage",
+              "venue.view",
+            ],
             onboardingIntent: intent,
           }),
         })
@@ -6199,14 +6225,12 @@ describe("the banner's email inbox link", () => {
     history.replaceState(null, "", "/manage/demo-printer");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({
-            ...meResponse,
-            role,
-            permissions: role === "supervisor" ? ["venue.view"] : meResponse.permissions,
-            onboardingIntent: intent,
-          }),
+        getMe: vi.fn().mockResolvedValue({
+          ...meResponse,
+          role,
+          permissions: role === "supervisor" ? ["venue.view"] : meResponse.permissions,
+          onboardingIntent: intent,
+        }),
       }),
     });
     await flush(el);
@@ -6514,7 +6538,13 @@ describe("alerts in the shell", () => {
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
           role: "admin",
-          permissions: ["person.admin", "system.manage", "hardware.manage", "venue.view"],
+          permissions: [
+            "person.admin",
+            "person.manage",
+            "system.manage",
+            "hardware.manage",
+            "venue.view",
+          ],
           sessionDefault: locale,
           onboardingIntent: intent,
         }),
@@ -6555,7 +6585,13 @@ describe("alerts in the shell", () => {
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
           role: "admin",
-          permissions: ["person.admin", "system.manage", "hardware.manage", "venue.view"],
+          permissions: [
+            "person.admin",
+            "person.manage",
+            "system.manage",
+            "hardware.manage",
+            "venue.view",
+          ],
           sessionDefault: locale,
           onboardingIntent: intent,
         }),

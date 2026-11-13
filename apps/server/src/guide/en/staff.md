@@ -40,11 +40,9 @@ Choose **Cancel** to leave the action undone. If the disk is full, open **Box st
 
 ## Your own account {#own-account}
 
-The dashboard shows the pages your permissions allow. If your account has no venue permissions,
-use **My schedule** and **Orders**. Open **Your profile** from the account menu to manage your own sign-in.
-
-Open **Account settings** from the account menu to change your own sign-in details. Your own
-email, password, PIN, passkeys and two-factor settings remain yours to manage.
+Open **Account settings** from the account menu to change your own sign-in details, even when
+the sidebar only offers **My schedule** and **Orders**. Your own email, password, PIN, passkeys
+and two-factor settings remain yours to manage.
 
 These changes use the same 15-minute confirmation as other protected actions. If you use an
 authenticator, enter its current code for each sign-in change; a recovery code cannot replace it.

@@ -1,7 +1,6 @@
 export {
   readPersonAuthority,
   listAdminHolders,
-  isAdminHolder,
   holds,
   holdsInCopy,
   type PersonAuthority,

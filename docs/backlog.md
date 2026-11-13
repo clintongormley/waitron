@@ -2371,9 +2371,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   (A1384). Left open by A261-2e's review (#1277); whether a shipped build can reach it is unverified.
 
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
-  dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat and off
-  the coarse `requiresManager` gate. A core nav item can now also name a `requiresPermission`
-  (`apps/dashboard/src/dashboard-app.ts`); Servers (`node.manage`) is the first to use it.
+  dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat.
 
 ### Data protection and legal compliance
 

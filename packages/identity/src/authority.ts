@@ -80,10 +80,3 @@ export async function listAdminHolders(
       ),
     );
 }
-
-export async function isAdminHolder(
-  tx: Database | Transaction,
-  personId: string,
-): Promise<boolean> {
-  return (await readPersonAuthority(tx, personId)).admin;
-}

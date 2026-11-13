@@ -46,12 +46,9 @@ equipo** y usa **Liberar** para dejar espacio antes de confirmar. Consulta
 
 ## Tu propia cuenta {#own-account}
 
-El panel muestra las páginas que permiten tus permisos. Si tu cuenta no tiene permisos del local,
-usa **Mi horario** y **Pedidos**. Abre **Tu perfil** desde el menú de cuenta para gestionar tu propio acceso.
-
 Abre **Configuración de la cuenta** desde el menú de cuenta para cambiar tus propios datos de
-acceso. Puedes seguir gestionando tu correo, contraseña, PIN, llaves de acceso y verificación en
-dos pasos.
+acceso, aunque en la barra lateral solo aparezcan **Mi horario** y **Pedidos**. Puedes seguir
+gestionando tu correo, contraseña, PIN, llaves de acceso y verificación en dos pasos.
 
 Estos cambios usan la misma confirmación de 15 minutos que las otras acciones protegidas. Si usas
 un autenticador, introduce su código actual para cada cambio de acceso; un código de recuperación

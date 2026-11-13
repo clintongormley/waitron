@@ -39,7 +39,7 @@ export function stubShellApi(signedIn: boolean, locale: ShellLocale = "es-ES"): 
           sessionDefault: locale,
           venueName: "Deli Test SL",
           onboardingIntent: "prepare",
-          permissions: ["venue.view", "hardware.manage", "system.manage"],
+          permissions: ["venue.view", "hardware.manage", "system.manage", "person.manage"],
           modules: [],
         })
       : vi.fn().mockRejectedValue({ code: "management_session.required" }),

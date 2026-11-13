@@ -772,7 +772,7 @@ it.each(["same-app", "device"] as const)(
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
         venueName: "Venue",
-        permissions: ["person.admin", "system.manage"],
+        permissions: ["person.admin", "system.manage", "person.manage"],
         modules: [],
         onboardingIntent: "demo",
       }),

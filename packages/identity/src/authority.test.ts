@@ -51,14 +51,6 @@ describe("person authority", () => {
     ]);
   });
 
-  it("checks Admin membership independently of status, and refuses other or missing people", async () => {
-    const admin = await seedPerson(suite.db, "admin", "suspended");
-    const manager = await seedPerson(suite.db, "manager");
-    expect(await identity.isAdminHolder(suite.db, admin)).toBe(true);
-    expect(await identity.isAdminHolder(suite.db, manager)).toBe(false);
-    expect(await identity.isAdminHolder(suite.db, crypto.randomUUID())).toBe(false);
-  });
-
   it("an unknown person holds nothing", async () => {
     const personId = crypto.randomUUID();
     const authority = await identity.readPersonAuthority(suite.db, personId);
