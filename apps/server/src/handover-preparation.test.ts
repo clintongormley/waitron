@@ -54,12 +54,7 @@ import { locationId } from "@waitron/shared";
 import { startServer, type StartedServer } from "./boot.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
-import type {
-  ClockStepRequest,
-  ClockStopState,
-  ClockWitness,
-  TrustedReading,
-} from "@waitron/fiscal";
+import type { ClockStepRequest, TrustedReading } from "@waitron/fiscal";
 import type { ClockServiceStatus } from "./box-host-client.js";
 import { clockCorrection } from "./clock-correction.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
@@ -1117,20 +1112,12 @@ describe("setting the spare's clock from this device", () => {
     options: {
       status?: ClockServiceStatus;
       byInternet?: boolean;
-      aeatSpoke?: boolean;
     } = {},
   ) {
     const hostSets: number[] = [];
     const steps: ClockStepRequest[] = [];
     const start = startClockState();
     if (options.byInternet === true) start.confirm("by_internet", {});
-    const authority: ClockWitness = {
-      kind: "authority",
-      id: "authority",
-      boxAt: new Date().toISOString(),
-      witnessAt: new Date().toISOString(),
-      uncertaintyMs: 40,
-    };
     const correction = clockCorrection({
       host: {
         clockStatus: async () => options.status ?? NOT_SYNCED,
@@ -1147,24 +1134,8 @@ describe("setting the spare's clock from this device", () => {
           return { confirmation: null, corrected: null };
         },
         assertRecordableAt: () => {},
-        ...(options.aeatSpoke === true
-          ? {
-              clockStopState: async (): Promise<ClockStopState> => ({
-                clockAt: new Date().toISOString(),
-                offsetMinutes: 0,
-                lastRecordAt: new Date().toISOString(),
-                lastRecordOffsetMinutes: 0,
-                recordId: "record-1",
-                gapMs: 0,
-                proof: "contrary",
-                agreeing: { authority: null, devices: [] },
-                contrary: { authority, devices: [] },
-                confirmation: null,
-              }),
-            }
-          : {}),
       },
-      store: { clear: () => {}, witnesses: () => [] },
+      store: { clear: () => {} },
       clock: {
         now: () =>
           ({
@@ -1248,7 +1219,6 @@ describe("setting the spare's clock from this device", () => {
   it.each([
     ["synchronised", { status: { ...NOT_SYNCED, synchronised: true } }, 45_000],
     ["not_stopped", { byInternet: true }, 45_000],
-    ["witnessed", { aeatSpoke: true }, 45_000],
     ["agrees", {}, 20_000],
     ["target_invalid", {}, Date.UTC(2101, 0, 1)],
     [
