@@ -2247,7 +2247,15 @@ export interface ReaderStatusView {
 }
 
 /** An open order's card payment that nothing is driving any more, typically after a restart. */
+export interface PartialRefundView {
+  paymentId: string;
+  captured: string;
+  refunded: string;
+  remaining: string;
+}
+
 export interface StuckPaymentRow {
+  partialRefund?: PartialRefundView;
   paymentId: string;
   workingOrderId: string;
   orderNumber: number;
@@ -2267,6 +2275,7 @@ export type StuckPaymentResolution =
   | { outcome: "not_charged"; orderUnlocked: boolean };
 
 export interface StuckBillPaymentRow {
+  partialRefund?: PartialRefundView;
   billPaymentId: string;
   workingOrderId: string;
   orderNumber: number;
@@ -4984,6 +4993,13 @@ export class DashboardApi {
 
   listStuckPayments(): Promise<StuckPaymentRow[]> {
     return this.#request<StuckPaymentRow[]>("/management-api/payments/stuck", "GET");
+  }
+
+  releasePartialRefund(paymentId: string): Promise<{ outcome: "released" }> {
+    return this.#request(
+      `/management-api/payments/partial-refunds/${encodeURIComponent(paymentId)}/release`,
+      "POST",
+    );
   }
 
   resolveStuckPayment(paymentId: string): Promise<StuckPaymentResolution> {

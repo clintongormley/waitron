@@ -529,3 +529,110 @@ describe("the Record what was done dialog", () => {
     expect(field(el, "note").value).toBe("");
   });
 });
+
+describe("partly refunded charges", () => {
+  const row = {
+    paymentId: "p-part",
+    workingOrderId: "wo-part",
+    orderNumber: 73,
+    label: "Terrace",
+    source: "device",
+    deviceId: "d",
+    deviceName: "Bar",
+    provider: "stripe-terminal",
+    amount: "1.50",
+    startedAt: "2026-09-27T10:00:00Z",
+    partialRefund: { paymentId: "p-part", captured: "1.50", refunded: "0.40", remaining: "1.10" },
+  };
+  it.each(["whole order", "bill payment"])(
+    "shows honest amounts and releases a %s only after confirmation",
+    async (kind) => {
+      const release = vi.fn().mockResolvedValue({ outcome: "released" });
+      const read = vi
+        .fn()
+        .mockResolvedValueOnce(
+          kind === "whole order"
+            ? [row]
+            : [
+                {
+                  ...row,
+                  billPaymentId: "bp",
+                  method: "card",
+                  applied: "1.50",
+                  tip: "0.00",
+                  providerState: "partially_refunded",
+                },
+              ],
+        )
+        .mockResolvedValue([]);
+      const el = await mount(
+        stubApi({
+          listHeldPayments: vi.fn().mockResolvedValue([]),
+          [kind === "whole order" ? "listStuckPayments" : "listStuckBillPayments"]: read,
+          releasePartialRefund: release,
+        }),
+      );
+      const item = q(el, "[data-test=partial-refund-p-part]")!;
+      expect(item.textContent).toContain("€1.50");
+      expect(item.textContent).toContain("€0.40");
+      expect(item.textContent).toContain("€1.10");
+      expect(item.querySelector('[data-test^="attest-"]')).toBeNull();
+      expect(item.querySelector('[data-test^="check-"]')).toBeNull();
+      q(el, "[data-test=release-partial-p-part]")!.click();
+      await flush(el);
+      expect(q(el, "[data-test=partial-refund-dialog]")!.textContent).toContain(
+        "Refund the remaining",
+      );
+      expect(q(el, "[data-test=partial-refund-dialog] wt-input")).toBeNull();
+      q(el, "[data-test=cancel-partial-refund]")!.click();
+      await flush(el);
+      expect(release).not.toHaveBeenCalled();
+      q(el, "[data-test=release-partial-p-part]")!.click();
+      await flush(el);
+      q(el, "[data-test=confirm-partial-refund]")!.click();
+      await flush(el);
+      expect(release).toHaveBeenCalledExactlyOnceWith("p-part");
+      expect(q(el, "[data-test=partial-refund-dialog]")).toBeNull();
+      expect(q(el, "[data-test=bill-action-result]")!.textContent).toContain("fully refunded");
+    },
+  );
+
+  it("keeps a provider refusal separate from a subsequent load failure", async () => {
+    const release = vi
+      .fn()
+      .mockRejectedValue({ code: "payment.outcome_unknown", params: { reason: "ambiguous" } });
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce([row])
+      .mockRejectedValue({ code: "server.internal" });
+    const el = await mount(stubApi({ listStuckPayments: read, releasePartialRefund: release }));
+    q(el, "[data-test=release-partial-p-part]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-partial-refund]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=bill-action-result]")!.getAttribute("role")).toBe("alert");
+    expect(q(el, "[data-test=bill-action-result]")!.textContent).toContain("could not confirm");
+    expect(q(el, "[data-test=stuck-load-error]")).not.toBeNull();
+  });
+
+  it("reports a successful release separately when the list refresh fails", async () => {
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce([row])
+      .mockRejectedValue({ code: "server.internal" });
+    const el = await mount(
+      stubApi({
+        listStuckPayments: read,
+        releasePartialRefund: vi.fn().mockResolvedValue({ outcome: "released" }),
+      }),
+    );
+    q(el, "[data-test=release-partial-p-part]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-partial-refund]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=partial-refund-dialog]")).toBeNull();
+    expect(q(el, "[data-test=bill-action-result]")!.getAttribute("role")).toBe("status");
+    expect(q(el, "[data-test=bill-action-result]")!.textContent).toContain("fully refunded");
+    expect(q(el, "[data-test=stuck-load-error]")).not.toBeNull();
+  });
+});

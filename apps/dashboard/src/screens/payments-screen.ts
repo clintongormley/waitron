@@ -387,6 +387,7 @@ export class PaymentsScreen extends LitElement {
   #readErrorShown = false;
   @state() private stuck: StuckPaymentRow[] = [];
   @state() private stuckLoadError: string | null = null;
+  @state() private confirmingPartial: StuckPaymentRow | StuckBillPaymentRow | null = null;
   @state() private confirmingStuck: StuckPaymentRow | null = null;
   @state() private resolvingId: string | null = null;
   @state() private stuckResult: { text: string; refused: boolean } | null = null;
@@ -1107,7 +1108,9 @@ export class PaymentsScreen extends LitElement {
     return row.label ? `${order} · ${row.label}` : order;
   }
 
-  #billOrder(row: StuckBillPaymentRow | StuckBillRefundRow | StuckTenderRefundRow): string {
+  #billOrder(
+    row: StuckPaymentRow | StuckBillPaymentRow | StuckBillRefundRow | StuckTenderRefundRow,
+  ): string {
     if ("saleId" in row) return fill("payments.tender.sale", { id: row.invoiceNumber });
     const order = t("payments.stuck.order").replace("{number}", String(row.orderNumber));
     return row.label ? `${order} · ${row.label}` : order;
@@ -1437,6 +1440,8 @@ export class PaymentsScreen extends LitElement {
   }
 
   #renderBillRow(target: BillTarget): TemplateResult {
+    if (target.kind === "payment" && target.row.partialRefund)
+      return this.#renderPartialRow(target.row);
     if (target.kind === "tender")
       return html`<li class="stuck" data-test=${`tender-refund-${target.row.id}`}>
         <div class="stuck-body">
@@ -1962,6 +1967,7 @@ export class PaymentsScreen extends LitElement {
   }
 
   #renderStuckRow(row: StuckPaymentRow): TemplateResult {
+    if (row.partialRefund) return this.#renderPartialRow(row);
     const order = this.#stuckOrder(row);
     return html`<li class="stuck" data-test="stuck-${row.paymentId}">
       <div class="stuck-body">
@@ -1987,6 +1993,110 @@ export class PaymentsScreen extends LitElement {
         >${t("payments.stuck.check")}</wt-button
       >
     </li>`;
+  }
+
+  #partialAmounts(row: StuckPaymentRow | StuckBillPaymentRow): string {
+    const facts = row.partialRefund!;
+    return fill("payments.partial.amounts", {
+      captured: formatMoney(facts.captured, currentLocale()),
+      refunded: formatMoney(facts.refunded, currentLocale()),
+      remaining: formatMoney(facts.remaining, currentLocale()),
+    });
+  }
+
+  #renderPartialRow(row: StuckPaymentRow | StuckBillPaymentRow): TemplateResult {
+    const id = row.partialRefund!.paymentId;
+    return html`<li class="stuck" data-test=${`partial-refund-${id}`}>
+      <div class="stuck-body">
+        <p class="stuck-order">${this.#billOrder(row)}</p>
+        <p>${this.#providerName(row.provider!)} · ${this.#partialAmounts(row)}</p>
+      </div>
+      <wt-button
+        variant="secondary"
+        data-test=${`release-partial-${id}`}
+        aria-label=${`${t("payments.partial.confirm")}: ${this.#billOrder(row)}`}
+        ?disabled=${this.billBusy}
+        @click=${() => {
+          this.confirmingPartial = row;
+        }}
+        >${t("payments.partial.confirm")}</wt-button
+      >
+    </li>`;
+  }
+
+  async #releasePartial(): Promise<void> {
+    const row = this.confirmingPartial;
+    if (!row || this.billBusy) return;
+    this.confirmingPartial = null;
+    this.billBusy = true;
+    this.billResult = null;
+    const operation = (this.#billOperation = {});
+    const current = () => this.isConnected && this.#billOperation === operation;
+    try {
+      await this.api.releasePartialRefund(row.partialRefund!.paymentId);
+      if (!current()) return;
+      this.billResult = {
+        text: `${this.#billOrder(row)}: ${t("payments.partial.released")}`,
+        refused: false,
+      };
+    } catch (error) {
+      if (!current()) return;
+      this.billResult = {
+        text: `${this.#billOrder(row)}: ${codeOf(error) === "payment.outcome_unknown" ? t("payments.partial.unconfirmed") : stuckRefusalText(error)}`,
+        refused: true,
+      };
+    }
+    try {
+      await this.#loadBillRecovery(true);
+      try {
+        const rows = await (this.api.background ?? this.api).listStuckPayments();
+        if (current()) {
+          this.stuck = rows;
+          this.stuckLoadError = null;
+        }
+      } catch (error) {
+        if (current()) this.stuckLoadError = codeOf(error);
+      }
+    } finally {
+      if (current()) {
+        this.billBusy = false;
+        this.#billOperation = undefined;
+      }
+    }
+  }
+
+  #renderPartialDialog(): TemplateResult | typeof nothing {
+    const row = this.confirmingPartial;
+    if (!row) return nothing;
+    return html`<wt-dialog
+      data-test="partial-refund-dialog"
+      .open=${true}
+      heading=${t("payments.partial.confirm")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.confirmingPartial = null;
+      }}
+    >
+      <p>${this.#billOrder(row)}</p>
+      <p>${this.#partialAmounts(row)}</p>
+      <p>
+        ${fill("payments.partial.instructions", { provider: this.#providerName(row.provider!), remaining: formatMoney(row.partialRefund!.remaining, currentLocale()) })}
+      </p>
+      <wt-form-actions slot="footer">
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="cancel-partial-refund"
+          @click=${() => {
+            this.confirmingPartial = null;
+          }}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button data-test="confirm-partial-refund" @click=${() => void this.#releasePartial()}
+          >${t("payments.partial.confirm")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-dialog>`;
   }
 
   #renderResolveDialog(): TemplateResult | typeof nothing {
@@ -2521,7 +2631,8 @@ export class PaymentsScreen extends LitElement {
       </section>
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
       ${keyed(this.editor, this.#renderEditor())} ${this.#renderDeleteDialog()}
-      ${this.#renderResolveDialog()} ${keyed(this.billAction, this.#renderBillDialog())}
+      ${this.#renderPartialDialog()} ${this.#renderResolveDialog()}
+      ${keyed(this.billAction, this.#renderBillDialog())}
       ${keyed(this.heldAction, this.#renderHeldDialog())}
       ${
         this.labelReader === null

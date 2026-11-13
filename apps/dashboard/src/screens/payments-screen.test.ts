@@ -1416,9 +1416,7 @@ describe("card payments stuck after a restart", () => {
   it("lists each stuck payment's order, device, provider, amount and start time", async () => {
     const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }));
 
-    expect(section(el)!.querySelector("h2")!.textContent).toBe(
-      "Card payments stuck after a restart",
-    );
+    expect(section(el)!.querySelector("h2")!.textContent).toBe("Card payments needing attention");
     const row = q(el, "[data-test=stuck-pay-1]")!.textContent!;
     expect(row).toContain("Order 12 · Terrace 3");
     expect(row).toContain("Bar till");
@@ -1450,7 +1448,7 @@ describe("card payments stuck after a restart", () => {
     const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }));
 
     expect(section(el)!.querySelector("h2")!.textContent).toBe(
-      "Cobros con tarjeta sin resolver tras un reinicio",
+      "Cobros con tarjeta pendientes de revisión",
     );
     expect(q(el, "[data-test=stuck-pay-1]")!.textContent).toContain("Pedido 12 · Terrace 3");
     // Intl puts a no-break space before the euro sign.

@@ -1,3 +1,4 @@
+import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -54,6 +55,7 @@ import {
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
+  recordRefund,
   paymentResolutions,
   payments,
   stampAttemptingRef,
@@ -80,6 +82,7 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order.js";
+import { ordersWithUnfiledPayment } from "./till-sale.js";
 import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { descendingIds } from "./testing/descending-ids.js";
@@ -171,6 +174,7 @@ async function setup(
     providerFor?: (p: StripeTerminalProvider) => PaymentProvider;
     /** A second provider, served under its own id and connected through the Stripe credential. */
     extra?: PaymentProvider;
+    partialRefundRelease?: boolean;
     attendance?: AttendanceRecorder;
   } = {},
 ): Promise<Venue> {
@@ -289,7 +293,15 @@ async function setup(
       ...{ attendance: opts.attendance },
       providers: [
         stripeSeat,
-        ...(opts.extra === undefined ? [] : [{ ...stripeSeat, providerId: opts.extra.provider }]),
+        ...(opts.extra === undefined
+          ? []
+          : [
+              {
+                ...stripeSeat,
+                providerId: opts.extra.provider,
+                partialRefundRelease: opts.partialRefundRelease ?? false,
+              },
+            ]),
       ],
     },
     noopLog,
@@ -2840,4 +2852,256 @@ describe("whole-order attendance on manager recovery", () => {
       }
     },
   );
+});
+
+describe("provider-confirmed partial-refund release", () => {
+  const releasePath = (id: string) => `/management-api/payments/partial-refunds/${id}/release`;
+  async function partial(
+    options: {
+      bill?: "pending" | "failed";
+      placed?: boolean;
+      mark?: boolean;
+      unidentified?: boolean;
+    } = {},
+  ) {
+    const evidence = {
+      kind: "known" as const,
+      processorRef: "partial-txn",
+      captured: decimal("1.50"),
+      refunds: [
+        { providerRefundRef: "first", amount: decimal("0.40") },
+        { providerRefundRef: "rest", amount: decimal("1.10") },
+      ],
+    };
+    const lookup = vi.fn(async (_ref: string) => evidence);
+    const provider = Object.assign(new FakePaymentProvider(suite.db), {
+      lookupCompletedRefunds: lookup,
+    });
+    const v = await setup({ extra: provider, partialRefundRelease: true });
+    const orderId = await openOrder(v);
+    const bill = options.bill ? await strandBillPayment(v, orderId, { kind: "captured" }) : null;
+    const key = { provider: provider.provider, paymentRef: randomUUID() };
+    await withTransaction(suite.db, async (tx) => {
+      if (bill)
+        await tx
+          .update(payments)
+          .set({ ...key, externalRef: "partial-txn" })
+          .where(eq(payments.billPaymentId, bill));
+      else
+        await insertCapturedPayment(tx, {
+          ...key,
+          origin: deviceOrigin(v.deviceId),
+          nodeId: v.cfg.nodeId,
+          workingOrderId: brandWorkingOrderId(orderId),
+          amount: decimal("1.50"),
+          externalRef: "partial-txn",
+          settledAt: new Date(MARK),
+          card: { scheme: "VISA", last4: "1234", entryMode: "chip", authCode: "AUTH" },
+        });
+      await recordRefund(tx, {
+        ...key,
+        amount: decimal("0.40"),
+        ...(options.unidentified ? {} : { providerRefundRef: "first" }),
+      });
+      if (bill && options.bill === "failed")
+        await tx
+          .update(billPayments)
+          .set({ state: "failed", failedAt: MARK })
+          .where(eq(billPayments.id, bill));
+      await tx
+        .update(workingOrders)
+        .set({
+          ...(options.placed ? { status: "placed" as const } : {}),
+          paymentAttemptAt: options.mark ? MARK : null,
+        })
+        .where(eq(workingOrders.id, orderId));
+    });
+    const [payment] = await suite.db
+      .select()
+      .from(payments)
+      .where(eq(payments.paymentRef, key.paymentRef));
+    return { v, orderId, bill, payment: payment!, lookup, evidence };
+  }
+
+  it.each([
+    { bill: undefined, placed: false, mark: true },
+    { bill: undefined, placed: true, mark: false },
+    { bill: "pending" as const, placed: false, mark: false },
+    { bill: "failed" as const, placed: false, mark: false },
+  ])(
+    "lists and releases $bill/$placed with only session authorization, preserving the capture",
+    async (options) => {
+      const { v, orderId, bill, payment, lookup } = await partial(options);
+      const list = await send(
+        v,
+        "GET",
+        bill ? "/management-api/payments/bill-payments" : "/management-api/payments/stuck",
+      );
+      expect(list.status).toBe(200);
+      expect(await list.json()).toEqual([
+        expect.objectContaining({
+          partialRefund: {
+            paymentId: payment.id,
+            captured: "1.50",
+            refunded: "0.40",
+            remaining: "1.10",
+          },
+        }),
+      ]);
+      expect(
+        await withTransaction(suite.db, (tx) => ordersWithUnfiledPayment(tx, [orderId])),
+      ).toEqual(new Set([orderId]));
+      const result = await send(v, "POST", releasePath(payment.id));
+      expect(result.status).toBe(200);
+      expect(await result.json()).toEqual({ outcome: "released" });
+      expect(lookup).toHaveBeenCalledWith("partial-txn");
+      expect(await suite.db.select().from(payments).where(eq(payments.id, payment.id))).toEqual([
+        { ...payment, state: "refunded", updatedAt: expect.any(String) },
+      ]);
+      expect(
+        await suite.db
+          .select({
+            ref: paymentRefunds.providerRefundRef,
+            amount: paymentRefunds.amount,
+            by: paymentRefunds.authorizedBy,
+          })
+          .from(paymentRefunds)
+          .where(eq(paymentRefunds.paymentId, payment.id)),
+      ).toEqual([
+        { ref: "first", amount: 40, by: null },
+        { ref: "rest", amount: 110, by: v.managerId },
+      ]);
+      expect(await orderOf(orderId)).toEqual({
+        status: options.placed ? "placed" : "open",
+        mark: null,
+      });
+      if (bill) expect((await billPaymentOf(bill)).state).toBe("failed");
+      expect(saleIdsFor(orderId)).toEqual([]);
+      expect(
+        await withTransaction(suite.db, (tx) => ordersWithUnfiledPayment(tx, [orderId])),
+      ).toEqual(new Set());
+      const replay = await send(v, "POST", releasePath(payment.id));
+      expect(replay.status).toBe(200);
+      expect(await replay.json()).toEqual({ outcome: "released" });
+      expect(lookup).toHaveBeenCalledTimes(1);
+      expect(
+        await suite.db
+          .select()
+          .from(paymentRefunds)
+          .where(eq(paymentRefunds.paymentId, payment.id)),
+      ).toHaveLength(2);
+      expect(
+        await (
+          await send(
+            v,
+            "GET",
+            bill ? "/management-api/payments/bill-payments" : "/management-api/payments/stuck",
+          )
+        ).json(),
+      ).toEqual([]);
+    },
+  );
+
+  it.each([
+    "partial",
+    "wrong-capture",
+    "wrong-reference",
+    "missing-prior",
+    "different-prior",
+    "unidentified",
+  ])("keeps the capture held for %s evidence", async (problem) => {
+    const { v, payment, evidence } = await partial({
+      mark: true,
+      unidentified: problem === "unidentified",
+    });
+    if (problem === "partial") evidence.refunds.pop();
+    if (problem === "wrong-capture") evidence.captured = decimal("2.00");
+    if (problem === "wrong-reference") evidence.processorRef = "another-txn";
+    if (problem === "missing-prior") evidence.refunds[0]!.providerRefundRef = "another-refund";
+    if (problem === "different-prior") {
+      evidence.refunds[0]!.amount = decimal("0.50");
+      evidence.refunds[1]!.amount = decimal("1.00");
+    }
+    const result = await send(v, "POST", releasePath(payment.id));
+    expect(result.status).toBe(409);
+    expect((await errorOf(result)).code).toBe("payment.outcome_unknown");
+    expect(await suite.db.select().from(payments).where(eq(payments.id, payment.id))).toEqual([
+      payment,
+    ]);
+    expect(
+      await suite.db.select().from(paymentRefunds).where(eq(paymentRefunds.paymentId, payment.id)),
+    ).toHaveLength(1);
+    expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
+  });
+
+  it("refuses ordinary received and failed attestations over partially refunded money", async () => {
+    const { v, bill, payment } = await partial({ bill: "pending" });
+    for (const outcome of ["received", "failed"]) {
+      const result = await post(v, attestPath(bill!), {
+        outcome,
+        note: "Checked refund",
+        pin: "1234",
+      });
+      expect(result.status).toBe(409);
+      expect((await errorOf(result)).code).toBe("bill.attestation_contradicted");
+    }
+    expect((await billPaymentOf(bill!)).state).toBe("pending");
+    expect((await paymentRow(payment.id)).state).toBe("partially_refunded");
+  });
+
+  it("requires management permission before reading the provider and rechecks it after the read", async () => {
+    const { v, payment, lookup, evidence } = await partial({ mark: true });
+    for (const cookie of [null, v.staffCookie]) {
+      const result = await send(v, "POST", releasePath(payment.id), cookie);
+      expect([401, 403]).toContain(result.status);
+      expect((await errorOf(result)).code).toBe(
+        cookie ? "authorization.not_permitted" : "management_session.required",
+      );
+    }
+    expect(lookup).not.toHaveBeenCalled();
+    lookup.mockImplementation(async () => {
+      await suite.db
+        .update(persons)
+        .set({ status: "suspended" })
+        .where(eq(persons.id, v.managerId));
+      return evidence;
+    });
+    const result = await send(v, "POST", releasePath(payment.id));
+    expect(result.status).toBe(403);
+    expect((await errorOf(result)).code).toBe("person.suspended");
+    expect((await paymentRow(payment.id)).state).toBe("partially_refunded");
+    expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
+  });
+
+  it("rolls refunds and the order mark back together when releasing the mark fails", async () => {
+    const { v, payment } = await partial({ mark: true });
+    await suite.db
+      .execute(sql`create trigger refuse_partial_mark before update of payment_attempt_at on working_orders
+      begin select raise(abort, 'probe: release refused'); end`);
+    let result: Response;
+    try {
+      result = await send(v, "POST", releasePath(payment.id));
+    } finally {
+      await suite.db.execute(sql`drop trigger refuse_partial_mark`);
+    }
+    expect(result.status).toBe(500);
+    expect((await errorOf(result)).code).toBe("server.internal");
+    expect((await paymentRow(payment.id)).state).toBe("partially_refunded");
+    expect(
+      await suite.db.select().from(paymentRefunds).where(eq(paymentRefunds.paymentId, payment.id)),
+    ).toHaveLength(1);
+    expect((await orderOf(payment.workingOrderId)).mark).toBe(MARK);
+  });
+
+  it("does not release another box's charge", async () => {
+    const { v, payment, lookup } = await partial();
+    await suite.db
+      .update(payments)
+      .set({ nodeId: await seedNode(suite.db) })
+      .where(eq(payments.id, payment.id));
+    const result = await send(v, "POST", releasePath(payment.id));
+    expect(result.status).toBe(409);
+    expect((await errorOf(result)).code).toBe("payment.not_stuck");
+    expect(lookup).not.toHaveBeenCalled();
+  });
 });

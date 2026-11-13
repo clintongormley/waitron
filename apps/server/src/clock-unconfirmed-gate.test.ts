@@ -1217,3 +1217,24 @@ describe("money already moved while the start waits", () => {
     );
   });
 });
+
+it("checks the start clock before a partial-refund release and serves its eligibility check after confirmation", async () => {
+  const state = startClockState();
+  const holds = startClockGateHolds(
+    state,
+    () => true,
+    () => false,
+  );
+  const app = paymentsApp(gateSeatOnStartClock(venue.backend, holds), holds);
+  const path = `/management-api/payments/partial-refunds/${randomUUID()}/release`;
+  const before = moneyState();
+  expect(await manager(app, path)).toEqual({
+    status: 409,
+    json: { code: "clock.unconfirmed", params: {} },
+  });
+  expect(moneyState()).toEqual(before);
+  state.confirm("by_person", {});
+  const served = await manager(app, path);
+  expect(served.status).toBe(409);
+  expect(served.json.code).toBe("payment.not_stuck");
+});

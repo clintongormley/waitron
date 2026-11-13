@@ -4,6 +4,7 @@ export type {
   AsyncPaymentProvider,
   CardDetails,
   CollectParams,
+  CompletedRefunds,
   CollectionOwners,
   ForwardResult,
   InboundSettlement,

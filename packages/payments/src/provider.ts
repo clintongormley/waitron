@@ -174,6 +174,15 @@ export type RefundAnswer =
       httpStatus?: number;
     };
 
+export type CompletedRefunds =
+  | { kind: "unknown" }
+  | {
+      kind: "known";
+      processorRef: string;
+      captured: Decimal;
+      refunds: readonly { providerRefundRef: string; amount: Decimal }[];
+    };
+
 export interface RefundLookupQuery {
   processorRef: string;
   /** The `RefundSend.refundId` the refund was asked for with. */
@@ -267,6 +276,9 @@ export interface PaymentProvider {
    * attempt before the call and records the outcome after it. Absent on an adapter that offers no
    * such refund. */
   sendRefund?(req: RefundSend): Promise<RefundAnswer>;
+
+  /** Read completed refunds without changing local payment facts or sending money. */
+  lookupCompletedRefunds?(processorRef: string): Promise<CompletedRefunds>;
 
   /** Find a refund `sendRefund` asked for, reading the processor only. */
   lookupRefund?(query: RefundLookupQuery): Promise<RefundLookup>;

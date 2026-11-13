@@ -4,6 +4,7 @@ import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
+  CompletedRefunds,
   CardDetails,
   CollectParams,
   CollectionOwners,
@@ -271,6 +272,26 @@ export class SumUpCloudProvider implements PaymentProvider {
       amount: decimal(row.amount),
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
     };
+  }
+
+  async lookupCompletedRefunds(processorRef: string): Promise<CompletedRefunds> {
+    try {
+      const transaction = await this.opts.client.findTransaction({ id: processorRef });
+      if (transaction?.refundEvents === undefined) return { kind: "unknown" };
+      const outcome = SumUpCloudProvider.classify(transaction, this.now());
+      if (outcome.kind !== "captured") return { kind: "unknown" };
+      return {
+        kind: "known",
+        processorRef: outcome.transactionId,
+        captured: outcome.amount,
+        refunds: outcome.refunds.map((refund) => ({
+          providerRefundRef: refund.id,
+          amount: refund.amount,
+        })),
+      };
+    } catch {
+      return { kind: "unknown" };
+    }
   }
 
   static classify(t: SumUpTransaction | null, now: Date): PollOutcome {
