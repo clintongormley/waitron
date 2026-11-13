@@ -4,7 +4,7 @@
 import { randomUUID, X509Certificate } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { isIP, Socket } from "node:net";
+import { Socket } from "node:net";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { eq } from "drizzle-orm";
@@ -44,6 +44,7 @@ import { POLL_INTERVAL_MS, POLL_TRIES, fetchHealthOk } from "./boot-harness.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { freePorts } from "./free-ports.js";
 import { fixturePinHash } from "./known-secret-hashes.js";
+import { settleWithin } from "./settle-within.js";
 import { stageClock, waitUntil, type StageEvent } from "./scenario-stages.js";
 import { BASIC_ACTIONS } from "./session-device.js";
 import { boxDirs, copyMigrations, provisionStreamBox, type BoxDirs } from "./stream-box.js";
@@ -129,27 +130,38 @@ function isLoopback(address: string): boolean {
 }
 
 /**
- * Every address a socket in this process was asked to reach, resolved or connected to, until
- * `stop`. A socket given a name records the address its lookup answered.
+ * What TCP `net.Socket` connects on this thread were asked to reach, until `stop`: a host given as
+ * an address, a name other than `localhost` (so an outside name counts whether or not it resolves),
+ * the address a lookup answered, and each connected address and port. UDP, worker threads and
+ * child processes are outside it.
  */
-function watchConnections(): { addresses: Set<string>; stop(): void } {
+function watchConnections(): {
+  addresses: Set<string>;
+  connected: { address: string; port: number }[];
+  stop(): void;
+} {
   const original = Socket.prototype.connect;
   const addresses = new Set<string>();
+  const connected: { address: string; port: number }[] = [];
   Socket.prototype.connect = function (this: Socket, ...args: unknown[]) {
     const first = Array.isArray(args[0]) ? (args[0] as unknown[])[0] : args[0];
     const host =
       typeof first === "object" && first !== null ? (first as { host?: unknown }).host : args[1];
-    if (typeof host === "string" && isIP(host) !== 0) addresses.add(host);
+    if (typeof host === "string" && host !== "localhost") addresses.add(host);
     this.once("lookup", (error: Error | null, address: string) => {
       if (error === null && typeof address === "string") addresses.add(address);
     });
     this.once("connect", () => {
-      if (this.remoteAddress !== undefined) addresses.add(this.remoteAddress);
+      if (this.remoteAddress === undefined) return;
+      addresses.add(this.remoteAddress);
+      if (this.remotePort !== undefined)
+        connected.push({ address: this.remoteAddress, port: this.remotePort });
     });
     return (original as (...a: unknown[]) => Socket).apply(this, args);
   } as typeof original;
   return {
     addresses,
+    connected,
     stop: () => {
       Socket.prototype.connect = original;
     },
@@ -157,6 +169,13 @@ function watchConnections(): { addresses: Set<string>; stop(): void } {
 }
 
 class ClosedWhileStarting extends Error {}
+
+/** Settles as `starting` does, or throws once it has run `BOOT_MS` unsettled. */
+async function boundedStart(starting: Promise<void>, what: string): Promise<void> {
+  if (!(await settleWithin(starting, BOOT_MS)))
+    throw new Error(`${what} did not finish within ${BOOT_MS} ms`);
+  await starting;
+}
 
 /**
  * One box's server, started again in place whenever it asks to restart: the `restart` seam closes
@@ -224,9 +243,12 @@ class TestBox {
     return this.restarting;
   }
 
-  /** Restarts the box as its own restart seam would, and throws what the restart failed with. */
+  /**
+   * Restarts the box as its own restart seam would, and throws what the restart failed with, or
+   * that it did not finish within `BOOT_MS`.
+   */
   async restartNow(): Promise<void> {
-    await this.restart();
+    await boundedStart(this.restart(), `the box on port ${this.port}'s restart`);
     const failure = this.restartFailure;
     this.restartFailure = undefined;
     if (failure !== undefined) throw failure;
@@ -498,7 +520,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
       boxHost: synchronisedBoxHost(),
     });
     boxes.push(boxM);
-    await boxM.start();
+    await boundedStart(boxM.start(), "M's first start");
     const caM = await readFile(join(dirsM.state, "tls", "ca.crt"), "utf8");
     const urlM = `https://127.0.0.1:${portM}`;
     const viaM = new Agent({ connect: { ca: caM } });
@@ -540,7 +562,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
       { spareCopy: { hold: copyHold } },
     );
     boxes.push(boxS);
-    await boxS.start();
+    await boundedStart(boxS.start(), "S's setup start");
     const urlS = `https://127.0.0.1:${portS}`;
     const caS = await readFile(join(dirsS.state, "tls", "ca.crt"), "utf8");
     // In setup S answers under its own authority; once it adopts, under the venue's, M's.
@@ -660,6 +682,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
       try {
         const page = await fetch(`${urlS}/`, { dispatcher: viaM } as RequestInit);
         const text = await page.text();
+        lastFetchError = undefined;
         return text.includes("Restaurant screens are closed here") ? true : undefined;
       } catch (error) {
         // S is between starts, or answers under an authority M's does not verify.
@@ -689,7 +712,15 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     clock.begin("start-check");
     const logAtCheck = log.lines.length;
     const lookupsAtCheck = boxM.lookups.length;
+    const connectedAtCheck = sockets.connected.length;
     await boxM.restartNow();
+    // The start check runs before M's restart finishes; the test asks only M in this phase, and
+    // M's pair stream goes to S's store port.
+    const duringRestart = sockets.connected.slice(connectedAtCheck);
+    expect(duringRestart, JSON.stringify(duringRestart)).toContainEqual({
+      address: "127.0.0.1",
+      port: portS,
+    });
     await fetchHealthOk(`${urlM}/health`, { dispatcher: viaM } as RequestInit);
     const chartM = await readNodeMembershipOf(dirsM.venue);
     const entryS = chartM?.nodes.find((entry) => entry.nodeId === nodeIdS);
