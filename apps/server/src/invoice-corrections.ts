@@ -2,7 +2,9 @@ import { and, eq, sql } from "drizzle-orm";
 import { findAdjustmentReason } from "@waitron/adjustments";
 import {
   previewCorrectionAmounts,
+  readCorrectableLines,
   recordCorrection,
+  type CorrectableLine,
   type CorrectionPreview,
   type RecordCorrectionInput,
 } from "@waitron/core";
@@ -108,6 +110,27 @@ async function checkCorrectionOpenable(
   saleId: SaleId,
   selection: { gross: Decimal; lineIds?: readonly string[] },
 ): Promise<CorrectionPreview & { moneyRefundable: Decimal }> {
+  return checkInvoiceCorrectable(tx, backend, cfg, reading, saleId, async (moneyRefundable) => {
+    const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
+    if (compareDecimal(moneyRefundable, preview.gross) < 0)
+      throw new AppError("invoice_correction.money_short", {
+        saleId,
+        moneyLeft: moneyRefundable,
+        gross: preview.gross,
+      });
+    return { ...preview, moneyRefundable };
+  });
+}
+
+/** Runs `read` between the checks about the invoice that the preview and Open both make. */
+async function checkInvoiceCorrectable<T>(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: Pick<DeviceRequestConfig, "nodeId">,
+  reading: TrustedReading,
+  saleId: SaleId,
+  read: (moneyRefundable: Decimal) => Promise<T>,
+): Promise<T> {
   const [settled] = await tx
     .select({ id: saleSettlements.id })
     .from(saleSettlements)
@@ -121,18 +144,26 @@ async function checkCorrectionOpenable(
       saleId,
       refundId: pending.pendingRefundId!,
     });
-  const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
-  const moneyRefundable = appliedRemainingOf(refundable);
-  if (compareDecimal(moneyRefundable, preview.gross) < 0)
-    throw new AppError("invoice_correction.money_short", {
-      saleId,
-      moneyLeft: moneyRefundable,
-      gross: preview.gross,
-    });
+  const result = await read(appliedRemainingOf(refundable));
   if ((await backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
   await backend.refuseWhileClockBehind(tx, reading);
-  return { ...preview, moneyRefundable };
+  return result;
+}
+
+/** The invoice's lines with what is left to correct of each, and the money still refundable on
+ * it; refused as the preview refuses the invoice, before any amount is asked. */
+export async function readInvoiceCorrectionLines(
+  tx: Transaction,
+  backend: FiscalBackend,
+  cfg: Pick<DeviceRequestConfig, "nodeId">,
+  reading: TrustedReading,
+  saleId: SaleId,
+): Promise<{ lines: CorrectableLine[]; moneyRefundable: Decimal }> {
+  return checkInvoiceCorrectable(tx, backend, cfg, reading, saleId, async (moneyRefundable) => ({
+    lines: await readCorrectableLines(tx, backend, saleId, cfg.nodeId),
+    moneyRefundable,
+  }));
 }
 
 /** What correcting `selection.gross` off the invoice would file, and the money still refundable on it. */

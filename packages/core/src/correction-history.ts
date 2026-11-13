@@ -18,6 +18,7 @@ import {
   type CorrectionAmountAllocation,
   type CorrectionAmountHistory,
   type CorrectionAmountPreview,
+  remainingLines,
 } from "./correction-allocation.js";
 import { requireSupportedCorrection } from "./correction-eligibility.js";
 import type { RecordSaleLine } from "./record-sale.js";
@@ -43,6 +44,57 @@ export async function previewCorrectionAmounts(
   issuingNodeId: NodeId,
   selection: { gross: Decimal; lineIds?: readonly string[] },
 ): Promise<CorrectionPreview> {
+  const { admission, history, invoiceLines } = await admittedHistory(
+    tx,
+    backend,
+    saleId,
+    issuingNodeId,
+  );
+  const preview = allocateCorrectionAmounts(history, selection);
+  return {
+    ...preview,
+    filing: admission.filing,
+    original: admission.original,
+    lines: correctionLinesFor(invoiceLines, preview.allocations),
+  };
+}
+
+export interface CorrectableLine {
+  id: string;
+  lineNo: number;
+  descriptions: Record<string, string>;
+  rate: Decimal;
+  gross: Decimal;
+  left: Decimal;
+}
+
+/** The invoice's lines with what is left to correct of each, refused as
+ * `previewCorrectionAmounts` refuses the invoice. */
+export async function readCorrectableLines(
+  tx: Transaction,
+  backend: FiscalBackend,
+  saleId: SaleId,
+  issuingNodeId: NodeId,
+): Promise<CorrectableLine[]> {
+  const { history, invoiceLines } = await admittedHistory(tx, backend, saleId, issuingNodeId);
+  const left = new Map(remainingLines(history).map((line) => [line.id, line.gross]));
+  const byId = new Map(invoiceLines.map((line) => [line.id, line]));
+  return history.lines.map((line) => ({
+    id: line.id,
+    lineNo: line.lineNo,
+    descriptions: byId.get(line.id)!.descriptions,
+    rate: line.rate,
+    gross: line.gross,
+    left: left.get(line.id)!,
+  }));
+}
+
+async function admittedHistory(
+  tx: Transaction,
+  backend: FiscalBackend,
+  saleId: SaleId,
+  issuingNodeId: NodeId,
+) {
   const [substituted] = await tx
     .select({ id: saleSubstitutions.id })
     .from(saleSubstitutions)
@@ -59,14 +111,7 @@ export async function previewCorrectionAmounts(
   const stored = await readStored(tx, saleId);
   requireSupportedCorrection(stored.sale.counterpartyTaxId, saleId);
   await refuseMovedFigures(tx, backend, [stored.sale, ...stored.corrections]);
-  const { history, invoiceLines } = await readHistory(tx, saleId, stored);
-  const preview = allocateCorrectionAmounts(history, selection);
-  return {
-    ...preview,
-    filing: admission.filing,
-    original: admission.original,
-    lines: correctionLinesFor(invoiceLines, preview.allocations),
-  };
+  return { admission, ...(await readHistory(tx, saleId, stored)) };
 }
 
 /**

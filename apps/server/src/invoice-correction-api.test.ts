@@ -226,6 +226,54 @@ describe("POST /api/transactions/:saleId/corrections/preview", () => {
   });
 });
 
+describe("GET /api/transactions/:saleId/corrections/lines", () => {
+  const lines = (saleId: string, cookie = venue.cookie) =>
+    send(venue.app, cookie, "GET", `/api/transactions/${saleId}/corrections/lines`);
+
+  it("answers each line with what is left of it and the money still refundable", async () => {
+    const saleId = await sold(["4.00", "6.00"]);
+    const answer = await lines(saleId);
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({
+      lines: [
+        {
+          id: expect.any(String),
+          lineNo: 1,
+          descriptions: expect.any(Object),
+          rate: "21.00",
+          gross: "10.00",
+          left: "10.00",
+        },
+      ],
+      moneyRefundable: "10.00",
+    });
+    expect(
+      Object.values((answer.json as { lines: [{ descriptions: object }] }).lines[0].descriptions),
+    ).toContain("Croquetas de jamón");
+  });
+
+  it("refuses with the preview's code an invoice the preview refuses", async () => {
+    const unpaid = await sold([]);
+    const busy = await sold(["10.00"]);
+    await opened(busy);
+    for (const saleId of [unpaid, busy]) {
+      const refused = await lines(saleId);
+      expect(refused.status).toBe(409);
+      expect(refused).toEqual(await preview(saleId, { gross: "5.00" }));
+    }
+    expect((await lines(unpaid)).json).toMatchObject({ code: "invoice_correction.not_settled" });
+    expect((await lines(busy)).json).toMatchObject({ code: "invoice_correction.already_open" });
+  });
+
+  it("refuses a till outside the invoice's zone as the preview does", async () => {
+    const saleId = await sold(["10.00"]);
+    await serveOnly(otherZone);
+    expect(await lines(saleId, zonedTill.cookie)).toEqual(ZONE_REFUSED());
+    await serveOnly(venue.zoneId);
+    expect(await lines(saleId, zonedTill.cookie)).toMatchObject({ status: 200 });
+  });
+});
+
 describe("POST /api/transactions/:saleId/corrections", () => {
   it.each([
     ["submissionId", { submissionId: 1 }],
