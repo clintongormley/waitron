@@ -4555,6 +4555,100 @@ describe("till-app: service cancellation consent", () => {
       expect(getInvoiceCorrection).toHaveBeenCalledWith("correction-1", {});
     });
 
+    const resumedCard = {
+      ...cash,
+      tenderId: "44444444-4444-4444-8444-444444444444",
+      method: "card",
+      last4: "0042",
+      tipRemaining: "0.00",
+      appliedRemaining: "10.00",
+    };
+    const resumedCorrection = {
+      id: "correction-1",
+      saleId: "own-sale",
+      state: "open",
+      gross: "10.00",
+      moneyBack: "6.00",
+      pending: "0.00",
+      left: "4.00",
+      reason: "Mistake",
+      openedAt: "2026-11-13T10:00:00.000Z",
+      correctiveSaleId: null,
+      legs: [],
+      fileNow: null,
+    };
+    async function resumeCorrection(methods: ReturnType<typeof paidMethods>) {
+      const { el } = await mountApp(methods);
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      emit(shell(el), "find-bill");
+      const findBill = () => el.shadowRoot!.querySelector("till-find-bill-screen");
+      await expect.poll(findBill).not.toBeNull();
+      emit(findBill()!, "find-correction-open", {
+        correction: { id: "correction-1", saleId: "own-sale" },
+      });
+      const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
+      await expect
+        .poll(() => correcting()?.shadowRoot!.querySelector("[data-choice=card]"))
+        .not.toBeNull();
+      correcting()!.shadowRoot!.querySelector<HTMLElement>("[data-choice=card]")!.click();
+      return el;
+    }
+
+    it("hands a correction's card to Refund a payment with the payment as it is now", async () => {
+      const methods = paidMethods({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          capabilities: [...till.capabilities, "take-cash", "integrated-card-payment"],
+        }),
+        getRefundableTenders: vi
+          .fn()
+          .mockResolvedValueOnce([{ ...resumedCard, pendingRefundId: "old-refund" }])
+          .mockResolvedValue([{ ...resumedCard, appliedRemaining: "4.00" }]),
+        getInvoiceCorrection: vi.fn().mockResolvedValue(resumedCorrection),
+      });
+      const el = await resumeCorrection(methods);
+
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      await refundForm(el)!.updateComplete;
+      expect(refundForm(el)!.tenders).toMatchObject([
+        { pendingRefundId: null, appliedRemaining: "4.00" },
+      ]);
+      expect(refundForm(el)!.shadowRoot!.querySelector('[name="appliedAmount"]')).not.toBeNull();
+      expect(refundForm(el)!.correcting).toBe(true);
+    });
+
+    it("opens no Refund a payment when the waiter leaves the bill while the card's payment is read again", async () => {
+      const fresh = [{ ...resumedCard, appliedRemaining: "4.00" }];
+      let answer!: (rows: typeof fresh) => void;
+      const methods = paidMethods({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          capabilities: [...till.capabilities, "take-cash", "integrated-card-payment"],
+        }),
+        getRefundableTenders: vi
+          .fn()
+          .mockResolvedValueOnce(fresh)
+          .mockResolvedValueOnce(fresh)
+          .mockImplementation(
+            () =>
+              new Promise((resolve) => {
+                answer = resolve;
+              }),
+          ),
+        getInvoiceCorrection: vi.fn().mockResolvedValue(resumedCorrection),
+      });
+      const el = await resumeCorrection(methods);
+
+      await expect.poll(() => api.getRefundableTenders).toHaveBeenCalledTimes(3);
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      answer(fresh);
+      await flush(el);
+      expect(refundForm(el)).toBeNull();
+    });
+
     it("reports a transaction load failure after the kitchen write without reopening a cancellation", async () => {
       const methods = paidMethods({
         getTransactionReceipt: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),

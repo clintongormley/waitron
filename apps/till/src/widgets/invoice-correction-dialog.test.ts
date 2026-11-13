@@ -353,7 +353,9 @@ it("shows a refusal about the invoice above the buttons, giving way to the field
 
   await type(el, "5");
   await vi.waitFor(() =>
-    expect(actions().error).toBe(codeMessage("invoice_correction.chain_unsound")),
+    expect(actions().error).toBe(
+      `${codeMessage("invoice_correction.chain_unsound")} ${t("invoice_correction.refund_still")}`,
+    ),
   );
   confirm(el).click();
   await el.updateComplete;
@@ -1060,4 +1062,94 @@ it.each(["en", "es"])("links its help to the guide's Correct an invoice in %s", 
   const tip = root(el).querySelector<HTMLElementTagNameMap["wt-help-tooltip"]>("wt-help-tooltip")!;
   expect(tip.getAttribute("mode")).toBe("help-mode");
   expect(tip.getAttribute("guide-href")).toBe(`/help/${locale}/table-service#correct-invoice`);
+});
+
+describe("what an open correction files, and why it cannot", () => {
+  const FILING = (moneyBack: string, base: string, tax: string): InvoiceCorrectionView => ({
+    ...OPEN,
+    moneyBack,
+    left: "4.05",
+    fileNow: { gross: moneyBack, vatBreakdown: [{ rate: "21.00", base, tax }] },
+  });
+  const splits = (el: TillInvoiceCorrectionDialog) =>
+    [...root(el).querySelectorAll("[data-split]")].map((node) => text(node));
+  const splitText = (base: string, tax: string) =>
+    t("invoice_correction.split")
+      .replace("{rate}", "21")
+      .replace("{base}", base)
+      .replace("{tax}", tax);
+
+  it("shows the VAT split Finish now files on a resumed correction", async () => {
+    const api = sendingApi();
+    api.getInvoiceCorrection.mockResolvedValue(FILING("2.00", "1.65", "0.35"));
+    const { el } = await mountSending(api, "correction-1");
+
+    expect(root(el).querySelector("[data-choice=file]")).not.toBeNull();
+    expect(splits(el)).toEqual([splitText("€1.65", "€0.35")]);
+  });
+
+  it("shows the changed split after filing is refused over it, before staff press again", async () => {
+    const api = sendingApi();
+    api.getInvoiceCorrection
+      .mockResolvedValueOnce(FILING("2.00", "1.65", "0.35"))
+      .mockResolvedValue({ ...FILING("3.00", "2.48", "0.52"), left: "3.05" });
+    api.fileInvoiceCorrection.mockRejectedValueOnce(refused("invoice_correction.split_changed"));
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=file]")!.click();
+    await vi.waitFor(() => expect(text(root(el).querySelector("[data-back]"))).toContain("€3.00"));
+    expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+      codeMessage("invoice_correction.split_changed"),
+    );
+    expect(splits(el)).toEqual([splitText("€2.48", "€0.52")]);
+  });
+
+  it("words a filing refusal by its reason, never telling staff to give money back again", async () => {
+    const api = sendingApi();
+    api.getInvoiceCorrection.mockResolvedValue({
+      ...OPEN,
+      moneyBack: "2.00",
+      fileNow: { refusal: "sale.correction_not_admitted", reason: "wrong_node", closable: true },
+    });
+    const { el } = await mountSending(api, "correction-1");
+
+    const said = text(root(el).querySelector("[data-file-refusal]"));
+    expect(said).toBe(codeMessage("sale.correction_not_admitted", "en", { reason: "wrong_node" }));
+    expect(said).not.toContain("Refund a payment");
+    expect(root(el).querySelector("[data-choice=close-keeping]")).not.toBeNull();
+  });
+
+  it("never tells staff to give money back again when Finish now is refused", async () => {
+    const api = sendingApi();
+    api.getInvoiceCorrection.mockResolvedValue(FILING("2.00", "1.65", "0.35"));
+    api.fileInvoiceCorrection.mockRejectedValueOnce(
+      refused("sale.correction_not_admitted", { reason: "missing" }),
+    );
+    const { el } = await mountSending(api, "correction-1");
+
+    root(el).querySelector<HTMLElement>("[data-choice=file]")!.click();
+    await vi.waitFor(() =>
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        codeMessage("sale.correction_not_admitted", "en", { reason: "missing" }),
+      ),
+    );
+    expect(root(el).querySelector("wt-form-actions")!.error).not.toContain("Refund a payment");
+  });
+
+  it.each([
+    ["en", "Refund a payment still gives money back."],
+    ["es", "Devolver un pago sigue permitiendo devolver dinero."],
+  ])(
+    "adds Refund a payment's next step in %s before a correction is opened",
+    async (locale, step) => {
+      setLocale(locale as "en" | "es");
+      const api = fakeApi();
+      api.readInvoiceCorrectionLines.mockRejectedValue({ code: "sale.correction_unsupported" });
+      const { el } = await mount(api);
+
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        `${codeMessage("sale.correction_unsupported", locale)} ${step}`,
+      );
+    },
+  );
 });

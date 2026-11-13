@@ -43,7 +43,7 @@ export interface InvoiceCorrectionView {
   legs: TenderRefundView[];
   fileNow:
     | { gross: string; vatBreakdown: CorrectionSplitLine[] }
-    | { refusal: string; closable: boolean }
+    | { refusal: string; reason?: string; closable: boolean }
     | null;
 }
 

@@ -116,6 +116,8 @@ export const en = {
     "The refundable payments could not be loaded. Reopen the receipt to try again.",
   "tender_refund.total": "Total to return",
   "tender_refund.invoice_unchanged": "This returns money only. The original invoice is unchanged.",
+  "tender_refund.correction_leg":
+    "This refund is part of the invoice's correction. Once all its money is back, Waitron files the corrective invoice by itself when it can; otherwise Correct invoice shows what is left to do.",
   "tender_refund.choose": "Original payment",
   "tender_refund.unavailable": "No cash or card money is available to refund.",
   "tender_refund.applied": "Payment amount to return",
@@ -169,6 +171,7 @@ export const en = {
   "invoice_correction.close_keeping": "Close keeping the refunds",
   "invoice_correction.close_keeping_hint":
     "Ends the correction without a corrective invoice. The money given back stays given back.",
+  "invoice_correction.refund_still": "Refund a payment still gives money back.",
   "invoice_correction.filed": "Corrective invoice filed for {amount}.",
   "invoice_correction.closed":
     "Correction closed without a corrective invoice. The {amount} given back stays given back.",
@@ -2183,6 +2186,8 @@ export const es: Record<StringKey, string> = {
     "No se han podido cargar los pagos que se pueden devolver. Vuelve a abrir el recibo para intentarlo de nuevo.",
   "tender_refund.total": "Total que se devuelve",
   "tender_refund.invoice_unchanged": "Esto solo devuelve dinero. La factura original no cambia.",
+  "tender_refund.correction_leg":
+    "Esta devolución forma parte de la rectificación de la factura. Cuando se haya devuelto todo su dinero, Waitron presenta la factura rectificativa por sí solo si puede; si no, Rectificar factura muestra lo que queda por hacer.",
   "tender_refund.choose": "Pago original",
   "tender_refund.unavailable": "No hay dinero en efectivo o tarjeta disponible para devolver.",
   "tender_refund.applied": "Importe del pago que se devuelve",
@@ -2238,6 +2243,7 @@ export const es: Record<StringKey, string> = {
   "invoice_correction.close_keeping": "Cerrar y conservar las devoluciones",
   "invoice_correction.close_keeping_hint":
     "Termina la rectificación sin factura rectificativa. El dinero devuelto queda devuelto.",
+  "invoice_correction.refund_still": "Devolver un pago sigue permitiendo devolver dinero.",
   "invoice_correction.filed": "Factura rectificativa presentada por {amount}.",
   "invoice_correction.closed":
     "Rectificación cerrada sin factura rectificativa. Los {amount} devueltos quedan devueltos.",

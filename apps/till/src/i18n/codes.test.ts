@@ -918,6 +918,38 @@ it.each([
   expect(codeMessage(code, "es")).not.toMatch(/responsable/i);
 });
 
+it("words sale.correction_unsupported for every flow that meets it, the whole-order cancel included", () => {
+  expect(codeMessage("sale.correction_unsupported", "en")).toBe(
+    "This is a full invoice naming a customer, and the till cannot file a corrective invoice for it.",
+  );
+  expect(codeMessage("sale.correction_unsupported", "es")).toBe(
+    "Es una factura completa a nombre de un cliente y la caja no puede presentar una factura rectificativa para ella.",
+  );
+});
+
+it("leaves Refund a payment out of the correction refusals other flows share", () => {
+  const worded = [
+    ...[
+      "invoice_correction.chain_unsound",
+      "sale.correction_history_unusable",
+      "sale.correction_not_admitted",
+      "sale.correction_unsupported",
+    ].map((code) => [code, {}] as const),
+    ...[
+      "replaced",
+      "unsupported",
+      "missing",
+      "wrong_node",
+      "not_simplified",
+      "filing_versions_unusable",
+    ].map((reason) => ["sale.correction_not_admitted", { reason }] as const),
+  ];
+  for (const [code, params] of worded) {
+    expect(codeMessage(code, "en", params)).not.toMatch(/refund a payment/i);
+    expect(codeMessage(code, "es", params)).not.toMatch(/devolver un pago/i);
+  }
+});
+
 it("words each reason a correction is not admitted, and any other reason as the general one", () => {
   const reasons = [
     "replaced",

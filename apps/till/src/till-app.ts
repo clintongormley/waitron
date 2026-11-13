@@ -8534,9 +8534,10 @@ export class TillApp extends LitElement {
     );
   }
 
-  async #readRefundableTenders(afterRefund = false): Promise<void> {
+  /** True when the payments read now are the ones shown. */
+  async #readRefundableTenders(afterRefund = false): Promise<boolean> {
     const receipt = this.historicalReceipt;
-    if (receipt?.kind !== "invoice") return;
+    if (receipt?.kind !== "invoice") return false;
     const session = this.#operatorSession;
     const api = this.api;
     const read = ++this.#tenderRefundRead;
@@ -8548,10 +8549,13 @@ export class TillApp extends LitElement {
       read === this.#tenderRefundRead;
     try {
       const tenders = await api.getRefundableTenders(receipt.saleId, {});
-      if (current()) this.refundableTenders = tenders;
+      if (!current()) return false;
+      this.refundableTenders = tenders;
+      return true;
     } catch {
       if (current())
         this.errorKey = afterRefund ? "tender_refund.refresh_failed" : "tender_refund.read_failed";
+      return false;
     }
   }
 
@@ -8813,6 +8817,35 @@ export class TillApp extends LitElement {
     };
   }
 
+  /** Opens Refund a payment on a correction's card once the payments are read again: the correction
+   * window read them after this app did, and a refund may have ended between the two reads. */
+  async #openCorrectionCard(
+    correcting: InvoiceCorrectionSession,
+    leg: InvoiceCorrectionCardLeg,
+  ): Promise<void> {
+    const receipt = this.historicalReceipt;
+    const session = this.#operatorSession;
+    const api = this.api;
+    if (this.invoiceCorrecting?.session !== correcting) return;
+    if (!(await this.#readRefundableTenders())) return;
+    if (
+      !this.isConnected ||
+      this.historicalReceipt !== receipt ||
+      this.#operatorSession !== session ||
+      this.api !== api ||
+      this.invoiceCorrecting?.session !== correcting
+    )
+      return;
+    this.#openTenderRefund({
+      target: leg.target,
+      startReasonId: leg.startReasonId,
+      dishes: "",
+      cancellationIds: [],
+      invoiceCorrectionId: leg.correctionId,
+      tenderId: leg.tenderId,
+    });
+  }
+
   #renderInvoiceCorrection(): TemplateResult | typeof nothing {
     const open = this.invoiceCorrecting;
     if (!open) return nothing;
@@ -8827,15 +8860,7 @@ export class TillApp extends LitElement {
       .legsRevision=${open.legsRevision}
       @invoice-correction-card=${(event: CustomEvent<InvoiceCorrectionCardLeg>) => {
         event.stopPropagation();
-        if (this.invoiceCorrecting?.session === open.session)
-          this.#openTenderRefund({
-            target: event.detail.target,
-            startReasonId: event.detail.startReasonId,
-            dishes: "",
-            cancellationIds: [],
-            invoiceCorrectionId: event.detail.correctionId,
-            tenderId: event.detail.tenderId,
-          });
+        void this.#openCorrectionCard(open.session, event.detail);
       }}
       @invoice-correction-close=${(event: Event) => {
         event.stopPropagation();
@@ -8862,6 +8887,7 @@ export class TillApp extends LitElement {
         .dishes=${open.fill?.dishes ?? ""}
         .target=${open.fill?.target ?? ""}
         .refundAtTill=${this.#refundAtTill(open.fill)}
+        .correcting=${open.fill?.invoiceCorrectionId !== undefined}
         @tender-refund-reasons=${(event: Event) => {
           event.stopPropagation();
           if (this.tenderRefunding?.visit === open.visit) void this.#loadTenderRefundReasons();

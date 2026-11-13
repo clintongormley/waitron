@@ -129,6 +129,26 @@ it("refunds the original card's remaining applied amount and tip, explicitly lea
   ]);
 });
 
+it.each([
+  [
+    "en",
+    "This refund is part of the invoice's correction. Once all its money is back, Waitron files the corrective invoice by itself when it can; otherwise Correct invoice shows what is left to do.",
+  ],
+  [
+    "es",
+    "Esta devolución forma parte de la rectificación de la factura. Cuando se haya devuelto todo su dinero, Waitron presenta la factura rectificativa por sí solo si puede; si no, Rectificar factura muestra lo que queda por hacer.",
+  ],
+] as const)(
+  "says in %s that a correction's card refund leads to its corrective invoice",
+  async (locale, said) => {
+    setLocale(locale);
+    const el = await mount({ correcting: true });
+
+    expect(root(el).querySelector("[data-invoice-unchanged]")).toBeNull();
+    expect(root(el).querySelector("[data-correction-leg]")!.textContent!.trim()).toBe(said);
+  },
+);
+
 it("requires a choice between original tenders and resets amounts and the hand-keyed switch on another choice", async () => {
   const manual = { ...card, tenderId: "manual-1", last4: "0077", manual: true };
   const el = await mount({ tenders: [manual, card] });

@@ -85,6 +85,16 @@ interface InvoiceCorrectionAsk {
 type Draft = { gross: string; lineIds: string[]; reasonId: string; note: string };
 type Field = "gross" | "lines" | "reason" | "note";
 const blank = (): Draft => ({ gross: "", lineIds: [], reasonId: "", note: "" });
+/** Refusals barring a correction of the invoice while Refund a payment can still give money back,
+ * worded with that next step only while no correction is open: the server refuses Refund a payment
+ * beside an open one (`invoice_correction.already_open`). */
+const REFUND_STILL = new Set([
+  "invoice_correction.chain_unsound",
+  "sale.correction_history_unusable",
+  "sale.correction_not_admitted",
+  "sale.correction_unsupported",
+]);
+const NOT_ADMITTED_NO_REFUND = new Set(["voided", "filing_refused"]);
 const AMOUNT_REFUSALS = new Set([
   "sale.correction_amount_invalid",
   "invoice_correction.money_short",
@@ -357,7 +367,18 @@ export class TillInvoiceCorrectionDialog extends LitElement {
   }
   #refusalText(refusal: PayRefusal): string {
     if (refusal.code === "network") return t("invoice_correction.read_failed");
-    return codeMessage(refusal.code, currentLocale(), refusal);
+    return this.#words(refusal);
+  }
+  #words(refusal: PayRefusal): string {
+    const said = codeMessage(refusal.code, currentLocale(), refusal);
+    const refundStill =
+      this.correction === null &&
+      REFUND_STILL.has(refusal.code) &&
+      !(
+        refusal.code === "sale.correction_not_admitted" &&
+        NOT_ADMITTED_NO_REFUND.has(String(refusal.reason))
+      );
+    return refundStill ? `${said} ${t("invoice_correction.refund_still")}` : said;
   }
   async #confirm(): Promise<void> {
     if (!this.active || this.busy || this.confirming) return;
@@ -596,17 +617,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
           this.#set({ gross: event.detail.value });
         }}
       ></wt-price-input>
-      ${answer?.vatBreakdown.map(
-        (line) =>
-          html`<p data-split>
-            ${t("invoice_correction.split")
-              .replace("{rate}", () =>
-                formatDecimalInput(String(Number(line.rate)), currentLocale()),
-              )
-              .replace("{base}", () => this.#money(line.base))
-              .replace("{tax}", () => this.#money(line.tax))}
-          </p>`,
-      )}
+      ${answer === null ? nothing : this.#split(answer.vatBreakdown)}
       <p data-refundable>
         ${t("invoice_correction.refundable").replace("{amount}", () =>
           this.#money(loaded.moneyRefundable),
@@ -663,6 +674,17 @@ export class TillInvoiceCorrectionDialog extends LitElement {
           }</wt-button
         >
       </wt-form-actions>`;
+  }
+  #split(lines: readonly CorrectionSplitLine[]) {
+    return lines.map(
+      (line) =>
+        html`<p data-split>
+          ${t("invoice_correction.split")
+            .replace("{rate}", () => formatDecimalInput(String(Number(line.rate)), currentLocale()))
+            .replace("{base}", () => this.#money(line.base))
+            .replace("{tax}", () => this.#money(line.tax))}
+        </p>`,
+    );
   }
   #cancelButton() {
     return html`<wt-button
@@ -808,7 +830,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
       }
       ${
         fileNow !== null && "vatBreakdown" in fileNow
-          ? this.#choice(
+          ? html`${this.#split(fileNow.vatBreakdown)}${this.#choice(
               "file",
               t(positive(left) ? "invoice_correction.finish_now" : "invoice_correction.record"),
               t(
@@ -818,12 +840,12 @@ export class TillInvoiceCorrectionDialog extends LitElement {
               ).replace("{amount}", () => back),
               () => void this.#run(() => this.#end("file"), "invoice_correction.unknown_end"),
               "primary",
-            )
+            )}`
           : nothing
       }
       ${
         fileNow !== null && "refusal" in fileNow
-          ? html`<p data-file-refusal>${codeMessage(fileNow.refusal)}</p>
+          ? html`<p data-file-refusal>${codeMessage(fileNow.refusal, currentLocale(), fileNow)}</p>
               ${
                 fileNow.closable
                   ? this.#choice(
@@ -890,9 +912,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
     this.stillLost = this.savedOpen !== null && this.sendRefusal?.code === "network";
   }
   #sendText(refusal: PayRefusal): string {
-    return refusal.code === "network"
-      ? t(this.lostKey)
-      : codeMessage(refusal.code, currentLocale(), refusal);
+    return refusal.code === "network" ? t(this.lostKey) : this.#words(refusal);
   }
   #body() {
     if (this.correction !== null) return this.#view(this.correction);

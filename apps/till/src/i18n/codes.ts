@@ -474,12 +474,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta cuenta tiene platos con más de un tipo de IVA. Elige los platos que se rectifican, todos del mismo tipo.",
   },
   "sale.correction_history_unusable": {
-    en: "This invoice's earlier corrections cannot be read, so it cannot be corrected. Refund a payment still gives money back.",
-    es: "No se pueden leer las rectificaciones anteriores de esta factura, así que no se puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+    en: "This invoice's earlier corrections cannot be read, so it cannot be corrected.",
+    es: "No se pueden leer las rectificaciones anteriores de esta factura, así que no se puede rectificar.",
   },
   "sale.correction_not_admitted": {
-    en: "This invoice cannot be corrected. Refund a payment still gives money back.",
-    es: "Esta factura no se puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+    en: "This invoice cannot be corrected.",
+    es: "Esta factura no se puede rectificar.",
   },
   "sale.correction_exceeds_total": {
     en: "That correction is more than is left of the invoice after its earlier corrections",
@@ -490,8 +490,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta factura ya se ha rectificado, así que no se puede abonar por completo",
   },
   "sale.correction_unsupported": {
-    en: "This is a full invoice naming a customer, so it cannot be corrected at the till. Refund a payment still gives money back.",
-    es: "Es una factura completa a nombre de un cliente, así que no se puede rectificar en la caja. Devolver un pago sigue permitiendo devolver dinero.",
+    en: "This is a full invoice naming a customer, and the till cannot file a corrective invoice for it.",
+    es: "Es una factura completa a nombre de un cliente y la caja no puede presentar una factura rectificativa para ella.",
   },
   "bill.presented": {
     en: "This bill has been presented, so it cannot be changed",
@@ -915,35 +915,35 @@ const DEFERRED_INELIGIBLE: Record<string, { en: string; es: string }> = {
 };
 
 const FIGURES_UNCHECKED = {
-  en: "This invoice's filed figures cannot be checked, so it cannot be corrected. Refund a payment still gives money back.",
-  es: "No se pueden comprobar las cifras presentadas de esta factura, así que no se puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+  en: "This invoice's filed figures cannot be checked, so it cannot be corrected.",
+  es: "No se pueden comprobar las cifras presentadas de esta factura, así que no se puede rectificar.",
 };
 
 /** Why `sale.correction_not_admitted` refused, by its `reason`. */
 const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
   replaced: {
-    en: "This receipt was replaced by a full invoice, so it cannot be corrected. Refund a payment still gives money back.",
-    es: "Este tique se sustituyó por una factura completa, así que no se puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+    en: "This receipt was replaced by a full invoice, so it cannot be corrected.",
+    es: "Este tique se sustituyó por una factura completa, así que no se puede rectificar.",
   },
   unsupported: {
-    en: "Invoices cannot be corrected at this venue. Refund a payment still gives money back.",
-    es: "En este local no se pueden rectificar facturas. Devolver un pago sigue permitiendo devolver dinero.",
+    en: "Invoices cannot be corrected at this venue.",
+    es: "En este local no se pueden rectificar facturas.",
   },
   missing: {
-    en: "This invoice has no filing record, so it cannot be corrected. Refund a payment still gives money back.",
-    es: "Esta factura no tiene registro presentado, así que no se puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+    en: "This invoice has no filing record, so it cannot be corrected.",
+    es: "Esta factura no tiene registro presentado, así que no se puede rectificar.",
   },
   wrong_node: {
-    en: "This invoice was filed by another server, so this one cannot correct it. Refund a payment still gives money back.",
-    es: "Otro servidor presentó esta factura, así que este no la puede rectificar. Devolver un pago sigue permitiendo devolver dinero.",
+    en: "This invoice was filed by another server, so this one cannot correct it.",
+    es: "Otro servidor presentó esta factura, así que este no la puede rectificar.",
   },
   voided: {
     en: "This invoice was cancelled, so there is nothing left to correct.",
     es: "Esta factura se anuló, así que no queda nada por rectificar.",
   },
   not_simplified: {
-    en: "Only a simplified invoice can be corrected here. Refund a payment still gives money back.",
-    es: "Aquí solo se puede rectificar una factura simplificada. Devolver un pago sigue permitiendo devolver dinero.",
+    en: "Only a simplified invoice can be corrected here.",
+    es: "Aquí solo se puede rectificar una factura simplificada.",
   },
   filing_refused: {
     en: "The tax agency has not accepted this invoice's filing. Try again once it has been sent again.",
