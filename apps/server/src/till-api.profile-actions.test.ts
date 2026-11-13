@@ -10,7 +10,7 @@ import { devices, kitchenStations, withTransaction, floorZones } from "@waitron/
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ADJUSTMENT_ACTIONS } from "@waitron/adjustments";
-import { hashPin, type PersonRoleValue } from "@waitron/identity";
+import { hashPin, type BuiltInRoleKey } from "@waitron/identity";
 import {
   CAPABILITY_FLAGS,
   type CapabilityFlag,
@@ -54,9 +54,9 @@ const noopLog: Logger = () => {};
 let v: PartyVenue;
 let app: Hono;
 let stationId: string;
-const people: Partial<Record<PersonRoleValue, string>> = {};
+const people: Partial<Record<BuiltInRoleKey, string>> = {};
 
-async function person(role: PersonRoleValue): Promise<string> {
+async function person(role: BuiltInRoleKey): Promise<string> {
   const known = people[role];
   if (known !== undefined) return known;
   const [row] = await seedPersons(suite.db, {
@@ -81,14 +81,14 @@ async function profile(capabilities: readonly string[], formFactor: FormFactor =
  * device's id. */
 async function signIn(
   capabilities: readonly string[],
-  role: PersonRoleValue = "admin",
+  role: BuiltInRoleKey = "admin",
 ): Promise<{ cookie: string; deviceId: string }> {
   return signInOn(await profile(capabilities), role);
 }
 
 async function signInOn(
   profileId: string,
-  role: PersonRoleValue = "admin",
+  role: BuiltInRoleKey = "admin",
 ): Promise<{ cookie: string; deviceId: string }> {
   const device = await enrolDeviceForTest(suite.db, v.cfg, {
     name: `Till ${randomUUID()}`,

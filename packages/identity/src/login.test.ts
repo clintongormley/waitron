@@ -38,8 +38,12 @@ describe("loginWithPin", () => {
       token: expect.any(String),
       personId,
       deviceId,
-      role: "staff",
-      authority: { personId, admin: false, permissions: expect.any(Set) },
+      authority: {
+        personId,
+        admin: false,
+        roleIds: [expect.any(String)],
+        permissions: expect.any(Set),
+      },
       locale: null,
     });
 
@@ -49,13 +53,14 @@ describe("loginWithPin", () => {
     expect(rows.rows).toEqual([{ ended_at: null }]);
   });
 
-  it("carries the person's own role in the session (a manager, not just the staff default)", async () => {
+  it("carries the person's current authority in the session", async () => {
     const deviceId = await seedSessionDevice(suite.db);
     const personId = await seedPerson(suite.db, "manager");
 
     const session = await run((tx) => loginWithPin(tx, { deviceId, personId, pin: "1234" }));
 
-    expect(session.role).toBe("manager");
+    expect(session.authority.permissions.has("person.manage")).toBe(true);
+    expect(session).not.toHaveProperty("role");
   });
 
   it("carries the person's set locale in the session (not just the null default)", async () => {

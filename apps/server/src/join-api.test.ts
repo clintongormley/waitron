@@ -2,7 +2,7 @@ import { seedDeviceProfiles, seedZone } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { personRole } from "@waitron/identity";
+import { BUILT_IN_ROLE_KEYS } from "@waitron/identity";
 import { roleHasPermission } from "@waitron/identity/src/permissions.js";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -16,7 +16,7 @@ import { VENUE_SERVICE } from "./modules.js";
 describe("the role map join-api.ts depends on", () => {
   it("grants hardware administration to managers and admins only", () => {
     const expected = { staff: false, supervisor: false, manager: true, admin: true };
-    for (const role of personRole.enumValues) {
+    for (const role of BUILT_IN_ROLE_KEYS) {
       expect(roleHasPermission(role, "hardware.manage")).toBe(expected[role]);
     }
   });

@@ -10,7 +10,7 @@ import { starterName } from "@waitron/country-packs";
 import { DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
 import type { SeedLocale } from "./locale.js";
 import type { Transaction } from "@waitron/db";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { setBuiltInMembership, hashPassword, hashPin, persons } from "@waitron/identity";
 import { DEMO_PIN, DEMO_DASHBOARD_PASSWORD } from "./credentials.js";
 import type { DemoDataSet } from "./data-set.js";
 
@@ -41,9 +41,9 @@ export async function seedStaff(
         pinHash,
         passwordHash,
         email: person.email,
-        role: person.role,
       })
       .returning({ id: persons.id });
+    await setBuiltInMembership(tx, created!.id, person.role);
     for (const name of person.jobRoles) {
       await tx
         .insert(personStaffRoles)

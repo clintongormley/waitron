@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, isNull, ne, or } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne, or } from "drizzle-orm";
 import {
   indexViolated,
   isUniqueViolation,
@@ -7,6 +7,8 @@ import {
   liveDisplayNameKey,
   loginEmailKey,
   pendingEmailKey,
+  personRoles,
+  roles,
   persons,
   managementSessions,
   managementAccountActions,
@@ -25,8 +27,9 @@ import { requireFreshManagementSignIn } from "./fresh-sign-in.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
 import type { Permission } from "./permissions.js";
-import { holds, authorityForRole, type PersonAuthority } from "./authority.js";
-import type { PersonRoleValue } from "@waitron/shared";
+import { holds, authorityForRoles, listAdminHolders, type PersonAuthority } from "./authority.js";
+import type { BuiltInRoleKey } from "./permissions.js";
+import { heldBuiltInKey, setBuiltInMembership } from "./roles.js";
 import {
   PERSONS_EMAIL,
   PERSONS_LIVE_DISPLAY_NAME,
@@ -148,12 +151,15 @@ export async function authorizePersonLoginChange(
     permission: "person.manage",
   });
   const [person] = await tx
-    .select({ role: persons.role })
+    .select({ id: persons.id })
     .from(persons)
     .where(eq(persons.id, settleId(input.personId)));
   if (person !== undefined && actor.authorizedBy !== settleId(input.personId))
     requireAdminAuthority(actor.authority);
-  return { ...actor, targetRole: person?.role };
+  return {
+    ...actor,
+    targetRole: person === undefined ? null : await heldBuiltInKey(tx, person.id),
+  };
 }
 
 async function invalidatePersonAccountActions(tx: Transaction, personId: string): Promise<void> {
@@ -208,7 +214,7 @@ export async function updatePersonDetails(
     lastNames: string;
     telephone: string | null;
     email: string;
-    role: PersonRoleValue;
+    role: BuiltInRoleKey;
     status: "pending" | "active" | "suspended";
   },
 ): Promise<void> {
@@ -216,16 +222,13 @@ export async function updatePersonDetails(
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  const activeAdmins = await tx
-    .select({ id: persons.id })
-    .from(persons)
-    .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
-    .orderBy(persons.id);
+  const activeAdmins = await listAdminHolders(tx, { status: "active" });
   const [person] = await tx
     .select()
     .from(persons)
     .where(eq(persons.id, settleId(input.personId)));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
+  const personRole = await heldBuiltInKey(tx, person.id);
   if (input.status === "suspended" && authorizedBy === settleId(input.personId)) {
     throw new AppError("person.self_deactivation", {});
   }
@@ -233,15 +236,18 @@ export async function updatePersonDetails(
     throw new AppError("person.transition_invalid", {});
   }
   if (
-    input.role !== person.role &&
-    (authorizedBy !== person.id || input.role === "admin" || person.role === "admin")
+    input.role !== personRole &&
+    (authorizedBy !== person.id || input.role === "admin" || personRole === "admin")
   ) {
-    if (!holds(authority, "person.admin")) {
+    if (
+      !holds(authority, "person.admin") ||
+      ((input.role === "admin" || personRole === "admin") && !authority.admin)
+    ) {
       throw new AppError("authorization.not_permitted", { permission: "person.admin" });
     }
   }
   if (
-    person.role === "admin" &&
+    personRole === "admin" &&
     person.status === "active" &&
     (input.role !== "admin" || input.status !== "active") &&
     activeAdmins.length === 1
@@ -259,7 +265,7 @@ export async function updatePersonDetails(
   if ((email !== person.email && authorizedBy !== person.id) || input.status !== person.status) {
     requireAdminAuthority(authority);
   }
-  if (email !== person.email || input.role !== person.role || input.status !== person.status)
+  if (email !== person.email || input.role !== personRole || input.status !== person.status)
     await requireFreshManagementSignIn(tx, input.managementSessionId);
   await assertDisplayNameAvailable(tx, displayName, person.id);
   await assertEmailAvailable(tx, email, person.id);
@@ -276,7 +282,6 @@ export async function updatePersonDetails(
         email,
         emailFolded: foldForUniqueness(email),
         emailVerifiedAt: email === person.email ? person.emailVerifiedAt : null,
-        role: input.role,
         status: input.status,
         ...(becomesSuspended ? NO_SIGN_IN_SECRETS : {}),
       })
@@ -284,11 +289,10 @@ export async function updatePersonDetails(
   } catch (error) {
     asPersonUniqueViolation(error, { displayName, email });
   }
+  if (input.role !== personRole) await setBuiltInMembership(tx, person.id, input.role);
   if (becomesSuspended) await deleteSignInRows(tx, person.id);
   if (email !== person.email || input.status !== person.status)
     await revokePersonAccess(tx, person.id);
-  else if (input.role !== person.role && (input.role === "admin" || person.role === "admin"))
-    await invalidatePersonAccountActions(tx, person.id);
 }
 
 export async function deactivatePerson(
@@ -299,20 +303,17 @@ export async function deactivatePerson(
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  const activeAdmins = await tx
-    .select({ id: persons.id })
-    .from(persons)
-    .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
-    .orderBy(persons.id);
+  const activeAdmins = await listAdminHolders(tx, { status: "active" });
   const [person] = await tx
-    .select({ id: persons.id, role: persons.role, status: persons.status })
+    .select({ id: persons.id, status: persons.status })
     .from(persons)
     .where(eq(persons.id, settleId(input.personId)));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (authorizedBy === settleId(input.personId)) {
     throw new AppError("person.self_deactivation", {});
   }
-  if (person.role === "admin" && person.status === "active" && activeAdmins.length === 1) {
+  const personRole = await heldBuiltInKey(tx, person.id);
+  if (personRole === "admin" && person.status === "active" && activeAdmins.length === 1) {
     throw new AppError("person.last_admin", {});
   }
   requireAdminAuthority(authority);
@@ -347,23 +348,19 @@ export async function resetPersonLogin(
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
   await authorizePersonLoginChange(tx, input);
-  const activeAdmins = await tx
-    .select({ id: persons.id })
-    .from(persons)
-    .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
-    .orderBy(persons.id);
+  const activeAdmins = await listAdminHolders(tx, { status: "active" });
   const [person] = await tx
     .select({
       id: persons.id,
       displayName: persons.displayName,
-      role: persons.role,
       status: persons.status,
     })
     .from(persons)
     .where(eq(persons.id, settleId(input.personId)));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status === "suspended") throw new AppError("person.transition_invalid", {});
-  if (person.role === "admin" && person.status === "active" && activeAdmins.length === 1) {
+  const personRole = await heldBuiltInKey(tx, person.id);
+  if (personRole === "admin" && person.status === "active" && activeAdmins.length === 1) {
     throw new AppError("person.last_admin", {});
   }
   await tx
@@ -386,7 +383,6 @@ export async function reactivatePersonForInvitation(
     .select({
       id: persons.id,
       displayName: persons.displayName,
-      role: persons.role,
       status: persons.status,
     })
     .from(persons)
@@ -415,7 +411,7 @@ export async function invitePerson(
     firstNames: string;
     lastNames: string;
     telephone: string | null;
-    role: PersonRoleValue;
+    role: BuiltInRoleKey;
     email: string;
   },
 ): Promise<{ id: string }> {
@@ -424,6 +420,8 @@ export async function invitePerson(
     permission: "person.manage",
   });
   requireAdminAuthority(authority);
+  if (input.role === "admin" && !authority.admin)
+    throw new AppError("authorization.not_permitted", { permission: "person.admin" });
   const displayName = requiredText(input.displayName, "displayName");
   const firstNames = requiredText(input.firstNames, "firstNames");
   const lastNames = requiredText(input.lastNames, "lastNames");
@@ -444,12 +442,12 @@ export async function invitePerson(
         telephone,
         pinHash: null,
         passwordHash: null,
-        role: input.role,
         status: "pending",
         email,
         emailFolded: foldForUniqueness(email),
       })
       .returning({ id: persons.id });
+    await setBuiltInMembership(tx, row!.id, input.role);
     return { id: row!.id };
   } catch (error) {
     // Any unique violation off the email index is read as the display name: the insert leaves
@@ -468,7 +466,7 @@ export async function createPerson(
   input: {
     managementSessionId: string;
     displayName: string;
-    role: PersonRoleValue;
+    role: BuiltInRoleKey;
     pin: string;
     email: string;
   },
@@ -478,6 +476,8 @@ export async function createPerson(
     permission: "person.manage",
   });
   requireAdminAuthority(authority);
+  if (input.role === "admin" && !authority.admin)
+    throw new AppError("authorization.not_permitted", { permission: "person.admin" });
   assertPinLength(input.pin);
   const email = normalizeAndValidateEmail(input.email);
   const displayName = requiredText(input.displayName, "displayName");
@@ -490,11 +490,11 @@ export async function createPerson(
         displayName,
         displayNameFolded: foldForUniqueness(displayName),
         pinHash: hashPin(input.pin),
-        role: input.role,
         email,
         emailFolded: foldForUniqueness(email),
       })
       .returning({ id: persons.id });
+    await setBuiltInMembership(tx, row!.id, input.role);
     return { id: row!.id };
   } catch (err) {
     // Any unique violation off the email index is read as the display name: the insert leaves
@@ -507,20 +507,14 @@ export async function createPerson(
   }
 }
 
-/** authorizeManager reads a role live (via resolveManagementSession), so an open management
- * session sees the change on its next call. */
 export async function setRole(
   tx: Transaction,
-  input: { managementSessionId: string; personId: string; role: PersonRoleValue },
+  input: { managementSessionId: string; personId: string; role: BuiltInRoleKey },
 ): Promise<void> {
   const { authority, targetRole } = await authorizePersonLoginChange(tx, input);
-  if (input.role === "admin") requireAdminAuthority(authority);
-  await tx
-    .update(persons)
-    .set({ role: input.role })
-    .where(eq(persons.id, settleId(input.personId)));
-  if (input.role !== targetRole && (input.role === "admin" || targetRole === "admin"))
-    await invalidatePersonAccountActions(tx, settleId(input.personId));
+  if ((input.role === "admin" || targetRole === "admin") && !authority.admin)
+    throw new AppError("authorization.not_permitted", { permission: "person.admin" });
+  await setBuiltInMembership(tx, settleId(input.personId), input.role);
 }
 
 export async function resetPin(
@@ -607,13 +601,21 @@ export async function listActivePersonsWithPermission(
   permission: Permission | (string & {}),
 ): Promise<StaffListEntry[]> {
   const rows = await tx
-    .select({ personId: persons.id, displayName: persons.displayName, role: persons.role })
+    .select({ personId: persons.id, displayName: persons.displayName, role: roles })
     .from(persons)
+    .leftJoin(personRoles, eq(personRoles.personId, persons.id))
+    .leftJoin(roles, eq(roles.id, personRoles.roleId))
     .where(eq(persons.status, "active"))
     .orderBy(persons.displayName);
-  return rows
-    .filter((row) => holds(authorityForRole(row.personId, row.role), permission))
-    .map((row) => ({ personId: row.personId, displayName: row.displayName }));
+  const people = new Map<string, { displayName: string; roles: (typeof roles.$inferSelect)[] }>();
+  for (const row of rows) {
+    const person = people.get(row.personId) ?? { displayName: row.displayName, roles: [] };
+    if (row.role !== null) person.roles.push(row.role);
+    people.set(row.personId, person);
+  }
+  return [...people]
+    .filter(([id, person]) => holds(authorityForRoles(id, person.roles), permission))
+    .map(([personId, person]) => ({ personId, displayName: person.displayName }));
 }
 
 /** Carries credential BOOLEANS, never the hash or secret behind them. */
@@ -625,7 +627,7 @@ export interface PersonSummary {
   telephone: string | null;
   /** The person's login email. Null is reserved for internal principals and low-level fixtures. */
   email: string | null;
-  role: PersonRoleValue;
+  role: BuiltInRoleKey | null;
   status: "pending" | "active" | "suspended";
   hasPassword: boolean;
   hasTotp: boolean;
@@ -648,23 +650,34 @@ export async function listPersons(
       lastNames: persons.lastNames,
       telephone: persons.telephone,
       email: persons.email,
-      role: persons.role,
       status: persons.status,
       passwordHash: persons.passwordHash,
       totpSecret: persons.totpSecret,
     })
     .from(persons)
     .orderBy(persons.displayName);
-  return rows.map((r) => ({
-    personId: r.personId,
-    displayName: r.displayName,
-    firstNames: r.firstNames,
-    lastNames: r.lastNames,
-    telephone: r.telephone,
-    email: r.email,
-    role: r.role as PersonRoleValue,
-    status: r.status as "pending" | "active" | "suspended",
-    hasPassword: r.passwordHash !== null,
-    hasTotp: r.totpSecret !== null,
-  }));
+  const memberships = await tx
+    .select({ personId: personRoles.personId, key: roles.builtInKey })
+    .from(personRoles)
+    .innerJoin(roles, eq(roles.id, personRoles.roleId))
+    .where(isNotNull(roles.builtInKey));
+  const builtInKeys = new Map<string, BuiltInRoleKey>();
+  for (const membership of memberships)
+    if (!builtInKeys.has(membership.personId) || membership.key === "admin")
+      builtInKeys.set(membership.personId, membership.key!);
+  const result: PersonSummary[] = [];
+  for (const r of rows)
+    result.push({
+      personId: r.personId,
+      displayName: r.displayName,
+      firstNames: r.firstNames,
+      lastNames: r.lastNames,
+      telephone: r.telephone,
+      email: r.email,
+      role: builtInKeys.get(r.personId) ?? null,
+      status: r.status as "pending" | "active" | "suspended",
+      hasPassword: r.passwordHash !== null,
+      hasTotp: r.totpSecret !== null,
+    });
+  return result;
 }

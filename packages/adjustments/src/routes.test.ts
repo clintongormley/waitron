@@ -11,7 +11,7 @@ import {
   persons,
   registerModulePermissions,
   startManagementSession,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { decimal } from "@waitron/shared";
@@ -60,14 +60,14 @@ const OTHER = {
 
 interface Fixture {
   app: Hono;
-  cookie: Record<PersonRoleValue, string>;
-  personIds: Record<PersonRoleValue, string>;
+  cookie: Record<BuiltInRoleKey, string>;
+  personIds: Record<BuiltInRoleKey, string>;
 }
 
 async function fixture(): Promise<Fixture> {
   await seedTenant(db);
-  const cookie = {} as Record<PersonRoleValue, string>;
-  const personIds = {} as Record<PersonRoleValue, string>;
+  const cookie = {} as Record<BuiltInRoleKey, string>;
+  const personIds = {} as Record<BuiltInRoleKey, string>;
   await db.transaction(async (tx) => {
     for (const role of ["staff", "supervisor", "manager", "admin"] as const) {
       const [person] = await seedPersons(tx, {
@@ -706,11 +706,11 @@ describe("adjustment report routes", () => {
       dayCutover: "05:00:00",
     });
     const fx = await fixture();
-    const people: { id: string; role: PersonRoleValue | null }[] = [];
+    const people: { id: string; role: BuiltInRoleKey | null }[] = [];
     for (const person of await db.select({ id: persons.id }).from(persons)) {
       people.push({ ...person, role: await builtInRoleForTest(db, person.id) });
     }
-    const idOf = (role: PersonRoleValue) => people.find((p) => p.role === role)!.id;
+    const idOf = (role: BuiltInRoleKey) => people.find((p) => p.role === role)!.id;
     const bill = await seedOrder(db, {
       source: "dashboard",
       deviceId: null,

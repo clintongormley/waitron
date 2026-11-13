@@ -11,6 +11,8 @@ const OWNED = [
   "staff_roles",
   "person_staff_roles",
   "persons",
+  "roles",
+  "person_roles",
   "sessions",
   "management_sessions",
   "management_account_actions",

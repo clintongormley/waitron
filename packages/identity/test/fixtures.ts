@@ -9,7 +9,7 @@ import { loginManager } from "../src/manager-login.js";
 import { hashSessionToken } from "../src/session-token.js";
 import { hashPin } from "../src/verify-pin.js";
 import { hashPassword } from "../src/verify-password.js";
-import type { PersonRoleValue } from "@waitron/shared";
+import type { BuiltInRoleKey } from "../src/permissions.js";
 import type { TotpKeyRing } from "../src/mfa.js";
 
 export const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
@@ -57,7 +57,7 @@ export async function openSession(
 /** A person whose dashboard password is "correct horse". */
 export async function seedPersonWithPassword(
   db: Database,
-  role: PersonRoleValue = "manager",
+  role: BuiltInRoleKey = "manager",
 ): Promise<string> {
   const personId = await seedPerson(db, role);
   await withTransaction(db, (tx) =>
@@ -71,7 +71,7 @@ export async function seedPersonWithPassword(
 /** A person who can sign in on the dashboard: `email` and the password "correct horse". */
 export async function seedManager(
   db: Database,
-  opts: { email: string; role?: PersonRoleValue; status?: "pending" | "active" | "suspended" },
+  opts: { email: string; role?: BuiltInRoleKey; status?: "pending" | "active" | "suspended" },
 ): Promise<string> {
   const personId = await seedPerson(db, opts.role ?? "manager", opts.status ?? "active");
   await withTransaction(db, (tx) =>
@@ -85,7 +85,7 @@ export async function seedManager(
 /** Seeds a manager and returns an open management session for them. */
 export async function openManagementSession(
   db: Database,
-  role: PersonRoleValue = "manager",
+  role: BuiltInRoleKey = "manager",
 ): Promise<{ personId: string; token: string }> {
   const email = `mgr-${crypto.randomUUID()}@example.test`;
   const personId = await seedManager(db, { email, role });
@@ -97,7 +97,7 @@ export async function openManagementSession(
 
 export async function openFreshManagementSession(
   db: Database,
-  role: PersonRoleValue = "manager",
+  role: BuiltInRoleKey = "manager",
 ): Promise<{ personId: string; token: string }> {
   const session = await openManagementSession(db, role);
   await withTransaction(db, (tx) =>

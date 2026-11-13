@@ -87,7 +87,11 @@ describe("the demo scripts' test venue", () => {
       adminEmail: "demo-owner@example.test",
     })();
 
-    expect(suite.db.all(sql`select display_name, email, role from persons`)).toEqual([
+    expect(
+      suite.db.all(
+        sql`select display_name, email, (select built_in_key from person_roles join roles on roles.id = person_roles.role_id where person_roles.person_id = persons.id and built_in_key is not null) as role from persons`,
+      ),
+    ).toEqual([
       {
         display_name: "Administrator",
         email: "demo-owner@example.test",

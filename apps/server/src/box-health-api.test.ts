@@ -13,7 +13,7 @@ import {
   persons,
   startManagementSession,
   withPassiveManagementRead,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
 } from "@waitron/identity";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -48,7 +48,7 @@ let manager: Person;
 let admin: Person;
 let supervisor: Person;
 
-async function seedPerson(role: PersonRoleValue, name: string): Promise<Person> {
+async function seedPerson(role: BuiltInRoleKey, name: string): Promise<Person> {
   return withTransaction(suite.db, async (tx) => {
     const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
     const session = await startManagementSession(tx, { personId: p!.id });

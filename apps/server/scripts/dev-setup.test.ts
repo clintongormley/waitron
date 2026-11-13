@@ -220,7 +220,7 @@ describe("devSetup against a real venue directory", () => {
   it("gives the developer administrator an English display name", async () => {
     const rows = await readVenue(async (db) => {
       const result = await db.execute<{ display_name: string }>(
-        sql`select display_name from persons where role = 'admin'`,
+        sql`select display_name from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')`,
       );
       return result.rows;
     });

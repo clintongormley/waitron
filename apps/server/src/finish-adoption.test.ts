@@ -232,7 +232,7 @@ describe("runFinishAdoption — default steps on a migrated venue", () => {
     );
     expect(node.rows).toEqual([{ name: "standby" }]);
     const viewer = await suite.db.execute<{ role: string }>(
-      sql`select role from persons where id = ${MIRROR_VIEWER_PERSON_ID}`,
+      sql`select (select built_in_key from person_roles join roles on roles.id = person_roles.role_id where person_roles.person_id = persons.id and built_in_key is not null) as role from persons where id = ${MIRROR_VIEWER_PERSON_ID}`,
     );
     expect(viewer.rows).toEqual([]);
     expect(await readPendingAdoption(dir)).toBeNull();

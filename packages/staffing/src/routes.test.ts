@@ -11,7 +11,7 @@ import {
   persons,
   registerModulePermissions,
   startManagementSession,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
@@ -47,7 +47,7 @@ const noopLog: Logger = () => {};
 async function routed() {
   const venue = await seedVenueWithStaff(suite.db);
   const cookies = await withTransaction(suite.db, async (tx) => {
-    const session = async (personRole: PersonRoleValue) => {
+    const session = async (personRole: BuiltInRoleKey) => {
       const [row] = await seedPersons(tx, {
         jobRoles: [],
         displayName: `${personRole} ${randomUUID()}`,

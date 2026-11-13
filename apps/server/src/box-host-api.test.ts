@@ -11,7 +11,7 @@ import {
   persons,
   startManagementSession,
   withPassiveManagementRead,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -47,7 +47,7 @@ let manager: Person;
 let admin: Person;
 let supervisor: Person;
 
-async function seedPerson(role: PersonRoleValue, name: string, id?: string): Promise<Person> {
+async function seedPerson(role: BuiltInRoleKey, name: string, id?: string): Promise<Person> {
   return withTransaction(suite.db, async (tx) => {
     const [p] = await seedPersons(tx, {
       ...(id === undefined ? {} : { id }),

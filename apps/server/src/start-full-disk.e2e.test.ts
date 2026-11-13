@@ -43,7 +43,7 @@ import {
   hashSessionToken,
   startManagementSession,
   withPassiveManagementRead,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
 } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { authenticateAgent } from "@waitron/printing";
@@ -262,7 +262,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
   let cashier: { personId: string; token: string; cookie: string };
   let nodeId: string;
 
-  async function seedPerson(role: PersonRoleValue, name: string) {
+  async function seedPerson(role: BuiltInRoleKey, name: string) {
     return withTransaction(db, async (tx) => {
       const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
       const session = await startManagementSession(tx, { personId: p!.id });

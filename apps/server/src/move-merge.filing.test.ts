@@ -382,7 +382,7 @@ describe("a full-invoice bill merged away", () => {
 
   async function pay(cfg: DeviceRequestConfig, tab: string, amount: string) {
     const { rows: admins } = await suite.db.execute<{ id: string }>(
-      sql`select id from persons where role = 'admin'`,
+      sql`select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')`,
     );
     const personId = admins[0]!.id;
     return takeBillPayment(

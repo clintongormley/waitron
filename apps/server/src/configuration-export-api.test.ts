@@ -57,7 +57,7 @@ const suite = useVenueDb({
     moduleVersions = await schemaVersionsByModule({ venue: db, node: suite.node }, ALL_MODULES);
     cookie = await withTransaction(db, async (tx) => {
       const admin = await tx.execute<{ id: string }>(sql`
-        select id from persons where role = 'admin'
+        select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')
       `);
       const session = await startManagementSession(tx, {
         personId: admin.rows[0]!.id,

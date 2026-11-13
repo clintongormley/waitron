@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "../test/person-rows.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -54,7 +55,7 @@ describe("person authority", () => {
   it("an unknown person holds nothing", async () => {
     const personId = crypto.randomUUID();
     const authority = await identity.readPersonAuthority(suite.db, personId);
-    expect(authority).toEqual({ personId, admin: false, permissions: new Set() });
+    expect(authority).toEqual({ personId, admin: false, roleIds: [], permissions: new Set() });
     expect(identity.holds(authority, "payment.take")).toBe(false);
   });
 
@@ -80,9 +81,7 @@ describe("person authority", () => {
         tx.execute(sql`update persons set password_hash = 'copy-verifier' where id = ${admin}`),
       );
       await suite.db.archiveTo(path);
-      await withTransaction(suite.db, (tx) =>
-        tx.execute(sql`update persons set role = 'staff' where id = ${admin}`),
-      );
+      await withTransaction(suite.db, (tx) => setBuiltInRoleForTest(tx, admin, "staff"));
       const copy = await openBackupQuery(path);
       try {
         expect(await identity.listAdminHolders(copy.query, { status: "active" })).toEqual([
@@ -113,7 +112,12 @@ describe("person authority", () => {
   it("an undeclared stored permission grants nothing", () => {
     expect(
       identity.holds(
-        { personId: "unused", admin: false, permissions: new Set(["authority_test.retired"]) },
+        {
+          personId: "unused",
+          admin: false,
+          roleIds: [],
+          permissions: new Set(["authority_test.retired"]),
+        },
         "authority_test.retired",
       ),
     ).toBe(false);

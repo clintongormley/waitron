@@ -1,5 +1,4 @@
 import { maySelfApproveAttendance } from "./corrections.js";
-import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -636,11 +635,13 @@ it("self-approval follows workforce.self_approve, not the Admin name", async () 
       ),
     "correction.not_permitted",
   );
-  registerModulePermissions([
-    { permission: "workforce.self_approve", defaultHolders: ["manager"] },
-  ]);
+  suite.db.run(
+    sql`update roles set permissions = '["workforce.correct","workforce.self_approve"]' where built_in_key = 'manager'`,
+  );
   try {
-    registerModulePermissions([{ permission: "workforce.correct", defaultHolders: [] }]);
+    suite.db.run(
+      sql`update roles set permissions = '["workforce.self_approve"]' where built_in_key = 'manager'`,
+    );
     try {
       expect(await run((tx) => maySelfApproveAttendance(tx, personId))).toBe(false);
       await unchangedRefusal(
@@ -651,9 +652,9 @@ it("self-approval follows workforce.self_approve, not the Admin name", async () 
         "correction.not_permitted",
       );
     } finally {
-      registerModulePermissions([
-        { permission: "workforce.correct", defaultHolders: ["supervisor", "manager"] },
-      ]);
+      suite.db.run(
+        sql`update roles set permissions = '["workforce.correct","workforce.self_approve"]' where built_in_key = 'manager'`,
+      );
     }
     const approved = await run((tx) =>
       backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: personId }),
@@ -667,6 +668,8 @@ it("self-approval follows workforce.self_approve, not the Admin name", async () 
     });
     await intact();
   } finally {
-    registerModulePermissions([{ permission: "workforce.self_approve", defaultHolders: [] }]);
+    suite.db.run(
+      sql`update roles set permissions = '["workforce.correct"]' where built_in_key = 'manager'`,
+    );
   }
 });

@@ -12,6 +12,10 @@ const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[]
     in: ["staff_role_id"],
     out: ["person_id"],
   },
+  person_roles: {
+    in: ["role_id"],
+    out: ["person_id"],
+  },
   persons: {
     in: [
       "id",
@@ -24,7 +28,6 @@ const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[]
       "email",
       "pending_email",
       "email_verified_at",
-      "role",
       "status",
       "created_at",
     ],

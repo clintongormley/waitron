@@ -5,7 +5,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promi
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { Hono } from "hono";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
@@ -60,7 +60,7 @@ const suite = useVenueDb({
   resetPerTest: false,
   timeoutMs: 120_000,
   setup: async (db) => {
-    await db.insert(persons).values({
+    await seedPersons(db, {
       displayName: "Backup administrator",
       role: "admin",
       passwordHash: hashPassword("fixture-restore-password"),

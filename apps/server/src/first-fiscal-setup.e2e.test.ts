@@ -472,7 +472,11 @@ it.each([
           id: claim.body.state.nodeId,
         });
         expect(
-          isolated.prepare("select id from persons where role = 'admin'").all(),
+          isolated
+            .prepare(
+              "select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')",
+            )
+            .all(),
         ).not.toContainEqual({ id: claim.body.state.administratorId });
         expect(isolated.prepare("select environment from fiscal_allocations").all()).toEqual([
           { environment: "preproduction" },

@@ -1,4 +1,5 @@
-import { hashPassword, persons } from "@waitron/identity";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { hashPassword } from "@waitron/identity";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -33,7 +34,7 @@ const NODE = "d0000000-0000-4000-8000-000000000001";
 const LOCATION = "d0000000-0000-4000-8000-000000000002";
 let scratch: string;
 beforeEach(async () => {
-  await suite.db.insert(persons).values({
+  await seedPersons(suite.db, {
     displayName: "Backup administrator",
     role: "admin",
     passwordHash: hashPassword("fixture-restore-password"),

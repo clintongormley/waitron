@@ -1,7 +1,7 @@
 import { readTenant, readVenue, type Database } from "@waitron/db";
 import { resolveCountryDemoIdentity } from "@waitron/country";
 import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/catalogue";
-import type { PersonRoleValue } from "@waitron/identity";
+import type { BuiltInRoleKey } from "@waitron/identity";
 import type { AdjustmentReasonInput } from "@waitron/adjustments";
 import type {
   DemoPlainText,
@@ -55,7 +55,7 @@ export type SeedCatalogue<L extends string = string> = Omit<
 > & { readonly categories: readonly SeedCategory<L>[] };
 export type SeedProductOptionLists<L extends string = string> = CountryDemoProductOptionLists<L>;
 export type SeedProductExtraLists<L extends string = string> = CountryDemoProductExtraLists<L>;
-export type SeedPerson = Omit<CountryDemoPerson, "role"> & { readonly role: PersonRoleValue };
+export type SeedPerson = Omit<CountryDemoPerson, "role"> & { readonly role: BuiltInRoleKey };
 type RawReason<L extends string = string> = Omit<CountryDemoReason<L>, "kind" | "actions"> & {
   readonly kind: AdjustmentReasonInput["kind"];
   readonly actions: readonly AdjustmentReasonInput["actions"][number][];

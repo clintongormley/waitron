@@ -1,5 +1,4 @@
 import type { ModulePermission } from "@waitron/module";
-import type { PersonRoleValue } from "@waitron/shared";
 
 export type BuiltInRoleKey = "staff" | "supervisor" | "manager" | "admin";
 export type DefaultHolder = Exclude<BuiltInRoleKey, "admin">;
@@ -59,12 +58,12 @@ export function defaultPermissionsFor(holder: DefaultHolder): string[] {
   return declaredPermissions().filter((permission) => roleHasPermission(holder, permission));
 }
 
-export function permissionsForRole(role: PersonRoleValue): string[] {
+export function permissionsForRole(role: BuiltInRoleKey): string[] {
   return role === "admin" ? declaredPermissions() : defaultPermissionsFor(role);
 }
 
 export function roleHasPermission(
-  role: PersonRoleValue,
+  role: BuiltInRoleKey,
   permission: Permission | (string & {}),
 ): boolean {
   if (role === "admin") return isDeclaredPermission(permission);

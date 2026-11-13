@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { deviceProfiles, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { listStaffAdmittedTo, verifyPin, type PersonRoleValue } from "@waitron/identity";
+import { listStaffAdmittedTo, verifyPin, type BuiltInRoleKey } from "@waitron/identity";
 import { seedStaff } from "./seed-staff.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 import { DEMO_ADMIN_EMAIL, DEMO_PIN } from "./credentials.js";
@@ -35,9 +35,11 @@ describe("seedStaff", () => {
 
       const { rows } = await tx.execute<{
         display_name: string;
-        role: PersonRoleValue;
+        role: BuiltInRoleKey;
         pin_hash: string;
-      }>(sql`select display_name, role, pin_hash from persons order by created_at`);
+      }>(
+        sql`select display_name, (select built_in_key from person_roles join roles on roles.id = person_roles.role_id where person_roles.person_id = persons.id and built_in_key is not null) as role, pin_hash from persons order by created_at`,
+      );
       return rows;
     });
 
@@ -76,10 +78,12 @@ describe("seedStaff", () => {
 
       const { rows } = await tx.execute<{
         display_name: string;
-        role: PersonRoleValue;
+        role: BuiltInRoleKey;
         email: string | null;
         password_hash: string | null;
-      }>(sql`select display_name, role, email, password_hash from persons order by created_at`);
+      }>(
+        sql`select display_name, (select built_in_key from person_roles join roles on roles.id = person_roles.role_id where person_roles.person_id = persons.id and built_in_key is not null) as role, email, password_hash from persons order by created_at`,
+      );
       return rows;
     });
 
@@ -112,7 +116,7 @@ for (const locale of ["en", "es"] as const) {
       name: string;
     }>(sql`select p.email, r.name from persons p
       join person_staff_roles h on h.person_id = p.id join staff_roles r on r.id = h.staff_role_id
-      where p.role <> 'admin' order by p.email, r.name`);
+      where p.id not in (select person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin') order by p.email, r.name`);
     const names =
       locale === "en"
         ? ["Waiter", "Kitchen", "Manager on duty"]

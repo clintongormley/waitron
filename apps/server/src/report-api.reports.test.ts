@@ -17,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { insertHandoverActivationTx } from "@waitron/handover";
 import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, personRole, startManagementSession } from "@waitron/identity";
+import { hashPin, BUILT_IN_ROLE_KEYS, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -218,7 +218,7 @@ const suite = useVenueDb({
     const sids = await withTransaction(db, async (tx) => {
       const mkPerson = async (
         name: string,
-        role: (typeof personRole.enumValues)[number],
+        role: (typeof BUILT_IN_ROLE_KEYS)[number],
       ): Promise<string> => {
         const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
         const session = await startManagementSession(tx, { personId: p!.id });

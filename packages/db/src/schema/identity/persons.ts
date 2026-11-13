@@ -2,12 +2,6 @@ import { sql, type SQL } from "drizzle-orm";
 import { check, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumType, id, label, newId, nowIso, table, tsString } from "../columns.js";
 
-/**
- * Call sites gate on a permission; `packages/identity/src/permissions.ts` maps each role to its
- * permission set.
- */
-export const personRole = enumType(["staff", "supervisor", "manager", "admin"]);
-
 /** `suspended` keeps the row, and any history that references it, while refusing login. */
 export const personStatus = enumType(["pending", "active", "suspended"]);
 
@@ -65,7 +59,6 @@ export const persons = table(
     emailVerifiedAt: tsString("email_verified_at"),
     /** Google's OpenID Connect subject. Not the email: a Google account can change addresses. */
     googleSubject: label("google_subject"),
-    role: personRole("role").notNull().default("staff"),
     status: personStatus("status").notNull().default("active"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
@@ -104,7 +97,6 @@ export const persons = table(
       "persons_pending_email_ck",
       sql`${t.pendingEmail} is null or length(${t.pendingEmail}) > 0`,
     ),
-    check("persons_role_ck", enumCheck(t.role)),
     check("persons_status_ck", enumCheck(t.status)),
   ],
 );

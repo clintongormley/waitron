@@ -1,4 +1,4 @@
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedPersons, type PersonSeed } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -43,10 +43,7 @@ const pass = (overrides: Partial<ReturnType<typeof deps>> = {}) =>
 const reminders = () => suite.db.select().from(fiscalCertificateReminders);
 const recipients = () => send.mock.calls.map(([message]) => message.recipient).sort();
 
-async function person(
-  displayName: string,
-  values: Partial<typeof persons.$inferInsert>,
-): Promise<string> {
+async function person(displayName: string, values: Partial<PersonSeed>): Promise<string> {
   const [row] = await seedPersons(suite.db, { displayName, ...values });
   return row!.id;
 }

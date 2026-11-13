@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "298adca4-77e4-4443-aa9e-e1f87a395b83",
+  "id": "a6add431-f9dc-4a0c-93dd-6eb014175a78",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -11618,6 +11618,65 @@
         }
       }
     },
+    "person_roles": {
+      "name": "person_roles",
+      "columns": {
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role_id": {
+          "name": "role_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "person_roles_person_fk": {
+          "name": "person_roles_person_fk",
+          "tableFrom": "person_roles",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "person_roles_role_fk": {
+          "name": "person_roles_role_fk",
+          "tableFrom": "person_roles",
+          "tableTo": "roles",
+          "columnsFrom": [
+            "role_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "person_roles_pk": {
+          "columns": [
+            "person_id",
+            "role_id"
+          ],
+          "name": "person_roles_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "person_staff_roles": {
       "name": "person_staff_roles",
       "columns": {
@@ -11799,14 +11858,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'staff'"
-        },
         "status": {
           "name": "status",
           "type": "text",
@@ -11897,10 +11948,6 @@
           "name": "persons_pending_email_ck",
           "value": "\"persons\".\"pending_email\" is null or length(\"persons\".\"pending_email\") > 0"
         },
-        "persons_role_ck": {
-          "name": "persons_role_ck",
-          "value": "\"persons\".\"role\" in ('staff', 'supervisor', 'manager', 'admin')"
-        },
         "persons_status_ck": {
           "name": "persons_status_ck",
           "value": "\"persons\".\"status\" in ('pending', 'active', 'suspended')"
@@ -11976,6 +12023,89 @@
         "recovery_codes_hash_ck": {
           "name": "recovery_codes_hash_ck",
           "value": "length(\"recovery_codes\".\"code_hash\") = 64"
+        }
+      }
+    },
+    "roles": {
+      "name": "roles",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "built_in_key": {
+          "name": "built_in_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name_folded": {
+          "name": "name_folded",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "permissions": {
+          "name": "permissions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "roles_built_in_key_uq": {
+          "name": "roles_built_in_key_uq",
+          "columns": [
+            "built_in_key"
+          ],
+          "isUnique": true,
+          "where": "\"roles\".\"built_in_key\" is not null"
+        },
+        "roles_name_folded_uq": {
+          "name": "roles_name_folded_uq",
+          "columns": [
+            "name_folded"
+          ],
+          "isUnique": true,
+          "where": "\"roles\".\"name_folded\" is not null"
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "roles_name_ck": {
+          "name": "roles_name_ck",
+          "value": "(\"roles\".\"built_in_key\" is null) = (\"roles\".\"name\" is not null)"
+        },
+        "roles_admin_permissions_ck": {
+          "name": "roles_admin_permissions_ck",
+          "value": "\"roles\".\"built_in_key\" is not 'admin' or json_array_length(\"roles\".\"permissions\") = 0"
+        },
+        "roles_built_in_key_ck": {
+          "name": "roles_built_in_key_ck",
+          "value": "\"roles\".\"built_in_key\" in ('staff', 'supervisor', 'manager', 'admin')"
         }
       }
     },

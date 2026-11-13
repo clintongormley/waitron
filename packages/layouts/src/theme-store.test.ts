@@ -5,7 +5,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
-import type { PersonRoleValue } from "@waitron/identity";
+import type { BuiltInRoleKey } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { sql } from "drizzle-orm";
@@ -45,7 +45,7 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 /** Through drizzle rather than raw SQL: `persons.id` takes its value from a `$defaultFn`. */
-async function seedSession(role: PersonRoleValue): Promise<string> {
+async function seedSession(role: BuiltInRoleKey): Promise<string> {
   const [person] = await seedPersons(suite.db, {
     displayName: `Operator ${role}`,
     pinHash: "seed-pin-hash",

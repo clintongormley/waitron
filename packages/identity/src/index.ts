@@ -1,4 +1,13 @@
 export {
+  BUILT_IN_ROLE_KEYS,
+  prepareAccessRoleImport,
+  importAccessRole,
+  importAccessRoleMembership,
+  ensureBuiltInRoles,
+  heldBuiltInKey,
+  setBuiltInMembership,
+} from "./roles.js";
+export {
   readPersonAuthority,
   listAdminHolders,
   holds,
@@ -25,7 +34,6 @@ export {
   deviceProfileAdmissionRoles,
   managementAccountActions,
   managementSessions,
-  personRole,
   persons,
   personStatus,
   sessions,
@@ -83,7 +91,6 @@ export type {
   BuiltInRoleKey,
   DefaultHolder,
 } from "./permissions.js";
-export type { PersonRoleValue } from "@waitron/shared";
 export {
   readOwnProfile,
   saveOwnProfile,

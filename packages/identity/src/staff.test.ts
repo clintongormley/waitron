@@ -1,10 +1,11 @@
+import { heldBuiltInKey } from "./roles.js";
 import { CORE_MIGRATIONS, personStaffRoles, refusalError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { ensureFixtureJobRole } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { authorize } from "./authorize.js";
 import { loginWithPin } from "./login.js";
 import { loginManager } from "./manager-login.js";
@@ -52,8 +53,8 @@ async function personRow(
     status: string;
     pin_hash: string;
     password_hash: string | null;
-  }>(sql`select role, status, pin_hash, password_hash from persons where id = ${id}`);
-  return rows.rows[0]!;
+  }>(sql`select status, pin_hash, password_hash from persons where id = ${id}`);
+  return { ...rows.rows[0]!, role: (await heldBuiltInKey(suite.db, id))! };
 }
 
 async function emailOf(id: string): Promise<string | null> {
@@ -79,8 +80,9 @@ describe("createPerson", () => {
     );
 
     const rows = await suite.db.execute<{ role: string; status: string; display_name: string }>(
-      sql`select role, status, display_name from persons where id = ${id}`,
+      sql`select status, display_name from persons where id = ${id}`,
     );
+    for (const person of rows.rows) person.role = (await heldBuiltInKey(suite.db, id))!;
     expect(rows.rows).toEqual([{ role: "supervisor", status: "active", display_name: "Bea" }]);
 
     await run(async (tx) => {
@@ -93,8 +95,12 @@ describe("createPerson", () => {
       token: expect.any(String),
       personId: id,
       deviceId,
-      role: "supervisor",
-      authority: { personId: id, admin: false, permissions: expect.any(Set) },
+      authority: {
+        personId: id,
+        admin: false,
+        roleIds: [expect.any(String)],
+        permissions: expect.any(Set),
+      },
       locale: null,
     });
   });
@@ -351,8 +357,12 @@ describe("resetPin", () => {
       token: expect.any(String),
       personId: targetId,
       deviceId,
-      role: "staff",
-      authority: { personId: targetId, admin: false, permissions: expect.any(Set) },
+      authority: {
+        personId: targetId,
+        admin: false,
+        roleIds: [expect.any(String)],
+        permissions: expect.any(Set),
+      },
       locale: null,
     });
 
@@ -492,6 +502,22 @@ describe("listActiveStaff", () => {
 });
 
 describe("listPersons", () => {
+  it("reads the staff roster in a fixed number of queries", async () => {
+    const { token, personId } = await openManagementSession(suite.db, "admin");
+    for (let i = 0; i < 20; i++) await seedPerson(suite.db, "staff");
+    await run(async (tx) => {
+      const reads = vi.spyOn(tx, "select");
+      try {
+        const roster = await listPersons(tx, { managementSessionId: token });
+        expect(roster.length).toBeGreaterThanOrEqual(21);
+        expect(roster.find((person) => person.personId === personId)?.role).toBe("admin");
+        expect(reads.mock.calls.length).toBeLessThanOrEqual(4);
+      } finally {
+        reads.mockRestore();
+      }
+    });
+  });
+
   it("listPersons returns a roster with credential booleans, no secrets", async () => {
     const { token, personId: manager } = await openManagementSession(suite.db, "admin");
     await run((tx) =>

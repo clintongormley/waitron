@@ -21,7 +21,7 @@ import {
   endSession,
   hashPin,
   loginWithPin,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
   type PinThrottle,
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -83,7 +83,7 @@ async function signIn(
   return `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
 }
 
-async function seedPerson(role: PersonRoleValue, name: string): Promise<string> {
+async function seedPerson(role: BuiltInRoleKey, name: string): Promise<string> {
   const [person] = await seedPersons(venue.db, {
     displayName: name,
     pinHash: hashPin("1234"),

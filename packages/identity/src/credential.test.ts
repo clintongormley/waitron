@@ -43,16 +43,20 @@ beforeEach(() => {
 });
 
 describe("verifyThrottledCredential", () => {
-  it("answers the person's role for the right PIN and clears their count", async () => {
+  it("answers the person's authority for the right PIN and clears their count", async () => {
     const personId = await seedPerson(suite.db, "supervisor");
     const { attempts, throttle } = spiedAttempts();
 
     const cred = await run((tx) => verifyThrottledCredential(tx, personId, "1234", attempts));
 
     expect(cred).toEqual({
-      role: "supervisor",
       locale: null,
-      authority: { personId, admin: false, permissions: expect.any(Set) },
+      authority: {
+        personId,
+        admin: false,
+        roleIds: [expect.any(String)],
+        permissions: expect.any(Set),
+      },
     });
     expect(cred.authority.permissions.has("sale.refund")).toBe(true);
     expect(cred.authority.permissions.has("report.export")).toBe(false);
@@ -110,7 +114,8 @@ describe("verifyThrottledCredential", () => {
     await wrongThrice();
     const cred = await run((tx) => verifyThrottledCredential(tx, personId, "1234", attempts));
 
-    expect(cred.role).toBe("supervisor");
+    expect(cred.authority.permissions.has("sale.refund")).toBe(true);
+    expect(cred).not.toHaveProperty("role");
   });
 
   it("does not count a failure that is not a wrong PIN", async () => {

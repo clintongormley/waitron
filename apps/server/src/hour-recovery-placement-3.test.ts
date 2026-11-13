@@ -1,4 +1,5 @@
-import { hashPassword, persons } from "@waitron/identity";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { hashPassword } from "@waitron/identity";
 import {
   external,
   suite,
@@ -627,7 +628,7 @@ describe("selected-hour admission before archive placement", () => {
 
   it("carries the bucket HTTP selection and isolation through the real staging adapter", async () => {
     const history = await recoveryInvoices();
-    await suite.db.insert(persons).values({
+    await seedPersons(suite.db, {
       displayName: "Backup administrator",
       role: "admin",
       passwordHash: hashPassword("fixture-restore-password"),

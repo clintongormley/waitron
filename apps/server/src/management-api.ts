@@ -75,7 +75,7 @@ import {
   verifyOwnCredentials,
   readProfileAdmissions,
   setProfileAdmission,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
   type ProfileAdmission,
   type TotpKeyRing,
 } from "@waitron/identity";
@@ -1075,7 +1075,7 @@ export function mountManagementApi(
         firstNames?: string;
         lastNames?: string;
         telephone?: string | null;
-        role?: PersonRoleValue;
+        role?: BuiltInRoleKey;
         email?: string;
       }>(c);
       if (
@@ -1094,7 +1094,8 @@ export function mountManagementApi(
       if (typeof body.email !== "string") {
         throw new AppError("management.request_invalid", { field: "email" });
       }
-      const { displayName, firstNames, lastNames, telephone = null, role, email } = body;
+      const { displayName, firstNames, lastNames, telephone = null, email } = body;
+      const role = requireEnum(body.role, "role", ["staff", "supervisor", "manager", "admin"]);
       const { created, delivery } = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, { managementSessionId: sessionId, permission: "person.admin" });
         await deps.assertAccountMailPrimary?.();

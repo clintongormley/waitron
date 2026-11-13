@@ -1,4 +1,3 @@
-import { registerModulePermissions } from "@waitron/identity";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
@@ -959,16 +958,18 @@ it("self-approval follows workforce.self_approve, not the Admin name", async () 
   await send(value);
   const decision = await command({ action: "approve", itemId: value.commandId });
   await refused(() => send(decision), "correction.not_permitted");
-  registerModulePermissions([
-    { permission: "workforce.self_approve", defaultHolders: ["manager"] },
-  ]);
-  registerModulePermissions([{ permission: "workforce.correct", defaultHolders: [] }]);
+  suite.db.run(
+    sql`update roles set permissions = '["workforce.correct","workforce.self_approve"]' where built_in_key = 'manager'`,
+  );
+  suite.db.run(
+    sql`update roles set permissions = '["workforce.self_approve"]' where built_in_key = 'manager'`,
+  );
   try {
     await refused(() => send(decision), "correction.not_permitted");
   } finally {
-    registerModulePermissions([
-      { permission: "workforce.correct", defaultHolders: ["supervisor", "manager"] },
-    ]);
+    suite.db.run(
+      sql`update roles set permissions = '["workforce.correct","workforce.self_approve"]' where built_in_key = 'manager'`,
+    );
   }
   try {
     const result = await send(decision);
@@ -982,6 +983,8 @@ it("self-approval follows workforce.self_approve, not the Admin name", async () 
     ]);
     await intact();
   } finally {
-    registerModulePermissions([{ permission: "workforce.self_approve", defaultHolders: [] }]);
+    suite.db.run(
+      sql`update roles set permissions = '["workforce.correct"]' where built_in_key = 'manager'`,
+    );
   }
 });

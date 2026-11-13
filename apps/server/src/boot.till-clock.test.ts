@@ -1,3 +1,4 @@
+import { listAdminHolders } from "@waitron/identity";
 import { convenioConfig } from "@waitron/workforce-es";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { once } from "node:events";
@@ -27,7 +28,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillClockState } from "./till-clock-state.js";
 import { timeEntries, WorkforceBackend } from "@waitron/workforce";
-import { persons, startManagementSession } from "@waitron/identity";
+import { startManagementSession } from "@waitron/identity";
 import { createClockVenue } from "./testing/clock-venue.js";
 import { awaitListening, copyMigrationsRoot } from "./testing/boot-harness.js";
 import { serverFixture } from "./testing/server-fixture.js";
@@ -351,9 +352,7 @@ for (const spain of [false, true]) {
         let managementCookie: string | undefined;
         if (spain) {
           managementCookie = await withTransaction(suite.db, async (tx) => {
-            const admin = (await tx.select().from(persons)).find(
-              (person) => person.role === "admin",
-            )!;
+            const admin = (await listAdminHolders(tx))[0]!;
             const session = await startManagementSession(tx, { personId: admin.id });
             return `waitron_management_session=${session.token}`;
           });

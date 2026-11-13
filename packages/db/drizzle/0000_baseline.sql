@@ -1717,6 +1717,14 @@ CREATE TABLE `management_sessions` (
 --> statement-breakpoint
 CREATE INDEX `management_sessions_open_idx` ON `management_sessions` (`person_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `management_sessions_token_hash_uq` ON `management_sessions` (`token_hash`);--> statement-breakpoint
+CREATE TABLE `person_roles` (
+	`person_id` text NOT NULL,
+	`role_id` text NOT NULL,
+	PRIMARY KEY(`person_id`, `role_id`),
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`role_id`) REFERENCES `roles`(`id`) ON UPDATE no action ON DELETE restrict
+);
+--> statement-breakpoint
 CREATE TABLE `person_staff_roles` (
 	`person_id` text NOT NULL,
 	`staff_role_id` text NOT NULL,
@@ -1743,7 +1751,6 @@ CREATE TABLE `persons` (
 	`pending_email_folded` text,
 	`email_verified_at` text,
 	`google_subject` text,
-	`role` text DEFAULT 'staff' NOT NULL,
 	`status` text DEFAULT 'active' NOT NULL,
 	`created_at` text NOT NULL,
 	CONSTRAINT "persons_display_name_ck" CHECK(length("persons"."display_name") > 0),
@@ -1755,7 +1762,6 @@ CREATE TABLE `persons` (
 	CONSTRAINT "persons_totp_secret_ck" CHECK("persons"."totp_secret" is null or length("persons"."totp_secret") > 0),
 	CONSTRAINT "persons_locale_ck" CHECK("persons"."locale" is null or length("persons"."locale") > 0),
 	CONSTRAINT "persons_pending_email_ck" CHECK("persons"."pending_email" is null or length("persons"."pending_email") > 0),
-	CONSTRAINT "persons_role_ck" CHECK("persons"."role" in ('staff', 'supervisor', 'manager', 'admin')),
 	CONSTRAINT "persons_status_ck" CHECK("persons"."status" in ('pending', 'active', 'suspended'))
 );
 --> statement-breakpoint
@@ -1774,6 +1780,20 @@ CREATE TABLE `recovery_codes` (
 );
 --> statement-breakpoint
 CREATE INDEX `recovery_codes_person_idx` ON `recovery_codes` (`person_id`);--> statement-breakpoint
+CREATE TABLE `roles` (
+	`id` text PRIMARY KEY NOT NULL,
+	`built_in_key` text,
+	`name` text,
+	`name_folded` text,
+	`permissions` text DEFAULT '[]' NOT NULL,
+	`created_at` text NOT NULL,
+	CONSTRAINT "roles_name_ck" CHECK(("roles"."built_in_key" is null) = ("roles"."name" is not null)),
+	CONSTRAINT "roles_admin_permissions_ck" CHECK("roles"."built_in_key" is not 'admin' or json_array_length("roles"."permissions") = 0),
+	CONSTRAINT "roles_built_in_key_ck" CHECK("roles"."built_in_key" in ('staff', 'supervisor', 'manager', 'admin'))
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `roles_built_in_key_uq` ON `roles` (`built_in_key`) WHERE "roles"."built_in_key" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `roles_name_folded_uq` ON `roles` (`name_folded`) WHERE "roles"."name_folded" is not null;--> statement-breakpoint
 CREATE TABLE `sessions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`token_hash` text NOT NULL,

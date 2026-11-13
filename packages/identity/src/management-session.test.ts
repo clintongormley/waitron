@@ -69,7 +69,7 @@ describe("management session lifecycle", () => {
     expect(Date.parse(row!.last_seen_at)).toBeGreaterThan(Date.parse(aged) + 9 * 60_000);
   });
 
-  it("starts and resolves a session, returning the person's role and locale", async () => {
+  it("starts and resolves a session, returning the person's authority and locale", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));
     const resolved = await run((tx) => resolveManagementSession(tx, session.token));
@@ -86,8 +86,12 @@ describe("management session lifecycle", () => {
     expect(resolved).toEqual({
       sessionRowId: row!.id,
       personId,
-      role: "manager",
-      authority: { personId, admin: false, permissions: expect.any(Set) },
+      authority: {
+        personId,
+        admin: false,
+        roleIds: [expect.any(String)],
+        permissions: expect.any(Set),
+      },
       email: null,
       displayName: person!.display_name,
       locale: null,

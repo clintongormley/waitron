@@ -34,8 +34,9 @@ for (const mode of [true, false, "empty", "no-target-job"] as const) {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const admin = suite.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!
-      .id;
+    const admin = suite.db.all<{ id: string }>(
+      sql`select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')`,
+    )[0]!.id;
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`delete from person_staff_roles`);
       await tx.execute(sql`delete from staff_roles`);
@@ -82,13 +83,13 @@ for (const mode of [true, false, "empty", "no-target-job"] as const) {
       name: string;
     }>(sql`select r.id, r.name from staff_roles r
       join person_staff_roles h on h.staff_role_id = r.id join persons p on p.id = h.person_id
-      where p.role = 'admin' order by r.name`);
+      where p.id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin') order by r.name`);
     expect(held.map((r) => r.name)).toEqual(
       empty ? [STARTER_JOB_ROLE_NAMES.Team.es] : hasRoles ? ["Waiter"] : ["Kitchen", "Waiter"],
     );
     expect(held.every((r) => !r.id.startsWith("source-"))).toBe(true);
     const targetAdmin = targetSuite.db.all<{ id: string }>(
-      sql`select id from persons where role = 'admin'`,
+      sql`select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')`,
     )[0]!.id;
     const baseline = await targetSuite.db
       .select()

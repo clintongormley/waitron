@@ -26,7 +26,6 @@ import {
 } from "./staff.js";
 import { loginWithPin } from "./login.js";
 import { loginManager } from "./manager-login.js";
-import type { PersonRoleValue } from "@waitron/shared";
 import {
   codeOf,
   openFreshManagementSession as openManagementSession,
@@ -748,9 +747,9 @@ async function withRacerPlanted<T>(
       when new.id <> 'racer' and not exists (select 1 from persons where id = 'racer')
       begin
         insert into persons
-          (id, display_name, display_name_folded, email, email_folded, role, status, created_at)
+          (id, display_name, display_name_folded, email, email_folded, status, created_at)
         values
-          ('racer', 'Racer', 'racer', 'racer@example.com', 'racer@example.com', 'staff', 'active',
+          ('racer', 'Racer', 'racer', 'racer@example.com', 'racer@example.com', 'active',
            '2026-09-23T00:00:00.000Z');
       end`),
   );
@@ -816,17 +815,17 @@ describe("a colliding row that lands after the pre-check", () => {
       run((tx) =>
         invitePerson(tx, {
           managementSessionId: token,
-          displayName: "Bad role",
+          displayName: "\0",
           firstNames: "Bad",
           lastNames: "Role",
           telephone: null,
-          role: "owner" as PersonRoleValue,
+          role: "staff",
           email: "bad-role@example.com",
         }),
       ),
     );
     expect(isAppError(error)).toBe(false);
-    expect(checkFailed(error, "persons_role_ck")).toBe(true);
+    expect(checkFailed(error, "persons_display_name_ck")).toBe(true);
   });
 
   it("createPerson reports a display-name collision as person.display_name_taken", async () => {
@@ -874,15 +873,15 @@ describe("a colliding row that lands after the pre-check", () => {
       run((tx) =>
         createPerson(tx, {
           managementSessionId: token,
-          displayName: "Bad role",
-          role: "owner" as PersonRoleValue,
+          displayName: "\0",
+          role: "staff",
           pin: "5678",
           email: "bad-role@example.com",
         }),
       ),
     );
     expect(isAppError(error)).toBe(false);
-    expect(checkFailed(error, "persons_role_ck")).toBe(true);
+    expect(checkFailed(error, "persons_display_name_ck")).toBe(true);
   });
 
   it("updatePersonDetails reports a display-name collision as person.display_name_taken", async () => {

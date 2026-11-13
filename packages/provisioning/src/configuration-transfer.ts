@@ -1,4 +1,9 @@
-import { listAdminHolders } from "@waitron/identity";
+import {
+  listAdminHolders,
+  prepareAccessRoleImport,
+  importAccessRole,
+  importAccessRoleMembership,
+} from "@waitron/identity";
 import { createStarterStaffRole } from "@waitron/staffing";
 import {
   exportSettingsDocuments,
@@ -137,7 +142,7 @@ export async function buildConfigurationBundle(
     throw new AppError("setup.request_invalid", { field: "businessDayStart" });
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 28,
+    version: 29,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -168,7 +173,7 @@ export async function buildConfigurationBundle(
 }
 
 export interface ConfigurationBundle {
-  version: 28;
+  version: 29;
   settings: Record<string, TransferredSettings>;
   createdAt: string;
   sourceOperatorId: string;
@@ -551,10 +556,10 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  if (typeof value.version === "number" && value.version > 28) {
+  if (typeof value.version === "number" && value.version > 29) {
     throw new AppError("setup.configuration_newer", {});
   }
-  if (value.version !== 28) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 29) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const modules = value.modules;
   const tables = value.tables;
@@ -842,7 +847,13 @@ export async function importConfigurationTables(
   // final state.
   // `packages/db/src/testing/venue-db.ts` empties a whole venue the same way.
   await tx.execute(sql`pragma defer_foreign_keys = on`);
+  if (bundle.tables.roles !== undefined)
+    await prepareAccessRoleImport(
+      tx,
+      administrators.map((person) => person.id),
+    );
   for (const [declaration] of [...checked].reverse()) {
+    if (declaration.name === "roles" || declaration.name === "person_roles") continue;
     if (declaration.name === "persons") {
       await tx.delete(persons).where(
         notInArray(
@@ -865,7 +876,8 @@ export async function importConfigurationTables(
   for (const [declaration, rows] of checked) {
     for (const row of rows) {
       if (typeof row.id === "string") {
-        const mapped = randomUUID();
+        const mapped =
+          declaration.name === "roles" ? await importAccessRole(tx, row) : randomUUID();
         idMap.set(row.id, mapped);
         if (declaration.name === "persons" && row.id === bundle.sourceOperatorId) continue;
         if (typeof row.person_id === "string" && sourceOperatorIds.has(row.person_id)) continue;
@@ -875,6 +887,7 @@ export async function importConfigurationTables(
   }
   for (const [declaration, rows] of checked) {
     for (const source of rows) {
+      if (declaration.name === "roles") continue;
       if (declaration.name === "persons" && source.id === bundle.sourceOperatorId) continue;
       if (typeof source.person_id === "string" && sourceOperatorIds.has(source.person_id)) continue;
       const row: Record<string, unknown> = { ...source };
@@ -889,6 +902,10 @@ export async function importConfigurationTables(
         if (ids.has(field) && typeof value === "string" && idMap.has(value))
           row[field] = idMap.get(value)!;
         else if (blobs.has(field)) row[field] = decodeBytes(value);
+      }
+      if (declaration.name === "person_roles") {
+        await importAccessRoleMembership(tx, String(row.person_id), String(row.role_id));
+        continue;
       }
       if (declaration.name === "persons") {
         row.pin_hash = `disabled-import:${randomUUID()}`;

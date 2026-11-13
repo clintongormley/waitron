@@ -1,3 +1,4 @@
+import { listAdminHolders } from "@waitron/identity";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { Hono } from "hono";
@@ -23,7 +24,7 @@ import {
 } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { endSession, loginWithPin, persons } from "@waitron/identity";
+import { endSession, loginWithPin } from "@waitron/identity";
 import type { DeviceKitchenScreen, ScreenSlot } from "@waitron/module";
 import type { PassBoard } from "./pass-card.js";
 import { routeProductTo } from "./testing/zone-offers.js";
@@ -219,9 +220,7 @@ describe("the pass screen's device routes", () => {
     const anonymous = await done(f.app, till.cookie, { ticketItemIds: [itemId], done: true });
     expect(anonymous.status).toBe(404);
 
-    const [person] = await inTx(f.v, (tx) =>
-      tx.select({ id: persons.id }).from(persons).where(eq(persons.role, "admin")).limit(1),
-    );
+    const [person] = await inTx(f.v, (tx) => listAdminHolders(tx));
     const session = await inTx(f.v, (tx) =>
       loginWithPin(tx, { deviceId: till.id, personId: person!.id, pin: "1234" }),
     );
@@ -451,9 +450,7 @@ describe("a pass monitor on a till", () => {
       const till = await f.device(name, f.till, {
         kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: [zoneId] },
       });
-      const [person] = await inTx(f.v, (tx) =>
-        tx.select({ id: persons.id }).from(persons).where(eq(persons.role, "admin")).limit(1),
-      );
+      const [person] = await inTx(f.v, (tx) => listAdminHolders(tx));
       const session = await inTx(f.v, (tx) =>
         loginWithPin(tx, { deviceId: till.id, personId: person!.id, pin: "1234" }),
       );
@@ -500,9 +497,7 @@ describe("the till's watcher routes", () => {
       log,
     );
     const sessionDeviceId = await seedSessionDevice(suite.db);
-    const [person] = await inTx(f.v, (tx) =>
-      tx.select({ id: persons.id }).from(persons).where(eq(persons.role, "admin")).limit(1),
-    );
+    const [person] = await inTx(f.v, (tx) => listAdminHolders(tx));
     const session = await inTx(f.v, (tx) =>
       loginWithPin(tx, { deviceId: sessionDeviceId, personId: person!.id, pin: "1234" }),
     );
@@ -578,9 +573,7 @@ describe("A773 pass board: routes", () => {
     f: Awaited<ReturnType<typeof fixture>>,
     device: { id: string; cookie: string },
   ) => {
-    const [person] = await inTx(f.v, (tx) =>
-      tx.select({ id: persons.id }).from(persons).where(eq(persons.role, "admin")).limit(1),
-    );
+    const [person] = await inTx(f.v, (tx) => listAdminHolders(tx));
     const session = await inTx(f.v, (tx) =>
       loginWithPin(tx, { deviceId: device.id, personId: person!.id, pin: "1234" }),
     );
@@ -948,9 +941,7 @@ describe("A773 pass display policy: the device's own route", () => {
         params: {},
       },
     );
-    const [person] = await inTx(f.v, (tx) =>
-      tx.select({ id: persons.id }).from(persons).where(eq(persons.role, "admin")).limit(1),
-    );
+    const [person] = await inTx(f.v, (tx) => listAdminHolders(tx));
     const { token } = await inTx(f.v, (tx) =>
       loginWithPin(tx, { deviceId: till.id, personId: person!.id, pin: "1234" }),
     );
@@ -1283,9 +1274,7 @@ describe("A773 pass release: route", () => {
     );
     const till = await f.device("Till pass", profile!.id, { kitchenScreen: EVERY_PASS });
     const other = await f.device("Other till", profile!.id, { kitchenScreen: EVERY_PASS });
-    const [person] = await inTx(f.v, (tx) =>
-      tx.select({ id: persons.id }).from(persons).where(eq(persons.role, "admin")).limit(1),
-    );
+    const [person] = await inTx(f.v, (tx) => listAdminHolders(tx));
     const tokenOn = async (deviceId: string) =>
       (await inTx(f.v, (tx) => loginWithPin(tx, { deviceId, personId: person!.id, pin: "1234" })))
         .token;
@@ -1558,9 +1547,7 @@ describe("A773 pass release: route", () => {
       seedDeviceProfiles(tx, { name: "Till pass profile", formFactor: "till", capabilities: FULL }),
     );
     const till = await f.device("Till pass", profile!.id, { kitchenScreen: EVERY_PASS });
-    const [person] = await inTx(f.v, (tx) =>
-      tx.select({ id: persons.id }).from(persons).where(eq(persons.role, "admin")).limit(1),
-    );
+    const [person] = await inTx(f.v, (tx) => listAdminHolders(tx));
     const { token } = await inTx(f.v, (tx) =>
       loginWithPin(tx, { deviceId: till.id, personId: person!.id, pin: "1234" }),
     );

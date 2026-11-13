@@ -12,7 +12,7 @@ import {
   persons,
   startManagementSession,
   withPassiveManagementRead,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
 } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AlertSource } from "@waitron/module";
@@ -38,7 +38,7 @@ interface Person {
 let manager: Person;
 let supervisor: Person;
 
-async function seedPerson(role: PersonRoleValue, name: string): Promise<Person> {
+async function seedPerson(role: BuiltInRoleKey, name: string): Promise<Person> {
   return withTransaction(suite.db, async (tx) => {
     const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
     const session = await startManagementSession(tx, { personId: p!.id });

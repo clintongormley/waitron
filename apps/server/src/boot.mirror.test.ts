@@ -659,7 +659,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       });
       await expect(
         withTransaction(db[venue], (tx) => resolveManagementSession(tx, token)),
-      ).resolves.toMatchObject({ role: "admin" });
+      ).resolves.toMatchObject({ authority: { admin: true } });
 
       const port = await freePort();
       const server = await startServer({
@@ -701,7 +701,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     });
     await expect(
       withTransaction(db.mirror, (tx) => resolveManagementSession(tx, token)),
-    ).resolves.toMatchObject({ role: "admin" });
+    ).resolves.toMatchObject({ authority: { admin: true } });
     const server = await startServer({
       ...KEY_ENV,
       WAITRON_VENUE_DIR: venueDir.mirror,
@@ -730,7 +730,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     beforeServerStarts();
     await expect(
       withTransaction(db.mirror, (tx) => resolveManagementSession(tx, token)),
-    ).resolves.toMatchObject({ role: "admin" });
+    ).resolves.toMatchObject({ authority: { admin: true } });
   }, 60_000);
 
   it("a mirror boot listens on a non-loopback host", async () => {

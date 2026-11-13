@@ -10,7 +10,7 @@ import {
   managementSessions,
   persons,
   startManagementSession,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
@@ -32,7 +32,7 @@ interface Person {
 let manager: Person;
 let supervisor: Person;
 
-async function seedPerson(role: PersonRoleValue, name: string): Promise<Person> {
+async function seedPerson(role: BuiltInRoleKey, name: string): Promise<Person> {
   return withTransaction(suite.db, async (tx) => {
     const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
     const session = await startManagementSession(tx, { personId: p!.id });

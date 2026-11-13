@@ -5,7 +5,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { registerModulePermissions } from "./permissions.js";
-import type { PersonRoleValue } from "@waitron/shared";
+import type { BuiltInRoleKey } from "./permissions.js";
 import { hashPin } from "./verify-pin.js";
 import { listActivePersonsWithPermission } from "./staff.js";
 
@@ -18,7 +18,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 async function seedPerson(
   db: Database,
   name: string,
-  role: PersonRoleValue,
+  role: BuiltInRoleKey,
   status: "active" | "suspended" | "pending" = "active",
 ): Promise<string> {
   const [row] = await seedPersons(db, { displayName: name, pinHash: PIN, role, status });

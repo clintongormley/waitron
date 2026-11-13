@@ -341,7 +341,9 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     name: "Mobile with drawer",
     profileId: seeded.seededHandheldWithDrawerProfileId,
   });
-  const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
+  const [admin] = db.all<{ id: string }>(
+    sql`select id from persons where id in (select person_roles.person_id from person_roles join roles on roles.id = person_roles.role_id where roles.built_in_key = 'admin')`,
+  );
   await withTransaction(db, async (tx) => {
     const staffRoleId = await ensureFixtureJobRole(tx);
     await tx.insert(personStaffRoles).values({ personId: admin!.id, staffRoleId });

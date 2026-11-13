@@ -210,6 +210,8 @@ describe("no source writes a listed table outside the files the JSON names", () 
       "node_recovery_key",
       "node_signing_key",
       "nodes",
+      "person_roles",
+      "roles",
       "settings",
       "tenants",
     ]);

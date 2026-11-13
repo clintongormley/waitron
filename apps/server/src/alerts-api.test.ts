@@ -2,7 +2,7 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   devices,
   incidents,
@@ -25,7 +25,7 @@ import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron
 import {
   hashPin,
   hashSessionToken,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
   resolveManagementSession,
   startManagementSession,
   withPassiveManagementRead,
@@ -54,31 +54,6 @@ import { createAlertRegistry } from "./alerts.js";
 import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
 
-// No real role holds hardware.manage without fiscal.view and system.manage, so a test replaces
-// one role's held set while the real alert claims stay in force.
-const roleOverride = vi.hoisted(() => new Map<string, string[]>());
-vi.mock("@waitron/identity", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@waitron/identity")>();
-  return {
-    ...actual,
-    resolveManagementSession: async (
-      ...args: Parameters<typeof actual.resolveManagementSession>
-    ) => {
-      const session = await actual.resolveManagementSession(...args);
-      const override = roleOverride.get(session.role);
-      return override === undefined
-        ? session
-        : {
-            ...session,
-            authority: { ...session.authority, permissions: new Set(override) },
-          };
-    },
-  };
-});
-afterEach(() => {
-  roleOverride.clear();
-});
-
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -105,7 +80,7 @@ async function seedVenueWithStaff(): Promise<Venue> {
     operationDescription: "Venta en establecimiento",
   });
   const { deviceId } = await seedDevice(db, { label: "Till 1" });
-  const cookie = (role: PersonRoleValue, name: string) =>
+  const cookie = (role: BuiltInRoleKey, name: string) =>
     withTransaction(db, async (tx) => {
       const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
       const session = await startManagementSession(tx, { personId: p!.id });
@@ -289,8 +264,10 @@ describe("alert routes", () => {
   });
 
   it("shows and lets handle only payment alerts to a session holding hardware.manage alone", async () => {
-    roleOverride.set("supervisor", ["hardware.manage"]);
     const v = await seedVenueWithStaff();
+    await db.execute(
+      sql`update roles set permissions = '["hardware.manage"]' where built_in_key = 'supervisor'`,
+    );
     const payment = await raise(v, "payment.refund_unresolved");
     const others = [
       await raise(v, "fiscal.registro_rechazado"),
@@ -484,7 +461,9 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
       code: "alert.not_found",
       params: { id },
     });
-    roleOverride.set("supervisor", ["hardware.manage"]);
+    await db.execute(
+      sql`update roles set permissions = '["hardware.manage"]' where built_in_key = 'supervisor'`,
+    );
     await expectError(await postBody(app, id, v.supervisor, long), 403, {
       code: "authorization.not_permitted",
       params: { permission: "system.manage" },
@@ -640,7 +619,9 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
       code: "management_session.required",
       params: {},
     });
-    roleOverride.set("supervisor", ["hardware.manage"]);
+    await db.execute(
+      sql`update roles set permissions = '["hardware.manage"]' where built_in_key = 'supervisor'`,
+    );
     await expectError(await postNote(app, id, v.supervisor, note("")), 403, {
       code: "authorization.not_permitted",
       params: { permission: "system.manage" },
@@ -949,8 +930,10 @@ describe("ongoing alert sources through the route", () => {
   });
 
   it("filters ongoing sources by permission: hardware.manage sees printing and card_reader alerts", async () => {
-    roleOverride.set("supervisor", ["hardware.manage"]);
     const v = await seedVenueWithStaff();
+    await db.execute(
+      sql`update roles set permissions = '["hardware.manage"]' where built_in_key = 'supervisor'`,
+    );
     await seedLowReader();
     await seedStuckPrintJob();
     const app = appFor(ongoingRegistry({ backupDisabled: true, awaitingCert: true }));

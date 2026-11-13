@@ -1,3 +1,4 @@
+import { listAdminHolders } from "@waitron/identity";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { parties, withTransaction } from "@waitron/db";
@@ -72,10 +73,7 @@ it("a configuration import over a venue whose closed party has a completed step 
     beforeCommit: async (tx) => {
       const [step] = await tx.select({ id: serviceSteps.id }).from(serviceSteps).limit(1);
       expect(step).toBeDefined();
-      const [actor] = await tx
-        .select({ id: persons.id })
-        .from(persons)
-        .where(eq(persons.role, "admin"));
+      const [actor] = await listAdminHolders(tx);
       expect(actor).toBeDefined();
       const [party] = await tx
         .insert(parties)

@@ -12,7 +12,7 @@ import {
   hashPin,
   persons,
   startManagementSession,
-  type PersonRoleValue,
+  type BuiltInRoleKey,
 } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -87,7 +87,7 @@ async function setupVenue(): Promise<Venue> {
   const { managerSid, staffSid, supervisorSid } = await withTransaction(suite.db, async (tx) => {
     // Through the table definition: `persons.id` and `created_at` are NOT NULL `$defaultFn`
     // generators a raw insert never reaches.
-    const seedPerson = async (role: PersonRoleValue): Promise<string> => {
+    const seedPerson = async (role: BuiltInRoleKey): Promise<string> => {
       const [p] = await seedPersons(tx, {
         displayName: `The ${role}`,
         pinHash: hashPin("1234"),
