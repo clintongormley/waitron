@@ -11,6 +11,22 @@ import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import type { ClockServiceStatus, ClockSetAnswer } from "./box-host-client.js";
 import { createSetupClockSet, raiseSetupClockSteps } from "./setup-clock-set.js";
 
+/** When set, the next note write lands and then throws, as a failed folder flush does. */
+const writes = vi.hoisted(() => ({ throwAfterNext: false }));
+vi.mock("./fs-atomic.js", async (original) => {
+  const actual = await original<typeof import("./fs-atomic.js")>();
+  return {
+    ...actual,
+    writeFileDurable: async (...args: Parameters<typeof actual.writeFileDurable>) => {
+      await actual.writeFileDurable(...args);
+      if (writes.throwAfterNext) {
+        writes.throwAfterNext = false;
+        throw Object.assign(new Error("folder flush failed"), { code: "EIO" });
+      }
+    },
+  };
+});
+
 const H = 3_600_000;
 const START_MS = Date.parse("2026-10-31T10:00:00.000Z");
 const ADMIN = { id: "0b6f1c1e-7f2a-4a35-9c1d-2f0e5a8b9c10", name: "Luis" };
@@ -191,6 +207,30 @@ describe("setting the box's clock from the setup and restore pages", () => {
     expect(await h.setter(h.request(-2 * H), async () => null)).toEqual({ status: "set" });
     const entries = (await note(h.dir)) as { params: Record<string, unknown> }[];
     expect(entries.map((entry) => entry.params["direction"])).toEqual(["forward", "back"]);
+  });
+
+  it("notes a step once when the write that failed had landed", async () => {
+    const h = await harness();
+    writes.throwAfterNext = true;
+    expect(await h.setter(h.request(), async () => null)).toEqual({ status: "set" });
+    expect(await h.setter(h.request(-2 * H), async () => null)).toEqual({ status: "set" });
+    const entries = (await note(h.dir)) as { id: string; params: Record<string, unknown> }[];
+    expect(entries.map((entry) => entry.params["direction"])).toEqual(["forward", "back"]);
+    expect(new Set(entries.map((entry) => entry.id)).size).toBe(2);
+  });
+
+  it("writes a step whose note failed when asked, and throws while it still cannot", async () => {
+    const h = await harness();
+    await rm(h.dir, { recursive: true });
+    expect(await h.setter(h.request(), async () => null)).toEqual({ status: "set" });
+    await expect(h.setter.writePending()).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await note(h.dir)).toBeNull();
+    await mkdir(h.dir);
+    await h.setter.writePending();
+    const entries = (await note(h.dir)) as { params: Record<string, unknown> }[];
+    expect(entries.map((entry) => entry.params["direction"])).toEqual(["forward"]);
+    await h.setter.writePending();
+    expect(await note(h.dir)).toHaveLength(1);
   });
 
   it("refuses an offset measured before a step made meanwhile", async () => {

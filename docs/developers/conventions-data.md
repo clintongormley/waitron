@@ -4839,7 +4839,13 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
   setup or restore that never fully starts, or one made before an environment-mismatch Move sets the
   note aside with the other `reset: "deleted"` entries
   (`packages/provisioning/src/environment-recovery-move.ts`), is never alerted: the host's journal
-  line and Waitron's `clock_correction.stepped` log line are its only record.
+  line and Waitron's `clock_correction.stepped` log line are its only record. An entry that could
+  not be written stays in the process, under one id across retries: the next **This device** press
+  writes it before setting anything, and every finish that restarts into the full start (the first
+  setup's activation, `apps/server/src/first-fiscal-activation.ts`, and each setup operation,
+  `runOperation` in `apps/server/src/setup-api.ts`) writes it first and is refused while it cannot.
+  Start again and the adopt reset restart without writing it, so it is lost there, as it is when
+  the process ends first.
 
 Never from devices alone, never while the host says the clock is synchronised, and never when the
 host service does not answer. A person's set hands the correction no witnesses: what set the clock
@@ -5051,7 +5057,9 @@ a stub host, and it calls `raiseSetupClockSteps` directly rather than through a 
 handover page is open" in `apps/server/src/handover-activation.test.ts`, which writes the alert with
 `recordCorrected` rather than through the page's set, at `filing_assumed` and `emergency_declared`
 only, and checks it stays open through activation and its restart and that the box, then primary,
-queues its email.
+queues its email; and the two "while a clock step's note cannot be written" cases in
+`apps/server/src/boot.setup-routes.test.ts`, which refuse and then finish one restore and one live
+first setup, not an adopt or the other restores.
 
 #### Jobs that compare a stored time with the clock, across a step of days
 

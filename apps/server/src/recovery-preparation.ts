@@ -52,10 +52,8 @@ import { STAGED_RECOVERY_DIR } from "./restore-staging-dirs.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
-import type { createSetupClockSet } from "./setup-clock-set.js";
+import type { SetupClockSetter } from "./setup-clock-set.js";
 import "./errors.js";
-
-type SetupClockSet = ReturnType<typeof createSetupClockSet>;
 
 interface BaseOptions {
   stateDir: string;
@@ -74,7 +72,7 @@ interface BaseOptions {
   /** Recovery states already read from this same unchanging database, keyed by node and binding. */
   rememberedStates?(): Map<string, unknown> | undefined;
   /** Sets the box's clock for the restore page, where nobody signs in. */
-  setBoxClock?: SetupClockSet;
+  setBoxClock?: SetupClockSetter;
 }
 type Isolation = Pick<
   ModuleRecoveryFacts,
@@ -299,7 +297,7 @@ export function createInteractiveRecoveryPreparation(options: {
   modules: readonly WaitronModule[];
   coordinator: FirstSetupCoordinator;
   testClock?: ModuleOperationHost["testClock"];
-  setBoxClock?: SetupClockSet;
+  setBoxClock?: SetupClockSetter;
 }) {
   const requests = new AsyncLocalStorage<{
     db: Database;

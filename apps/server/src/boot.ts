@@ -1450,7 +1450,7 @@ async function bootServer(
       assertOtherAllowed: () => assertOtherFirstSetupAllowed(config.venueDir, firstSetupStore),
     };
     const testClock = seams.testClock;
-    setupClockSet = createSetupClockSet({
+    const setupClock = createSetupClockSet({
       stateDir: config.stateDir,
       host: seams.boxHost ?? boxHostClient(),
       log,
@@ -1459,9 +1459,10 @@ async function bootServer(
         ? {}
         : { wall: () => testClock.wall(), monotonic: () => testClock.monotonic() }),
     });
+    setupClockSet = setupClock;
     const recoveryPreparation = createSetupRecoveryPreparation({
       testClock: seams.testClock,
-      setBoxClock: setupClockSet,
+      setBoxClock: setupClock,
       stateDir: config.stateDir,
       venueDir: config.venueDir,
       stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
@@ -1484,6 +1485,7 @@ async function bootServer(
           coordinator: firstSetupCoordinator,
           guard: firstSetup.assertOtherAllowed,
         }),
+        writeClockSteps: () => setupClock.writePending(),
         cloudRecovery,
         requestFromBox: seams.requestFromBox,
         prepareRecovery: recoveryPreparation,

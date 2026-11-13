@@ -209,3 +209,7 @@ browser reading `unavailable: challenge` (`:115,127`). The history checks still 
 - **The environment-mismatch Move** sets the note aside with the other `reset: "deleted"` entries
   (`packages/provisioning/src/environment-recovery-move.ts`), so a step made before that Move is
   never alerted, as in Q4.
+- **A note that fails to save.** The step stays in the setup process under one id; the next press,
+  and every finish that restarts into the full start (first setup's activation and each setup
+  operation), writes it first, and the finish is refused while it cannot be written. Start again
+  and the adopt reset restart without it (`docs/developers/conventions-data.md`).

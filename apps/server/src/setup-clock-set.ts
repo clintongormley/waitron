@@ -39,10 +39,10 @@ async function readSetupClockSteps(stateDir: string): Promise<SetupClockStep[] |
   }
 }
 
-function noteEntry(request: ClockStepRequest): SetupClockStep {
+function noteEntry(request: ClockStepRequest, id: string): SetupClockStep {
   const person = request.admin?.personName ?? null;
   return {
-    id: randomUUID(),
+    id,
     detectedAt: request.after.instant.toISOString(),
     params: {
       confirmationId: null,
@@ -70,6 +70,18 @@ function noteEntry(request: ClockStepRequest): SetupClockStep {
 const withoutDatabase = <T>(fn: (tx: Transaction) => Promise<T>) =>
   fn(undefined as unknown as Transaction);
 
+export type SetupClockSetter = (
+  request: ModuleClockSetRequest,
+  person: () => Promise<SetupClockPerson>,
+) => Promise<ModuleClockSetAnswer>;
+
+export interface SetupClockSet extends SetupClockSetter {
+  /** Notes the steps whose note could not be written when they were made; throws while one still
+   * cannot be. Setup and restore call it before they finish, since the step lives only in this
+   * process until it is noted. */
+  writePending(): Promise<void>;
+}
+
 /** Sets the box's clock from the setup or restore page, before the venue exists: the setter the
  * full start uses, with no stop, no witnesses and a start nothing confirms by the internet, whose
  * every step that moved the clock or was verified is appended to the setup note. `set` reads the
@@ -83,21 +95,20 @@ export function createSetupClockSet(deps: {
   wall?: () => number;
   monotonic?: () => number;
   log: Logger;
-}): (
-  request: ModuleClockSetRequest,
-  person: () => Promise<SetupClockPerson>,
-) => Promise<ModuleClockSetAnswer> {
+}): SetupClockSet {
+  // One id per step across retries: a write that throws after replacing the note has landed.
+  const ids = new WeakMap<ClockStepRequest, string>();
   const correction = clockCorrection({
     host: deps.host,
     backend: {
       assertRecordableAt: () => {},
       confirmClockStep: async (_tx, request) => {
-        const entry = noteEntry(request);
-        await writeFileDurable(
-          notePath(deps.stateDir),
-          JSON.stringify([...((await readSetupClockSteps(deps.stateDir)) ?? []), entry]),
-          0o600,
-        );
+        const id = ids.get(request) ?? randomUUID();
+        ids.set(request, id);
+        const entry = noteEntry(request, id);
+        const noted = (await readSetupClockSteps(deps.stateDir)) ?? [];
+        if (!noted.some((step) => step.id === id))
+          await writeFileDurable(notePath(deps.stateDir), JSON.stringify([...noted, entry]), 0o600);
         return { confirmation: null, corrected: { id: entry.id, params: entry.params } };
       },
     },
@@ -112,7 +123,7 @@ export function createSetupClockSet(deps: {
     log: deps.log,
     start: { state: startClockState(), heads: async () => ({}) },
   });
-  return async (request, person) => {
+  const set: SetupClockSetter = async (request, person) => {
     const stepsSeen = correction.steps();
     try {
       await correction.writePending();
@@ -141,6 +152,7 @@ export function createSetupClockSet(deps: {
       }),
     );
   };
+  return Object.assign(set, { writePending: () => correction.writePending() });
 }
 
 /** At the venue's first full start: one `clock.corrected` per noted step under the step's id, each

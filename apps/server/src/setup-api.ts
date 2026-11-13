@@ -148,6 +148,10 @@ export interface SetupDeps {
   persistTrading?: (cfg: TradingConfig) => Promise<void>;
   /** Called on the next tick, so the wizard sees the success response before the box goes down. */
   requestRestart?: () => void;
+  /** Notes the clock steps this process made whose note could not be written; throws while one
+   * still cannot be. A finish that restarts into the full start calls it first, since the step
+   * lives only in this process until it is noted. */
+  writeClockSteps?: () => Promise<void>;
   /** The built setup-wizard SPA directory, or `undefined` to serve the inline
    * `SETUP_PLACEHOLDER_HTML` shell instead. */
   setupAppDir?: string;
@@ -722,12 +726,15 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       );
     });
   }
-  const runOperation = <T>(
+  const runOperation = async <T>(
     request: Request,
     kind: Parameters<SetupOperationStore["run"]>[0],
     hash: string,
     body: (operation: ActiveSetupOperation) => Promise<T>,
-  ): Promise<T> => deps.operations!.run(kind, hash, body, holds.get(request));
+  ): Promise<T> => {
+    await deps.writeClockSteps?.();
+    return deps.operations!.run(kind, hash, body, holds.get(request));
+  };
   // Once at mount, not per request: the box's mode is not otherwise visible in the request log.
   log("info", "setup.mode_active", { environment: deps.environment });
 
