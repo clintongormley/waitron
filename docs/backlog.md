@@ -1284,9 +1284,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   bigger brainstorm." Next: that brainstorm with the owner, before any build or further question.
   [Detail](backlog/payments.md#a793--tips-who-a-tip-belongs-to-how-it-is-shared-out-and-what-payroll-gets)
 
-- **Three small tip display gaps** (found by A793's design, read): the dashboard's order detail
-  shows a bill payment's applied amount without its tip; the card slip's words are fixed Spanish;
-  and the Spanish refund slip says "Propina" where the English says "Tip returned".
+- **Two small tip display gaps** (found by A793's design, read): the dashboard's order detail
+  shows a bill payment's applied amount without its tip; and the Spanish refund slip says
+  "Propina" where the English says "Tip returned".
   [Detail](backlog/payments.md#tip-display-gaps)
 
 - **Reader status time limits** (bundle of 2, size S). [Detail](backlog/payments.md#bundle-reader-status-time-limits)

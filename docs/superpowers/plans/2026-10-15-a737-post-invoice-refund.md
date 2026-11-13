@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Hono, Drizzle/SQLite, existing PaymentProvider contracts, Lit/shared fields, Vitest real databases/Chromium.
 
-**Spec:** [A737](../../backlog/till.md#a737-find-a-bill-becomes-a-page-with-bills-and-transactions-tabs), [bill-payments design §§6/6b](../specs/2026-09-26-bill-payments-design.md), [payments durable-attempt backlog](../../backlog/payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time), **WATCHER 2026-10-15 22:40** in `/Users/clintongormley/waitron-campaign-f/questions.md`. [Part 1](2026-10-15-a737-find-bill-page.md) must land first. This plan moves the prior refund design out of Part 1; it does not create an owner approval checkpoint.
+**Spec:** [A737](../../backlog/till.md#a737-find-a-bill-becomes-a-page-with-bills-and-transactions-tabs), [bill-payments design §§6/6b](../specs/2026-09-26-bill-payments-design.md), [payments durable-attempt backlog](../../backlog/payments.md#the-reconcilers-card-reversal-records-only-after-the-provider-call-with-a-fresh-key-each-time), **WATCHER 2026-10-15 22:40** in `/Users/clintongormley/waitron-campaign-f/questions.md`. [Part 1](2026-10-15-a737-find-bill-page.md) must land first. This plan moves the prior refund design out of Part 1; it does not create an owner approval checkpoint.
 
 ## Global Constraints
 
