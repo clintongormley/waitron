@@ -1403,7 +1403,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   preparation, now ready: ordinary people and device-profile fixtures use the shared helpers.
   SQL constraint, trigger and pinned-hash probes retain their direct writes until PR11.
   Comp reasons and the bill limit use Apply comps and Approve comps without role lists.
-  Legacy raw SQL role reads remain for PR11. Permission declarations now list their default
+  Permission declarations now list their default
   holders; Managers can restart the box, while clock and email changes use Box administration
   (Admin by default). Job roles and their holders now live in core under identity; staffing and workforce are permanent. Used job roles can be hidden without losing shift names, memberships are logged, and each person’s editor saves job-role tags separately. Setup administrators now hold Team, imports give them the source administrator’s job roles or all visible imported roles, with Team when neither exists, and demo and shared fixture staff hold job roles. Device profiles now select visible job roles, with an empty selection admitting nobody; setup, demo, bench and imports retain sign-in. Job membership changes now refresh the till sign-in list, and deleting a job names profiles left with nobody. Permission checks and Admin-holder reads now go through identity. Dashboard pages follow permissions and signed-in state follows the person id; editable access roles remain to be built.
   Cut 1's permission names (#2578) have landed.
@@ -1418,11 +1418,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   passkey or authenticator added or removed, recovery codes regenerated, email changed, Google login
   connected or disconnected. No link, one line on what to do if it was not them. Open: notify the OLD
   address on an email change; wording when an admin made the change; grouping a burst.
-
-- **Permission-based dashboard navigation** (owner, 2026-09-09; `NAV_GROUPS` in
-  `apps/dashboard/src/dashboard-app.ts` mostly uses role checks): map every built-in destination to
-  its server permission, hide unavailable items and empty groups, same rule for direct URLs and the
-  landing screen.
 
 - **The admin's Edit user form has no Language** chooser; a person's `locale` can only be set on Your
   profile.
