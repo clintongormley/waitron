@@ -2027,7 +2027,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   historical controls. The A696 fixtures themselves are corrected; the scanner gap remains.
   [Reproduction](backlog/ci.md#retired-settings-after-a-source-escape).
 
-- **The nightly mutation run: downloads, shard layout and repeated jobs** (bundle of 3, size M). [Detail](backlog/ci.md#bundle-the-nightly-mutation-run-downloads-shard-layout-and-repeated-jobs)
 
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).

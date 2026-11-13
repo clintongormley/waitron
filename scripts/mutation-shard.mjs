@@ -20,8 +20,6 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
  * whose span crosses a range boundary is in neither range, so no shard mutates it and the merged
  * score leaves it out (instrumenter 10.0.0).
  *
- * db: `src/schema/sales.ts` alone ran 186min while every other N=10 shard finished <=90min
- * (run 32384997149).
  * ui, run 38233718266 (30-minute limit): wt-combobox.ts alone hit the limit at 716 of 780 mutants;
  * wt-data-table.ts in 4 ranges took 4.4, 28.7, 10.3 and 19.5min; wt-dialog.ts alone hit the
  * limit at 325 of 382, 21% of its mutants static and 42 timed out.
@@ -32,7 +30,7 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
  * @type {Record<string, Record<string, number>>}
  */
 export const HEAVY_FILES = {
-  db: { "src/schema/sales.ts": 3 },
+  db: {},
   ui: {
     "src/components/wt-combobox.ts": 4,
     "src/components/wt-data-table.ts": 12,

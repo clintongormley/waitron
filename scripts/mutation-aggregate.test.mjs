@@ -373,36 +373,3 @@ describe("the command", () => {
     expect(result.stdout).not.toContain("not measured");
   });
 });
-
-// The shard COUNT is written twice per sharded package in `.github/workflows/mutation.yml`: once as
-// the matrix list the `mutation-<pkg>` shard jobs come from, and once as the `--shards` argument its
-// `mutation-<pkg>-aggregate` job uses to refuse a run with a report missing. The shard SCRIPT avoids
-// that by reading `strategy.job-total`, which a separate job cannot see. This reads the workflow as
-// TEXT, so it checks those pairs of numbers and nothing else about the file — it cannot tell you the
-// aggregate job runs, only that if it does it expects as many reports as its own matrix produces.
-describe("the shard count in the mutation workflow", () => {
-  const workflow = readFileSync(join(here, "..", ".github", "workflows", "mutation.yml"), "utf8");
-
-  /** One job's text: from its `  <id>:` line to the next line at that indent (a job or its comment). */
-  function section(id) {
-    const start = workflow.indexOf(`\n  ${id}:\n`);
-    expect(start, `no \`${id}\` job in mutation.yml`).toBeGreaterThan(-1);
-    const rest = workflow.slice(start + 1);
-    const end = rest.slice(1).search(/\n {2}\S/);
-    return end === -1 ? rest : rest.slice(0, end + 1);
-  }
-
-  it.each(["db", "ui", "ui-core"])(
-    "matches between mutation-%s's shard matrix and its own aggregate job's --shards",
-    (pkg) => {
-      const matrix = section(`mutation-${pkg}`).match(/shard: \[([^\]]*)\]/);
-      expect(matrix, `no \`shard: [...]\` matrix in mutation-${pkg}`).not.toBeNull();
-      const shards = matrix[1].split(",").length;
-
-      const argument = section(`mutation-${pkg}-aggregate`).match(/--shards (\d+)/);
-      expect(argument, `no \`--shards <n>\` in mutation-${pkg}-aggregate`).not.toBeNull();
-
-      expect(Number(argument[1])).toBe(shards);
-    },
-  );
-});

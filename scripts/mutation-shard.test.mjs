@@ -13,6 +13,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterAll, describe, expect, it } from "vitest";
+import { mutationCallers } from "./mutation-workflow.mjs";
 
 import {
   assignShards,
@@ -283,9 +284,9 @@ describe("the selection follows each package's own stryker config", () => {
 });
 
 describe("HEAVY_FILES", () => {
-  it("splits db's sales schema and ui's large components, keeping ui-core and shared whole", () => {
+  it("splits ui's large components, keeping db, ui-core and shared whole", () => {
     expect(HEAVY_FILES).toEqual({
-      db: { "src/schema/sales.ts": 3 },
+      db: {},
       ui: {
         "src/components/wt-combobox.ts": 4,
         "src/components/wt-data-table.ts": 12,
@@ -300,7 +301,9 @@ describe("HEAVY_FILES", () => {
     expect(missingHeavyFiles({ "src/gone.ts": 2, "src/here.ts": 2 }, ["src/here.ts"])).toEqual([
       "src/gone.ts",
     ]);
-    for (const pkg of ["db", "ui", "ui-core"]) {
+    for (const pkg of mutationCallers(
+      readFileSync(join(root, ".github/workflows/mutation.yml"), "utf8"),
+    ).map((caller) => caller.package)) {
       const config = JSON.parse(readFileSync(join(packageDir(pkg), "stryker.config.json"), "utf8"));
       expect(
         missingHeavyFiles(HEAVY_FILES[pkg], mutateFiles(packageDir(pkg), config.mutate)),
@@ -310,6 +313,13 @@ describe("HEAVY_FILES", () => {
 });
 
 describe("shardFiles", () => {
+  it("packs db sales whole exactly once alongside the other whole files", () => {
+    const all = Array.from({ length: 13 }, (_, i) => shardFilesOf("db", i + 1, 13, root)).flat();
+    expect(all.filter((path) => path.startsWith("src/schema/sales.ts"))).toEqual([
+      "src/schema/sales.ts",
+    ]);
+  });
+
   it("partitions every shared mutation target into four nonempty whole-file shards", () => {
     const shards = [1, 2, 3, 4].map((shard) => shardFilesOf("shared", shard, 4, root));
     expect(shards.every((paths) => paths.length > 0)).toBe(true);
@@ -322,39 +332,16 @@ describe("shardFiles", () => {
   });
 
   it("refuses when a heavy file has been renamed or removed", () => {
-    const dir = fixturePackage(["packages/db/src/a.ts"]);
+    const dir = fixturePackage(["packages/ui/src/a.ts"]);
     writeFileSync(
-      join(dir, "packages", "db", "stryker.config.json"),
+      join(dir, "packages/ui/stryker.config.json"),
       JSON.stringify({ mutate: ["src/**/*.ts"] }),
     );
-    expect(() => shardFilesOf("db", 1, 1, dir)).toThrow(
-      /HEAVY_FILES names "src\/schema\/sales.ts".*renamed or removed/,
+    expect(() => shardFilesOf("ui", 1, 1, dir)).toThrow(
+      /HEAVY_FILES names "src\/components\/wt-combobox.ts".*renamed or removed/,
     );
   });
 
-  it("splits a heavy file into line ranges over distinct shards", () => {
-    const dir = fixturePackage(
-      ["packages/db/src/schema/sales.ts", "packages/db/src/a.ts"],
-      "line\n".repeat(98),
-    );
-    writeFileSync(
-      join(dir, "packages", "db", "stryker.config.json"),
-      JSON.stringify({ mutate: ["src/**/*.ts"] }),
-    );
-    writeFileSync(join(dir, "packages", "db", "src", "a.ts"), "export const a = 1;\n");
-    const shards = [1, 2, 3, 4].map((shard) => shardFilesOf("db", shard, 4, dir));
-    expect(shards.slice(0, 3).map((s) => s.filter((p) => p.includes(":")))).toEqual([
-      ["src/schema/sales.ts:1-33"],
-      ["src/schema/sales.ts:34-66"],
-      ["src/schema/sales.ts:67-99"],
-    ]);
-    expect(shards.flat()).toContain("src/a.ts");
-  });
-
-  /**
-   * A db fixture: `sales.ts`, 99 lines in 495 bytes (three ranges of 33), beside `others`, each
-   * 600 bytes, so a packer weighing by bytes would place them first and the ranges beside them.
-   */
   function dbFixture(others) {
     const dir = fixturePackage(["packages/db/src/schema/sales.ts"], "line\n".repeat(98));
     for (const path of others) {
@@ -368,29 +355,13 @@ describe("shardFiles", () => {
     return dir;
   }
 
-  it("gives each heavy range a shard of its own and packs the other files into the rest", () => {
-    const others = ["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts", "src/e.ts"];
-    const dir = dbFixture(others);
-    const shards = [1, 2, 3, 4, 5, 6].map((shard) => shardFilesOf("db", shard, 6, dir));
-    expect(shards.slice(0, 3)).toEqual([
-      ["src/schema/sales.ts:1-33"],
-      ["src/schema/sales.ts:34-66"],
-      ["src/schema/sales.ts:67-99"],
-    ]);
-    expect(shards.slice(3)).toEqual([
-      ["src/a.ts", "src/d.ts"],
-      ["src/b.ts", "src/e.ts"],
-      ["src/c.ts"],
-    ]);
-  });
-
   it("gives every range of every heavy file a shard of its own, files by path, ranges by line", () => {
     const heavy = Object.keys(HEAVY_FILES.ui);
     const dir = fixturePackage(
       heavy.map((path) => `packages/ui/${path}`),
       "line\n".repeat(119),
     );
-    for (const path of ["src/a.ts", "src/b.ts"])
+    for (const path of ["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts", "src/e.ts"])
       writeFileSync(join(dir, "packages", "ui", path), "export const a = 1;\n");
     writeFileSync(
       join(dir, "packages", "ui", "stryker.config.json"),
@@ -398,9 +369,14 @@ describe("shardFiles", () => {
     );
     const ranges = heavy.sort().flatMap((path) => splitRanges(path, 120, HEAVY_FILES.ui[path]));
     expect(ranges).toHaveLength(22);
-    const total = ranges.length + 2;
+    const total = ranges.length + 3;
     const shards = Array.from({ length: total }, (_, i) => shardFilesOf("ui", i + 1, total, dir));
-    expect(shards).toEqual([...ranges.map((range) => [range]), ["src/a.ts"], ["src/b.ts"]]);
+    expect(shards).toEqual([
+      ...ranges.map((range) => [range]),
+      ["src/a.ts", "src/d.ts"],
+      ["src/b.ts", "src/e.ts"],
+      ["src/c.ts"],
+    ]);
   });
 
   it("packs by the package's cost table, so a small costly file gets a shard to itself", () => {
@@ -414,10 +390,15 @@ describe("shardFiles", () => {
         "src/c.ts": 1,
         "src/d.ts": 1,
         "src/e.ts": 100,
+        "src/schema/sales.ts": 1,
       }),
     );
-    const shards = [4, 5, 6].map((shard) => shardFilesOf("db", shard, 6, dir));
-    expect(shards).toEqual([["src/e.ts"], ["src/a.ts", "src/c.ts"], ["src/b.ts", "src/d.ts"]]);
+    const shards = [1, 2, 3].map((shard) => shardFilesOf("db", shard, 3, dir));
+    expect(shards).toEqual([
+      ["src/e.ts"],
+      ["src/a.ts", "src/c.ts", "src/schema/sales.ts"],
+      ["src/b.ts", "src/d.ts"],
+    ]);
   });
 
   it("refuses a cost table that gives a file zero seconds, naming the table", () => {
@@ -430,32 +411,36 @@ describe("shardFiles", () => {
   });
 
   it("refuses a shard count that cannot hold the heavy ranges plus the other files", () => {
-    const dir = dbFixture(["src/a.ts"]);
-    expect(() => shardFilesOf("db", 1, 3, dir)).toThrow(
-      /3 shards cannot hold the 3 heavy ranges plus the other files — raise the shard count/,
+    const heavy = Object.keys(HEAVY_FILES.ui);
+    const dir = fixturePackage(
+      heavy.map((path) => `packages/ui/${path}`),
+      "line\n".repeat(119),
     );
-    expect(() => shardFilesOf("db", 1, 2, dir)).toThrow(/2 shards cannot hold the 3 heavy ranges/);
-    expect(shardFilesOf("db", 4, 4, dir)).toEqual(["src/a.ts"]);
+    writeFileSync(join(dir, "packages/ui/src/a.ts"), "export const a = 1;\n");
+    writeFileSync(
+      join(dir, "packages/ui/stryker.config.json"),
+      JSON.stringify({ mutate: ["src/**/*.ts"] }),
+    );
+    expect(() => shardFilesOf("ui", 1, 22, dir)).toThrow(
+      /22 shards cannot hold the 22 heavy ranges plus the other files/,
+    );
+    expect(() => shardFilesOf("ui", 1, 21, dir)).toThrow(
+      /21 shards cannot hold the 22 heavy ranges/,
+    );
+    expect(shardFilesOf("ui", 23, 23, dir)).toEqual(["src/a.ts"]);
   });
 });
 
-/**
- * The length of the `shard: [...]` matrix list in mutation.yml's `mutation-<pkg>` job, which is
- * the `strategy.job-total` the job hands the sharder as its total.
- */
 function workflowShardCount(pkg) {
   const workflow = readFileSync(join(root, ".github", "workflows", "mutation.yml"), "utf8");
-  const start = workflow.indexOf(`\n  mutation-${pkg}:\n`);
-  expect(start, `no \`mutation-${pkg}\` job in mutation.yml`).toBeGreaterThan(-1);
-  const rest = workflow.slice(start + 1);
-  const end = rest.slice(1).search(/\n {2}\S/);
-  const job = end === -1 ? rest : rest.slice(0, end + 1);
-  const list = /^ {8}shard:\s*\[([^\]]*)\]/m.exec(job);
-  expect(list, `no inline \`shard:\` list in \`mutation-${pkg}\``).not.toBeNull();
-  return list[1].split(",").filter((entry) => entry.trim() !== "").length;
+  const caller = mutationCallers(workflow).find((candidate) => candidate.package === pkg);
+  expect(caller, `no mutation caller for ${pkg}`).toBeDefined();
+  return caller.shards.length;
 }
 
-for (const pkg of ["db", "ui", "ui-core"]) {
+for (const pkg of mutationCallers(
+  readFileSync(join(root, ".github/workflows/mutation.yml"), "utf8"),
+).map((caller) => caller.package)) {
   describe(`the CLI over the real @waitron/${pkg} tree at the workflow's shard count`, () => {
     const heavy = HEAVY_FILES[pkg];
     const fileOf = (entry) => entry.replace(/:\d+-\d+$/, "");
@@ -553,12 +538,6 @@ describe("the CLI rejects bad input loudly", () => {
   });
 
   it("fails when a shard would select no files (more shards than slices)", () => {
-    // Derive the shard count from the LIVE slice count (at one shard past db's split-file ranges, the
-    // last shard holds every other file) rather than hard-coding it — `@waitron/db` grows, and a
-    // fixed number silently stops exceeding the slice count once it does. One more shard than there
-    // are slices guarantees the HIGHEST-index shard is empty (greedy packs slices into the
-    // lowest-index shards), so requesting it must fail loudly, never print an empty --mutate list
-    // that would make stryker a confusing no-op.
     const ranges = Object.values(HEAVY_FILES.db).reduce((sum, parts) => sum + parts, 0);
     const slices = shardFiles(ranges + 1, ranges + 1).length + ranges;
     const n = String(slices + 1);
