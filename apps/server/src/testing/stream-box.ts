@@ -25,13 +25,9 @@ import { mintBreakGlassSecret } from "../break-glass.js";
 import { ensureBoxSecrets } from "../box-secrets.js";
 import { formatEnvFile, parseEnvFile } from "../env-file.js";
 import { seedTermZeroMembership } from "../membership-seed.js";
-import { ALL_MODULES } from "../modules.js";
 import { establishNodeIdentity } from "../node-identity.js";
 import { streamSettingsPayload } from "../stream-host.js";
 import { copyMigrationsRoot } from "./boot-harness.js";
-import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
-
-const LOCALE = "es-ES";
 
 export interface BoxDirs {
   root: string;
@@ -44,6 +40,23 @@ export async function boxDirs(parent: string, name: string): Promise<BoxDirs> {
   const dirs = { root, state: join(root, "state"), venue: join(root, "state", "venue") };
   await mkdir(dirs.venue, { recursive: true });
   return dirs;
+}
+
+/** What a box on `dirs` starts with, listening on `port`. */
+export function bootEnv(
+  dirs: Pick<BoxDirs, "state" | "venue">,
+  port: number,
+  migrationsRoot: string,
+  litestreamBin: string,
+): NodeJS.ProcessEnv {
+  return {
+    WAITRON_STATE_DIR: dirs.state,
+    WAITRON_VENUE_DIR: dirs.venue,
+    WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    WAITRON_HTTP_PORT: String(port),
+    WAITRON_HTTP_LANDING_PORT: "0",
+    WAITRON_LITESTREAM_BIN: litestreamBin,
+  };
 }
 
 /** Every migration set copied under `<scratch>/migrations`, as a box's `WAITRON_MIGRATIONS_DIR`. */
@@ -67,8 +80,7 @@ export interface StreamBox {
 /**
  * Secrets and TLS in the state folder, a migrated and provisioned venue, a node key and a term-0
  * membership document naming `advertisedOrigin`, and streaming to `bucket` switched on with
- * `recoveryKey`; `modulesJson` is written as `modules.json`. The venue is planned for a Spanish
- * taxpayer with every module unless `venue` says otherwise, and must agree with `modulesJson`.
+ * `recoveryKey`; `modulesJson` is written as `modules.json`, and must agree with `venue`'s modules.
  */
 export async function provisionStreamBox(options: {
   dirs: BoxDirs;
@@ -77,11 +89,11 @@ export async function provisionStreamBox(options: {
   bucket: BucketConfig;
   recoveryKey: string;
   modulesJson: unknown;
-  venue?: { request: Partial<VenueRequest>; modules: readonly WaitronModule[] };
+  venue: { request: VenueRequest; modules: readonly WaitronModule[] };
   apply?: typeof applyMinuteVenue;
 }): Promise<StreamBox> {
   const { dirs, bucket } = options;
-  const modules = options.venue?.modules ?? ALL_MODULES;
+  const { modules } = options.venue;
   await ensureBoxSecrets({
     stateDir: dirs.state,
     hostnames: ["waitron.local", "localhost"],
@@ -95,36 +107,7 @@ export async function provisionStreamBox(options: {
   try {
     await stampDeployment(seeding.venue, "preproduction");
     const venue = await (options.apply ?? applyAllocatedTestVenue)(
-      planVenue(
-        {
-          country: "ES",
-          taxId: "74000001P",
-          legalName: "Stream Loop SL",
-          name: "Main room",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: [LOCALE],
-          operationDescription: "Sale on premises",
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
-          seriesCode: "A",
-          rectificativeSeriesCode: "R",
-          admin: {
-            displayName: "Administrator",
-            firstNames: "Test",
-            lastNames: "Operator",
-            pinHash: fixturePinHash("1234"),
-            passwordHash: fixturePasswordHash("dashPass123"),
-            email: "owner@example.test",
-          },
-          ...options.venue?.request,
-        },
-        modules,
-      ),
+      planVenue(options.venue.request, modules),
       { db: seeding.venue, modules },
     );
     const venueId = await venueLocationId(seeding.venue);

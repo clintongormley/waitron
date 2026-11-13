@@ -27,6 +27,7 @@ import {
   applyVenue as applyMinuteVenue,
   mergeModulePreparationRevisions,
   quoteIdent,
+  type VenueRequest,
 } from "@waitron/provisioning";
 import { withOperationAuthority } from "@waitron/module";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
@@ -60,10 +61,38 @@ import { unsealNodeState } from "../sealed-state.js";
 import type { StreamHostDeps } from "../stream-host.js";
 import { httpsVia } from "./boot-harness.js";
 import { freePort } from "./free-ports.js";
+import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
-import { boxDirs, copyMigrations, provisionStreamBox, type BoxDirs } from "./stream-box.js";
+import { bootEnv, boxDirs, copyMigrations, provisionStreamBox } from "./stream-box.js";
 
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
+const LOCALE = "es-ES";
+const VENUE: VenueRequest = {
+  country: "ES",
+  taxId: "74000001P",
+  legalName: "Stream Loop SL",
+  name: "Main room",
+  fiscalTerritory: "ES-common",
+  invoiceLocales: [LOCALE],
+  operationDescription: "Venta en establecimiento",
+  addressLine1: "Calle Mayor 1",
+  addressLine2: null,
+  postalCode: "28013",
+  city: "Madrid",
+  province: "Madrid",
+  timeZone: "Europe/Madrid",
+  dayCutover: "05:00",
+  seriesCode: "A",
+  rectificativeSeriesCode: "R",
+  admin: {
+    displayName: "Administrator",
+    firstNames: "Test",
+    lastNames: "Operator",
+    pinHash: fixturePinHash("1234"),
+    passwordHash: fixturePasswordHash("dashPass123"),
+    email: "owner@example.test",
+  },
+};
 
 // `waitFor` checks each POINTER and UPLOAD wait's deadline between probes, and each restore passes
 // RESTORE_MS as `restoreGeneration`'s ceiling, which it checks every five seconds.
@@ -319,26 +348,14 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       bucket,
       recoveryKey: RECOVERY_KEY,
       modulesJson: { modules: { "fiscal-none": false } },
-      venue: {
-        request: { operationDescription: "Venta en establecimiento" },
-        modules: ALL_MODULES,
-      },
+      venue: { request: VENUE, modules: ALL_MODULES },
       ...(fixture.useRecoveryPack ? { apply: applyWithFirstSetup(dirsA.state) } : {}),
     });
     let nodeSecret = mintedSecret;
 
-    const bootEnv = (dirs: BoxDirs, port: number): NodeJS.ProcessEnv => ({
-      WAITRON_STATE_DIR: dirs.state,
-      WAITRON_VENUE_DIR: dirs.venue,
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_HTTP_LANDING_PORT: "0",
-      WAITRON_LITESTREAM_BIN: litestreamBin,
-    });
-
     // 3. A boots, opens its generation and moves the pointer only after the first full copy landed.
     const serverA = await startServer(
-      await loadBoxEnv(bootEnv(dirsA, portA), dirsA.state),
+      await loadBoxEnv(bootEnv(dirsA, portA, migrationsRoot, litestreamBin), dirsA.state),
       {},
       { stream: { ...fixture.serverSeams } },
     );
@@ -612,7 +629,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     // 7. B's first start: a membership document one term higher, a generation of its own, and the
     //    pointer moved — still verifiable with the key the owner's kit carries.
     const serverB = await startServer(
-      await loadBoxEnv(bootEnv(dirsB, portB), dirsB.state),
+      await loadBoxEnv(bootEnv(dirsB, portB, migrationsRoot, litestreamBin), dirsB.state),
       {},
       { stream: { ...fixture.serverSeams } },
     );

@@ -64,7 +64,7 @@ import { establishNodeIdentity } from "../node-identity.js";
 import { streamSettingsPayload, type StreamHostDeps } from "../stream-host.js";
 import { freePort } from "./free-ports.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
-import { copyMigrations } from "./stream-box.js";
+import { bootEnv, copyMigrations } from "./stream-box.js";
 import {
   framesUnderHeader,
   holdProven,
@@ -408,14 +408,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     // 3. The server boots with a small side-file limit and opens its generation.
     server = await startServer(
       await loadBoxEnv(
-        {
-          WAITRON_STATE_DIR: stateDir,
-          WAITRON_VENUE_DIR: venueDir,
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_HTTP_LANDING_PORT: "0",
-          WAITRON_LITESTREAM_BIN: litestreamBin,
-        },
+        bootEnv({ state: stateDir, venue: venueDir }, port, migrationsRoot, litestreamBin),
         stateDir,
       ),
       {},

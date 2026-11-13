@@ -6,9 +6,8 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { eq } from "drizzle-orm";
-import { Agent } from "undici";
 import { expect } from "vitest";
 import {
   assignCatalogueToVenue,
@@ -23,6 +22,7 @@ import {
   persons,
   readNodeMembership,
   withTransaction,
+  type VenueDatabase,
 } from "@waitron/db";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { loginWithPin } from "@waitron/identity";
@@ -30,6 +30,7 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { readPairLink } from "@waitron/node-db";
 import { nodeId as brandNodeId, PERSON_HEADER } from "@waitron/shared";
+import type { VenueRequest } from "@waitron/provisioning";
 import { createS3ObjectStore, readPointer, type BucketConfig } from "@waitron/stream";
 import { BOX_HOSTNAME, boxHostnameFor, ownContactUrl } from "../box-name.js";
 import { loadBoxEnv } from "../box-env.js";
@@ -40,36 +41,61 @@ import type { BoxLookup } from "../mirror-bundle-fetch.js";
 import { ALL_MODULES } from "../modules.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import type { TradingContext } from "../trading-context.js";
-import { POLL_INTERVAL_MS, POLL_TRIES, fetchHealthOk } from "./boot-harness.js";
+import {
+  POLL_INTERVAL_MS,
+  POLL_TRIES,
+  fetchHealthOk,
+  httpsVia,
+  withCapturedStdout,
+  type LogLine,
+} from "./boot-harness.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { freePorts } from "./free-ports.js";
-import { fixturePinHash } from "./known-secret-hashes.js";
+import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 import { settleWithin } from "./settle-within.js";
 import { stageClock, waitUntil, type StageEvent } from "./scenario-stages.js";
 import { BASIC_ACTIONS } from "./session-device.js";
-import { boxDirs, copyMigrations, provisionStreamBox, type BoxDirs } from "./stream-box.js";
+import {
+  bootEnv,
+  boxDirs,
+  copyMigrations,
+  provisionStreamBox,
+  type BoxDirs,
+} from "./stream-box.js";
 import { synchronisedBoxHost } from "./synchronised-box-host.js";
 import { offerProducts } from "./zone-offers.js";
 
 const RECOVERY_KEY = "spare-join-e2e-recovery-key";
 const MODULES_M = { modules: { "fiscal-verifactu": false } };
 const LOCALE_M = "en-GB";
+const ADMIN = { email: "owner@example.test", password: "dashPass123" };
 /** A taxpayer whose territory selects `fiscal-none`, the one fiscal module `MODULES_M` leaves on. */
-const VENUE_M = {
+const VENUE_M: VenueRequest = {
   country: "GB",
   taxId: "GB100000001",
   legalName: "Spare Join Ltd",
+  name: "Main room",
   fiscalTerritory: "GB-vat",
   invoiceLocales: [LOCALE_M],
   operationDescription: "Sale on premises",
   addressLine1: "1 High Street",
+  addressLine2: null,
   postalCode: "EC1A 1AA",
   city: "London",
   province: "London",
   timeZone: "Europe/London",
+  dayCutover: "05:00",
+  seriesCode: "A",
+  rectificativeSeriesCode: "R",
+  admin: {
+    displayName: "Administrator",
+    firstNames: "Test",
+    lastNames: "Operator",
+    pinHash: fixturePinHash("1234"),
+    passwordHash: fixturePasswordHash(ADMIN.password),
+    email: ADMIN.email,
+  },
 };
-/** `provisionStreamBox`'s administrator. */
-const ADMIN = { email: "owner@example.test", password: "dashPass123" };
 const STAFF_PIN = "5555";
 /** Adopting restarts S once, into the start that takes the first copy. */
 const SPARE_RESTARTS_AT_ADOPT = 1;
@@ -379,10 +405,22 @@ async function seedCounterTill(
   }
 }
 
-/** What a refused join must leave alone on M: its chart, its `nodes` and series rows, its link. */
-async function joinState(venueDir: string, nodeId: string): Promise<unknown> {
+/** `read` over the box's databases in `venueDir`, opened without the venue lock its server holds. */
+async function readOutside<T>(
+  venueDir: string,
+  read: (store: VenueDatabase) => Promise<T>,
+): Promise<T> {
   const store = await openVenueDatabase(venueDir, { exclusive: false });
   try {
+    return await read(store);
+  } finally {
+    await store.close();
+  }
+}
+
+/** What a refused join must leave alone on M: its chart, its `nodes` and series rows, its link. */
+function joinState(venueDir: string, nodeId: string): Promise<unknown> {
+  return readOutside(venueDir, async (store) => {
     const chart = await readNodeMembership(store.venue);
     return {
       chart: chart === null ? null : chart.body,
@@ -393,71 +431,42 @@ async function joinState(venueDir: string, nodeId: string): Promise<unknown> {
         .orderBy(invoiceSeries.id),
       link: await readPairLink(store.node, nodeId),
     };
-  } finally {
-    await store.close();
-  }
+  });
 }
 
-/** The chart body `venue.db` holds, read from outside the box's server. */
-async function readNodeMembershipOf(venueDir: string) {
-  const store = await openVenueDatabase(venueDir, { exclusive: false });
+/** The first row `sql` answers in `venueDir`'s `venue.db`, opened read-only. */
+function firstRowIn(venueDir: string, sql: string, ...params: SQLInputValue[]) {
+  const db = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
   try {
-    return (await readNodeMembership(store.venue))?.body;
-  } finally {
-    await store.close();
-  }
-}
-
-/** The public key `venue.db`'s `nodes` row holds for `nodeId`, read-only. */
-function nodeKeyIn(venueFile: string, nodeId: string): string | null | undefined {
-  const db = new DatabaseSync(venueFile, { readOnly: true });
-  try {
-    const row = db.prepare("select public_key from nodes where id = ?").get(nodeId) as
-      { public_key: string | null } | undefined;
-    return row === undefined ? undefined : row.public_key;
+    return db.prepare(sql).get(...params);
   } finally {
     db.close();
   }
+}
+
+/** The public key `venue.db`'s `nodes` row holds for `nodeId`. */
+function nodeKeyIn(venueDir: string, nodeId: string) {
+  return firstRowIn(venueDir, "select public_key from nodes where id = ?", nodeId)?.public_key;
 }
 
 /** Whether `venue.db` holds the sale of `workingOrderId`, its idempotency key. */
-function saleOf(venueFile: string, workingOrderId: string): boolean {
-  const db = new DatabaseSync(venueFile, { readOnly: true });
-  try {
-    return (
-      db.prepare("select 1 from sales where working_order_id = ?").get(workingOrderId) !== undefined
-    );
-  } finally {
-    db.close();
-  }
+function saleOf(venueDir: string, workingOrderId: string): boolean {
+  return (
+    firstRowIn(venueDir, "select 1 from sales where working_order_id = ?", workingOrderId) !==
+    undefined
+  );
 }
 
-interface LogLine {
-  event?: string;
-  [key: string]: unknown;
-}
-
-/** Every JSON line this process writes to stdout, kept as it arrives; `stop` restores stdout. */
-function captureLog(): { lines: LogLine[]; stop(): void } {
-  const original = process.stdout.write.bind(process.stdout);
-  const lines: LogLine[] = [];
-  process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
-    for (const text of String(chunk).split("\n")) {
-      try {
-        const parsed = JSON.parse(text) as unknown;
-        if (typeof parsed === "object" && parsed !== null) lines.push(parsed as LogLine);
-      } catch {
-        // Not one of the logger's lines.
-      }
+/** The logger's JSON lines among `lines`. */
+function logLines(lines: readonly string[]): LogLine[] {
+  return lines.flatMap((text) => {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      return typeof parsed === "object" && parsed !== null ? [parsed as LogLine] : [];
+    } catch {
+      return [];
     }
-    return (original as (...args: unknown[]) => boolean)(chunk, ...rest);
-  }) as typeof process.stdout.write;
-  return {
-    lines,
-    stop: () => {
-      process.stdout.write = original;
-    },
-  };
+  });
 }
 
 function describeError(error: unknown): string {
@@ -466,17 +475,22 @@ function describeError(error: unknown): string {
   return `${String(error)}${detail}`;
 }
 
-export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<void> {
+export function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<void> {
+  return withCapturedStdout((log) => runCaptured(fixture, log));
+}
+
+/** The scenario, with `log` holding every line this process writes to stdout as it arrives. */
+async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): Promise<void> {
   const { bucket, scratch, signal } = fixture;
   const clock = stageClock(fixture.record, signal);
-  const log = captureLog();
   const sockets = watchConnections();
   let releaseCopy = (): void => {};
   const copyHold = new Promise<void>((resolve) => {
     releaseCopy = resolve;
   });
   const boxes: TestBox[] = [];
-  const agents: Agent[] = [];
+  let closeViaM: (() => Promise<void>) | undefined;
+  let closeViaS: (() => Promise<void>) | undefined;
   const closeAll = (): Promise<unknown[]> => closeBoxes(boxes);
   let abortClose: Promise<unknown[]> | undefined;
   const onAbort = (): void => {
@@ -486,8 +500,16 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
   const failures: unknown[] = [];
   const wait = <T>(what: string, ms: number, probe: () => Promise<T | undefined>) =>
     waitUntil(what, ms, probe, signal, WAIT_POLL_MS);
+  const parsed: LogLine[] = [];
+  let parsedUpTo = 0;
+  /** The logger's lines so far, each parsed once. */
+  const logSoFar = (): LogLine[] => {
+    parsed.push(...logLines(log.slice(parsedUpTo)));
+    parsedUpTo = log.length;
+    return parsed;
+  };
   /** The log's lines from `from` on, so a line written before a phase cannot satisfy it. */
-  const linesSince = (from: number): LogLine[] => log.lines.slice(from);
+  const linesSince = (from: number): LogLine[] => logSoFar().slice(from);
   try {
     clock.begin("probe");
     const { migrationsRoot, fromSource } = await copyMigrations(scratch);
@@ -498,13 +520,8 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
       number,
       number,
     ];
-    const bootEnv = (dirs: BoxDirs, port: number): NodeJS.ProcessEnv => ({
-      WAITRON_STATE_DIR: dirs.state,
-      WAITRON_VENUE_DIR: dirs.venue,
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_HTTP_LANDING_PORT: "0",
-      WAITRON_LITESTREAM_BIN: fixture.litestreamBin,
+    const boxEnv = (dirs: BoxDirs, port: number): NodeJS.ProcessEnv => ({
+      ...bootEnv(dirs, port, migrationsRoot, fixture.litestreamBin),
       WAITRON_VERSITYGW_BIN: fixture.versitygwBin,
       // The advertised origin: each box puts its own name in place of `waitron.local`.
       WAITRON_MANAGEMENT_ORIGIN: `https://${BOX_HOSTNAME}:${port}`,
@@ -526,7 +543,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     });
     const till = await seedCounterTill(dirsM.venue, m);
     // The host's time service is synchronised, so M's start is not held for its time.
-    const boxM = new TestBox(dirsM, portM, bootEnv(dirsM, portM), {
+    const boxM = new TestBox(dirsM, portM, boxEnv(dirsM, portM), {
       boxHost: synchronisedBoxHost(),
     });
     boxes.push(boxM);
@@ -535,7 +552,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
       dirsS,
       portS,
       {
-        ...bootEnv(dirsS, portS),
+        ...boxEnv(dirsS, portS),
         WAITRON_ENV: "preproduction",
         WAITRON_SPARE_STORE_PORT: String(storeS),
         WAITRON_SPARE_STORE_LOOPBACK_PORT: String(storeLoopbackS),
@@ -550,14 +567,14 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     const sellingOnM = (async () => {
       await boundedStart(boxM.start(), "M's first start");
       const caM = await readFile(join(dirsM.state, "tls", "ca.crt"), "utf8");
-      const viaM = new Agent({ connect: { ca: caM } });
-      agents.push(viaM);
-      const health = await fetchHealthOk(`${urlM}/health`, { dispatcher: viaM } as RequestInit);
+      const { via: viaM, close } = httpsVia(caM);
+      closeViaM = close;
+      const health = await fetchHealthOk(`${urlM}/health`, viaM);
       const healthBody = (await health.json()) as { tradingAvailable?: unknown };
       expect(healthBody.tradingAvailable, JSON.stringify(healthBody)).not.toBe(false);
 
       const sold = await fetch(`${urlM}/api/sales`, {
-        dispatcher: viaM,
+        ...viaM,
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -570,9 +587,9 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
           workingOrderId,
           zoneId: till.zoneId,
         }),
-      } as RequestInit);
+      });
       expect(sold.status, await sold.text()).toBe(200);
-      expect(saleOf(join(dirsM.venue, "venue.db"), workingOrderId)).toBe(true);
+      expect(saleOf(dirsM.venue, workingOrderId)).toBe(true);
       return { caM, viaM };
     })();
     // S's setup start reads nothing of M's, so it runs while M starts and sells.
@@ -583,18 +600,18 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     const urlS = `https://127.0.0.1:${portS}`;
     const caS = await readFile(join(dirsS.state, "tls", "ca.crt"), "utf8");
     // In setup S answers under its own authority; once it adopts, under the venue's, M's.
-    const viaS = new Agent({ connect: { ca: caS } });
-    agents.push(viaS);
+    const { via: viaS, close } = httpsVia(caS);
+    closeViaS = close;
 
     // M's address is the one its chart gives it, at its own name; S reaches it through the lookup.
     const addressM = ownContactUrl(boxM.origin, m.nodeId);
     expect(new URL(addressM).hostname).not.toBe(BOX_HOSTNAME);
     const read = await fetch(`${urlS}/setup-api/primary-certificate`, {
-      dispatcher: viaS,
+      ...viaS,
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ primaryUrl: addressM }),
-    } as RequestInit);
+    });
     const answer = (await read.json()) as unknown;
     expect(read.status, JSON.stringify(answer)).toBe(200);
     expect(answer).toMatchObject({
@@ -603,7 +620,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
 
     const adopt = async (): Promise<{ status: number; body: unknown }> => {
       const adopted = await fetch(`${urlS}/setup-api/adopt`, {
-        dispatcher: viaS,
+        ...viaS,
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -611,7 +628,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
           credential: { personId: till.adminId, password: ADMIN.password },
           confirmedCaPem: caM,
         }),
-      } as RequestInit);
+      });
       return { status: adopted.status, body: (await adopted.json()) as unknown };
     };
 
@@ -631,11 +648,11 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
 
     clock.begin("bucket-stopped");
     const signIn = await fetch(`${urlM}/management-api/session`, {
-      dispatcher: viaM,
+      ...viaM,
       method: "POST",
       headers: { "content-type": "application/json", origin: boxM.origin },
       body: JSON.stringify(ADMIN),
-    } as RequestInit);
+    });
     expect(signIn.status, await signIn.clone().text()).toBe(200);
     await signIn.arrayBuffer();
     const managing = {
@@ -644,38 +661,34 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
       cookie: signIn.headers.get("set-cookie")!.split(";")[0]!,
     };
     const proof = await fetch(`${urlM}/management-api/session/me/fresh-sign-in`, {
-      dispatcher: viaM,
+      ...viaM,
       method: "POST",
       headers: managing,
       body: JSON.stringify({ method: "password", password: ADMIN.password }),
-    } as RequestInit);
+    });
     expect(proof.status, await proof.clone().text()).toBe(204);
     await proof.arrayBuffer();
     const stopped = await fetch(`${urlM}/api/backup/stream`, {
-      dispatcher: viaM,
+      ...viaM,
       method: "DELETE",
       headers: managing,
-    } as RequestInit);
+    });
     const stoppedView = (await stopped.json()) as { configured?: unknown };
     expect(stopped.status, JSON.stringify(stoppedView)).toBe(200);
     expect(stoppedView.configured).toBe(false);
 
     clock.begin("spare-join");
     const restartsBeforeJoin = boxS.restarts;
-    const logAtJoin = log.lines.length;
+    const logAtJoin = logSoFar().length;
     const joined = await adopt();
     expect(joined.status, JSON.stringify(joined.body)).toBe(200);
     expect(joined.body).toMatchObject({ adopted: true, restarting: true });
-    const readerM = await openVenueDatabase(dirsM.venue, { exclusive: false });
-    let link: NonNullable<Awaited<ReturnType<typeof readPairLink>>>;
-    try {
-      link = await wait("M's pair link to reach streaming", LINK_WAIT_MS, async () => {
-        const current = await readPairLink(readerM.node, m.nodeId);
+    const link = await readOutside(dirsM.venue, (reader) =>
+      wait("M's pair link to reach streaming", LINK_WAIT_MS, async () => {
+        const current = await readPairLink(reader.node, m.nodeId);
         return current?.state === "streaming" ? current : undefined;
-      });
-    } finally {
-      await readerM.close();
-    }
+      }),
+    );
     expect(link.role).toBe("streams");
     const nodeIdS = link.peerNodeId;
 
@@ -686,7 +699,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     await boxM.restartNow();
     expect(boxM.restarts - restartsM).toBe(1);
     expect(boxM.server).not.toBe(serverBeforeRestart);
-    await fetchHealthOk(`${urlM}/health`, { dispatcher: viaM } as RequestInit);
+    await fetchHealthOk(`${urlM}/health`, viaM);
     expect(linesSince(logAtJoin).filter((line) => line.event === "spare.first_copy_ready")).toEqual(
       [],
     );
@@ -694,7 +707,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
 
     clock.begin("spare-copy");
     const restartsBeforeCopy = boxS.restarts;
-    const logAtCopy = log.lines.length;
+    const logAtCopy = logSoFar().length;
     const ready = await wait("S's spare.first_copy_ready", COPY_WAIT_MS, async () =>
       linesSince(logAtCopy).find((line) => line.event === "spare.first_copy_ready"),
     );
@@ -703,7 +716,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     await wait("S to start as a mirror", MIRROR_WAIT_MS, async () => {
       if (existsSync(join(dirsS.state, PENDING_ADOPTION_FILE))) return undefined;
       try {
-        const page = await fetch(`${urlS}/`, { dispatcher: viaM } as RequestInit);
+        const page = await fetch(`${urlS}/`, viaM);
         const text = await page.text();
         lastFetchError = undefined;
         return text.includes("Restaurant screens are closed here") ? true : undefined;
@@ -721,18 +734,17 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
         },
       );
     });
-    const node = await fetch(`${urlS}/api/node`, { dispatcher: viaM } as RequestInit);
+    const node = await fetch(`${urlS}/api/node`, viaM);
     expect(await node.json()).toMatchObject({ acceptingSales: false });
     for (const event of ["spare.first_copy_placed", "adoption.established"])
       expect(linesSince(logAtCopy).map((line) => line.event)).toContain(event);
     expect(boxS.restarts - restartsBeforeCopy).toBe(SPARE_RESTARTS_AFTER_FIRST_COPY);
-    const venueS = join(dirsS.venue, "venue.db");
-    expect(saleOf(venueS, workingOrderId)).toBe(true);
-    expect(nodeKeyIn(venueS, nodeIdS)).toBe(link.peerPublicKey);
-    expect(nodeKeyIn(join(dirsM.venue, "venue.db"), nodeIdS)).toBe(link.peerPublicKey);
+    expect(saleOf(dirsS.venue, workingOrderId)).toBe(true);
+    expect(nodeKeyIn(dirsS.venue, nodeIdS)).toBe(link.peerPublicKey);
+    expect(nodeKeyIn(dirsM.venue, nodeIdS)).toBe(link.peerPublicKey);
 
     clock.begin("start-check");
-    const logAtCheck = log.lines.length;
+    const logAtCheck = logSoFar().length;
     const lookupsAtCheck = boxM.lookups.length;
     const connectedAtCheck = sockets.connected.length;
     await boxM.restartNow();
@@ -743,8 +755,9 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
       address: "127.0.0.1",
       port: portS,
     });
-    await fetchHealthOk(`${urlM}/health`, { dispatcher: viaM } as RequestInit);
-    const chartM = await readNodeMembershipOf(dirsM.venue);
+    await fetchHealthOk(`${urlM}/health`, viaM);
+    const chartM = (await readOutside(dirsM.venue, (store) => readNodeMembership(store.venue)))
+      ?.body;
     const entryS = chartM?.nodes.find((entry) => entry.nodeId === nodeIdS);
     expect(entryS === undefined ? undefined : new URL(entryS.contactUrl).hostname).toBe(
       boxHostnameFor(nodeIdS),
@@ -770,8 +783,8 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     signal?.removeEventListener("abort", onAbort);
     if (abortClose !== undefined) failures.push(...(await abortClose));
     failures.push(...(await closeAll()));
-    for (const agent of agents) await agent.close().catch(() => {});
-    log.stop();
+    await closeViaM?.().catch(() => {});
+    await closeViaS?.().catch(() => {});
   }
   if (failures.length === 1) throw failures[0];
   if (failures.length > 1) throw new AggregateError(failures, "spare join failed");
