@@ -449,14 +449,44 @@ describe("queue-pressure routing", () => {
     },
   );
 
-  it("uses hosted when the active run list shrinks between pages", async () => {
+  it.each(["empty page", "changed count"])(
+    "uses only a fresh whole inventory after a transient %s",
+    async (fault) => {
+      const f = fixture(20),
+        request = f.options.request,
+        pages = [];
+      f.options.request = async (path, options) => {
+        if (path.includes("/runs/50/attempts/2/jobs?")) {
+          pages.push(Number(new URL("https://fixture.test" + path).searchParams.get("page")));
+          if (pages.length === 1)
+            return { total_count: 2, jobs: [{ ...f.jobs[0], id: 999, run_id: 999 }] };
+          if (pages.length === 2)
+            return fault === "empty page"
+              ? { total_count: 2, jobs: [] }
+              : { total_count: 3, jobs: [f.jobs[1], f.jobs[2]] };
+        }
+        return request(path, options);
+      };
+      expect((await serverRoute(f.options)).route).toBe("server");
+      expect(pages).toEqual([1, 2, 1]);
+      expect(f.calls.some(([, options]) => options?.method)).toBe(false);
+    },
+  );
+
+  it("uses hosted after two incomplete reads of the active run list", async () => {
     const f = fixture(),
       request = f.options.request;
-    f.options.request = async (path, options) =>
-      path.includes("/workflows/ci.yml/runs?") && path.includes("status=queued")
-        ? { total_count: 1, workflow_runs: [] }
-        : request(path, options);
+    let reads = 0;
+    f.options.request = async (path, options) => {
+      if (path.includes("/workflows/ci.yml/runs?") && path.includes("status=queued")) {
+        reads++;
+        if (reads > 2) throw new Error("Unexpected third enumeration");
+        return { total_count: 1, workflow_runs: [] };
+      }
+      return request(path, options);
+    };
     expect((await serverRoute(f.options)).route).toBe("hosted");
+    expect(reads).toBe(2);
   });
 
   it.each(["unavailable", "duplicate", "foreign", "empty page"])(
