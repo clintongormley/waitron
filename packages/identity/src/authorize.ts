@@ -82,3 +82,23 @@ export async function authorizeByPin(
   }
   return { authorizedBy: personId, permission: args.permission, viaOverride: true };
 }
+
+/** Refused `authorization.not_permitted` unless `personId` is an active person who holds
+ * `permission` now. Reads only. `viaOverride` is false: this does not know whether the earlier
+ * approval was an override (`invoice_corrections.via_override` does). */
+export async function authorizeApproval(
+  tx: Transaction,
+  args: { personId: string; permission: Permission | (string & {}) },
+): Promise<Authorization> {
+  const [person] = await tx
+    .select({ status: persons.status })
+    .from(persons)
+    .where(eq(persons.id, args.personId));
+  if (
+    person?.status !== "active" ||
+    !holds(await readPersonAuthority(tx, args.personId), args.permission)
+  ) {
+    throw new AppError("authorization.not_permitted", { permission: args.permission });
+  }
+  return { authorizedBy: args.personId, permission: args.permission, viaOverride: false };
+}

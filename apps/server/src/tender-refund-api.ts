@@ -154,6 +154,7 @@ export function mountTenderRefundApi(
     attendance: deps.attendance,
     refundProviderFor: refundProvidersOf({ simulator: deps.cardProvider, pool: deps.pool }),
     clockUnconfirmed: deps.clockUnconfirmed,
+    log,
   };
   app.get("/api/transactions/:saleId/refundable-tenders", (c) =>
     run(c, log, async () => {

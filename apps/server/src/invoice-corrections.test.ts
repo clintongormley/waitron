@@ -196,6 +196,7 @@ async function open(
     split?: { rate: string; base: string; tax: string }[];
     backend?: typeof venue.backend;
     clock?: TrustedClock;
+    approverId?: string;
   },
 ) {
   const scope = ask.lineIds === undefined ? {} : { lineIds: ask.lineIds };
@@ -223,7 +224,12 @@ async function open(
         note: ask.note === undefined ? "Overcooked" : ask.note,
         expectedSplit: split,
       }),
-      actor(),
+      ask.approverId === undefined
+        ? actor()
+        : {
+            personId: managerId,
+            authorization: { ...actor().authorization, authorizedBy: ask.approverId },
+          },
     ),
   );
 }
@@ -1462,8 +1468,6 @@ async function handKeyedLeg(saleId: string, correctionId: string, amount: string
   );
 }
 
-const MENU_TWENTY_FIVE = [{ rate: "21.00", base: "20.66", tax: "4.34" }];
-
 describe("a correction's hand-keyed card legs", () => {
   it("opens a correction of a ticket paid €20 cash and €20 by hand-keyed card", async () => {
     const saleId = await soldForCash("Set menu", ["20.00", { card: "20.00" }]);
@@ -1475,35 +1479,44 @@ describe("a correction's hand-keyed card legs", () => {
     expect(counts()).toEqual({ ...was, corrections: was.corrections + 1 });
   });
 
-  it("records a hand-keyed card last leg and files nothing", async () => {
+  it("files a hand-keyed card last leg's corrective after recording the refund", async () => {
     const saleId = await soldForCash("Set menu", ["20.00", { card: "20.00" }]);
-    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+    const [approver] = await inTx(venue, (tx) =>
+      seedPersons(tx, { displayName: "Laura", pinHash: hashPin("7777"), role: "manager" }),
+    );
+    const { correction } = await open(saleId, {
+      submissionId: randomUUID(),
+      gross: "25.00",
+      approverId: approver!.id,
+    });
     await cash(correction.id, "15.00");
     const was = counts();
 
     const leg = await handKeyedLeg(saleId, correction.id, "10.00");
 
     expect(leg).toMatchObject({ state: "completed", appliedAmount: "10.00" });
-    expect(counts()).toEqual({ ...was, refunds: was.refunds + 1 });
-    const view = await inTx(venue, (tx) =>
-      readInvoiceCorrection(tx, venue.backend, venue.cfg, correction.id),
-    );
-    expect(view).toMatchObject({
-      state: "open",
-      moneyBack: "25.00",
-      left: "0.00",
-      correctiveSaleId: null,
-      fileNow: { gross: "25.00", vatBreakdown: MENU_TWENTY_FIVE },
-    });
-
-    const filed = await fileNow(correction.id, MENU_TWENTY_FIVE);
-
-    expect(filed).toMatchObject({ state: "filed", moneyBack: "25.00" });
+    expect(counts()).toEqual({ ...was, refunds: was.refunds + 1, invoices: was.invoices + 1 });
+    const row = await correctionRow(correction.id);
+    expect(row).toMatchObject({ state: "filed", endedAt: expect.any(String), endedBy: null });
     const [corrective] = await venue.db
       .select()
       .from(sales)
-      .where(eq(sales.id, filed.correctiveSaleId!));
-    expect(corrective).toMatchObject({ correctsSaleId: saleId, total: -2500 });
+      .where(eq(sales.id, row.correctiveSaleId!));
+    expect(corrective).toMatchObject({
+      correctsSaleId: saleId,
+      total: -2500,
+      vatBreakdown: [{ rate: "21.00", base: "-20.66", tax: "-4.34" }],
+      authorizedBy: approver!.id,
+    });
+    expect(
+      await inTx(venue, (tx) => readInvoiceCorrection(tx, venue.backend, venue.cfg, correction.id)),
+    ).toMatchObject({
+      state: "filed",
+      moneyBack: "25.00",
+      left: "0.00",
+      correctiveSaleId: row.correctiveSaleId,
+      fileNow: null,
+    });
   });
 
   it("refuses a cash payment joining a correction through Refund a payment", async () => {
