@@ -7814,7 +7814,7 @@ export async function advanceTicketItem(
         isNotNull(ticketItems.firedAt),
       ),
     )
-    .returning({ id: ticketItems.id, orderId: ticketItems.workingOrderId });
+    .returning({ lineId: ticketItems.workingOrderLineId });
   if (updated.length === 0 && validTo === "preparing") {
     updated.push(
       ...(await tx
@@ -7829,14 +7829,14 @@ export async function advanceTicketItem(
               tx
                 .select({ id: workingOrderLines.id })
                 .from(workingOrderLines)
-                .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+                .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
                 .where(
                   and(eq(workingOrderLines.id, ticketItems.workingOrderLineId), kitchenWork()),
                 ),
             ),
           ),
         )
-        .returning({ id: ticketItems.id, orderId: ticketItems.workingOrderId })),
+        .returning({ lineId: ticketItems.workingOrderLineId })),
     );
   }
   if (updated.length === 0) {

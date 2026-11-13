@@ -467,7 +467,7 @@ async function ticketStateOf(id: string): Promise<string | null> {
 /** The `ready_at` stamp of the ticket item fired for this SINGLE-line order. */
 async function readyAtOf(id: string): Promise<string | null | undefined> {
   const { rows } = await suite.db.execute<{ ready_at: string | null }>(sql`
-    select ready_at from ticket_items where working_order_id = ${id}
+    select ready_at from ticket_items where working_order_line_id in (select id from working_order_lines where working_order_id = ${id})
   `);
   return rows[0]?.ready_at;
 }

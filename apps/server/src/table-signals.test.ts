@@ -1244,7 +1244,8 @@ describe("a ready dish a cook puts back to Preparing", () => {
             readyAt: ticketItems.readyAt,
           })
           .from(ticketItems)
-          .where(eq(ticketItems.workingOrderId, tabId)),
+          .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+          .where(eq(workingOrderLines.workingOrderId, tabId)),
       );
       return row!;
     };
