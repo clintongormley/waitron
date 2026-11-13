@@ -426,8 +426,10 @@ The generated storage migration adds the column and replaces indexes; it does no
 the table.
 Correction payload persistence, administrator-only remedy operations, held-case
 resolution and the real AEAT second-correction proof remain part of Task 8 before publication.
-Disputed production remedies stay disabled pending Q35/Q38/Q40 or a case-specific owner decision;
-Q37-FIX enables the correction record.
+Of the disputed production remedies, the corrective invoice (the replacement) waits on Q37-FIX
+Task 3, which waits on the owner's answers to questions A–E (lane L, 2026-11-14); the others stay
+disabled pending Q35/Q38/Q40 or a case-specific owner decision. Q37-FIX enables the correction
+record.
 
 **1 November 2026, Task 8 receipt replay check.** The receipt lookup explicitly selects the
 original issued alta by its empty correction link. `record-version-receipt.test.ts` stores
@@ -591,6 +593,9 @@ refund operations; all production remedies remain disabled. _2026-11-11: a chang
 total or correction amount is now refused with `fiscal.remedy_amount_changed`, before the saved
 decision is compared; a changed tax type, regime, taxed or not-subject class or exemption reason on
 a breakdown line is refused with `fiscal.remedy_class_changed` at the same point; see [A1481](#a1481-a-fix-never-changes-an-invoices-amounts-owner-2026-11-11)._
+_2026-11-14: Q37-FIX enables the correction record in production; see the W41s entry. A changed
+correction type, corrected invoice or replaced invoice, or null for one the record carries, is
+refused with `fiscal.remedy_printed_fact_changed`._
 
 **2 November 2026, Task 8 explicit accepted-with-errors description decisions.** With a synthetic
 server policy, `priorOutcome: "accepted-with-errors"` requires both an accepted-with-errors delivery
@@ -601,6 +606,7 @@ key is refused. Retries after a later delivery outcome and clock change preserve
 The tests compare earlier records, deliveries and case facts, including two successive synthetic
 accepted-with-errors corrections. These are local engineering checks, not AEAT acceptance or a
 decision that a particular invoice error permits this remedy. Production policies remain empty.
+_2026-11-14: Q37-FIX enables the correction record in production; see the W41s entry._
 
 | Source, checked 2 November 2026 | Exact words | Scope |
 | --- | --- | --- |

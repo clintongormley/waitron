@@ -295,8 +295,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Importing, matching or reconciling recovered history, and any missing-history remedy, wait for
   the adviser's answer to Q41. Signed witnesses and fencing (W41s-10b)
   were retired on 9 November 2026: A1342 (#2654) and A1418 with A1425 cover them. Qualify live AEAT reconciliation, production TLS, a till payment through a booted
-  restored server, and history before the oldest known month. Task 8's disputed production remedies
-  remain disabled pending Q35/Q38/Q40 or a case-specific owner decision. Once its original's
+  restored server, and history before the oldest known month. Of Task 8's disputed production
+  remedies, the corrective invoice (the replacement) waits on Q37-FIX Task 3, which waits on the
+  owner's answers to questions A–E (lane L, 2026-11-14); the others stay disabled pending
+  Q35/Q38/Q40 or a case-specific owner decision. Once its original's
   correction is accepted, on any issuing chain, an administrator may release a held cancellation
   through a remedy, which only a test policy enables today (production's `ENABLED_REMEDIES` holds
   only `record-correction`, `packages/fiscal-verifactu/src/record-remedy-routes.ts:22`).
