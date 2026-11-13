@@ -34,7 +34,12 @@ second clock within 30 seconds of the box"). There is no "last hour" question: t
 Tick "These details are correct.", then press **Proceed**; once
 the clocks agree, the page asks the box for the invoice series
 (`first-hour.browser.test.ts`, "with the clocks agreeing, ticking the details and pressing Proceed
-makes the series"). The invoice series is the code at the start of every invoice number. The tick
+makes the series"). When the box's time service is not synchronised and only this device's clock
+agrees, the page shows the server's time and this device's above **Proceed**, with "The server could
+not check its time over the internet. Check that both times below are right before you press
+Proceed."; check both, because pressing **Proceed** confirms them (the same file's "when only this
+device agrees, the step shows both times above Proceed, and Proceed confirms them"). The invoice
+series is the code at the start of every invoice number. The tick
 alone asks for nothing (the same file's "with the tick and the clocks agreeing, nothing asks for the
 series until Proceed"), and **Proceed** stays disabled until the tick is given (the same file's
 "Proceed is quiet and disabled until the details are ticked"). While the button reads **Proceed**,
@@ -86,7 +91,8 @@ with no press or tick"). If no second clock answers at zero, or the box answers 
 page carries on the same way (the same file's "a reload's wait whose second clock is missing at
 zero makes the series by itself once a clock answers" and "a reload's wait that the box answers at
 zero with a fresh wait makes the series by itself at that wait's zero"). If it stops for anything
-else, such as clocks that differ, it needs the tick and **Proceed** (the same file's "a reload's
+else, such as clocks that differ or only this device's clock agreeing with the box's (both times
+then show above **Proceed**), it needs the tick and **Proceed** (the same file's "a reload's
 wait that stops at zero on clocks that differ needs the tick and Proceed, even after Compare the
 clocks again waits for a second clock"). Changing the tick, or the page being taken off the screen,
 ends that carrying-on for good (the same file's "a reload's wait ends for good once the tick
@@ -109,7 +115,8 @@ recorded"). What the page shows when it cannot go ahead, and what it asks for:
   server** and **Both times are wrong** say to correct this device's time and reconnect to the box,
   and **This device** sets the box's clock.
   It does not retry by itself; press **Compare the clocks again**, which after **Proceed** carries on
-  to the series once the clocks agree (`first-hour.browser.test.ts`, "a clock refusal shows each
+  to the series once the clocks agree, except that when the box cannot check its time over the
+  internet it shows both times above **Proceed** and waits for **Proceed** again (`first-hour.browser.test.ts`, "a clock refusal shows each
   clock's reading and no countdown, and waits for Compare the clocks again" and "Compare the clocks again
   after Proceed carries on to the series once the clocks agree").
 - **The minute this box would use is already taken**: the page says "This invoice series code has

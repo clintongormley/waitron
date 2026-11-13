@@ -1012,9 +1012,10 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   Setup/restore/promotion/conflict switch use five symbols for the box's UTC minute, after a second
   clock agrees within 30 seconds. The box's internet time service saying it is synchronised carries
   on by itself, and AEAT's time is not read for it (owner, 2026-11-11: "Instead we rely on NTP");
-  another machine's clock counts only once the person proved on that page (setup password, the
-  backup's node recovery key, a `node.manage` or administrator sign-in) confirms both times or sets
-  the box's clock from that machine (owner, 2026-11-13: "we should never just accept another
+  another machine's clock counts only once the person proved on that page (the setup password on
+  setup, the backup's node recovery key on restore, a `node.manage` sign-in on handover, the box's
+  current recovery key on the conflict switch) confirms both times or sets the box's clock from that
+  machine (owner, 2026-11-13: "we should never just accept another
   device's match automatically. instead, we should always ask for confirmation, and that
   confirmation should be protected"; This device and the list of proofs are the watcher's 09:49
   proposal, which the owner agreed to at 09:52: "i agree with the rest"). A minute whose name is

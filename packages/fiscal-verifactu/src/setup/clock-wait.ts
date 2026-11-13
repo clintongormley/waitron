@@ -583,8 +583,12 @@ export function renderClockRows(
   words: ClockRowWords,
   locale: "en" | "es",
   timeZone: string,
+  named = false,
 ) {
   const minutes = dateTimeFormat(locale, timeZone, { dateStyle: "long", timeStyle: "short" });
+  const zoneName = dateTimeFormat(locale, timeZone, { timeZoneName: "short" });
+  const zone = (ms: number) =>
+    named ? ` ${zoneName.formatToParts(ms).find((p) => p.type === "timeZoneName")?.value}` : "";
   const box = clock.usable.find((r) => r.source === "box");
   const boxMinute = box && minutes.format(middle(box));
   const format = clock.usable.some((r) => r !== box && minutes.format(middle(r)) === boxMinute)
@@ -592,7 +596,7 @@ export function renderClockRows(
     : minutes;
   const at = (source: HourClockDecision["usable"][number]["source"]) => {
     const reading = clock.usable.find((r) => r.source === source);
-    return reading ? format.format(middle(reading)) : words.unavailable;
+    return reading ? format.format(middle(reading)) + zone(middle(reading)) : words.unavailable;
   };
   return html`${detailRow(words.serverTime, at("box"))}${detailRow(words.thisDevice, at("browser"))}`;
 }

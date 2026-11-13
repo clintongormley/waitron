@@ -100,7 +100,9 @@ se uniera a su principal actual.
 Lee las advertencias, marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
 el servidor principal anterior**. En la comprobación del reloj, marca **Estos datos son correctos.**
 y elige **Continuar**: la página compara los relojes, crea las series de facturas nuevas e inicia
-el local en este servidor sola. Si este servidor no puede comprobar su hora por internet y los relojes no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
+el local en este servidor sola. Si este servidor no puede comprobar su hora por internet, la página
+muestra antes la hora de este servidor y la de este dispositivo: comprueba que las dos son correctas y
+elige **Confirmar la hora**. Si los relojes no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
 hora de este servidor con la del dispositivo que estás usando y la página sigue; después de **El
 servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
 el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. El
@@ -139,7 +141,10 @@ Mantén los dos servidores conectados. La página de traspaso se abre en el serv
 transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador y elige
 **Continuar a la comprobación del reloj**. Marca **Estos datos son correctos.** y elige
 **Continuar**: la página compara los relojes y crea las series de facturas nuevas sola, también tras
-cualquier espera, y después inicia el local en el servidor de reserva. Si el servidor de reserva no puede comprobar su hora por internet y los relojes no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
+cualquier espera, y después inicia el local en el servidor de reserva. Si el servidor de reserva no
+puede comprobar su hora por internet, la página muestra antes la hora del servidor de reserva y la de
+este dispositivo: comprueba que las dos son correctas y elige **Confirmar la hora**. Si los relojes
+no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
 hora del servidor de reserva con la del dispositivo que estás usando y la página sigue; después de **El
 servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Un código del autenticador dura
 menos de un minuto. Si el tuyo caduca antes de que la página lo use, la página te pide revisar la contraseña y el código: introduce un código nuevo y elige

@@ -125,7 +125,9 @@ AEAT lookup, keep any old or copied box offline. A new identity does not stop an
 Open `/manage/recovery/fiscal-conflict` on this box over HTTPS. You need its current server key;
 signing in to the dashboard does not replace that key. Enter the key and choose **Check conflict**
 to see the affected invoice and identity. Confirm that the old or copied box is offline and that
-nobody else is recovering it, then choose **Compare clocks**.
+nobody else is recovering it, then choose **Compare clocks**. If the box cannot check its time over
+the internet, the page then shows the box's time and this device's: check that both are right, then
+choose **Confirm the time**.
 
 If a minute is unavailable, wait for the countdown. The page checks again every five seconds.
 When the wait ends, compare the clocks again. Check the selected identity, then choose **Switch

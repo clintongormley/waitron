@@ -5908,7 +5908,8 @@ unverifiable under the other environment.
 identity and chain; there is no operator chain-reset path. A setup, restore or promotion names
 its installation from the box's clock — five symbols for the UTC minute — only after the box's
 internet time service says it is synchronised, or a clock on another machine agrees within 30
-seconds (no confirmation); AEAT's time is not read for it. The minute is not taken
+seconds and the person on that page confirms both times or sets the box's clock from that machine;
+AEAT's time is not read for it. The minute is not taken
 when a name in the history the box reads already holds it: the module's own record of the names it
 has chosen, earlier abandoned attempts of the same setup, a restored or surviving database and a
 backup's record of names. A later name or a later record is never a reason to refuse or to pick a
@@ -6340,12 +6341,17 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ### An installation name's minute: waits, refusals and repeats
 
-- **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion
-  use five symbols for the box's UTC minute, after the box's internet time service says it is
-  synchronised, or another machine's clock agrees within 30 seconds (no confirmation); a device that
-  has just set the box's clock from that page is that machine (A1482 plan, cleared by the watcher
-  2026-11-12 18:33; not owner-approved); AEAT's time is not read for it (owner, 2026-11-11: "Instead
-  we rely on NTP"; 2026-11-13: "b", AEAT no longer counts); a minute whose name is already in a
+- **Restore and promotion start a new chain under a new installation name.**
+  Setup/restore/promotion/conflict switch use five symbols for the box's UTC minute, after a second
+  clock agrees within 30 seconds. The box's internet time service saying it is synchronised carries
+  on by itself, and AEAT's time is not read for it (owner, 2026-11-11: "Instead we rely on NTP";
+  2026-11-13: "b", AEAT no longer counts); another machine's clock counts only once the person
+  proved on that page (the setup password on setup, the backup's node recovery key on restore, a
+  `node.manage` sign-in on handover, the box's current recovery key on the conflict switch) confirms
+  both times or sets the box's clock from that machine (owner, 2026-11-13: "we should never just
+  accept another device's match automatically. instead, we should always ask for confirmation, and
+  that confirmation should be protected"; This device and the list of proofs are the watcher's 09:49
+  proposal, which the owner agreed to at 09:52: "i agree with the rest"); a minute whose name is already in a
   history the box reads is not taken (the box waits for the next free one if it starts within 150
   seconds, and otherwise refuses with when it can; the setup and restore pages count that down and
   check again by themselves; owner, 2026-10-30, A1207), and no other name or record refuses or moves
@@ -6356,7 +6362,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   Only preproduction throwaway skips
   second-clock/history checks; refuse it outside preproduction. Restore takes one source;
   working-time chain continues from its head. Guards:
-  hour-selection/hour-clock/hour-clock-time-service/minute-selection-unknown-name suites (the
+  hour-selection/hour-clock/hour-clock-time-service/hour-setup-clock/minute-selection-unknown-name suites (the
   last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`.
 
 

@@ -93,7 +93,8 @@ made after this spare joined its current main box.
 Read the warnings, tick all three statements and give your reason. Choose **Declare the old main
 box switched off**. At the clock check, tick **These details are correct.** and choose **Proceed**:
 the page compares the clocks, creates the new invoice series and starts the venue on this box by
-itself. If this box cannot check its time over the internet and the clocks differ, the page asks which time is correct: **This device** sets this box's time from
+itself. If this box cannot check its time over the internet, the page first shows this box's time
+and this device's: check that both are right, then choose **Confirm the time**. If the clocks differ, the page asks which time is correct: **This device** sets this box's time from
 the device you are using and the page carries on; after **The server** or **Both times are wrong**,
 correct this device's time and reconnect. Keep the page open through the restart. You enter your password and code once; if the code expires, enter its
 current replacement when asked and try the step again. Your reason and statements stay in place.
@@ -128,7 +129,9 @@ authenticator code, if set up, ready to sign in on the spare. A passkey cannot c
 Keep both boxes connected. The handover page opens on the spare and follows the transfer. Once the
 copy is ready, enter the same administrator account and choose **Continue to clock check**. Tick
 **These details are correct.** and choose **Proceed**: the page compares the clocks and creates the
-new invoice series by itself, including after any wait, and then starts the venue on the spare. If the spare cannot check its time over the internet and the clocks differ, the page asks which time is correct: **This device** sets the spare's time from
+new invoice series by itself, including after any wait, and then starts the venue on the spare. If
+the spare cannot check its time over the internet, the page first shows the spare's time and this
+device's: check that both are right, then choose **Confirm the time**. If the clocks differ, the page asks which time is correct: **This device** sets the spare's time from
 the device you are using and the page carries on; after **The server** or **Both times are wrong**,
 correct this device's time and reconnect.
 An authenticator code lasts under a minute. If yours runs out before the page uses it, the page asks

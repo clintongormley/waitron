@@ -327,6 +327,11 @@ it("with only this device agreeing, shows both times and selects with confirmed 
     "The server could not check its time over the internet. Check that both times below are right, then press Confirm the time.",
   );
   expect(screen.shadowRoot!.querySelectorAll("[data-confirm-time] dt")).toHaveLength(2);
+  const zone = new Intl.DateTimeFormat("en-GB", { timeZoneName: "short" })
+    .formatToParts(Date.now())
+    .find((part) => part.type === "timeZoneName")!.value;
+  for (const time of screen.shadowRoot!.querySelectorAll("[data-confirm-time] dd"))
+    expect(time.textContent?.trim()).toContain(` ${zone}`);
   expect(proposals(calls).map((p) => p.action)).toEqual(["clock-challenge", "compare-clocks"]);
   await click(screen, "confirm-time");
   await vi.waitFor(() =>

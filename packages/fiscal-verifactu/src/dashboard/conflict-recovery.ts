@@ -464,7 +464,7 @@ export class ConflictRecovery extends LitElement {
                     : html`<section data-confirm-time>
                         <p role="status">${this.t("conflict_recovery.confirm_why")}</p>
                         <dl class="details">
-                          ${renderClockRows(this.toConfirm, clockWaitStrings[this.locale], this.locale, Intl.DateTimeFormat().resolvedOptions().timeZone)}
+                          ${renderClockRows(this.toConfirm, clockWaitStrings[this.locale], this.locale, Intl.DateTimeFormat().resolvedOptions().timeZone, true)}
                         </dl>
                       </section>`
                 }
