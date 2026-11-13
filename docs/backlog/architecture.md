@@ -838,7 +838,6 @@ the helper's constant status is not evidence of the write.
 
 - **A976. Finish the server's English test-venue defaults.**
   The VAT-class, issue-rate, line-transfer and move/merge filing suites use Administrator for their staff sample; their location and dish samples remain.
-  The issuance-pass and list-unit-price fiscal-identity, served-at-huella, split-bill fiscal and tabs filing suites use Administrator for their staff sample; their other display samples remain.
   Local invoice-correction and fiscal-sale route staff samples use Martha, Administrator, Cashier and Supervisor.
   Local workforce-export staff use Martha Canary, Colleague Green, Anna Admin and Lewis Manager;
   the adjustment-approval and box-email incident samples use Paul and Anna.
@@ -874,7 +873,8 @@ the helper's constant status is not evidence of the write.
   The shared adjustment venue uses Anna and Martha for its staff and manager samples.
   Local `issuance-pass.test.ts`, `till-sale-tender-block.test.ts`, `sale-till-source.receipt.test.ts`,
   `served.test.ts`, `report-api.categories-reconcile.test.ts` and `demo-seed.db.test.ts` use English staff display names.
-  Spanish staff display-name samples remain in other local and shared `testing/` fixtures.
+  Remaining Spanish staff display-name samples include `testing/boot-harness.ts`,
+  `testing/stream-loop-scenario.ts` and `testing/stream-pause-scenario.ts`.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
   helper's raw `Barra` locations should use `Main room`, as `setupVenue` does.
