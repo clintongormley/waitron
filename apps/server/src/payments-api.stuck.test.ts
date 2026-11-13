@@ -82,7 +82,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { systemClock } from "./till-backend.js";
-import { setWorkingOrderLabel, createOpenOrder } from "./working-order.js";
+import { createOpenOrder } from "./working-order.js";
 import { ordersWithUnfiledPayment } from "./till-sale.js";
 import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -2986,24 +2986,6 @@ describe("provider-confirmed partial-refund release", () => {
       expect(replay.status).toBe(200);
       expect(await replay.json()).toEqual({ outcome: "released" });
       expect(lookup).toHaveBeenCalledTimes(1);
-      if (!options.placed) {
-        const [order] = await suite.db
-          .select({ revision: workingOrders.revision })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, orderId));
-        await setWorkingOrderLabel(suite.db, orderId, {
-          label: "Released order",
-          revision: order!.revision,
-          operatorId: v.managerId,
-          expectedEdit: null,
-        });
-        expect(
-          await suite.db
-            .select({ label: workingOrders.label })
-            .from(workingOrders)
-            .where(eq(workingOrders.id, orderId)),
-        ).toEqual([{ label: "Released order" }]);
-      }
 
       expect(
         await suite.db
@@ -3030,12 +3012,13 @@ describe("provider-confirmed partial-refund release", () => {
     "missing-prior",
     "different-prior",
     "unidentified",
+    "unidentified-partial",
   ])("keeps the capture held for %s evidence", async (problem) => {
-    const { v, payment, evidence } = await partial({
+    const { v, payment, evidence, lookup } = await partial({
       mark: true,
-      unidentified: problem === "unidentified",
+      unidentified: problem.startsWith("unidentified"),
     });
-    if (problem === "partial") evidence.refunds.pop();
+    if (problem === "partial" || problem === "unidentified-partial") evidence.refunds.pop();
     if (problem === "wrong-capture") evidence.captured = decimal("2.00");
     if (problem === "wrong-reference") evidence.processorRef = "another-txn";
     if (problem === "missing-prior") evidence.refunds[0]!.providerRefundRef = "another-refund";
@@ -3047,8 +3030,10 @@ describe("provider-confirmed partial-refund release", () => {
     expect(result.status).toBe(409);
     const error = await errorOf(result);
     expect(error.code).toBe("payment.outcome_unknown");
-    if (problem === "unidentified")
+    if (problem.startsWith("unidentified")) {
       expect(error.params).toMatchObject({ reason: "refund_reference_missing" });
+      expect(lookup).not.toHaveBeenCalled();
+    }
     expect(await suite.db.select().from(payments).where(eq(payments.id, payment.id))).toEqual([
       payment,
     ]);

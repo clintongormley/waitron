@@ -1197,7 +1197,16 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             billPaymentIsLive(deps.db, row.payment.billPaymentId))
         )
           throw new AppError("payment.not_stuck", { paymentId });
-        return row;
+        const refunds =
+          row.payment.state === "partially_refunded"
+            ? (await refundFacts(tx, paymentId, row.payment.amount)).refunds
+            : [];
+        if (refunds.some((refund) => refund.providerRefundRef === null))
+          throw new AppError("payment.outcome_unknown", {
+            paymentId,
+            reason: "refund_reference_missing",
+          });
+        return { ...row, refunds };
       };
       const before = await gated(sessionId, read);
       if (before.payment.state === "refunded") return c.json({ outcome: "released" });
@@ -1211,7 +1220,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           ? { kind: "unknown" as const }
           : await provider.lookupCompletedRefunds(before.payment.externalRef);
       await gated(sessionId, async (tx, personId) => {
-        const { payment, mark, billState } = await read(tx);
+        const { payment, mark, billState, refunds } = await read(tx);
         if (payment.state === "refunded") return;
         const unknown = () =>
           new AppError("payment.outcome_unknown", { paymentId, reason: "ambiguous" });
@@ -1231,7 +1240,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           )
         )
           throw unknown();
-        const { refunds } = await refundFacts(tx, paymentId, payment.amount);
         const recorded = new Set<string>();
         for (const refund of refunds) {
           const ref = refund.providerRefundRef;
