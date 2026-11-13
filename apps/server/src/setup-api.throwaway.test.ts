@@ -85,8 +85,8 @@ function body(mode: Mode): Record<string, unknown> {
       rectificativeSeriesCode: "R",
       admin: {
         displayName: "Administrator",
-        firstNames: "Ana Maria",
-        lastNames: "Lopez Garcia",
+        firstNames: "Anna Mary",
+        lastNames: "Smith Green",
         pin: "1357",
         password: "correct-horse-battery",
         email: "admin@waitron.dev",

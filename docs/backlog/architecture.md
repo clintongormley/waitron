@@ -637,8 +637,7 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   address and the operation description "Venta en establecimiento". The setup API suite
   (`apps/server/src/setup-api.test.ts`) uses English location, administrator, product,
   series-code, zone and department samples, and keeps its `es-ES` locale, its Spanish addresses,
-  the administrator's personal names "Ana Maria" and "Lopez Garcia", and the operation
-  description "Venta en establecimiento" its operation-description case reads from the fiscal package.
+  and the operation description "Venta en establecimiento" its operation-description case reads from the fiscal package.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
@@ -850,6 +849,7 @@ the helper's constant status is not evidence of the write.
   Local course-retention, service-step, status, kitchen-note, allergy, today-join, course and party route fixtures use Anna for staff.
   The provision, setup-api.throwaway, promote-api.handover, break-glass-command and
   backup-api.settings-evidence suites use Administrator for their local administrator display-name samples.
+  The setup-api and setup-api.throwaway suites use Anna Mary and Smith Green for their administrator real-name samples.
   The backup-api.route and mirror-bundle-api suites use English staff display-name samples.
   The cancel-invoiced-order and unpaid-departure suites use Sophia for their local supervisor samples.
   The device-equipment and device-levers suites use English staff display-name samples.
@@ -1089,8 +1089,7 @@ the helper's constant status is not evidence of the write.
   address and the operation description "Venta en establecimiento". The setup API suite
   (`apps/server/src/setup-api.test.ts`) uses English location, administrator, product,
   series-code, zone and department samples, and keeps its `es-ES` locale, its Spanish addresses,
-  the administrator's personal names "Ana Maria" and "Lopez Garcia", and the operation
-  description "Venta en establecimiento" its operation-description case reads from the fiscal package.
+  and the operation description "Venta en establecimiento" its operation-description case reads from the fiscal package.
   Group-route and course-deletion service-step suites use English names for their own courses.
   The printer-test-page suite uses an English printer sample and retains its bilingual words
   and accented-character checks.

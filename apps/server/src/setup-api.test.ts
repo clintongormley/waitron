@@ -163,8 +163,8 @@ function demoBody(): Record<string, unknown> {
       rectificativeSeriesCode: "R",
       admin: {
         displayName: "Administrator",
-        firstNames: "Ana Maria",
-        lastNames: "Lopez Garcia",
+        firstNames: "Anna Mary",
+        lastNames: "Smith Green",
         pin: "1357",
         password: "correct-horse-battery",
         email: "admin@waitron.dev",
@@ -593,8 +593,8 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(res.status).toBe(200);
     await tick();
     expect(provisionRequests[0].venue.admin).toMatchObject({
-      firstNames: "Ana Maria",
-      lastNames: "Lopez Garcia",
+      firstNames: "Anna Mary",
+      lastNames: "Smith Green",
     });
   });
 
@@ -776,15 +776,15 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
 
     const body = demoBody();
     const admin = asRec(asRec(body.venue).admin);
-    admin.firstNames = "  Ana Maria  ";
-    admin.lastNames = "\tLopez Garcia\n";
+    admin.firstNames = "  Anna Mary  ";
+    admin.lastNames = "\tSmith Green\n";
     const res = await postProvision(app, body);
 
     expect(res.status).toBe(200);
     await tick();
     expect(provisionRequests[0].venue.admin).toMatchObject({
-      firstNames: "Ana Maria",
-      lastNames: "Lopez Garcia",
+      firstNames: "Anna Mary",
+      lastNames: "Smith Green",
     });
   });
 
