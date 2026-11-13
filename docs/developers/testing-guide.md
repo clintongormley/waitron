@@ -27,8 +27,9 @@ download and disk flush too. The request counter advances before either has fini
 ## Count image requests as they are delivered
 
 When a retry test counts resource requests, observe the resource entries as they arrive with a
-scoped `PerformanceObserver`, then disconnect it in `finally` and register the same restoration
-with `onTestFinished`: a timed-out test may still be awaiting an event when Vitest ends it. The
+scoped `PerformanceObserver`, then disconnect it and restore the list's size from `onTestFinished`
+or `afterEach`, not only from `finally`: a timed-out test may still be awaiting an event when
+Vitest ends it. The
 retained timing list is a bounded observation, so it cannot establish that no new request happened once it is full.
 
 On 4 November 2026, A1332 reproduced the till logo check's `expected 2, received 1` failure by
@@ -40,6 +41,29 @@ retained list still contains only one request. Run
 `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.venue-logo.test.ts`.
 This reproduces a mechanism for the CI symptom; the failed CI runs did not retain their buffer
 state, so that part of their diagnosis remains inferred.
+
+The shared primitive's suite (`packages/ui/src/components/wt-venue-logo.retry.test.ts`) counts
+the same way: with one timing slot the old list-reading count failed `expected 1 to be 2`, and
+its 60-second retry case runs with 250 slots and with one. Run
+`pnpm --filter @waitron/ui exec vitest run src/components/wt-venue-logo.retry.test.ts`.
+
+## Bound a retry case's waits by a real timer
+
+In a retry case that counts requests, end each wait for a request or an image-error event on a
+timer taken from `window.setTimeout` before any case fakes it (`within` in
+`packages/ui/test/venue-logo-fixture.ts`), not on a count of animation frames or a
+`performance.now()` check made between frames: once frames stop, a loop paced by frames never
+checks its deadline again. Keep the sum of the case's waits plus its own running time under the
+case's time limit; where several waits must fit, give them one shared allowance so a slow first
+load can use time the later waits did not need.
+
+On 13 November 2026 the till's repeated-failure logo case was run with the frames its waits and
+its `settle` helper ask for each delayed by 70 ms, the rate A1332's review measured. With a
+request that never came, the old 300-frame waits ended in `Test timed out in 15000ms` with no
+count reported. With the six waits sharing a 5-second allowance, the third request kept out of the count and `within`'s
+frames stopped once the count reached two, the case failed with `expected 2 to be 3` in 7.5 to
+8.1 seconds. With 70 ms frames and every wait taking its share of the allowance before
+succeeding, it passed in 11.7 to 12.1 seconds.
 
 ## Retiring test cases also updates their fresh-process wrappers
 

@@ -564,17 +564,6 @@ The remaining work concerns live routing qualification and the action-repository
 - **The dependency-optimizer fix still needs a cold-cache check on Vite 8.**
   [Detail](dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured)
 
-## Bundle: The logo retry checks' deadline and counting
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The logo retry check can outwait its test deadline** (left open by A1332, #2458). Its 300-frame
-  request wait can exceed the unchanged 15-second case deadline when Chromium throttles frames.
-  [Detail](ci.md#the-logo-retry-check-can-outwait-its-test-deadline).
-- **The shared logo primitive's retry checks still count a bounded timing list** (left open by
-  A1332, #2458). Apply the till check's scoped observation after reproducing the same failure there.
-  [Detail](ci.md#shared-logo-retry-checks-use-the-retained-timing-list).
-
 ## Bundle: One throwaway branch that interrupts an upload and re-runs a shard
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -1437,28 +1426,3 @@ it is, delete this entry; if not, make the helper keep the re-run's copy.
 existing one in #2395, and two of its new cases sit apart from the cases they extend. Fold the
 new setup into the existing helper and move the two cases beside their neighbours; no assertion
 changes.
-
-## Shared logo retry checks use the retained timing list
-
-`packages/ui/src/components/wt-venue-logo.retry.test.ts`'s `requests` helper reads
-`performance.getEntriesByName`. By reading, it has the same bounded-observation shape that
-A1332 reproduced in the till's logo check. Reproduce the primitive suite with a full timing
-buffer, then retain its exact retry assertions while changing the observation. A1332 changed
-only the till check; it did not qualify or change these sibling cases.
-
-## The logo retry check can outwait its test deadline
-
-`apps/till/src/widgets/till-shell.venue-logo.test.ts`'s `requestsReach` waits up to 300 animation
-frames. A1332's run-it review measured 66–70 ms frames: the request wait then exceeds the
-15-second test deadline, so a missing request can produce only a timeout before its count
-assertion runs. The retry-disabled controls still detect the missing retry; they do not establish
-that its count assertion always reports first. Reproduce the throttled-frame case before choosing
-a wall-clock-bounded observation; keep the retry schedule, request assertions and existing case
-deadline. The related `await failed` can also await a missing event until the case times out.
-
-## Till logo retry missing request
-
-A790's 4 November CI runs 41879243123 and 41886182380 counted one request instead of two.
-The observation mechanism was reproduced and corrected by A1332 (#2458); see
-[Count image requests as they are delivered](../developers/testing-guide.md#count-image-requests-as-they-are-delivered).
-The shared-logo and deadline qualifications remain in the logo retry bundle above.

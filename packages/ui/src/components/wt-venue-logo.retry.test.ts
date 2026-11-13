@@ -4,6 +4,7 @@ import { cleanup, host, mount } from "../test-helpers.js";
 import { THEME_STORAGE_KEY, chooseTheme, startThemeChoice } from "../theme-choice.js";
 import { VENUE_LOGO_RETRY_MS, type WtVenueLogo } from "./wt-venue-logo.js";
 import "./wt-venue-logo.js";
+import { within } from "../../test/venue-logo-fixture.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -24,15 +25,26 @@ const FALLBACK = `<span slot="fallback">W</span>`;
 
 const box = (el: WtVenueLogo) => el.shadowRoot!.querySelector<HTMLElement>(".box");
 const images = (el: WtVenueLogo) => [...el.shadowRoot!.querySelectorAll<HTMLImageElement>("img")];
-const requests = (address: string) =>
-  performance.getEntriesByName(new URL(address, location.href).href).length;
+// Counted as delivered: the retained resource-timing buffer stops recording once it is full.
+const requestCounts = new Map<string, number>();
+let requestObserver: PerformanceObserver | undefined;
+const requests = (address: string) => requestCounts.get(new URL(address, location.href).href) ?? 0;
 const unique = () => `/no-such-${crypto.randomUUID()}.png`;
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
+// Four waits of this length in the retry case must fit inside its 15 s limit.
+const WAIT_MS = 2_000;
+
 // vi.waitFor advances faked timers on each check, which would bring a retry forward.
 async function requestsReach(address: string, count: number): Promise<void> {
-  for (let i = 0; i < 300 && requests(address) < count; i++) await frame();
+  await within(WAIT_MS, () => requests(address) >= count);
   expect(requests(address)).toBe(count);
+}
+
+function errorSeen(target: EventTarget): () => boolean {
+  let seen = false;
+  target.addEventListener("wt-logo-error", () => (seen = true), { once: true });
+  return () => seen;
 }
 
 async function logo(attributes: string): Promise<WtVenueLogo> {
@@ -64,10 +76,19 @@ async function failed(attributes: string): Promise<WtVenueLogo> {
 }
 
 beforeEach(() => {
+  requestObserver = new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+      requestCounts.set(entry.name, (requestCounts.get(entry.name) ?? 0) + 1);
+    }
+  });
+  requestObserver.observe({ type: "resource" });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 });
 
 afterEach(async () => {
+  requestObserver?.disconnect();
+  requestCounts.clear();
+  performance.setResourceTimingBufferSize(250);
   vi.useRealTimers();
   localStorage.removeItem(THEME_STORAGE_KEY);
   chooseTheme("device");
@@ -104,46 +125,56 @@ describe("wt-venue-logo when its image fails", () => {
     expect(fallback.getBoundingClientRect().width).toBeGreaterThan(0);
   });
 
-  it("tries the same address again after 60 seconds", async () => {
-    const address = unique();
-    const el = await logo(`light="${address}"`);
-    const first = images(el)[0]!;
-    await next(el, "wt-logo-error");
-    await rendered(el);
-    await requestsReach(address, 1);
-    expect(images(el)).toEqual([]);
-    expect(vi.getTimerCount()).toBe(1);
+  it.each([250, 1])(
+    "tries the same address again after 60 seconds (%i timing slots)",
+    async (timingSlots) => {
+      performance.clearResourceTimings();
+      performance.setResourceTimingBufferSize(timingSlots);
+      const address = unique();
+      const seen = errorSeen(document);
+      const el = await logo(`light="${address}"`);
+      const first = images(el)[0]!;
+      await within(WAIT_MS, seen);
+      expect(seen(), "the logo should report its failed load").toBe(true);
+      await rendered(el);
+      await requestsReach(address, 1);
+      expect(images(el)).toEqual([]);
+      expect(vi.getTimerCount()).toBe(1);
 
-    await advance(el, VENUE_LOGO_RETRY_MS - 1);
-    expect(images(el)).toEqual([]);
+      await advance(el, VENUE_LOGO_RETRY_MS - 1);
+      expect(images(el)).toEqual([]);
 
-    let errors = 0;
-    el.addEventListener("wt-logo-error", () => errors++);
-    await advance(el, 1);
-    const retries = images(el);
-    expect(retries).toHaveLength(1);
-    const retry = retries[0]!;
-    expect(retry).not.toBe(first);
-    expect(retry.getAttribute("src")).toBe(address);
-    expect(retry.hidden).toBe(true);
-    expect(getComputedStyle(retry).display).toBe("none");
-    expect(retry.alt).toBe("");
+      let errors = 0;
+      el.addEventListener("wt-logo-error", () => errors++);
+      await advance(el, 1);
+      const retries = images(el);
+      expect(retries).toHaveLength(1);
+      const retry = retries[0]!;
+      expect(retry).not.toBe(first);
+      expect(retry.getAttribute("src")).toBe(address);
+      expect(retry.hidden).toBe(true);
+      expect(getComputedStyle(retry).display).toBe("none");
+      expect(retry.alt).toBe("");
 
-    await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1));
-    await rendered(el);
-    expect(el.failed).toBe(true);
-    expect(box(el)).toBeNull();
-    expect(vi.getTimerCount()).toBe(1);
-    await requestsReach(address, 2);
+      await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1));
+      await rendered(el);
+      expect(el.failed).toBe(true);
+      expect(box(el)).toBeNull();
+      expect(vi.getTimerCount()).toBe(1);
+      await requestsReach(address, 2);
 
-    await advance(el, VENUE_LOGO_RETRY_MS);
-    const again = images(el);
-    expect(again).toHaveLength(1);
-    expect(again[0]).not.toBe(retry);
-    expect(again[0]!.getAttribute("src")).toBe(address);
-    await requestsReach(address, 3);
-    expect(errors).toBe(0);
-  });
+      await advance(el, VENUE_LOGO_RETRY_MS);
+      const again = images(el);
+      expect(again).toHaveLength(1);
+      expect(again[0]).not.toBe(retry);
+      expect(again[0]!.getAttribute("src")).toBe(address);
+      await requestsReach(address, 3);
+      expect(errors).toBe(0);
+      if (timingSlots === 1) {
+        expect(performance.getEntriesByName(new URL(address, location.href).href)).toHaveLength(1);
+      }
+    },
+  );
 
   it("a retry that loads shows the logo and says so", async () => {
     const address = png(400, 100);
