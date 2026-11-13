@@ -10,7 +10,7 @@ import {
   writeDurableHostJson,
   type FiscalReadinessInput,
 } from "@waitron/provisioning";
-import { configurationBundle } from "../../../packages/provisioning/test/configuration-bundle.js";
+import { configurationBundle } from "@waitron/provisioning/testing/configuration-bundle";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { clock, external } from "../test/hour-recovery-host.js";

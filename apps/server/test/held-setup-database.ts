@@ -32,7 +32,7 @@ import { writeTradingEnv } from "../src/trading-config.js";
 export interface HeldSetupOptions {
   /** Invoice records written through the fiscal module's own write path after activation. */
   invoices?: number;
-  /** `publication` expects the caller to interrupt the final record write. */
+  /** `committed` stops after activation; `publication` interrupts the final record write; `complete` finishes. */
   status?: "committed" | "publication" | "complete";
   /** Publication writes `<state>/trading.env` before it fails or completes. */
   tradingSettings?: boolean;

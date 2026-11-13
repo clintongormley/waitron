@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./testing/allocated-venue": "./test/allocated-venue.ts",
+    "./testing/configuration-bundle": "./test/configuration-bundle.ts",
     "./testing/start-again-attempt": "./test/start-again-attempt.ts"
   },
   "waitron": {
