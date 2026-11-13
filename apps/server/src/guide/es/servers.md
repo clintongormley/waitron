@@ -8,12 +8,13 @@ ofrece acceso al panel de gestión.
 
 ## Añadir un equipo de reserva {#adding-a-spare}
 
-En esta versión, un equipo de reserva guarda una copia de los datos del local, pero aún no puede sustituir al equipo principal: ninguna pantalla pasa el local a él. No lo añadas a un local que esté abierto al público hasta que una actualización traiga el cambio de equipo.
+Un local configurado en España aún no puede añadir un equipo de reserva.
 
-Un equipo de reserva que ha terminado de unirse no se puede retirar de **Ajustes → Servidores**
-en esta versión; uno cuya unión no terminó, sí. Mientras un equipo de reserva unido está apagado,
-el equipo principal espera en cada inicio hasta que un administrador
-[sigue sin él](servers.md#carry-on).
+En esta versión no se puede retirar un equipo de reserva que ha terminado de unirse. No lo añadas
+a un local que esté abierto al público hasta que una actualización permita retirarlo.
+
+Mientras un equipo de reserva que ha terminado de unirse está apagado, el equipo principal espera
+en cada inicio hasta que un administrador [deje que siga sin él](servers.md#carry-on).
 
 Antes de empezar, comprueba dos cosas en el equipo principal:
 
@@ -34,9 +35,9 @@ muestra después de **Use this box's own address**. Elige **Unirse o recuperar**
 Introduce la dirección HTTPS del equipo principal y elige **Continuar**. En un dispositivo que ya
 tenga la sesión iniciada en el panel del equipo principal, abre **Ajustes → Servidores** y compara
 **Huella del certificado público de este servidor** con la que muestra el equipo nuevo. Elige
-**Coincide** solo si son iguales; si no, elige **No coincide** y no se envía nada. Después
-introduce los datos de la cuenta y elige **Conectar**. El equipo nuevo recibe su primera copia por
-la red del local y se reinicia solo como equipo de reserva.
+**Coincide** solo si son iguales. Después introduce los datos de la cuenta y elige **Conectar**. El
+equipo nuevo recibe su primera copia por la red del local y se reinicia solo como equipo de
+reserva.
 
 ## Iniciar aquí si ha fallado el equipo principal {#emergency}
 

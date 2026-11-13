@@ -7,11 +7,13 @@ and data. The spare’s page shows its status; it takes no sales and offers no d
 
 ## Add a spare box {#adding-a-spare}
 
-In this version a spare keeps a copy of the venue's data but cannot yet take over from the main box: no screen switches the venue to it. Do not add one to a venue that is open for business until an update brings switching.
+A venue set up in Spain cannot add a spare yet.
 
-A spare that has finished joining cannot be removed from **Settings → Servers** in this version;
-one whose join never finished can. While a joined spare is switched off, the main box waits at
-each start until an administrator [carries on without it](servers.md#carry-on).
+A spare that has finished joining cannot be removed in this version. Do not add one to a venue
+that is open for business until an update lets you remove it.
+
+While a joined spare is switched off, the main box waits at each start until an administrator
+[lets it carry on without the spare](servers.md#carry-on).
 
 Before you start, check two things on the main box:
 
@@ -30,10 +32,9 @@ after **Use this box's own address**. Choose **Join or recover**, then **Add a m
 
 Enter the main box's HTTPS address and choose **Continue**. On a device already signed in to the
 main box's dashboard, open **Settings → Servers** and compare **This server's public certificate
-fingerprint** with the one the new box shows. Choose **It matches** only if they are the same;
-otherwise choose **It doesn't match**, and nothing is sent. Then enter the account's details and
-choose **Connect**. The new box takes its first copy over the venue's network and restarts by
-itself as the spare.
+fingerprint** with the one the new box shows. Choose **It matches** only if they are the same.
+Then enter the account's details and choose **Connect**. The new box takes its first copy over the
+venue's network and restarts by itself as the spare.
 
 ## Start here when the main box has failed {#emergency}
 
