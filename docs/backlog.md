@@ -1973,7 +1973,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
-- **A1398-2. Finish the four-minute target for dashboard and till jobs.** Selected draft autosave waits advance without sleeping, the menu test's loading wait polls sooner, static editor layout fixtures use a shorter disclosure animation, and the product-list layout tests, Menus structure matrix and printer pick-up-role matrix no longer save unused PNGs. Dashboard packing uses refreshed complete-run file durations; the remaining whole-job costs still need a green full run with healthy checkout timings before another cut. The optional native add-on builds are suppressed; coverage-on whole-job timing and the archiver wait still need measurement. [Detail](backlog/ci.md#a1398-2-slow-browser-test-files).
+- **A1398-2. Finish the four-minute target for dashboard and till jobs.** Measure the current dashboard and till jobs on a green full run with healthy checkout timings before another cut. The optional native add-on builds are suppressed; coverage-on whole-job timing and the archiver wait still need measurement. [Detail](backlog/ci.md#a1398-2-slow-browser-test-files).
 
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
 
