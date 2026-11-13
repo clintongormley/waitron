@@ -61,8 +61,6 @@ const VAT_CLASS_CHANGES: MadridVatClassChange[] = [
   ].map((image) => ({ product: madridProduct(image), old: "reduced", new: "super_reduced" })),
 ];
 
-// Sweetened soft drinks and alcoholic drinks sold as goods take the general rate
-// (LIVA art. 91.Uno.1.1.º excludes them; art. 90.Uno).
 const TAKEAWAY_DRINKS = {
   cola: {
     image: "5796adbb32bc1ed2781bb2ce4755d2b0d9ed7ff37226cfa8b4ff23335684cfeb.webp",

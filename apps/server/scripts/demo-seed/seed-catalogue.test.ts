@@ -179,7 +179,7 @@ describe("seedCatalogues", () => {
       ["Starters", { en: "Starters", es: "Primeros" }],
       ["Mains", { en: "Mains", es: "Segundos" }],
     ]);
-    expect(read.deli).toEqual(["Charcuterie", "Cheeses", "Conserves"]);
+    expect(read.deli).toEqual(["Charcuterie", "Cheeses", "Conserves", "Drinks to take away"]);
     expect(read.lunchNegroni).toMatchObject({ grossPrice: "9.00" });
     expect(read.lunchNegroni?.placements).toContainEqual([]);
     expect(read.lunchNegroni?.placements).toContainEqual(read.drinksPath);
