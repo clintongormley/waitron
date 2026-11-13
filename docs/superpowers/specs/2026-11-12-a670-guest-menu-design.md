@@ -1,5 +1,12 @@
 # A670: designed guest menus
 
+**13 November update:** the owner's 12 November 20:45 answer supersedes the paper-first
+recommendation and online-with-ordering sequence below. Read the
+[read-only online go-live study](2026-11-13-a670-online-go-live-study.md) and
+[printed-template comparison](2026-11-13-a670-printed-template-study.md) first. The PDF method
+question waits for the template choice. This document retains the earlier proposal and vocabulary;
+it is not a cleared build plan.
+
 **Proposal, 12 November 2026.** The owner requested a design, not these recommendations or a build.
 Authority: Lane D `~/waitron-campaign-d/questions.md`, 12:14 relay: “these menus are mixing
 concerns”, “why not just translate it now”, and “yes” to design first. The stopped
