@@ -135,8 +135,8 @@ Tracking starts with this feature. Invoices already held in a copy are not added
 list is not a complete history of earlier returns. The list does not identify duplicates.
 
 The report notice also tells you when returned invoices are recorded, independently of the dates
-you select. Open **Returned invoices** to check their original issue dates. Use the figures
-displayed in each report; do not add the list’s amounts to report totals.
+you select. Follow the notice’s **Check handover intervals** link; **Returned invoices** is below
+the intervals. Check the invoices’ original issue dates. Use the figures displayed in each report; do not add the list’s amounts to report totals.
 
 ## When a box is waiting for another box {#waiting}
 

@@ -151,8 +151,9 @@ por lo que una lista vacía no es un historial completo de devoluciones anterior
 identifica duplicados.
 
 El aviso de los informes también indica si hay facturas devueltas registradas, independientemente
-de las fechas que selecciones. Abre **Facturas devueltas** para comprobar sus fechas de expedición
-originales. Usa las cifras que muestra cada informe; no añadas los importes de la lista a los
+de las fechas que selecciones. Sigue el enlace **Comprobar los intervalos del traspaso** del aviso;
+**Facturas devueltas** está debajo de los intervalos. Comprueba las fechas de expedición originales
+de las facturas. Usa las cifras que muestra cada informe; no añadas los importes de la lista a los
 totales del informe.
 
 ## Cuando un equipo espera a otro equipo {#waiting}
