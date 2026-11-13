@@ -365,6 +365,8 @@ describe("capturing a stepped-down box's final copy", () => {
     expect(events).toHaveLength(1);
     expect(canonicalize(a as unknown as CanonicalValue)).toBe(events[0]!.envelope);
     expect(canonicalize(b as unknown as CanonicalValue)).toBe(events[0]!.envelope);
+    expect(existsSync(copyPath())).toBe(true);
+    expect(existsSync(join(otherState, "handover", OP, "venue.db"))).toBe(true);
   });
 
   it("a crash between the copy and the event: the next call captures again and records one event", async () => {

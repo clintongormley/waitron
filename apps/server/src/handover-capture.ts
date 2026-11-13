@@ -65,7 +65,7 @@ export function finalCopyPath(stateDir: string, operationId: string): string {
 
 const JOURNAL_TABLE = /^__drizzle_migrations_[a-z_]+$/;
 
-/** Captures sharing a destination must not write its archive at the same time. */
+/** Captures given the same destination path share one capture. */
 const inFlight = new Map<string, Promise<FinalStateEnvelope>>();
 
 /**
