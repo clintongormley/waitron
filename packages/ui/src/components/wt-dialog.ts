@@ -79,8 +79,13 @@ export class WtDialog extends LitElement {
         overflow: hidden;
       }
 
-      /* A body with nothing focusable gives opening focus to the box itself, which is not a control. */
-      dialog:focus-visible {
+      /* A body with nothing focusable gives opening focus to the box itself, which is not a control.
+         Chromium counts that focus as keyboard focus after a key press, such as the Escape that
+         closed an earlier dialog. The body takes opening focus the same way, but it is a tab stop,
+         so it loses only the opening focus's ring, until a key is pressed on it or focus leaves
+         it. */
+      dialog:focus-visible,
+      .body.opening-focus:focus-visible {
         outline: none;
       }
 
@@ -406,6 +411,20 @@ export class WtDialog extends LitElement {
     // it; a body with something to focus hands it on.
     if (this.shadowRoot!.activeElement === this.bodyEl && this.bodyTabStop === "overflow")
       this.focusFirstContent();
+    if (this.shadowRoot!.activeElement === this.bodyEl) this.bodyEl.classList.add("opening-focus");
+  }
+
+  private endOpeningFocus(): void {
+    this.bodyEl.classList.remove("opening-focus");
+  }
+
+  /** Whether the body still held its opening focus when it last lost focus. Taking the dialog off
+   * the page moves focus away before `showAgain` can look. */
+  private bodyLeftWithOpeningFocus = false;
+
+  private onBodyBlur(): void {
+    this.bodyLeftWithOpeningFocus = this.bodyEl.classList.contains("opening-focus");
+    this.endOpeningFocus();
   }
 
   /** Leaving the page takes a native dialog out of the top layer but leaves its `open` attribute,
@@ -433,6 +452,8 @@ export class WtDialog extends LitElement {
     this.dialog.close();
     this.showModalWithOpeningFocus();
     focused?.focus();
+    if (focused === this.bodyEl && this.shadowRoot!.activeElement === this.bodyEl)
+      this.bodyEl.classList.toggle("opening-focus", this.bodyLeftWithOpeningFocus);
     this.bodyEl.scrollTop = scrolled;
   }
 
@@ -632,7 +653,7 @@ export class WtDialog extends LitElement {
              aria-labelledby/aria-label from a dialog with no explicit role produced zero axe
              violations, even fully nameless; adding role="dialog" made the same break get
              flagged. Removing this attribute would silently blind wt-dialog.a11y.test.ts. -->
-        <div class="body">
+        <div class="body" @keydown=${this.endOpeningFocus} @blur=${this.onBodyBlur}>
           ${
             this.heading
               ? html`<div class="heading-row">
