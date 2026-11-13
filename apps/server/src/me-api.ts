@@ -86,6 +86,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.too_short": 400,
   "passkey.not_registered": 404,
   "person.email_taken": 409,
+  "person.last_admin": 409,
   "person.email_invalid": 400,
   "person.telephone_invalid": 400,
   "person.display_name_taken": 409,

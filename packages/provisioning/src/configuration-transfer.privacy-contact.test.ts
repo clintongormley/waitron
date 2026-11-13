@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { tenants, withTransaction, type Database } from "@waitron/db";
@@ -234,6 +235,11 @@ it("an import writes the privacy contact before the modules' afterImport hooks, 
 });
 
 it("an import with no taxpayer row finishes and creates none", async () => {
+  await seedPersons(suite.db, {
+    displayName: "Admin",
+    role: "admin",
+    passwordHash: "admin-password",
+  });
   await withTransaction(suite.db, async (tx) => {
     await seedVenue(tx);
     await tx.delete(tenants);

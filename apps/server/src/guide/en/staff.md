@@ -11,6 +11,9 @@ to roles and account status.
 
 ## Account access {#account-access}
 
+Keep at least one active admin who can sign in to the dashboard with a password, Google or a
+passkey. A PIN alone only gives access to the till.
+
 As an admin, you can add a person and send their invitation, resend an invitation, reset their
 PIN or login, and disable or re-enable their account. Resetting a PIN clears it; the person
 chooses its replacement. Resetting a login clears their credentials and sends a new invitation if

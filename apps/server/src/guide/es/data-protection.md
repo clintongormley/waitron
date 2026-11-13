@@ -550,7 +550,7 @@ cierra sus sesiones de caja; una sesión del panel pertenece a la persona. Por e
 abre **Usuarios** y elige **Restablecer acceso** para esa persona. Cierra todas sus sesiones,
 borra su PIN, su contraseña, sus llaves de acceso, su verificación en dos pasos, sus códigos de
 recuperación y su vínculo con Google, y le envía una nueva invitación si el correo está
-configurado. Waitron no lo permite para el único administrador activo del local. Si en el último
+configurado. Waitron no lo permite para el único administrador activo del local que pueda entrar al panel. Si en el último
 minuto ya se envió una invitación a esa persona, se restableció su acceso o se eligió **Habilitar
 y enviar invitación**, no cambia nada y te indica que esperes un minuto antes de volver a
 intentarlo. El navegador también guarda la dirección de correo de la persona si eligió **Recordar
@@ -568,7 +568,7 @@ el equipo envía los registros de facturación a la Agencia Tributaria y su cont
 pregunta a tu asesor cómo sustituirlo. El equipo también guarda la clave de recuperación, que abre
 tus copias programadas. La clave que protege los secretos de la verificación en dos pasos también
 está en el equipo, así que elige **Restablecer acceso** para cada persona que use la verificación en
-dos pasos. Waitron no permite **Restablecer acceso** para el único administrador activo, que en su
+dos pasos. Waitron no permite **Restablecer acceso** para el único administrador activo que pueda entrar al panel, que en su
 lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplicación de
 autenticación** y lo vuelve a configurar.
 
@@ -579,7 +579,7 @@ configurar la copia del bucket contiene la clave de acceso y el
 secreto de tu bucket y la clave de recuperación (el paquete la llama clave de copia), así que quien lo tenga puede leer toda la copia de la base de datos de tu
 bucket y desbloquear las contraseñas y claves guardadas en ella, incluida la clave que protege los
 secretos de la verificación en dos pasos, así que elige también **Restablecer acceso** para cada
-persona que la use. Waitron no permite **Restablecer acceso** para el único administrador activo,
+persona que la use. Waitron no permite **Restablecer acceso** para el único administrador activo que pueda entrar al panel,
 que en su lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplicación de
 autenticación** y lo vuelve a configurar. La clave de recuperación también abre tus copias
 programadas, allí donde esa

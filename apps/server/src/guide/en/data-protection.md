@@ -504,7 +504,7 @@ the copies of each person's data. A deleted device can still ask to come back an
 sign-ins; a dashboard sign-in belongs to the person. So an admin opens **Users** and chooses
 **Reset login** for that person. It signs them out everywhere, deletes their PIN, password,
 passkeys, two-factor settings, recovery codes and Google link, and sends them a new invitation if
-email is set up. Waitron refuses it for the venue's only active admin. Within a minute of an
+email is set up. Waitron refuses it for the venue's only active admin who can sign in to the dashboard. Within a minute of an
 earlier invitation, **Reset login** or **Enable and send invitation** for the same person, it
 changes nothing and tells you to wait a minute before trying again. The browser also keeps the
 person's email address if they chose **Remember my email on this device** when signing in. If the
@@ -519,7 +519,7 @@ provider, your bucket's access keys included. Among them are the certificate the
 invoice records to the Tax Agency and its passphrase, so ask your adviser how to replace it. The box
 also keeps the recovery key, which opens your scheduled backups. The key that protects two-factor
 secrets is on the box too, so choose **Reset login** for each person who uses two-factor sign-in.
-Waitron refuses **Reset login** for the venue's only active admin, who instead opens **Account
+Waitron refuses **Reset login** for the venue's only active admin who can sign in to the dashboard, who instead opens **Account
 settings**, chooses **Disable** beside **Authenticator app**, and sets it up again.
 
 **A lost recovery pack.** The pack made during first setup holds only the server key, which a
@@ -527,8 +527,7 @@ recovery needs alongside access to a copy; to replace it, see the end of this se
 on **Backups** after you set up the bucket copy holds your bucket's access
 key and secret and the recovery key (the pack calls it the backup key), so whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
 stored in it, including the key that protects two-factor secrets, so also choose **Reset login** for
-each person who uses two-factor sign-in. Waitron refuses **Reset login** for the venue's only
-active admin, who instead opens **Account settings**, chooses **Disable** beside **Authenticator
+each person who uses two-factor sign-in. Waitron refuses **Reset login** for the venue's only active admin who can sign in to the dashboard, who instead opens **Account settings**, chooses **Disable** beside **Authenticator
 app**, and sets it up again. The recovery key also opens your scheduled backups,
 wherever that person can reach them. Revoke the old access keys at your bucket provider, which
 Waitron cannot do for you. Then, on **Backups**, choose **Change bucket** and enter the new keys. If

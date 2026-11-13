@@ -353,6 +353,9 @@ describe("the running server's managers' email check", () => {
     const booted: Booted = {};
     try {
       await bootServer(booted, venue, { intent: "prepare", development: false });
+      expect(holder.mail!.owners).toContainEqual(
+        expect.objectContaining({ kind: "email_changed", deliveryRule: "notice" }),
+      );
       await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe("smtp");
       await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("smtp");
       expect(

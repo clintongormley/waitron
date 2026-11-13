@@ -44,6 +44,7 @@ it("records the editor without addresses and queues the old-address notice for o
     personId: actor.personId,
     data: {},
   });
+  expect(entries[0]!.data).toEqual({});
   const [editor] = await suite.db.select().from(persons).where(eq(persons.id, actor.personId));
   const mail = await suite.db.select().from(outgoingMail);
   expect(mail).toHaveLength(1);
@@ -86,5 +87,23 @@ it("rolls back the email, log and queue together", async () => {
   const [person] = await suite.db.select().from(persons).where(eq(persons.id, target.id));
   expect(person!.email).toBe("old@example.test");
   expect(await suite.db.select().from(activityLog)).toEqual([]);
+  expect(await suite.db.select().from(outgoingMail)).toEqual([]);
+});
+
+it("records a first email without queuing a notice to a nonexistent old address", async () => {
+  const { target, actor, input } = await fixture();
+  await suite.db
+    .update(persons)
+    .set({ email: null, emailFolded: null })
+    .where(eq(persons.id, target.id));
+  await withTransaction(suite.db, (tx) => updatePersonDetails(tx, input));
+  const entries = await suite.db.select().from(activityLog);
+  expect(entries).toHaveLength(1);
+  expect(entries[0]).toMatchObject({
+    kind: "person.email_changed",
+    subjectId: target.id,
+    personId: actor.personId,
+  });
+  expect(entries[0]!.data).toEqual({});
   expect(await suite.db.select().from(outgoingMail)).toEqual([]);
 });

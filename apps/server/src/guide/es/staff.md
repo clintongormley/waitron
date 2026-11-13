@@ -11,6 +11,9 @@ se aplica al rol y al estado de la cuenta.
 
 ## Acceso a la cuenta {#account-access}
 
+Mantén al menos un administrador activo que pueda entrar al panel con contraseña, Google o una
+llave de acceso. Un PIN solo permite entrar en la caja.
+
 Como administrador, puedes añadir personas y enviar su invitación, reenviar una invitación,
 restablecer el PIN o el acceso, y deshabilitar o volver a habilitar cuentas. Restablecer el PIN
 lo borra; la persona elige el nuevo. Restablecer el acceso borra sus credenciales y envía una
