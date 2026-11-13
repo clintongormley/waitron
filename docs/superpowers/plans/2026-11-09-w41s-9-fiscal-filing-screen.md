@@ -375,7 +375,9 @@ environment (`readDeploymentEnvironment`), in two set-based queries:
 
   Corrected 2026-11-11 after review: the earlier identity is the one inserted just before, among
   the taxpayer's identities with an activation row or records in that environment, whether or not
-  it holds records; when it holds none, the entry says the box holds no invoice under it.
+  it holds records; when it holds none, the entry says the box holds no invoice under it. This
+  departure was approved by the watcher on 2026-11-11 at 04:35 (a watcher decision, not the
+  owner's; lane L's questions.md).
 
 **Wording.** The same rule must be true after a restore, an emergency promotion and a conflict
 switch on the same box. So the screen says only: "The fiscal identity changed from {earlier} to
