@@ -377,8 +377,8 @@ it("says plainly what Send again does to a correction whose answer was lost, in 
 
 it("says Send again got no answer either, in both languages", () => {
   expect([en["invoice_correction.still_lost"], es["invoice_correction.still_lost"]]).toEqual([
-    "Still no answer. Check this till's connection, then send again.",
-    "Sigue sin respuesta. Comprueba la conexión de esta caja y vuelve a enviar.",
+    "Still no answer. Check this till's connection to the server, then send again.",
+    "Sigue sin respuesta. Comprueba la conexión de esta caja con el servidor y vuelve a enviar.",
   ]);
 });
 

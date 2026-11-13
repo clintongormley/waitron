@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { findAdjustmentReason } from "@waitron/adjustments";
 import {
   formatInvoiceNumber,
@@ -13,7 +13,9 @@ import {
   deviceProfiles,
   devices,
   invoiceCorrections,
+  invoiceSeries,
   readLiveSeriesIdTx,
+  sales,
   saleSettlements,
   type Transaction,
 } from "@waitron/db";
@@ -39,8 +41,10 @@ import { invalid, MONEY } from "./bill-allocation.js";
 import { deviceProfileJoin } from "./device-session.js";
 import {
   readCorrectionLegs,
+  readCorrectionLegsOf,
   readCorrectionMoney,
   readCorrectionRow,
+  type CorrectionLegs,
   refuseWhileCorrectionOpen,
   type InvoiceCorrectionRow,
 } from "./invoice-correction-legs.js";
@@ -276,11 +280,14 @@ export async function readInvoiceCorrection(
 }
 
 async function summaryOf(tx: Transaction, correctionId: string) {
-  const row = await readCorrectionRow(tx, correctionId);
-  const {
-    refunds,
-    money: { completed: back, pending },
-  } = await readCorrectionLegs(tx, correctionId);
+  return summaryFrom(
+    await readCorrectionRow(tx, correctionId),
+    await readCorrectionLegs(tx, correctionId),
+  );
+}
+
+function summaryFrom(row: InvoiceCorrectionRow, { refunds, money }: CorrectionLegs) {
+  const { completed: back, pending } = money;
   const view: Omit<InvoiceCorrectionView, "fileNow"> = {
     id: row.id,
     saleId: row.originalSaleId,
@@ -298,25 +305,28 @@ async function summaryOf(tx: Transaction, correctionId: string) {
 }
 
 /** The open corrections whose invoice's working order `inZones` admits, oldest first, each without
- * `fileNow` and with the number of the invoice it corrects. */
+ * `fileNow` and with the number of the invoice it corrects; two reads whatever their number. */
 export async function listOpenInvoiceCorrections(
   tx: Transaction,
   inZones?: OrderZoneCondition,
 ): Promise<(Omit<InvoiceCorrectionView, "fileNow"> & { invoiceNumber: string })[]> {
-  const rows = await tx.execute<{ id: string; code: string; number: number }>(sql`select c.id,
-      sr.code, s.invoice_number as number
-    from invoice_corrections c
-    join sales s on s.id = c.original_sale_id
-    join invoice_series sr on sr.id = s.series_id
-    where c.state = 'open' and (${inZones?.(sql`s.working_order_id`) ?? sql`1`})
-    order by c.created_at, c.id`);
-  const views: (Omit<InvoiceCorrectionView, "fileNow"> & { invoiceNumber: string })[] = [];
-  for (const { id, code, number } of rows.rows)
-    views.push({
-      ...(await summaryOf(tx, id)).view,
-      invoiceNumber: formatInvoiceNumber(code, number),
-    });
-  return views;
+  const rows = await tx
+    .select({ row: invoiceCorrections, code: invoiceSeries.code, number: sales.invoiceNumber })
+    .from(invoiceCorrections)
+    .innerJoin(sales, eq(sales.id, invoiceCorrections.originalSaleId))
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .where(
+      and(eq(invoiceCorrections.state, "open"), inZones?.(sql`${sales.workingOrderId}`) ?? sql`1`),
+    )
+    .orderBy(asc(invoiceCorrections.createdAt), asc(invoiceCorrections.id));
+  const legs = await readCorrectionLegsOf(
+    tx,
+    rows.map(({ row }) => row.id),
+  );
+  return rows.map(({ row, code, number }) => ({
+    ...summaryFrom(row, legs.get(row.id)!).view,
+    invoiceNumber: formatInvoiceNumber(code, number),
+  }));
 }
 
 /**

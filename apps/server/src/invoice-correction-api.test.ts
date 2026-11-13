@@ -28,6 +28,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { readBillEditState } from "./bill-editing.js";
+import { listOpenInvoiceCorrections } from "./invoice-corrections.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { parkOrder, readInvoiceNumber } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -551,6 +552,66 @@ describe("GET /api/invoice-corrections", () => {
     expect(ids).toEqual(expect.arrayContaining([here, there]));
     expect(ids).not.toContain(filed);
     await serveOnly(venue.zoneId);
+  });
+
+  it("lists each open correction as reading it alone shows it, money back and refunds included", async () => {
+    const ids = [
+      await opened(await sold(["10.00"])),
+      await opened(await sold(["10.00"])),
+      await opened(await sold(["10.00"])),
+    ];
+    expect((await giveCash(ids[0]!, cashBody({ amount: "2.00" }))).status).toBe(200);
+    expect((await giveCash(ids[1]!, cashBody({ amount: "1.00" }))).status).toBe(200);
+
+    const listed = (await list()).json.corrections as Record<string, unknown>[];
+    for (const id of ids) {
+      const { fileNow, ...alone } = (await read(id)).json as Record<string, unknown>;
+      void fileNow;
+      expect(listed.find((correction) => correction.id === id)).toEqual({
+        ...alone,
+        invoiceNumber: expect.any(String),
+      });
+    }
+    expect(
+      ids.map((id) => {
+        const found = listed.find((correction) => correction.id === id)!;
+        return [found.moneyBack, found.left, (found.legs as unknown[]).length];
+      }),
+    ).toEqual([
+      ["2.00", "3.00", 1],
+      ["1.00", "4.00", 1],
+      ["0.00", "5.00", 0],
+    ]);
+  });
+
+  it("reads the list in the same number of statements however many corrections are open", async () => {
+    const statementsFor = () =>
+      inTx(venue, async (tx) => {
+        let statements = 0;
+        const counted = new Proxy(tx, {
+          get(target, prop) {
+            const value: unknown = Reflect.get(target, prop, target);
+            if (typeof value !== "function") return value;
+            if (["execute", "select", "all", "get", "run", "values"].includes(String(prop)))
+              return (...args: unknown[]) => {
+                statements += 1;
+                return (value as (...a: unknown[]) => unknown).apply(target, args);
+              };
+            return value.bind(target);
+          },
+        });
+        const corrections = await listOpenInvoiceCorrections(counted);
+        return { statements, rows: corrections.length };
+      });
+    const before = await statementsFor();
+    const id = await opened(await sold(["10.00"]));
+    expect((await giveCash(id, cashBody({ amount: "1.00" }))).status).toBe(200);
+    await opened(await sold(["10.00"]));
+    await opened(await sold(["10.00"]));
+    const after = await statementsFor();
+
+    expect(after.rows).toBe(before.rows + 3);
+    expect(after.statements).toBe(before.statements);
   });
 
   it("names each correction's invoice by its number", async () => {

@@ -724,6 +724,25 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
     expect(stillLost()).toBeNull();
   });
 
+  it("shows above the buttons why Send again was refused when the answer did arrive", async () => {
+    const api = sendingApi();
+    api.openInvoiceCorrection
+      .mockRejectedValueOnce(lost())
+      .mockRejectedValueOnce(refused("clock.unconfirmed"));
+    const { el } = await mountSending(api);
+
+    await confirmCorrection(el);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-saved]")).not.toBeNull());
+    resend(el).click();
+    await vi.waitFor(() =>
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        codeMessage("clock.unconfirmed"),
+      ),
+    );
+    expect(root(el).querySelector("[data-saved]")).not.toBeNull();
+    expect(root(el).querySelector("[data-still-lost]")).toBeNull();
+  });
+
   it("opens a saved Open with focus on Send again", async () => {
     const session = new InvoiceCorrectionSession(SCOPE, {
       openInvoiceCorrection: () => Promise.reject(lost()),

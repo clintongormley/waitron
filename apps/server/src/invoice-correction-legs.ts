@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   invoiceCorrectionRefunds,
   invoiceCorrections,
@@ -6,6 +6,7 @@ import {
   tenders,
   type Transaction,
 } from "@waitron/db";
+import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import "./errors.js";
@@ -38,23 +39,59 @@ export interface CorrectionMoney {
 export async function readCorrectionLegs(
   tx: Transaction,
   correctionId: string,
-): Promise<{
+): Promise<CorrectionLegs> {
+  return (await readCorrectionLegsOf(tx, [correctionId])).get(correctionId)!;
+}
+
+export interface CorrectionLegs {
   refunds: (typeof tenderRefunds.$inferSelect)[];
   requestIds: string[];
   money: CorrectionMoney;
-}> {
-  const links = await tx
-    .select({ refund: tenderRefunds, requestId: invoiceCorrectionRefunds.requestId })
-    .from(invoiceCorrectionRefunds)
-    .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId))
-    .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
-    .where(eq(invoiceCorrectionRefunds.invoiceCorrectionId, correctionId))
-    .orderBy(
-      asc(invoiceCorrectionRefunds.createdAt),
-      asc(tenders.settledAt),
-      asc(tenders.id),
-      asc(invoiceCorrectionRefunds.id),
+}
+
+/** {@link readCorrectionLegs} of each named correction, by correction id, in one read per
+ * {@link SQL_VARIABLE_LIMIT} ids. */
+export async function readCorrectionLegsOf(
+  tx: Transaction,
+  correctionIds: readonly string[],
+): Promise<Map<string, CorrectionLegs>> {
+  const links: {
+    correctionId: string;
+    refund: typeof tenderRefunds.$inferSelect;
+    requestId: string;
+  }[] = [];
+  for (let start = 0; start < correctionIds.length; start += SQL_VARIABLE_LIMIT)
+    links.push(
+      ...(await tx
+        .select({
+          correctionId: invoiceCorrectionRefunds.invoiceCorrectionId,
+          refund: tenderRefunds,
+          requestId: invoiceCorrectionRefunds.requestId,
+        })
+        .from(invoiceCorrectionRefunds)
+        .innerJoin(tenderRefunds, eq(tenderRefunds.id, invoiceCorrectionRefunds.tenderRefundId))
+        .innerJoin(tenders, eq(tenders.id, tenderRefunds.tenderId))
+        .where(
+          inArray(
+            invoiceCorrectionRefunds.invoiceCorrectionId,
+            correctionIds.slice(start, start + SQL_VARIABLE_LIMIT),
+          ),
+        )
+        .orderBy(
+          asc(invoiceCorrectionRefunds.createdAt),
+          asc(tenders.settledAt),
+          asc(tenders.id),
+          asc(invoiceCorrectionRefunds.id),
+        )),
     );
+  const legs = new Map(correctionIds.map((id) => [id, [] as typeof links]));
+  for (const link of links) legs.get(link.correctionId)!.push(link);
+  return new Map([...legs].map(([id, own]) => [id, legsOf(own)]));
+}
+
+function legsOf(
+  links: readonly { refund: typeof tenderRefunds.$inferSelect; requestId: string }[],
+): CorrectionLegs {
   const refunds = links.map(({ refund }) => refund);
   const money: CorrectionMoney = {
     completed: 0,
