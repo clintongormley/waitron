@@ -287,7 +287,8 @@ export async function combineParties(
       guestCount: combinedGuests(fromParty.guestCount, intoParty.guestCount),
       billRequestedAt:
         fromParty.billRequestedAt === null ||
-        (intoParty.billRequestedAt !== null && intoParty.billRequestedAt < fromParty.billRequestedAt)
+        (intoParty.billRequestedAt !== null &&
+          intoParty.billRequestedAt < fromParty.billRequestedAt)
           ? intoParty.billRequestedAt
           : fromParty.billRequestedAt,
       name: intoParty.name ?? fromParty.name,
