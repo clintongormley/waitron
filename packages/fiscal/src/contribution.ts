@@ -164,9 +164,11 @@ export interface FiscalOutboxSeat {
 export interface FiscalDeclarationsSeat {
   /** Stores the declaration of `entry.version` unless that version is already kept. */
   keep(tx: Transaction, entry: { version: string; text: string; at: Date }): Promise<void>;
-  /** Every kept version, in no particular order. */
+  /** Every kept version, in no particular order. Select-only; the host calls it on the database
+   * itself, in no transaction and no write-lock turn. */
   versions(tx: Transaction): Promise<string[]>;
-  /** The kept text of one version, or null when it was never kept. */
+  /** The kept text of one version, or null when it was never kept. Select-only; called as
+   * `versions` is. */
   text(tx: Transaction, version: string): Promise<string | null>;
 }
 

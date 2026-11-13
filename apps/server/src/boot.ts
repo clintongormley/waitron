@@ -374,10 +374,11 @@ import { mountDiscovery } from "./discovery-api.js";
 import { mountGuidePages } from "./guide-pages.js";
 import {
   declarationRoot,
+  type DeclarationPagesDeps,
   type KeptDeclarations,
   mountDeclarationPages,
 } from "./declaration-pages.js";
-import { keepRunningDeclaration } from "./keep-declaration.js";
+import { keepRunningDeclaration, keptDeclarationsReader } from "./keep-declaration.js";
 import {
   startMdnsResponder,
   watchVenueNameInSetup,
@@ -892,6 +893,7 @@ function landingHostFor(config: LandingListenerConfig, spare: boolean): LandingL
 export function startLandingListener(
   config: LandingListenerConfig,
   log: Logger,
+  declarationPages: DeclarationPagesDeps = {},
 ): { close(): Promise<void> } | undefined {
   if (
     config.landingPort === 0 ||
@@ -914,6 +916,7 @@ export function startLandingListener(
     connection: config.connection,
     landingPort: config.landingPort,
     connectionHostnames: BOX_LEAF_HOSTNAMES,
+    declarationPages,
   });
   const server = serve(
     buildServeOptions(
@@ -1405,11 +1408,8 @@ async function bootServer(
   mountGuidePages(app, {}, log);
   const releaseDeclaration = seams.declarationRoot ?? declarationRoot();
   let keptDeclarations: KeptDeclarations | undefined;
-  mountDeclarationPages(
-    app,
-    { root: releaseDeclaration, build, kept: () => keptDeclarations },
-    log,
-  );
+  const declarationPages = { root: releaseDeclaration, build, kept: () => keptDeclarations };
+  mountDeclarationPages(app, declarationPages, log);
 
   if (config.node === undefined) {
     // SETUP MODE — this box is bound to no venue. Beyond the routes mounted above, it serves
@@ -2255,6 +2255,9 @@ async function bootServer(
   // Resolved through the generic slot so `boot.ts` names no regime package
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
+  const declarationsSeat = enabledFiscal.declarations;
+  if (declarationsSeat !== undefined)
+    keptDeclarations = keptDeclarationsReader(db, declarationsSeat);
   const startClock = startClockState();
   // Bound once the clock correction is built below; until then no set can be with the host.
   let clockSetting = () => false;
@@ -2426,25 +2429,17 @@ async function bootServer(
         closePools: () => store.close(),
       },
       { stop: () => Promise.resolve() },
-      startLandingListener(landingHostFor(config, isMirror), log),
+      startLandingListener(landingHostFor(config, isMirror), log, declarationPages),
     );
   }
-  if (acceptingSales) {
+  if (acceptingSales && declarationsSeat !== undefined) {
     await keepRunningDeclaration({
       root: releaseDeclaration,
-      seat: enabledFiscal.declarations,
+      seat: declarationsSeat,
       db,
       now,
       log,
     });
-  }
-  const declarations = enabledFiscal.declarations;
-  if (declarations !== undefined) {
-    // Write-lock turns with no change-list drain, so the page answers on a nearly full disk.
-    keptDeclarations = {
-      versions: () => db.withWriteLock(() => declarations.versions(db)),
-      text: (version) => db.withWriteLock(() => declarations.text(db, version)),
-    };
   }
   tradingAdmission.admit();
   const jobRunner = createJobRunner({ now, log });
@@ -4281,7 +4276,7 @@ async function bootServer(
       closePools: () => store.close(),
     },
     mdns,
-    startLandingListener(landingHostFor(config, isMirror), log),
+    startLandingListener(landingHostFor(config, isMirror), log, declarationPages),
     // Decided once at boot: a box exposes one in-process promote, never both.
     isMirror
       ? { kind: "mirror" as const, run: promoteMirrorRun }

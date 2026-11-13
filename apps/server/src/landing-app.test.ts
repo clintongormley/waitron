@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, beforeAll } from "vitest";
 import { buildLandingApp } from "./landing-app.js";
-import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
+import { DECLARATION_LINK_WORDS, DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
+import { writeDeclarationFolder } from "./testing/declaration-folder.js";
 
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 let material: SelfSignedMaterial;
@@ -248,6 +249,52 @@ it.each(["trust page", "connection repair"] as const)(
       const page = await app.request("http://waitron.local/legal/declaration");
       expect(page.status).toBe(404);
       expect(await page.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+it.each(["trust page", "connection repair"] as const)(
+  "lists and serves the venue's earlier declarations over plain HTTP on the %s",
+  async (shape) => {
+    const dir = stateDirWithCa();
+    try {
+      const root = join(dir, "declaration");
+      await writeDeclarationFolder(root);
+      const kept = () => ({
+        versions: () => Promise.resolve(["1.0.0"]),
+        text: (version: string) => Promise.resolve(version === "1.0.0" ? "kept 1.0.0" : null),
+      });
+      const app = buildLandingApp({
+        stateDir: dir,
+        reachUrls: ["https://waitron.local"],
+        httpsUrl: "https://waitron.local",
+        log: () => {},
+        declarationPages: { root, kept },
+        ...(shape === "connection repair"
+          ? {
+              connection: {
+                stateDir: dir,
+                hostnames: ["waitron.local"],
+                listIpv4: () => [],
+                now: () => new Date(),
+                origins: ["http://waitron.local"],
+                reachUrls: ["https://waitron.local"],
+                onRepaired: async () => {},
+                log: () => {},
+              },
+            }
+          : {}),
+      });
+      const page = await app.request("http://waitron.local/legal/declaration");
+      expect(page.status).toBe(200);
+      expect(await page.text()).toContain(
+        `<h2>${DECLARATION_LINK_WORDS.earlierTitle}</h2>\n<ul>\n<li><a href="/legal/declaration/1.0.0.txt">`,
+      );
+      const text = await app.request("http://waitron.local/legal/declaration/1.0.0.txt");
+      expect(text.status).toBe(200);
+      expect(await text.text()).toBe("kept 1.0.0");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -53,7 +53,7 @@ import { menuActivationJob } from "./menu-activation.js";
 import { readVenueDetails } from "./venue-details.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
-import { writeDeclarationFolder } from "./testing/declaration-folder.js";
+import { TEST_RELEASE, writeDeclarationFolder } from "./testing/declaration-folder.js";
 import {
   copyMigrationsRoot,
   withMockedKill,
@@ -443,19 +443,28 @@ describe("startup zone admission", () => {
     expect((await (await request("/api/node")).json()).acceptingSales).toBe(false);
     expect(suite.db.all(sql`select version from declaraciones_responsables`)).toEqual([]);
   });
-  it("shows the venue's kept declarations only on a start that goes on to sell", async () => {
+  it("shows the venue's kept declarations in repair, and keeps the running one only on a start that goes on to sell", async () => {
     suite.db.run(
       sql`insert into declaraciones_responsables (version, text, first_started_at) values ('1.0.0', 'kept 1.0.0', '2026-01-01T00:00:00.000Z')`,
     );
-    for (const [zone, status] of [
-      ["Invalid/Zone", 404],
-      ["Europe/Madrid", 200],
+    const declaration = join(scratch, "running-declaration");
+    await writeDeclarationFolder(declaration);
+    for (const [zone, kept] of [
+      ["Invalid/Zone", ["1.0.0"]],
+      ["Europe/Madrid", ["1.0.0", TEST_RELEASE.version]],
     ] as const) {
       await rawZone(zone);
-      await boot();
+      await boot({ declarationRoot: declaration });
       const read = await request("/legal/declaration/1.0.0.txt");
-      expect({ zone, status: read.status }).toEqual({ zone, status });
-      if (status === 200) expect(await read.text()).toBe("kept 1.0.0");
+      expect({ zone, status: read.status, text: await read.text() }).toEqual({
+        zone,
+        status: 200,
+        text: "kept 1.0.0",
+      });
+      const rows = suite.db.all<{ version: string }>(
+        sql`select version from declaraciones_responsables order by version`,
+      );
+      expect({ zone, kept: rows.map((row) => row.version) }).toEqual({ zone, kept });
       await server!.close();
       server = undefined;
     }

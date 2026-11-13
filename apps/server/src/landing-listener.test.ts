@@ -150,6 +150,23 @@ describe("startLandingListener", () => {
     }
   });
 
+  it("hands the declaration pages it is given to the landing app", async () => {
+    const stateDir = await stateDirWithLeaf();
+    const port = await freePort();
+    const handle = startLandingListener(configFor({ landingPort: port, stateDir }), noopLog, {
+      kept: () => ({
+        versions: () => Promise.resolve([]),
+        text: (version) => Promise.resolve(version === "1.0.0" ? "kept 1.0.0" : null),
+      }),
+    });
+    try {
+      expect(await getStatus(port, "/legal/declaration/1.0.0.txt")).toBe(200);
+      expect(await getStatus(port, "/legal/declaration/2.0.0.txt")).toBe(404);
+    } finally {
+      await handle?.close();
+    }
+  });
+
   it("returns undefined when the landing port is 0 (disabled)", async () => {
     const stateDir = await stateDirWithLeaf();
     expect(startLandingListener(configFor({ landingPort: 0, stateDir }), noopLog)).toBeUndefined();
