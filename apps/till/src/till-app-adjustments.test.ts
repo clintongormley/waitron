@@ -4460,6 +4460,68 @@ describe("till-app: service cancellation consent", () => {
       expect(correcting()).toBeNull();
     });
 
+    it("gives a correction's card leg through Refund a payment, then has the correction read again", async () => {
+      const card = {
+        ...cash,
+        tenderId: "44444444-4444-4444-8444-444444444444",
+        method: "card",
+        last4: "0042",
+        tipRemaining: "0.00",
+      };
+      const refundTransaction = vi
+        .fn()
+        .mockResolvedValue({ ...refunded, tenderId: card.tenderId, appliedAmount: "6.05" });
+      const methods = paidMethods({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          capabilities: [...till.capabilities, "take-cash", "integrated-card-payment"],
+        }),
+        readInvoiceCorrectionLines: vi.fn(() => new Promise(() => {})),
+        getRefundableTenders: vi.fn().mockResolvedValue([cash, card]),
+        refundTransaction,
+      });
+      const { el } = await mountApp(methods);
+      await openTable4(el);
+      await chooseRefund(el);
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      emit(refundForm(el)!, "tender-refund-close");
+      await flush(el);
+      emit(ticket(el)!, "invoice-correction-open");
+      await flush(el);
+      const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog")!;
+      expect(correcting().legsRevision).toBe(0);
+
+      emit(correcting(), "invoice-correction-card", {
+        correctionId: "correction-1",
+        target: "6.05",
+        startReasonId: "r-mistake",
+      });
+      await expect.poll(() => refundForm(el)).not.toBeNull();
+      expect([refundForm(el)!.target, refundForm(el)!.startReasonId]).toEqual([
+        "6.05",
+        "r-mistake",
+      ]);
+      emit(refundForm(el)!, "tender-refund-submit", {
+        tenderId: card.tenderId,
+        appliedAmount: "6.05",
+        tipAmount: "0.00",
+        reason: "Mistake",
+        manualConfirmed: false,
+      });
+      await expect.poll(() => refundForm(el)).toBeNull();
+      expect(refundTransaction).toHaveBeenCalledWith("own-sale", {
+        tenderId: card.tenderId,
+        appliedAmount: "6.05",
+        tipAmount: "0.00",
+        reason: "Mistake",
+        manualConfirmed: false,
+        invoiceCorrectionId: "correction-1",
+        submissionId: expect.any(String),
+      });
+      expect(correcting().legsRevision).toBe(1);
+      expect(correcting().session).toBeDefined();
+    });
+
     it("reports a transaction load failure after the kitchen write without reopening a cancellation", async () => {
       const methods = paidMethods({
         getTransactionReceipt: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),

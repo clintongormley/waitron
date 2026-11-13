@@ -24,6 +24,11 @@ export interface InvoiceCorrectionCashRequest {
   override?: { personId: string; pin: string };
 }
 
+export interface InvoiceCorrectionFileRequest {
+  expectedSplit: CorrectionSplitLine[];
+  override?: { personId: string; pin: string };
+}
+
 export interface InvoiceCorrectionView {
   id: string;
   saleId: string;

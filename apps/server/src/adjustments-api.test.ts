@@ -1286,6 +1286,18 @@ describe("what the till reads", () => {
       { code: "management.request_invalid", params: { field: "permission" } },
     ]);
   });
+  it("lists who may correct an invoice, for the till's PIN sign-in", async () => {
+    const answer = await send(
+      venue.app,
+      venue.cookie.staff,
+      "GET",
+      "/api/adjustment-approvers?permission=sale.rectify",
+    );
+    expect(answer.status).toBe(200);
+    const ids = (answer.json as unknown as { personId: string }[]).map((person) => person.personId);
+    expect(ids).toContain(venue.managerId);
+    expect(ids).not.toContain(venue.staffId);
+  });
   it("lists the reasons in the operator's language", async () => {
     const answer = await send(venue.app, venue.cookie.staff, "GET", "/api/adjustment-reasons");
     expect(answer.status).toBe(200);

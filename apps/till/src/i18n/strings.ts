@@ -149,6 +149,33 @@ export const en = {
   "invoice_correction.refundable": "{amount} can still be given back, from these payments:",
   "invoice_correction.confirm": "Correct and refund {amount}",
   "invoice_correction.confirm_any": "Correct and refund",
+  "invoice_correction.back": "{back} given back so far, of {gross}.",
+  "invoice_correction.left_back": "{amount} left to give back.",
+  "invoice_correction.pending": "{amount} is waiting for the card company's answer.",
+  "invoice_correction.check_again": "Check again",
+  "invoice_correction.give_cash": "Give back {amount} in cash",
+  "invoice_correction.give_cash_hint": "The cash drawer opens.",
+  "invoice_correction.cash_given": "Give the customer {amount} in cash.",
+  "invoice_correction.refund_card": "Refund to card",
+  "invoice_correction.refund_card_hint": "Opens Refund a payment for this correction.",
+  "invoice_correction.finish_now": "Finish now",
+  "invoice_correction.finish_now_hint":
+    "Files a corrective invoice for the {amount} given back, and gives no more back.",
+  "invoice_correction.record": "Record correction",
+  "invoice_correction.record_hint": "Files the corrective invoice for the {amount} given back.",
+  "invoice_correction.discard": "Discard",
+  "invoice_correction.discard_hint":
+    "Ends the correction. Nothing was given back, so nothing is filed.",
+  "invoice_correction.close_keeping": "Close keeping the refunds",
+  "invoice_correction.close_keeping_hint":
+    "Ends the correction without a corrective invoice. The money given back stays given back.",
+  "invoice_correction.filed": "Corrective invoice filed for {amount}.",
+  "invoice_correction.closed":
+    "Correction closed without a corrective invoice. The {amount} given back stays given back.",
+  "invoice_correction.discarded": "Correction discarded. Nothing was given back.",
+  "invoice_correction.unknown":
+    "The server's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
+  "invoice_correction.close": "Close",
   "tender_refund.left": "{amount} left to refund from another payment",
 
   "kitchen_note.changed": "Kitchen note changed",
@@ -2178,6 +2205,33 @@ export const es: Record<StringKey, string> = {
   "invoice_correction.refundable": "Aún se pueden devolver {amount}, de estos pagos:",
   "invoice_correction.confirm": "Rectificar y devolver {amount}",
   "invoice_correction.confirm_any": "Rectificar y devolver",
+  "invoice_correction.back": "Devueltos {back} hasta ahora, de {gross}.",
+  "invoice_correction.left_back": "Quedan {amount} por devolver.",
+  "invoice_correction.pending": "{amount} espera la respuesta de la entidad de la tarjeta.",
+  "invoice_correction.check_again": "Volver a consultar",
+  "invoice_correction.give_cash": "Devolver {amount} en efectivo",
+  "invoice_correction.give_cash_hint": "Se abre el cajón.",
+  "invoice_correction.cash_given": "Da al cliente {amount} en efectivo.",
+  "invoice_correction.refund_card": "Devolver a la tarjeta",
+  "invoice_correction.refund_card_hint": "Abre Devolver un pago para esta rectificación.",
+  "invoice_correction.finish_now": "Terminar ahora",
+  "invoice_correction.finish_now_hint":
+    "Presenta una factura rectificativa por los {amount} devueltos y no devuelve más.",
+  "invoice_correction.record": "Registrar la rectificación",
+  "invoice_correction.record_hint": "Presenta la factura rectificativa por los {amount} devueltos.",
+  "invoice_correction.discard": "Descartar",
+  "invoice_correction.discard_hint":
+    "Termina la rectificación. No se ha devuelto nada, así que no se presenta nada.",
+  "invoice_correction.close_keeping": "Cerrar y conservar las devoluciones",
+  "invoice_correction.close_keeping_hint":
+    "Termina la rectificación sin factura rectificativa. El dinero devuelto queda devuelto.",
+  "invoice_correction.filed": "Factura rectificativa presentada por {amount}.",
+  "invoice_correction.closed":
+    "Rectificación cerrada sin factura rectificativa. Los {amount} devueltos quedan devueltos.",
+  "invoice_correction.discarded": "Rectificación descartada. No se ha devuelto nada.",
+  "invoice_correction.unknown":
+    "No ha llegado la respuesta del servidor. Vuelve a pulsar: se envía la misma petición, así que nada ocurre dos veces.",
+  "invoice_correction.close": "Cerrar",
   "tender_refund.left": "Quedan {amount} por devolver de otro pago",
 
   "kitchen_note.changed": "Nota para cocina cambiada",

@@ -418,8 +418,40 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta cuenta no está pagada del todo, así que su factura aún no se puede rectificar.",
   },
   "invoice_correction.already_open": {
-    en: "A correction of this invoice is already under way. Finish it before starting another.",
-    es: "Ya hay una rectificación de esta factura en curso. Termínala antes de empezar otra.",
+    en: "A correction of this invoice is under way. Open Correct invoice to carry on with it.",
+    es: "Hay una rectificación de esta factura en curso. Abre Rectificar factura para continuarla.",
+  },
+  "invoice_correction.not_open": {
+    en: "This correction has already ended. Close this window to see the invoice as it is now.",
+    es: "Esta rectificación ya ha terminado. Cierra esta ventana para ver la factura como está ahora.",
+  },
+  "invoice_correction.not_found": {
+    en: "This correction no longer exists. Close this window and open Correct invoice again.",
+    es: "Esta rectificación ya no existe. Cierra esta ventana y vuelve a abrir Rectificar factura.",
+  },
+  "invoice_correction.leg_too_large": {
+    en: "That is more than this correction has left to give back. Give back no more than the amount shown as left.",
+    es: "Es más de lo que le queda por devolver a esta rectificación. Devuelve como mucho el importe que aparece pendiente.",
+  },
+  "invoice_correction.nothing_back": {
+    en: "No money has gone back yet, so there is nothing to file. Give money back first, or discard the correction.",
+    es: "Aún no se ha devuelto dinero, así que no hay nada que presentar. Devuelve dinero primero o descarta la rectificación.",
+  },
+  "invoice_correction.still_correctable": {
+    en: "Money has gone back and this correction can still be filed. Press Finish now to file it.",
+    es: "Ya se ha devuelto dinero y esta rectificación aún se puede presentar. Pulsa Terminar ahora para presentarla.",
+  },
+  "invoice_correction.cash_short": {
+    en: "This bill's cash payments hold less than that. Give the rest back on the card it was paid with.",
+    es: "Los pagos en efectivo de esta cuenta no llegan a ese importe. Devuelve el resto en la tarjeta con la que se pagó.",
+  },
+  "invoice_correction.cash_route_only": {
+    en: "Cash for a correction is given back from Correct invoice. Open Correct invoice to give it.",
+    es: "El efectivo de una rectificación se devuelve desde Rectificar factura. Abre Rectificar factura para devolverlo.",
+  },
+  "invoice_correction.split_changed": {
+    en: "The VAT split has changed since it was shown. Check the new split and press again.",
+    es: "El desglose del IVA ha cambiado desde que se mostró. Revisa el nuevo desglose y vuelve a pulsar.",
   },
   "invoice_correction.refund_pending": {
     en: "A refund of this bill is still waiting for its result. Check it under Refund a payment, then try again.",

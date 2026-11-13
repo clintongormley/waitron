@@ -949,3 +949,30 @@ it("words each reason a correction is not admitted, and any other reason as the 
     "Esta factura se anuló, así que no queda nada por rectificar.",
   );
 });
+
+it.each([
+  "invoice_correction.not_open",
+  "invoice_correction.not_found",
+  "invoice_correction.leg_too_large",
+  "invoice_correction.nothing_back",
+  "invoice_correction.still_correctable",
+  "invoice_correction.cash_short",
+  "invoice_correction.cash_route_only",
+  "invoice_correction.split_changed",
+])("explains the refusal %s of finishing a correction in English and Spanish", (code) => {
+  for (const locale of ["en", "es"]) {
+    expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown", locale));
+    expect(codeMessage(code, locale)).not.toContain(code);
+  }
+  expect(codeMessage(code, "en")).not.toMatch(/ask a manager/i);
+  expect(codeMessage(code, "es")).not.toMatch(/responsable/i);
+});
+
+it("tells staff an open correction carries on from Correct invoice", () => {
+  expect(codeMessage("invoice_correction.already_open", "en")).toBe(
+    "A correction of this invoice is under way. Open Correct invoice to carry on with it.",
+  );
+  expect(codeMessage("invoice_correction.already_open", "es")).toBe(
+    "Hay una rectificación de esta factura en curso. Abre Rectificar factura para continuarla.",
+  );
+});

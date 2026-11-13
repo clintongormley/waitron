@@ -36,6 +36,10 @@ const api: InvoiceCorrectionApi = {
   getRefundableTenders: async () => [],
   listAdjustmentReasons: async () => [reason],
   previewInvoiceCorrection: (saleId, request) => preview(saleId, request),
+  getInvoiceCorrection: vi.fn(),
+  fileInvoiceCorrection: vi.fn(),
+  closeInvoiceCorrection: vi.fn(),
+  listApprovers: vi.fn(),
 };
 const answered: InvoiceCorrectionApi["previewInvoiceCorrection"] = async (_saleId, request) => ({
   gross: request.gross,

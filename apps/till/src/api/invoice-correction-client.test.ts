@@ -110,3 +110,33 @@ it("previews a correction on the encoded invoice with the amount and lines", asy
     post(request),
   );
 });
+
+it("reads a correction on the encoded id, passing the signal", async () => {
+  const answer = { id: "correction/1", state: "open", moneyBack: "2.00", left: "4.05" };
+  const fetcher = vi.fn().mockResolvedValue(response(answer));
+  const signal = new AbortController().signal;
+  expect(await new TillApi("", fetcher).getInvoiceCorrection("correction/1", { signal })).toEqual(
+    answer,
+  );
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/invoice-corrections/correction%2F1", {
+    method: "GET",
+    credentials: "include",
+    signal,
+  });
+});
+
+it("files a correction with the split shown, and closes one, each with the PIN when given", async () => {
+  const answer = { id: "correction/1", state: "filed" };
+  const fetcher = vi.fn(async () => response(answer));
+  const api = new TillApi("", fetcher);
+  const filing = {
+    expectedSplit: [{ rate: "21.00", base: "1.65", tax: "0.35" }],
+    override: { personId: "manager", pin: "0123" },
+  };
+  expect(await api.fileInvoiceCorrection("correction/1", filing)).toEqual(answer);
+  expect(await api.closeInvoiceCorrection("correction/1", {})).toEqual(answer);
+  expect(fetcher.mock.calls).toEqual([
+    ["/api/invoice-corrections/correction%2F1/file", post(filing)],
+    ["/api/invoice-corrections/correction%2F1/close", post({})],
+  ]);
+});
