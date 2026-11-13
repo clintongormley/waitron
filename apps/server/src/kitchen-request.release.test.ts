@@ -15,7 +15,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setRoutingCell, setStationToday, ticketItemAllergies } from "@waitron/venue-service";
+import { setRoutingCell, setStationToday } from "@waitron/venue-service";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { setStationPrinting } from "./testing/station-printing.js";
@@ -91,9 +91,13 @@ async function orderRevision(tx: Transaction, orderId: string): Promise<number> 
 
 async function allergyCopies(tx: Transaction, ticketItemId: string) {
   return tx
-    .select()
-    .from(ticketItemAllergies)
-    .where(eq(ticketItemAllergies.ticketItemId, ticketItemId));
+    .select({
+      ticketItemId: ticketItems.id,
+      originalBlock: ticketItems.allergyOriginal,
+      currentBlock: ticketItems.allergyCurrent,
+    })
+    .from(ticketItems)
+    .where(and(eq(ticketItems.id, ticketItemId), eq(ticketItems.allergyFrozen, true)));
 }
 
 async function partyRevision(tx: Transaction, partyId: string): Promise<number> {
@@ -367,7 +371,7 @@ describe("A773 waiter request: release", () => {
       await later();
       expect(await row()).toEqual([requested]);
       expect(await tx.select().from(ticketItems).where(eq(ticketItems.id, held!.id))).toEqual([
-        { ...held, requestedAt: laterAt.toISOString(), passControlled: true },
+        { ...held, requestedAt: laterAt.toISOString(), passControlled: true, allergyFrozen: true },
       ]);
       expect(await jobCounts(tx, venue)).toEqual(before);
 

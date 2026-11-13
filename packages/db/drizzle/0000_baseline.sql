@@ -651,7 +651,6 @@ CREATE TABLE `kitchen_courses` (
 CREATE UNIQUE INDEX `kitchen_courses_name_key` ON `kitchen_courses` (`name`) WHERE "kitchen_courses"."active" = 1;--> statement-breakpoint
 CREATE TABLE `ticket_items` (
 	`id` text PRIMARY KEY NOT NULL,
-	`node_id` text NOT NULL,
 	`working_order_id` text NOT NULL,
 	`working_order_line_id` text NOT NULL,
 	`station_id` text NOT NULL,
@@ -666,14 +665,49 @@ CREATE TABLE `ticket_items` (
 	`station_chosen_at` text,
 	`station_retained_at_release` integer DEFAULT false NOT NULL,
 	`note` text,
+	`allergy_frozen` integer DEFAULT false NOT NULL,
+	`allergy_original` text,
+	`allergy_current` text,
 	`quantity` integer,
 	`made_here` integer DEFAULT false NOT NULL,
 	`sent_order_number` integer,
-	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`working_order_line_id`) REFERENCES `working_order_lines`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "ticket_items_state_ck" CHECK("ticket_items"."state" in ('queued', 'preparing', 'ready'))
+	CONSTRAINT "ticket_items_state_ck" CHECK("ticket_items"."state" in ('queued', 'preparing', 'ready')),
+	CONSTRAINT "ticket_items_allergy_original_ck" CHECK(case when "ticket_items"."allergy_original" is null then 1
+    when not json_valid("ticket_items"."allergy_original") then 0
+    else json_type("ticket_items"."allergy_original") is 'object'
+      and json_type("ticket_items"."allergy_original", '$.who') is 'text'
+      and length(trim(json_extract("ticket_items"."allergy_original", '$.who'))) between 1 and 40
+      and json_type("ticket_items"."allergy_original", '$.allergens') is 'object'
+      and json_extract("ticket_items"."allergy_original", '$.allergens') <> '{}'
+      and json_type("ticket_items"."allergy_original", '$.clashes') is 'object'
+      and (json_type("ticket_items"."allergy_original", '$.note') is 'null'
+        or (json_type("ticket_items"."allergy_original", '$.note') is 'text'
+          and length(json_extract("ticket_items"."allergy_original", '$.note')) <= 2000))
+      and json_type("ticket_items"."allergy_original", '$.labels.en.avoids') is 'array'
+      and json_type("ticket_items"."allergy_original", '$.labels.en.clashes') is 'array'
+      and json_type("ticket_items"."allergy_original", '$.labels.es.avoids') is 'array'
+      and json_type("ticket_items"."allergy_original", '$.labels.es.clashes') is 'array'
+    end),
+	CONSTRAINT "ticket_items_allergy_current_ck" CHECK(case when "ticket_items"."allergy_current" is null then 1
+    when not json_valid("ticket_items"."allergy_current") then 0
+    else json_type("ticket_items"."allergy_current") is 'object'
+      and json_type("ticket_items"."allergy_current", '$.who') is 'text'
+      and length(trim(json_extract("ticket_items"."allergy_current", '$.who'))) between 1 and 40
+      and json_type("ticket_items"."allergy_current", '$.allergens') is 'object'
+      and json_extract("ticket_items"."allergy_current", '$.allergens') <> '{}'
+      and json_type("ticket_items"."allergy_current", '$.clashes') is 'object'
+      and (json_type("ticket_items"."allergy_current", '$.note') is 'null'
+        or (json_type("ticket_items"."allergy_current", '$.note') is 'text'
+          and length(json_extract("ticket_items"."allergy_current", '$.note')) <= 2000))
+      and json_type("ticket_items"."allergy_current", '$.labels.en.avoids') is 'array'
+      and json_type("ticket_items"."allergy_current", '$.labels.en.clashes') is 'array'
+      and json_type("ticket_items"."allergy_current", '$.labels.es.avoids') is 'array'
+      and json_type("ticket_items"."allergy_current", '$.labels.es.clashes') is 'array'
+    end),
+	CONSTRAINT "ticket_items_allergy_frozen_ck" CHECK("ticket_items"."allergy_frozen" = 1 or ("ticket_items"."allergy_original" is null and "ticket_items"."allergy_current" is null))
 );
 --> statement-breakpoint
 CREATE INDEX `ticket_items_queue_idx` ON `ticket_items` (`station_id`,`state`);--> statement-breakpoint
@@ -2333,6 +2367,7 @@ CREATE TABLE `kitchen_notices` (
 	`id` text PRIMARY KEY NOT NULL,
 	`station_id` text NOT NULL,
 	`working_order_id` text NOT NULL,
+	`ticket_item_id` text,
 	`order_label` text NOT NULL,
 	`kind` text NOT NULL,
 	`line_name` text NOT NULL,
@@ -2351,6 +2386,8 @@ CREATE TABLE `kitchen_notices` (
 	`acknowledged_at` text,
 	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`ticket_item_id`) REFERENCES `ticket_items`(`id`) ON UPDATE no action ON DELETE set null,
+	CONSTRAINT "kitchen_notices_ticket_item_kind_ck" CHECK("kitchen_notices"."kind" = 'moved' or "kitchen_notices"."ticket_item_id" is null),
 	CONSTRAINT "kitchen_notices_kind_ck" CHECK("kitchen_notices"."kind" in ('recalled', 'void', 'changed', 'moved', 'rerouted', 'allergy_changed', 'allergy_removed')),
 	CONSTRAINT "kitchen_notices_allergy_block_ck" CHECK(case when "kitchen_notices"."allergy_block" is null then 1
     when not json_valid("kitchen_notices"."allergy_block") then 0
@@ -2379,16 +2416,17 @@ CREATE TABLE `kitchen_notices` (
 	CONSTRAINT "kitchen_notices_cancelled_extra_kind_ck" CHECK("kitchen_notices"."kind" = 'changed' or "kitchen_notices"."cancelled_extra" is null)
 );
 --> statement-breakpoint
+CREATE INDEX `kitchen_notices_order_idx` ON `kitchen_notices` (`working_order_id`);--> statement-breakpoint
+CREATE INDEX `kitchen_notices_ticket_item_idx` ON `kitchen_notices` (`ticket_item_id`) WHERE "kitchen_notices"."ticket_item_id" is not null;--> statement-breakpoint
 CREATE INDEX `kitchen_notices_open_idx` ON `kitchen_notices` (`station_id`,`created_at`) WHERE "kitchen_notices"."acknowledged_at" is null;--> statement-breakpoint
 CREATE TABLE `routing_cell_periods` (
 	`id` text PRIMARY KEY NOT NULL,
 	`cell_id` text NOT NULL,
 	`period_id` text NOT NULL,
-	`department_id` text NOT NULL,
 	`station_id` text,
 	`no_preparation` integer DEFAULT false NOT NULL,
 	FOREIGN KEY (`cell_id`) REFERENCES `routing_cells`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`period_id`,`department_id`) REFERENCES `menu_periods`(`id`,`department_id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`period_id`) REFERENCES `menu_periods`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "routing_cell_periods_target_ck" CHECK(("routing_cell_periods"."station_id" is not null and "routing_cell_periods"."no_preparation" = 0) or ("routing_cell_periods"."station_id" is null and "routing_cell_periods"."no_preparation" = 1))
 );
@@ -2698,45 +2736,6 @@ CREATE TABLE `party_allergy_guests` (
 	CONSTRAINT "party_allergy_guests_who_ck" CHECK(length(trim("party_allergy_guests"."who")) between 1 and 40),
 	CONSTRAINT "party_allergy_guests_allergens_ck" CHECK(json_valid("party_allergy_guests"."allergens") and json_type("party_allergy_guests"."allergens") = 'object' and "party_allergy_guests"."allergens" <> '{}'),
 	CONSTRAINT "party_allergy_guests_note_ck" CHECK("party_allergy_guests"."note" is null or length("party_allergy_guests"."note") <= 2000)
-);
---> statement-breakpoint
-CREATE TABLE `ticket_item_allergies` (
-	`ticket_item_id` text PRIMARY KEY NOT NULL,
-	`original_block` text,
-	`current_block` text,
-	FOREIGN KEY (`ticket_item_id`) REFERENCES `ticket_items`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "ticket_item_allergies_original_ck" CHECK(case when "ticket_item_allergies"."original_block" is null then 1
-    when not json_valid("ticket_item_allergies"."original_block") then 0
-    else json_type("ticket_item_allergies"."original_block") is 'object'
-      and json_type("ticket_item_allergies"."original_block", '$.who') is 'text'
-      and length(trim(json_extract("ticket_item_allergies"."original_block", '$.who'))) between 1 and 40
-      and json_type("ticket_item_allergies"."original_block", '$.allergens') is 'object'
-      and json_extract("ticket_item_allergies"."original_block", '$.allergens') <> '{}'
-      and json_type("ticket_item_allergies"."original_block", '$.clashes') is 'object'
-      and (json_type("ticket_item_allergies"."original_block", '$.note') is 'null'
-        or (json_type("ticket_item_allergies"."original_block", '$.note') is 'text'
-          and length(json_extract("ticket_item_allergies"."original_block", '$.note')) <= 2000))
-      and json_type("ticket_item_allergies"."original_block", '$.labels.en.avoids') is 'array'
-      and json_type("ticket_item_allergies"."original_block", '$.labels.en.clashes') is 'array'
-      and json_type("ticket_item_allergies"."original_block", '$.labels.es.avoids') is 'array'
-      and json_type("ticket_item_allergies"."original_block", '$.labels.es.clashes') is 'array'
-    end),
-	CONSTRAINT "ticket_item_allergies_current_ck" CHECK(case when "ticket_item_allergies"."current_block" is null then 1
-    when not json_valid("ticket_item_allergies"."current_block") then 0
-    else json_type("ticket_item_allergies"."current_block") is 'object'
-      and json_type("ticket_item_allergies"."current_block", '$.who') is 'text'
-      and length(trim(json_extract("ticket_item_allergies"."current_block", '$.who'))) between 1 and 40
-      and json_type("ticket_item_allergies"."current_block", '$.allergens') is 'object'
-      and json_extract("ticket_item_allergies"."current_block", '$.allergens') <> '{}'
-      and json_type("ticket_item_allergies"."current_block", '$.clashes') is 'object'
-      and (json_type("ticket_item_allergies"."current_block", '$.note') is 'null'
-        or (json_type("ticket_item_allergies"."current_block", '$.note') is 'text'
-          and length(json_extract("ticket_item_allergies"."current_block", '$.note')) <= 2000))
-      and json_type("ticket_item_allergies"."current_block", '$.labels.en.avoids') is 'array'
-      and json_type("ticket_item_allergies"."current_block", '$.labels.en.clashes') is 'array'
-      and json_type("ticket_item_allergies"."current_block", '$.labels.es.avoids') is 'array'
-      and json_type("ticket_item_allergies"."current_block", '$.labels.es.clashes') is 'array'
-    end)
 );
 --> statement-breakpoint
 CREATE TABLE `device_zone_selection_zones` (

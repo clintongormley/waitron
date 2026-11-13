@@ -399,7 +399,13 @@ export async function configureZone(
     .delete(routingCellPeriods)
     .where(
       and(
-        ne(routingCellPeriods.departmentId, input.departmentId),
+        inArray(
+          routingCellPeriods.periodId,
+          tx
+            .select({ id: menuPeriods.id })
+            .from(menuPeriods)
+            .where(ne(menuPeriods.departmentId, input.departmentId)),
+        ),
         inArray(
           routingCellPeriods.cellId,
           tx

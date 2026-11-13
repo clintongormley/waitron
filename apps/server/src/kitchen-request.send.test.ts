@@ -30,7 +30,7 @@ import { OPERATOR } from "./testing/party-venue.js";
 import { kitchenPhase } from "./kitchen-phase.js";
 import { createCourse } from "./kitchen.js";
 import { bumpGroupReady } from "./order-groups.js";
-import { advanceTicket, advanceTicketItem } from "./working-order.js";
+import { advanceTicketItem } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
@@ -418,7 +418,6 @@ describe("A773 waiter request: send", () => {
     );
     expect(refused).toMatchObject({ code: "ticket.item_held" });
     await withTransaction(db, async (tx) => {
-      await advanceTicket(tx, venue.party.tabId, venue.stations.grill, "preparing");
       expect(await items(tx, venue.party.tabId)).toEqual([item]);
       await bumpGroupReady(tx, venue.party.partyId, groupId, {
         operatorId: OPERATOR,

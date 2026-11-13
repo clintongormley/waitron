@@ -404,7 +404,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 29,
+  version: 30,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -5522,7 +5522,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(29);
+  expect(exported.version).toBe(30);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -5826,9 +5826,9 @@ it("carries a cell's period choices with their cell, including a period whose me
     const productCell = cellIds.rows.find((row) => row.product_id !== null)!.id;
     const categoryCell = cellIds.rows.find((row) => row.product_id === null)!.id;
     await tx.execute(sql`insert into routing_cell_periods
-      (id, cell_id, period_id, department_id, station_id, no_preparation)
-      values (${randomUUID()}, ${productCell}, ${period.id}, ${department.id}, ${griddle!.id}, 0),
-        (${randomUUID()}, ${categoryCell}, ${period.id}, ${department.id}, null, 1)`);
+      (id, cell_id, period_id, station_id, no_preparation)
+      values (${randomUUID()}, ${productCell}, ${period.id}, ${griddle!.id}, 0),
+        (${randomUUID()}, ${categoryCell}, ${period.id}, null, 1)`);
     return [department.id, terrace.id, bar!.id, griddle!.id, period.id, productCell, categoryCell];
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -5852,14 +5852,14 @@ it("carries a cell's period choices with their cell, including a period whose me
     beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
   const choices = await targetSuite.db.execute<Record<string, unknown>>(sql`
-    select x.cell_id, x.period_id, x.department_id, x.station_id,
+    select x.cell_id, x.period_id, p.department_id, x.station_id,
       c.product_id is not null as product_cell,
       z.name as zone, p.name as period, d.name as department, s.name as station, x.no_preparation
     from routing_cell_periods x
     join routing_cells c on c.id = x.cell_id
     left join floor_zones z on z.id = c.zone_id
-    join menu_periods p on p.id = x.period_id and p.department_id = x.department_id
-    join departments d on d.id = x.department_id
+    join menu_periods p on p.id = x.period_id
+    join departments d on d.id = p.department_id
     left join kitchen_stations s on s.id = x.station_id
     order by product_cell desc`);
   expect(

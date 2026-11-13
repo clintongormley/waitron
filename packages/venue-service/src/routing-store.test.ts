@@ -1701,12 +1701,9 @@ describe("routing previews", () => {
           .select({ id: routingCells.id })
           .from(routingCells)
           .where(eq(routingCells.productId, f.burger));
-        await tx.insert(routingCellPeriods).values({
-          cellId: burgerCell!.id,
-          periodId: lunch,
-          departmentId: f.department,
-          stationId: downstairs!.id,
-        });
+        await tx
+          .insert(routingCellPeriods)
+          .values({ cellId: burgerCell!.id, periodId: lunch, stationId: downstairs!.id });
         const address: CellAddress = { row: productRow(f.cheese), zoneId: null };
         await setRoutingCell(tx, address, station(f.bar));
         const moves = await previewRoutingChange(tx, {
@@ -1742,12 +1739,9 @@ describe("routing previews", () => {
           .select({ id: routingCells.id })
           .from(routingCells)
           .where(eq(routingCells.productId, f.cheese));
-        await tx.insert(routingCellPeriods).values({
-          cellId: cheeseCell!.id,
-          periodId: lunch,
-          departmentId: f.department,
-          stationId: downstairs!.id,
-        });
+        await tx
+          .insert(routingCellPeriods)
+          .values({ cellId: cheeseCell!.id, periodId: lunch, stationId: downstairs!.id });
         const moves = await previewRoutingChange(tx, {
           kind: "cell",
           address,
@@ -3023,12 +3017,9 @@ describe("routing during a service period", () => {
       .select({ id: routingCells.id })
       .from(routingCells)
       .where(eq(routingCells.categoryId, f.cocktails));
-    await tx.insert(routingCellPeriods).values({
-      cellId: cell!.id,
-      periodId: lunch,
-      departmentId: f.department,
-      stationId: downstairs!.id,
-    });
+    await tx
+      .insert(routingCellPeriods)
+      .values({ cellId: cell!.id, periodId: lunch, stationId: downstairs!.id });
     return { ...f, dining: dining!.id, upstairs: upstairs!.id, downstairs: downstairs!.id };
   }
   const fridayAt = (time: string) => new Date(`2026-10-02T${time}:00Z`);
@@ -3183,6 +3174,33 @@ describe("saving a cell's period choices", () => {
       patio: patio!.id,
     };
   }
+  it("drops a zone's old-department routing periods when it moves departments", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      const address: CellAddress = { row: productRow(f.mojito), zoneId: f.terrace };
+      await setRoutingCell(tx, address, station(f.upstairs), [
+        { periodId: f.lunch, target: station(f.downstairs) },
+      ]);
+      const [cell] = await tx
+        .select({ id: routingCells.id })
+        .from(routingCells)
+        .where(and(eq(routingCells.productId, f.mojito), eq(routingCells.zoneId, f.terrace)));
+      const periods = () =>
+        tx
+          .select({ periodId: routingCellPeriods.periodId })
+          .from(routingCellPeriods)
+          .where(eq(routingCellPeriods.cellId, cell!.id));
+      expect(await periods()).toEqual([{ periodId: f.lunch }]);
+      await configureZone(tx, { zoneId: f.terrace, departmentId: f.barDepartment });
+      expect(await periods()).toEqual([]);
+      expect(
+        await tx
+          .select({ id: routingCells.id })
+          .from(routingCells)
+          .where(eq(routingCells.id, cell!.id)),
+      ).toEqual([{ id: cell!.id }]);
+    }));
+
   type Choices = Awaited<ReturnType<typeof choicesFixture>>;
   const at = new Date("2026-10-02T13:00:00Z");
   const everyZone = (f: Choices): CellAddress => ({ row: categoryRow(f.cocktails), zoneId: null });
@@ -3481,7 +3499,6 @@ describe("saving a cell's period choices", () => {
           [f.lunch, f.staffLunch].map((periodId) => ({
             cellId: cell!.id,
             periodId,
-            departmentId: f.department,
             stationId: f.downstairs,
           })),
         );

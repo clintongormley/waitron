@@ -62,7 +62,6 @@ import { centsToDecimal, nodeId as brandNodeId, seriesId as brandSeriesId } from
 import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
-  advanceTicket,
   advanceTicketItem,
   bumpCourseReady,
   createOpenOrder,
@@ -77,7 +76,6 @@ import {
   readStoredOrder,
   priceStoredOrderForIssuance,
   readTabLines,
-  sendToPrep,
   setOrderInvoiceChoice,
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
@@ -3234,14 +3232,6 @@ describe("abandonHeldOrder", () => {
   });
 });
 
-// ---------------------------------------------------------------------------------------------------
-// Fire → ticket items. `fireLines` resolves `product ?? category ?? default` and
-// SNAPSHOTS the station onto each ticket item; the three fire points (placeOrder, sendToPrep, and a
-// tab's round-send via addTabRound) funnel through it. This suite proves the resolver, the snapshot
-// rule and the no-default refusal; the `ticket_items` schema's own
-// columns, unique and cascade are packages/db `ticket-items.test.ts`'s.
-// ---------------------------------------------------------------------------------------------------
-
 /** The accountable operator a placing amendment is attributed to (a fixed fixture uuid — only ever
  *  stored, never joined; mirrors working-order.pay-and-dispatch.test.ts's OPERATOR). */
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
@@ -3346,9 +3336,6 @@ async function createOfferedOrder(
   });
 }
 
-/** Open a fresh working order carrying `lines` and FIRE it — the same read-lines → fireLines sequence
- *  placeOrder/sendToPrep run, isolated onto the caller's tx so the resolver + snapshot can be asserted
- *  without the fiscal machinery. Returns the order's id. */
 async function placeOrderWith(
   tx: Transaction,
   cfg: DeviceRequestConfig,
@@ -4937,7 +4924,7 @@ describe("an order whose card payment is in flight (plan D22)", () => {
   );
 });
 
-describe("placeOrder / sendToPrep fire ticket items", () => {
+describe("placeOrder fire ticket items", () => {
   it("placeOrder fires one ticket item per line to the resolved station (Mode T)", async () => {
     const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
     const { kitchenStationId, coffeeProduct } = await withTransaction(db, async (tx) => {
@@ -5169,26 +5156,7 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
         .where(eq(ticketItems.workingOrderId, id)),
     ).toEqual([]);
   });
-
-  it("sendToPrep refuses an order that is not settled (working_order.not_settled)", async () => {
-    const { cfg, coffeeId } = await setupVenue();
-    const id = randomUUID();
-    // An OPEN (parked, never settled) order is ineligible — Mode P's pickup fires only a settled order.
-    await parkProducts(cfg, { id, lines: [{ productId: coffeeId, quantity: "1" }] });
-    await expect(sendToPrep({ db }, cfg, id)).rejects.toMatchObject({
-      code: "working_order.not_settled",
-      params: { workingOrderId: id },
-    });
-  });
 });
-
-// Bump (advance) + per-station queue read. `advanceTicketItem` is the per-line
-// conditional-UPDATE state machine (queued → preparing → ready, illegal moves refused via an empty
-// `returning` → `ticket.invalid_transition`); `advanceTicket` bumps every not-yet-`to` line of one
-// order at one station together; `listStationQueue` groups a station's items by order, dropping
-// collected and abandoned orders. This suite proves the transition logic, the whole-ticket fan-out
-// and the grouping/exclusion filters.
-// ---------------------------------------------------------------------------------------------------
 
 /** The order's ticket items joined to their line, in line_no order — each item's id (the bump target),
  *  line and current state, so a test can address item[0]/item[1] deterministically. */
@@ -5204,8 +5172,8 @@ async function ticketItemRows(
     .orderBy(workingOrderLines.lineNo);
 }
 
-describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", () => {
-  it("bumps a line queued→preparing→ready, refuses illegal moves, and whole-ticket bumps together", async () => {
+describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
+  it("bumps a line queued→preparing→ready, refuses illegal moves", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
@@ -5230,18 +5198,14 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         params: { ticketItemId: items[0]!.id },
       });
 
-      // Whole-ticket bump advances only the still-queued item[1] (item[0], already `ready`, is left
-      // alone — it is no longer at the `queued` predecessor).
-      await advanceTicket(tx, orderId, kitchenStation.id, "preparing");
+      await advanceTicketItem(tx, items[1]!.id, "preparing");
 
       const queue = await listStationQueue(tx, kitchenStation.id);
       const group = queue.find((g) => g.orderId === orderId)!;
       expect(group.items).toHaveLength(2);
       expect(group.items.map((i) => i.state).sort()).toEqual(["preparing", "ready"]);
 
-      // A second whole-ticket bump to `ready` advances the now-preparing item[1]; item[0] (already
-      // `ready`) is skipped — the bulk UPDATE matches only the `preparing` predecessor.
-      await advanceTicket(tx, orderId, kitchenStation.id, "ready");
+      await advanceTicketItem(tx, items[1]!.id, "ready");
       const readied = await listStationQueue(tx, kitchenStation.id);
       expect(readied.find((g) => g.orderId === orderId)!.items.map((i) => i.state)).toEqual([
         "ready",
@@ -5961,35 +5925,6 @@ describe("waiter line release / hold-and-fire", () => {
       expect(mains).toHaveLength(2);
       expect(mains.every((i) => i.firedAt !== null)).toBe(true);
       expect(byLine(items, dessert).firedAt).toBeNull();
-    });
-  });
-
-  it("advanceTicket (whole-ticket bump) advances fired items and SKIPS held ones", async () => {
-    // §5a: the bulk bump acts only on fired items — a mixed ticket's fired line advances while its held
-    // line stays put (no throw, unlike the per-line verb). Both items sit at the same (default) station,
-    // so the whole-ticket sweep addresses both; only the fired one is in the match.
-    const { cfg, catalogueId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
-      const starter = await makeProduct(tx, catalogueId, {});
-      const main = await makeProduct(tx, catalogueId, {});
-      await setProductCourse(tx, starter, starterCourse.id);
-      await setProductCourse(tx, main, mainCourse.id);
-
-      const orderId = await fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
-      const before = await courseItemsFor(tx, orderId);
-      expect(byLine(before, starter).firedAt).not.toBeNull(); // Starters auto-fired
-      expect(byLine(before, main).firedAt).toBeNull(); // Mains held
-
-      // Whole-ticket bump to preparing: the fired starter advances; the held main is skipped.
-      await advanceTicket(tx, orderId, kitchenStation.id, "preparing");
-
-      const after = await courseItemsFor(tx, orderId);
-      expect(byLine(after, starter).state).toBe("preparing"); // fired item advanced
-      expect(byLine(after, main).state).toBe("queued"); // held item untouched
-      expect(byLine(after, main).firedAt).toBeNull(); // and still held
     });
   });
 

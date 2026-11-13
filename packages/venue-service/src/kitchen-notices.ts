@@ -3,6 +3,7 @@ import {
   KITCHEN_NOTICE_DIRECTIONS,
   kitchenNoticeKind,
   kitchenNotices,
+  ticketItems,
   kitchenStations,
   insertInChunks,
   nowIso,
@@ -171,6 +172,19 @@ export async function recordKitchenNotices(
         ),
       ),
     );
+  const tickets =
+    kind === "moved"
+      ? await tx
+          .select({ lineId: ticketItems.workingOrderLineId, ticketItemId: ticketItems.id })
+          .from(ticketItems)
+          .where(
+            inArray(
+              ticketItems.workingOrderLineId,
+              items.map((item) => item.workingOrderLineId),
+            ),
+          )
+      : [];
+  const ticketByLine = new Map(tickets.map((ticket) => [ticket.lineId, ticket.ticketItemId]));
   const lineById = new Map(lines.map((line) => [line.id, line]));
   const soldInEach = await readLinesSoldInEach(
     tx,
@@ -197,6 +211,7 @@ export async function recordKitchenNotices(
         workingOrderId: orderId,
         orderLabel: noteEvent?.labels.get(item.stationId) ?? orderLabel,
         kind,
+        ticketItemId: ticketByLine.get(item.workingOrderLineId) ?? null,
         lineName: kitchenPresentationName(line),
         unitName: line.unitName,
         soldInEach: soldInEach.has(line.id),

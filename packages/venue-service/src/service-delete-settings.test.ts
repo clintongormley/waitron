@@ -314,10 +314,10 @@ it("delete removes only owned configuration and keeps every unaffected row", asy
     const children = await tx
       .insert(routingCellPeriods)
       .values([
-        { cellId: cells[0]!.id, periodId: p1, departmentId: f.department, noPreparation: true },
-        { cellId: cells[0]!.id, periodId: p2, departmentId: f.department, noPreparation: true },
-        { cellId: cells[1]!.id, periodId: p1, departmentId: f.department, noPreparation: true },
-        { cellId: cells[1]!.id, periodId: p3, departmentId: f.alpha, noPreparation: true },
+        { cellId: cells[0]!.id, periodId: p1, noPreparation: true },
+        { cellId: cells[0]!.id, periodId: p2, noPreparation: true },
+        { cellId: cells[1]!.id, periodId: p1, noPreparation: true },
+        { cellId: cells[1]!.id, periodId: p3, noPreparation: true },
       ])
       .returning();
     await tx.insert(menuPeriodStaffMenus).values(

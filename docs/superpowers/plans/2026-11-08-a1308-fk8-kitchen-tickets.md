@@ -2,7 +2,7 @@
 
 ## 2026-11-13 — CURRENT-MAIN PREFLIGHT
 
-**DRAFT — Claude reviewed in 213 seconds; findings folded in; awaiting watcher clearance.** Base `4e930fd07c`;
+**Claude reviewed in 213 seconds; findings folded in; watcher cleared 2026-11-13 19:54.** Base `4e930fd07c`;
 fk7 merged `9dbea6ba9e`, exact-merge CI `43482596862` succeeded (Runner receipt). Preserve the
 historical decisions/tests below. After fk8, allergy snapshots live on tickets, MOVED distinguishes
 alike dishes, routing periods derive their department, and tickets need no node column.
@@ -109,6 +109,13 @@ reaches its department through `menu_periods` (appendix §1.21).
 this cannot be restored or imported."
 
 **Who lands:** the lane (rules §6: tickets and notices feed no fiscal value).
+
+## 2026-11-13 — named stop point 1 settled
+
+The watcher accepted the split-piece control changing from zero to one MOVED slip at 20:23
+(lane E questions.md). Join tables, move a multi-unit dish, split off a unit, then split the
+tables apart: the new ticket has no MOVED record and receives one redundant slip. Keep the planned
+ticket/station lookup; carry no paper-history record. List this new control's port in the PR.
 
 ## What it builds
 

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a6add431-f9dc-4a0c-93dd-6eb014175a78",
+  "id": "a1a4fd4b-80c6-44a7-9c3a-c8fe5ced169c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -4431,13 +4431,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "node_id": {
-          "name": "node_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "working_order_id": {
           "name": "working_order_id",
           "type": "text",
@@ -4539,6 +4532,28 @@
           "notNull": false,
           "autoincrement": false
         },
+        "allergy_frozen": {
+          "name": "allergy_frozen",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "allergy_original": {
+          "name": "allergy_original",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "allergy_current": {
+          "name": "allergy_current",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "quantity": {
           "name": "quantity",
           "type": "integer",
@@ -4603,19 +4618,6 @@
         }
       },
       "foreignKeys": {
-        "ticket_items_node_id_nodes_id_fk": {
-          "name": "ticket_items_node_id_nodes_id_fk",
-          "tableFrom": "ticket_items",
-          "tableTo": "nodes",
-          "columnsFrom": [
-            "node_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "ticket_items_working_order_line_id_working_order_lines_id_fk": {
           "name": "ticket_items_working_order_line_id_working_order_lines_id_fk",
           "tableFrom": "ticket_items",
@@ -4662,6 +4664,18 @@
         "ticket_items_state_ck": {
           "name": "ticket_items_state_ck",
           "value": "\"ticket_items\".\"state\" in ('queued', 'preparing', 'ready')"
+        },
+        "ticket_items_allergy_original_ck": {
+          "name": "ticket_items_allergy_original_ck",
+          "value": "case when \"ticket_items\".\"allergy_original\" is null then 1\n    when not json_valid(\"ticket_items\".\"allergy_original\") then 0\n    else json_type(\"ticket_items\".\"allergy_original\") is 'object'\n      and json_type(\"ticket_items\".\"allergy_original\", '$.who') is 'text'\n      and length(trim(json_extract(\"ticket_items\".\"allergy_original\", '$.who'))) between 1 and 40\n      and json_type(\"ticket_items\".\"allergy_original\", '$.allergens') is 'object'\n      and json_extract(\"ticket_items\".\"allergy_original\", '$.allergens') <> '{}'\n      and json_type(\"ticket_items\".\"allergy_original\", '$.clashes') is 'object'\n      and (json_type(\"ticket_items\".\"allergy_original\", '$.note') is 'null'\n        or (json_type(\"ticket_items\".\"allergy_original\", '$.note') is 'text'\n          and length(json_extract(\"ticket_items\".\"allergy_original\", '$.note')) <= 2000))\n      and json_type(\"ticket_items\".\"allergy_original\", '$.labels.en.avoids') is 'array'\n      and json_type(\"ticket_items\".\"allergy_original\", '$.labels.en.clashes') is 'array'\n      and json_type(\"ticket_items\".\"allergy_original\", '$.labels.es.avoids') is 'array'\n      and json_type(\"ticket_items\".\"allergy_original\", '$.labels.es.clashes') is 'array'\n    end"
+        },
+        "ticket_items_allergy_current_ck": {
+          "name": "ticket_items_allergy_current_ck",
+          "value": "case when \"ticket_items\".\"allergy_current\" is null then 1\n    when not json_valid(\"ticket_items\".\"allergy_current\") then 0\n    else json_type(\"ticket_items\".\"allergy_current\") is 'object'\n      and json_type(\"ticket_items\".\"allergy_current\", '$.who') is 'text'\n      and length(trim(json_extract(\"ticket_items\".\"allergy_current\", '$.who'))) between 1 and 40\n      and json_type(\"ticket_items\".\"allergy_current\", '$.allergens') is 'object'\n      and json_extract(\"ticket_items\".\"allergy_current\", '$.allergens') <> '{}'\n      and json_type(\"ticket_items\".\"allergy_current\", '$.clashes') is 'object'\n      and (json_type(\"ticket_items\".\"allergy_current\", '$.note') is 'null'\n        or (json_type(\"ticket_items\".\"allergy_current\", '$.note') is 'text'\n          and length(json_extract(\"ticket_items\".\"allergy_current\", '$.note')) <= 2000))\n      and json_type(\"ticket_items\".\"allergy_current\", '$.labels.en.avoids') is 'array'\n      and json_type(\"ticket_items\".\"allergy_current\", '$.labels.en.clashes') is 'array'\n      and json_type(\"ticket_items\".\"allergy_current\", '$.labels.es.avoids') is 'array'\n      and json_type(\"ticket_items\".\"allergy_current\", '$.labels.es.clashes') is 'array'\n    end"
+        },
+        "ticket_items_allergy_frozen_ck": {
+          "name": "ticket_items_allergy_frozen_ck",
+          "value": "\"ticket_items\".\"allergy_frozen\" = 1 or (\"ticket_items\".\"allergy_original\" is null and \"ticket_items\".\"allergy_current\" is null)"
         }
       }
     },
@@ -15709,6 +15723,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "ticket_item_id": {
+          "name": "ticket_item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "order_label": {
           "name": "order_label",
           "type": "text",
@@ -15825,6 +15846,21 @@
         }
       },
       "indexes": {
+        "kitchen_notices_order_idx": {
+          "name": "kitchen_notices_order_idx",
+          "columns": [
+            "working_order_id"
+          ],
+          "isUnique": false
+        },
+        "kitchen_notices_ticket_item_idx": {
+          "name": "kitchen_notices_ticket_item_idx",
+          "columns": [
+            "ticket_item_id"
+          ],
+          "isUnique": false,
+          "where": "\"kitchen_notices\".\"ticket_item_id\" is not null"
+        },
         "kitchen_notices_open_idx": {
           "name": "kitchen_notices_open_idx",
           "columns": [
@@ -15861,11 +15897,28 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "kitchen_notices_ticket_item_fk": {
+          "name": "kitchen_notices_ticket_item_fk",
+          "tableFrom": "kitchen_notices",
+          "tableTo": "ticket_items",
+          "columnsFrom": [
+            "ticket_item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "kitchen_notices_ticket_item_kind_ck": {
+          "name": "kitchen_notices_ticket_item_kind_ck",
+          "value": "\"kitchen_notices\".\"kind\" = 'moved' or \"kitchen_notices\".\"ticket_item_id\" is null"
+        },
         "kitchen_notices_kind_ck": {
           "name": "kitchen_notices_kind_ck",
           "value": "\"kitchen_notices\".\"kind\" in ('recalled', 'void', 'changed', 'moved', 'rerouted', 'allergy_changed', 'allergy_removed')"
@@ -15932,13 +15985,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "department_id": {
-          "name": "department_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "station_id": {
           "name": "station_id",
           "type": "text",
@@ -15984,12 +16030,10 @@
           "tableFrom": "routing_cell_periods",
           "tableTo": "menu_periods",
           "columnsFrom": [
-            "period_id",
-            "department_id"
+            "period_id"
           ],
           "columnsTo": [
-            "id",
-            "department_id"
+            "id"
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
@@ -18174,60 +18218,6 @@
         "party_allergy_guests_note_ck": {
           "name": "party_allergy_guests_note_ck",
           "value": "\"party_allergy_guests\".\"note\" is null or length(\"party_allergy_guests\".\"note\") <= 2000"
-        }
-      }
-    },
-    "ticket_item_allergies": {
-      "name": "ticket_item_allergies",
-      "columns": {
-        "ticket_item_id": {
-          "name": "ticket_item_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "original_block": {
-          "name": "original_block",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "current_block": {
-          "name": "current_block",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "ticket_item_allergies_ticket_fk": {
-          "name": "ticket_item_allergies_ticket_fk",
-          "tableFrom": "ticket_item_allergies",
-          "tableTo": "ticket_items",
-          "columnsFrom": [
-            "ticket_item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "ticket_item_allergies_original_ck": {
-          "name": "ticket_item_allergies_original_ck",
-          "value": "case when \"ticket_item_allergies\".\"original_block\" is null then 1\n    when not json_valid(\"ticket_item_allergies\".\"original_block\") then 0\n    else json_type(\"ticket_item_allergies\".\"original_block\") is 'object'\n      and json_type(\"ticket_item_allergies\".\"original_block\", '$.who') is 'text'\n      and length(trim(json_extract(\"ticket_item_allergies\".\"original_block\", '$.who'))) between 1 and 40\n      and json_type(\"ticket_item_allergies\".\"original_block\", '$.allergens') is 'object'\n      and json_extract(\"ticket_item_allergies\".\"original_block\", '$.allergens') <> '{}'\n      and json_type(\"ticket_item_allergies\".\"original_block\", '$.clashes') is 'object'\n      and (json_type(\"ticket_item_allergies\".\"original_block\", '$.note') is 'null'\n        or (json_type(\"ticket_item_allergies\".\"original_block\", '$.note') is 'text'\n          and length(json_extract(\"ticket_item_allergies\".\"original_block\", '$.note')) <= 2000))\n      and json_type(\"ticket_item_allergies\".\"original_block\", '$.labels.en.avoids') is 'array'\n      and json_type(\"ticket_item_allergies\".\"original_block\", '$.labels.en.clashes') is 'array'\n      and json_type(\"ticket_item_allergies\".\"original_block\", '$.labels.es.avoids') is 'array'\n      and json_type(\"ticket_item_allergies\".\"original_block\", '$.labels.es.clashes') is 'array'\n    end"
-        },
-        "ticket_item_allergies_current_ck": {
-          "name": "ticket_item_allergies_current_ck",
-          "value": "case when \"ticket_item_allergies\".\"current_block\" is null then 1\n    when not json_valid(\"ticket_item_allergies\".\"current_block\") then 0\n    else json_type(\"ticket_item_allergies\".\"current_block\") is 'object'\n      and json_type(\"ticket_item_allergies\".\"current_block\", '$.who') is 'text'\n      and length(trim(json_extract(\"ticket_item_allergies\".\"current_block\", '$.who'))) between 1 and 40\n      and json_type(\"ticket_item_allergies\".\"current_block\", '$.allergens') is 'object'\n      and json_extract(\"ticket_item_allergies\".\"current_block\", '$.allergens') <> '{}'\n      and json_type(\"ticket_item_allergies\".\"current_block\", '$.clashes') is 'object'\n      and (json_type(\"ticket_item_allergies\".\"current_block\", '$.note') is 'null'\n        or (json_type(\"ticket_item_allergies\".\"current_block\", '$.note') is 'text'\n          and length(json_extract(\"ticket_item_allergies\".\"current_block\", '$.note')) <= 2000))\n      and json_type(\"ticket_item_allergies\".\"current_block\", '$.labels.en.avoids') is 'array'\n      and json_type(\"ticket_item_allergies\".\"current_block\", '$.labels.en.clashes') is 'array'\n      and json_type(\"ticket_item_allergies\".\"current_block\", '$.labels.es.avoids') is 'array'\n      and json_type(\"ticket_item_allergies\".\"current_block\", '$.labels.es.clashes') is 'array'\n    end"
         }
       }
     },

@@ -1871,10 +1871,9 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
   });
 });
 
-// Mode P fires preparation in the sale transaction. The retained `sendToPrep` endpoint therefore
 // rejects a second fire, while still refusing an unpaid order before any write.
-describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", () => {
-  it("finds a prepay sale already fired and refuses a still-open parked order", async () => {
+describe("Mode P sends preparation with payment", () => {
+  it("finds a prepay sale already queued at its station", async () => {
     const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
     const each = available.find((p) => p.pricingUnit === "each")!;
 
@@ -1899,17 +1898,6 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
     });
     expect(sale.status).toBe(200);
 
-    // Preparation was committed with the sale, so an explicit send is a duplicate.
-    const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
-    });
-    expect(sent.status).toBe(409);
-    expect(await sent.json()).toMatchObject({
-      error: { code: "ticket.already_fired", params: { workingOrderId } },
-    });
-
     // It appears on that station's kitchen queue, queued.
     const stations = (await (
       await app.request("/api/stations", { headers: { cookie } })
@@ -1924,32 +1912,6 @@ describe("POST /api/working-orders/:id/prep — Mode P's send-to-prep route", ()
         items: [expect.objectContaining({ state: "queued" })],
       }),
     ]);
-
-    // A SEPARATE, still-OPEN (parked, unpaid) order is refused — the other half of the guard, over the
-    // real route rather than the library function directly.
-    const openId = randomUUID();
-    const park = await app.request("/api/working-orders", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ id: openId, lines: [{ menuItemId: each.menuItemId, quantity: "1" }] }),
-    });
-    expect(park.status).toBe(200);
-    const refused = await app.request(`/api/working-orders/${openId}/prep`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
-    });
-    expect(refused.status).toBe(409);
-    expect(await refused.json()).toMatchObject({
-      error: { code: "working_order.not_settled", params: { workingOrderId: openId } },
-    });
-    // Refused before any write — never appears on the kitchen queue.
-    const queueAfterRefusal = (
-      (await (
-        await app.request(`/api/stations/${defaultStation.id}/queue`, { headers: { cookie } })
-      ).json()) as { items: { orderId: string }[] }
-    ).items;
-    expect(queueAfterRefusal.find((g) => g.orderId === openId)).toBeUndefined();
   });
 });
 
@@ -3041,100 +3003,6 @@ describe("POST /api/session by device kind", () => {
       body: JSON.stringify({ personId: operatorId, pin: "5555" }),
     });
     expect(res.status).toBe(200);
-  });
-});
-
-describe("POST /api/working-orders/:id/prep for a settled order nothing fired yet", () => {
-  it("fires the order to its station queue and answers 200 with an empty body", async () => {
-    const { cfg, available, operatorId } = await setupVenue();
-    // A ticket_then_pay venue settles a walk-up sale without firing it, which leaves prep to do.
-    const modeCfg: TradingContext = { ...cfg };
-    const each = available.find((p) => p.pricingUnit === "each")!;
-    const app = new Hono();
-    mountTillApi(app, apiDeps(modeCfg), noopLog);
-    const deviceCookie = await enrolTillCookie(cfg);
-    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-
-    const workingOrderId = randomUUID();
-    const stations = (await (
-      await app.request("/api/stations", { headers: { cookie } })
-    ).json()) as { id: string; isDefault: boolean }[];
-    const defaultStation = stations.find((s) => s.isDefault)!;
-    // With the default station off, the sale leaves the dish unsent; turning it back on before
-    // the prep call lets that call send the same stored dish.
-    await suite.db.execute(sql`
-      update kitchen_stations set active = 0
-      where is_default`);
-    const sale = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    });
-    expect(sale.status).toBe(200);
-    const queue = async () =>
-      (
-        (await (
-          await app.request(`/api/stations/${defaultStation.id}/queue`, { headers: { cookie } })
-        ).json()) as { items: { orderId: string }[] }
-      ).items;
-    expect((await queue()).find((g) => g.orderId === workingOrderId)).toBeUndefined();
-
-    await suite.db.execute(sql`
-      update kitchen_stations set active = 1
-      where is_default`);
-    const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
-    });
-    expect(sent.status).toBe(200);
-    expect(await sent.text()).toBe("");
-    expect((await queue()).find((g) => g.orderId === workingOrderId)).toBeDefined();
-  });
-  it("fires a paid order whose product has since sold out: a settled order's lines cannot be removed", async () => {
-    const { cfg, available, operatorId } = await setupVenue();
-    const modeCfg: TradingContext = { ...cfg };
-    const each = available.find((p) => p.pricingUnit === "each")!;
-    const app = new Hono();
-    mountTillApi(app, apiDeps(modeCfg), noopLog);
-    const deviceCookie = await enrolTillCookie(cfg);
-    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-    const workingOrderId = randomUUID();
-    // With the default station off, the sale leaves the dish unsent; turning it back on before
-    // the prep call lets that call send the same stored dish.
-    await suite.db.execute(sql`
-      update kitchen_stations set active = 0
-      where is_default`);
-    const sale = await app.request("/api/sales", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-      }),
-    });
-    expect(sale.status).toBe(200);
-    await suite.db.execute(sql`update products set available = 0 where id = ${each.id}`);
-
-    await suite.db.execute(sql`
-      update kitchen_stations set active = 1
-      where is_default`);
-    const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
-    });
-
-    expect(sent.status).toBe(200);
-    const fired = await suite.db.execute(
-      sql`select 1 from ticket_items where working_order_id = ${workingOrderId}`,
-    );
-    expect(fired.rows).toHaveLength(1);
   });
 });
 

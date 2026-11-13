@@ -528,7 +528,6 @@ function validateRoutingCellPeriods(
     if (!cellZone.has(row.cell_id)) refuse("routing_cell_periods.cell_id");
     if (!periodDepartment.has(row.period_id)) refuse("routing_cell_periods.period_id");
     const department = periodDepartment.get(row.period_id);
-    if (row.department_id !== department) refuse("routing_cell_periods.department_id");
     const zone = cellZone.get(row.cell_id);
     if (zone !== null && zoneDepartment.get(zone) !== department)
       refuse("routing_cell_periods.period_id");

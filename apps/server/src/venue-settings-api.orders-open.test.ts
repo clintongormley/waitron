@@ -242,8 +242,6 @@ describe("a receipt-language change while orders are open", () => {
       status: 200,
       json: { receiptLanguage: "gl-ES" },
     });
-    const prep = await till("POST", `/api/working-orders/${id}/prep`);
-    expect(prep.json).toMatchObject({ code: "ticket.already_fired" });
   });
 
   it("accepts a change while a paid bill's party is seated, and its dishes can still be served", async () => {
@@ -330,7 +328,7 @@ describe("a receipt-language change while orders are open", () => {
     expect(language()).toEqual(["gl-ES"]);
   });
 
-  it("accepts a change while a paid counter sale holds a dish no station took, which the send route then sends", async () => {
+  it("accepts a change while a paid counter sale holds a dish no station took", async () => {
     reset();
     const id = randomUUID();
     venue.db.run(sql`update kitchen_stations set active = 0`);
@@ -351,12 +349,9 @@ describe("a receipt-language change while orders are open", () => {
       status: 200,
       json: { receiptLanguage: "gl-ES" },
     });
-
-    expect((await till("POST", `/api/working-orders/${id}/prep`)).status).toBe(200);
-    expect(dishLines(id)[0]!.sent_at).not.toBeNull();
   });
 
-  it("accepts a change while a paid sale holds an unsent dish beside one a station took, which the send route refuses", async () => {
+  it("accepts a change while a paid sale holds an unsent dish beside one a station took", async () => {
     reset();
     await withTransaction(venue.db, async (tx) => {
       const grill = await createStation(tx, { name: "Plancha" });
@@ -383,19 +378,12 @@ describe("a receipt-language change while orders are open", () => {
       venue.db.run(sql`update kitchen_stations set active = 1 where is_default = 1`);
     }
     expect(dishLines(id).map((line) => line.sent_at !== null)).toEqual([true, false]);
-    const prep = await till("POST", `/api/working-orders/${id}/prep`);
-    expect(prep).toMatchObject({ status: 409, json: { code: "ticket.already_fired" } });
     expect(dishLines(id)[1]!.sent_at).toBeNull();
 
     expect(await changeTo("gl-ES")).toMatchObject({
       status: 200,
       json: { receiptLanguage: "gl-ES" },
     });
-
-    const before = dishLines(id);
-    const after = await till("POST", `/api/working-orders/${id}/prep`);
-    expect(after).toMatchObject({ status: 409, json: { code: "ticket.already_fired" } });
-    expect(dishLines(id)).toEqual(before);
   });
 
   it("accepts a change while an order is placed, and the order can still be collected", async () => {

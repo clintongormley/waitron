@@ -122,36 +122,11 @@ it("counts base and child routing rows once and clears only their union", async 
     const children = await tx
       .insert(routingCellPeriods)
       .values([
-        {
-          cellId: bases[0]!.id,
-          periodId: periods[0]!.id,
-          departmentId: department!.id,
-          stationId: f.gone,
-        },
-        {
-          cellId: bases[0]!.id,
-          periodId: periods[1]!.id,
-          departmentId: department!.id,
-          stationId: f.other,
-        },
-        {
-          cellId: bases[1]!.id,
-          periodId: periods[0]!.id,
-          departmentId: department!.id,
-          stationId: f.gone,
-        },
-        {
-          cellId: bases[1]!.id,
-          periodId: periods[1]!.id,
-          departmentId: department!.id,
-          noPreparation: true,
-        },
-        {
-          cellId: bases[2]!.id,
-          periodId: periods[0]!.id,
-          departmentId: department!.id,
-          stationId: f.other,
-        },
+        { cellId: bases[0]!.id, periodId: periods[0]!.id, stationId: f.gone },
+        { cellId: bases[0]!.id, periodId: periods[1]!.id, stationId: f.other },
+        { cellId: bases[1]!.id, periodId: periods[0]!.id, stationId: f.gone },
+        { cellId: bases[1]!.id, periodId: periods[1]!.id, noPreparation: true },
+        { cellId: bases[2]!.id, periodId: periods[0]!.id, stationId: f.other },
       ])
       .returning();
     expect(await tx.select().from(routingCells)).toEqual(bases);

@@ -4,7 +4,7 @@ import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
-import { captureError } from "../testing/errors.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -58,7 +58,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   // The Drizzle builder rather than raw SQL: `id` and `queued_at` are `$defaultFn` columns
   // applied CLIENT-side, so a raw insert is refused NOT NULL.
   async function seedOrderLine(
-    node: string,
     product: string,
   ): Promise<{ orderId: string; lineId: string }> {
     orderNumberSeq += 1;
@@ -93,7 +92,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   }
 
   function seedTicket(
-    node: string,
     orderId: string,
     lineId: string,
     station: string,
@@ -103,7 +101,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       const [row] = await tx
         .insert(ticketItems)
         .values({
-          nodeId: node,
           workingOrderId: orderId,
           workingOrderLineId: lineId,
           stationId: station,
@@ -116,7 +113,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
 
   it("exposes every column through the Drizzle export across the queued → preparing → ready lifecycle", async () => {
     const { orderId, lineId } = await seedOrderLine(nodeA, productA);
-    const id = await seedTicket(nodeA, orderId, lineId, stationA);
+    const id = await seedTicket(orderId, lineId, stationA);
     await inTx((tx) =>
       tx
         .update(ticketItems)
@@ -134,14 +131,55 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     expect(row!.workingOrderLineId).toBe(lineId);
     expect(row!.workingOrderId).toBe(orderId);
     expect(row!.stationId).toBe(stationA);
-    expect(row!.nodeId).toBe(nodeA);
     expect(row!.queuedAt).not.toBeNull();
     expect(row!.readyAt).not.toBeNull();
   });
 
+  it("refuses a snapshot on an unfrozen ticket", async () => {
+    const { orderId, lineId } = await seedOrderLine(nodeA, productA);
+    const id = await seedTicket(orderId, lineId, stationA);
+    const block = JSON.stringify({
+      who: "Guest",
+      allergens: { milk: {} },
+      clashes: {},
+      note: null,
+      labels: { en: { avoids: ["Milk"], clashes: [] }, es: { avoids: ["Milk"], clashes: [] } },
+    });
+    const error = await captureError(() =>
+      suite.db.run(sql`update ticket_items set allergy_original = ${block} where id = ${id}`),
+    );
+    expect(engineErrorMessage(error)).toContain("ticket_items_allergy_frozen_ck");
+  });
+
+  it("stores a frozen ticket with no block", async () => {
+    const { orderId, lineId } = await seedOrderLine(nodeA, productA);
+    const id = await seedTicket(orderId, lineId, stationA);
+    suite.db.run(sql`update ticket_items set allergy_frozen = 1 where id = ${id}`);
+    expect(
+      suite.db.all(
+        sql`select allergy_frozen, allergy_original, allergy_current from ticket_items where id = ${id}`,
+      ),
+    ).toEqual([{ allergy_frozen: 1, allergy_original: null, allergy_current: null }]);
+  });
+
+  it.each(["original", "current"] as const)(
+    "refuses a malformed %s allergy block",
+    async (field) => {
+      const { orderId, lineId } = await seedOrderLine(nodeA, productA);
+      const id = await seedTicket(orderId, lineId, stationA);
+      const column = field === "original" ? sql`allergy_original` : sql`allergy_current`;
+      const error = await captureError(() =>
+        suite.db.run(
+          sql`update ticket_items set allergy_frozen = 1, ${column} = '{}' where id = ${id}`,
+        ),
+      );
+      expect(engineErrorMessage(error)).toContain(`ticket_items_allergy_${field}_ck`);
+    },
+  );
+
   it("A773 phases: a new ticket item has no request time and is not pass-controlled", async () => {
     const { orderId, lineId } = await seedOrderLine(nodeA, productA);
-    const id = await seedTicket(nodeA, orderId, lineId, stationA);
+    const id = await seedTicket(orderId, lineId, stationA);
     const [row] = await inTx((tx) => tx.select().from(ticketItems).where(eq(ticketItems.id, id)));
     expect(row!.requestedAt).toBeNull();
     expect(row!.passControlled).toBe(false);
@@ -149,7 +187,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
 
   it("defaults an item to not made here", async () => {
     const { orderId, lineId } = await seedOrderLine(nodeA, productA);
-    const id = await seedTicket(nodeA, orderId, lineId, stationA);
+    const id = await seedTicket(orderId, lineId, stationA);
     const [row] = await suite.db
       .select({ madeHere: ticketItems.madeHere })
       .from(ticketItems)
@@ -168,7 +206,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       { name: "sent_order_number", type: "INTEGER", notnull: 0, dflt_value: null },
     ]);
     const { orderId, lineId } = await seedOrderLine(nodeA, productA);
-    const id = await seedTicket(nodeA, orderId, lineId, stationA);
+    const id = await seedTicket(orderId, lineId, stationA);
     const [row] = suite.db.all<{ sent_order_number: number | null }>(
       sql`select sent_order_number from ticket_items where id = ${id}`,
     );
@@ -204,7 +242,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       .map((c) => ({ name: c.name, type: c.type, notnull: c.notnull }));
     expect(meta).toEqual([{ name: "note", type: "TEXT", notnull: 0 }]);
     const { orderId, lineId } = await seedOrderLine(nodeA, productA);
-    const id = await seedTicket(nodeA, orderId, lineId, stationA);
+    const id = await seedTicket(orderId, lineId, stationA);
     await inTx((tx) =>
       tx.update(ticketItems).set({ note: "no salt" }).where(eq(ticketItems.id, id)),
     );
@@ -223,13 +261,12 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       .map((c) => ({ ...c }));
     expect(meta).toEqual([{ name: "quantity", type: "INTEGER", notnull: 0, dflt_value: null }]);
     const unstated = await seedOrderLine(nodeA, productA);
-    const unstatedId = await seedTicket(nodeA, unstated.orderId, unstated.lineId, stationA);
+    const unstatedId = await seedTicket(unstated.orderId, unstated.lineId, stationA);
     const stated = await seedOrderLine(nodeA, productA);
     const [statedRow] = await inTx((tx) =>
       tx
         .insert(ticketItems)
         .values({
-          nodeId: nodeA,
           workingOrderId: stated.orderId,
           workingOrderLineId: stated.lineId,
           stationId: stationA,
@@ -252,15 +289,15 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
 
   it("rejects a second ticket item for the same line (the per-line UNIQUE — the concurrent-fire guard)", async () => {
     const { orderId, lineId } = await seedOrderLine(nodeA, productA);
-    await seedTicket(nodeA, orderId, lineId, stationA);
-    const e = await captureError(() => seedTicket(nodeA, orderId, lineId, stationA));
+    await seedTicket(orderId, lineId, stationA);
+    const e = await captureError(() => seedTicket(orderId, lineId, stationA));
     expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
   });
 
   it("cascades a ticket item away when its working_order_line is deleted (ON DELETE CASCADE)", async () => {
     // The parent order is open, so working_order_lines_require_open_parent permits the delete.
     const { orderId, lineId } = await seedOrderLine(nodeA, productA);
-    const id = await seedTicket(nodeA, orderId, lineId, stationA);
+    const id = await seedTicket(orderId, lineId, stationA);
     expect(countTicket(id)).toBe(1);
     await suite.db.delete(workingOrderLines).where(eq(workingOrderLines.id, lineId));
     expect(countTicket(id)).toBe(0);

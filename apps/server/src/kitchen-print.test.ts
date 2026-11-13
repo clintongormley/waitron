@@ -338,7 +338,6 @@ describe("show the rest of the order", () => {
         lineTotal: 150,
       });
       await tx.insert(ticketItems).values({
-        nodeId: cfg.nodeId,
         workingOrderId: orderId,
         workingOrderLineId: lineId,
         stationId: cold.id,
@@ -387,7 +386,6 @@ describe("show the rest of the order", () => {
           groupId: group!.id,
         });
         await tx.insert(ticketItems).values({
-          nodeId: cfg.nodeId,
           workingOrderId: orderId,
           workingOrderLineId: id,
           stationId,

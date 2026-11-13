@@ -53,7 +53,15 @@ async function settings(
           routingCellPeriods.cellId,
           cells.map((row) => row.id),
         ),
-        departmentId === null ? undefined : eq(routingCellPeriods.departmentId, departmentId),
+        departmentId === null
+          ? undefined
+          : inArray(
+              routingCellPeriods.periodId,
+              tx
+                .select({ id: menuPeriods.id })
+                .from(menuPeriods)
+                .where(eq(menuPeriods.departmentId, departmentId)),
+            ),
       ),
     );
   const extensions = zones.filter((zone) => zone.keptOpenDay !== null);

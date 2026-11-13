@@ -129,12 +129,9 @@ async function routed() {
       .insert(routingCells)
       .values({ stationId: station!.id, noCategory: true })
       .returning({ id: routingCells.id });
-    await tx.insert(routingCellPeriods).values({
-      cellId: cell!.id,
-      periodId: lunch,
-      departmentId: restaurant,
-      stationId: station!.id,
-    });
+    await tx
+      .insert(routingCellPeriods)
+      .values({ cellId: cell!.id, periodId: lunch, stationId: station!.id });
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await seedPersons(tx, {
         displayName: `${role} ${randomUUID()}`,

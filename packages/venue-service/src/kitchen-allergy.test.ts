@@ -49,7 +49,7 @@ beforeEach(async () => {
     invoiceLocales: ["en"],
     operationDescription: "Restaurant",
   });
-  const nodeId = await seedNode(suite.db);
+  await seedNode(suite.db);
   const [station] = await suite.db
     .insert(kitchenStations)
     .values({
@@ -83,7 +83,6 @@ beforeEach(async () => {
   const [ticket] = await suite.db
     .insert(ticketItems)
     .values({
-      nodeId,
       workingOrderId: orderId,
       workingOrderLineId: line!.id,
       stationId,
@@ -99,7 +98,7 @@ function hasStorage(): void {
     suite.db
       .all<{ name: string }>(sql`select name from sqlite_master where type = 'table'`)
       .map((row) => row.name),
-  ).toContain("ticket_item_allergies");
+  ).not.toContain("ticket_item_allergies");
   expect(
     suite.db
       .all<{ name: string }>(sql`select name from pragma_table_info('kitchen_notices')`)
@@ -108,9 +107,9 @@ function hasStorage(): void {
 }
 async function putCopy(before: unknown = original, after: unknown = original): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
-    await tx.execute(sql`insert into ticket_item_allergies(ticket_item_id, original_block, current_block)
-      values (${ticketId}, ${before === null ? null : JSON.stringify(before)},
-        ${after === null ? null : JSON.stringify(after)})`);
+    await tx.execute(sql`update ticket_items set allergy_frozen = 1,
+      allergy_original = ${before === null ? null : JSON.stringify(before)},
+      allergy_current = ${after === null ? null : JSON.stringify(after)} where id = ${ticketId}`);
   });
 }
 async function putNotice(
@@ -138,9 +137,17 @@ async function putNotice(
 describe("A669 storage", () => {
   it("keeps the original and corrected copy by value, with explicit frozen null distinct from absence", async () => {
     hasStorage();
-    expect(suite.db.all(sql`select * from ticket_item_allergies`)).toEqual([]);
+    expect(
+      suite.db.all(
+        sql`select id as ticket_item_id, allergy_original as original_block, allergy_current as current_block from ticket_items where allergy_frozen = 1`,
+      ),
+    ).toEqual([]);
     await putCopy(original, null);
-    expect(suite.db.all(sql`select * from ticket_item_allergies`)).toEqual([
+    expect(
+      suite.db.all(
+        sql`select id as ticket_item_id, allergy_original as original_block, allergy_current as current_block from ticket_items where allergy_frozen = 1`,
+      ),
+    ).toEqual([
       {
         ticket_item_id: ticketId,
         original_block: JSON.stringify(original),
@@ -148,22 +155,27 @@ describe("A669 storage", () => {
       },
     ]);
     await suite.db.delete(ticketItems).where(eq(ticketItems.id, ticketId));
-    expect(suite.db.all(sql`select * from ticket_item_allergies`)).toEqual([]);
+    expect(
+      suite.db.all(
+        sql`select id as ticket_item_id, allergy_original as original_block, allergy_current as current_block from ticket_items where allergy_frozen = 1`,
+      ),
+    ).toEqual([]);
   });
 
-  it("stores a frozen unticked row and refuses orphan ticket copies", async () => {
+  it("stores a frozen unticked ticket", async () => {
     hasStorage();
     await putCopy(null, null);
-    expect(suite.db.all(sql`select * from ticket_item_allergies`)).toEqual([
+    expect(
+      suite.db.all(
+        sql`select id as ticket_item_id, allergy_original as original_block, allergy_current as current_block from ticket_items where allergy_frozen = 1`,
+      ),
+    ).toEqual([
       {
         ticket_item_id: ticketId,
         original_block: null,
         current_block: null,
       },
     ]);
-    ticketId = randomUUID();
-    const error = await putCopy().catch((error: unknown) => error);
-    expect(engineErrorMessage(error)).toContain("FOREIGN KEY constraint failed");
   });
 
   it("keeps the kitchen copy when the last live guest is deleted", async () => {
@@ -197,7 +209,9 @@ describe("A669 storage", () => {
       [],
     );
     expect(
-      suite.db.all(sql`select original_block, current_block from ticket_item_allergies`),
+      suite.db.all(
+        sql`select allergy_original as original_block, allergy_current as current_block from ticket_items where allergy_frozen = 1`,
+      ),
     ).toEqual([
       {
         original_block: JSON.stringify(original),
@@ -228,9 +242,13 @@ describe("A669 storage", () => {
         column === "original" ? block : original,
         column === "current" ? block : original,
       ).catch((error: unknown) => error);
-      expect(engineErrorMessage(error)).toContain(`ticket_item_allergies_${column}_ck`);
+      expect(engineErrorMessage(error)).toContain(`ticket_items_allergy_${column}_ck`);
     }
-    expect(suite.db.all(sql`select * from ticket_item_allergies`)).toEqual([]);
+    expect(
+      suite.db.all(
+        sql`select id as ticket_item_id, allergy_original as original_block, allergy_current as current_block from ticket_items where allergy_frozen = 1`,
+      ),
+    ).toEqual([]);
   });
 
   it("stores changed and removed notices with their separate payload", async () => {
@@ -281,8 +299,8 @@ describe("A669 storage", () => {
       VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "ticket_item_allergies").map(
         ({ table, class: kind }) => [table, kind],
       ),
-    ).toEqual([["ticket_item_allergies", "state"]]);
-    expect(VENUE_SERVICE_CHANGE_SOURCES).toContainEqual({
+    ).toEqual([]);
+    expect(VENUE_SERVICE_CHANGE_SOURCES).not.toContainEqual({
       table: "ticket_item_allergies",
       type: "ticket_item_allergies",
     });
@@ -296,6 +314,12 @@ it("A669 copy operations keep the first original, update only current and read t
   expect(VENUE_SERVICE).toHaveProperty("recordTicketAllergies");
   expect(
     await withTransaction(suite.db, (tx) => VENUE_SERVICE.readTicketAllergies(tx, [])),
+  ).toEqual(new Map());
+  await withTransaction(suite.db, (tx) =>
+    VENUE_SERVICE.setTicketAllergyCurrent(tx, ticketId, original),
+  );
+  expect(
+    await withTransaction(suite.db, (tx) => VENUE_SERVICE.readTicketAllergies(tx, [ticketId])),
   ).toEqual(new Map());
   await withTransaction(suite.db, (tx) =>
     VENUE_SERVICE.recordTicketAllergies(tx, [

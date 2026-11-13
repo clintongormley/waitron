@@ -10,7 +10,7 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { inTx, OPERATOR, seatWithNoAllergies, setupPartyVenue } from "./testing/party-venue.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
-import { fireableLineColumns, fireLines, parkOrder, sendToPrep } from "./working-order.js";
+import { fireableLineColumns, fireLines, parkOrder } from "./working-order.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
@@ -104,7 +104,6 @@ describe("A773 counter release", () => {
     );
     expect(before).toHaveLength(lines.length);
     expect(before.every(({ firedAt }) => firedAt !== null)).toBe(true);
-    await expect(sendToPrep(v, v.cfg, id)).rejects.toMatchObject({ code: "ticket.already_fired" });
     expect(
       await inTx(v, (tx) =>
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, id)),

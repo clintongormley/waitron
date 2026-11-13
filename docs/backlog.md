@@ -767,7 +767,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4c, Split a table through the same
-  picker, has landed; it leaves open A1347–A1352, A1358–A1360, A1362, A1365 and A1366. Remaining: pre-bills through A446, which no longer
+  picker, has landed; it leaves open A1347–A1350, A1352, A1358–A1360, A1362 and A1365. Remaining: pre-bills through A446, which no longer
   waits for asesor S2.
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
@@ -2100,7 +2100,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
   What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 
-- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 17, 8 important, size M, waits for the A1308 table hold to lift). Holds A1368, A1351, A1366. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
+- **Small checks and indexes that are cheap only inside A1308's fresh tables** (bundle of 15, 6 important, size M, waits for the A1308 table hold to lift). Holds A1368. [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
 
 - **Cloud's shared UI release still needs dependency updates and portal qualification.**
   Waitron's [release workflow](../.github/workflows/publish-ui.yml) checks and publishes
@@ -2135,7 +2135,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   hyphenated segment (`/management-api/venue-details`, `/venue-defaults`). Pick one shape before
   go-live.
 
-- **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 21, size M). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
+- **Remove code nothing reaches (replaced or dead, never merely unused)** (bundle of 20, size M). [Detail](backlog/architecture.md#bundle-remove-code-nothing-reaches-replaced-or-dead-never-merely-unused)
 
 - **Go-live day steps.**
   [Detail](backlog/architecture.md#go-live-day-steps).

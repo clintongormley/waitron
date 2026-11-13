@@ -149,9 +149,9 @@ function copies(orderId: string) {
       current: string | null;
     }>(
       sql`
-    select t.id, t.working_order_line_id as lineId, a.ticket_item_id as frozen,
-      a.original_block as original, a.current_block as current
-    from ticket_items t left join ticket_item_allergies a on a.ticket_item_id = t.id
+    select t.id, t.working_order_line_id as lineId, case when t.allergy_frozen = 1 then t.id else null end as frozen,
+      t.allergy_original as original, t.allergy_current as current
+    from ticket_items t
     where t.working_order_id = ${orderId} order by t.rowid
   `,
     )

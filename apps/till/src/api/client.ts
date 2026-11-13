@@ -3702,15 +3702,6 @@ export class TillApi {
   }
 
   /**
-   * FIRE a SETTLED order to the kitchen → `POST /api/working-orders/:id/prep` — for an order that pays
-   * at order and so never places. A non-settled or absent id rejects `working_order.not_settled`; a
-   * re-fire `ticket.already_fired`; missing prep station `station.no_default`.
-   */
-  async sendToPrep(id: string): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${id}/prep`, "POST", {});
-  }
-
-  /**
    * Hand a fired order to the customer → `POST /api/orders/:id/collect`: a settled one, or a counter
    * order sent without payment in a mode that pays after sending. NON-FISCAL: it stamps
    * `collected_at`, which drops the order off the station queue — DISTINCT from {@link collectOrder},

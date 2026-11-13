@@ -453,7 +453,6 @@ export {
   serviceSteps,
   specialDayDates,
   specialDays,
-  ticketItemAllergies,
   workingLineContexts,
   zoneDayRanges,
   zoneDays,

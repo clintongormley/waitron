@@ -83,7 +83,6 @@ beforeAll(async () => {
   });
   const queuedAt = new Date(Date.now() - 3 * MINUTE_MS).toISOString();
   await db.insert(ticketItems).values({
-    nodeId,
     workingOrderId: orderId,
     workingOrderLineId: lineId,
     stationId,
@@ -191,7 +190,6 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       lineTotal: 121,
     });
     await db.insert(ticketItems).values({
-      nodeId: cfg.nodeId,
       workingOrderId: order!.id,
       workingOrderLineId: drinkLine,
       stationId,
@@ -243,7 +241,6 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       lineTotal: 121,
     });
     await db.insert(ticketItems).values({
-      nodeId: cfg.nodeId,
       workingOrderId: orderId,
       workingOrderLineId: lineId,
       stationId,

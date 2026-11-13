@@ -15,6 +15,7 @@ import {
   tsString,
 } from "../columns.js";
 import { kitchenStations } from "../kitchen-stations.js";
+import { ticketItems } from "../ticket-items.js";
 import { workingOrders } from "../orders.js";
 import { kitchenAllergyBlockCheck } from "./kitchen-allergy.js";
 
@@ -41,6 +42,7 @@ export const kitchenNotices = table(
     id: id("id").primaryKey().$defaultFn(newId),
     stationId: id("station_id").notNull(),
     workingOrderId: id("working_order_id").notNull(),
+    ticketItemId: id("ticket_item_id"),
     orderLabel: label("order_label").notNull(),
     kind: kitchenNoticeKind("kind").notNull(),
     lineName: label("line_name").notNull(),
@@ -74,6 +76,19 @@ export const kitchenNotices = table(
       foreignColumns: [workingOrders.id],
       name: "kitchen_notices_order_fk",
     }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.ticketItemId],
+      foreignColumns: [ticketItems.id],
+      name: "kitchen_notices_ticket_item_fk",
+    }).onDelete("set null"),
+    index("kitchen_notices_order_idx").on(t.workingOrderId),
+    index("kitchen_notices_ticket_item_idx")
+      .on(t.ticketItemId)
+      .where(sql`${t.ticketItemId} is not null`),
+    check(
+      "kitchen_notices_ticket_item_kind_ck",
+      sql`${t.kind} = 'moved' or ${t.ticketItemId} is null`,
+    ),
     index("kitchen_notices_open_idx")
       .on(t.stationId, t.createdAt)
       .where(sql`${t.acknowledgedAt} is null`),

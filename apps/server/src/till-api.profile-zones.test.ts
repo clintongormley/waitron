@@ -136,7 +136,6 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | PUT  /api/working-orders/:id/label                      | order                  | refuses PUT .../label                                |
  * | DELETE /api/working-orders/:id                          | order                  | refuses DELETE /api/working-orders/:id               |
  * | POST /api/working-orders/:id/place                      | order                  | refuses POST .../place                               |
- * | POST /api/working-orders/:id/prep                       | order                  | refuses POST .../prep                                |
  * | POST /api/orders/:id/courses/:courseId/ready  | order                  | refuses POST /api/orders/:id/courses/:courseId/<verb>|
  * | GET  /api/orders/counter-waiting                        | list, by order zone    | "lists only the profile's zones, tables and orders"  |
  * | POST /api/orders/:id/collect                            | order                  | refuses POST /api/orders/:id/collect                 |
@@ -249,7 +248,6 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * screen or pass monitor ("A773 pass board" below), and `PUT /api/device/kitchen-screen-display`,
  * scoped by the pass screen or pass monitor it names; the till's All stations
  * board `/api/expo/board` ("A773 pass board: all stations" in `till-api.expo-board.test.ts`)
- * and `/api/orders/:id/stations/:sid/advance`, which check the session only;
  * `/api/ticket-items/:id/advance`, which checks the session and that the dish is still at the
  * station the request names;
  * and the drawer, the authorizer and reason lists and
@@ -670,13 +668,6 @@ const ROUTES: readonly Row[] = [
     "POST /api/working-orders/:id/place",
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/place`,
-    () => ({}),
-    deliOrderZone,
-  ],
-  [
-    "POST /api/working-orders/:id/prep",
-    "POST",
-    (x) => `/api/working-orders/${x.deliOrder}/prep`,
     () => ({}),
     deliOrderZone,
   ],

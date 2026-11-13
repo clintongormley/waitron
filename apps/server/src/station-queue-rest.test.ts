@@ -62,7 +62,6 @@ describe("station queue rest of the order", () => {
       lineTotal: 121,
     });
     await db.insert(ticketItems).values({
-      nodeId,
       workingOrderId: orderId,
       workingOrderLineId: ownLineId,
       stationId,
@@ -146,7 +145,6 @@ describe("station queue rest of the order", () => {
       const [ticket] = await db
         .insert(ticketItems)
         .values({
-          nodeId,
           workingOrderId: orderId,
           workingOrderLineId: lineId,
           stationId: station(item.station),
@@ -173,7 +171,6 @@ describe("station queue rest of the order", () => {
       lineTotal: 121,
     });
     await db.insert(ticketItems).values({
-      nodeId,
       workingOrderId: ownOnlyOrderId,
       workingOrderLineId: ownOnlyLineId,
       stationId,
@@ -285,7 +282,6 @@ describe("station queue bump mode", () => {
         lineTotal: 121,
       });
       await db.insert(ticketItems).values({
-        nodeId,
         workingOrderId: orderId,
         workingOrderLineId: lineId,
         stationId,

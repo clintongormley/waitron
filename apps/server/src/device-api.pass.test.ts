@@ -391,7 +391,6 @@ describe("the pass screen's device routes", () => {
     const [foreignItem] = await suite.db
       .insert(ticketItems)
       .values({
-        nodeId: foreignNode,
         workingOrderId: foreignOrder!.id,
         workingOrderLineId: foreignLine!.id,
         stationId: foreignStation!.id,

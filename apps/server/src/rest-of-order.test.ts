@@ -137,7 +137,6 @@ describe("rest of the order read", () => {
         servedQuantity: "served" in item && item.served ? 9000 : 0,
       });
       await db.insert(ticketItems).values({
-        nodeId,
         workingOrderId: item.order,
         workingOrderLineId: lineId,
         stationId: station(item.station),

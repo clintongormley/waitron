@@ -42,7 +42,6 @@ export {
   serviceSteps,
   specialDayDates,
   specialDays,
-  ticketItemAllergies,
   workingLineContexts,
   ZONE_PAINT_KINDS,
   zoneDayRanges,

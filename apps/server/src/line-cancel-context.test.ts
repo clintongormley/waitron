@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setRoutingCell, ticketItemAllergies } from "@waitron/venue-service";
+import { setRoutingCell } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { advanceTicketItem } from "./working-order.js";
 import { fireGroup } from "./order-groups.js";
@@ -47,25 +47,10 @@ useVenueDb({
 });
 
 async function renameFixtureTicket(tx: Transaction, lineId: string, ticketId: string) {
-  const [ticket] = await tx
-    .select({ id: ticketItems.id })
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderLineId, lineId));
-  const copies =
-    ticket === undefined
-      ? []
-      : await tx
-          .delete(ticketItemAllergies)
-          .where(eq(ticketItemAllergies.ticketItemId, ticket.id))
-          .returning();
   await tx
     .update(ticketItems)
     .set({ id: ticketId })
     .where(eq(ticketItems.workingOrderLineId, lineId));
-  if (copies.length > 0)
-    await tx
-      .insert(ticketItemAllergies)
-      .values(copies.map((copy) => ({ ...copy, ticketItemId: ticketId })));
 }
 
 async function fixture(release: "fire" | "hold" = "fire", coffee = false) {

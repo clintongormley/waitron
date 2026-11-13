@@ -178,14 +178,6 @@ save the answer can be `ticket.already_fired` (found by #2044's second Codex rev
 bug). Decide whether "started first" should hold across the whole save
 ([rule](#changes-after-sending-every-part-of-a-dish-decides-and-removal-is-not-gated-a756-pr-8-2026-10-24)).
 
-## `POST /api/orders/:id/stations/:sid/advance` (`apps/server/src/till-api.ts`) has no till caller
-
-- **`POST /api/orders/:id/stations/:sid/advance` (`apps/server/src/till-api.ts`) has no till caller**
-  since A797 slice 8, whose heading and whole-ticket taps send each dish's own advance in turn (the
-  plan's slice 8, D8). Retiring it is a change of its own, on the FULL review path because it is a
-  till route, and not part of A773-2, whose Task 2 keeps "real station-item/ticket preparation
-  routes for actual-released work" (its plan, Task 2's Interfaces).
-
 ## A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question)
 
 - A card whose

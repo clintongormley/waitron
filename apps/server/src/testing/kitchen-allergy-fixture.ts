@@ -18,12 +18,7 @@ import {
 import type { Database } from "@waitron/db";
 import { hashSessionToken, sessions } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
-import {
-  allergyLineTicks,
-  kitchenNotices,
-  partyAllergyGuests,
-  ticketItemAllergies,
-} from "@waitron/venue-service";
+import { allergyLineTicks, kitchenNotices, partyAllergyGuests } from "@waitron/venue-service";
 import type { KitchenAllergyBlock } from "@waitron/module";
 import { readBillEditState } from "../bill-editing.js";
 import { ALLERGEN_NAMES } from "../i18n/kitchen-allergy.js";
@@ -258,7 +253,14 @@ export async function kitchenState(db: Database) {
       .from(parties),
     guests: await tx.select().from(partyAllergyGuests),
     ticks: await tx.select().from(allergyLineTicks),
-    copies: await tx.select().from(ticketItemAllergies),
+    copies: await tx
+      .select({
+        ticketItemId: ticketItems.id,
+        originalBlock: ticketItems.allergyOriginal,
+        currentBlock: ticketItems.allergyCurrent,
+      })
+      .from(ticketItems)
+      .where(eq(ticketItems.allergyFrozen, true)),
     notices: await tx.select().from(kitchenNotices),
     jobs: await tx.select().from(printJobs),
     parties: await tx.select().from(parties),

@@ -97,8 +97,7 @@ it("A1208 a table bill firing 11,880 burgers at once records an allergy snapshot
   });
 
   const [snapshots] = suite.db.all<{ count: number }>(
-    sql`select count(*) as count from ticket_item_allergies a
-        join ticket_items t on t.id = a.ticket_item_id where t.working_order_id = ${id}`,
+    sql`select count(*) as count from ticket_items t where t.allergy_frozen = 1 and t.working_order_id = ${id}`,
   );
   expect(snapshots!.count).toBe(11880);
 });

@@ -1235,9 +1235,7 @@ the helper's constant status is not evidence of the write.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
-17 entries, size M. The first 15 are unchanged from the index they came from (backlog review,
-2026-11-06); the 16th was added on 2026-11-07, and the last one is a slow read A1308 slice 0's
-bench found on a year of trading.
+15 entries, size M. Two kitchen-notice entries were retired by A1308 fk8 (2026-11-13).
 Where each lands: the A1308 slice named in the design's "Lands in" column
 ([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
 
@@ -1261,19 +1259,6 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   record: a schema change, held by A1308 until A760 lands. The owner chose to fix it there
   (2026-11-06): a cook is not left with two tickets for one dish.
   [Detail](kitchen.md#a1368-a-dish-waiting-for-the-pass-whose-hold-ticket-printed-moved-to-the-counter-still-gets-no-moved-line-and-no-fire-mark)
-- **A1351. `kitchen_notices` has no index on `working_order_id` (left open by A803 slice 4c).** Split
-  a table's MOVED-slip read scans it once per split: 9.29 ms at 200,000 rows and 48 ms at 1,000,000,
-  measured on a Mac with a warm cache (the 4c plan's R15). Add the index once the A1308 hold on table
-  changes ends.
-- **A1366. Two dishes alike on one bill share a MOVED notice, so Split a table can miss a slip
-  (left open by A803 slice 4c).** `readNamesOnPaper` (`apps/server/src/kitchen-print.ts`) matches a
-  dish's last MOVED notice by bill, station and dish name, so a notice written for one Burger also
-  counts for another Burger on that bill, and a split can print no slip for a dish whose ticket still
-  names the table that left. Ran twice: the 4c plan's D6 (`Mesa 431` leaving: no notice, no slip),
-  and the finish-branch review (two Burgers sent at Mesa 940, one moved to another bill, Mesa 941
-  joined, that Burger moved back, Mesa 940 split away: no slip; with a Flan as the second dish the
-  slip printed). `kitchen_notices` names no ticket item, so telling the two apart needs a column,
-  which waits for the A1308 hold.
 - **`envio_flujo`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`envios`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`invoice_series`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
@@ -1491,7 +1476,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Remove code nothing reaches (replaced or dead, never merely unused)
 
-21 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+20 entries, size M. The unused whole-ticket advance route was retired by A1308 fk8 (2026-11-13).
 
 - **The products' made-at read has no screen since A655**
   [Detail](catalogue.md#the-products-made-at-read-has-no-screen-since-a655)
@@ -1516,9 +1501,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   Remove them, or keep them with a stated reason — left open by A506-8, #1634.
 - **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no caller**
   [Detail](kitchen.md#get-management-apistationsoutputs-down-and-the-dashboards-listoutputsdown-have-no-caller)
-- **`POST /api/orders/:id/stations/:sid/advance` (`apps/server/src/till-api.ts`) has no till caller**
-  since A797 slice 8, whose heading and whole-ticket taps send each dish's own advance in turn (the
-  plan's slice 8, D8). [Detail](kitchen.md#post-apiordersidstationssidadvance-appsserversrctill-apits-has-no-till-caller)
 - **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
   moved a station's printers into the station save; `parseStationPrinterIds`
   (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.
