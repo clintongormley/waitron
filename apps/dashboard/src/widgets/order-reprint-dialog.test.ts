@@ -68,6 +68,7 @@ it("prints a duplicate on the selected printer and says where it went", async ()
     expect(el.shadowRoot!.querySelector("wt-combobox")?.options).toHaveLength(2),
   );
   expect(el.shadowRoot!.textContent).toContain("Bill No. 12, invoice A/12");
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Reprint the receipt");
   el.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "printer-2" }, bubbles: true, composed: true }),
   );
@@ -387,7 +388,7 @@ it.each(locales)("lists the loaded printers with no message beside them (%s)", a
 });
 
 it.each(locales)(
-  "says there is no active printer once an empty list arrives (%s)",
+  "says no printer is available for the document once an empty list arrives (%s)",
   async (locale) => {
     setLocale(locale);
     const api = {
@@ -771,6 +772,12 @@ describe("printing a full invoice", () => {
       ),
     );
     expect(api.reprintOrder).not.toHaveBeenCalled();
+    api.getOrder.mockResolvedValue(invoiceDetail([OFFICE_PRINTER], null));
+    api.liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.textContent).toContain("No printer is available for this document"),
+    );
+    expect(chooser(el)).toBeNull();
   });
 
   it("waits for the first eligible offer without rejecting its remembered printer while busy", async () => {
@@ -817,6 +824,7 @@ describe("printing a full invoice", () => {
   });
 
   it("keeps independent browser printer memories for Receipt and Invoice", async () => {
+    setLocale("en-GB");
     localStorage.setItem("waitron-dashboard-document-printer:receipt", KITCHEN_PRINTER.id);
     localStorage.setItem("waitron-dashboard-document-printer:invoice", OFFICE_PRINTER.id);
     const api = invoiceApi(
@@ -829,6 +837,7 @@ describe("printing a full invoice", () => {
       { api, row: fullRow, mode: "receipt" },
     );
     await vi.waitFor(() => expect(chooser(receipt)?.value).toBe(KITCHEN_PRINTER.id));
+    expect(receipt.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Reprint the receipt");
     expect(chooser(receipt)!.options.map((printer) => printer.value)).toEqual([
       BAR_PRINTER.id,
       KITCHEN_PRINTER.id,
@@ -969,12 +978,23 @@ describe("printing a full invoice", () => {
     );
     await vi.waitFor(() => expect(chooser(el)).toBeNull());
     expect(el.shadowRoot!.querySelector("[data-test=print-busy]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(
+      "Your previous printer is no longer available",
+    );
     expect(el.shadowRoot!.textContent).not.toContain("No printer is available for this document");
     expect(el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading")).toBe(
       "Print the invoice",
     );
     expect(printButton(el).getAttribute("disabled")).not.toBeNull();
     expect(printButton(el).variant).toBe("secondary");
+    api.getOrder.mockResolvedValue(
+      withCurrent(invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id), "sent"),
+    );
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(chooser(el)?.value).toBe(OFFICE_PRINTER.id));
+    expect(el.shadowRoot!.textContent).not.toContain(
+      "Your previous printer is no longer available",
+    );
   });
 
   it("never offers the receipt printers' list when the dialog turns to a full invoice", async () => {
@@ -1054,7 +1074,7 @@ describe("printing a full invoice", () => {
     ["en-GB", "sent", "No printer is available for this document"],
     ["es-ES", "failed", "No hay ninguna impresora disponible para este documento"],
   ] as const)(
-    "says there is no active printer, not that the invoice is on its way, when the server offers no print and nothing is on its way (%s, current %s)",
+    "says no printer is available for the document when no delivery is on its way (%s, current %s)",
     async (locale, current, words) => {
       setLocale(locale);
       const offerless = invoiceDetail(null, null);

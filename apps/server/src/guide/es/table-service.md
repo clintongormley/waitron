@@ -115,8 +115,9 @@ en cola en A4 o por correo antes de elegir Ticket para una factura completa.
 
 Elige la impresora y pulsa **Imprimir en {printer}** o **Imprimir una copia en {printer}**. **A4**
 identifica una impresora de oficina. Este navegador recuerda por separado la última impresora que
-aceptó un envío para Ticket y Factura. Si ya no está disponible, vuelve a elegir. Al abrir la lista, si solo
-hay una impresora disponible, aparece seleccionada. Usa **Actualizar impresoras** si no aparece ninguna,
+aceptó un envío para Ticket y Factura. Si ya no está disponible, vuelve a elegir. Al abrir la lista,
+si solo hay una impresora disponible, aparece seleccionada. Usa **Actualizar impresoras** si no
+aparece ninguna,
 o **Cancelar** para salir sin imprimir.
 
 ## Evitar justificantes de tarjeta duplicados {#reader-slips}
