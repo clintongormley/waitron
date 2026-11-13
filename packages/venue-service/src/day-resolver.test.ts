@@ -1019,7 +1019,7 @@ describe("readServiceDayPlan on a repeating date that follows a holiday's name",
     return day!.id;
   }
 
-  it("finds the holiday's date in a later year from the place the clock read", async () => {
+  it("finds a repeating holiday date's day in a later year", async () => {
     const id = await madridChristmas();
     const prepared = await scoped((tx) => readServiceDayPlan(tx, new Date("2026-12-25T11:00:00Z")));
     expect(prepared.plan!.special.get("2026-12-25")?.specialDayId).toBe(id);

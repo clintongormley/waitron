@@ -15,7 +15,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { listVenueReadiness } from "./operations.js";
-import { listSpecialDays, readSpecialDay, saveSpecialDay, specialDaysOn } from "./special-days.js";
+import { readSpecialDay, saveSpecialDay, specialDaysOn } from "./special-days.js";
 
 /** Calls to the invented calendar's `read`, so a test can count the holiday-list reads. */
 const reads = vi.hoisted(() => ({ count: 0 }));
@@ -187,7 +187,7 @@ describe("a special-day date records the public holiday it was saved on", () => 
 });
 
 describe("reading a special day gives each date's stored holiday name", () => {
-  it("names the holiday on a holiday date and leaves an ordinary date without one, in one read and the list", async () => {
+  it("names the holiday on a holiday date and leaves an ordinary date without one, in one read", async () => {
     await venue();
     const day = await save({
       name: "Semana Santa",
@@ -199,41 +199,6 @@ describe("reading a special day gives each date's stored holiday name", () => {
       { date: "2026-04-04", closedAllDay: false },
     ];
     expect((await scoped((tx) => readSpecialDay(tx, day.id))).dates).toEqual(expected);
-    expect(await scoped((tx) => listSpecialDays(tx))).toEqual([
-      { id: day.id, name: "Semana Santa", latestDate: "2026-04-04" },
-    ]);
-  });
-});
-
-describe("the special-day list offers each day's name and latest date", () => {
-  it("answers every day by name then id in one statement, with no latest date for a day without dates", async () => {
-    await venue();
-    const holy = await save({
-      name: "Semana Santa",
-      repeatsYearly: false,
-      dates: dates(["2026-04-03", "2026-04-05", "2026-04-04"]),
-    });
-    const [empty] = await db
-      .insert(specialDays)
-      .values({ name: "Annual closure", repeatsYearly: false })
-      .returning({ id: specialDays.id });
-    const fair = await save({ name: "Fair", repeatsYearly: true, dates: dates(["2026-09-10"]) });
-    await scoped(async (tx) => {
-      const session = (
-        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
-      ).session;
-      const spy = vi.spyOn(session, "prepareQuery");
-      try {
-        expect(await listSpecialDays(tx)).toEqual([
-          { id: empty!.id, name: "Annual closure", latestDate: null },
-          { id: fair.id, name: "Fair", latestDate: "2026-09-10" },
-          { id: holy.id, name: "Semana Santa", latestDate: "2026-04-05" },
-        ]);
-        expect(spy).toHaveBeenCalledTimes(1);
-      } finally {
-        spy.mockRestore();
-      }
-    });
   });
 });
 
