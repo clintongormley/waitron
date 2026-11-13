@@ -1975,7 +1975,7 @@ export interface PassCard {
   group?: { displayNumber: number; numberPartyLabel?: string; position: number };
   items: PassCardItem[];
   /** Dimmed dishes the pass's display choice hides: never drawn, but counted for the card's
-   *  lateness, allergy marker and course Ready levers as if drawn. */
+   *  lateness and allergy marker as if drawn. */
   hiddenItems?: PassCardItem[];
   /** Empty, with a null context, on the pass monitor's board. */
   releaseTicketItemIds: string[];
@@ -3622,12 +3622,8 @@ export class TillApi {
     });
   }
 
-  async bumpDeviceCourseReady(orderId: string, courseId: string): Promise<void> {
-    await this.#request<void>(
-      `/api/device/orders/${orderId}/courses/${courseId}/ready`,
-      "POST",
-      {},
-    );
+  async bumpDeviceBillReady(orderId: string): Promise<void> {
+    await this.#request<void>(`/api/device/orders/${orderId}/ready`, "POST", {});
   }
 
   bumpDeviceGroupReady(
@@ -3748,14 +3744,8 @@ export class TillApi {
     await this.#request<void>(`/api/orders/${orderId}/reprint`, "POST", {});
   }
 
-  /**
-   * Bump a WHOLE course to `ready` across every station → `POST
-   * /api/orders/:id/courses/:courseId/ready`: every FIRED, not-yet-`ready` item of the order and course.
-   * NON-FISCAL. A course with nothing left to bump is a 200 no-op; a malformed order id rejects
-   * `working_order.not_found`, a malformed course id `course.not_found`.
-   */
-  async bumpCourseReady(orderId: string, courseId: string): Promise<void> {
-    await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/ready`, "POST", {});
+  async bumpBillReady(orderId: string): Promise<void> {
+    await this.#request<void>(`/api/orders/${orderId}/ready`, "POST", {});
   }
 
   async cancelOrder(

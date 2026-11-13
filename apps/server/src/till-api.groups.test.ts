@@ -47,6 +47,15 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
+    const [device] = await db.select().from(devices).where(eq(devices.id, venue.deviceId));
+    const [profile] = await db
+      .select()
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.id, device!.deviceProfileId));
+    await db
+      .update(deviceProfiles)
+      .set({ capabilities: [...(profile!.capabilities as string[]), "run-the-pass"] })
+      .where(eq(deviceProfiles.id, profile!.id));
   },
 });
 

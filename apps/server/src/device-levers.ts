@@ -12,7 +12,8 @@ import { asObject } from "./bill-payments-api.js";
 import { groupCommand, requirePartyParam } from "./till-api.js";
 import { isUuid } from "./till-session.js";
 import { orderWatchZones, partyWatchZones } from "./watch-zones.js";
-import { bumpCourseReady } from "./working-order.js";
+import { passReleaseRefusal } from "./pass-release.js";
+import { bumpBillReady } from "./working-order.js";
 import { bumpGroupReady } from "./order-groups.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
@@ -53,18 +54,18 @@ export function mountDeviceLevers(
   log: Logger,
   run: Run,
 ): void {
-  app.post("/api/device/orders/:id/courses/:courseId/ready", (c) =>
+  app.post("/api/device/orders/:id/ready", (c) =>
     run(c, log, async () => {
       const device = await requireKitchenDisplay(deps, c, "prepare-orders");
+      const refused = passReleaseRefusal(device);
+      if (refused !== null) throw new AppError("device.forbidden_action", { action: refused });
       const orderId = c.req.param("id").toLowerCase();
       if (!isUuid(orderId))
         throw new AppError("working_order.not_found", { workingOrderId: orderId });
-      const courseId = c.req.param("courseId");
-      if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
       await withTransaction(deps.db, async (tx) => {
         const zoneId = await orderZone(tx, orderId);
         await VENUE_SERVICE.assertPassScreenZone(tx, device.deviceId, zoneId);
-        await bumpCourseReady(tx, orderId, courseId, { deviceId: device.deviceId });
+        await bumpBillReady(tx, orderId, { deviceId: device.deviceId });
       });
       return c.body(null, 200);
     }),
@@ -73,6 +74,8 @@ export function mountDeviceLevers(
   app.post("/api/device/parties/:id/groups/:gid/ready", (c) =>
     run(c, log, async () => {
       const device = await requireKitchenDisplay(deps, c, "prepare-orders");
+      const refused = passReleaseRefusal(device);
+      if (refused !== null) throw new AppError("device.forbidden_action", { action: refused });
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });

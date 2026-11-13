@@ -2562,7 +2562,7 @@ off only at the lock screen. The station board (`till-station-queue`) marks its 
 Columns, and the Changes to orders heading while there are changes; the station screen marks
 Merged / Stacked, drawn only on a kitchen screen with more than one station; the pass board
 (`till-pass-board`, on the pass, its monitor and a till's Pass) marks its first card drawn and
-Columns, and the first Course ready or Group ready, whose wrapper is drawn only while help is on.
+Columns, and the first Ready, whose wrapper is drawn only while help is on.
 One card and one lever per board carry a badge, so a busy
 board does not fill with identical "?" marks and Tab stops. These badges show on a till's Kitchen and
 Pass screens too. On these boards the cards, Columns and the first lever carry `help-inset`

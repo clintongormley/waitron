@@ -96,7 +96,7 @@ import { listTables, listZones } from "./tables.js";
 import {
   abandonHeldOrder,
   advanceTicketItem,
-  bumpCourseReady,
+  bumpBillReady,
   cancelPlacedOrder,
   captureOrderService,
   getHeldOrder,
@@ -126,6 +126,7 @@ import {
   paysAfterSending,
   unsentDishLines,
 } from "./working-order.js";
+import { passReleaseRefusal } from "./pass-release.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import type { LineExtras, OrderLinePatch, TicketState, OrderAttendance } from "./working-order.js";
 import { listStationsToday } from "./kitchen.js";
@@ -1193,20 +1194,19 @@ function requireLineNo(tabId: string, raw: string): number {
   return lineNo;
 }
 
-function mountCourseReady(app: Hono, deps: TillApiDeps, log: Logger): void {
-  app.post("/api/orders/:id/courses/:courseId/ready", (c) =>
+function mountBillReady(app: Hono, deps: TillApiDeps, log: Logger): void {
+  app.post("/api/orders/:id/ready", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "prepare-orders" });
+      const refused = passReleaseRefusal(session.device);
+      if (refused !== null) throw new AppError("device.forbidden_action", { action: refused });
       const { personId } = session;
       const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
-      const courseId = c.req.param("courseId");
-      if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ orderId }]);
-        await bumpCourseReady(
+        await bumpBillReady(
           tx,
           orderId,
-          courseId,
           { personId },
           deps.attendance === undefined
             ? undefined
@@ -2281,7 +2281,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  mountCourseReady(app, deps, log);
+  mountBillReady(app, deps, log);
 
   app.get("/api/orders/counter-waiting", (c) =>
     run(c, log, async () => {
@@ -3301,6 +3301,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     app.post(`/api/parties/:id/groups/:gid/${step}`, (c) =>
       run(c, log, async () => {
         const session = await requireSession(deps, c, { action });
+        const refused = passReleaseRefusal(session.device);
+        if (refused !== null) throw new AppError("device.forbidden_action", { action: refused });
         const { personId } = session;
         const partyId = requirePartyParam(c.req.param("id"));
         const groupId = c.req.param("gid");

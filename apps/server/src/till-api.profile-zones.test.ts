@@ -136,7 +136,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | PUT  /api/working-orders/:id/label                      | order                  | refuses PUT .../label                                |
  * | DELETE /api/working-orders/:id                          | order                  | refuses DELETE /api/working-orders/:id               |
  * | POST /api/working-orders/:id/place                      | order                  | refuses POST .../place                               |
- * | POST /api/orders/:id/courses/:courseId/ready  | order                  | refuses POST /api/orders/:id/courses/:courseId/<verb>|
+ * | POST /api/orders/:id/ready  | order                  | refuses POST /api/orders/:id/<verb>|
  * | GET  /api/orders/counter-waiting                        | list, by order zone    | "lists only the profile's zones, tables and orders"  |
  * | POST /api/orders/:id/collect                            | order                  | refuses POST /api/orders/:id/collect                 |
  * | POST /api/orders/:id/reprint                            | order                  | refuses POST /api/orders/:id/reprint                 |
@@ -216,7 +216,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/working-orders/:id/adjustments, /preview      | order                  | refuses POST .../adjustments, /preview               |
  * | GET  /api/bills/lookup                                  | list, by order zone    | "shows a Deli bill to the Deli ...", "fills ... twenty Deli bills ..." |
  * | GET  /api/invoices/lookup                               | list, by order zone    | "shows a Deli invoice to the Deli ...", "fills ... twenty Deli invoices ..." |
- * | POST /api/device/orders/:id/courses/:courseId/ready | order, against the device's pass zones | refuses the display's POST /api/device/orders/:id/courses/:courseId/<verb> |
+ * | POST /api/device/orders/:id/ready | order, against the device's pass zones | refuses the display's POST /api/device/orders/:id/<verb> |
  * | POST /api/device/parties/:id/groups/:gid/ready | party, against the device's pass zones | refuses the display's POST /api/device/parties/:id/groups/:gid/<verb> |
  * | POST /api/device/pass-screen/release | body party or order, against the profile's zones | "A773 pass release" below |
  *
@@ -672,9 +672,9 @@ const ROUTES: readonly Row[] = [
     deliOrderZone,
   ],
   ...(["ready"] as const).map((verb): Row => [
-    `POST /api/orders/:id/courses/:courseId/${verb}`,
+    `POST /api/orders/:id/${verb}`,
     "POST",
-    (x) => `/api/orders/${x.deliOrder}/courses/${id}/${verb}`,
+    (x) => `/api/orders/${x.deliOrder}/${verb}`,
     () => ({}),
     deliOrderZone,
   ]),
@@ -1465,7 +1465,7 @@ describe("a kitchen display's pass levers", () => {
     const [row] = await seedDeviceProfiles(suite.db, {
       name: `Pass ${randomUUID()}`,
       formFactor: "kds",
-      capabilities: ["take-orders", "prepare-orders", "hand-over-orders"],
+      capabilities: ["take-orders", "prepare-orders", "hand-over-orders", "run-the-pass"],
     });
     const device = await enrolDeviceForTest(suite.db, v.cfg, {
       name: `Pass ${randomUUID()}`,
@@ -1476,11 +1476,11 @@ describe("a kitchen display's pass levers", () => {
   }
 
   for (const verb of ["ready"] as const) {
-    it(`refuses the display's POST /api/device/orders/:id/courses/:courseId/${verb}`, async () => {
+    it(`refuses the display's POST /api/device/orders/:id/${verb}`, async () => {
       const answer = await send(
         await restaurantPass(),
         "POST",
-        `/api/device/orders/${f.deliOrder}/courses/${randomUUID()}/${verb}`,
+        `/api/device/orders/${f.deliOrder}/${verb}`,
       );
       expect(answer).toEqual({
         status: 403,

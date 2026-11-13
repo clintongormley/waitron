@@ -272,11 +272,11 @@ dashboard. There, under **Device profiles**, a profile's pass screen and pass mo
 window has the same setting for its pass screen or pass monitor, with **Use the profile's setting**,
 **Show** and **Hide**.
 
-On a card **In progress**, **Group ready** marks every sent dish of the table's group ready at every
-station, not only the ones this pass shows, and on a counter order **Course ready**, followed by the
-course's name, does the same for that course. Dishes not yet sent to be cooked, held or waiting for
-the pass, stay as they are. **Fire** and these buttons show only on a device whose profile **Runs
-the pass**. On a till, a card that is not held also offers **Reprint** for each of its bills.
+On each card **In progress**, tap **Ready** to mark its sent dishes ready at every station,
+including dishes this pass hides. This covers the whole card, including counter orders and dishes
+without a course. Dishes still held or waiting for the pass stay as they are. **Fire** and **Ready**
+need **Runs the pass** on the device's profile.
+On a till, a card that is not held also offers **Reprint** for each of its bills.
 
 A pass monitor shows the same board for watching, with no **Fire**, Ready or **Reprint** buttons. A
 till whose device has no pass screen or pass monitor opens **Pass** on every station and service
@@ -300,7 +300,7 @@ tapping its heading.
 Tap **?** at the top right of a kitchen screen, before the theme and language buttons, to turn help
 on. **?** marks then show on the first card and on **Columns** of each board, on **Changes to
 orders** while there are changes to read, and on **Merged** or **Stacked** on a screen with more
-than one station. On the pass they also show on the first **Course ready** or **Group ready**. Tap
+than one station. On the pass they also show on the first **Ready**. Tap
 a mark to read a short note
 about that part; some notes link to this guide. The rest of the screen works as usual while help is
 on.

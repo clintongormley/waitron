@@ -62,7 +62,7 @@ export const helpEn = {
   "help.pass.card":
     "Each card is an order from a table or the counter. Fire, where it shows, sends the card's dishes marked Waiting for the pass to their stations to be cooked. A dashed card is held: the waiter hasn't asked for it yet. A card's left edge changes colour, then turns red, the longer its dishes wait.",
   "help.pass.ready":
-    "Marks the food of this course or group ready at every station, including dishes this screen doesn't show. Dishes not yet sent to cook stay as they are.",
+    "Marks the food on this card ready at every station, including dishes this screen doesn't show. Dishes not yet sent to cook stay as they are.",
 } as const;
 
 export type HelpKey = keyof typeof helpEn;
@@ -127,7 +127,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.pass.card":
     "Cada tarjeta es un pedido de una mesa o del mostrador. Marchar, donde aparece, manda a sus estaciones los platos de la tarjeta que dicen Esperando al pase, para que los preparen. Una tarjeta con borde discontinuo está en espera: el camarero aún no la ha pedido. El borde izquierdo de una tarjeta cambia de color y luego pasa a rojo cuanto más esperan sus platos.",
   "help.pass.ready":
-    "Marca como lista la comida de este curso o grupo en todas las estaciones, también los platos que esta pantalla no muestra. Los platos que aún no se han mandado a preparar se quedan como están.",
+    "Marca como lista la comida de esta tarjeta en todas las estaciones, también los platos que esta pantalla no muestra. Los platos que aún no se han mandado a preparar se quedan como están.",
 };
 const helpCatalogues: Record<string, Partial<Record<HelpKey, string>>> = {
   en: helpEn,

@@ -468,19 +468,15 @@ export class TillPassScreen extends LitElement {
     if (this.#isCurrent(boardId)) await this.#reload();
   }
 
-  /** Unlike a group Ready press, a course Ready press leaves the refresh sentence. */
-  async #courseReady(
-    boardId: BoardId,
-    key: string,
-    orderId: string,
-    courseId: string,
-  ): Promise<void> {
+  async #billReady(boardId: BoardId, key: string): Promise<void> {
     const card = this.board.inProgress.find((offered) => offered.key === key);
+    if (card?.target.kind !== "bill") return;
+    const orderId = card.target.workingOrderId;
     this.leverError = undefined;
     try {
       await (this.#onDevice()
-        ? this.api.bumpDeviceCourseReady(orderId, courseId)
-        : this.api.bumpCourseReady(orderId, courseId));
+        ? this.api.bumpDeviceBillReady(orderId)
+        : this.api.bumpBillReady(orderId));
     } catch (error) {
       if (this.#switched(error)) return;
       if (this.#isCurrent(boardId)) this.#leverRefused(card, error);
@@ -687,12 +683,9 @@ export class TillPassScreen extends LitElement {
         event.stopPropagation();
         void this.#groupReady(boardId, (event as CustomEvent<{ key: string }>).detail.key);
       }}
-      @pass-course-ready=${(event: Event) => {
+      @pass-bill-ready=${(event: Event) => {
         event.stopPropagation();
-        const { key, orderId, courseId } = (
-          event as CustomEvent<{ key: string; orderId: string; courseId: string }>
-        ).detail;
-        void this.#courseReady(boardId, key, orderId, courseId);
+        void this.#billReady(boardId, (event as CustomEvent<{ key: string }>).detail.key);
       }}
       @pass-reprint=${(event: Event) => {
         event.stopPropagation();

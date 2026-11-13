@@ -7,6 +7,8 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
   newId,
+  deviceProfiles,
+  devices,
   orderGroups,
   orderGroupEvents,
   parties,
@@ -27,7 +29,7 @@ import { createCourse, createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { bumpGroupReady, fireGroup } from "./order-groups.js";
 import { splitPartyBill } from "./testing/serve-line.js";
-import { advanceTicketItem, bumpCourseReady, markServed } from "./working-order.js";
+import { advanceTicketItem, markServed } from "./working-order.js";
 import {
   provisionBillVenue,
   seatedHeldWith,
@@ -45,6 +47,15 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-05T09:00:00Z"));
   v = await provisionBillVenue(suite.db);
+  const [device] = await suite.db.select().from(devices).where(eq(devices.id, v.deviceId));
+  const [profile] = await suite.db
+    .select()
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, device!.deviceProfileId));
+  await suite.db
+    .update(deviceProfiles)
+    .set({ capabilities: [...(profile!.capabilities as string[]), "run-the-pass"] })
+    .where(eq(deviceProfiles.id, profile!.id));
   await withTransaction(suite.db, async (tx) => {
     stationId = (await createStation(tx, { name: "Kitchen", isDefault: true })).id;
     destination = (await createStation(tx, { name: "Bar" })).id;
@@ -64,7 +75,7 @@ const actions = [
   "ticket-preparing",
   "ticket-ready",
   "group-fire",
-  "course-ready",
+  "bill-ready",
   "group-ready",
   "served",
   "unserved",
@@ -111,7 +122,17 @@ async function prepare(action: Action) {
         expectedPartyRevision: await partyRevision(tx, party.partyId),
         operatorId: v.operatorId,
       });
-    if (action.endsWith("-away")) await bumpCourseReady(tx, party.tabId, courseId);
+    if (action === "bill-ready")
+      await tx
+        .update(workingOrderLines)
+        .set({ groupId: null })
+        .where(eq(workingOrderLines.id, line!.id));
+    if (action.endsWith("-away"))
+      await bumpGroupReady(tx, party.partyId, line!.groupId!, {
+        submissionId: newId(),
+        expectedPartyRevision: await partyRevision(tx, party.partyId),
+        operatorId: v.operatorId,
+      });
     if (action === "unserved")
       await markServed(tx, v.cfg, party.partyId, [{ lineId: line!.id, quantity: "1" }], {
         submissionId: newId(),
@@ -156,6 +177,9 @@ function command(app: Hono, action: Action, order: Awaited<ReturnType<typeof pre
   } else if (action.startsWith("ticket-")) {
     path = `/api/ticket-items/${order.ticketId}/advance`;
     body = { stationId, to: action.slice(7) };
+  } else if (action === "bill-ready") {
+    path = `/api/orders/${order.tabId}/ready`;
+    body = {};
   } else if (action.startsWith("course-")) {
     path = `/api/orders/${order.tabId}/courses/${courseId}/${action.slice(7)}`;
     body = {};

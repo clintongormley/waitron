@@ -508,7 +508,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     markCollected: vi.fn().mockResolvedValue(undefined),
     getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }),
-    bumpCourseReady: vi.fn().mockResolvedValue(undefined),
+    bumpBillReady: vi.fn().mockResolvedValue(undefined),
     markCourseAway: vi.fn().mockResolvedValue(undefined),
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),

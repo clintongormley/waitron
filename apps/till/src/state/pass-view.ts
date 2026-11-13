@@ -28,16 +28,11 @@ export interface CardView {
   ageWord: "minutes" | "ready" | null;
   band: TimingBand | null;
   allergy: boolean;
-  /** The dishes drawn; a dish Hide hid counts for `band`, `allergy` and `courseReady`, undrawn. */
+  /** The dishes drawn; a dish Hide hid counts for `band` and `allergy`, undrawn. */
   items: ItemView[];
   fire: { shown: boolean; enabled: boolean };
   groupReady: boolean;
-  courseReady: CourseReady[];
-}
-export interface CourseReady {
-  orderId: string;
-  courseId: string;
-  name: string;
+  billReady: boolean;
 }
 
 type PassColumn = CardView["column"];
@@ -91,39 +86,6 @@ function cardBand(items: readonly ItemView[]): TimingBand | null {
   return worst;
 }
 
-const released = (item: PassCardItem) => item.phase !== "held" && item.phase !== "requested";
-
-/** Per course of a bill card whose dishes are all released and not all ready, in first-seen order. */
-function readyCourses(card: PassCard, dishes: readonly PassCardItem[]): CourseReady[] {
-  if (card.target.kind !== "bill") return [];
-  const courses = new Map<string, CourseReady & { items: PassCardItem[] }>();
-  for (const item of dishes) {
-    if (item.course === null) continue;
-    const key = JSON.stringify([item.orderId, item.course.id]);
-    let course = courses.get(key);
-    if (course === undefined) {
-      course = {
-        orderId: item.orderId,
-        courseId: item.course.id,
-        name: item.course.name ?? "",
-        items: [],
-      };
-      courses.set(key, course);
-    }
-    course.items.push(item);
-  }
-  return [...courses.values()]
-    .filter(({ items }) => items.every(released) && !items.every((item) => item.phase === "ready"))
-    .map(({ orderId, courseId, name }) => ({ orderId, courseId, name }));
-}
-
-/** Course Ready's order as the server's, except between two courses sharing a place: the server
- *  breaks that tie by line number, which the till lacks, so drawn dishes stay first. */
-function inCourseOrder(dishes: PassCardItem[]): PassCardItem[] {
-  const place = (item: PassCardItem) => item.course?.displayOrder ?? 0;
-  return dishes.sort((a, b) => place(a) - place(b));
-}
-
 function cardView(
   card: PassCard,
   column: PassColumn,
@@ -133,10 +95,7 @@ function cardView(
 ): CardView {
   const items = card.items.map((item) => itemView(item, now));
   const hidden = (card.hiddenItems ?? []).map((item) => itemView(item, now));
-  const dishes =
-    card.hiddenItems === undefined
-      ? card.items
-      : inCourseOrder([...card.items, ...card.hiddenItems]);
+  const dishes = card.hiddenItems === undefined ? card.items : [...card.items, ...card.hiddenItems];
   const fireShown = column === "toFire" && mode === "pass" && runsPass;
   const levers = column === "inProgress" && mode !== "monitor" && runsPass;
   const age: Pick<CardView, "ageFrom" | "ageWord"> =
@@ -155,7 +114,7 @@ function cardView(
     items,
     fire: { shown: fireShown, enabled: fireShown && card.releaseTicketItemIds.length > 0 },
     groupReady: levers && card.target.kind === "group",
-    courseReady: levers ? readyCourses(card, dishes) : [],
+    billReady: levers && card.target.kind === "bill",
   };
 }
 

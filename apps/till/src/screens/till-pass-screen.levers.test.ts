@@ -82,8 +82,8 @@ type FakeApi = TillApi &
     | "getDevicePassBoard"
     | "bumpDeviceGroupReady"
     | "bumpGroupReady"
-    | "bumpDeviceCourseReady"
-    | "bumpCourseReady"
+    | "bumpDeviceBillReady"
+    | "bumpBillReady"
     | "reprintOrder"
     | "getExpoBoard"
     | "releaseDevicePass",
@@ -99,8 +99,8 @@ function fakeApi(overrides: Record<string, unknown> = {}): FakeApi {
     releaseDevicePass: vi.fn().mockResolvedValue({ releasedTicketItemIds: ["f-a"] }),
     bumpDeviceGroupReady: vi.fn().mockResolvedValue({ revision: 8 }),
     bumpGroupReady: vi.fn().mockResolvedValue({ revision: 8 }),
-    bumpDeviceCourseReady: vi.fn().mockResolvedValue(undefined),
-    bumpCourseReady: vi.fn().mockResolvedValue(undefined),
+    bumpDeviceBillReady: vi.fn().mockResolvedValue(undefined),
+    bumpBillReady: vi.fn().mockResolvedValue(undefined),
     reprintOrder: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as FakeApi;
@@ -140,9 +140,9 @@ const surfaces = [
     where: "a kitchen display",
     mountOne: mountDisplay,
     group: "bumpDeviceGroupReady",
-    course: "bumpDeviceCourseReady",
+    bill: "bumpDeviceBillReady",
   },
-  { where: "a till", mountOne: mountTill, group: "bumpGroupReady", course: "bumpCourseReady" },
+  { where: "a till", mountOne: mountTill, group: "bumpGroupReady", bill: "bumpBillReady" },
 ] as const;
 
 const boardOf = (el: TillPassScreen) =>
@@ -231,30 +231,30 @@ describe("A773 pass screen: levers", () => {
 
   it.each(surfaces)(
     "another Ready refusal on $where shows the card's label and the code's words",
-    async ({ mountOne, group, course }) => {
+    async ({ mountOne, group, bill }) => {
       const api = fakeApi({
         [group]: vi.fn().mockRejectedValue(refused("device.forbidden_action", 403)),
-        [course]: vi.fn().mockRejectedValue(refused("order.payment_in_flight", 404)),
+        [bill]: vi.fn().mockRejectedValue(refused("order.payment_in_flight", 404)),
       });
       const el = await mountOne(api);
       await press(el, '[data-group-ready="g-1"]');
       expect(text(leverError(el))).toBe(`#7 T7: ${codeMessage("device.forbidden_action")}`);
       expect(leverError(el)!.getAttribute("role")).toBe("alert");
       expect(tableChanged(el)).toBeNull();
-      await press(el, '[data-ready="course-mains"]');
+      await press(el, '[data-ready="order-1"]');
       expect(text(leverError(el))).toBe(`#1 T1: ${codeMessage("order.payment_in_flight")}`);
       expect(leverError(el)!.getAttribute("role")).toBe("alert");
     },
   );
 
   it.each(surfaces)(
-    "Course Ready on a bill card on $where sends the order and course, then reloads",
-    async ({ mountOne, course }) => {
+    "Bill Ready on a bill card on $where sends the bill, then reloads",
+    async ({ mountOne, bill }) => {
       const api = fakeApi();
       const el = await mountOne(api);
       const reads = api.getDevicePassBoard.mock.calls.length;
-      await press(el, '[data-ready="course-mains"]');
-      expect(api[course]).toHaveBeenCalledExactlyOnceWith("order-1", "course-mains");
+      await press(el, '[data-ready="order-1"]');
+      expect(api[bill]).toHaveBeenCalledExactlyOnceWith("order-1");
       expect(api.getDevicePassBoard).toHaveBeenCalledTimes(reads + 1);
     },
   );
@@ -262,14 +262,14 @@ describe("A773 pass screen: levers", () => {
   it.each([
     ["device.unauthorized", '[data-group-ready="g-1"]'],
     ["kitchen_screen.not_allowed", '[data-group-ready="g-1"]'],
-    ["device.unauthorized", '[data-ready="course-mains"]'],
-    ["kitchen_screen.not_allowed", '[data-ready="course-mains"]'],
+    ["device.unauthorized", '[data-ready="order-1"]'],
+    ["kitchen_screen.not_allowed", '[data-ready="order-1"]'],
   ] as const)(
     "a lever refused %s on a kitchen display asks the app to re-read the device's choice (%s)",
     async (code, selector) => {
       const api = fakeApi({
         bumpDeviceGroupReady: vi.fn().mockRejectedValue(refused(code, 401)),
-        bumpDeviceCourseReady: vi.fn().mockRejectedValue(refused(code, 401)),
+        bumpDeviceBillReady: vi.fn().mockRejectedValue(refused(code, 401)),
       });
       const el = await mountDisplay(api);
       const changed = vi.fn();
@@ -290,7 +290,7 @@ describe("A773 pass screen: levers", () => {
     const reboot = vi.fn();
     document.addEventListener("device-unauthorized", reboot);
     try {
-      await press(el, '[data-ready="course-mains"]');
+      await press(el, '[data-ready="order-1"]');
       expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
       expect(reboot).not.toHaveBeenCalled();
       expect(el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
@@ -300,9 +300,9 @@ describe("A773 pass screen: levers", () => {
     }
   });
 
-  it("on a till, a course Ready refused kitchen_screen.not_allowed shows its words, reads the board again and asks for no switch", async () => {
+  it("on a till, a bill Ready refused kitchen_screen.not_allowed shows its words, reads the board again and asks for no switch", async () => {
     const api = fakeApi({
-      bumpCourseReady: vi.fn().mockRejectedValue({
+      bumpBillReady: vi.fn().mockRejectedValue({
         ...refused("kitchen_screen.not_allowed", 403),
         params: { screen: "pass" },
       }),
@@ -311,8 +311,8 @@ describe("A773 pass screen: levers", () => {
     const changed = vi.fn();
     el.addEventListener("kitchen-screen-changed", changed);
     const reads = api.getDevicePassBoard.mock.calls.length;
-    await press(el, '[data-ready="course-mains"]');
-    expect(api.bumpCourseReady).toHaveBeenCalledExactlyOnceWith("order-1", "course-mains");
+    await press(el, '[data-ready="order-1"]');
+    expect(api.bumpBillReady).toHaveBeenCalledExactlyOnceWith("order-1");
     expect(api.getDevicePassBoard).toHaveBeenCalledTimes(reads + 1);
     expect(changed).not.toHaveBeenCalled();
     expect(text(leverError(el))).toBe(`#1 T1: ${codeMessage("kitchen_screen.not_allowed")}`);
@@ -326,7 +326,7 @@ describe("A773 pass screen: levers", () => {
       getDevicePassBoard: vi
         .fn()
         .mockResolvedValue(deviceBoard(passBoard({ inProgress: [untabled] }))),
-      bumpDeviceCourseReady: vi
+      bumpDeviceBillReady: vi
         .fn()
         .mockRejectedValue(refused("kitchen_screen.zone_not_allowed", 403)),
     });
@@ -335,7 +335,7 @@ describe("A773 pass screen: levers", () => {
       deviceMode: true,
       initialBoard: deviceBoard(passBoard({ inProgress: [untabled] })),
     });
-    await press(el, '[data-ready="course-mains"]');
+    await press(el, '[data-ready="order-1"]');
     expect(text(leverError(el))).toBe(`#6: ${codeMessage("kitchen_screen.zone_not_allowed")}`);
   });
 
@@ -343,14 +343,14 @@ describe("A773 pass screen: levers", () => {
     const code = refused("service_zone.not_allowed", 403);
     const api = fakeApi({
       bumpGroupReady: vi.fn().mockRejectedValue(code),
-      bumpCourseReady: vi.fn().mockRejectedValue(code),
+      bumpBillReady: vi.fn().mockRejectedValue(code),
     });
     const el = await mountTill(api);
     const sentence =
       "This device's profile does not work in that area. It can be changed in the dashboard, under Device profiles.";
     await press(el, '[data-group-ready="g-1"]');
     expect(text(leverError(el))).toBe(`#7 T7: ${sentence}`);
-    await press(el, '[data-ready="course-mains"]');
+    await press(el, '[data-ready="order-1"]');
     expect(text(leverError(el))).toBe(`#1 T1: ${sentence}`);
   });
 
@@ -405,7 +405,7 @@ describe("A773 pass screen: levers", () => {
 
   it("a group Ready press clears the refresh sentence, the one still waiting for a read, and a refusal", async () => {
     const api = fakeApi({
-      bumpDeviceCourseReady: vi.fn().mockRejectedValue(refused("order.payment_in_flight", 404)),
+      bumpDeviceBillReady: vi.fn().mockRejectedValue(refused("order.payment_in_flight", 404)),
       bumpDeviceGroupReady: vi
         .fn()
         .mockRejectedValueOnce(refused("party.out_of_date"))
@@ -413,7 +413,7 @@ describe("A773 pass screen: levers", () => {
         .mockResolvedValue({ revision: 8 }),
     });
     const el = await mountDisplay(api);
-    await press(el, '[data-ready="course-mains"]');
+    await press(el, '[data-ready="order-1"]');
     expect(leverError(el)).not.toBeNull();
     await press(el, '[data-group-ready="g-1"]');
     expect(leverError(el)).toBeNull();
@@ -427,10 +427,10 @@ describe("A773 pass screen: levers", () => {
     expect(tableChanged(el)).toBeNull();
   });
 
-  it("a course Ready press clears a refusal and leaves the refresh sentence", async () => {
+  it("a bill Ready press clears a refusal and leaves the refresh sentence", async () => {
     const api = fakeApi({
       bumpDeviceGroupReady: vi.fn().mockRejectedValue(refused("party.out_of_date")),
-      bumpDeviceCourseReady: vi
+      bumpDeviceBillReady: vi
         .fn()
         .mockRejectedValueOnce(refused("order.payment_in_flight", 404))
         .mockResolvedValue(undefined),
@@ -440,9 +440,9 @@ describe("A773 pass screen: levers", () => {
     expect(tableChanged(el)).not.toBeNull();
 
     api.getDevicePassBoard.mockRejectedValue(new TypeError("Failed to fetch"));
-    await press(el, '[data-ready="course-mains"]');
+    await press(el, '[data-ready="order-1"]');
     expect(leverError(el)).not.toBeNull();
-    await press(el, '[data-ready="course-mains"]');
+    await press(el, '[data-ready="order-1"]');
     expect(leverError(el)).toBeNull();
     expect(tableChanged(el)).not.toBeNull();
   });
@@ -498,7 +498,7 @@ describe("A773 pass screen: levers", () => {
     setHelpMode(true);
     await flush(el);
     const before = boardOf(el)!.board;
-    await press(el, '[data-ready="course-mains"]');
+    await press(el, '[data-ready="order-1"]');
     expect(boardOf(el)!.board).not.toBe(before);
     const ready = badges(el).filter((badge) => badge.textContent === helpText("help.pass.ready"));
     expect(ready).toHaveLength(1);
@@ -537,10 +537,10 @@ describe("A773 pass screen: levers", () => {
       "Abre el pase: una tarjeta por cada pedido de una mesa o del mostrador, en columnas de Por marchar a Listo.",
     );
     expect(helpEn["help.pass.ready"]).toBe(
-      "Marks the food of this course or group ready at every station, including dishes this screen doesn't show. Dishes not yet sent to cook stay as they are.",
+      "Marks the food on this card ready at every station, including dishes this screen doesn't show. Dishes not yet sent to cook stay as they are.",
     );
     expect(helpEs["help.pass.ready"]).toBe(
-      "Marca como lista la comida de este curso o grupo en todas las estaciones, también los platos que esta pantalla no muestra. Los platos que aún no se han mandado a preparar se quedan como están.",
+      "Marca como lista la comida de esta tarjeta en todas las estaciones, también los platos que esta pantalla no muestra. Los platos que aún no se han mandado a preparar se quedan como están.",
     );
   });
 });
@@ -560,22 +560,22 @@ describe("A773 pass screen: levers on a till's All stations", () => {
   const allBoard = () =>
     passBoard({ held: [heldCard], toFire: [fireCard()], inProgress: [groupCard(), passCard()] });
 
-  it("draws a released course's Ready and no Fire on a held or To fire card, though it runs the pass", async () => {
+  it("draws a bill card's Ready and no Fire on a held or To fire card, though it runs the pass", async () => {
     const api = allApi(allBoard());
     const el = await mountTill(api);
     expect(boardOf(el)!.mode).toBe("all_stations");
     expect(inBoard(el, '[data-card="held:h-1"]')).not.toBeNull();
     expect(inBoard(el, '[data-card="group:g-2"]')).not.toBeNull();
     expect(boardOf(el)!.shadowRoot!.querySelectorAll("[data-pass-fire]")).toHaveLength(0);
-    expect(text(inBoard(el, '[data-ready="course-mains"]'))).toBe(`${t("expo.ready")} Mains`);
+    expect(text(inBoard(el, '[data-ready="order-1"]'))).toBe(t("expo.ready"));
   });
 
   it("a Ready refused service_zone.not_allowed says the profile can be changed, in both languages, since this board has no zone limit", async () => {
     const api = allApi(allBoard(), {
-      bumpCourseReady: vi.fn().mockRejectedValue(refused("service_zone.not_allowed", 403)),
+      bumpBillReady: vi.fn().mockRejectedValue(refused("service_zone.not_allowed", 403)),
     });
     const el = await mountTill(api);
-    await press(el, '[data-ready="course-mains"]');
+    await press(el, '[data-ready="order-1"]');
     expect(text(leverError(el))).toBe(
       "#1 T1: This device's profile does not work in that area. It can be changed in the dashboard, under Device profiles.",
     );
@@ -583,7 +583,7 @@ describe("A773 pass screen: levers on a till's All stations", () => {
     setLocale("es-ES");
     try {
       const inSpanish = await mountTill(api);
-      await press(inSpanish, '[data-ready="course-mains"]');
+      await press(inSpanish, '[data-ready="order-1"]');
       expect(text(leverError(inSpanish))).toBe(
         "#1 T1: El perfil de este dispositivo no trabaja en esa zona. Se puede cambiar en el panel, en Perfiles de dispositivo.",
       );
@@ -607,7 +607,7 @@ describe("A773 pass screen: levers on a till's All stations", () => {
     expect(api.getExpoBoard).toHaveBeenCalledOnce();
   });
 
-  it("keeps a course whose dishes are all ready, and a dish with no course, on the card with no Ready", async () => {
+  it("offers one Ready for the card including a dish with no course", async () => {
     const card = passCard({
       items: [
         passItem({
@@ -627,26 +627,26 @@ describe("A773 pass screen: levers on a till's All stations", () => {
       [...boardOf(el)!.shadowRoot!.querySelectorAll("[data-ready]")].map((lever) =>
         lever.getAttribute("data-ready"),
       ),
-    ).toEqual(["course-mains"]);
+    ).toEqual(["order-1"]);
   });
 
-  it("Course Ready sends the order and course through the till's route, then reads All stations again", async () => {
+  it("Bill Ready sends the bill through the till's route, then reads All stations again", async () => {
     const api = allApi(allBoard());
     const el = await mountTill(api);
-    await press(el, '[data-ready="course-mains"]');
-    expect(api.bumpCourseReady).toHaveBeenCalledExactlyOnceWith("order-1", "course-mains");
-    expect(api.bumpDeviceCourseReady).not.toHaveBeenCalled();
+    await press(el, '[data-ready="order-1"]');
+    expect(api.bumpBillReady).toHaveBeenCalledExactlyOnceWith("order-1");
+    expect(api.bumpDeviceBillReady).not.toHaveBeenCalled();
     expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
   });
 
-  it("a refused Course Ready shows its words and still reads All stations again", async () => {
+  it("a refused Bill Ready shows its words and still reads All stations again", async () => {
     const api = allApi(allBoard(), {
-      bumpCourseReady: vi.fn().mockRejectedValue(refused("course.not_found", 404)),
+      bumpBillReady: vi.fn().mockRejectedValue(refused("working_order.not_found", 404)),
     });
     const el = await mountTill(api);
-    await press(el, '[data-ready="course-mains"]');
+    await press(el, '[data-ready="order-1"]');
     expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
-    expect(text(leverError(el))).toBe(`#1 T1: ${codeMessage("course.not_found")}`);
+    expect(text(leverError(el))).toBe(`#1 T1: ${codeMessage("working_order.not_found")}`);
   });
 
   it("draws Reprint on each card's bill, and a press reprints that bill and reads nothing", async () => {
@@ -808,7 +808,7 @@ describe("A773 pass screen: a party's group cards on a till's All stations", () 
     );
     expect(api.getExpoBoard).toHaveBeenCalledTimes(3);
     expect(api.bumpDeviceGroupReady).not.toHaveBeenCalled();
-    expect(api.bumpCourseReady).not.toHaveBeenCalled();
+    expect(api.bumpBillReady).not.toHaveBeenCalled();
     expect(api.releaseDevicePass).not.toHaveBeenCalled();
   });
 
@@ -863,7 +863,7 @@ describe("A773 pass screen: a party's group cards on a till's All stations", () 
     expect(api.getExpoBoard).toHaveBeenCalledTimes(3);
   });
 
-  it("keeps the table-changed line through a failed read and clears it at the next good one, a course Ready press clearing nothing", async () => {
+  it("keeps the table-changed line through a failed read and clears it at the next good one, a bill Ready press clearing nothing", async () => {
     const api = allApi(passBoard({ inProgress: [groupCard(), passCard()] }), {
       bumpGroupReady: vi.fn().mockRejectedValue(refused("party.out_of_date")),
     });
@@ -871,10 +871,10 @@ describe("A773 pass screen: a party's group cards on a till's All stations", () 
     await press(el, '[data-group-ready="g-1"]');
     expect(tableChanged(el)).not.toBeNull();
     api.getExpoBoard.mockRejectedValueOnce(new TypeError("offline"));
-    await press(el, '[data-ready="course-mains"]');
+    await press(el, '[data-ready="order-1"]');
     expect(tableChanged(el)).not.toBeNull();
-    await press(el, '[data-ready="course-mains"]');
-    expect(api.bumpCourseReady).toHaveBeenCalledTimes(2);
+    await press(el, '[data-ready="order-1"]');
+    expect(api.bumpBillReady).toHaveBeenCalledTimes(2);
     expect(tableChanged(el)).toBeNull();
   });
 });

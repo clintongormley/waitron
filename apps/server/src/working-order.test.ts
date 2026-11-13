@@ -63,7 +63,7 @@ import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   advanceTicketItem,
-  bumpCourseReady,
+  bumpBillReady,
   createOpenOrder,
   splitLinesWithinOrder,
   fireOrderLines,
@@ -6820,9 +6820,6 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
   });
 });
 
-/** Fire ONE course of an order across TWO stations — two products in the SAME (earliest, so auto-fired)
- *  course routed to DIFFERENT stations, placed so both items fire and sit `queued`. The cross-station
- *  shape `bumpCourseReady` must sweep in one UPDATE (`listStationQueue` would need two reads to see both). */
 async function firedCourseAcrossTwoStations(
   tx: Transaction,
   cfg: DeviceRequestConfig,
@@ -6839,22 +6836,34 @@ async function firedCourseAcrossTwoStations(
   return { orderId, courseId: starterCourse.id };
 }
 
-describe("bumpCourseReady — course preparation without dispatch", () => {
-  it("bumps a whole course ready across stations without dispatching it", async () => {
+describe("bumpBillReady — pass card preparation without dispatch", () => {
+  it("pass card Ready crosses courses including no course", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const { orderId, courseId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const counter = await createStation(tx, { name: "Counter" });
+      const starters = await createCourse(tx, { name: "Starters", displayOrder: 0 });
+      const mains = await createCourse(tx, { name: "Mains", displayOrder: 1 });
+      const soup = await makeProduct(tx, catalogueId, {});
+      const main = await makeProduct(tx, catalogueId, { stationId: counter.id });
+      const water = await makeProduct(tx, catalogueId, {});
+      await setProductCourse(tx, soup, starters.id);
+      await setProductCourse(tx, main, mains.id);
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(soup), line(main), line(water)]);
+      const before = await courseItemsFor(tx, orderId);
+      expect(before).toHaveLength(3);
+      expect(before.map((item) => item.courseId)).toEqual(
+        expect.arrayContaining([starters.id, mains.id, null]),
+      );
+      expect(before.every((item) => item.state === "queued" && item.firedAt !== null)).toBe(true);
 
-      // Both items start fired + queued, across two stations, under the one course.
-      let items = await courseItemsFor(tx, orderId);
-      expect(items).toHaveLength(2);
-      expect(items.every((i) => i.state === "queued")).toBe(true);
-      expect(items.every((i) => i.firedAt !== null)).toBe(true);
+      await bumpBillReady(tx, orderId);
 
-      // One set-based bump plates the whole course ready — both stations' items reach `ready`.
-      await bumpCourseReady(tx, orderId, courseId);
-      items = await courseItemsFor(tx, orderId);
-      expect(items.every((i) => i.state === "ready")).toBe(true);
+      expect((await courseItemsFor(tx, orderId)).map((item) => item.state)).toEqual([
+        "ready",
+        "ready",
+        "ready",
+      ]);
     });
   });
 
@@ -6870,18 +6879,20 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
       await setProductCourse(tx, main, mainCourse.id);
       const orderId = await fireTableKitchenOrder(tx, cfg, [line(starter), line(main)]);
 
-      // Mains is HELD (later course, fired_at null). bumpCourseReady on it advances NOTHING — the
-      // `fired_at IS NOT NULL` predicate skips held items.
-      await bumpCourseReady(tx, orderId, mainCourse.id);
+      await bumpBillReady(tx, orderId);
       let items = await courseItemsFor(tx, orderId);
-      expect(byLine(items, main).state).toBe("queued"); // held → skipped
-      expect(byLine(items, main).firedAt).toBeNull(); // and still held
-
-      // Starters IS fired, so bumping it plates its item straight to `ready` (queued → ready in one step)
-      // — the OTHER answer, so the held-skip above is a real measurement, not "nothing ever advances".
-      await bumpCourseReady(tx, orderId, starterCourse.id);
-      items = await courseItemsFor(tx, orderId);
+      expect(byLine(items, main).state).toBe("queued");
+      expect(byLine(items, main).firedAt).toBeNull();
       expect(byLine(items, starter).state).toBe("ready");
+
+      await tx
+        .update(ticketItems)
+        .set({ requestedAt: nowIso() })
+        .where(eq(ticketItems.id, byLine(items, main).id));
+      await bumpBillReady(tx, orderId);
+      items = await courseItemsFor(tx, orderId);
+      expect(byLine(items, main).state).toBe("queued");
+      expect(byLine(items, main).firedAt).toBeNull();
 
       await fireProductLine(tx, cfg, orderId, main);
       items = await courseItemsFor(tx, orderId);
@@ -6889,22 +6900,79 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
     });
   });
 
-  it("leaves every item unchanged for an unknown course", async () => {
+  it("pass card Ready leaves grouped siblings unchanged", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const soup = await makeProduct(tx, catalogueId, {});
+      const main = await makeProduct(tx, catalogueId, {});
+      const orderId = await fireTableKitchenOrder(tx, cfg, [line(soup), line(main)]);
+      const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, orderId));
+      const [group] = await tx
+        .insert(orderGroups)
+        .values({
+          partyId: order!.partyId!,
+          position: 0,
+          state: "fired",
+          firedAt: nowIso(),
+          submittedBy: OPERATOR,
+        })
+        .returning();
+      await tx
+        .update(workingOrderLines)
+        .set({ groupId: group!.id })
+        .where(
+          and(eq(workingOrderLines.workingOrderId, orderId), eq(workingOrderLines.productId, main)),
+        );
+      const groupedBefore = byLine(await courseItemsFor(tx, orderId), main);
+
+      await bumpBillReady(tx, orderId);
+
+      const items = await courseItemsFor(tx, orderId);
+      expect(byLine(items, soup).state).toBe("ready");
+      expect(byLine(items, main)).toEqual(groupedBefore);
+    });
+  });
+
+  it("leaves every item unchanged for an unknown bill", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const { orderId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
       const before = await courseItemsFor(tx, orderId);
-      await bumpCourseReady(tx, orderId, randomUUID());
+      await bumpBillReady(tx, randomUUID());
       expect(await courseItemsFor(tx, orderId)).toEqual(before);
       expect(before.every((i) => i.state === "queued")).toBe(true);
+    });
+  });
+
+  it("bill Ready preserves an already-served no-course line", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, { name: "Kitchen", isDefault: true });
+      const soup = await makeProduct(tx, catalogueId, {});
+      const water = await makeProduct(tx, catalogueId, {});
+      const orderId = await fireTableKitchenOrder(tx, cfg, [line(soup), line(water)]);
+      await serveLine(tx, cfg, orderId, 2);
+      const before = byLine(await courseItemsFor(tx, orderId), water);
+      expect(before.state).toBe("queued");
+      expect(before.firedAt).not.toBeNull();
+      expect(before.courseId).toBeNull();
+      const board = await readScopedPassBoard(tx, { stationIds: null, zoneIds: null });
+      expect(board.inProgress.flatMap((card) => card.items.map((item) => item.id))).toEqual([
+        byLine(await courseItemsFor(tx, orderId), soup).id,
+      ]);
+      await bumpBillReady(tx, orderId);
+      const after = await courseItemsFor(tx, orderId);
+      expect(byLine(after, soup).state).toBe("ready");
+      expect(byLine(after, water)).toEqual(before);
     });
   });
 
   it("keeps original ready timestamps and item facts on a repeated bump", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
-      const { orderId, courseId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
-      await bumpCourseReady(tx, orderId, courseId);
+      const { orderId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
+      await bumpBillReady(tx, orderId);
       const read = () =>
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, orderId));
       const readied = await read();
@@ -6915,7 +6983,7 @@ describe("bumpCourseReady — course preparation without dispatch", () => {
         .set({ readyAt: "2026-10-20T12:00:00.000Z" })
         .where(eq(ticketItems.workingOrderId, orderId));
       const first = await read();
-      await bumpCourseReady(tx, orderId, courseId);
+      await bumpBillReady(tx, orderId);
       expect(await read()).toEqual(first);
     });
   });

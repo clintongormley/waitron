@@ -99,7 +99,7 @@ export interface PassCard {
   group?: { displayNumber: number; numberPartyLabel?: string; position: number };
   items: PassCardItem[];
   /** The dimmed dishes the pass's display choice hides: not drawn, but still counted for the
-   *  card's lateness, its allergy marker and its course Ready levers (D83). Absent when none are
+   *  card's lateness and its allergy marker (D83). Absent when none are
    *  hidden. */
   hiddenItems?: PassCardItem[];
   releaseTicketItemIds: string[];

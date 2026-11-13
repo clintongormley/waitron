@@ -276,12 +276,12 @@ describe("A773 pass board widget", () => {
     expect(root(monitor).querySelectorAll(levers)).toHaveLength(0);
   });
 
-  it("emits a group's Ready and a bill's course Ready from In progress cards", async () => {
+  it("emits a group's Ready and a bill's Ready from In progress cards", async () => {
     const el = await mountBoard({
       board: passBoard({ inProgress: [groupInProgress, billInProgress] }),
     });
     const groupReady = eventsOf(el, "pass-group-ready");
-    const courseReady = eventsOf(el, "pass-course-ready");
+    const billReady = eventsOf(el, "pass-bill-ready");
     const group = cardOf(el, groupInProgress.key).querySelector<HTMLElement>(
       '[data-group-ready="g2"]',
     )!;
@@ -289,36 +289,32 @@ describe("A773 pass board widget", () => {
     await userEvent.click(group);
     expect(groupReady).toEqual([{ key: groupInProgress.key }]);
     await userEvent.click(
-      cardOf(el, billInProgress.key).querySelector<HTMLElement>('[data-ready="course-mains"]')!,
+      cardOf(el, billInProgress.key).querySelector<HTMLElement>('[data-ready="order-5"]')!,
     );
-    expect(courseReady).toEqual([
-      { key: billInProgress.key, orderId: "order-5", courseId: "course-mains" },
-    ]);
+    expect(billReady).toEqual([{ key: billInProgress.key }]);
   });
 
-  it("names its course on each course Ready of a bill card, in what is drawn and what is read out", async () => {
-    const starters = { id: "course-starters", name: "Starters", displayOrder: 1 };
+  it.each([false, true])("offers one Ready per bill card with no course: %s", async (noCourse) => {
     const bill = passCard({
       ...billInProgress,
       items: [
-        passItem({ id: "s-1", orderId: "order-5", course: starters }),
-        passItem({ id: "m-1", orderId: "order-5" }),
+        passItem({
+          id: "s-1",
+          orderId: "order-5",
+          course: noCourse ? null : { id: "starters", name: "Starters", displayOrder: 1 },
+        }),
+        passItem({
+          id: "m-1",
+          orderId: "order-5",
+          course: noCourse ? null : { id: "mains", name: "Mains", displayOrder: 2 },
+        }),
       ],
     });
     const el = await mountBoard({ board: passBoard({ inProgress: [bill] }) });
     const levers = [...cardOf(el, bill.key).querySelectorAll<HTMLButtonElement>("[data-ready]")];
-    expect(levers.map((lever) => lever.getAttribute("data-ready"))).toEqual([
-      "course-starters",
-      "course-mains",
-    ]);
-    expect(levers.map((lever) => lever.textContent!.trim())).toEqual([
-      `${t("expo.ready")} Starters`,
-      `${t("expo.ready")} Mains`,
-    ]);
-    for (const lever of levers) {
-      const label = lever.getAttribute("aria-label");
-      expect(label === null || label === lever.textContent!.trim()).toBe(true);
-    }
+    expect(levers).toHaveLength(1);
+    expect(levers[0]!.textContent!.trim()).toBe(t("expo.ready"));
+    expect(levers[0]!.getAttribute("data-ready")).toBe("order-5");
   });
 
   it("draws a card Hide emptied with its heading, age and levers, and no dish line (D83)", async () => {
@@ -333,7 +329,7 @@ describe("A773 pass board widget", () => {
     expect(card.querySelectorAll("[data-item]")).toHaveLength(0);
   });
 
-  it("draws no line for a dish Hide hid, yet keeps its lateness, the overdue count and its course Ready (D73)", async () => {
+  it("draws no line for a dish Hide hid, yet keeps its lateness, the overdue count and its bill Ready (D73)", async () => {
     const hidden = passCard({
       ...billInProgress,
       requestedAt: minutesAgo(50),
@@ -359,9 +355,7 @@ describe("A773 pass board widget", () => {
     expect(root(el).querySelector("[data-overdue-count]")!.textContent!.trim()).toBe(
       `1 ${t("station.overdue_count")}`,
     );
-    expect(card.querySelector('[data-ready="course-mains"]')!.textContent!.trim()).toBe(
-      `${t("expo.ready")} Mains`,
-    );
+    expect(card.querySelector('[data-ready="order-5"]')!.textContent!.trim()).toBe(t("expo.ready"));
   });
 
   it("marks the head of a card Hide emptied for its hidden dish's allergy, as Show would (D83)", async () => {
@@ -455,15 +449,15 @@ describe("A773 pass board widget", () => {
       board: passBoard({ toFire: [toFireCard], inProgress: [groupInProgress, billInProgress] }),
     });
     const captured: CustomEvent[] = [];
-    for (const name of ["pass-fire", "pass-group-ready", "pass-course-ready"])
+    for (const name of ["pass-fire", "pass-group-ready", "pass-bill-ready"])
       el.addEventListener(name, (event) => captured.push(event as CustomEvent));
     await userEvent.click(fireOf(el, toFireCard.key)!);
     await userEvent.click(root(el).querySelector<HTMLElement>('[data-group-ready="g2"]')!);
-    await userEvent.click(root(el).querySelector<HTMLElement>('[data-ready="course-mains"]')!);
+    await userEvent.click(root(el).querySelector<HTMLElement>('[data-ready="order-5"]')!);
     expect(captured.map((event) => [event.type, event.bubbles, event.composed])).toEqual([
       ["pass-fire", true, true],
       ["pass-group-ready", true, true],
-      ["pass-course-ready", true, true],
+      ["pass-bill-ready", true, true],
     ]);
   });
 

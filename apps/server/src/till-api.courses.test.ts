@@ -530,7 +530,7 @@ function itemsByName(order: { items: PassCardItem[] }): Map<string, PassCardItem
   return new Map(order.items.map((i) => [i.name, i]));
 }
 
-describe("KDS-3 expo routes: the All stations board + whole-course ready", () => {
+describe("KDS-3 expo routes: the All stations board + whole-card ready", () => {
   it("GET /api/expo/board carries every dish of the order; each carries its station name, course and fired time", async () => {
     const orderId = await placeOrder([SOUP, STEAK, BREAD]);
     const order = await expoOrder(orderId);
@@ -562,14 +562,15 @@ describe("KDS-3 expo routes: the All stations board + whole-course ready", () =>
   it("the Ready route still bumps fired food, while retired Away leaves it ready", async () => {
     const orderId = await placeOrder([SOUP, STEAK]);
 
-    // Entrantes auto-fired but its items are `queued`; the pass bumps the WHOLE course to ready.
-    const ready = await app.request(`/api/orders/${orderId}/courses/${starterCourseId}/ready`, {
+    // The counter releases both courses; Ready plates both without dispatching.
+    const ready = await app.request(`/api/orders/${orderId}/ready`, {
       method: "POST",
       headers: { cookie },
     });
     expect(ready.status).toBe(200);
     expect(await ready.text()).toBe("");
     expect(itemsByName(await expoOrder(orderId)).get(SOUP)!.state).toBe("ready");
+    expect(itemsByName(await expoOrder(orderId)).get(STEAK)!.state).toBe("ready");
 
     const away = await app.request(`/api/orders/${orderId}/courses/${starterCourseId}/away`, {
       method: "POST",
@@ -587,7 +588,7 @@ describe("KDS-3 expo routes: the All stations board + whole-course ready", () =>
       const orderId =
         state === "held" ? await tabWithSoupAndSteak() : await placeOrder([SOUP, STEAK]);
       if (state === "ready") {
-        const ready = await app.request(`/api/orders/${orderId}/courses/${starterCourseId}/ready`, {
+        const ready = await app.request(`/api/orders/${orderId}/ready`, {
           method: "POST",
           headers: { cookie },
         });
@@ -632,7 +633,7 @@ describe("KDS-3 expo routes: the All stations board + whole-course ready", () =>
     },
   );
 
-  it("retired Away returns 404; retained Ready keeps its target validation and unknown-course no-op", async () => {
+  it("retires course Ready and Away; bill Ready validates its target and keeps unknown-bill no-op", async () => {
     const orderId = await placeOrder([SOUP]);
 
     const unknownAway = await app.request(`/api/orders/${orderId}/courses/${randomUUID()}/away`, {
@@ -653,26 +654,19 @@ describe("KDS-3 expo routes: the All stations board + whole-course ready", () =>
       headers: { cookie },
     });
     expect(malformedReady.status).toBe(404);
-    expect(await malformedReady.json()).toMatchObject({
-      error: { code: "course.not_found", params: { courseId: "not-a-uuid" } },
-    });
+    expect(await malformedReady.text()).toBe("404 Not Found");
 
-    // `ready` does NOT existence-check (bumpCourseReady no-throws-on-empty): an unknown well-formed course
-
-    const unknownReady = await app.request(`/api/orders/${orderId}/courses/${randomUUID()}/ready`, {
+    const unknownReady = await app.request(`/api/orders/${randomUUID()}/ready`, {
       method: "POST",
       headers: { cookie },
     });
     expect(unknownReady.status).toBe(200);
 
     // Ready still validates the order id.
-    const malformedOrder = await app.request(
-      `/api/orders/not-a-uuid/courses/${starterCourseId}/ready`,
-      {
-        method: "POST",
-        headers: { cookie },
-      },
-    );
+    const malformedOrder = await app.request(`/api/orders/not-a-uuid/ready`, {
+      method: "POST",
+      headers: { cookie },
+    });
     expect(malformedOrder.status).toBe(404);
     expect(await malformedOrder.json()).toMatchObject({
       error: { code: "working_order.not_found", params: { workingOrderId: "not-a-uuid" } },
@@ -684,7 +678,7 @@ describe("KDS-3 expo routes: the All stations board + whole-course ready", () =>
     expect(board.status).toBe(401);
     expect(await board.json()).toMatchObject({ error: { code: "session.required" } });
 
-    const ready = await app.request(`/api/orders/${randomUUID()}/courses/${randomUUID()}/ready`, {
+    const ready = await app.request(`/api/orders/${randomUUID()}/ready`, {
       method: "POST",
     });
     expect(ready.status).toBe(401);

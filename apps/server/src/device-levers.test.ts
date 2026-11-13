@@ -49,7 +49,12 @@ const suite = useVenueDb({
 const log = () => {};
 
 const EVERY_PASS: DeviceKitchenScreen = { kind: "pass", stationIds: null, zoneIds: null };
-const RUNS_THE_PASS = ["take-orders", "prepare-orders", "hand-over-orders"] as const;
+const RUNS_THE_PASS = [
+  "take-orders",
+  "prepare-orders",
+  "hand-over-orders",
+  "run-the-pass",
+] as const;
 
 async function fixture() {
   const v = await setupPartyVenue(suite.db);
@@ -151,6 +156,7 @@ async function send(app: Hono, cookie: string, path: string, body: unknown = {})
 
 const coursePath = (orderId: string, courseId: string, verb: string) =>
   `/api/device/orders/${orderId}/courses/${courseId}/${verb}`;
+const billPath = (orderId: string) => `/api/device/orders/${orderId}/ready`;
 const groupPath = (partyId: string, groupId: string, verb: string) =>
   `/api/device/parties/${partyId}/groups/${groupId}/${verb}`;
 
@@ -418,30 +424,51 @@ async function fireAsWaiter(
   expect(answer.status).toBe(200);
 }
 
-const readyPaths = (
-  held: { tabId: string; partyId: string; groupId: string },
-  courseId: string,
-) => [coursePath(held.tabId, courseId, "ready"), groupPath(held.partyId, held.groupId, "ready")];
+const readyPaths = (held: { tabId: string; partyId: string; groupId: string }) => [
+  billPath(held.tabId),
+  groupPath(held.partyId, held.groupId, "ready"),
+];
 
 describe("a kitchen display's retained Ready actions", () => {
-  it("readies an actually released course while leaving a held course unchanged", async () => {
+  it("requires Runs the pass for both Ready routes without changing food", async () => {
+    const f = await fixture();
+    const held = await f.heldBurger();
+    await fireAsWaiter(f, held);
+    const display = await f.device(
+      "Preparation only",
+      await f.profile(
+        "kds",
+        RUNS_THE_PASS.filter((flag) => flag !== "run-the-pass"),
+      ),
+      { kitchenScreen: EVERY_PASS },
+    );
+    const before = await itemsOf(held.tabId);
+    for (const path of [groupPath(held.partyId, held.groupId, "ready"), billPath(held.tabId)]) {
+      const answer = await send(f.app, display.cookie, path, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(f.v, held.partyId),
+      });
+      expect({ status: answer.status, error: answer.body.error }).toEqual({
+        status: 403,
+        error: { code: "device.forbidden_action", params: { action: "run-the-pass" } },
+      });
+      expect(await itemsOf(held.tabId)).toEqual(before);
+    }
+  });
+
+  it("bill Ready leaves grouped work unchanged before and after release", async () => {
     const f = await fixture();
     const held = await f.heldBurger();
     const before = await itemsOf(held.tabId);
-    expect(
-      (await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "ready"))).status,
-    ).toBe(200);
+    expect((await send(f.app, f.pass.cookie, billPath(held.tabId))).status).toBe(200);
     expect(await itemsOf(held.tabId)).toEqual(before);
     await fireAsWaiter(f, held);
-    expect(
-      (await send(f.app, f.pass.cookie, coursePath(held.tabId, f.mains, "ready"))).status,
-    ).toBe(200);
-    expect(await itemsOf(held.tabId)).toEqual([
-      expect.objectContaining({ state: "ready", firedAt: expect.any(String) }),
-    ]);
+    const fired = await itemsOf(held.tabId);
+    expect((await send(f.app, f.pass.cookie, billPath(held.tabId))).status).toBe(200);
+    expect(await itemsOf(held.tabId)).toEqual(fired);
   });
 
-  it("readies the counter's released course on a pass limited to the counter zone", async () => {
+  it("readies the counter's bill card on a pass limited to the counter zone", async () => {
     const f = await fixture();
     const display = await f.device("Counter pass", f.runner, {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.counter.zoneId] },
@@ -453,9 +480,7 @@ describe("a kitchen display's retained Ready actions", () => {
     });
     expect(placed.status).toBe(200);
     expect((await itemsOf(counter)).every((item) => item.firedAt !== null)).toBe(true);
-    expect((await send(f.app, display.cookie, coursePath(counter, f.mains, "ready"))).status).toBe(
-      200,
-    );
+    expect((await send(f.app, display.cookie, billPath(counter))).status).toBe(200);
     expect(await itemsOf(counter)).toEqual([
       expect.objectContaining({ state: "ready", firedAt: expect.any(String) }),
     ]);
@@ -494,7 +519,7 @@ describe("a kitchen display's retained Ready actions", () => {
       { kitchenScreen: EVERY_PASS },
     );
     const before = await itemsOf(held.tabId);
-    for (const path of readyPaths(held, f.mains)) {
+    for (const path of readyPaths(held)) {
       const answer = await send(f.app, display.cookie, path, {
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(f.v, held.partyId),
@@ -514,7 +539,7 @@ describe("a kitchen display's retained Ready actions", () => {
       kitchenScreen: EVERY_PASS,
     });
     for (const cookie of [till.cookie, await f.signIn(till.cookie)]) {
-      for (const path of readyPaths(held, f.mains)) {
+      for (const path of readyPaths(held)) {
         const answer = await send(f.app, cookie, path, {
           submissionId: randomUUID(),
           expectedPartyRevision: await revisionOf(f.v, held.partyId),
@@ -537,7 +562,7 @@ describe("a kitchen display's retained Ready actions", () => {
       { kitchenScreen: { kind: "pass_monitor" as const, stationIds: null, zoneIds: null } },
     ]) {
       const display = await f.device(`Other screen ${randomUUID()}`, f.runner, choice);
-      for (const path of readyPaths(held, f.mains)) {
+      for (const path of readyPaths(held)) {
         const answer = await send(f.app, display.cookie, path, {
           submissionId: randomUUID(),
           expectedPartyRevision: await revisionOf(f.v, held.partyId),
@@ -557,7 +582,7 @@ describe("a kitchen display's retained Ready actions", () => {
     const display = await f.device("Counter pass", f.runner, {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.counter.zoneId] },
     });
-    for (const path of readyPaths(held, f.mains)) {
+    for (const path of readyPaths(held)) {
       const answer = await send(f.app, display.cookie, path, {
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(f.v, held.partyId),
@@ -582,7 +607,7 @@ describe("a kitchen display's retained Ready actions", () => {
     const display = await f.device("Table pass", f.runner, {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.tables.zoneId] },
     });
-    const path = coursePath(order!.id, f.mains, "ready");
+    const path = billPath(order!.id);
     const refused = await send(f.app, display.cookie, path);
     expect({ status: refused.status, error: refused.body.error }).toEqual({
       status: 403,
@@ -599,9 +624,8 @@ describe("a kitchen display's retained Ready actions", () => {
       expectedPartyRevision: await revisionOf(f.v, held.partyId),
     };
     for (const [path, body, status, code] of [
-      [coursePath(randomUUID(), f.mains, "ready"), {}, 404, "working_order.not_found"],
-      [coursePath("nope", f.mains, "ready"), {}, 404, "working_order.not_found"],
-      [coursePath(held.tabId, "nope", "ready"), {}, 404, "course.not_found"],
+      [billPath(randomUUID()), {}, 404, "working_order.not_found"],
+      [billPath("nope"), {}, 404, "working_order.not_found"],
       [groupPath(randomUUID(), randomUUID(), "ready"), command, 409, "party.not_open"],
       [groupPath(held.partyId, randomUUID(), "ready"), command, 404, "group.not_found"],
       [groupPath("nope", held.groupId, "ready"), command, 409, "party.not_open"],
