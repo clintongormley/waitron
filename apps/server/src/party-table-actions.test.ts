@@ -1808,7 +1808,7 @@ describe("a party combined into another (Review Focus 3)", () => {
 
 describe("combineParties", () => {
   it("keeps the earliest pending bill request when parties combine", async () => {
-    const [m1, m2, m3, m4] = await tables("Requested bill", 1, 2, 3, 4);
+    const [m1, m2, m3, m4, m5] = await tables("Requested bill", 1, 2, 3, 4, 5);
     const a = await seat(v, m1);
     const b = await seat(v, m2);
     const c = await seat(v, m3);
@@ -1839,6 +1839,12 @@ describe("combineParties", () => {
     expect(last.billRequestedAt! > requestedAt!).toBe(true);
     const movingLater = await opts(d.partyId, c.partyId);
     await act((tx) => moveGuests(tx, v.cfg, d.partyId, m3, movingLater));
+    expect((await partyRow(v, c.partyId)).billRequestedAt).toBe(requestedAt);
+    expect((await floorRow(v, m3)).signals).toContainEqual({ kind: "bill_requested", requestedAt });
+
+    const e = await seat(v, m5);
+    const movingUnrequested = await opts(e.partyId, c.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, e.partyId, m3, movingUnrequested));
     expect((await partyRow(v, c.partyId)).billRequestedAt).toBe(requestedAt);
     expect((await floorRow(v, m3)).signals).toContainEqual({ kind: "bill_requested", requestedAt });
   });
