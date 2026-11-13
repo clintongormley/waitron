@@ -837,6 +837,7 @@ the helper's constant status is not evidence of the write.
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.**
+  The VAT-class, issue-rate, line-transfer and move/merge filing suites use Administrator for their staff sample; their location and dish samples remain.
   Local invoice-correction and fiscal-sale route staff samples use Martha, Administrator, Cashier and Supervisor.
   Local workforce-export staff use Martha Canary, Colleague Green, Anna Admin and Lewis Manager;
   the adjustment-approval and box-email incident samples use Paul and Anna.
