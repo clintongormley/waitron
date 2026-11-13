@@ -148,7 +148,7 @@ function totalOf(breakdown: readonly VatBreakdownLine[]): Decimal {
   return sumDecimals(breakdown.flatMap((g) => [g.base, g.tax]));
 }
 
-async function nodeBackend(
+export async function nodeBackend(
   db: Database,
   tx: Transaction,
   nodeId: string,
@@ -275,6 +275,7 @@ export async function seedSales(
           unitPrice: base,
           vatRate: rate,
           lineTotal: base,
+          lineGross: gross,
         });
       }
 
