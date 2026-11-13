@@ -2795,10 +2795,54 @@ describe("the Edit dialog", () => {
         });
       }
 
-      it("is a column of what each device prints invoices on", async () => {
-        const el = await openEdit(invoiceApi({ ...onDefault, equipment: [invoiceOn(null)] }));
+      it.each([
+        { chosenId: null, name: "Office", a4: true, defaulted: true },
+        { chosenId: "pg1", name: "Office", a4: true, defaulted: false },
+        { chosenId: "pr2", name: "Terrace", a4: false, defaulted: false },
+        { chosenId: null, name: null, a4: false, defaulted: true },
+      ])("marks the resolved invoice printer: $name, default=$defaulted", async (test) => {
+        const equipment = invoiceOn(test.chosenId);
+        equipment.resolved =
+          test.name === null
+            ? null
+            : {
+                id: test.chosenId ?? "pg1",
+                name: test.name,
+                available: true,
+              };
+        const device = { ...onDefault, equipment: [equipment] };
+        const el = await openEdit(invoiceApi(device));
+        const name = test.name ?? t("equipment.none");
         expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
-          `Office (${t("devices.default_mark")})`,
+          `${name}${test.a4 ? " · A4" : ""}${test.defaulted ? ` (${t("devices.default_mark")})` : ""}`,
+        );
+        const invoice = devicesTable(el).columns.find((column) => column.key === "invoice")!;
+        expect(invoice.sortValue!(device)).toBe(deepText(el, "[data-test=device-invoice-t1]"));
+      });
+
+      it("adds the A4 marker when the printer list arrives after the devices", async () => {
+        let resolvePages!: (rows: PagePrinterRow[]) => void;
+        const pages = new Promise<PagePrinterRow[]>((resolve) => {
+          resolvePages = resolve;
+        });
+        const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+          api: invoiceApi(
+            { ...onDefault, equipment: [invoiceOn(null)] },
+            {
+              listPagePrinters: vi.fn(() => pages),
+            },
+          ),
+        });
+        await vi.waitFor(() =>
+          expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
+            `Office (${t("devices.default_mark")})`,
+          ),
+        );
+        resolvePages([office]);
+        await vi.waitFor(() =>
+          expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
+            `Office · A4 (${t("devices.default_mark")})`,
+          ),
         );
       });
 
