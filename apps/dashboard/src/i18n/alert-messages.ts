@@ -267,13 +267,13 @@ export const ALERT_MESSAGES: Readonly<
     es: "{count} dispositivos coinciden en que marcan {deviceAt:minute}, pero el servidor marca {boxAt:minute}. Comprueba la fecha y la hora del servidor en Estado del servidor.",
   },
   "clock.unconfirmed": {
-    en: "The box has not confirmed its time since it started, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time ({agreed} of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
-    es: "El servidor no ha confirmado su hora desde que arrancó, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora ({agreed} de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
+    en: "{cause:clock_unconfirmed_lead}, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time ({agreed} of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
+    es: "{cause:clock_unconfirmed_lead}, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora ({agreed} de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
     variants: {
       hostSilent: {
         mode: "append",
-        en: "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start, and its clock cannot be corrected from Waitron until that part answers.",
-        es: "No puede ver su hora de internet porque la parte del servidor que la lee no responde, así que espera así en cada arranque, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
+        en: "{cause:clock_unconfirmed_host_silent}",
+        es: "{cause:clock_unconfirmed_host_silent}",
       },
     },
   },
@@ -708,6 +708,30 @@ export const ALERT_WORDS: Readonly<
     },
   },
   // `clock.corrected`'s direction; the reloj (masculine) is what moved, in Spanish.
+  clock_unconfirmed_lead: {
+    words: {
+      clock_jumped: {
+        en: "The box's clock jumped and it cannot check the time over the internet",
+        es: "El reloj del equipo ha saltado y no puede comprobar la hora por internet",
+      },
+    },
+    otherwise: {
+      en: "The box has not confirmed its time since it started",
+      es: "El equipo no ha confirmado su hora desde que arrancó",
+    },
+  },
+  clock_unconfirmed_host_silent: {
+    words: {
+      clock_jumped: {
+        en: "It cannot see its internet time, because the part of the box that reads it is not answering, and its clock cannot be corrected from Waitron until that part answers.",
+        es: "No puede ver su hora de internet porque la parte del equipo que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
+      },
+    },
+    otherwise: {
+      en: "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start, and its clock cannot be corrected from Waitron until that part answers.",
+      es: "No puede ver su hora de internet porque la parte del equipo que la lee no responde, así que espera así en cada arranque, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
+    },
+  },
   clock_step_direction: {
     words: {
       forward: { en: "moved forward", es: "adelantado" },

@@ -41,7 +41,7 @@ export function clockUnconfirmedAlertSource(waiting: () => StartClockWaiting | n
           severity: "error",
           since: null,
           screen: "box-status",
-          params: { agreed: now.agreed, hostSilent: !now.hostAnswers },
+          params: { agreed: now.agreed, hostSilent: !now.hostAnswers, cause: now.cause },
         },
       ]);
     },
