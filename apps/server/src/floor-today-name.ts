@@ -3,7 +3,7 @@ import { eq, isNotNull } from "drizzle-orm";
 import {
   diningTables,
   floorPlanTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   todaySet,
 } from "@waitron/db";
@@ -36,9 +36,9 @@ export async function nameToday(
   if (today.merge !== null) {
     const { joinId } = today.merge;
     const [group] = await tx
-      .select({ name: floorTodayJoins.name })
-      .from(floorTodayJoins)
-      .where(eq(floorTodayJoins.id, joinId));
+      .select({ name: tableMerges.name })
+      .from(tableMerges)
+      .where(eq(tableMerges.id, joinId));
     if (wanted === group!.name) return;
     if (wanted !== null) await refuseInUse(tx, wanted, { joinId });
     await withMovedSlips(
@@ -47,9 +47,9 @@ export async function nameToday(
       { tables: today.merge.members.map((member) => member.tableId) },
       async () => {
         await tx
-          .update(floorTodayJoins)
+          .update(tableMerges)
           .set({ name: wanted })
-          .where(eq(floorTodayJoins.id, joinId));
+          .where(eq(tableMerges.id, joinId));
       },
     );
     return;
@@ -102,8 +102,8 @@ async function refuseInUse(
   if (todays.some((t) => t.tableId !== selfTable && sameName(t.name!, name))) throw taken;
 
   const groups = await tx
-    .select({ id: floorTodayJoins.id, name: floorTodayJoins.name })
-    .from(floorTodayJoins)
-    .where(isNotNull(floorTodayJoins.name));
+    .select({ id: tableMerges.id, name: tableMerges.name })
+    .from(tableMerges)
+    .where(isNotNull(tableMerges.name));
   if (groups.some((g) => g.id !== selfJoin && sameName(g.name!, name))) throw taken;
 }

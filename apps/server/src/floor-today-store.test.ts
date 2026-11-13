@@ -15,7 +15,7 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   floorZones,
   dayCutoverChanges,
@@ -252,8 +252,8 @@ async function mergeMembersIn(zoneId: string): Promise<string[]> {
     tx
       .select({ tableId: floorTodayJoinTables.tableId })
       .from(floorTodayJoinTables)
-      .innerJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
-      .where(eq(floorTodayJoins.zoneId, zoneId)),
+      .innerJoin(tableMerges, eq(tableMerges.id, floorTodayJoinTables.joinId))
+      .where(eq(tableMerges.zoneId, zoneId)),
   );
   return rows.map((row) => row.tableId).sort();
 }
@@ -422,9 +422,9 @@ describe("building today's plan from a zone's layout", () => {
     await join(v, partyId, t2);
     await inTx(v, async (tx) => {
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       for (const tableId of [t1, t2]) {
         await tx
           .insert(floorTodayJoinTables)
@@ -699,9 +699,9 @@ describe("building today's plan from a zone's layout", () => {
     await reset(z);
     const mergeId = await inTx(v, async (tx) => {
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 12 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       for (const tableId of [t1, u1, u2]) {
         await tx
           .insert(floorTodayJoinTables)
@@ -761,9 +761,9 @@ describe("building today's plan from a zone's layout", () => {
         .set(todaySet({ x: 70, takenOff: true }))
         .where(eq(diningTables.id, t1));
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       for (const tableId of [t1, t2]) {
         await tx
           .insert(floorTodayJoinTables)
@@ -793,9 +793,9 @@ describe("building today's plan from a zone's layout", () => {
         .set(todaySet({ x: 9 }))
         .where(eq(diningTables.id, u1));
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       await tx
         .insert(floorTodayJoinTables)
         .values({ joinId: merge!.id, tableId: t1, beforeX: 0, beforeY: 0, beforeRotation: 0 });
@@ -831,9 +831,9 @@ describe("building today's plan from a zone's layout", () => {
         .set(todaySet({ x: 9 }))
         .where(eq(diningTables.id, u1));
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       await tx
         .insert(floorTodayJoinTables)
         .values({ joinId: merge!.id, tableId: t1, beforeX: 0, beforeY: 0, beforeRotation: 0 });
@@ -854,7 +854,7 @@ describe("building today's plan from a zone's layout", () => {
     expect((await liveTablesOf(z)).map((t) => t.id)).toEqual([u1]);
     expect(await mergeMembersIn(z)).toEqual([]);
     expect(
-      await inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, z))),
+      await inTx(v, (tx) => tx.select().from(tableMerges).where(eq(tableMerges.zoneId, z))),
     ).toEqual([]);
     expect(await todayRow(u1)).toMatchObject({ x: 30, y: 40, rotation: 90 });
   });
@@ -1190,9 +1190,9 @@ it.each([false, true])(
     if (partyId !== null) await join(v, partyId, t2);
     await inTx(v, async (tx) => {
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: z, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       for (const tableId of [t1, t2]) {
         await tx.insert(floorTodayJoinTables).values({
           joinId: merge!.id,
@@ -1218,7 +1218,7 @@ it.each([false, true])(
     expect(await liveTablesOf(z)).toEqual([]);
     expect(await mergeMembersIn(z)).toEqual([]);
     expect(
-      await inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, z))),
+      await inTx(v, (tx) => tx.select().from(tableMerges).where(eq(tableMerges.zoneId, z))),
     ).toEqual([]);
     expect(await todayRow(t1)).toBeUndefined();
     expect(await todayRow(t2)).toBeUndefined();
@@ -2067,7 +2067,7 @@ it("a saved joined table resets to one named group of its real tables", async ()
   );
   expect(
     await inTx(v, (tx) =>
-      tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, zoneId)),
+      tx.select().from(tableMerges).where(eq(tableMerges.zoneId, zoneId)),
     ),
   ).toEqual([expect.objectContaining({ id: group!.joinId, name: saved!.label, seats: 5 })]);
   const members = await inTx(v, (tx) =>

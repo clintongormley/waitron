@@ -13,7 +13,7 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   partyTables,
   ticketItems,
@@ -658,9 +658,9 @@ describe("removeLiveTables", () => {
     } = await plannedZone("Merged 1", "Merged 2");
     await inTx(v, async (tx) => {
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId, seats: 8 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       await tx
         .update(diningTables)
         .set(todaySet({ x: 50, y: 50, width: 8, height: 8, shape: "rect", rotation: 0 }))
@@ -676,7 +676,7 @@ describe("removeLiveTables", () => {
 
     expect(await tableExists(t1!)).toBe(false);
     const merges = await inTx(v, (tx) =>
-      tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, zoneId)),
+      tx.select().from(tableMerges).where(eq(tableMerges.zoneId, zoneId)),
     );
     expect(merges).toEqual([]);
     expect(await todayRow(t2!)).toMatchObject({ x: 3, y: 4, rotation: 90 });

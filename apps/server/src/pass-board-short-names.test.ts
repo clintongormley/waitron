@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   diningTables,
   floorTodayJoinTables,
-  floorTodayJoins,
+  tableMerges,
   parties,
   partyTables,
   shortNameColumns,
@@ -245,9 +245,9 @@ describe("a table named for today keeps its short name on the pass", () => {
     const { zoneId } = await tableRow(v, first);
     await inTx(v, async (tx) => {
       const [joined] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId, seats: 4, name })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       await tx.insert(floorTodayJoinTables).values(
         [first, second].map((tableId) => ({
           joinId: joined!.id,

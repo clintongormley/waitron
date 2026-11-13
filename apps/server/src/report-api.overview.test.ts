@@ -7,7 +7,7 @@ import { describe, expect, it, onTestFinished } from "vitest";
 import {
   CORE_MIGRATIONS,
   diningTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   floorZones,
   parties,
@@ -255,7 +255,7 @@ describe("mountReportApi — /reports/overview", () => {
         .set({ onFloor: true })
         .where(eq(diningTables.id, table.id));
     const [group] = await suite.db
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId: zone!.id, name: "Long table", seats: 10 })
       .returning();
     await suite.db.insert(floorTodayJoinTables).values(
@@ -269,7 +269,7 @@ describe("mountReportApi — /reports/overview", () => {
     );
     onTestFinished(async () => {
       await suite.db.delete(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, group!.id));
-      await suite.db.delete(floorTodayJoins).where(eq(floorTodayJoins.id, group!.id));
+      await suite.db.delete(tableMerges).where(eq(tableMerges.id, group!.id));
       for (const t of tables) {
         await suite.db.update(diningTables).set(OFF_FLOOR).where(eq(diningTables.id, t.id));
         await suite.db.delete(diningTables).where(eq(diningTables.id, t.id));

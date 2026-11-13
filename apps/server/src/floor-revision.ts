@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   diningTables,
   floorResetTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   type Transaction,
   floorZones,
@@ -82,13 +82,13 @@ export async function roomPrints(
       beforeX: floorTodayJoinTables.beforeX,
       beforeY: floorTodayJoinTables.beforeY,
       beforeRotation: floorTodayJoinTables.beforeRotation,
-      groupSeats: floorTodayJoins.seats,
-      groupName: floorTodayJoins.name,
+      groupSeats: tableMerges.seats,
+      groupName: tableMerges.name,
       readyToMove: floorResetTables.readyToMove,
     })
     .from(diningTables)
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
-    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+    .leftJoin(tableMerges, eq(tableMerges.id, floorTodayJoinTables.joinId))
     .leftJoin(floorResetTables, eq(floorResetTables.tableId, diningTables.id))
     .where(inArray(diningTables.zoneId, [...zoneIds]))
     .orderBy(asc(diningTables.id));

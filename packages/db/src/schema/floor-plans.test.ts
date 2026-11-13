@@ -21,7 +21,7 @@ import {
   floorPlanTables,
   floorResetTables,
   floorTodayJoinTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodaySplitParts,
   rangeCheck,
 } from "./floor-plans.js";
@@ -282,13 +282,13 @@ describe("floor plan tables", () => {
 
     const [first, second] = await inTx(async (tx) => {
       const a = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: OTHER_ZONE, seats: 6 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       const b = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: OTHER_ZONE, seats: 6 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       return [a[0]!.id, b[0]!.id];
     });
     const before = { beforeX: 1, beforeY: 2, beforeRotation: 30 };
@@ -311,8 +311,8 @@ describe("floor plan tables", () => {
   it.each([
     [
       "a today's join with no seats",
-      () => inTx((tx) => tx.insert(floorTodayJoins).values({ zoneId: ZONE, seats: 0 })),
-      "floor_today_joins_seats_ck",
+      () => inTx((tx) => tx.insert(tableMerges).values({ zoneId: ZONE, seats: 0 })),
+      "table_merges_seats_ck",
     ],
     [
       "a reset row turned 20",
@@ -363,9 +363,9 @@ describe("floor plan tables", () => {
       async () => {
         const joinId = await inTx(async (tx) => {
           const [j] = await tx
-            .insert(floorTodayJoins)
+            .insert(tableMerges)
             .values({ zoneId: ZONE, seats: 2 })
-            .returning({ id: floorTodayJoins.id });
+            .returning({ id: tableMerges.id });
           return j!.id;
         });
         return inTx((tx) =>
@@ -381,9 +381,9 @@ describe("floor plan tables", () => {
       async () => {
         const joinId = await inTx(async (tx) => {
           const [j] = await tx
-            .insert(floorTodayJoins)
+            .insert(tableMerges)
             .values({ zoneId: ZONE, seats: 2 })
-            .returning({ id: floorTodayJoins.id });
+            .returning({ id: tableMerges.id });
           return j!.id;
         });
         return inTx((tx) =>

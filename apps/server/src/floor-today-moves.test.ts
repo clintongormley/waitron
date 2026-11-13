@@ -7,7 +7,7 @@ import {
   floorPlanPlacements,
   floorPlanTables,
   floorTodayJoinTables,
-  floorTodayJoins,
+  tableMerges,
   todaySet,
   diningTables,
 } from "@waitron/db";
@@ -49,9 +49,9 @@ async function setToday(
 async function merge(zoneId: string, tableIds: string[]): Promise<void> {
   await inTx(v, async (tx) => {
     const [join] = await tx
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId, seats: 8 })
-      .returning({ id: floorTodayJoins.id });
+      .returning({ id: tableMerges.id });
     for (const tableId of tableIds) {
       await tx
         .insert(floorTodayJoinTables)

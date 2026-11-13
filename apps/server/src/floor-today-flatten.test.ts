@@ -6,7 +6,7 @@ import {
   diningTables,
   floorResetTables,
   floorTodayJoinTables,
-  floorTodayJoins,
+  tableMerges,
   partyTables,
   workingOrders,
   todayColumns,
@@ -135,7 +135,7 @@ async function everything() {
       .from(diningTables)
       .where(eq(diningTables.onFloor, true))
       .orderBy(asc(diningTables.id)),
-    joins: await tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
+    joins: await tx.select().from(tableMerges).orderBy(asc(tableMerges.id)),
     joinTables: await tx
       .select()
       .from(floorTodayJoinTables)

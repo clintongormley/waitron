@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { diningTables, floorTodayJoins, todaySet } from "@waitron/db";
+import { diningTables, tableMerges, todaySet } from "@waitron/db";
 import type { JoinSide } from "@waitron/shared";
 import { leaveMergesRestoring, mergeMembers, writeMerge } from "./floor-today-merges.js";
 import { inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
@@ -80,7 +80,7 @@ describe("today's merges", () => {
       ]),
     );
     const [join] = await inTx(v, (tx) =>
-      tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.id, merged!.joinId)),
+      tx.select().from(tableMerges).where(eq(tableMerges.id, merged!.joinId)),
     );
     expect(join!.zoneId).toBe(zoneId);
     expect((await inTx(v, (tx) => mergeMembers(tx, a))).sort()).toEqual([a, b].sort());

@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorTodayJoins, todayColumns, todaySet, diningTables } from "@waitron/db";
+import { tableMerges, todayColumns, todaySet, diningTables } from "@waitron/db";
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
 import { markMoved } from "./floor-today-mark-moved.js";
@@ -108,7 +108,7 @@ async function refused(work: Promise<unknown>): Promise<{ code: string; params: 
 async function everything() {
   return inTx(v, async (tx) => ({
     tables: await tx.select(todayColumns).from(diningTables).where(eq(diningTables.onFloor, true)),
-    joins: await tx.select().from(floorTodayJoins),
+    joins: await tx.select().from(tableMerges),
   }));
 }
 
@@ -116,7 +116,7 @@ async function groupName(tableId: string): Promise<string | null | undefined> {
   const merge = await mergeOf(v, tableId);
   if (merge === null) return undefined;
   const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.id, merge.joinId)),
+    tx.select().from(tableMerges).where(eq(tableMerges.id, merge.joinId)),
   );
   return row!.name;
 }
@@ -460,7 +460,7 @@ describe("what moves, ends or keeps today's name", () => {
   /** Snug (6 seats) = Counter 7 (2) and Counter 8 (4), each kept 2 × 2. */
   const nameOf = async (tableId: string) => (await todayRow(v, tableId))!.name;
   const joinRow = (joinId: string) =>
-    inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.id, joinId)));
+    inTx(v, (tx) => tx.select().from(tableMerges).where(eq(tableMerges.id, joinId)));
   const leftOn = (tableId: string, name: string) =>
     inTx(v, (tx) =>
       tx.update(diningTables).set(todaySet({ name })).where(eq(diningTables.id, tableId)),
@@ -674,7 +674,7 @@ describe("a reset clears today's name", () => {
       tx.update(diningTables).set(todaySet({ name })).where(eq(diningTables.id, tableId)),
     );
   const joinRow = (joinId: string) =>
-    inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.id, joinId)));
+    inTx(v, (tx) => tx.select().from(tableMerges).where(eq(tableMerges.id, joinId)));
 
   it("Reset to {set} plan clears a free table's name and moves the revision (reset clears)", async () => {
     const { table, zoneId } = await LONG_TABLE();

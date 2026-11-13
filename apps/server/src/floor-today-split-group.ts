@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { floorTodayJoins, nowIso, type Transaction } from "@waitron/db";
+import { tableMerges, nowIso, type Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { leaveMergesRestoring } from "./floor-today-merges.js";
@@ -103,6 +103,6 @@ async function leaveAsGroup(
 ): Promise<void> {
   await leaveMergesRestoring(tx, partIds);
   if (seats !== null) {
-    await tx.update(floorTodayJoins).set({ seats }).where(eq(floorTodayJoins.id, joinId));
+    await tx.update(tableMerges).set({ seats }).where(eq(tableMerges.id, joinId));
   }
 }

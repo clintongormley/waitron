@@ -12,7 +12,7 @@ import { saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import {
   diningTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   floorTodaySplitParts,
   partyTables,
@@ -681,7 +681,7 @@ describe("a party change that changes a room answers its revision", () => {
       tx.select().from(floorTodaySplitParts).orderBy(asc(floorTodaySplitParts.id)),
     );
     const joins = await inTx(v, (tx) =>
-      tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
+      tx.select().from(tableMerges).orderBy(asc(tableMerges.id)),
     );
     const joinTables = await inTx(v, (tx) =>
       tx.select().from(floorTodayJoinTables).orderBy(asc(floorTodayJoinTables.id)),

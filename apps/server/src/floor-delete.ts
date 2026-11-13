@@ -5,7 +5,7 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   parties,
   partyTables,
@@ -57,8 +57,8 @@ async function inventory(tx: Transaction, zoneIds: readonly string[]) {
   const saved = await tx.select().from(floorPlanTables).where(inArray(floorPlanTables.zoneId, ids));
   const todayJoins = await tx
     .select()
-    .from(floorTodayJoins)
-    .where(inArray(floorTodayJoins.zoneId, ids));
+    .from(tableMerges)
+    .where(inArray(tableMerges.zoneId, ids));
   const todayMembers = await tx
     .select({ joinId: floorTodayJoinTables.joinId, id: diningTables.id, label: diningTables.label })
     .from(floorTodayJoinTables)
@@ -170,7 +170,7 @@ export function floorDeletionFor(removals: readonly TableRemoval[]): FloorDeleti
       await tx
         .delete(floorTodayJoinTables)
         .where(inArray(floorTodayJoinTables.joinId, todayJoinIds));
-      await tx.delete(floorTodayJoins).where(inArray(floorTodayJoins.id, todayJoinIds));
+      await tx.delete(tableMerges).where(inArray(tableMerges.id, todayJoinIds));
       await tx
         .update(floorZones)
         .set({

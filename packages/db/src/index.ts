@@ -113,7 +113,7 @@ export {
   floorPlanTables,
   floorResetTables,
   floorTodayJoinTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodaySplitParts,
 } from "./schema/floor-plans.js";
 export {

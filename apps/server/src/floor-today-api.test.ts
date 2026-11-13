@@ -14,7 +14,7 @@ import {
   tableInService,
   diningTables,
   floorPlans,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   floorTodaySplitParts,
   partyTables,
@@ -189,7 +189,7 @@ async function everything() {
     tx.select().from(floorTodaySplitParts).orderBy(asc(floorTodaySplitParts.id)),
   );
   const joins = await inTx(v, (tx) =>
-    tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
+    tx.select().from(tableMerges).orderBy(asc(tableMerges.id)),
   );
   const joinTables = await inTx(v, (tx) =>
     tx.select().from(floorTodayJoinTables).orderBy(asc(floorTodayJoinTables.id)),

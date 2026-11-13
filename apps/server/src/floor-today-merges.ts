@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   partyTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   todaySet,
   diningTables,
@@ -47,7 +47,7 @@ export async function leaveMerges(tx: Transaction, tableIds: readonly string[]):
       await putBack(tx, member);
     }
     await tx.delete(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, joinId));
-    await tx.delete(floorTodayJoins).where(eq(floorTodayJoins.id, joinId));
+    await tx.delete(tableMerges).where(eq(tableMerges.id, joinId));
   }
 }
 
@@ -168,13 +168,13 @@ export async function writeMerge(
   let joinId = target.merge?.joinId;
   if (joinId === undefined) {
     const [join] = await tx
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId, seats })
-      .returning({ id: floorTodayJoins.id });
+      .returning({ id: tableMerges.id });
     joinId = join!.id;
     await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, target));
   } else {
-    await tx.update(floorTodayJoins).set({ seats }).where(eq(floorTodayJoins.id, joinId));
+    await tx.update(tableMerges).set({ seats }).where(eq(tableMerges.id, joinId));
   }
   const goes = { width: moving.row.width!, height: moving.row.height! };
   const against = placeOf(target.row);

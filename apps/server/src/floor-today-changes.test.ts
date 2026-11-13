@@ -9,7 +9,7 @@ import {
   floorPlanTables,
   floorResetTables,
   floorTodayJoinTables,
-  floorTodayJoins,
+  tableMerges,
   workingOrders,
   todayColumns,
   todaySet,
@@ -74,9 +74,9 @@ async function merge(
 ): Promise<void> {
   await inTx(v, async (tx) => {
     const [join] = await tx
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId, seats: 8 })
-      .returning({ id: floorTodayJoins.id });
+      .returning({ id: tableMerges.id });
     for (const member of members) {
       await tx.insert(floorTodayJoinTables).values({
         joinId: join!.id,
@@ -141,7 +141,7 @@ async function everything() {
       .from(diningTables)
       .where(eq(diningTables.onFloor, true))
       .orderBy(asc(diningTables.id)),
-    joins: await tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
+    joins: await tx.select().from(tableMerges).orderBy(asc(tableMerges.id)),
     joinTables: await tx.select().from(floorTodayJoinTables).orderBy(asc(floorTodayJoinTables.id)),
   }));
 }

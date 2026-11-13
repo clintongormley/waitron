@@ -65,7 +65,7 @@ for (const enabled of [true, false]) {
         "floor_plans",
         "floor_plan_tables",
         "floor_reset_tables",
-        "floor_today_joins",
+        "table_merges",
         "floor_today_join_tables",
         "parties",
         "party_tables",

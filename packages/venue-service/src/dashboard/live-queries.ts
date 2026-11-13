@@ -6,7 +6,7 @@ const HIERARCHY_DELETE_READS = [
   "floor_plans",
   "floor_plan_tables",
   "floor_reset_tables",
-  "floor_today_joins",
+  "table_merges",
   "floor_today_join_tables",
   "parties",
   "party_tables",
@@ -87,7 +87,7 @@ export const QUERY_DEPENDENCIES = {
     "routing_cell_periods",
     "floor_zones",
     "floor_today_join_tables",
-    "floor_today_joins",
+    "table_merges",
   ],
   "floor-plan-sets": [
     "floor_plan_sets",

@@ -9,7 +9,7 @@ import {
   floorPlanTables,
   floorPlanPlacements,
   floorTodayJoinTables,
-  floorTodayJoins,
+  tableMerges,
   floorZones,
   todayColumns,
 } from "@waitron/db";
@@ -355,9 +355,9 @@ export async function mergeOf(
 } | null> {
   return inTx(v, async (tx) => {
     const [own] = await tx
-      .select({ joinId: floorTodayJoinTables.joinId, seats: floorTodayJoins.seats })
+      .select({ joinId: floorTodayJoinTables.joinId, seats: tableMerges.seats })
       .from(floorTodayJoinTables)
-      .innerJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+      .innerJoin(tableMerges, eq(tableMerges.id, floorTodayJoinTables.joinId))
       .where(eq(floorTodayJoinTables.tableId, tableId));
     if (own === undefined) return null;
     const members = await tx

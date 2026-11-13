@@ -239,8 +239,8 @@ export const floorResetTables = table(
   ],
 );
 
-export const floorTodayJoins = table(
-  "floor_today_joins",
+export const tableMerges = table(
+  "table_merges",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     zoneId: id("zone_id").notNull(),
@@ -248,13 +248,13 @@ export const floorTodayJoins = table(
     name: label("name"),
   },
   (t) => [
-    index("floor_today_joins_zone_idx").on(t.zoneId),
+    index("table_merges_zone_idx").on(t.zoneId),
     foreignKey({
       columns: [t.zoneId],
       foreignColumns: [floorZones.id],
-      name: "floor_today_joins_zone_fk",
+      name: "table_merges_zone_fk",
     }),
-    check("floor_today_joins_seats_ck", sql`${t.seats} >= 1`),
+    check("table_merges_seats_ck", sql`${t.seats} >= 1`),
   ],
 );
 
@@ -273,7 +273,7 @@ export const floorTodayJoinTables = table(
     unique("floor_today_join_tables_table_key").on(t.tableId),
     foreignKey({
       columns: [t.joinId],
-      foreignColumns: [floorTodayJoins.id],
+      foreignColumns: [tableMerges.id],
       name: "floor_today_join_tables_join_fk",
     }),
     foreignKey({

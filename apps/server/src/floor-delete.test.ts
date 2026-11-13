@@ -13,7 +13,7 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   floorTodaySplitParts,
   floorZones,
@@ -86,7 +86,7 @@ const floorRows = {
   floorPlanTables,
   floorPlanPlacements,
   floorResetTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   floorTodaySplitParts,
 };
@@ -162,7 +162,7 @@ async function planned(z: string, prefix: string) {
       )
       .returning(todayColumns);
     const [todayJoin] = await tx
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId: z, seats: 12 })
       .returning();
     const todayMembers = await tx
@@ -405,7 +405,7 @@ describe("floor hierarchy deletion", () => {
       floorPlans: [own.plan],
       floorPlanTables: own.masters,
       floorResetTables: [...own.resets, own.pending],
-      floorTodayJoins: [own.todayJoin],
+      tableMerges: [own.todayJoin],
       floorTodayJoinTables: own.todayMembers,
     };
     for (const [key, rows] of Object.entries(removed)) {

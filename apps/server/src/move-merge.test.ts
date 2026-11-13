@@ -10,7 +10,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   captureError,
   floorTodayJoinTables,
-  floorTodayJoins,
+  tableMerges,
   kitchenStations,
   parties,
   partyTables,
@@ -752,9 +752,9 @@ describe("a MOVED slip per order per station", () => {
 async function group(v: PartyVenue, name: string, tableIds: string[]): Promise<void> {
   await inTx(v, async (tx) => {
     const [row] = await tx
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId: v.tables.zoneId, seats: 8, name })
-      .returning({ id: floorTodayJoins.id });
+      .returning({ id: tableMerges.id });
     for (const tableId of tableIds)
       await tx
         .insert(floorTodayJoinTables)

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { needsMoving } from "./joined-parts.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { diningTables } from "./schema/dining-tables.js";
-import { floorResetTables, floorTodayJoinTables, floorTodayJoins } from "./schema/floor-plans.js";
+import { floorResetTables, floorTodayJoinTables, tableMerges } from "./schema/floor-plans.js";
 import { seedVenue, seedZone } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
@@ -97,9 +97,9 @@ describe("needs moving", () => {
 
   it("is true in a merge", async () => {
     const [join] = await suite.db
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId: ZONE, seats: 8 })
-      .returning({ id: floorTodayJoins.id });
+      .returning({ id: tableMerges.id });
     await suite.db
       .insert(floorTodayJoinTables)
       .values({ joinId: join!.id, tableId: PLAIN, beforeX: 0, beforeY: 0, beforeRotation: 0 });

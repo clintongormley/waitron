@@ -7,7 +7,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   floorResetTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   floorZones,
   todaySet,
@@ -117,9 +117,9 @@ describe("the till's table-state answer carries today's plan", () => {
         .set(todaySet({ takenOff: true }))
         .where(eq(diningTables.id, off));
       const [join] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId, seats: 7 })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       for (const tableId of [a, b]) {
         await tx
           .insert(floorTodayJoinTables)
@@ -334,9 +334,9 @@ describe("the till's table-state answer carries today's names", () => {
         .set(todaySet({ name: tableName }))
         .where(eq(diningTables.id, named.table.bar!));
       await tx
-        .update(floorTodayJoins)
+        .update(tableMerges)
         .set({ name: groupName })
-        .where(eq(floorTodayJoins.id, joinId));
+        .where(eq(tableMerges.id, joinId));
     });
 
     const states = await read();

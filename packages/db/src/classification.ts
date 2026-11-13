@@ -158,7 +158,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("floor_plan_tables", "state", STATE),
   classify("floor_plan_placements", "state", STATE),
   classify("floor_reset_tables", "state", STATE),
-  classify("floor_today_joins", "state", STATE),
+  classify("table_merges", "state", STATE),
   classify("floor_today_join_tables", "state", STATE),
   classify("floor_today_split_parts", "state", STATE),
   classify("kitchen_stations", "state", STATE),

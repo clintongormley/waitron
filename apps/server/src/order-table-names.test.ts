@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   parties,
   partyTables,
@@ -60,7 +60,7 @@ describe("A765 table names in order lists", () => {
       for (const label of ["North 1", "North 2"])
         tables.push(await createTable(tx, venue.cfg, { label, zoneId: venue.zoneId }));
       const [join] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId: venue.zoneId, seats: 6, name: "Garden party" })
         .returning();
       const [party] = await tx.insert(parties).values({ openedBy: venue.operatorId }).returning();

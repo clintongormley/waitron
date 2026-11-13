@@ -109,7 +109,7 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
       "floor_plans",
       "floor_plan_tables",
       "floor_reset_tables",
-      "floor_today_joins",
+      "table_merges",
       "floor_today_join_tables",
       "parties",
       "party_tables",
@@ -177,7 +177,7 @@ it("refreshes a station's delete impact when a table or group is named for today
       "dining_tables",
       "dining_tables.today",
       "floor_today_join_tables",
-      "floor_today_joins",
+      "table_merges",
     ]),
   );
 });

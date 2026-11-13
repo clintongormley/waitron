@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorTodayJoins, floorTodayJoinTables, workingOrders } from "@waitron/db";
+import { tableMerges, floorTodayJoinTables, workingOrders } from "@waitron/db";
 import {
   partyNameOnPaper,
   readOrderPlaces,
@@ -41,9 +41,9 @@ useVenueDb({
 async function group(name: string, tableIds: string[]): Promise<void> {
   await inTx(v, async (tx) => {
     const [row] = await tx
-      .insert(floorTodayJoins)
+      .insert(tableMerges)
       .values({ zoneId: v.tables.zoneId, seats: 8, name })
-      .returning({ id: floorTodayJoins.id });
+      .returning({ id: tableMerges.id });
     for (const tableId of tableIds) {
       await tx
         .insert(floorTodayJoinTables)

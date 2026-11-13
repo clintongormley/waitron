@@ -19,7 +19,7 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoins,
+  tableMerges,
   floorTodayJoinTables,
   floorZones,
   needsMoving,
@@ -787,9 +787,9 @@ async function catchUpPass(
     if (joined.x !== null) {
       await leaveMergesRestoring(tx, memberIds);
       const [merge] = await tx
-        .insert(floorTodayJoins)
+        .insert(tableMerges)
         .values({ zoneId, name: joined.label, seats: joined.seats! })
-        .returning({ id: floorTodayJoins.id });
+        .returning({ id: tableMerges.id });
       await tx.insert(floorTodayJoinTables).values(
         parts.map((row) => ({
           joinId: merge!.id,
@@ -1261,9 +1261,9 @@ export async function seatsToday(tx: Transaction, tableId: string, seats: number
   if (today.row.takenOff) throw new AppError("table.taken_off", { tableId });
   if (today.merge !== null) {
     await tx
-      .update(floorTodayJoins)
+      .update(tableMerges)
       .set({ seats })
-      .where(eq(floorTodayJoins.id, today.merge.joinId));
+      .where(eq(tableMerges.id, today.merge.joinId));
     return;
   }
   await tx
