@@ -15,7 +15,12 @@ import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireBillEditors } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { carryMergeInvoice, checkMergeInvoice, type MergeInvoices } from "./merge-invoice.js";
+import {
+  carryMergeInvoice,
+  checkMergeInvoice,
+  parseChoice,
+  type MergeInvoices,
+} from "./merge-invoice.js";
 import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { guardParty, refuseMovedParty, requireBillOfParty } from "./parties.js";
@@ -247,7 +252,7 @@ async function checkMoveInvoice(
   invoiceChoice: unknown,
 ): Promise<MergeInvoices | null> {
   if (empties) return checkMergeInvoice(tx, intoBillId, fromBillId, invoiceChoice);
-  if (invoiceChoice !== undefined) {
+  if (parseChoice(invoiceChoice) !== undefined) {
     throw new AppError("bill.merge_invoice_choice_required", {
       workingOrderId: fromBillId,
       intoWorkingOrderId: intoBillId,

@@ -65,7 +65,8 @@ function requireIdentity(value: unknown): InvoiceIdentity {
   };
 }
 
-function parseChoice(value: unknown): MergeInvoiceChoice | undefined {
+/** Refuses a malformed `value` as `management.request_invalid`; undefined when none was sent. */
+export function parseChoice(value: unknown): MergeInvoiceChoice | undefined {
   if (value === undefined) return undefined;
   if (!isObject(value) || (value.keep !== "into" && value.keep !== "from")) invalid();
   const into = value.into === null ? null : requireIdentity(value.into);

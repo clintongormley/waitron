@@ -1128,6 +1128,32 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     );
   });
 
+  it.each([
+    ["a null choice", null],
+    ["a choice that is not an object", "from"],
+    ["a bad keep", { keep: "both", into: null, from: { taxId: ACME.taxId } }],
+    ["a from without a tax number", { keep: "from", into: null, from: { taxId: 5 } }],
+  ])(
+    "A1519 move dishes refuses: %s is management.request_invalid whether or not the move empties the bill",
+    async (_, invoiceChoice) => {
+      const p = await party([dish("Caña"), dish("Burger")]);
+      await fullInvoice(v, p.bill1, ACME);
+      const dishes = await dishIds(p.bill1);
+      const invalid = { field: "invoiceChoice" };
+
+      await refused(
+        () => moveChoosing(p, p.bill2, [dishes[0]!], invoiceChoice),
+        "management.request_invalid",
+        invalid,
+      );
+      await refused(
+        () => moveChoosing(p, p.bill2, dishes, invoiceChoice),
+        "management.request_invalid",
+        invalid,
+      );
+    },
+  );
+
   it("every dish, one with an extra, counts as emptying", async () => {
     const p = await party([{ ...dish("Burger"), cheese: 1 }, dish("Caña")]);
     await fullInvoice(v, p.bill1, ACME);
