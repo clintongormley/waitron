@@ -75,8 +75,8 @@ bajo el nombre de la cuenta; las dos abren el mismo formulario para la cuenta en
 aparece cuando la cuenta ya está pagada o ya se ha emitido su factura. Convertir una cuenta pagada
 en factura completa sería corregir una factura ya emitida, y Waitron todavía no ofrece esa
 corrección. Cuando ya has elegido un cliente, su nombre y su identificador aparecen debajo de
-**Factura completa**, en la zona de cobro. Al juntar cuentas, la caja pregunta antes de cambiar
-el cliente de una factura completa.
+**Factura completa**, en la zona de cobro. Al juntar cuentas, o al mover todos los platos a otra
+cuenta, la caja pregunta antes de cambiar el cliente de una factura completa.
 
 En el mostrador, elige **Factura completa** antes de **Cobrar**. Al cobrar todo el pedido se
 emite la factura. Tramitar un pedido de mostrador por sí solo no emite una factura.
@@ -501,6 +501,10 @@ Después de moverlos, una cuenta nueva se pone en pantalla; si los pasas a otra 
 pantalla. Cada plato conserva su curso y sigue enviado, marchado o servido como estaba. Si mueves
 los últimos platos sin pagar de una cuenta pagada en parte, la cuenta queda pagada del todo y se
 emite su factura.
+
+Si una cuenta está a nombre de un cliente para factura completa y mueves todos sus platos a una
+cuenta que no nombra al mismo cliente, la caja pregunta antes: elige el cliente al que se facturan
+los platos, o **No mover**.
 
 Si alguien paga un plato en otra caja mientras el panel está abierto, su fila pasa a **Pagado**
 cuando la caja vuelve a leer la cuenta, y ese plato deja de estar entre los que elegiste. Si tocas

@@ -165,13 +165,6 @@ that bundle's heading in the area's file: take a bundle as one pull request.
   to land. Left open by A1189.
   [Detail](backlog/fiscal.md#retire-the-historical-allocation-formats-from-fiscal-verifactu)
 
-- **A1519: moving every dish off a full-invoice bill loses its customer.** When staff use Move
-  dishes to take every dish off a bill set for a full invoice, then Finish table, the emptied bill
-  is closed with the customer's invoice details on it, and the dishes are invoiced as the bill they
-  moved to is set: on a simplified invoice, or to that bill's own customer. Merging bills asks
-  first; Move dishes does not. Left open by the merge-bills invoice question
-  ([plan](superpowers/plans/2026-11-12-r4-merge-recipient.md)).
-
 - **Invoice context qualification:** Exercise full-invoice print delivery and PDF downloads with
   distinct serving-node and data-node contexts, including practice marking. The A1156 review's
   print-delivery override survived the reprint-only controls; existing delivery/PDF suites remain.

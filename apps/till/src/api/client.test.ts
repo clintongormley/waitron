@@ -3272,6 +3272,28 @@ describe("TillApi", () => {
     },
   );
 
+  it("moveDishes sends invoiceChoice only when given", async () => {
+    const fetchStub = vi.fn(async () => jsonResponse({ billId: "wo-into" }));
+    const api = new TillApi("", fetchStub);
+    const revisions = { expectedEdits: [] };
+    const choice = { keep: "from" as const, into: null, from: { taxId: "B12345678" } };
+
+    await api.moveDishes("wo-from", ["line-1"], null, revisions, choice);
+    await api.moveDishes("wo-from", ["line-1"], null, revisions);
+
+    const bodies = fetchStub.mock.calls.map((call) =>
+      JSON.parse((call as unknown as [string, RequestInit])[1].body as string),
+    );
+    expect(bodies[0]).toEqual({
+      lineIds: ["line-1"],
+      toBillId: null,
+      expectedEdits: [],
+      invoiceChoice: choice,
+    });
+    expect(bodies[1]).toEqual({ lineIds: ["line-1"], toBillId: null, expectedEdits: [] });
+    expect(Object.hasOwn(bodies[1], "invoiceChoice")).toBe(false);
+  });
+
   it("A803 bill names: setBillName PUTs the name, the party, its revision and the bill's editor expectation to the bill's /name route", async () => {
     const fetchStub = vi
       .fn()
