@@ -750,7 +750,8 @@ const BATTERY_CHECK_LIMIT_MS = 45_000;
 /**
  * The card-reader alert source: a reader its provider reports offline, and a low battery. A reader
  * whose provider reports no battery raises no battery alert, and a status the provider could not
- * read (`unreachable`) raises no offline alert. Status answers are cached per reader id so a
+ * read, whether it threw, ran out of time or answered `unreachable`, raises
+ * `reader.status_unavailable` alone. Status answers are cached per reader id so a
  * polling dashboard does not call the provider every time.
  */
 export function batteryAlertSource(deps: {
@@ -785,7 +786,10 @@ export function batteryAlertSource(deps: {
             deps.cache
               .get(r.id, () => seat.readers.status(deps.runtimeDeps(), r.ref))
               .then(
-                (status) => ({ kind: "reading" as const, status }),
+                (status) =>
+                  status.unreachable === true
+                    ? { kind: "unavailable" as const }
+                    : { kind: "reading" as const, status },
                 () => ({ kind: "unavailable" as const }),
               ),
             deadline.then(() => ({ kind: "unavailable" as const })),
@@ -810,7 +814,7 @@ export function batteryAlertSource(deps: {
           return;
         }
         const { status } = result;
-        if (status.online === false && status.unreachable !== true)
+        if (status.online === false)
           alerts.push({
             key: `reader.offline:${r.id}`,
             code: "reader.offline",
