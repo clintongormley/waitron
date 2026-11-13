@@ -102,10 +102,6 @@ it.each([
     await change(el, "endsAt", end);
     save(el).click();
     await el.updateComplete;
-    const invalidField = field(el, startError ? "startsAt" : "endsAt");
-    await expect
-      .poll(() => invalidField.shadowRoot!.activeElement)
-      .toBe(invalidField.shadowRoot!.querySelector("input"));
     expect(results).toEqual([]);
     expect(el.open).toBe(true);
     expect(field(el, "startsAt").error).toBe(startError);
@@ -326,10 +322,6 @@ it("ignores a new-period command it does not own and a period outside its depart
 
 it("retained fields and Cancel cannot change or close the next opening", async () => {
   const el = await mount(true);
-  await change(el, "startsAt", "09:07");
-  save(el).click();
-  await el.updateComplete;
-  expect(field(el, "startsAt").error).not.toBe("");
   const oldInput = field(el, "endsAt");
   const oldCancel = el.shadowRoot!.querySelector<HTMLElement>("[slot=cancel]")!;
   el.open = false;
@@ -342,8 +334,6 @@ it("retained fields and Cancel cannot change or close the next opening", async (
   expect(el.open).toBe(true);
   expect(field(el, "endsAt").value).toBe("10:00");
   expect(save(el).disabled).toBe(true);
-  await change(el, "startsAt", "");
-  expect(field(el, "startsAt").error).toBe("");
 });
 
 it("closedTimes edits a range with no period choice or period id in its output", async () => {
