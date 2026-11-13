@@ -3678,6 +3678,7 @@ async function bootServer(
       timeHealthCache.clear();
     },
   });
+  const chainNodeId = config.node.nodeId;
   const clockWatch = createClockWatch({
     backend: nodeBackend,
     store: clockWitnesses,
@@ -3693,6 +3694,11 @@ async function bootServer(
         timeHealthCache.clear();
       },
       heads: recordHeads,
+      futureDateRefusal: {
+        nodeId: chainNodeId,
+        latest: async (tx, abovePosition) =>
+          (await nodeBackend.latestFutureDateRefusal?.(tx, chainNodeId, abovePosition)) ?? null,
+      },
     },
     log,
     monotonic: boxBoot.elapsed,

@@ -488,6 +488,23 @@ it("serves a waiting box's challenge and keep with AEAT never asked", async () =
   expect(start.status).toBe("by_person");
 });
 
+it("offers the keep and confirms by it while waiting because AEAT refused a sale as dated in the future", async () => {
+  const { box, start } = await waitingBox();
+  start.confirm("by_person", {});
+  start.backToWaiting("future_date_refused", "2026-11-14");
+  const boxAt = boxTime(box);
+  const asked = await ask(box, staffCookie);
+  expect(asked.status).toBe(200);
+  expect(asked.json).toMatchObject({ keepOffered: true });
+  const answer = await confirmWith(box, staffCookie, {
+    challengeId: asked.json.challengeId,
+    deviceAt: boxAt + 10 * MINUTE,
+    keep: true,
+  });
+  expect(answer.status).toBe(200);
+  expect(start).toMatchObject({ status: "by_person", cause: null, refusedOn: null });
+});
+
 it("refuses the challenge with the window shut once the start check is by the internet, the control", async () => {
   const { box, start } = await waitingBox();
   start.confirm("by_internet", {});

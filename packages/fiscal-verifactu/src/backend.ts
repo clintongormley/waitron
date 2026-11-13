@@ -225,8 +225,12 @@ export class VerifactuBackend implements FiscalBackend {
     return chainHeads(tx);
   }
 
-  latestFutureDateRefusal(tx: Transaction, nodeId: string): Promise<FutureDateRefusal | null> {
-    return latestFutureDateRefusal(tx, nodeId);
+  latestFutureDateRefusal(
+    tx: Transaction,
+    nodeId: string,
+    abovePosition: number,
+  ): Promise<FutureDateRefusal | null> {
+    return latestFutureDateRefusal(tx, nodeId, abovePosition);
   }
 
   /**

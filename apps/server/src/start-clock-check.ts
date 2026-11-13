@@ -1,4 +1,9 @@
-import { agreeingDeviceCount, agreeingDeviceGroup, type ClockWitness } from "@waitron/fiscal";
+import {
+  agreeingDeviceCount,
+  agreeingDeviceGroup,
+  type ClockWitness,
+  type FutureDateRefusal,
+} from "@waitron/fiscal";
 import type { ClockServiceStatus } from "./box-host-client.js";
 
 /** How close two devices' clocks must be to the box's, and to each other, to confirm a start. */
@@ -23,14 +28,18 @@ export interface StartClockState {
   readonly cause: StartClockCause | null;
   /** The chain heads at the latest confirmation, or null before the first. */
   readonly mark: ChainHeads | null;
+  /** The issue date of the sale AEAT refused as dated in the future, while waiting for that. */
+  readonly refusedOn: string | null;
   /** False while the latest look could not hear from the host's time service. */
   readonly hostAnswers: boolean;
   unconfirmed(): boolean;
   confirm(by: StartClockConfirmation, heads: ChainHeads): void;
-  /** Moves any status to waiting, `by_internet` included: the caller decides by the reading. */
-  backToWaiting(cause: StartClockCause): void;
+  /** Moves any status to waiting, `by_internet` included: the caller decides by the reading. A
+   * box waiting because AEAT refused a sale as dated in the future keeps that cause. */
+  backToWaiting(cause: StartClockCause, refusedOn?: string): void;
   /** While waiting, confirms by devices when two or more agree within `START_CLOCK_MARGIN_MS`,
-   * and answers their readings; otherwise answers none, changes nothing and reads no heads. */
+   * and answers their readings; otherwise answers none, changes nothing and reads no heads.
+   * Devices never end a wait caused by AEAT refusing a sale as dated in the future. */
   confirmDevices(
     witnesses: readonly ClockWitness[],
     heads: () => Promise<ChainHeads>,
@@ -42,6 +51,7 @@ export function startClockState(): StartClockState {
   let status: StartClockStatus = "waiting";
   let cause: StartClockCause | null = "start";
   let mark: ChainHeads | null = null;
+  let refusedOn: string | null = null;
   let hostAnswers = true;
   const current = (): StartClockStatus => status;
 
@@ -49,6 +59,7 @@ export function startClockState(): StartClockState {
     if (status === "by_internet") return;
     status = by;
     cause = null;
+    refusedOn = null;
     mark = { ...heads };
   };
 
@@ -62,17 +73,22 @@ export function startClockState(): StartClockState {
     get mark() {
       return mark;
     },
+    get refusedOn() {
+      return refusedOn;
+    },
     get hostAnswers() {
       return hostAnswers;
     },
     unconfirmed: () => status === "waiting",
     confirm,
-    backToWaiting(next) {
+    backToWaiting(next, refusedDate) {
+      if (status === "waiting" && cause === "future_date_refused") return;
       status = "waiting";
       cause = next;
+      refusedOn = next === "future_date_refused" ? (refusedDate ?? null) : null;
     },
     async confirmDevices(witnesses, heads) {
-      if (status !== "waiting") return [];
+      if (status !== "waiting" || cause === "future_date_refused") return [];
       const group = agreeingDeviceGroup(witnesses, START_CLOCK_MARGIN_MS);
       if (group.length === 0) return [];
       const at = await heads();
@@ -114,6 +130,35 @@ export async function backToWaitingUnlessSynchronised(
   if (answer.available && answer.synchronised) return false;
   deps.state.backToWaiting(cause);
   return true;
+}
+
+/** Whether AEAT's future-date refusal at `position` on `nodeId`'s chain is of a sale recorded
+ * since the latest confirmation; never before the first. */
+function refusedSinceConfirmed(state: StartClockState, nodeId: string, position: number): boolean {
+  return state.mark !== null && position > (state.mark[nodeId] ?? 0);
+}
+
+function waitingForRefusal(state: StartClockState): boolean {
+  return state.status === "waiting" && state.cause === "future_date_refused";
+}
+
+/** Sends the box back to waiting because AEAT refused, as dated in the future, a sale recorded
+ * since the latest confirmation, unless the time service is synchronised; a host that throws or
+ * does not answer counts as not synchronised. */
+export async function backToWaitingForRefusal(
+  deps: Pick<StartClockCheckDeps, "state" | "clockStatus">,
+  nodeId: string,
+  refusal: FutureDateRefusal,
+): Promise<"moved" | "synchronised" | "unchanged"> {
+  const applies = () =>
+    refusedSinceConfirmed(deps.state, nodeId, refusal.position) && !waitingForRefusal(deps.state);
+  if (!applies()) return "unchanged";
+  const answer = await clockServiceAnswerOf(deps.clockStatus);
+  if (answer.available && answer.synchronised) return "synchronised";
+  // A person may have confirmed while the time service was read.
+  if (!applies()) return "unchanged";
+  deps.state.backToWaiting("future_date_refused", refusal.issuedOn);
+  return "moved";
 }
 
 /** One look at the time service: a synchronised answer confirms by the internet. A host that

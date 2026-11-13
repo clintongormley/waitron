@@ -27,11 +27,11 @@ async function drainOnce(client: VerifactuClient) {
   );
 }
 
-const refusalOn = (nodeId: string) =>
-  withTransaction(suite.db, (tx) => latestFutureDateRefusal(tx, nodeId));
+const refusalOn = (nodeId: string, above = 0) =>
+  withTransaction(suite.db, (tx) => latestFutureDateRefusal(tx, nodeId, above));
 
 describe("latestFutureDateRefusal", () => {
-  it("answers the highest position on the node's chain AEAT refused as dated in the future, with its issue date", async () => {
+  it("answers the highest position above the given one on the node's chain AEAT refused as dated in the future, with its issue date", async () => {
     const fake = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     fake.reject(seeded.facturaKeys[0]!, FUTURE_DATE_REFUSAL, "Rechazo");
@@ -39,6 +39,8 @@ describe("latestFutureDateRefusal", () => {
     await drainOnce(fake.client());
 
     expect(await refusalOn(seeded.nodeId)).toEqual({ position: 2, issuedOn: "2026-07-20" });
+    expect(await refusalOn(seeded.nodeId, 1)).toEqual({ position: 2, issuedOn: "2026-07-20" });
+    expect(await refusalOn(seeded.nodeId, 2)).toBeNull();
   });
 
   it("answers the one refused record when only one is", async () => {

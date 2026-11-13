@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ClockServiceStatus } from "./box-host-client.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 import {
+  backToWaitingForRefusal,
   backToWaitingUnlessSynchronised,
   lookAtClockService,
   startClockAgreed,
@@ -149,6 +150,38 @@ describe("moving between states", () => {
       mark: { "node-a": 4 },
     });
     expect(state.unconfirmed()).toBe(true);
+  });
+});
+
+describe("waiting because AEAT refused a sale as dated in the future", () => {
+  it("keeps that cause and the refused sale's date when sent back to waiting for a jump, and clears the date on confirmation", () => {
+    const state = startClockState();
+    state.confirm("by_person", { "node-a": 4 });
+    state.backToWaiting("future_date_refused", "2027-03-15");
+    state.backToWaiting("clock_jumped");
+    expect(state).toMatchObject({
+      status: "waiting",
+      cause: "future_date_refused",
+      refusedOn: "2027-03-15",
+    });
+    state.confirm("by_person", { "node-a": 6 });
+    expect(state).toMatchObject({ status: "by_person", cause: null, refusedOn: null });
+  });
+
+  it("stays confirmed when a person confirms while the time service is read", async () => {
+    const state = startClockState();
+    state.confirm("by_person", { "node-a": 4 });
+    const clockStatus = vi.fn(async () => {
+      state.confirm("by_person", { "node-a": 6 });
+      return clockServiceAnswer(false);
+    });
+    await expect(
+      backToWaitingForRefusal({ state, clockStatus }, "node-a", {
+        position: 5,
+        issuedOn: "2027-03-15",
+      }),
+    ).resolves.toBe("unchanged");
+    expect(state.status).toBe("by_person");
   });
 });
 
