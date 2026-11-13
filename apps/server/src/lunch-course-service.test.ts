@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { systemClock } from "./till-backend.js";
@@ -5,7 +6,7 @@ import { applyPartyAllergyPatch, allergyTargets, readAllergySendView } from "./p
 import { VENUE_SERVICE } from "./modules.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { eq, getTableColumns, sql, inArray } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import {
   ticketItems,
   printJobs,
@@ -138,11 +139,7 @@ async function rows(tx: Transaction, id: string) {
     .orderBy(workingOrderLines.lineNo);
 }
 async function tickets(tx: Transaction, id: string) {
-  return tx
-    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(eq(workingOrderLines.workingOrderId, id));
+  return ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id));
 }
 
 describe("set lunch course service", () => {

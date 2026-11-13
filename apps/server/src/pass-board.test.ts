@@ -1,7 +1,8 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq, sql, getTableColumns, inArray } from "drizzle-orm";
+import { and, eq, sql, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -193,14 +194,7 @@ describe("pass screen", () => {
     const party = await seat(v, await v.table("Split table"));
     await orderForParty(v, party.partyId, ["Burger"], party.tabId);
     const [item] = await inTx(v, (tx) =>
-      tx
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     await inTx(v, async (tx) => {
       await tx
@@ -322,19 +316,9 @@ describe("pass monitor", () => {
     expect(names(terraceOnly).sort()).toEqual(["BURG", "CANA"]);
 
     const [burger] = await inTx(v, (tx) =>
-      tx
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(
-          and(
-            eq(workingOrderLines.workingOrderId, outside.tabId),
-            eq(ticketItems.stationId, grill),
-          ),
-        ),
+      ticketItemsWithBill(tx).where(
+        and(eq(workingOrderLines.workingOrderId, outside.tabId), eq(ticketItems.stationId, grill)),
+      ),
     );
 
     expect(boardOrderIds(await read(v, EVERY))).toContain(outside.tabId);

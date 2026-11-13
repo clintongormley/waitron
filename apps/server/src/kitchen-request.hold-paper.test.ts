@@ -1,8 +1,9 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, sql, getTableColumns } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   orderGroupHoldStations,
@@ -201,14 +202,7 @@ describe("A773 hold paper: cancel", () => {
         });
         expect(lines).toHaveLength(shape === "grouped" ? 1 : 3);
         const items = await inTx(venue, (tx) =>
-          tx
-            .select({
-              ...getTableColumns(ticketItems),
-              workingOrderId: workingOrderLines.workingOrderId,
-            })
-            .from(ticketItems)
-            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-            .where(eq(workingOrderLines.workingOrderId, order.billId)),
+          ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, order.billId)),
         );
         expect(items.length).toBeGreaterThan(0);
         for (const item of items)

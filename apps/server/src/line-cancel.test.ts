@@ -1,8 +1,9 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql, getTableColumns } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   adjustments,
@@ -97,11 +98,9 @@ async function fixture(release: "fire" | "hold" = "fire", name = "Pizza", quanti
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, order.billId))
       .orderBy(workingOrderLines.lineNo);
-    const tickets = await tx
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, order.billId));
+    const tickets = await ticketItemsWithBill(tx).where(
+      eq(workingOrderLines.workingOrderId, order.billId),
+    );
     return { ...order, parent: lines[0]!, extra: lines[1], tickets };
   });
 }
@@ -174,11 +173,9 @@ async function snapshot(order: Fixture) {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, order.billId))
       .orderBy(workingOrderLines.lineNo),
-    tickets: await tx
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, order.billId)),
+    tickets: await ticketItemsWithBill(tx).where(
+      eq(workingOrderLines.workingOrderId, order.billId),
+    ),
     cancellations: await tx
       .select()
       .from(lineServiceCancellations)

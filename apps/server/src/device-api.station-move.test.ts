@@ -1,7 +1,8 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles, seedActivityActor } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, inArray, getTableColumns } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   kitchenStations,
@@ -98,11 +99,7 @@ const passScreen: DeviceKitchenScreen = { kind: "pass", stationIds: null, zoneId
 async function sentDish() {
   const { tabId } = await seatedWith(venue, "Paella");
   const [item] = await inTx(venue, (tx) =>
-    tx
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, tabId)),
+    ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
   );
   return { tabId, item: item! };
 }
@@ -168,14 +165,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
       const screen = await display(stationScreen(bar));
       const { tabId } = await seatedWith(venue, "Paella", "Caña");
       const items = await inTx(venue, (tx) =>
-        tx
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(workingOrderLines.workingOrderId, tabId)),
+        ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
       );
       const [dish, extra] = items as [(typeof items)[0], (typeof items)[0]];
       await inTx(venue, (tx) =>
@@ -186,14 +176,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
       );
       const snapshot = () =>
         inTx(venue, async (tx) => ({
-          items: await tx
-            .select({
-              ...getTableColumns(ticketItems),
-              workingOrderId: workingOrderLines.workingOrderId,
-            })
-            .from(ticketItems)
-            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-            .where(eq(workingOrderLines.workingOrderId, tabId)),
+          items: await ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
           lines: await tx
             .select()
             .from(workingOrderLines)
@@ -330,14 +313,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     const screen = await display(stationScreen(bar));
     const { tabId } = await seatedWith(venue, "Paella", "Caña");
     const items = await inTx(venue, (tx) =>
-      tx
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, tabId)),
     );
     expect(items).toHaveLength(2);
     const [atBar, atGrill] = items as [(typeof items)[0], (typeof items)[0]];

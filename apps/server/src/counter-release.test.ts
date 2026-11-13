@@ -1,8 +1,9 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, getTableColumns } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { orderGroups, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCourse } from "./kitchen.js";
@@ -62,14 +63,7 @@ describe("A773 counter release", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id))
         .orderBy(workingOrderLines.lineNo),
-      items: await tx
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, id)),
+      items: await ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id)),
       groups: await tx.select().from(orderGroups),
     }));
     expect(after.order.partyId).toBeNull();
@@ -107,27 +101,13 @@ describe("A773 counter release", () => {
       OPERATOR,
     );
     const before = await inTx(v, (tx) =>
-      tx
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, id)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id)),
     );
     expect(before).toHaveLength(lines.length);
     expect(before.every(({ firedAt }) => firedAt !== null)).toBe(true);
     expect(
       await inTx(v, (tx) =>
-        tx
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(workingOrderLines.workingOrderId, id)),
+        ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id)),
       ),
     ).toEqual(before);
   });
@@ -146,14 +126,7 @@ describe("A773 counter release", () => {
       }),
     );
     const items = await inTx(v, (tx) =>
-      tx
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, party.tabId)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     // The held Burger ×2 is two portions, each its own line and ticket item (A803).
     const [fired, held] = placed.groups.map((group) => group.lineIds);
@@ -180,14 +153,7 @@ describe("A773 counter release", () => {
       );
     });
     const items = await inTx(v, (tx) =>
-      tx
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, id)),
+      ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, id)),
     );
     expect(items).toHaveLength(lines.length);
     expect(items.every(({ firedAt }) => firedAt !== null)).toBe(true);

@@ -1,7 +1,8 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { clearPartyAllergyForTest } from "@waitron/db/testing/seed.js";
 import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, sql, getTableColumns } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   orderGroups,
@@ -339,32 +340,20 @@ describe("A773 waiter request: release", () => {
         operatorId: OPERATOR,
         groups: [{ lines: [dish(venue, "burger")], release: "fire" }],
       });
-      const [requested] = await tx
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, venue.party.tabId));
+      const [requested] = await ticketItemsWithBill(tx).where(
+        eq(workingOrderLines.workingOrderId, venue.party.tabId),
+      );
       expect(requested).toMatchObject({ firedAt: null, passControlled: true });
       const requestedAt = requested!.requestedAt!;
       await addTabRound(tx, venue.cfg, venue.party.tabId, [
         { ...dish(venue, "burger"), hold: true },
       ]);
-      const [held] = await tx
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(
-          and(
-            eq(workingOrderLines.workingOrderId, venue.party.tabId),
-            isNull(ticketItems.requestedAt),
-          ),
-        );
+      const [held] = await ticketItemsWithBill(tx).where(
+        and(
+          eq(workingOrderLines.workingOrderId, venue.party.tabId),
+          isNull(ticketItems.requestedAt),
+        ),
+      );
       const before = await jobCounts(tx, venue);
       const laterAt = new Date(Date.parse(requestedAt) + 60_000);
       const later = () =>
@@ -376,28 +365,11 @@ describe("A773 waiter request: release", () => {
           undefined,
           routingOnce(tx, laterAt),
         );
-      const row = async () =>
-        tx
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(ticketItems.id, requested!.id));
+      const row = async () => ticketItemsWithBill(tx).where(eq(ticketItems.id, requested!.id));
 
       await later();
       expect(await row()).toEqual([requested]);
-      expect(
-        await tx
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(ticketItems.id, held!.id)),
-      ).toEqual([
+      expect(await ticketItemsWithBill(tx).where(eq(ticketItems.id, held!.id))).toEqual([
         { ...held, requestedAt: laterAt.toISOString(), passControlled: true, allergyFrozen: true },
       ]);
       expect(await jobCounts(tx, venue)).toEqual(before);
@@ -417,27 +389,15 @@ describe("A773 waiter request: release", () => {
         operatorId: OPERATOR,
         groups: [{ lines: [dish(venue, "burger")], release: "fire" }],
       });
-      const [requested] = await tx
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, venue.party.tabId));
+      const [requested] = await ticketItemsWithBill(tx).where(
+        eq(workingOrderLines.workingOrderId, venue.party.tabId),
+      );
       expect(requested).toMatchObject({ firedAt: null, passControlled: true });
       await clearPartyAllergyForTest(tx, venue.party.partyId);
       await fireOrderLines(tx, venue.cfg, venue.party.tabId, [requested!.workingOrderLineId]);
-      expect(
-        await tx
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(ticketItems.id, requested!.id)),
-      ).toEqual([requested]);
+      expect(await ticketItemsWithBill(tx).where(eq(ticketItems.id, requested!.id))).toEqual([
+        requested,
+      ]);
     });
   });
 

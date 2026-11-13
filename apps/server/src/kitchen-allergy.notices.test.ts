@@ -1,10 +1,11 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { and, eq, getTableColumns, sql, inArray } from "drizzle-orm";
+import { and, eq, sql, inArray } from "drizzle-orm";
 import {
   kitchenStations,
   printers,
@@ -154,11 +155,9 @@ async function sent(
           allergy,
         }),
   );
-  const [ticket] = await v.db
-    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(eq(workingOrderLines.workingOrderId, p.tabId));
+  const [ticket] = await ticketItemsWithBill(v.db).where(
+    eq(workingOrderLines.workingOrderId, p.tabId),
+  );
   const snap = await inTx(v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
   return { ...p, tableId, ticket: ticket!, guest: snap.guests[0]! };
 }
@@ -419,14 +418,9 @@ describe("A669 notices", () => {
         [{ listId: extra.list.id, picks: [{ productId: extra.side.id, quantity: 2 }] }],
         release === "fire" ? "grouped" : undefined,
       );
-      const tickets = await v.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, p.tabId));
+      const tickets = await ticketItemsWithBill(v.db).where(
+        eq(workingOrderLines.workingOrderId, p.tabId),
+      );
       // Fire builds today's grouped line (dish + side); hold sends three portions, each with its
       // own side.
       expect(tickets).toHaveLength(release === "fire" ? 2 : 6);
@@ -775,11 +769,9 @@ describe("A803 portions", () => {
       ),
     ).toEqual(new Set(bound ? lines.map((line) => line.id) : []));
     const snap = await inTx(v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
-    const [ticket] = await v.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, p.tabId));
+    const [ticket] = await ticketItemsWithBill(v.db).where(
+      eq(workingOrderLines.workingOrderId, p.tabId),
+    );
     return {
       ...p,
       tableId,

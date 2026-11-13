@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -5,7 +6,7 @@ import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
-import { asc, eq, inArray, sql, getTableColumns } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   assignCatalogueToVenue,
@@ -374,10 +375,7 @@ async function snapshot(partyId: string) {
       .from(workingOrderLines)
       .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(workingOrderLines.id),
-    tickets: await suite.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    tickets: await ticketItemsWithBill(suite.db)
       .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(ticketItems.id),
     commands: await suite.db

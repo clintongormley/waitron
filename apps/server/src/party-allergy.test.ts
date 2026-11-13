@@ -1,13 +1,8 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { and, eq, getTableColumns } from "drizzle-orm";
-import {
-  orderDraftLines,
-  orderGroups,
-  ticketItems,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+import { and, eq } from "drizzle-orm";
+import { orderDraftLines, orderGroups, workingOrderLines, workingOrders } from "@waitron/db";
 import type { AllergenMap } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -311,14 +306,7 @@ describe("A669 candidate sets", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, p.tabId)),
       groups: await v.db.select().from(orderGroups).where(eq(orderGroups.partyId, p.partyId)),
-      tickets: await v.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, p.tabId)),
+      tickets: await ticketItemsWithBill(v.db).where(eq(workingOrderLines.workingOrderId, p.tabId)),
     };
     await view(p.partyId, { kind: "draft", draftId: d.id, lineIds: [d.lines[0]!.id] });
     await view(p.partyId, { kind: "group", groupId: line!.groupId! });
@@ -329,14 +317,7 @@ describe("A669 candidate sets", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, p.tabId)),
       groups: await v.db.select().from(orderGroups).where(eq(orderGroups.partyId, p.partyId)),
-      tickets: await v.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, p.tabId)),
+      tickets: await ticketItemsWithBill(v.db).where(eq(workingOrderLines.workingOrderId, p.tabId)),
     }).toEqual(before);
   });
 
@@ -447,11 +428,9 @@ describe("A669 candidate sets", () => {
     expect(result.dishes).toEqual([
       expect.objectContaining({ name: n.egg.name, offeredBefore: true, sentAt: null }),
     ]);
-    const tickets = await v.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, p.tabId));
+    const tickets = await ticketItemsWithBill(v.db).where(
+      eq(workingOrderLines.workingOrderId, p.tabId),
+    );
     expect(tickets).toEqual([]);
     expect(
       (

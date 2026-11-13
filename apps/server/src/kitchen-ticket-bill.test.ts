@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
 import { kitchenStations, printJobs, workingOrderLines, workingOrders } from "@waitron/db";
@@ -56,6 +57,11 @@ it("a moved dish shows under its new bill on every kitchen read", async () => {
   );
   expect(answer.status, JSON.stringify(answer.json)).toBe(200);
   const newBill = answer.json.billId as string;
+  expect(
+    Object.fromEntries(
+      (await ticketItemsWithBill(v.db)).map((row) => [row.workingOrderLineId, row.workingOrderId]),
+    ),
+  ).toEqual({ [lines[0]!.id]: party.tabId, [lines[1]!.id]: newBill });
   const bills = await v.db
     .select({ id: workingOrders.id, number: workingOrders.orderNumber })
     .from(workingOrders);

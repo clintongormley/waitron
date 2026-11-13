@@ -1,4 +1,5 @@
-import { eq, getTableColumns } from "drizzle-orm";
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   kitchenStations,
@@ -48,10 +49,7 @@ async function snapshot(billId: string) {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(workingOrderLines.lineNo),
-    items: await tx
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    items: await ticketItemsWithBill(tx)
       .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(ticketItems.id),
   }));

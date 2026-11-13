@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
@@ -16,7 +17,7 @@ import { fireDishesAtPayment } from "./till-sale.js";
 import { VENUE_SERVICE_PROVISIONING, setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { and, asc, eq, inArray, isNotNull, sql, getTableColumns } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   billPaymentRefunds,
@@ -452,10 +453,7 @@ async function snapshot(v: Venue, partyId: string) {
       .from(workingOrderLines)
       .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(workingOrderLines.id),
-    tickets: await db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    tickets: await ticketItemsWithBill(db)
       .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(ticketItems.id),
     groups: await db
@@ -2953,10 +2951,7 @@ function sortedByBill<T extends { workingOrderId: string }>(
 }
 
 async function ticketsOfBill(billId: string) {
-  return db
-    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+  return ticketItemsWithBill(db)
     .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(ticketItems.id);
 }
@@ -4278,13 +4273,7 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
     await fire(v, s.partyId, s.warm);
     const rows = async () => ({
       events: await eventsOf(s.partyId),
-      tickets: await db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      tickets: await ticketItemsWithBill(db)
         .where(eq(workingOrderLines.workingOrderId, s.tabId))
         .orderBy(ticketItems.id),
       sent: (await linesOf(s.partyId)).map((row) => [row.id, row.sentAt]),

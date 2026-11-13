@@ -1833,7 +1833,6 @@ export async function insertSplitExtras(
     });
     return [
       {
-        workingOrderId: orderId,
         workingOrderLineId: extra.id,
         stationId: decision.stationId,
         courseId: dish.courseId,

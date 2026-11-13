@@ -1,8 +1,9 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
-import { eq, getTableColumns } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   lineServiceCancellations,
@@ -106,10 +107,7 @@ async function snapshot(order: Fixture) {
       .select()
       .from(lineServiceCancellations)
       .where(eq(lineServiceCancellations.lineId, order.parent.id)),
-    tickets: await tx
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    tickets: await ticketItemsWithBill(tx)
       .where(eq(workingOrderLines.workingOrderId, order.billId))
       .orderBy(ticketItems.workingOrderLineId),
     jobs: await tx.select().from(printJobs).orderBy(printJobs.id),

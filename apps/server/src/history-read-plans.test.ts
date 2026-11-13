@@ -1,6 +1,7 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { eq, inArray, sql, type Query, getTableColumns } from "drizzle-orm";
+import { eq, inArray, sql, type Query } from "drizzle-orm";
 import { SQLiteSelectBase } from "drizzle-orm/sqlite-core";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -78,11 +79,9 @@ async function history(tx: Transaction, billId: string, count = 256, leaveOpen =
     .select()
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, billId));
-  const [ticket] = await tx
-    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(eq(workingOrderLines.workingOrderId, billId));
+  const [ticket] = await ticketItemsWithBill(tx).where(
+    eq(workingOrderLines.workingOrderId, billId),
+  );
   const ids = Array.from({ length: count }, () => ({ bill: randomUUID(), line: randomUUID() }));
   await insertInChunks(
     tx,

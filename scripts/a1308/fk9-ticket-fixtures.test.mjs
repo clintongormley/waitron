@@ -47,3 +47,14 @@ it.each([
   expect(result.text).toBe(source);
   expect(result.reports.length).toBeGreaterThan(0);
 });
+
+it("shares a server fixture's complete ticket/bill read", () => {
+  const result = rewriteTicketBills(
+    "const rows = await tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, B));",
+    "apps/server/src/sample.test.ts",
+  );
+  expect(result.text).toContain("ticketItemsWithBill(tx)");
+  expect(result.text).toContain('"./testing/ticket-items-with-bill.js"');
+  expect(result.text).not.toContain("getTableColumns");
+  expect(rewriteTicketBills(result.text, "apps/server/src/sample.test.ts")).toEqual(result);
+});

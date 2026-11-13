@@ -1,6 +1,7 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql, getTableColumns } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   billPaymentRefunds,
@@ -117,11 +118,9 @@ async function snapshot(p: Fixture) {
     party: await venue.db.select().from(parties).where(eq(parties.id, p.partyId)),
     tables: await venue.db.select().from(partyTables).where(eq(partyTables.partyId, p.partyId)),
     bill: await venue.db.select().from(workingOrders).where(eq(workingOrders.id, p.billId)),
-    tickets: await venue.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, p.billId)),
+    tickets: await ticketItemsWithBill(venue.db).where(
+      eq(workingOrderLines.workingOrderId, p.billId),
+    ),
     lines: await venue.db
       .select()
       .from(workingOrderLines)

@@ -1,7 +1,8 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, sql, getTableColumns } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, onTestFinished } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -2818,13 +2819,7 @@ describe("A803 split", () => {
     /** The bill's kitchen items with everything stored, by line id. */
     function kitchenRows(billId: string) {
       return act((tx) =>
-        tx
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        ticketItemsWithBill(tx)
           .where(eq(workingOrderLines.workingOrderId, billId))
           .orderBy(asc(ticketItems.workingOrderLineId)),
       );

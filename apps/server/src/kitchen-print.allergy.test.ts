@@ -1,13 +1,8 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { and, eq, getTableColumns } from "drizzle-orm";
-import {
-  kitchenStations,
-  printJobs,
-  ticketItems,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { and, eq } from "drizzle-orm";
+import { kitchenStations, printJobs, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -141,11 +136,9 @@ describe("A669 paper stored copies", () => {
     await send(p, "fire");
     await send(p, "hold");
     const before = await v.db.select().from(printJobs);
-    const tickets = await v.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, p.tabId));
+    const tickets = await ticketItemsWithBill(v.db).where(
+      eq(workingOrderLines.workingOrderId, p.tabId),
+    );
     const copies = await inTx(v, (tx) =>
       VENUE_SERVICE.readTicketAllergies(
         tx,
@@ -352,11 +345,9 @@ describe("A1517-3 a dish's own allergens on Spanish paper beside a guest block",
     await send(p, "fire");
     const [first] = await v.db.select().from(printJobs);
     await setAllergens(v.productId("Burger"), { eggs: {} });
-    const [ticket] = await v.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, p.tabId));
+    const [ticket] = await ticketItemsWithBill(v.db).where(
+      eq(workingOrderLines.workingOrderId, p.tabId),
+    );
     const original = (
       await inTx(v, (tx) => VENUE_SERVICE.readTicketAllergies(tx, [ticket!.id]))
     ).get(ticket!.id)!.originalBlock!;
@@ -382,11 +373,9 @@ describe("A1517-3 a dish's own allergens on Spanish paper beside a guest block",
     const p = await seat(v, await v.table("Changed allergy"));
     await send(p, "fire");
     const before = await v.db.select().from(printJobs);
-    const [ticket] = await v.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, p.tabId));
+    const [ticket] = await ticketItemsWithBill(v.db).where(
+      eq(workingOrderLines.workingOrderId, p.tabId),
+    );
     const block: KitchenAllergyBlock = {
       who: "Corrected guest",
       allergens: { milk: {} },

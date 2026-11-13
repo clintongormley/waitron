@@ -1,6 +1,7 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql, getTableColumns } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -58,14 +59,9 @@ describe("cancelling a counter order the kitchen already has", () => {
         id,
         venue.operatorId,
       );
-      const [item] = await venue.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, id));
+      const [item] = await ticketItemsWithBill(venue.db).where(
+        eq(workingOrderLines.workingOrderId, id),
+      );
       expect(item).toMatchObject({ state: "queued", firedAt: expect.any(String) });
       if (stage === "served")
         await inTx(venue, (tx) =>

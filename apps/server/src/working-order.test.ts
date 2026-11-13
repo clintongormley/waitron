@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { cancelItemForTest } from "./testing/cancel-line.js";
 
 import { seedBusinessDay, seedActivityActor } from "@waitron/db/testing/seed.js";
@@ -18,7 +19,7 @@ import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { and, eq, isNull, sql, getTableColumns, inArray } from "drizzle-orm";
+import { and, eq, isNull, sql, inArray } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   billPaymentRefunds,
@@ -4109,17 +4110,7 @@ describe("opening hours", () => {
         const first = await fireContextless(tx, cfg, [product]);
         const recorded = () =>
           Promise.all([
-            tx
-              .select({
-                ...getTableColumns(ticketItems),
-                workingOrderId: workingOrderLines.workingOrderId,
-              })
-              .from(ticketItems)
-              .innerJoin(
-                workingOrderLines,
-                eq(workingOrderLines.id, ticketItems.workingOrderLineId),
-              )
-              .where(eq(workingOrderLines.workingOrderId, first.id)),
+            ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, first.id)),
             tx
               .select()
               .from(workingOrderLines)
@@ -4564,14 +4555,7 @@ describe("a sale on a Spanish public holiday", () => {
       Promise.all([
         db.select().from(workingOrders).where(eq(workingOrders.id, orderId)),
         db.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, orderId)),
-        db
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(workingOrderLines.workingOrderId, orderId)),
+        ticketItemsWithBill(db).where(eq(workingOrderLines.workingOrderId, orderId)),
       ]);
 
     const ordinary = await saleOn(ORDINARY);
@@ -7018,14 +7002,7 @@ describe("bumpBillReady — pass card preparation without dispatch", () => {
       const { orderId } = await firedCourseAcrossTwoStations(tx, cfg, catalogueId);
       await bumpBillReady(tx, orderId);
       const read = () =>
-        tx
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(workingOrderLines.workingOrderId, orderId));
+        ticketItemsWithBill(tx).where(eq(workingOrderLines.workingOrderId, orderId));
       const readied = await read();
       expect(readied).toHaveLength(2);
       expect(readied.every((i) => i.state === "ready" && i.readyAt !== null)).toBe(true);

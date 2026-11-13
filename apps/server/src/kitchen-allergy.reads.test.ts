@@ -1,7 +1,8 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { eq, sql, getTableColumns } from "drizzle-orm";
-import { kitchenStations, ticketItems, workingOrderLines, products } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import { kitchenStations, workingOrderLines, products } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -105,11 +106,9 @@ async function sent(
       },
     }),
   );
-  const tickets = await v.db
-    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(eq(workingOrderLines.workingOrderId, party.tabId));
+  const tickets = await ticketItemsWithBill(v.db).where(
+    eq(workingOrderLines.workingOrderId, party.tabId),
+  );
   // The unticked Burger ×2 is two portions, each with its own ticket item.
   expect(tickets).toHaveLength(extras === undefined ? 3 : 4);
   return { ...party, tickets };

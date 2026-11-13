@@ -1,5 +1,6 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
-import { eq, getTableColumns } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   lineServiceCancellations,
@@ -92,11 +93,9 @@ async function snapshot(order: Fixture) {
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, order.billId)),
-    tickets: await tx
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, order.billId)),
+    tickets: await ticketItemsWithBill(tx).where(
+      eq(workingOrderLines.workingOrderId, order.billId),
+    ),
     cancellations: await tx
       .select()
       .from(lineServiceCancellations)

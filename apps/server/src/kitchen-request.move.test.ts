@@ -1,7 +1,8 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
-import { asc, eq, getTableColumns } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -232,10 +233,7 @@ async function transferredCounterOrder(
     tab,
     person!.id,
   );
-  const items = await db
-    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+  const items = await ticketItemsWithBill(db)
     .where(eq(workingOrderLines.workingOrderId, tab))
     .orderBy(asc(ticketItems.id));
   await beforeTransfer(items);

@@ -1,6 +1,7 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
 import { createServer, type Socket } from "node:net";
-import { and, eq, inArray, getTableColumns, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
@@ -222,14 +223,7 @@ describe("unpaid departure stops kitchen work", () => {
     });
     expect(response.status, await response.clone().text()).toBe(200);
     expect(
-      await venue.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, order.billId)),
+      await ticketItemsWithBill(venue.db).where(eq(workingOrderLines.workingOrderId, order.billId)),
     ).toEqual([]);
     expect(await cancellations((await linesOf(order.billId))[0]!.id)).toEqual(beforeCancellations);
   });
@@ -337,11 +331,9 @@ describe("unpaid departure stops kitchen work", () => {
       .select()
       .from(workingOrders)
       .where(eq(workingOrders.id, paid.billId));
-    const paidTickets = await venue.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, paid.billId));
+    const paidTickets = await ticketItemsWithBill(venue.db).where(
+      eq(workingOrderLines.workingOrderId, paid.billId),
+    );
     const beforeJobs = await jobs();
 
     expect(await depart(paid.partyId, first.billId)).toMatchObject({
@@ -355,14 +347,7 @@ describe("unpaid departure stops kitchen work", () => {
       await venue.db.select().from(workingOrders).where(eq(workingOrders.id, paid.billId)),
     ).toEqual([paidBefore]);
     expect(
-      await venue.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, paid.billId)),
+      await ticketItemsWithBill(venue.db).where(eq(workingOrderLines.workingOrderId, paid.billId)),
     ).toEqual(paidTickets);
     expect(await cancellations((await linesOf(paid.billId))[0]!.id)).toEqual([]);
     expect(await cancellations((await linesOf(second.billId))[0]!.id)).toEqual([]);
@@ -557,14 +542,9 @@ describe("unpaid departure stops kitchen work", () => {
       }
       await joinOwing(order.partyId);
       const lines = await linesOf(order.billId);
-      const tickets = await venue.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, order.billId));
+      const tickets = await ticketItemsWithBill(venue.db).where(
+        eq(workingOrderLines.workingOrderId, order.billId),
+      );
       expect(tickets.every((row) => row.firedAt === null)).toBe(true);
       expect(
         tickets.every((row) =>
@@ -581,14 +561,9 @@ describe("unpaid departure stops kitchen work", () => {
       expect(await cancellations(lines[0]!.id)).toEqual([]);
       expect(await linesOf(order.billId)).toEqual(lines);
       expect(
-        await venue.db
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(workingOrderLines.workingOrderId, order.billId)),
+        await ticketItemsWithBill(venue.db).where(
+          eq(workingOrderLines.workingOrderId, order.billId),
+        ),
       ).toEqual(tickets);
       const newSlips = (await jobs())
         .filter((job) => !before.has(job.id))
@@ -807,25 +782,16 @@ describe("unpaid departure stops kitchen work", () => {
 
   it("refuses unfired uninvoiced work before changing any kitchen state or print job", async () => {
     const order = await billWith(venue, [{ name: "Burger" }], { release: "hold" });
-    const tickets = await venue.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, order.billId));
+    const tickets = await ticketItemsWithBill(venue.db).where(
+      eq(workingOrderLines.workingOrderId, order.billId),
+    );
     const before = await jobs();
     expect(await depart(order.partyId, order.billId)).toMatchObject({
       status: 409,
       body: { error: { code: "unpaid_departure.unfired_dishes" } },
     });
     expect(
-      await venue.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, order.billId)),
+      await ticketItemsWithBill(venue.db).where(eq(workingOrderLines.workingOrderId, order.billId)),
     ).toEqual(tickets);
     expect(await cancellations((await linesOf(order.billId))[0]!.id)).toEqual([]);
     expect(await jobs()).toEqual(before);
@@ -863,14 +829,9 @@ describe("unpaid departure stops kitchen work", () => {
           );
       }
       const lines = await linesOf(order.billId);
-      const tickets = await venue.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, order.billId));
+      const tickets = await ticketItemsWithBill(venue.db).where(
+        eq(workingOrderLines.workingOrderId, order.billId),
+      );
       expect(tickets.find((row) => row.workingOrderLineId === lines[0]!.id)).toMatchObject({
         madeHere: true,
         firedAt: expect.any(String),
@@ -900,14 +861,9 @@ describe("unpaid departure stops kitchen work", () => {
             ]
           : [],
       );
-      const after = await venue.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, order.billId));
+      const after = await ticketItemsWithBill(venue.db).where(
+        eq(workingOrderLines.workingOrderId, order.billId),
+      );
       expect(after).toEqual(stops ? [] : tickets);
       expect(
         (await venue.db.select().from(workingOrders).where(eq(workingOrders.id, order.billId)))[0]!
@@ -933,11 +889,9 @@ describe("unpaid departure stops kitchen work", () => {
       await inTx(venue, (tx) => setStationsWaitForPass(tx, false, [extraStation]));
     }
     const lines = await linesOf(order.billId);
-    const tickets = await venue.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, order.billId));
+    const tickets = await ticketItemsWithBill(venue.db).where(
+      eq(workingOrderLines.workingOrderId, order.billId),
+    );
     expect(tickets.find((row) => row.workingOrderLineId === lines[0]!.id)).toMatchObject({
       firedAt: expect.any(String),
     });
@@ -951,14 +905,7 @@ describe("unpaid departure stops kitchen work", () => {
       expect.objectContaining({ quantity: 1000 }),
     ]);
     expect(
-      await venue.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, order.billId)),
+      await ticketItemsWithBill(venue.db).where(eq(workingOrderLines.workingOrderId, order.billId)),
     ).toEqual([]);
     const slips = (await jobs())
       .filter((job) => !before.has(job.id))
@@ -1013,14 +960,9 @@ describe("unpaid departure stops kitchen work", () => {
       ]);
       expect(
         (
-          await venue.db
-            .select({
-              ...getTableColumns(ticketItems),
-              workingOrderId: workingOrderLines.workingOrderId,
-            })
-            .from(ticketItems)
-            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-            .where(eq(workingOrderLines.workingOrderId, order.billId))
+          await ticketItemsWithBill(venue.db).where(
+            eq(workingOrderLines.workingOrderId, order.billId),
+          )
         ).map((row) => row.quantity),
       ).toEqual(status === "placed" ? [1000, 2000] : [3000, 6000]);
       expect(
@@ -1063,14 +1005,9 @@ describe("unpaid departure stops kitchen work", () => {
         },
       ]);
       expect(
-        await venue.db
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(workingOrderLines.workingOrderId, order.billId)),
+        await ticketItemsWithBill(venue.db).where(
+          eq(workingOrderLines.workingOrderId, order.billId),
+        ),
       ).toEqual([]);
       expect(
         await venue.db
@@ -1118,11 +1055,9 @@ describe("unpaid departure stops kitchen work", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, mixed.billId))
       .orderBy(workingOrderLines.lineNo);
-    const tickets = await venue.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, mixed.billId));
+    const tickets = await ticketItemsWithBill(venue.db).where(
+      eq(workingOrderLines.workingOrderId, mixed.billId),
+    );
     expect(tickets.find((item) => item.workingOrderLineId === lines[0]!.id)).toMatchObject({
       firedAt: null,
       requestedAt: expect.any(String),
@@ -1162,14 +1097,7 @@ describe("unpaid departure stops kitchen work", () => {
         .where(eq(lineServiceCancellations.lineId, lines[0]!.id)),
     ).toEqual([]);
     expect(
-      await venue.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, mixed.billId)),
+      await ticketItemsWithBill(venue.db).where(eq(workingOrderLines.workingOrderId, mixed.billId)),
     ).toEqual(tickets);
     const slips = (await jobs())
       .filter((job) => !before.has(job.id))

@@ -1,6 +1,7 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, sql, getTableColumns } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -169,10 +170,7 @@ function eventsOf(groupId: string) {
 }
 
 function ticketsOf(billIds: string[]) {
-  return v.db
-    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+  return ticketItemsWithBill(v.db)
     .where(inArray(workingOrderLines.workingOrderId, billIds))
     .orderBy(asc(ticketItems.id));
 }

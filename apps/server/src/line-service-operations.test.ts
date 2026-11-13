@@ -1,5 +1,6 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { randomUUID } from "node:crypto";
-import { eq, getTableColumns } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   lineServiceCancellations,
@@ -259,14 +260,9 @@ describe("firing with charged cancellations", () => {
           await tx.delete(ticketItems).where(eq(ticketItems.workingOrderLineId, line.id));
         await fireLines(tx, venue.cfg, order.billId, family);
       });
-      const tickets = await venue.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(workingOrderLines.workingOrderId, order.billId));
+      const tickets = await ticketItemsWithBill(venue.db).where(
+        eq(workingOrderLines.workingOrderId, order.billId),
+      );
       expect(tickets.map((row) => row.quantity).sort((a, b) => a! - b!)).toEqual(want);
       expect((await rows(order.billId)).map((row) => [row.quantity, row.lineTotal])).toEqual([
         [3000, 2700],

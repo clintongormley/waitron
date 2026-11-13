@@ -1,8 +1,9 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { clearPartyAllergyForTest } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, sql, getTableColumns } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billPayments,
@@ -199,10 +200,7 @@ async function snapshot(t: Table) {
       .where(inArray(workingOrders.id, billIds))
       .orderBy(workingOrders.id),
     groups: await venue.db.select().from(orderGroups).orderBy(orderGroups.id),
-    tickets: await venue.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    tickets: await ticketItemsWithBill(venue.db)
       .where(inArray(workingOrderLines.workingOrderId, billIds))
       .orderBy(ticketItems.id),
     lines: await venue.db
@@ -378,11 +376,9 @@ describe("finishing a table by sending the food still to come to the counter", (
     expect(await post(t.partyId, body)).toEqual({ status: 200, body: { state: "closed" } });
 
     expect((await billRow(other.billIds[0]!)).partyId).toBeNull();
-    const tickets = await venue.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, other.billIds[0]!));
+    const tickets = await ticketItemsWithBill(venue.db).where(
+      eq(workingOrderLines.workingOrderId, other.billIds[0]!),
+    );
     expect(tickets.length).toBeGreaterThan(0);
     expect(tickets.every((item) => item.firedAt !== null)).toBe(true);
   });
@@ -407,11 +403,9 @@ describe("finishing a table by sending the food still to come to the counter", (
     expect(await post(t.partyId, body)).toEqual({ status: 200, body: { state: "closed" } });
 
     expect((await billRow(other.billIds[0]!)).partyId).toBeNull();
-    const tickets = await venue.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, other.billIds[0]!));
+    const tickets = await ticketItemsWithBill(venue.db).where(
+      eq(workingOrderLines.workingOrderId, other.billIds[0]!),
+    );
     expect(tickets.length).toBeGreaterThan(0);
     expect(tickets.every((item) => item.firedAt !== null)).toBe(true);
   });
@@ -452,11 +446,9 @@ describe("finishing a table by sending the food still to come to the counter", (
       }),
     );
 
-    const tickets = await venue.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, other.billIds[0]!));
+    const tickets = await ticketItemsWithBill(venue.db).where(
+      eq(workingOrderLines.workingOrderId, other.billIds[0]!),
+    );
     expect(tickets.length).toBeGreaterThan(0);
     expect(tickets.every((item) => item.firedAt !== null)).toBe(true);
   });
@@ -794,11 +786,9 @@ describe("a bill sent to the counter waits there until handed over", () => {
   it("shows on the pass, the station, Waiting orders and Find a bill, then leaves them all on hand over", async () => {
     const t = await table([{ name: "Burger" }], "fire", [], [null]);
     const billId = t.billIds[0]!;
-    const [item] = await venue.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, billId));
+    const [item] = await ticketItemsWithBill(venue.db).where(
+      eq(workingOrderLines.workingOrderId, billId),
+    );
     await inTx(venue, async (tx) => {
       await advanceTicketItem(tx, item!.id, "preparing");
       await advanceTicketItem(tx, item!.id, "ready");

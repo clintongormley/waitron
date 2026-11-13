@@ -1,5 +1,6 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import { sql, and, isNotNull, getTableColumns } from "drizzle-orm";
+import { sql, and, isNotNull } from "drizzle-orm";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
@@ -153,11 +154,9 @@ async function stationDish(station = grill) {
   );
   const group = await seat(v, await v.table(`Dish ${randomUUID()}`));
   await orderForParty(v, group.partyId, ["Burger"], group.tabId);
-  const [item] = await suite.db
-    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(eq(workingOrderLines.workingOrderId, group.tabId));
+  const [item] = await ticketItemsWithBill(suite.db).where(
+    eq(workingOrderLines.workingOrderId, group.tabId),
+  );
   expect(item).toBeDefined();
   expect(item!.stationId).toBe(station);
   return item!;
@@ -221,16 +220,7 @@ describe("the till's station day", () => {
     });
     expect(await rows()).toEqual([]);
     expect(
-      (
-        await suite.db
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(ticketItems.id, item.id))
-      )[0]!.stationId,
+      (await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, item.id)))[0]!.stationId,
     ).toBe(grill);
   });
   it.each([null, [], "", "discard", true])(
@@ -263,14 +253,7 @@ describe("the till's station day", () => {
       expect(await rows()).toEqual([
         expect.objectContaining({ stationId: grill, open: false, sendsToStationId: pastry }),
       ]);
-      const [moved] = await suite.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(ticketItems.id, item.id));
+      const [moved] = await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, item.id));
       expect(moved).toMatchObject({
         stationId: pastry,
         state: "queued",
@@ -306,14 +289,7 @@ describe("the till's station day", () => {
       expect(await rows()).toEqual([
         expect.objectContaining({ stationId: grill, open: false, sendsToStationId: bar }),
       ]);
-      const [kept] = await suite.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(ticketItems.id, item.id));
+      const [kept] = await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, item.id));
       expect(kept).toMatchObject({
         stationId: grill,
         state: state === "held" ? "queued" : state,
@@ -340,14 +316,7 @@ describe("the till's station day", () => {
       [ready.id, grill],
       [other.id, pastry],
     ]) {
-      const [item] = await suite.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(ticketItems.id, id!));
+      const [item] = await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, id!));
       expect(item!.stationId).toBe(expected);
     }
   });
@@ -367,11 +336,9 @@ describe("the till's station day", () => {
         billId: seated.tabId,
       }),
     );
-    const [item] = await suite.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, seated.tabId));
+    const [item] = await ticketItemsWithBill(suite.db).where(
+      eq(workingOrderLines.workingOrderId, seated.tabId),
+    );
     expect(item).toMatchObject({ stationId: grill, firedAt: null, state: "queued" });
     expect((await call("PUT", today(), { ...close(), openDishes: "leave" })).status).toBe(204);
     const [party] = await suite.db.select().from(parties).where(eq(parties.id, seated.partyId));
@@ -382,11 +349,7 @@ describe("the till's station day", () => {
         operatorId: manager,
       }),
     );
-    const [after] = await suite.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(ticketItems.id, item!.id));
+    const [after] = await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, item!.id));
     expect(after!.stationId).toBe(grill);
     expect(after!.firedAt).not.toBeNull();
   });
@@ -411,26 +374,10 @@ describe("the till's station day", () => {
           .update(workingOrders)
           .set(kind === "collected" ? { collectedAt: at } : { status: "abandoned" })
           .where(eq(workingOrders.id, excluded.workingOrderId));
-      const [before] = await suite.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(ticketItems.id, excluded.id));
+      const [before] = await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, excluded.id));
       expect((await call("PUT", today(), { ...close(), openDishes: "send" })).status).toBe(204);
       expect(
-        (
-          await suite.db
-            .select({
-              ...getTableColumns(ticketItems),
-              workingOrderId: workingOrderLines.workingOrderId,
-            })
-            .from(ticketItems)
-            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-            .where(eq(ticketItems.id, excluded.id))
-        )[0],
+        (await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, excluded.id)))[0],
       ).toEqual(
         kind === "queued"
           ? {
@@ -442,16 +389,7 @@ describe("the till's station day", () => {
           : before,
       );
       expect(
-        (
-          await suite.db
-            .select({
-              ...getTableColumns(ticketItems),
-              workingOrderId: workingOrderLines.workingOrderId,
-            })
-            .from(ticketItems)
-            .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-            .where(eq(ticketItems.id, moving.id))
-        )[0]!.stationId,
+        (await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, moving.id)))[0]!.stationId,
       ).toBe(bar);
     },
   );
@@ -470,18 +408,9 @@ describe("the till's station day", () => {
     expect(answer.status).toBe(409);
     expect(answer.json).toMatchObject({ code: "station.destination_invalid" });
     expect(await rows()).toEqual(before);
-    expect(
-      (
-        await suite.db
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(ticketItems.id, item.id))
-      )[0],
-    ).toEqual(item);
+    expect((await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, item.id)))[0]).toEqual(
+      item,
+    );
   });
   it("records the manager who authorizes a staff till's close", async () => {
     const item = await stationDish();
@@ -520,18 +449,9 @@ describe("the till's station day", () => {
     expect(answer.status).toBe(403);
     expect(answer.json).toMatchObject({ code: "authorization.not_permitted" });
     expect(await rows()).toEqual([]);
-    expect(
-      (
-        await suite.db
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(ticketItems.id, item.id))
-      )[0],
-    ).toEqual(item);
+    expect((await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, item.id)))[0]).toEqual(
+      item,
+    );
   });
 
   it("stores the chosen destination and reports why Grill is closed", async () => {
@@ -855,18 +775,9 @@ describe("the kitchen display's station day", () => {
       params: { field: "openDishes" },
     });
     expect(await rows()).toEqual([]);
-    expect(
-      (
-        await suite.db
-          .select({
-            ...getTableColumns(ticketItems),
-            workingOrderId: workingOrderLines.workingOrderId,
-          })
-          .from(ticketItems)
-          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-          .where(eq(ticketItems.id, item.id))
-      )[0],
-    ).toEqual(item);
+    expect((await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, item.id)))[0]).toEqual(
+      item,
+    );
   });
   it.each(["send", "leave"] as const)(
     "the kitchen manager can %s its waiting work while closing",
@@ -877,14 +788,7 @@ describe("the kitchen display's station day", () => {
       expect(await rows()).toEqual([
         expect.objectContaining({ stationId: grill, open: false, sendsToStationId: bar }),
       ]);
-      const [after] = await suite.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-        .where(eq(ticketItems.id, item.id));
+      const [after] = await ticketItemsWithBill(suite.db).where(eq(ticketItems.id, item.id));
       expect(after!.stationId).toBe(openDishes === "send" ? bar : grill);
       expect(after!.stationChosenAt).not.toBeNull();
       expect(await suite.db.select().from(ticketItemMoves)).toEqual(

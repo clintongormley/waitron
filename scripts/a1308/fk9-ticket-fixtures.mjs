@@ -2,7 +2,7 @@ import ts from "typescript";
 import { readFileSync, writeFileSync, realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { dirname, relative } from "node:path";
-import { parse, replaceNode, addNamedImport } from "./lib/fold-inserts.mjs";
+import { parse, replaceNode, addNamedImport, removeUnusedImport } from "./lib/fold-inserts.mjs";
 
 export function rewriteTicketBills(source, path) {
   const tree = parse(source, path),
@@ -91,6 +91,71 @@ export function rewriteTicketBills(source, path) {
     text = addNamedImport(addNamedImport(text, module, "workingOrderLines"), "drizzle-orm", "eq");
   }
   if (flat) text = addNamedImport(text, "drizzle-orm", "getTableColumns");
+  if (
+    path.startsWith("apps/server/") &&
+    (path.endsWith(".test.ts") || path.includes("/testing/")) &&
+    !path.endsWith("/testing/ticket-items-with-bill.ts")
+  ) {
+    const sharedEdits = [];
+    const share = (node) => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === "innerJoin" &&
+        node.arguments[0]?.getText() === "workingOrderLines"
+      ) {
+        const from = node.expression.expression;
+        if (
+          ts.isCallExpression(from) &&
+          ts.isPropertyAccessExpression(from.expression) &&
+          from.expression.name.text === "from" &&
+          from.arguments[0]?.getText() === "ticketItems"
+        ) {
+          const select = from.expression.expression;
+          if (
+            ts.isCallExpression(select) &&
+            ts.isPropertyAccessExpression(select.expression) &&
+            select.expression.name.text === "select"
+          ) {
+            const fields = select.arguments[0];
+            if (
+              fields &&
+              ts.isObjectLiteralExpression(fields) &&
+              fields.properties.length === 2 &&
+              fields.properties.some(
+                (p) =>
+                  ts.isSpreadAssignment(p) &&
+                  p.expression.getText() === "getTableColumns(ticketItems)",
+              ) &&
+              fields.properties.some(
+                (p) =>
+                  ts.isPropertyAssignment(p) &&
+                  p.name.getText() === "workingOrderId" &&
+                  p.initializer.getText() === "workingOrderLines.workingOrderId",
+              )
+            ) {
+              sharedEdits.push({
+                node,
+                text: `ticketItemsWithBill(${select.expression.expression.getText()})`,
+              });
+              return;
+            }
+          }
+        }
+      }
+      ts.forEachChild(node, share);
+    };
+    share(parse(text, path));
+    for (const edit of sharedEdits.sort((a, b) => b.node.getStart() - a.node.getStart()))
+      text = replaceNode(text, edit.node, edit.text);
+    if (sharedEdits.length) {
+      let module = relative(dirname(path), "apps/server/src/testing/ticket-items-with-bill.js");
+      if (!module.startsWith(".")) module = "./" + module;
+      text = addNamedImport(text, module, "ticketItemsWithBill");
+      for (const name of ["getTableColumns", "workingOrderLines", "ticketItems", "eq"])
+        text = removeUnusedImport(text, name);
+    }
+  }
   if (text.includes("ticketItems.workingOrderId"))
     reports.push(`${path}: remaining ticket bill reference`);
   if (

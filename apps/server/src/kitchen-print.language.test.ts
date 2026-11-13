@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { readVenueLocale } from "./venue-locale.js";
 import { addPortionRound } from "./testing/portion-bill.js";
 import { kitchenNotices } from "@waitron/venue-service";
@@ -7,12 +8,11 @@ import { nameParty } from "./testing/party-venue.js";
 import * as kitchenLanguage from "./kitchen-language.js";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createOpenOrder, fireLines, fireableLineColumns } from "./working-order.js";
-import { sql, eq, getTableColumns } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import {
   kitchenPrintJobs,
   printers,
   printJobs,
-  ticketItems,
   withTransaction,
   workingOrders,
   workingOrderLines,
@@ -62,11 +62,9 @@ it("uses the saved venue zone for every new paper and keeps already queued bytes
     const original = await jobs();
     expect(original).toHaveLength(2);
     for (const job of original) expect(printedLines(job.payload)).toContain("00:30");
-    const [fired] = await suite.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, id));
+    const [fired] = await ticketItemsWithBill(suite.db).where(
+      eq(workingOrderLines.workingOrderId, id),
+    );
     await withTransaction(suite.db, async (tx) => {
       await tx.run(
         sql`update settings set doc = json_set(doc, '$.timeZone', ${"Asia/Tokyo"}) where module = 'business_day'`,
@@ -154,15 +152,7 @@ describe("A964 venue language", () => {
       );
       await fireNewOrder(tx, v.cfg, [{ productId: v.products.burger, quantity: "1" }]);
     });
-    const id = (
-      await suite.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    )[0]!.workingOrderId;
+    const id = (await ticketItemsWithBill(suite.db))[0]!.workingOrderId;
     await withTransaction(suite.db, (tx) => reprintOrderTickets(tx, v.cfg, id));
     expect(
       (await jobs())
@@ -181,11 +171,9 @@ describe("A964 venue language", () => {
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.writeKitchenNote(tx, { workingOrderId: id }, 0, "Recorded order note"),
     );
-    const [fired] = await suite.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, id));
+    const [fired] = await ticketItemsWithBill(suite.db).where(
+      eq(workingOrderLines.workingOrderId, id),
+    );
     const target = {
       workingOrderLineId: fired!.workingOrderLineId,
       stationId: fired!.stationId!,
@@ -241,11 +229,9 @@ it("A964 venue language reads once per rendering root, outside printer loops", a
   const id = await withTransaction(suite.db, (tx) =>
     fireNewOrder(tx, v.cfg, [{ productId: v.products.burger, quantity: "2" }]),
   );
-  const [fired] = await suite.db
-    .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(eq(workingOrderLines.workingOrderId, id));
+  const [fired] = await ticketItemsWithBill(suite.db).where(
+    eq(workingOrderLines.workingOrderId, id),
+  );
   const item = {
     workingOrderLineId: fired!.workingOrderLineId,
     stationId: fired!.stationId!,
@@ -421,11 +407,9 @@ it.each(["grouped", "portions"] as const)(
     const id = await withTransaction(suite.db, (tx) =>
       fire(tx, cfg, [{ productId: v.products.burger, quantity: "1" }]),
     );
-    const [fired] = await suite.db
-      .select({ ...getTableColumns(ticketItems), workingOrderId: workingOrderLines.workingOrderId })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(workingOrderLines.workingOrderId, id));
+    const [fired] = await ticketItemsWithBill(suite.db).where(
+      eq(workingOrderLines.workingOrderId, id),
+    );
     const target = {
       workingOrderLineId: fired!.workingOrderLineId,
       stationId: fired!.stationId!,
@@ -490,15 +474,7 @@ it.each(["en", "es"] as const)(
         { fire: true },
       );
     });
-    const fired = (
-      await suite.db
-        .select({
-          ...getTableColumns(ticketItems),
-          workingOrderId: workingOrderLines.workingOrderId,
-        })
-        .from(ticketItems)
-        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    ).filter(
+    const fired = (await ticketItemsWithBill(suite.db)).filter(
       (item) => item.workingOrderId === v.party.tabId && item.stationId === v.stations.grill,
     );
     expect(fired).toHaveLength(2);

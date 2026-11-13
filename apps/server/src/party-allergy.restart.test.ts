@@ -1,3 +1,4 @@
+import { ticketItemsWithBill } from "./testing/ticket-items-with-bill.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -7,9 +8,9 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { eq, sql, getTableColumns } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { openVenueDatabase, orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
+import { openVenueDatabase, orderGroups, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashSessionToken, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -247,17 +248,9 @@ describe("A669 consideration through a server process restart", () => {
           ).toEqual([{ holdPrintedAt: null }]);
           if (noPreparation)
             expect(
-              await inspected.venue
-                .select({
-                  ...getTableColumns(ticketItems),
-                  workingOrderId: workingOrderLines.workingOrderId,
-                })
-                .from(ticketItems)
-                .innerJoin(
-                  workingOrderLines,
-                  eq(workingOrderLines.id, ticketItems.workingOrderLineId),
-                )
-                .where(eq(workingOrderLines.workingOrderId, party.tabId)),
+              await ticketItemsWithBill(inspected.venue).where(
+                eq(workingOrderLines.workingOrderId, party.tabId),
+              ),
             ).toEqual([]);
         } finally {
           await inspected.close();
