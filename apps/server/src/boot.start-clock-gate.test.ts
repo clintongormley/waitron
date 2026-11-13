@@ -10,6 +10,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { startManagementSession } from "@waitron/identity";
 import { emptyDrainResult } from "@waitron/fiscal";
+import { remedyRequestBody } from "@waitron/fiscal-verifactu/test/remedy-request.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import type { BoxHostClient } from "./box-host-client.js";
@@ -303,14 +304,16 @@ describe("the start clock gate as boot wires it", () => {
           "content-type": "application/json",
           cookie: `waitron_management_session=${session.token}`,
         },
-        body: JSON.stringify({
-          kind: "record-correction",
-          caseId: randomUUID(),
-          registroId: randomUUID(),
-          actionKey: "correct-facts",
-          reason: "Correct the stored record facts",
-          facts: { description: "Corrected restaurant service" },
-        }),
+        body: JSON.stringify(
+          remedyRequestBody({
+            kind: "record-correction",
+            caseId: randomUUID(),
+            recordId: randomUUID(),
+            actionKey: "correct-facts",
+            reason: "Correct the stored record facts",
+            facts: { description: "Corrected restaurant service" },
+          }),
+        ),
       });
       return { status: answer.status, body: await answer.text() };
     };
