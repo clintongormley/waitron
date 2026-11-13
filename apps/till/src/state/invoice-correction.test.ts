@@ -443,6 +443,23 @@ it("forgets a saved Open once its correction is found, but not while that Open w
   expect(session.savedOpen("sale-1")?.submissionId).toBe(waiting);
 });
 
+it("keeps a saved Open another session is still sending when this one is asked to forget it", async () => {
+  const w = waitingApi();
+  const sending = new InvoiceCorrectionSession(scope, w.api);
+  const other = new InvoiceCorrectionSession(scope, w.api);
+  const open = sending.open("sale-1", openAsk);
+  const waiting = sending.savedOpen("sale-1")!.submissionId;
+
+  other.forgetOpen("sale-1");
+  expect(other.savedOpen("sale-1")?.submissionId).toBe(waiting);
+  w.calls[0]!.refuse(lost());
+  await expect(open).rejects.toThrow();
+  expect(sending.savedOpen("sale-1")?.submissionId).toBe(waiting);
+
+  other.forgetOpen("sale-1");
+  expect(sending.savedOpen("sale-1")).toBeNull();
+});
+
 it("leaves a saved Open it cannot read when asked to forget it", async () => {
   const h = harness([lost()]);
   await expect(h.session.open("sale-1", openAsk)).rejects.toThrow();
