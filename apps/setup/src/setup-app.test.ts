@@ -3441,9 +3441,14 @@ describe("page shell", () => {
     await aboutModal(el).updateComplete;
     expect(aboutModal(el).open).toBe(true);
 
+    const closed = new Promise((resolve) =>
+      aboutSheet(el).addEventListener("about-close", resolve, { once: true }),
+    );
     await close(el);
-    await vi.waitFor(() => expect(aboutModal(el).open).toBe(false));
+    await closed;
     await el.updateComplete;
+    await aboutSheet(el).updateComplete;
+    expect(aboutModal(el).open).toBe(false);
     expect(aboutSheet(el).shadowRoot!.querySelector("iframe")).toBeNull();
     expect(info.shadowRoot!.activeElement).toBe(info.shadowRoot!.querySelector("button"));
   });
