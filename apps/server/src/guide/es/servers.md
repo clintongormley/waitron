@@ -22,7 +22,8 @@ Antes de empezar, comprueba dos cosas en el equipo principal:
   activado las copias de seguridad, abre **Copias de seguridad** y elige **Activar las copias**.
 - **Copia continua en tu bucket** está desactivada. El local copia sus cambios en un solo sitio a
   la vez, y el equipo de reserva ocupa ese sitio. Para añadirlo de todos modos, elige
-  **Desactivar** en ese apartado; tu bucket deja entonces de recibir los cambios del local.
+  **Desactivar** en ese apartado; tu bucket deja entonces de recibir los cambios del local y, en
+  esta versión, no puede volver a recibirlos mientras el equipo de reserva siga en el local.
 
 También necesitas una cuenta que pueda abrir **Ajustes → Servidores** en el equipo principal, con
 su ID de persona, su contraseña y el código actual del autenticador, si está configurado.

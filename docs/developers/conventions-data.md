@@ -3658,14 +3658,16 @@ link exists (see the write-path entry above, decision D7).
 **The store and its folders.** Only a box whose link `serves` runs the store, versitygw on
 loopback, behind a TLS listener on `WAITRON_SPARE_STORE_PORT` (7443 by default) that admits only a
 client certificate under the venue authority naming the paired main box (`startServedStore`,
-`apps/server/src/boot.ts:1889-1920`; `apps/server/src/spare-pipe.ts:60-92`). The store keeps its
+`apps/server/src/boot.ts`; `apps/server/src/spare-pipe.ts:60-92`). The store keeps its
 data in `<state>/pair-store/` (`apps/server/src/spare-store.ts:74`). The spare's first copy is
 restored from that store into `<state>/pair-copy/`, outside `scratch/` because it must survive the
 restart that puts it in place of `venue.db` (`apps/server/src/spare-copy.ts`,
 `spare-copy-placement.ts`). Both folders are named in `packages/store/src/state-layout.ts` and
 deleted by a plain reset.
 
-**Guards.** `apps/server/src/spare-join.test.ts` (the row and link states), the two-box test
+**Guards.** `apps/server/src/stream-api.route.test.ts` (`backup.spare_stream_active`),
+`apps/server/src/mirror-bundle-api.test.ts` (`mirror.bucket_stream_active`),
+`apps/server/src/spare-join.test.ts` (the row and link states), the two-box test
 `apps/server/src/spare-join.e2e.test.ts` (a join refused while the main box copies to a bucket,
 then joined, copied and kept to loopback), and `scripts/state-layout.test.ts`. Weaker than the
 rule: nothing checks that a new writer of bucket settings or of a pair link makes the other's check.

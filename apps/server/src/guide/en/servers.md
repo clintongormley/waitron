@@ -21,7 +21,8 @@ Before you start, check two things on the main box:
   **Backups** and choose **Turn on backups**.
 - **Continuous copy to your bucket** is off. The venue copies its changes to one place at a time,
   and a spare takes that place. To add a spare anyway, choose **Turn off** under that heading; your
-  bucket then stops receiving the venue's changes.
+  bucket then stops receiving the venue's changes, and in this version it cannot receive them again
+  while the spare is there.
 
 You also need an account that can open **Settings → Servers** on the main box, with its person ID,
 its password and its current authenticator code, if set up.
