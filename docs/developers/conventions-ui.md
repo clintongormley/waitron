@@ -161,6 +161,9 @@ The approved example, for length and tone. The station card's help:
   no se ha mandado a preparar. Las tarjetas pasan a ámbar y luego a rojo cuanto más esperan.» Then
   the guide link.
 
+2026-11-13: the live string adds "Tap a Ready dish to put it back to Preparing." («Toca un plato Listo
+para devolverlo a Preparando.») for R2 proposal 5; the owner has not reviewed that wording.
+
 The Columns badge: EN "Tap a heading to fold its column. Use Columns to choose which columns show,
 and in what order." ES «Toca una cabecera para plegar su columna. Con Columnas eliges qué columnas
 se ven y en qué orden.» What these leave out belongs in the guide: the Held heading inside Waiting

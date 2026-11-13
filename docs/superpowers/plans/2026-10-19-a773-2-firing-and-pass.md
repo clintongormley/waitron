@@ -331,7 +331,7 @@ Extra-held means genuinely held, not requested. Keep `finishPartyService(tx,cfg,
       one cancellation/close transaction and unchanged refund handoff.
 
 - [ ] **Failing tests:**
-      Move requested to either waiting or immediate station keeps it Requested with no fire job; its destination pass releases it once. Move actual-released queued work never re-holds it. Automatic rerouting cannot let a pass cook outside scope. Whole-line/partial serving of Requested, split extras, All served and Undo preserve quantities and suppress later fire jobs for already served components. A recalled source
+      Move requested to either waiting or immediate station keeps it Requested with no fire job; (2026-11-13: no longer so for an immediate station; contract 2's note.) its destination pass releases it once. Move actual-released queued work never re-holds it. Automatic rerouting cannot let a pass cook outside scope. Whole-line/partial serving of Requested, split extras, All served and Undo preserve quantities and suppress later fire jobs for already served components. A recalled source
       cannot be fired by a sent-group action. Direct legacy Recall cannot leave a request stamp that a later generic Send bypasses; any recall-to-held writer clears both stamps, while the party New order path retains its source reservation.
 
 - [ ] **Run RED:**

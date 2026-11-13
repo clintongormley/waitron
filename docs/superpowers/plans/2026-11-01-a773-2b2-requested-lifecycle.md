@@ -302,7 +302,7 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
   reason is refused" (`finish-party-service.test.ts:218`) pins that; B2.4 runs it in GREEN.
 
 - **D29 A station move keeps a Requested dish Requested and pass-controlled, with no paper, to any
-  station** (master Contract 2: "even to an immediate station"). Today's `moveDishesToStation`
+  station** (master Contract 2: "even to an immediate station"). (2026-11-13: reversed for a station that does not wait, R2 proposal 2: the dish starts there at the move.) Today's `moveDishesToStation`
   already does (finding 9); it re-stamps `queued_at` to the move (`station-move.ts:418-433`), which
   is harmless because the pass's release sets `queued_at` (D2, B3.4). Released work stays released
   and gets its FIRE "from" ticket as today. B2.5a pins both, and station closing's "send".
@@ -1023,7 +1023,7 @@ case is a stop.
      burger; move it to Kitchen with Kitchen waiting: `stationId` Kitchen, `requestedAt` unchanged,
      `firedAt` null, `passControlled` true, a `ticket_item_moves` row; no job anywhere. Then move it
      to Bar, which does not wait: the same, still Requested (master Contract 2: "even to an
-     immediate station").
+     immediate station"). (2026-11-13: reversed by R2 proposal 2; the test now expects the dish to start at Bar with a "From Kitchen" ticket.)
   2. **Released work is never re-held.** Nothing waits; a released burger; Kitchen set to wait;
      move it to Kitchen: `firedAt` kept, never Requested, and Kitchen gets its FIRE ticket "from
      Grill" as today.
@@ -1031,7 +1031,7 @@ case is a stop.
      Grill choosing to send its open dishes to Kitchen (`withStationDishes`,
      `apps/server/src/station-closing.ts:42-100`, choice `send`, as
      `till-api.station-today.test.ts:307` drives it): the burger at Kitchen, still Requested, no
-     job. Closing's "leave" choice is not pinned here: it sets `stationRetainedAtRelease` on the
+     job. (2026-11-13: Kitchen does not wait here, so after R2 proposal 2 the burger starts there with a "From Grill" ticket.) Closing's "leave" choice is not pinned here: it sets `stationRetainedAtRelease` on the
      item (`station-closing.ts:92`), which only the pass's release reads, so it is handed to B3
      (review 1, M9; "Left for B3").
   4. **Department transfer lists Requested work (D37).** `GET /api/department-transfers/:id`
