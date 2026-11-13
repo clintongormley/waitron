@@ -533,8 +533,11 @@ A1424's live qualification was added on 7 November 2026.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
   drills. Keep the corrected v41 controller; the existing routing job compares refreshed hosted counts
   with the published server snapshot (watcher, 2026-11-09 10:01), except that idle positive
-  server capacity needs no hosted read (watcher, 2026-11-12 20:47). A1454 keeps six slots per host (owner,
-  2026-11-11; see Decisions and deliberate limits); A1461 reduces run sizes. Per-job
+  server capacity needs no hosted read (watcher, 2026-11-12 20:47). A1454 now follows the renewed
+  measured-family-size and memory-admission ask (12 November); the watcher cleared sixteen
+  identifiers, eight per host, preserving six large guests (13 November 01:54). Its installed
+  mixed-job trial and wait/duration comparison remain open. The matched recipes and
+  controller are [installed with independent readback](https://github.com/waitron-io/waitron-cloud/pull/1198#issuecomment-6842611690). A1461 reduces run sizes. Per-job
   overflow, the remaining workflows and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day
   no-avoidable-wait target. Never drain other lanes' work for a drill.
@@ -680,6 +683,11 @@ A1424's live qualification was added on 7 November 2026.
   [the final gate's API check](../developers/ci-and-gates.md#the-ci-check-passes-only-when-every-needed-job-succeeded-or-was-skipped).
 
 - **A1454: keep six CI slots per host (owner, 2026-11-11).**
+  **Superseded on 12 November:** the owner renewed the full-day measurement, per-family
+  sizes and memory-admission ask. The watcher cleared its sixteen-identifier first cut on
+  13 November at 01:54, without a second live-free-memory gate. See Cloud’s
+  [governing plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-13-a1454-memory-admission.md).
+  The decision below records the declined fixed split; it does not govern the renewed work.
   The 11 November measurements show about 125 GiB per host. The simplest fixed split
   is two large and five small guests, seven jobs against six today, but large-job
   concurrency falls from six to two. The owner answered “Ok” to not building it
