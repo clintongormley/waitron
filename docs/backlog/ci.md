@@ -535,19 +535,11 @@ A1424's live qualification was added on 7 November 2026.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
   drills. Keep the corrected v41 controller; the existing routing job compares refreshed hosted counts
   with the published server snapshot (watcher, 2026-11-09 10:01), except that idle positive
-  server capacity needs no hosted read (watcher, 2026-11-12 20:47). A1454 now follows the renewed
-  measured-family-size and memory-admission ask (12 November); the watcher cleared sixteen
-  identifiers, eight per host, preserving six large guests (13 November 01:54). The trial
-  completed forty disposable-runner jobs successfully, with eight guests per host, but hosted
-  jobs queued while the server had admissible room. The previous release is
-  [restored under a fresh twelve-slot generation](https://github.com/waitron-io/waitron-cloud/pull/1198#issuecomment-6843575516).
-  The captured condition was traced to a partial-list refusal, an earlier busy-server placement
-  and an eleven-second refill interval. After the inventory reread lands, one bounded new-release
-  trial is cleared, announced to the watcher before it starts, with rollback for five minutes
-  of admissible room without admissions, job
-  failure or a guest killed for memory (watcher, 2026-11-13 05:24/05:43). The timing comparison
-  is unqualified because the trial's slowest checkout took 33 seconds.
-  A qualified wait/duration comparison remains open. A1461 reduces run sizes. Per-job
+  server capacity needs no hosted read (watcher, 2026-11-12 20:47).
+  The measured-memory pool is retained under the [13 November decision](#decisions-and-deliberate-limits).
+  New free-room code stays held until a real eligible case
+  is measured after source refusals and recorded turns are excluded; reverse movement remains
+  open (watcher, 13 November 07:02). A1461 reduces run sizes. Per-job
   overflow, the remaining workflows and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day
   no-avoidable-wait target. Never drain other lanes' work for a drill.
@@ -686,6 +678,18 @@ A1424's live qualification was added on 7 November 2026.
   (#916). [Detail](till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
 ## Decisions and deliberate limits
+
+- **A1454: retain measured-family memory admission (watcher, 2026-11-13 08:39).**
+  The sixteen-identifier pool is the running setup. The bounded third watch reached fifteen
+  live guests, eight on one host; ordinary PR runs [43383817678](https://github.com/clintongormley/waitron/actions/runs/43383817678)
+  and [43383904860](https://github.com/clintongormley/waitron/actions/runs/43383904860) passed
+  all 8 and 48 selected checks. No infrastructure failure or sampled memory kill was observed.
+  The watcher accepted keeping it and closing A1454. Checkout maxima of 12/14 seconds make
+  the timing comparison unqualified; no speed gain is claimed. Rollback applies to a failure
+  outside a job's own steps, including a memory kill, or five minutes with admissible room and
+  queued server work but no new admission. Read failed jobs' last test lines before deciding;
+  a pull request's failing assertions, coverage or lint are not by themselves server failures
+  (watcher, 13 November 07:43). The fresh-generation fallback retains six fixed guests per host.
 
 - **CI-gate-skipped: trust an omitted record only for exact saved `skipped` (watcher, 2026-11-12 19:33).**
   A complete jobs inventory and the saved result together allow the omission; present records
