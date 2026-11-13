@@ -43,6 +43,7 @@ import {
   previewMenu,
   publishMenu,
   readLiveDocuments,
+  readRecordedDocuments,
 } from "./menu-publication.js";
 import {
   createCatalogue,
@@ -783,7 +784,11 @@ describe("a live version published before its document froze VAT", () => {
 
   it("refuses an earlier document format with the venue-reset code", async () => {
     const f = await menusFixture(fx.db);
-    await liveInEarlierFormat(f.lunch);
+    const versionId = await liveInEarlierFormat(f.lunch);
+    await expect(app((tx) => readRecordedDocuments(tx, [versionId]))).rejects.toMatchObject({
+      code: "menu.reset_required",
+      params: { menuId: f.lunch },
+    });
     await expect(app((tx) => readLiveDocuments(tx, [f.lunch]))).rejects.toMatchObject({
       code: "menu.reset_required",
       params: { menuId: f.lunch },
@@ -2879,3 +2884,53 @@ async function storedArchive(tx: Transaction, productId: string): Promise<void> 
   await tx.update(products).set({ active: false }).where(eq(products.id, productId));
   await takeOffMenus(tx, [productId]);
 }
+
+it("reads the recorded version after another publication changes its price", async () => {
+  const f = await menusFixture(fx.db);
+  const first = await publish(f.lunch);
+  await app((tx) => updateProduct(tx, f.soup, { unitPrice: "99.00" }));
+  const second = await publish(f.lunch);
+  const versions = await app((tx) =>
+    readRecordedDocuments(tx, [first.versionId, second.versionId]),
+  );
+  expect(versions.size).toBe(2);
+  const price = (id: string) =>
+    Object.values(versions.get(id)!.offers).find((offer) => offer.productId === f.soup)!.unitPrice;
+  expect(price(first.versionId)).toBe("5.00");
+  expect(price(second.versionId)).toBe("99.00");
+});
+
+it("reuses a live document when reading the same recorded version without another query", async () => {
+  const f = await menusFixture(fx.db);
+  const published = await publish(f.lunch);
+  const cold = await publish(f.dinner);
+  await app(async (tx) => {
+    const live = (await readLiveDocuments(tx, [f.lunch])).get(f.lunch)!.document;
+    const session = (
+      tx as unknown as {
+        session: { prepareQuery(query: { sql: string }, ...args: unknown[]): unknown };
+      }
+    ).session;
+    const queries = vi.spyOn(session, "prepareQuery");
+    try {
+      const recorded = await readRecordedDocuments(tx, [published.versionId]);
+      expect(
+        queries.mock.calls.filter(([query]) => query.sql.includes("menu_versions")),
+      ).toHaveLength(0);
+      expect(recorded.get(published.versionId)).toBe(live);
+      queries.mockClear();
+      const firstCold = await readRecordedDocuments(tx, [cold.versionId]);
+      expect(
+        queries.mock.calls.filter(([query]) => query.sql.includes("menu_versions")).length,
+      ).toBeGreaterThan(0);
+      queries.mockClear();
+      const secondCold = await readRecordedDocuments(tx, [cold.versionId]);
+      expect(
+        queries.mock.calls.filter(([query]) => query.sql.includes("menu_versions")),
+      ).toHaveLength(0);
+      expect(secondCold.get(cold.versionId)).toBe(firstCold.get(cold.versionId));
+    } finally {
+      queries.mockRestore();
+    }
+  });
+});

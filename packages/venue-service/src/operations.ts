@@ -44,6 +44,7 @@ import {
   documentOffers,
   isEachUnit,
   readLiveDocuments,
+  readRecordedDocuments,
   readLiveState,
   NO_LIVE_FIELDS,
   units,
@@ -51,7 +52,13 @@ import {
   type MenuOffer,
   type ServedMenu,
 } from "@waitron/catalogue";
-import type { PreparedServiceDay, ServiceMode, ZoneMenuState, ZoneOffers } from "@waitron/module";
+import type {
+  PreparedServiceDay,
+  ServiceMode,
+  ZoneMenuState,
+  ZoneOffers,
+  ZoneMenuOffer,
+} from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { placeOpenPeriod, resolveDepartmentService, servedDefault } from "./menu-timetable.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
@@ -1134,9 +1141,36 @@ export async function findOrderServiceZones(
   return new Map(rows.map((row) => [row.workingOrderId, row.zoneId]));
 }
 
+export async function readLunchOffers(
+  tx: Transaction,
+  workingOrderId: string,
+  lineIds: readonly string[],
+) {
+  const contexts = await listWorkingLineContexts(tx, workingOrderId, lineIds);
+  const documents = await readRecordedDocuments(
+    tx,
+    contexts.flatMap((row) => (row.menuVersionId === null ? [] : [row.menuVersionId])),
+  );
+  const versions = new Map<string, ZoneMenuOffer[]>();
+  for (const [versionId, document] of documents) {
+    if (!Object.values(document.offers).some((offer) => offer.setLunch)) continue;
+    const { offers } = await applyLiveFields(tx, [document]);
+    versions.set(versionId, offers.get(document.menuId) ?? []);
+  }
+  return new Map(
+    contexts.flatMap((row) => {
+      const offer = versions.get(row.menuVersionId!)?.find((offer) => offer.id === row.menuItemId);
+      return offer?.setLunch
+        ? [[row.workingOrderLineId, { offer, versionId: row.menuVersionId! }] as const]
+        : [];
+    }),
+  );
+}
+
 export async function listWorkingLineContexts(
   tx: Transaction,
   workingOrderId: string,
+  lineIds?: readonly string[],
 ): Promise<
   {
     workingOrderLineId: string;
@@ -1174,7 +1208,14 @@ export async function listWorkingLineContexts(
     })
     .from(workingLineContexts)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, workingLineContexts.workingOrderLineId))
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, workingOrderId),
+        lineIds === undefined
+          ? undefined
+          : inArray(workingLineContexts.workingOrderLineId, [...lineIds]),
+      ),
+    );
   return rows.map((row) => ({
     ...row,
     hardwareUnit: row.hardwareUnit as "kg" | "g" | "mg" | null,
@@ -1250,16 +1291,13 @@ export async function recordSentLineNutrition(
   }
 }
 
-/**
- * Snapshot the commercial attribution of newly priced working-order lines, and the menu version
- * each was priced from, from `offers`: the zone's offers the lines were priced from.
- */
 export async function recordWorkingLineContexts(
   tx: Transaction,
   workingOrderId: string,
   lines: readonly {
     workingOrderLineId: string;
     menuItemId: string;
+    recorded?: { offer: ZoneMenuOffer; versionId: string };
     unit?: {
       id: string;
       name: Record<string, string>;
@@ -1306,7 +1344,7 @@ export async function recordWorkingLineContexts(
     tx,
     workingLineContexts,
     lines.map((line) => {
-      const offer = byMenuItem.get(line.menuItemId);
+      const offer = line.recorded?.offer ?? byMenuItem.get(line.menuItemId);
       if (offer === undefined) {
         throw new AppError("service_zone.offer_not_allowed", {
           zoneId: context.zoneId,
@@ -1318,7 +1356,7 @@ export async function recordWorkingLineContexts(
         workingOrderLineId: line.workingOrderLineId,
         menuItemId: offer.id,
         menuId: offer.menuId,
-        menuVersionId: versionOf(offer.menuId),
+        menuVersionId: line.recorded?.versionId ?? versionOf(offer.menuId),
         menuName: offer.menuName,
         departmentId: context.departmentId,
         departmentName: department.name,

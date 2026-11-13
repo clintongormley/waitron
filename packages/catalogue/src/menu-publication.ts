@@ -318,6 +318,49 @@ export async function assertLiveVersions(
   return live;
 }
 
+/** Recorded versions retain their prices after a later publication. */
+export async function readRecordedDocuments(
+  tx: Transaction,
+  versionIds: readonly string[],
+): Promise<Map<string, MenuDocument>> {
+  let cache = documentCaches.get(tx);
+  if (cache === undefined) documentCaches.set(tx, (cache = new Map()));
+  const documents = new Map<string, MenuDocument>();
+  const missing: string[] = [];
+  // menu_versions is append-only, so a validated cached version can be reused as recorded.
+  for (const versionId of new Set(versionIds)) {
+    const kept = cache.get(versionId);
+    if (kept === undefined) missing.push(versionId);
+    else {
+      cache.delete(versionId);
+      cache.set(versionId, kept);
+      documents.set(versionId, kept.document);
+    }
+  }
+  for (const batch of batches(missing)) {
+    const rows = await tx
+      .select({
+        id: menuVersions.id,
+        menuId: menuVersions.menuId,
+        contentHash: menuVersions.contentHash,
+        document: menuVersions.document,
+      })
+      .from(menuVersions)
+      .where(inArray(menuVersions.id, batch));
+    for (const row of rows) {
+      requireCurrentFormat(row.menuId, row.document.format);
+      const document = deepFreeze(row.document);
+      documents.set(row.id, document);
+      cache.set(row.id, { contentHash: row.contentHash, document });
+    }
+  }
+  for (const versionId of cache.keys()) {
+    if (cache.size <= CACHED_DOCUMENTS) break;
+    cache.delete(versionId);
+  }
+  return documents;
+}
+
 /** The menu each version belongs to, by version id; an id that names no version is left out. */
 export async function menusOfVersions(
   tx: Transaction,

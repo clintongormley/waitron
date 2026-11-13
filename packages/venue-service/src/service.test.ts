@@ -77,6 +77,7 @@ describe("VENUE_SERVICE", () => {
       "readLateSendMarks",
       "readLateSendNeedsManager",
       "readLinesSoldInEach",
+      "readLunchOffers",
       "readPartyAllergy",
       "readPrintedDepartmentReceipt",
       "readProfileDepartments",

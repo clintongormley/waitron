@@ -772,3 +772,85 @@ async function sessionPrepareSpy(into: string[]): Promise<{ restore: () => void 
     },
   };
 }
+
+it.each([false, true])(
+  "a table lunch files one 10% service with coffee chosen: %s",
+  async (includeCoffee) => {
+    const v = await setupVenue();
+    const { main, coffee, coffeeId } = await withTransaction(suite.db, async (tx) => {
+      await updateProduct(tx, v.products.burger, { setLunch: true, unitPrice: "18.00" });
+      await updateProduct(tx, v.products.cheese, { vatClass: "general" });
+      const includedCoffee = await createProduct(tx, {
+        catalogueId: v.counter.menuId,
+        categoryId: null,
+        name: "Included coffee",
+        customerName: { es: "Included guest coffee" },
+        kitchenName: "COFFEE",
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
+      const main = await createExtraList(
+        tx,
+        {
+          name: "Lunch main",
+          customerName: null,
+          kitchenName: null,
+          active: true,
+          minPicks: 1,
+          maxPicks: 1,
+          items: [
+            { productId: v.products.cheese, maxQuantity: 1, preselected: false, price: "3.00" },
+          ],
+        },
+        LOCALE,
+      );
+      const coffee = await createExtraList(
+        tx,
+        {
+          name: "Lunch coffee",
+          customerName: null,
+          kitchenName: null,
+          active: true,
+          minPicks: 1,
+          maxPicks: 1,
+          items: [
+            { productId: includedCoffee.id, maxQuantity: 1, preselected: false, price: "0.00" },
+          ],
+        },
+        LOCALE,
+      );
+      await writeProductModifiers(tx, v.products.burger, [
+        { kind: "extras", id: main.id },
+        { kind: "extras", id: coffee.id },
+      ]);
+      return { main, coffee, coffeeId: includedCoffee.id };
+    });
+    await republish(v);
+    const tabId = await openTableTab(v, [
+      {
+        menuItemId: v.tables.offerFor(v.products.burger),
+        quantity: "1",
+        extras: [
+          { listId: main.id, picks: [{ productId: v.products.cheese, quantity: 1 }] },
+          ...(includeCoffee
+            ? [{ listId: coffee.id, picks: [{ productId: coffeeId, quantity: 1 }] }]
+            : []),
+        ],
+      },
+    ]);
+    await payWorkingOrder({ ...deps(), admission: testTradingAdmission() }, v.cfg, {
+      id: tabId,
+      lines: [],
+      tender: { method: "cash", amount: "21.00" },
+    });
+    const sale = await filed(tabId);
+    expect(sale.total).toBe(2100);
+    expect(sale.vatBreakdown).toEqual([{ rate: "10.00", base: "19.09", tax: "1.91" }]);
+    expect(sale.lines.map((line) => [line.productId, line.vatRate, line.lineGross])).toEqual([
+      [v.products.burger, 1000, 1800],
+      [v.products.cheese, 1000, 300],
+      ...(includeCoffee ? [[coffeeId, 1000, 0]] : []),
+    ]);
+  },
+);
