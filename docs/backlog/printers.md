@@ -118,8 +118,7 @@ F2 A4 remains unavailable; A739 supplies order-linked Receipt Email. F2-to-F1 re
 
 The payment-time mixed-printer choice remains in A790: a printed full invoice should offer the
 profile's Invoice list, including receipt-paper printers, using the device's saved choice and then
-the profile default. Do not mistake #2640's ticket-view chooser for that payment change. Also retain
-the Devices-table A4 marker for its Invoice printer value. Keep the Printers tab's A4
+the profile default. Do not mistake #2640's ticket-view chooser for that payment change. Keep the Printers tab's A4
 printers wording and A661's separate print-queue Resend policy question.
 
 G4, the recovery-origin file, browser operation journal and two-stage prepare/accept exchange are

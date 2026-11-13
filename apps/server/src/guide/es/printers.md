@@ -46,6 +46,9 @@ Conserva su nombre y ajustes guardados. Vuelve a asignar sus dispositivos y perf
 
 Después de importar una configuración, busca sus impresoras A4 con **Añadir impresora** y vuelve a añadirlas.
 
+En **Dispositivos**, consulta **Impresora de facturas** para ver dónde imprime las facturas cada
+dispositivo. **· A4** tras el nombre identifica una impresora A4.
+
 Una impresora Bluetooth que desvinculaste queda deshabilitada. Para volver a usarla, ponla en modo
 de emparejamiento, abre sus detalles y elige **Emparejar de nuevo**.
 

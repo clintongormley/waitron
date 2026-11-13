@@ -43,6 +43,9 @@ name and settings. Assign its devices and device profiles again.
 
 After importing a configuration, find its A4 printers with **Add a printer** and add them again.
 
+In **Devices**, check **Invoice printer** to see where a device prints invoices. **· A4** after
+the printer's name identifies an A4 printer.
+
 A Bluetooth printer you unpaired is disabled. To use it again, put it in pairing mode, open its
 details and choose **Pair again**.
 

@@ -44,7 +44,7 @@ import {
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
-import { a4Choices, printerLabel } from "../i18n/domain.js";
+import { a4Choices, a4PrinterName, printerLabel } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
 import type {
   DashboardApi,
@@ -286,9 +286,15 @@ const EQUIPMENT_COLUMNS = [
 ] as const satisfies readonly { key: string; role: EquipmentRole; label: StringKey }[];
 
 /** What the role uses now, or None, marked when it comes from the profile's default. */
-function equipmentName(device: DeviceRow, role: EquipmentRole): string {
+function equipmentName(
+  device: DeviceRow,
+  role: EquipmentRole,
+  pagePrinters: readonly PagePrinterRow[],
+): string {
   const equipment = device.equipment.find((entry) => entry.role === role);
-  const name = equipment?.resolved?.name ?? t("equipment.none");
+  let name = equipment?.resolved?.name ?? t("equipment.none");
+  if (role === "invoice" && pagePrinters.some((p) => p.id === equipment?.resolved?.id))
+    name = a4PrinterName(name);
   return equipment === undefined || equipment.selection === "default"
     ? `${name} (${t("devices.default_mark")})`
     : name;
@@ -1875,10 +1881,10 @@ export class DevicesScreen extends LitElement {
         key: column.key,
         choosable: "shown",
         label: t(column.label),
-        sortValue: (d) => equipmentName(d, column.role),
+        sortValue: (d) => equipmentName(d, column.role, this.pagePrinters),
         cell: (d) =>
           html`<span data-test=${`device-${column.key}-${d.id}`}
-            >${equipmentName(d, column.role)}</span
+            >${equipmentName(d, column.role, this.pagePrinters)}</span
           >`,
       })),
       {
