@@ -120,11 +120,12 @@ export function loadBackupSettings(input: { env: Env; venueId: string } & Sealed
 install as fresh only when compose.yml is absent AND no state volume exists; a failed docker
 volume ls counts as not fresh (fail closed)." Fresh installs and resets select the inbox before
 image selection; existing installations select the requested image before the new profile decision.
-The existing reset confirmation still checks the installed box before changing it. Reset's image
+The existing reset confirmation still checks the installed box before changing it. `install --reset`'s image
 availability check stays before the wipe; a plain source install keeps its existing image-check behavior.
 Compose's own environment parser decodes profile values, then the comma-list selector trims spaces.
-The USB recipe writes the profile, and upgrade config/stop includes it; upgrade restart enables it
-only when its captured running-service image map includes Mailpit. These fixes follow the watcher's
+The USB recipe writes the profile, and upgrade config/stop includes it; upgrade restart adds an explicit inbox profile
+only when its captured running-service image map includes Mailpit. Otherwise Compose uses the profiles
+from the installed environment. These fixes follow the watcher's
 "USB inbox and profile ... must work with the new profile" instruction; no installer or upgrade flow is added.
 
 `deploy/waitron.sh` gains `select_practice_inbox <on|off|decide>`. It reads `.env`'s

@@ -1385,8 +1385,6 @@ once released. Belongs with A1016.
 
 ## Bundle: What pack part 1's reviews left
 
-10 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
 - **A1187 part 1's defaults, which the owner has not confirmed.** The plan settled each question
   the design left open with a conservative default, among them the keep-until date counting from
   the key's change time (a stated departure from design §4) and Make offered wherever the old

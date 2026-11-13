@@ -846,11 +846,14 @@ it.each(["restore", "keep"])(
   },
 );
 
-it.each([true, false])("reopens only an inbox captured as running (%s)", async (activeInbox) => {
-  const { f, images, calls } = await imageFixture({ activeInbox });
-  await f.host.stop();
-  await f.host.resume(images.old);
-  expect(calls.at(-1).includes("practice-inbox")).toBe(activeInbox);
-  const configs = calls.filter((args) => args.includes("config"));
-  expect(configs.every((args) => args.includes("practice-inbox"))).toBe(true);
-});
+it.each([true, false])(
+  "adds an explicit inbox profile when captured as running (%s)",
+  async (activeInbox) => {
+    const { f, images, calls } = await imageFixture({ activeInbox });
+    await f.host.stop();
+    await f.host.resume(images.old);
+    expect(calls.at(-1).includes("practice-inbox")).toBe(activeInbox);
+    const configs = calls.filter((args) => args.includes("config"));
+    expect(configs.every((args) => args.includes("practice-inbox"))).toBe(true);
+  },
+);
