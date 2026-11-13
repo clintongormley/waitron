@@ -1,9 +1,10 @@
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { setTimeout, clearTimeout } from "node:timers";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { upgradePayload } from "../../bench/box-installer/upgrade.mjs";
+import { upgradePayload, upgradeStage } from "../../bench/box-installer/upgrade.mjs";
 
 it("rejects changed rows after reboot without replacing the original comparison baseline", () => {
   const root = mkdtempSync(join(tmpdir(), "upgrade-baseline-"));
@@ -108,6 +109,49 @@ esac
     });
     expect(result.status, result.stderr).toBe(0);
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it("does not announce a restore cut when flushing its partial target fails", async () => {
+  const root = mkdtempSync(join(tmpdir(), "upgrade-cut-flush-"));
+  let child;
+  try {
+    const bin = join(root, "bin"),
+      source = join(root, "copies/0"),
+      target = join(root, "target"),
+      shim = join(root, "cp");
+    for (const folder of [bin, source, target]) mkdirSync(folder, { recursive: true });
+    writeFileSync(join(source, "data"), "source");
+    writeFileSync(join(bin, "sync"), "#!/bin/sh\nexit 1\n", { mode: 0o700 });
+    const stage = upgradeStage();
+    const begin = stage.indexOf("printf '%s' '#!/bin/bash"),
+      end = stage.indexOf("\nchmod 700", begin);
+    const write = stage
+      .slice(begin, end)
+      .replaceAll("/opt/waitron-host/probe-bin/cp", shim)
+      .replaceAll(
+        "/var/lib/docker/volumes/waitron_state/_data/partial-restore",
+        join(root, "partial"),
+      );
+    expect(spawnSync("bash", ["-ec", write]).status).toBe(0);
+    child = spawn("bash", [shim, "-a", "--", join(source, "data"), target], {
+      detached: true,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, A950_PROBE: "restore" },
+    });
+    let output = "";
+    child.stdout.on("data", (bytes) => {
+      output += bytes;
+      if (output.includes("A950_CUT")) process.kill(-child.pid, "SIGTERM");
+    });
+    const timer = setTimeout(() => process.kill(-child.pid, "SIGKILL"), 5000);
+    const code = await new Promise((done) => child.once("exit", done));
+    clearTimeout(timer);
+    expect(output).not.toContain("A950_CUT");
+    expect(code).toBe(1);
+  } finally {
+    if (child && child.exitCode === null && child.signalCode === null)
+      process.kill(-child.pid, "SIGTERM");
     rmSync(root, { recursive: true, force: true });
   }
 });
