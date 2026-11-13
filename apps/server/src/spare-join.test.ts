@@ -31,6 +31,7 @@ import {
 import { NODE_MIGRATIONS, readPairLink, type PairLink } from "@waitron/node-db";
 import { TLS_CLIENT_CERT_FILE, TLS_CLIENT_KEY_FILE, TLS_DIR } from "@waitron/store";
 import { checkPeersAtStart } from "./boot-peer-check.js";
+import { createTurns } from "./backup-turns.js";
 import { caCertPath } from "./box-secrets.js";
 import {
   issueClientCert,
@@ -114,6 +115,7 @@ describe("startSpareJoin", () => {
       nodeId: MAIN,
       stateDir,
       stream: { reload },
+      turns: createTurns(),
       intervalMs: 5_000,
       log: (level, event, fields) => logs.push({ level, event, fields }),
       ...overrides,
@@ -365,6 +367,37 @@ describe("startSpareJoin", () => {
 
     expect(logs.find((l) => l.event === "spare.join_failed")?.level).toBe("warn");
     expect((await readPairLink(suite.node, MAIN))?.state).toBe("streaming");
+  });
+
+  it("reloads the copy after another reload already running, not beside it", async () => {
+    // Refuses an overlapping reload as `StreamHost.reload` does.
+    let reloading = false;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const finished: string[] = [];
+    const reload = vi.fn(async (who = "join") => {
+      if (reloading) throw new AppError("backup.reload_in_progress", {});
+      reloading = true;
+      try {
+        if (who === "rotation") await held;
+        finished.push(who);
+      } finally {
+        reloading = false;
+      }
+    });
+    const turns = createTurns();
+    const rotation = turns(() => reload("rotation"));
+    await link(SPARE, spareKeys.publicKey);
+    const r = run({ probe: vi.fn(async () => true), stream: { reload: () => reload() }, turns });
+    await vi.waitFor(async () =>
+      expect((await readPairLink(suite.node, MAIN))?.state).toBe("streaming"),
+    );
+    release();
+    await rotation;
+    await vi.waitFor(() => expect(finished).toEqual(["rotation", "join"]));
+    await r.stop();
+
+    expect(logs.map((l) => l.event)).not.toContain("spare.join_failed");
   });
 
   describe("the probe through the store pipe", () => {

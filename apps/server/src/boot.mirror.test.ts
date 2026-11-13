@@ -57,6 +57,38 @@ vi.mock("@hono/node-server", async () => {
 const { beforeServerStarts, startServer, startConfiguredServer, httpPort } =
   ephemeralServerFixture();
 
+// Pass-through wrappers that record the mirror-bundle route's wake and the spare join's wakes.
+const joinWiring = vi.hoisted(() => ({
+  wakes: 0,
+  wakeSpareJoin: undefined as (() => void) | undefined,
+}));
+vi.mock("./spare-join.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./spare-join.js")>();
+  return {
+    ...actual,
+    startSpareJoin: (deps: Parameters<typeof actual.startSpareJoin>[0]) => {
+      const join = actual.startSpareJoin(deps);
+      return {
+        stop: () => join.stop(),
+        wake: () => {
+          joinWiring.wakes += 1;
+          join.wake();
+        },
+      };
+    },
+  };
+});
+vi.mock("./mirror-bundle-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./mirror-bundle-api.js")>();
+  return {
+    ...actual,
+    mountMirrorBundleApi: (...args: Parameters<typeof actual.mountMirrorBundleApi>) => {
+      joinWiring.wakeSpareJoin = args[1].wakeSpareJoin;
+      return actual.mountMirrorBundleApi(...args);
+    },
+  };
+});
+
 // Mirror-mode server boot. A mirror reads its origin, relay and CA from node.db's
 // `node_mirror_link`. Four venue directories: `mirror` (read-only, refuses writes); `primary`, the
 // same identity booted as primary — the control that the mirror's absences are real; `noConfig`,
@@ -576,6 +608,23 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         acceptingSales: true,
       });
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
+  it("a primary's mirror-bundle route wakes the running spare join", async () => {
+    joinWiring.wakes = 0;
+    joinWiring.wakeSpareJoin = undefined;
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: venueDir.primary,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
+    try {
+      joinWiring.wakeSpareJoin!();
+      expect(joinWiring.wakes).toBe(1);
     } finally {
       await server.close();
     }

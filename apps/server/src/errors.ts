@@ -1622,36 +1622,37 @@ declare module "@waitron/shared" {
     /** A destination's work was stopped because the backup duty stopped or reloaded. A
      * cancellation, never recorded as the destination failing. */
     "backup.destination_cancelled": Record<string, never>;
-    /** Neither an archive destination nor a bucket copy that is on and current: no copy of the data
-     * is being kept. Built as data by the backups alert source, never thrown. */
-    "backup.disabled": Record<string, never>;
+    /** Neither an archive destination nor a live copy that is on and current: no copy of the data
+     * is being kept. Built as data by the backups alert source, never thrown. `toSpare`: the copy
+     * goes to the standby's store, not the owner's bucket. */
+    "backup.disabled": { toSpare?: true };
     /** The dashboard's stored archive settings could not be read or used, so archives are off.
      * Built as data by the backups alert source, never thrown. */
     "backup.archive_settings_unusable": Record<string, never>;
-    /** The bucket copy's oldest change not yet in the bucket has waited `STREAM_BEHIND_AFTER_MS`
+    /** The live copy's oldest change not yet in its store has waited `STREAM_BEHIND_AFTER_MS`
      * (`alert-sources.ts`) or more. `minutes` is that wait, whole. Built as data by the backups
      * alert source, never thrown. */
-    "backup.stream_behind": { minutes: number };
-    /** The bucket copy stopped Litestream at the side-file limit. Built as data by the backups alert
+    "backup.stream_behind": { minutes: number; toSpare?: true };
+    /** The live copy stopped Litestream at the side-file limit. Built as data by the backups alert
      * source, never thrown. */
-    "backup.stream_paused": Record<string, never>;
-    /** The bucket copy stopped because the pointer changed under it, or names a newer term: usually
+    "backup.stream_paused": { toSpare?: true };
+    /** The live copy stopped because the pointer changed under it, or names a newer term: usually
      * another box writing this venue; it can also be a late pointer write by this box from before a
      * restart, or, on a bucket that refuses a conditional write to a missing object with 412, a
      * pointer that was deleted. Built as data by the backups alert source, never
      * thrown. */
-    "backup.stream_refused": Record<string, never>;
-    /** The bucket copy refused to start because a value bound for Litestream could not be written
+    "backup.stream_refused": { toSpare?: true };
+    /** The live copy refused to start because a value bound for Litestream could not be written
      * into its configuration safely. Built as data by the backups alert source, never thrown. */
-    "backup.stream_settings_unusable": Record<string, never>;
-    /** The bucket refuses this box's key, or fails the bucket check. Built as data by the backups
-     * alert source, never thrown. */
-    "backup.stream_bucket_unusable": Record<string, never>;
-    /** The bucket copy is set up but not running, and nobody stopped it: its supervisor failed, the
+    "backup.stream_settings_unusable": { toSpare?: true };
+    /** The copy's bucket or standby store refuses this box's key, or fails the bucket check. Built
+     * as data by the backups alert source, never thrown. */
+    "backup.stream_bucket_unusable": { toSpare?: true };
+    /** The live copy is set up but not running, and nobody stopped it: its supervisor failed, the
      * pinned Litestream cannot run, it could not start, or it refused for a reason with no wording
      * of its own. `reason` is the status's short tag. Built as data by the backups alert source,
      * never thrown. */
-    "backup.stream_stopped": { reason: string | null };
+    "backup.stream_stopped": { reason: string | null; toSpare?: true };
     /** This node's last attempt to rewrite its sealed state row failed, so the row a rebuild reads
      * is out of date or missing. `errorCode` is the failure's cause, `unknown` when unnamed. Built
      * as data by the sealed-state alert source, never thrown. */

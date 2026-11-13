@@ -3372,6 +3372,7 @@ async function bootServer(
     streamService(streamHost, () => holders.singletonRole.current === "primary"),
   );
   health.readStream = () => streamHost.status();
+  const backupTurns = createTurns();
   // Only the one main box records its spare.
   const spareJoin = acceptingSales
     ? startSpareJoin({
@@ -3381,6 +3382,7 @@ async function bootServer(
         nodeId: tradingContext.nodeId,
         stateDir: config.stateDir,
         stream: streamHost,
+        turns: backupTurns,
         log,
       })
     : undefined;
@@ -3695,7 +3697,6 @@ async function bootServer(
   mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
   // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
   // node that is not the chart's serving primary refuses it itself.
-  const backupTurns = createTurns();
   mountMembershipRemovalApi(
     app,
     {

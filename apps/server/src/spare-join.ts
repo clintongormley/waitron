@@ -16,6 +16,7 @@ import { codeOf } from "@waitron/server-kit";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createS3ObjectStore, probeBucket } from "@waitron/stream";
 import { TLS_CLIENT_CERT_FILE, TLS_CLIENT_KEY_FILE } from "@waitron/store";
+import type { Turns } from "./backup-turns.js";
 import type { BoxAddresses } from "./box-lookup.js";
 import { caCertPath } from "./box-secrets.js";
 import { createLoopWaker } from "./loop-wake.js";
@@ -36,6 +37,8 @@ export interface SpareJoinDeps {
   /** Holds the venue authority and this box's client certificate, for the default probe's pipe. */
   stateDir: string;
   stream: Pick<StreamHost, "reload">;
+  /** The queue every reload of the stream takes: the host refuses a reload beside another. */
+  turns: Turns;
   /** Whether the spare's store answers the pair's key; through a store pipe when absent. */
   probe?: Probe;
   /** The default probe's pipe's address lookup; the venue network's answer when absent. */
@@ -94,7 +97,7 @@ export function startSpareJoin(deps: SpareJoinDeps): SpareJoin {
       try {
         if (!(await recordSpare(deps, link))) return true;
         deps.log("info", "spare.joined", { peerNodeId: link.peerNodeId });
-        await deps.stream.reload();
+        await deps.turns(() => deps.stream.reload());
         return false;
       } catch (error) {
         if (!isAppError(error) || !hasCode(error, "spare.join_key_mismatch")) throw error;
