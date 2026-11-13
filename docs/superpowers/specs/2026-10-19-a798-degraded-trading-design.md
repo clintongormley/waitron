@@ -1741,6 +1741,8 @@ For the runner to file; none is acted on here.
 
 **2026-10-23:** A798-B slice 10's plan measured that an `unreachable` reader status raises nothing (P2), so §2.4's `reader.status_unavailable` comes only from a throw or the deadline; that a clock before 28-10-2024 cannot open a TLS mail connection (P8), so that condition's email rarely leaves the box; and that on Docker's containerd image store an upgrade's old pulled image is freed by Docker itself (P10), so on that store the old `app` and `print-agent` images do not pile up; the mail capture's old images stay on both stores.
 
+**2026-11-13:** fix/card-reader-alerts makes an `unreachable` reader status raise `reader.status_unavailable` and count toward the card-reader area's `alert.source_unavailable`, so the 2026-10-23 note's "comes only from a throw or the deadline" describes the earlier code. The battery check is now registered only when the payments module is on.
+
 **2026-11-08:** [D1](../plans/2026-11-08-d1-drawer-job-outcomes.md) adds a 30-second queued-drawer expiry and a 60-second unknown-claim outcome, checked before handing out jobs. Item 3 below records the earlier behaviour; a payload already handed to an agent cannot be recalled.
 
 1. **`Incidencia="S"` is never sent to AEAT.** The house reading of art. 16.4 lists it among the

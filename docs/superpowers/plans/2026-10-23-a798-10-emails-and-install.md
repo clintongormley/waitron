@@ -423,6 +423,8 @@ Each is a DEFAULT to build; the owner or the plan review may overrule any.
     unreachable: true }` raises neither `reader.offline` (connection unknown) nor, as today,
     `reader.status_unavailable` (P2). Making it raise `reader.status_unavailable` would add an alert
     to every box whose provider is unreachable, which the design did not ask for; Task 14 records it.
+    **2026-11-13:** fix/card-reader-alerts reverses this: an `unreachable` status now raises
+    `reader.status_unavailable`, as a failed read does.
 13. **The email's database reads answer on a full disk.** The location's name, the managers'
     addresses and the email settings are read in one `db.withWriteLock` turn with no change-log
     drain, never in `withTransaction`, whose closing drain is refused on a full disk while a change
