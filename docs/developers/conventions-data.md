@@ -6142,8 +6142,9 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   clock by over a second, is alerted and emailed (a step made before the venue exists, at its first
   full start that is neither a mirror nor fenced, unless the topic file's losses apply)** (owner,
   2026-11-10: "we rely on NTP only, we don't bother about AEAT"). **Waitron never reads AEAT's time
-  except to warn of drift from its filing replies** (owner, 2026-11-11 14:34: "Instead we rely on
-  NTP"). Guards:
+  except to warn of drift from its filing replies and, until A1420 PR 4 lands, in the series check
+  at setup, restore and promotion (`hour-clock-internet.ts`)** (owner, 2026-11-11 14:34: "Instead
+  we rely on NTP"). Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`,
   `apps/server/src/setup-clock-set.test.ts`, `apps/server/src/boot.box-emails.test.ts`, weaker than
