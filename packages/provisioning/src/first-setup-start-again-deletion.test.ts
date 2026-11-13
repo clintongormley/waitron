@@ -70,6 +70,34 @@ async function box() {
   return roots;
 }
 
+it("refuses an unknown folder inside flows/setup before recording a deletion", async () => {
+  const roots = await box();
+  await mkdir(join(roots.stateDir, "flows/setup/unexpected"));
+  expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
+    code: "setup.not_ready",
+    params: { cause: "unexpected" },
+    reason: "layout unexpected: flows/setup/unexpected",
+  });
+  expect(await readFile(join(roots.stateDir, "flows/setup/record.json"), "utf8")).toBe(
+    "attempt record",
+  );
+});
+
+it("refuses a crash record that fingerprints the guesses side file", async () => {
+  const roots = await box();
+  const marker = await startAgainMarkerFor(roots, attempt);
+  marker.files.push({
+    root: "state",
+    name: "flows/setup/start-again-guesses.json",
+    size: 0,
+    sha256: "c".repeat(64),
+  });
+  expect(await refusal(writeStartAgainMarker(roots, marker))).toEqual({
+    code: "setup.start_again_incomplete",
+    reason: "marker damaged",
+  });
+});
+
 async function flowBox() {
   const roots = await box();
   for (const folder of ["documents", "import"])

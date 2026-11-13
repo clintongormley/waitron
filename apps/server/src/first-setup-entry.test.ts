@@ -428,6 +428,7 @@ it.each(["pre-consumption-abandoned", "complete"])(
 );
 
 it.each([
+  "flows/restore/record.json",
   "flows/setup/node-key.json",
   "flows/setup/documents/manifest.json",
   "flows/setup/documents/0-0.json",
