@@ -138,6 +138,17 @@ describe("writeBackupRoomNote", () => {
     expect(await read()).toEqual({ note: stored });
   });
 
+  it("an old note ignores the extra management key but still requires folders", async () => {
+    await write();
+    const stored = JSON.parse(await readFile(notePath(), "utf8")) as Record<string, unknown>;
+    const current = { ...stored };
+    delete current.managedByEnvironment;
+    expect(await read()).toEqual({ note: current });
+    delete stored.folders;
+    await writeFile(notePath(), JSON.stringify(stored));
+    expect(await read()).toEqual({ skipped: "malformed" });
+  });
+
   it("deletes an older note and writes nothing when venue.db is missing", async () => {
     await write();
     await unlink(venueDb());

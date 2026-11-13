@@ -63,8 +63,9 @@ in `deploy/.env` stops backing up until they are set on the Backups screen."
    require a key.
 2. The start's backup room (`apps/server/src/start-backup-room.ts:120-145`) skipped when "management
    changed" between the note and the start; with one source that check goes, and a note written
-   before this lands (it carries `managedByEnvironment`) must read as "no note", not crash the start
-   (`backup-room-note.ts:182`).
+   before this lands (it carries `managedByEnvironment`) still reads as a note: ignore that extra
+   key and keep validating its folders (`backup-room-note.ts:182`). This follows Task 1's specific
+   case, confirmed by the watcher in Lane H's questions.md on 2026-11-13 at 01:30.
 3. A Demo box installed before setup has no `trading.env`: `is_production` reads it as not
    production, so Mailpit starts, as a Demo box needs.
 4. A Live box set up after install keeps Mailpit running until the next `waitron.sh install`, update
@@ -183,6 +184,11 @@ and stub 130, deploy and dashboard guards 40). Not counted: the deleted environm
 EQUAL. Any line is a stop.
 
 ## Stop points (beyond rules §5)
+
+**Current-base correction, 2026-11-13.** The watcher cleared the newer `loadBackupConfig` callers
+in `backup-data-placement.ts:72` and `backup-verification-secrets.ts:92`, and the environment-only
+scratch guard in `node-entry.ts:348-352`, as consumers of this removal (Lane H questions.md, 01:30).
+Port these in this slice, keeping their behaviour checks. The recovery-key checks remain.
 
 1. A behaviour suite that set a variable to configure backups asserts something the dashboard record
    cannot express (for example `WAITRON_BACKUP_INTERVAL_MS` below the record's smallest interval):

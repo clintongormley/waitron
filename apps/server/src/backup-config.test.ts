@@ -460,6 +460,35 @@ describe("resolveBackupConfig", () => {
     destinationTimeoutMs: 120_000,
   };
 
+  it("a destination in the environment is not a backup", () => {
+    expect(
+      resolveBackupConfig({
+        env: { WAITRON_BACKUP_DIR: "/x", WAITRON_BACKUP_RECOVERY_KEY: KEY },
+        sealed: null,
+        venueId: "venue-1",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("a switched-off record needs no key", () => {
+    expect(
+      resolveBackupConfig({
+        env: {},
+        sealed: { ...sealed, enabled: false },
+        venueId: "venue-1",
+      }),
+    ).toMatchObject({ enabled: false, recoveryKey: undefined });
+  });
+
+  it("stale after two days regardless of the retired environment setting", () => {
+    const cfg = resolveBackupConfig({
+      env: { WAITRON_BACKUP_RECOVERY_KEY: KEY, WAITRON_BACKUP_STALE_AFTER_MS: "1" },
+      sealed,
+      venueId: "venue-1",
+    });
+    expect(cfg?.staleAfterMs).toBe(172_800_000);
+  });
+
   it("ignores a sealed record when the environment owns the settings", () => {
     const cfg = resolveBackupConfig({
       managedByEnvironment: true,
