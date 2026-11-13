@@ -372,7 +372,11 @@ import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { mountGuidePages } from "./guide-pages.js";
-import { declarationRoot, mountDeclarationPages } from "./declaration-pages.js";
+import {
+  declarationRoot,
+  type KeptDeclarations,
+  mountDeclarationPages,
+} from "./declaration-pages.js";
 import { keepRunningDeclaration } from "./keep-declaration.js";
 import {
   startMdnsResponder,
@@ -1400,7 +1404,12 @@ async function bootServer(
   );
   mountGuidePages(app, {}, log);
   const releaseDeclaration = seams.declarationRoot ?? declarationRoot();
-  mountDeclarationPages(app, { root: releaseDeclaration, build }, log);
+  let keptDeclarations: KeptDeclarations | undefined;
+  mountDeclarationPages(
+    app,
+    { root: releaseDeclaration, build, kept: () => keptDeclarations },
+    log,
+  );
 
   if (config.node === undefined) {
     // SETUP MODE — this box is bound to no venue. Beyond the routes mounted above, it serves
@@ -2428,6 +2437,14 @@ async function bootServer(
       now,
       log,
     });
+  }
+  const declarations = enabledFiscal.declarations;
+  if (declarations !== undefined) {
+    // Write-lock turns with no change-list drain, so the page answers on a nearly full disk.
+    keptDeclarations = {
+      versions: () => db.withWriteLock(() => declarations.versions(db)),
+      text: (version) => db.withWriteLock(() => declarations.text(db, version)),
+    };
   }
   tradingAdmission.admit();
   const jobRunner = createJobRunner({ now, log });

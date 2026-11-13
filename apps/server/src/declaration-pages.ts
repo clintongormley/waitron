@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applicationVersion } from "@waitron/db";
 import type { LegalAbout } from "@waitron/shared";
+import { codeOf } from "@waitron/server-kit";
 import type { Context, Hono } from "hono";
 import { boxPageAnswer, renderBoxPage } from "./guide-pages.js";
 import { escapeHtml } from "./html-page.js";
@@ -28,6 +29,14 @@ export interface DeclarationPagesDeps {
   /** The folder holding the release's four files; defaults to `declarationRoot()`. */
   root?: string;
   build?: string;
+  /** The venue database's kept declarations; absent where no venue database is open. Asked per
+   * request, because `bootServer` mounts the pages before it opens the venue. */
+  kept?: () => KeptDeclarations | undefined;
+}
+
+export interface KeptDeclarations {
+  versions(): Promise<string[]>;
+  text(version: string): Promise<string | null>;
 }
 
 /** `/app/declaration/` in the image, beside the bundle, as the guides are found. */
@@ -125,6 +134,20 @@ function wordsPage(c: Context, title: string, text: string | undefined, status: 
   return boxPageAnswer(c, renderBoxPage(languageOf(c), title, body), status);
 }
 
+function parts(version: string): number[] {
+  return version.split(".").map(Number);
+}
+
+/** The kept versions below `running`, lowest first, compared part by part as numbers. */
+function earlierVersions(kept: readonly string[], running: string): string[] {
+  const order = (a: string, b: string) => {
+    const [x, y] = [parts(a), parts(b)];
+    const at = x.findIndex((part, i) => part !== y[i]);
+    return at < 0 ? 0 : x[at]! - y[at]!;
+  };
+  return kept.filter((version) => order(version, running) < 0).sort(order);
+}
+
 function fileName(version: string, ext: "pdf" | "txt"): string {
   return `waitron-${version}-declaration.${ext}`;
 }
@@ -143,7 +166,10 @@ export function mountDeclarationPages(app: Hono, deps: DeclarationPagesDeps, log
   }
 
   function withRelease(
-    serve: (c: Context, release: Extract<DeclarationFolder, { kind: "release" }>) => Response,
+    serve: (
+      c: Context,
+      release: Extract<DeclarationFolder, { kind: "release" }>,
+    ) => Response | Promise<Response>,
   ) {
     return async (c: Context) => {
       const found = await folder();
@@ -155,17 +181,53 @@ export function mountDeclarationPages(app: Hono, deps: DeclarationPagesDeps, log
     };
   }
 
+  const notFound = (c: Context) =>
+    wordsPage(c, DECLARATION_PAGE_WORDS[languageOf(c)].notFoundTitle, undefined, 404);
+
+  async function earlier(running: string): Promise<string[]> {
+    const reader = deps.kept?.();
+    if (reader === undefined) return [];
+    try {
+      return earlierVersions(await reader.versions(), running);
+    } catch (error) {
+      log("warn", "declaration.kept_read_failed", { errorCode: codeOf(error) });
+      return [];
+    }
+  }
+
   app.get(
     "/legal/declaration",
-    withRelease((c, release) => {
+    withRelease(async (c, release) => {
       const link = (ext: "pdf" | "txt", label: string) =>
         `<a href="/legal/declaration.${ext}" download="${escapeHtml(fileName(release.version, ext))}">${escapeHtml(label)}</a>`;
+      const versions = await earlier(release.version);
+      const list =
+        versions.length === 0
+          ? ""
+          : `
+<h2>${escapeHtml(DECLARATION_LINK_WORDS.earlierTitle)}</h2>
+<ul>
+${versions.map((v) => `<li><a href="/legal/declaration/${escapeHtml(v)}.txt">Waitron ${escapeHtml(v)}</a></li>`).join("\n")}
+</ul>`;
       const body = `${release.body}
-<p>${link("pdf", DECLARATION_LINK_WORDS.downloadPdf)} · ${link("txt", DECLARATION_LINK_WORDS.downloadText)}</p>`;
+<p>${link("pdf", DECLARATION_LINK_WORDS.downloadPdf)} · ${link("txt", DECLARATION_LINK_WORDS.downloadText)}</p>${list}`;
       const title = `${DECLARATION_LINK_WORDS.title} ${release.version}`;
       return boxPageAnswer(c, renderBoxPage("es", title, body), 200);
     }),
   );
+
+  app.get("/legal/declaration/:file", async (c) => {
+    const version = /^(\d+\.\d+\.\d+)\.txt$/.exec(c.req.param("file"))?.[1];
+    const reader = deps.kept?.();
+    if (version === undefined || reader === undefined) return notFound(c);
+    const text = await reader.text(version);
+    if (text === null) return notFound(c);
+    return c.body(text, 200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Disposition": `inline; filename="${fileName(version, "txt")}"`,
+      "Cache-Control": "no-cache",
+    });
+  });
 
   for (const [ext, type] of [
     ["pdf", "application/pdf"],
@@ -193,8 +255,6 @@ export function mountDeclarationPages(app: Hono, deps: DeclarationPagesDeps, log
     return c.json(answer);
   });
 
-  const notFound = (c: Context) =>
-    wordsPage(c, DECLARATION_PAGE_WORDS[languageOf(c)].notFoundTitle, undefined, 404);
   app.get("/legal", notFound);
   app.get("/legal/*", notFound);
 }

@@ -443,6 +443,23 @@ describe("startup zone admission", () => {
     expect((await (await request("/api/node")).json()).acceptingSales).toBe(false);
     expect(suite.db.all(sql`select version from declaraciones_responsables`)).toEqual([]);
   });
+  it("shows the venue's kept declarations only on a start that goes on to sell", async () => {
+    suite.db.run(
+      sql`insert into declaraciones_responsables (version, text, first_started_at) values ('1.0.0', 'kept 1.0.0', '2026-01-01T00:00:00.000Z')`,
+    );
+    for (const [zone, status] of [
+      ["Invalid/Zone", 404],
+      ["Europe/Madrid", 200],
+    ] as const) {
+      await rawZone(zone);
+      await boot();
+      const read = await request("/legal/declaration/1.0.0.txt");
+      expect({ zone, status: read.status }).toEqual({ zone, status });
+      if (status === 200) expect(await read.text()).toBe("kept 1.0.0");
+      await server!.close();
+      server = undefined;
+    }
+  });
   it("keeps password login generic, and permits real login/session/logout in repair mode", async () => {
     await rawZone("Invalid/Zone");
     await boot();

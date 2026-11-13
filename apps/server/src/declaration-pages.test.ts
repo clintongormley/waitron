@@ -4,9 +4,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { LegalAbout } from "@waitron/shared";
+import { AppError, type LegalAbout } from "@waitron/shared";
 import {
   declarationRoot,
+  type DeclarationPagesDeps,
   mountDeclarationPages,
   readDeclarationFolder,
 } from "./declaration-pages.js";
@@ -38,11 +39,29 @@ async function newFolder(
   return dir;
 }
 
-function appFor(root: string, log: Logger = vi.fn()): Hono {
+type Kept = NonNullable<DeclarationPagesDeps["kept"]>;
+
+function appFor(root: string, log: Logger = vi.fn(), kept?: Kept): Hono {
   const app = new Hono();
-  mountDeclarationPages(app, { root, build: "test-build" }, log);
+  mountDeclarationPages(
+    app,
+    kept === undefined ? { root, build: "test-build" } : { root, build: "test-build", kept },
+    log,
+  );
   app.get("*", (c) => c.text("spa", 200));
   return app;
+}
+
+function keptHolding(texts: Record<string, string>) {
+  const reader = {
+    versions: vi.fn(() => Promise.resolve(Object.keys(texts))),
+    text: vi.fn((version: string) => Promise.resolve(texts[version] ?? null)),
+  };
+  return { reader, kept: () => reader };
+}
+
+async function runningFolder(version: string): Promise<string> {
+  return newFolder({ version, releasedOn: "2026-10-22" }, undefined, version);
 }
 
 function between(text: string, open: string, close: string): string {
@@ -323,5 +342,118 @@ describe("declaration pages", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe("earlier declarations kept by the venue", () => {
+  const TEXTS = {
+    "1.0.0": "Declaration 1.0.0\nkept & <exact>\n",
+    "1.1.0": "Declaration 1.1.0\n",
+    "1.2.0": "Declaration 1.2.0\n",
+    "1.3.0": "Declaration 1.3.0\n",
+  };
+
+  it("lists earlier versions beneath the declaration", async () => {
+    const root = await runningFolder("1.2.0");
+    const { kept } = keptHolding(TEXTS);
+    const html = await (await appFor(root, vi.fn(), kept).request("/legal/declaration")).text();
+    const downloads = html.indexOf('href="/legal/declaration.txt"');
+    const heading = html.indexOf("<h2>Versiones anteriores</h2>");
+    expect(downloads).toBeGreaterThan(0);
+    expect(heading).toBeGreaterThan(downloads);
+    const links = html.slice(heading).match(/<a href="\/legal\/declaration\/[^"]*">[^<]*<\/a>/g);
+    expect(links).toStrictEqual([
+      '<a href="/legal/declaration/1.0.0.txt">Waitron 1.0.0</a>',
+      '<a href="/legal/declaration/1.1.0.txt">Waitron 1.1.0</a>',
+    ]);
+    expect(html).not.toContain("/legal/declaration/1.2.0.txt");
+    expect(html).not.toContain("/legal/declaration/1.3.0.txt");
+  });
+
+  it("lists earlier versions by their numbers, not as text, whatever order they are kept in", async () => {
+    const root = await runningFolder("1.11.0");
+    const kept = () => ({
+      versions: () => Promise.resolve(["1.10.0", "1.2.0", "1.9.0", "1.0.0"]),
+      text: () => Promise.resolve(null),
+    });
+    const html = await (await appFor(root, vi.fn(), kept).request("/legal/declaration")).text();
+    const listed = [...html.matchAll(/<a href="\/legal\/declaration\/([^"]*)\.txt">/g)].map(
+      (match) => match[1],
+    );
+    expect(listed).toStrictEqual(["1.0.0", "1.2.0", "1.9.0", "1.10.0"]);
+  });
+
+  it("shows no list when no earlier version is kept", async () => {
+    const root = await runningFolder("1.2.0");
+    const plain = await (await appFor(root).request("/legal/declaration")).text();
+    const onlyRunning = keptHolding({ "1.2.0": TEXTS["1.2.0"] }).kept;
+    const nothingOpen = () => undefined;
+    for (const kept of [onlyRunning, nothingOpen]) {
+      const response = await appFor(root, vi.fn(), kept).request("/legal/declaration");
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(plain);
+    }
+  });
+
+  it("serves an earlier version's kept text", async () => {
+    const absent = join(base, "absent-running");
+    const broken = await newFolder();
+    await unlink(join(broken, "declaration.pdf"));
+    for (const root of [await runningFolder("1.2.0"), absent, broken]) {
+      const response = await appFor(root, vi.fn(), keptHolding(TEXTS).kept).request(
+        "/legal/declaration/1.0.0.txt",
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect(response.headers.get("content-disposition")).toBe(
+        'inline; filename="waitron-1.0.0-declaration.txt"',
+      );
+      expect(response.headers.get("cache-control")).toBe("no-cache");
+      expect(await response.text()).toBe(TEXTS["1.0.0"]);
+    }
+  });
+
+  it("answers not found for a version it has not kept", async () => {
+    const root = await runningFolder("1.2.0");
+    const { reader, kept } = keptHolding(TEXTS);
+    const app = appFor(root, vi.fn(), kept);
+    const es = { headers: { "Accept-Language": "es" } };
+    for (const address of [
+      "/legal/declaration/9.9.9.txt",
+      "/legal/declaration/1.0.txt",
+      "/legal/declaration/..%2Fx.txt",
+      "/legal/declaration/1.0.0",
+      "/legal/declaration/1.0.0.pdf",
+    ]) {
+      const response = await app.request(address, es);
+      expect(response.status).toBe(404);
+      expect(await response.text()).toContain(DECLARATION_PAGE_WORDS.es.notFoundTitle);
+    }
+    expect(reader.text.mock.calls).toStrictEqual([["9.9.9"]]);
+    const closed = await appFor(root, vi.fn(), () => undefined).request(
+      "/legal/declaration/1.0.0.txt",
+      es,
+    );
+    expect(closed.status).toBe(404);
+    expect(await closed.text()).toContain(DECLARATION_PAGE_WORDS.es.notFoundTitle);
+    const none = await appFor(root).request("/legal/declaration/1.0.0.txt", es);
+    expect(none.status).toBe(404);
+    expect(await none.text()).toContain(DECLARATION_PAGE_WORDS.es.notFoundTitle);
+  });
+
+  it("a failed read of the kept list still shows the running declaration", async () => {
+    const root = await runningFolder("1.2.0");
+    const plain = await (await appFor(root).request("/legal/declaration")).text();
+    const log = vi.fn();
+    const kept = () => ({
+      versions: () => Promise.reject(new AppError("storage.disk_full", {})),
+      text: () => Promise.resolve(null),
+    });
+    const response = await appFor(root, log, kept).request("/legal/declaration");
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(plain);
+    expect(log.mock.calls).toStrictEqual([
+      ["warn", "declaration.kept_read_failed", { errorCode: "storage.disk_full" }],
+    ]);
   });
 });
