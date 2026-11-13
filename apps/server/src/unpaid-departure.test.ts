@@ -1093,22 +1093,28 @@ describe("a bill that owes nothing", () => {
   });
 
   it("invoices and settles an open bill whose every line was given away, beside a bill it records", async () => {
-    const ana = await seatedWith(venue, "Caña");
-    await giveAway(venue, ana.tabId, 1);
-    const luis = await seatedWith(venue, "Red wine bottle");
-    const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${ana.partyId}/join`, {
-      tableId: luis.tableId,
-      expectedEdits: await inTx(venue, (tx) =>
-        partyBillEditsForTest(tx, [ana.partyId, luis.partyId]),
-      ),
-      expectedPartyRevision: revisionOf(ana.partyId),
-      otherPartyId: luis.partyId,
-      expectedOtherPartyRevision: revisionOf(luis.partyId),
-    });
+    const anna = await seatedWith(venue, "Caña");
+    await giveAway(venue, anna.tabId, 1);
+    const lewis = await seatedWith(venue, "Red wine bottle");
+    const joined = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${anna.partyId}/join`,
+      {
+        tableId: lewis.tableId,
+        expectedEdits: await inTx(venue, (tx) =>
+          partyBillEditsForTest(tx, [anna.partyId, lewis.partyId]),
+        ),
+        expectedPartyRevision: revisionOf(anna.partyId),
+        otherPartyId: lewis.partyId,
+        expectedOtherPartyRevision: revisionOf(lewis.partyId),
+      },
+    );
     expect(joined.status).toBe(200);
 
-    const answer = await depart(ana.partyId, {
-      expectedPartyRevision: revisionOf(ana.partyId),
+    const answer = await depart(anna.partyId, {
+      expectedPartyRevision: revisionOf(anna.partyId),
       reason: REASON,
     });
 
@@ -1116,22 +1122,22 @@ describe("a bill that owes nothing", () => {
     expect(answer.json.departures).toEqual([]);
     expect(
       (
-        await depart(ana.partyId, {
-          billId: luis.tabId,
-          expectedPartyRevision: revisionOf(ana.partyId),
+        await depart(anna.partyId, {
+          billId: lewis.tabId,
+          expectedPartyRevision: revisionOf(anna.partyId),
           reason: REASON,
         })
       ).status,
     ).toBe(200);
-    expect(await departuresOf(luis.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
-    expect(await departuresOf(ana.tabId)).toEqual([]);
-    expect(fiscalRecordCount(venue, ana.tabId)).toBe(1);
-    const [given] = await salesOf(ana.tabId);
+    expect(await departuresOf(lewis.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
+    expect(await departuresOf(anna.tabId)).toEqual([]);
+    expect(fiscalRecordCount(venue, anna.tabId)).toBe(1);
+    const [given] = await salesOf(anna.tabId);
     expect(given).toEqual({ id: expect.any(String), total: 0, settledAt: expect.any(String) });
-    expect(await statusOf(venue, ana.tabId)).toBe("settled");
+    expect(await statusOf(venue, anna.tabId)).toBe("settled");
     const outstanding = (await inTx(venue, listOutstandingSales)).map((sale) => sale.saleId);
     expect(outstanding).not.toContain(given!.id);
-    expect((await partyState(ana.partyId)).state).toBe("closed");
+    expect((await partyState(anna.partyId)).state).toBe("closed");
   });
 
   it("closes a party whose only owing bill a credit note has brought to nothing, settling it and recording no departure", async () => {
@@ -2144,22 +2150,28 @@ describe("A773 requested lifecycle", () => {
 
 describe("a merged party", () => {
   it("invoices and records an owing bill brought by each party, and frees every table", async () => {
-    const ana = await seatedWith(venue, "Red wine bottle");
-    const luis = await seatedWith(venue, "Octopus");
-    const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${ana.partyId}/join`, {
-      tableId: luis.tableId,
-      expectedEdits: await inTx(venue, (tx) =>
-        partyBillEditsForTest(tx, [ana.partyId, luis.partyId]),
-      ),
-      expectedPartyRevision: revisionOf(ana.partyId),
-      otherPartyId: luis.partyId,
-      expectedOtherPartyRevision: revisionOf(luis.partyId),
-    });
+    const anna = await seatedWith(venue, "Red wine bottle");
+    const lewis = await seatedWith(venue, "Octopus");
+    const joined = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${anna.partyId}/join`,
+      {
+        tableId: lewis.tableId,
+        expectedEdits: await inTx(venue, (tx) =>
+          partyBillEditsForTest(tx, [anna.partyId, lewis.partyId]),
+        ),
+        expectedPartyRevision: revisionOf(anna.partyId),
+        otherPartyId: lewis.partyId,
+        expectedOtherPartyRevision: revisionOf(lewis.partyId),
+      },
+    );
     expect(joined.status).toBe(200);
 
-    const answer = await depart(ana.partyId, {
-      billId: ana.tabId,
-      expectedPartyRevision: revisionOf(ana.partyId),
+    const answer = await depart(anna.partyId, {
+      billId: anna.tabId,
+      expectedPartyRevision: revisionOf(anna.partyId),
       reason: REASON,
     });
 
@@ -2167,60 +2179,65 @@ describe("a merged party", () => {
     expect(answer.json.state).toBe("open");
     expect(
       (
-        await depart(ana.partyId, {
-          billId: luis.tabId,
-          expectedPartyRevision: revisionOf(ana.partyId),
+        await depart(anna.partyId, {
+          billId: lewis.tabId,
+          expectedPartyRevision: revisionOf(anna.partyId),
           reason: REASON,
         })
       ).status,
     ).toBe(200);
-    expect(fiscalRecordCount(venue, ana.tabId)).toBe(1);
-    expect(fiscalRecordCount(venue, luis.tabId)).toBe(1);
-    expect(await departuresOf(ana.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
-    expect(await departuresOf(luis.tabId)).toEqual([expect.objectContaining({ amount: 2000 })]);
-    expect(await tableHeldBy(ana.tableId)).toBeNull();
-    expect(await tableHeldBy(luis.tableId)).toBeNull();
+    expect(fiscalRecordCount(venue, anna.tabId)).toBe(1);
+    expect(fiscalRecordCount(venue, lewis.tabId)).toBe(1);
+    expect(await departuresOf(anna.tabId)).toEqual([expect.objectContaining({ amount: 3000 })]);
+    expect(await departuresOf(lewis.tabId)).toEqual([expect.objectContaining({ amount: 2000 })]);
+    expect(await tableHeldBy(anna.tableId)).toBeNull();
+    expect(await tableHeldBy(lewis.tableId)).toBeNull();
   });
 
   it("invoices merged bills in the order staff mark them unpaid", async () => {
-    const ana = await seatedWith(venue, "Red wine bottle");
-    const luis = await seatedWith(venue, "Octopus");
+    const anna = await seatedWith(venue, "Red wine bottle");
+    const lewis = await seatedWith(venue, "Octopus");
     const joined = await send(
       venue.app,
       venue.cookie,
       "POST",
-      `/api/parties/${luis.partyId}/join`,
+      `/api/parties/${lewis.partyId}/join`,
       {
-        tableId: ana.tableId,
+        tableId: anna.tableId,
         expectedEdits: await inTx(venue, (tx) =>
-          partyBillEditsForTest(tx, [luis.partyId, ana.partyId]),
+          partyBillEditsForTest(tx, [lewis.partyId, anna.partyId]),
         ),
-        expectedPartyRevision: revisionOf(luis.partyId),
-        otherPartyId: ana.partyId,
-        expectedOtherPartyRevision: revisionOf(ana.partyId),
+        expectedPartyRevision: revisionOf(lewis.partyId),
+        otherPartyId: anna.partyId,
+        expectedOtherPartyRevision: revisionOf(anna.partyId),
       },
     );
     expect(joined.status).toBe(200);
-    const listed = await send(venue.app, venue.cookie, "GET", `/api/parties/${luis.partyId}/bills`);
+    const listed = await send(
+      venue.app,
+      venue.cookie,
+      "GET",
+      `/api/parties/${lewis.partyId}/bills`,
+    );
     expect(listed.status).toBe(200);
     const numberOf = (billId: string) =>
       (listed.json as unknown as { workingOrderId: string; billNumber: number | null }[]).find(
         (bill) => bill.workingOrderId === billId,
       )!.billNumber;
-    expect([numberOf(luis.tabId), numberOf(ana.tabId)]).toEqual([1, 2]);
+    expect([numberOf(lewis.tabId), numberOf(anna.tabId)]).toEqual([1, 2]);
 
-    const answer = await depart(luis.partyId, {
-      billId: ana.tabId,
-      expectedPartyRevision: revisionOf(luis.partyId),
+    const answer = await depart(lewis.partyId, {
+      billId: anna.tabId,
+      expectedPartyRevision: revisionOf(lewis.partyId),
       reason: REASON,
     });
 
     expect(answer.status).toBe(200);
     expect(
       (
-        await depart(luis.partyId, {
-          billId: luis.tabId,
-          expectedPartyRevision: revisionOf(luis.partyId),
+        await depart(lewis.partyId, {
+          billId: lewis.tabId,
+          expectedPartyRevision: revisionOf(lewis.partyId),
           reason: REASON,
         })
       ).status,
@@ -2234,8 +2251,8 @@ describe("a merged party", () => {
       `);
       return row!;
     };
-    const first = filed(ana.tabId);
-    const second = filed(luis.tabId);
+    const first = filed(anna.tabId);
+    const second = filed(lewis.tabId);
     expect(second.number).toBe(first.number + 1);
     expect(second.previous).toBe(first.num);
   });

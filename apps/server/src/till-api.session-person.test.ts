@@ -125,7 +125,7 @@ const NAMED_REFUSED = [
 
 let v: PartyVenue;
 let app: Hono;
-let ana: string;
+let anna: string;
 let ben: string;
 /** Two tills, since one device may not show both pass kinds: a route is walked on each. */
 let tills: string[];
@@ -204,7 +204,7 @@ async function send(
     "content-type": "application/json",
     cookie: walk === "B" ? deviceCookie : `${SESSION_COOKIE}=${token}; ${deviceCookie}`,
   };
-  if (walk === "A") headers[PERSON_HEADER] = ana;
+  if (walk === "A") headers[PERSON_HEADER] = anna;
   if (walk === "control") headers[PERSON_HEADER] = ben;
   const controller = new AbortController();
   const response = await app.request(
@@ -299,7 +299,7 @@ beforeAll(async () => {
     noopLog,
   );
   mountScheduleApi(app, { db: suite.db }, noopLog);
-  ana = await person("Anna", "staff");
+  anna = await person("Anna", "staff");
   ben = await person("Ben", "admin");
   const [station] = await suite.db
     .insert(kitchenStations)

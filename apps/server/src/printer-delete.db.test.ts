@@ -280,7 +280,7 @@ async function seedVenueWithPrinters() {
       .where(eq(devices.id, deviceId));
     return deviceId;
   };
-  const ana = await device({
+  const anna = await device({
     label: "Handheld Ana",
     profileId: waiters,
     receipt: P,
@@ -298,7 +298,7 @@ async function seedVenueWithPrinters() {
   const barTill2 = await device({ label: "Bar till 2", profileId: bar, slip: P });
   const barTill3 = await device({ label: "Bar till 3", profileId: bar, invoice: P });
   await suite.db.insert(printerHolders).values([
-    { printerId: P, deviceId: ana },
+    { printerId: P, deviceId: anna },
     { printerId: Q, deviceId: barTill2 },
   ]);
 
@@ -402,7 +402,7 @@ async function seedVenueWithPrinters() {
     D,
     waiters,
     bar,
-    ana,
+    anna,
     oldHandheld,
     barTill,
     barTill2,
@@ -431,14 +431,14 @@ function expectedImpactOfP(v: Venue): DeleteImpact {
     ends: [
       { key: "print_jobs", count: 4, targets: [] },
       { key: "invoice_receipts", count: 3, targets: [] },
-      { key: "portable_holder", count: 1, targets: [{ id: v.ana, name: "Handheld Ana" }] },
+      { key: "portable_holder", count: 1, targets: [{ id: v.anna, name: "Handheld Ana" }] },
     ],
     removes: [
       {
         key: "device_receipt",
         count: 2,
         targets: [
-          { id: v.ana, name: "Handheld Ana" },
+          { id: v.anna, name: "Handheld Ana" },
           { id: v.oldHandheld, name: "Old handheld", deleted: true },
         ],
       },
@@ -447,10 +447,10 @@ function expectedImpactOfP(v: Venue): DeleteImpact {
         count: 2,
         targets: [
           { id: v.barTill2, name: "Bar till 2" },
-          { id: v.ana, name: "Handheld Ana" },
+          { id: v.anna, name: "Handheld Ana" },
         ],
       },
-      { key: "device_cash_drawer", count: 1, targets: [{ id: v.ana, name: "Handheld Ana" }] },
+      { key: "device_cash_drawer", count: 1, targets: [{ id: v.anna, name: "Handheld Ana" }] },
       { key: "device_invoice", count: 1, targets: [{ id: v.barTill3, name: "Bar till 3" }] },
       { key: "profile_receipt", count: 1, targets: [{ id: v.waiters, name: "Waiters" }] },
       {
@@ -517,14 +517,14 @@ describe("the printer delete impact", () => {
           tipsEnabled: false,
           simplifiedInvoiceLimit: null,
         },
-        v.ana,
+        v.anna,
       ),
     );
     const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.P));
     expect(impact.removes.find((item) => item.key === "device_cash_drawer")).toEqual({
       key: "device_cash_drawer",
       count: 1,
-      targets: [{ id: v.ana, name: "Handheld Ana", deleted: true }],
+      targets: [{ id: v.anna, name: "Handheld Ana", deleted: true }],
     });
   });
 
@@ -534,7 +534,7 @@ describe("the printer delete impact", () => {
     await suite.db
       .update(devices)
       .set({ receiptPrinterId: null, paymentSlipPrinterId: null })
-      .where(eq(devices.id, v.ana));
+      .where(eq(devices.id, v.anna));
 
     const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.P));
 
@@ -545,13 +545,13 @@ describe("the printer delete impact", () => {
         targets: [{ id: v.oldHandheld, name: "Old handheld", deleted: true }],
       },
       { key: "device_payment_slip", count: 1, targets: [{ id: v.barTill2, name: "Bar till 2" }] },
-      { key: "device_cash_drawer", count: 1, targets: [{ id: v.ana, name: "Handheld Ana" }] },
+      { key: "device_cash_drawer", count: 1, targets: [{ id: v.anna, name: "Handheld Ana" }] },
       { key: "device_invoice", count: 1, targets: [{ id: v.barTill3, name: "Bar till 3" }] },
-      { key: "device_receipt_default", count: 1, targets: [{ id: v.ana, name: "Handheld Ana" }] },
+      { key: "device_receipt_default", count: 1, targets: [{ id: v.anna, name: "Handheld Ana" }] },
       {
         key: "device_payment_slip_default",
         count: 1,
-        targets: [{ id: v.ana, name: "Handheld Ana" }],
+        targets: [{ id: v.anna, name: "Handheld Ana" }],
       },
       {
         key: "device_cash_drawer_default",
@@ -685,7 +685,7 @@ describe("deleting a printer", () => {
       .from(devices);
     expect(choices).toEqual(
       expect.arrayContaining([
-        { id: v.ana, receipt: null, slip: null, drawer: null },
+        { id: v.anna, receipt: null, slip: null, drawer: null },
         { id: v.oldHandheld, receipt: null, slip: null, drawer: v.Q },
         { id: v.barTill, receipt: null, slip: null, drawer: null },
         { id: v.barTill2, receipt: null, slip: null, drawer: null },
@@ -769,7 +769,7 @@ describe("deleting a printer", () => {
     item(expected.removes, "device_cash_drawer").count = 2;
     item(expected.removes, "device_cash_drawer").targets = [
       { id: v.barTill2, name: "Bar till 2" },
-      { id: v.ana, name: "Handheld Ana" },
+      { id: v.anna, name: "Handheld Ana" },
     ];
     item(expected.removes, "profile_receipt").count = 2;
     item(expected.removes, "profile_receipt").targets = [

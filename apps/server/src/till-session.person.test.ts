@@ -56,7 +56,7 @@ async function fixture() {
     });
     return row!.id;
   };
-  const ana = await person("Anna", "4411");
+  const anna = await person("Anna", "4411");
   const ben = await person("Ben", "4422");
   const profile = async (formFactor: "kds" | "till") => {
     const [row] = await seedDeviceProfiles(suite.db, {
@@ -87,9 +87,9 @@ async function fixture() {
         .values({ deviceId: joined.deviceId, personId, tokenHash: hashSessionToken(token) });
       return `${jar}; ${SESSION_COOKIE}=${token}`;
     };
-    const anaCookie = await sessionOf(ana);
+    const anaCookie = await sessionOf(anna);
     const benCookie = await sessionOf(ben);
-    return { id: joined.deviceId, jar, ana: anaCookie, ben: benCookie };
+    return { id: joined.deviceId, jar, anna: anaCookie, ben: benCookie };
   };
   const login = async (personId: string, pin: string) => {
     const session = await withTransaction(suite.db, (tx) =>
@@ -97,8 +97,8 @@ async function fixture() {
     );
     return `${SESSION_COOKIE}=${session.token}`;
   };
-  const till = { ana: await login(ana, "4411"), ben: await login(ben, "4422") };
-  return { v, app, ana, ben, grill, device, till };
+  const till = { anna: await login(anna, "4411"), ben: await login(ben, "4422") };
+  return { v, app, anna, ben, grill, device, till };
 }
 
 async function call(
@@ -134,11 +134,11 @@ describe("a session route and the person header", () => {
 
     expect((await stations(f.till.ben, f.ben)).status).toBe(200);
     expect((await stations(f.till.ben, f.ben.toUpperCase())).status).toBe(200);
-    expect(await stations(f.till.ben, f.ana)).toMatchObject(refusal(f.ana));
-    expect(await stations(f.till.ben, f.ana.toUpperCase())).toMatchObject(refusal(f.ana));
+    expect(await stations(f.till.ben, f.anna)).toMatchObject(refusal(f.anna));
+    expect(await stations(f.till.ben, f.anna.toUpperCase())).toMatchObject(refusal(f.anna));
     expect(await stations(f.till.ben, "")).toMatchObject(refusal(null));
     expect(await stations(f.till.ben, "not-an-id")).toMatchObject(refusal(null));
-    expect((await stations(f.till.ana, f.ana)).status).toBe(200);
+    expect((await stations(f.till.anna, f.anna)).status).toBe(200);
   });
 
   it("refuses a request with no header as naming nobody", async () => {
@@ -150,7 +150,7 @@ describe("a session route and the person header", () => {
   it("answers session.required, not the person refusal, when the cookie names no open session", async () => {
     const f = await fixture();
     for (const cookie of ["", `${SESSION_COOKIE}=${randomUUID()}`]) {
-      expect(await call(f.app, "/api/stations", cookie, f.ana)).toMatchObject({
+      expect(await call(f.app, "/api/stations", cookie, f.anna)).toMatchObject({
         status: 401,
         json: { error: { code: "session.required" } },
       });
@@ -160,7 +160,7 @@ describe("a session route and the person header", () => {
   it("answers device.unauthorized, not the person refusal, for a revoked device's session", async () => {
     const f = await fixture();
     const revoked = await revokedDeviceSessionCookie(suite.db, f.ben, "4422");
-    expect(await call(f.app, "/api/stations", revoked, f.ana)).toMatchObject({
+    expect(await call(f.app, "/api/stations", revoked, f.anna)).toMatchObject({
       status: 401,
       json: { error: { code: "device.unauthorized" } },
     });
@@ -171,8 +171,8 @@ describe("kitchen screens and the person header", () => {
   it("on a till, refuses the station screen's read and a pass release naming someone not signed in", async () => {
     const f = await fixture();
     const station = await f.device("till", { stationId: f.grill });
-    expect(await call(f.app, "/api/device/station-screen", station.ben, f.ana)).toMatchObject(
-      refusal(f.ana),
+    expect(await call(f.app, "/api/device/station-screen", station.ben, f.anna)).toMatchObject(
+      refusal(f.anna),
     );
     expect((await call(f.app, "/api/device/station-screen", station.ben, f.ben)).status).toBe(200);
     expect(await call(f.app, "/api/device/station-screen", station.ben)).toMatchObject(
@@ -181,11 +181,11 @@ describe("kitchen screens and the person header", () => {
 
     const pass = await f.device("till", { kitchenScreen: { kind: "pass" } });
     expect(
-      await call(f.app, "/api/device/pass-screen/release", pass.ben, f.ana, {
+      await call(f.app, "/api/device/pass-screen/release", pass.ben, f.anna, {
         method: "POST",
         body: {},
       }),
-    ).toMatchObject(refusal(f.ana));
+    ).toMatchObject(refusal(f.anna));
   });
 
   it("on a kitchen display, answers a request naming someone not signed in as with nobody signed in; its pass release reads no session at all", async () => {
@@ -193,7 +193,7 @@ describe("kitchen screens and the person header", () => {
     const station = await f.device("kds", { stationId: f.grill });
     const nobody = await call(f.app, "/api/device/station-screen", station.jar);
     expect(nobody.status).toBe(200);
-    expect(await call(f.app, "/api/device/station-screen", station.ben, f.ana)).toEqual(nobody);
+    expect(await call(f.app, "/api/device/station-screen", station.ben, f.anna)).toEqual(nobody);
     expect(await call(f.app, "/api/device/station-screen", station.ben)).toEqual(nobody);
 
     const pass = await f.device("kds", { kitchenScreen: { kind: "pass" } });
@@ -201,7 +201,7 @@ describe("kitchen screens and the person header", () => {
       call(f.app, "/api/device/pass-screen/release", cookie, person, { method: "POST", body: {} });
     const anonymous = await release(pass.jar);
     expect(anonymous).toMatchObject({ status: 400 });
-    expect(await release(pass.ben, f.ana)).toEqual(anonymous);
+    expect(await release(pass.ben, f.anna)).toEqual(anonymous);
     expect(await release(pass.ben)).toEqual(anonymous);
   });
 });

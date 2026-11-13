@@ -450,17 +450,17 @@ describe("what a removed table's delete waits on", () => {
         zoneId,
         ids: [from, into],
       } = await plannedZone(`Combined from ${tables}`, `Combined into ${tables}`);
-      const ana = await seat(v, from!);
-      const luis = await seat(v, into!);
+      const anna = await seat(v, from!);
+      const lewis = await seat(v, into!);
       await inTx(v, (tx) =>
         combineParties(tx, v.cfg, {
-          from: ana.partyId,
-          into: luis.partyId,
+          from: anna.partyId,
+          into: lewis.partyId,
           tables,
           operatorId: OPERATOR,
         }),
       );
-      await finish(luis.partyId);
+      await finish(lewis.partyId);
       await deleteFromMaster(from!);
 
       await reset(zoneId);
