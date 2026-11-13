@@ -266,6 +266,7 @@ describe("the selection follows each package's own stryker config", () => {
     const selected = mutateFiles(packageDir("ui"), configOf("ui").mutate);
     expect(eligibleFiles("ui").filter((path) => !selected.includes(path))).toEqual([
       "src/a11y-helpers.ts",
+      "src/icon-button-test-helpers.ts",
       "src/test-helpers.ts",
     ]);
   });

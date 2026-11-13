@@ -318,9 +318,9 @@ re-measured.
 ## `packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests
 
 It is test-only plumbing
-the Vitest config loads — the same class as `src/test-helpers.ts` and `src/a11y-helpers.ts`, which
-`packages/ui/stryker.config.json` excludes from `mutate`. Adding a third exclusion is the consistent
-move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
+the Vitest config loads — the same class as `src/test-helpers.ts`, `src/a11y-helpers.ts` and
+`src/icon-button-test-helpers.ts`, which `packages/ui/stryker.config.json` excludes from `mutate`.
+Adding it to those exclusions is the consistent move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
 Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position:
 in `packages/ui`'s coverage and `mutate` lists, loaded only by `packages/venue-service`'s Vitest
 config, so no ui test reaches it. Excluding it also needs a change to the exclusion list
@@ -670,7 +670,7 @@ A1424's live qualification was added on 7 November 2026.
 - **`packages/db`'s static mutants are not in its mutation score** — OPEN. Owner's call.
   [Detail](ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).
 - **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests** — left behind by raising
-  the `packages/ui` mutation score (#466, 2026-09-20). Adding a third exclusion is the consistent
+  the `packages/ui` mutation score (#466, 2026-09-20). Adding it to the test-helper exclusions is the consistent
   move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
   Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
 
