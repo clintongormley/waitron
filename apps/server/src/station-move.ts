@@ -435,8 +435,9 @@ export async function moveDishesToStation(
       );
       const paperOf = (row: (typeof moving)[number]) =>
         row.groupId === null ? undefined : holdPaper(row.groupId, row);
-      // A fired group's Requested dish is corrected at any station recorded for its group, so it
-      // joins the destination's HOLD paper whether or not the station it leaves had any.
+      // A fired group's Requested dish moving to a station that waits is corrected at any station
+      // recorded for its group, so it joins the destination's HOLD paper whether or not the station
+      // it leaves had any; one that starts here prints an ordinary ticket instead.
       const arrivesOnPaper = (row: (typeof moving)[number]) =>
         !startsHere(row) &&
         (paperOf(row) !== undefined ||

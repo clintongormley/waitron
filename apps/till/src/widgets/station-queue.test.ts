@@ -5320,11 +5320,11 @@ describe("A773 held column", () => {
         expect(badge.textContent).toBe(text["help.kitchen.card"]);
         if (lang === "en") {
           expect(badge.textContent).toBe(
-            "Each card is an order from a table or the counter. Tap a dish to move it on a step, or the card's heading to move the whole card to the next column. Tap a Ready dish to put it back. On a Whole ticket card, the dishes move together. A dashed card is held: it hasn't been sent to cook yet. Cards turn amber, then red, the longer they wait.",
+            "Each card is an order from a table or the counter. Tap a dish to move it on a step, or the card's heading to move the whole card to the next column. Tap a Ready dish to put it back to Preparing. On a Whole ticket card, the dishes move together. A dashed card is held: it hasn't been sent to cook yet. Cards turn amber, then red, the longer they wait.",
           );
         } else {
           expect(badge.textContent).toBe(
-            "Cada tarjeta es un pedido de una mesa o del mostrador. Toca un plato para avanzarlo un paso, o la cabecera de la tarjeta para pasar toda la tarjeta a la siguiente columna. Toca un plato Listo para devolverlo. En una tarjeta de Toda la comanda, los platos avanzan juntos. Una tarjeta con borde discontinuo está en espera: aún no se ha mandado a preparar. Las tarjetas pasan a ámbar y luego a rojo cuanto más esperan.",
+            "Cada tarjeta es un pedido de una mesa o del mostrador. Toca un plato para avanzarlo un paso, o la cabecera de la tarjeta para pasar toda la tarjeta a la siguiente columna. Toca un plato Listo para devolverlo a Preparando. En una tarjeta de Toda la comanda, los platos avanzan juntos. Una tarjeta con borde discontinuo está en espera: aún no se ha mandado a preparar. Las tarjetas pasan a ámbar y luego a rojo cuanto más esperan.",
           );
         }
       } finally {
