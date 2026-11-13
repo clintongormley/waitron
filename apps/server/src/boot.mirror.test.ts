@@ -35,6 +35,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
+import { TEST_RELEASE, writeDeclarationFolder } from "./testing/declaration-folder.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
@@ -601,6 +602,39 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       } finally {
         await server.close();
       }
+    }
+  }, 60_000);
+
+  it("a primary keeps its release's declaration at start; a mirror keeps none", async () => {
+    const declaration = await mkdtemp(join(tmpdir(), "waitron-mirror-declaration-"));
+    try {
+      await writeDeclarationFolder(declaration);
+      const kept = async (venue: VenueName) =>
+        (
+          await db[venue].all<{ version: string }>(
+            sql`select version from declaraciones_responsables`,
+          )
+        ).map((row) => row.version);
+      for (const [venue, versions] of [
+        ["mirror", []],
+        ["primary", [TEST_RELEASE.version]],
+      ] as const) {
+        const port = await freePort();
+        const server = await startServer(
+          {
+            ...KEY_ENV,
+            WAITRON_VENUE_DIR: venueDir[venue],
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          },
+          {},
+          { declarationRoot: declaration },
+        );
+        await server.close();
+        expect({ venue, versions: await kept(venue) }).toEqual({ venue, versions });
+      }
+    } finally {
+      await rm(declaration, { recursive: true, force: true });
     }
   }, 60_000);
 
