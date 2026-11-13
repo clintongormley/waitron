@@ -1970,11 +1970,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **One throwaway branch that interrupts an upload and re-runs a shard** (bundle of 2, size S). Holds A1251, A1213. [Detail](backlog/ci.md#bundle-one-throwaway-branch-that-interrupts-an-upload-and-re-runs-a-shard)
 
-- **The node-identity text guard misses a retired setting after an escaped newline.**
-  Inspect decoded string/template values as well as raw text, retaining legitimate negative and
-  historical controls. The A696 fixtures themselves are corrected; the scanner gap remains.
-  [Reproduction](backlog/ci.md#retired-settings-after-a-source-escape).
-
 
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).

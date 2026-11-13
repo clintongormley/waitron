@@ -391,7 +391,8 @@ identity and resolves its location from rows (`b1b0f1095`, PR #2198). Remove the
 from boot and wrong-node restore fixtures; rename the fiscal fixture's13identifier uses, retaining
 every matcher and property key. Focused guard40/server30/fiscal30 pass. A text search also caught
 a retired setting after an escaped newline that the guard missed; its decoded-string gap is
-recorded in the CI backlog, with the actual two-way probe. No guard was relaxed. The blocked
+recorded in the CI backlog, with the actual two-way probe. No guard was relaxed. (2026-11-13: that
+backlog entry is closed; the guard now also reads decoded string and template values.) The blocked
 hook is retained as failure evidence; the next normal push must complete its gate again.
 
 

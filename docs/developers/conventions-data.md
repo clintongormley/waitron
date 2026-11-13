@@ -6225,16 +6225,21 @@ hyphenated, its inflections and unhyphenated spelling are not checked, and an un
 the retired command's separator. Text extensions are case-sensitive. The fiscal parser checks
 ordinary and private identifiers; quoted property keys remain string literals and are not
 identifier checks. These limits also apply to source comments and prose that use different words.
+In JavaScript and TypeScript files the text rules also read the decoded value of every string and
+template piece, so a spelling such a value holds is refused however its characters are escaped.
+Everything else, including comments, regular expressions and identifiers in those files, is read as
+raw text: a spelling straight after `\b`, `\f`, `\n`, `\r`, `\t`, `\v` or `\0` is refused, but one
+with an escaped character inside it (`re\u002dregister` in JSON) or after another escape ending in a
+letter or digit (`\a`, `\e`, `\x1b`) is missed.
 
 On 1 November, A696's pre-push guard found an obsolete location setting and a fiscal test fixture
 still named for a till. Removing the unused setting and renaming the fixture preserves its
 assertions; focused guard40, server30 and fiscal30 cases pass. A further text search found another
-obsolete setting immediately after an escaped newline inside a template literal. The text regex
-misses it because it reads the source escape rather than the decoded newline: a direct
-`inspectSource` probe reports one failure for the plain spelling and none after the escape.
-That guard gap remains in the CI backlog. The fixture itself now uses only the supported node
-identity. The full first hook failed one of10,091 cases; its earlier format/lint passes do not
-qualify the blocked push. Logs: Lane E `receipts/a696-resume-20261101/`.
+obsolete setting immediately after an escaped newline inside a template literal. The guard, which
+then read raw text only, missed it; it now also reads decoded string and template values. The
+fixture itself now uses only the supported node identity. The full first hook failed one of 10,091
+cases; its earlier format/lint passes do not qualify the blocked push. Logs: Lane E
+`receipts/a696-resume-20261101/`.
 
 
 ## Root receipts moved on 2026-10-31
