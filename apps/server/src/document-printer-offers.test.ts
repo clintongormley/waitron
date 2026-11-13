@@ -22,7 +22,7 @@ import { emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
-import { setProfileServiceScope } from "@waitron/venue-service";
+import { setProfileServiceScope, departmentReceipts } from "@waitron/venue-service";
 import { recordSale } from "@waitron/core";
 import {
   billlessSale,
@@ -282,6 +282,22 @@ it("two same-venue profiles have independent printer lists", async () => {
     },
   ]);
   expect((await offers(till)).printers).toEqual([]);
+});
+
+it("dashboard invoice email requires report export, even when the invoice is visible", async () => {
+  await suite.db.update(departmentReceipts).set({
+    receipt: { operationDescription: "Hospitality", email: "venue@example.test" },
+  });
+  const id = await fullSale();
+  const supervisor: DeliveryAuthority = {
+    surface: "dashboard",
+    managementSessionId: venue.supervisorDashboard.split("=")[1]!,
+    deviceProof: null,
+  };
+  const restricted = await offers(supervisor, "invoice", id);
+  expect(restricted.saleId).toBe(id);
+  expect(restricted.actions.email).toBe(false);
+  expect((await offers(dashboard, "invoice", id)).actions.email).toBe(true);
 });
 
 it("offers do not expose inaccessible history", async () => {

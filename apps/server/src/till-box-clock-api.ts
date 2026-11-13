@@ -14,7 +14,6 @@ import { CLOCK_WITNESS_MARGIN_MS } from "@waitron/fiscal";
 import {
   authorize,
   canUseDeviceProfile,
-  persons,
   holds,
   readPersonAuthority,
   type PinAttempts,
@@ -165,13 +164,7 @@ export function mountTillBoxClockApi(
   }
 
   async function holdsAdmin(tx: Transaction, personId: string): Promise<boolean> {
-    const [person] = await tx
-      .select({ id: persons.id })
-      .from(persons)
-      .where(eq(persons.id, personId));
-    return (
-      person !== undefined && holds(await readPersonAuthority(tx, personId), "system.box_admin")
-    );
+    return holds(await readPersonAuthority(tx, personId), "system.box_admin");
   }
 
   function unusableAt(reading: ReturnType<TrustedClock["now"]>): boolean {

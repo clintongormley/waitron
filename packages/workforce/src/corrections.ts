@@ -1,5 +1,4 @@
-import { holds, readPersonAuthority, type PersonRoleValue } from "@waitron/identity";
-import { sql } from "drizzle-orm";
+import { holds, readPersonAuthority } from "@waitron/identity";
 import type { Transaction } from "@waitron/db";
 import { AppError, jobOrigin, type Origin } from "@waitron/shared";
 import { assertPersonExists } from "./body-ids.js";
@@ -31,15 +30,6 @@ export interface CorrectionDecisionInput {
   actorPersonId: string;
   origin: Origin;
   reason?: string;
-}
-export async function roleOf(
-  tx: Transaction,
-  personId: string,
-): Promise<PersonRoleValue | undefined> {
-  const { rows } = await tx.execute<{ role: PersonRoleValue }>(
-    sql`select role from persons where id=${personId}`,
-  );
-  return rows[0]?.role;
 }
 export async function maySelfApproveAttendance(
   tx: Transaction,

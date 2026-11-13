@@ -919,6 +919,11 @@ unchanged for the four levels. **Depends on:** PR 1, PR 2. **Risk trigger:** aut
 handover comparison caller and their tests into PR9 (Lane K questions.md, 04:48). Removing
 `roleHasPermission` from the public exports otherwise strands that caller between PR9 and PR10.
 All other PR10 tasks stay there.
+The watcher also cleared a small internal authority-from-role builder on 13 November at05:14
+(Lane K questions.md), after review measured 51 picker reads for 50 people. The existing row
+selection builds the list's authorities in one query; manager mail reuses that list. The builder
+is not part of identity's public index. The changed permission callers left workforce's `roleOf`
+unused, so PR9 removes it rather than carrying that raw reader to PR10.
 
 ### Task 9.1: `PersonAuthority`
 

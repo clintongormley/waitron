@@ -25,7 +25,7 @@ import { requireFreshManagementSignIn } from "./fresh-sign-in.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
 import type { Permission } from "./permissions.js";
-import { holds, readPersonAuthority, type PersonAuthority } from "./authority.js";
+import { holds, authorityForRole, type PersonAuthority } from "./authority.js";
 import type { PersonRoleValue } from "@waitron/shared";
 import {
   PERSONS_EMAIL,
@@ -606,12 +606,14 @@ export async function listActivePersonsWithPermission(
   tx: Transaction,
   permission: Permission | (string & {}),
 ): Promise<StaffListEntry[]> {
-  const rows = await listActiveStaff(tx);
-  const admitted: StaffListEntry[] = [];
-  for (const row of rows) {
-    if (holds(await readPersonAuthority(tx, row.personId), permission)) admitted.push(row);
-  }
-  return admitted;
+  const rows = await tx
+    .select({ personId: persons.id, displayName: persons.displayName, role: persons.role })
+    .from(persons)
+    .where(eq(persons.status, "active"))
+    .orderBy(persons.displayName);
+  return rows
+    .filter((row) => holds(authorityForRole(row.personId, row.role), permission))
+    .map((row) => ({ personId: row.personId, displayName: row.displayName }));
 }
 
 /** Carries credential BOOLEANS, never the hash or secret behind them. */

@@ -18,10 +18,17 @@ export async function readPersonAuthority(
     .select({ role: persons.role })
     .from(persons)
     .where(eq(persons.id, personId));
+  return authorityForRole(personId, person?.role);
+}
+
+export function authorityForRole(
+  personId: string,
+  role: PersonRoleValue | undefined,
+): PersonAuthority {
   return {
     personId,
-    admin: person?.role === "admin",
-    permissions: new Set(person === undefined ? [] : permissionsForRole(person.role)),
+    admin: role === "admin",
+    permissions: new Set(role === undefined ? [] : permissionsForRole(role)),
   };
 }
 
@@ -40,14 +47,7 @@ export async function holdsInCopy(
     const role = String(row.role);
     if (row.status !== "active" || !(personRole.enumValues as readonly string[]).includes(role))
       return false;
-    return holds(
-      {
-        personId,
-        admin: role === "admin",
-        permissions: new Set(permissionsForRole(role as PersonRoleValue)),
-      },
-      permission,
-    );
+    return holds(authorityForRole(personId, role as PersonRoleValue), permission);
   }
   return false;
 }

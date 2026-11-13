@@ -16,7 +16,7 @@ export interface Session {
   token: string;
   personId: string;
   deviceId: string;
-  /** Convenience for client-side affordances only: every server gate re-derives the role from the
+  /** Convenience for client-side affordances only: every server gate re-derives authority from the
    * session and re-checks the permission (`authorize`), so a tampered client value grants nothing. */
   role: PersonRoleValue;
   authority: PersonAuthority;

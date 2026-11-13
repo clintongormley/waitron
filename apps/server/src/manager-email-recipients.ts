@@ -1,6 +1,6 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { persons, holds, readPersonAuthority } from "@waitron/identity";
+import { persons, listActivePersonsWithPermission } from "@waitron/identity";
 
 export interface ManagerEmailRecipient {
   readonly personId: string;
@@ -13,6 +13,9 @@ async function recipients(
   venueLanguage: "en" | "es",
   personId?: string,
 ): Promise<ManagerEmailRecipient[]> {
+  const admitted = new Set(
+    (await listActivePersonsWithPermission(tx, "system.manage")).map((person) => person.personId),
+  );
   const people = await tx
     .select({
       id: persons.id,
@@ -28,20 +31,18 @@ async function recipients(
         sql`length(trim(${persons.email})) > 0`,
       ),
     );
-  const admitted = [];
-  for (const person of people) {
-    if (holds(await readPersonAuthority(tx, person.id), "system.manage")) admitted.push(person);
-  }
-  return admitted.map((person) => ({
-    personId: person.id,
-    email: person.email!.trim(),
-    language:
-      person.locale === "es-ES"
-        ? ("es" as const)
-        : person.locale === "en-GB"
-          ? ("en" as const)
-          : venueLanguage,
-  }));
+  return people
+    .filter((person) => admitted.has(person.id))
+    .map((person) => ({
+      personId: person.id,
+      email: person.email!.trim(),
+      language:
+        person.locale === "es-ES"
+          ? ("es" as const)
+          : person.locale === "en-GB"
+            ? ("en" as const)
+            : venueLanguage,
+    }));
 }
 
 export function readManagerEmailRecipients(
