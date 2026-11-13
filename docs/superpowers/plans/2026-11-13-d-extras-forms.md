@@ -1,6 +1,6 @@
 # D-EXTRAS-FORMS: picker wording and table layout
 
-13 November 2026. Sol-high draft, driver checked. Watcher queued this at 19:34; no owner design approval is recorded. Claude reads this before watcher clearance and implementation.
+13 November 2026. Sol-high draft, driver checked. Watcher queued this at 19:34; no owner design approval is recorded. Claude approach read (214 s) and sole fixes read (70 s) completed; the watcher cleared signed plan `561264dea6` on 13 November at 22:28 in Lane D’s `questions.md`. No third plan read.
 
 **Queue ask, verbatim:** “Extra bread · Extras” says “ · Extras” twice; “+ Add options list…” opens at the dropdown’s bottom edge; at 1280px the items table “scrolls sideways by 4px”; at 390px it is wider than its scrolling box, headings cut (“Preselecc…”).
 

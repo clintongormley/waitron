@@ -1542,7 +1542,10 @@ it.each([
   await page.viewport(frame, 844);
   setLocale(locale);
   try {
-    const { el } = await mount({ value: addons, products });
+    const { el } = await mount({
+      value: { ...addons, items: addons.items.map((item) => ({ ...item, price: "9999.99" })) },
+      products,
+    });
     const cells = el
       .shadowRoot!.querySelector(`tr[data-item="${BACON_ITEM}"]`)!
       .querySelectorAll("td");
@@ -1561,6 +1564,23 @@ it.each([
     expect(cells[6]!.getBoundingClientRect().width, "remove column").toBeLessThanOrEqual(
       remove.getBoundingClientRect().width + 2,
     );
+    const wrap = el.shadowRoot!.querySelector<HTMLElement>(".table-wrap")!;
+    const tableWidth = wrap.querySelector("table")!.getBoundingClientRect().width;
+    expect(wrap.scrollWidth, "content stays within the table").toBeLessThanOrEqual(
+      tableWidth + 0.5,
+    );
+    if (frame === 1280) expect(wrap.scrollWidth).toBeLessThanOrEqual(wrap.clientWidth);
+    wrap.scrollLeft = wrap.scrollWidth;
+    const bounds = wrap.getBoundingClientRect();
+    for (const row of wrap.querySelectorAll("tbody tr")) {
+      const price = row
+        .querySelector<HTMLElementTagNameMap["wt-price-input"]>("wt-price-input")!
+        .shadowRoot!.querySelector("input")!;
+      const bin = row.querySelector("wt-button")!;
+      expect(price.scrollWidth, "all price digits fit").toBeLessThanOrEqual(price.clientWidth);
+      expect(price.getBoundingClientRect().left).toBeGreaterThanOrEqual(bounds.left);
+      expect(bin.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right + 0.5);
+    }
   } finally {
     setLocale("en");
     await page.viewport(width, height);

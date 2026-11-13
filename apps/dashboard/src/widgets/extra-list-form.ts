@@ -138,13 +138,16 @@ export class ExtraListForm extends LitElement {
         table-layout: fixed;
         min-width: calc(
           var(--wt-cell-name-max-width) + var(--wt-stepper-field-width) +
-            var(--wt-price-field-width) * 2 + var(--wt-tap-min) * 5 + var(--wt-space-5) +
-            var(--wt-space-4) * 2
+            var(--wt-price-field-width) * 2 + var(--wt-tap-min) * 4 + var(--wt-space-5) +
+            var(--wt-space-4) * 2 +
+            max(var(--wt-tap-min), var(--wt-font-size-md) + var(--wt-space-4) * 2 + 2px)
         );
       }
-      col:first-child,
-      col:last-child {
+      col:first-child {
         width: var(--wt-tap-min);
+      }
+      col:last-child {
+        width: max(var(--wt-tap-min), var(--wt-font-size-md) + var(--wt-space-4) * 2 + 2px);
       }
       col:nth-child(3) {
         width: calc(var(--wt-stepper-field-width) + var(--wt-tap-min) + var(--wt-space-4));
@@ -167,7 +170,6 @@ export class ExtraListForm extends LitElement {
         position: relative;
         inset-inline-end: calc(var(--wt-space-6) + var(--wt-space-1));
       }
-      /* The grip and the bin are each a tap-target-wide button that already centres its icon. */
       th:first-child,
       td:first-child,
       td:last-child {

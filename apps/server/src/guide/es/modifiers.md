@@ -89,7 +89,7 @@ asignadas, o "Ninguno". Un solo control añade los dos tipos, y la sección reú
 única lista ordenada; cada fila muestra el nombre del personal de la lista y su tipo. Arrastra una
 fila por el asa de su inicio para moverla, o enfoca el asa y usa las flechas arriba y abajo. Ese
 mismo control muestra las listas de extras bajo un encabezado **Extras** y las listas de opciones
-bajo **Opciones**, y cada grupo termina con su propia entrada para crear una nueva, **Añadir lista
+bajo **Opciones**, y cada grupo empieza con su propia entrada para crear una nueva, **Añadir lista
 de extras…** o **Añadir lista de opciones…**, así puedes crear una lista sin abandonar el producto
 que estás editando.
 
