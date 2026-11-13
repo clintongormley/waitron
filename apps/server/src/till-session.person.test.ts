@@ -87,9 +87,9 @@ async function fixture() {
         .values({ deviceId: joined.deviceId, personId, tokenHash: hashSessionToken(token) });
       return `${jar}; ${SESSION_COOKIE}=${token}`;
     };
-    const anaCookie = await sessionOf(anna);
+    const annaCookie = await sessionOf(anna);
     const benCookie = await sessionOf(ben);
-    return { id: joined.deviceId, jar, anna: anaCookie, ben: benCookie };
+    return { id: joined.deviceId, jar, anna: annaCookie, ben: benCookie };
   };
   const login = async (personId: string, pin: string) => {
     const session = await withTransaction(suite.db, (tx) =>
