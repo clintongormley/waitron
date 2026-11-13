@@ -14119,33 +14119,34 @@ it.each(["en-GB", "es-ES"] as const)(
   },
 );
 
+const acme = {
+  taxId: "B11111111",
+  legalName: "Acme Travel SL",
+  address: "Carrer Major 1, Valencia",
+  countryCode: "ES",
+};
+const barSol = {
+  taxId: "B22222222",
+  legalName: "Bar Sol SL",
+  address: "Calle Sol 2, Madrid",
+  countryCode: "ES",
+};
+const question = (el: TillApp) =>
+  el.shadowRoot!.querySelector<WtDialog & HTMLElement>("[data-merge-invoice]");
+const buttons = (el: TillApp) =>
+  [...question(el)!.querySelectorAll<HTMLElement>("wt-button")].map((b) => b.textContent!.trim());
+const press = async (el: TillApp, selector: string) => {
+  question(el)!.querySelector<HTMLElement>(selector)!.click();
+  await flush(el);
+};
+
 describe("till-app: merging a bill set for a full invoice", () => {
-  const acme = {
-    taxId: "B11111111",
-    legalName: "Acme Travel SL",
-    address: "Carrer Major 1, Valencia",
-    countryCode: "ES",
-  };
-  const barSol = {
-    taxId: "B22222222",
-    legalName: "Bar Sol SL",
-    address: "Calle Sol 2, Madrid",
-    countryCode: "ES",
-  };
   const acmeCheck: PartyBill = { ...checkBill, invoiceType: "F1", recipient: acme };
   const barSolTab: PartyBill = { ...tabBill, invoiceType: "F1", recipient: barSol };
   const mergeEdits = {
     expectedPartyRevision: 3,
     partyId: "v1",
     expectedEdits: closingEdits,
-  };
-  const question = (el: TillApp) =>
-    el.shadowRoot!.querySelector<WtDialog & HTMLElement>("[data-merge-invoice]");
-  const buttons = (el: TillApp) =>
-    [...question(el)!.querySelectorAll<HTMLElement>("wt-button")].map((b) => b.textContent!.trim());
-  const press = async (el: TillApp, selector: string) => {
-    question(el)!.querySelector<HTMLElement>(selector)!.click();
-    await flush(el);
   };
 
   async function mergeCheckInto(
@@ -14388,18 +14389,6 @@ describe("till-app: merging a bill set for a full invoice", () => {
 });
 
 describe("till-app: moving every dish off a bill set for a full invoice", () => {
-  const acme = {
-    taxId: "B11111111",
-    legalName: "Acme Travel SL",
-    address: "Carrer Major 1, Valencia",
-    countryCode: "ES",
-  };
-  const barSol = {
-    taxId: "B22222222",
-    legalName: "Bar Sol SL",
-    address: "Calle Sol 2, Madrid",
-    countryCode: "ES",
-  };
   const acmeTab: PartyBill = { ...tabBill, invoiceType: "F1", recipient: acme };
   const barSolCheck: PartyBill = { ...checkBill, invoiceType: "F1", recipient: barSol };
   const moveEdits = {
@@ -14414,14 +14403,6 @@ describe("till-app: moving every dish off a bill set for a full invoice", () => 
     expectedPartyRevision: 3,
     partyId: "v1",
     expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
-  };
-  const question = (el: TillApp) =>
-    el.shadowRoot!.querySelector<WtDialog & HTMLElement>("[data-merge-invoice]");
-  const buttons = (el: TillApp) =>
-    [...question(el)!.querySelectorAll<HTMLElement>("wt-button")].map((b) => b.textContent!.trim());
-  const press = async (el: TillApp, selector: string) => {
-    question(el)!.querySelector<HTMLElement>(selector)!.click();
-    await flush(el);
   };
 
   async function moveEveryDish(
