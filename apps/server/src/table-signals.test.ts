@@ -1207,6 +1207,71 @@ describe("each station's oldest ready time", () => {
   });
 });
 
+describe("a ready dish a cook puts back to Preparing", () => {
+  it("leaves the table's ready signal, goes back while part is still to serve, and is refused once all of it is served", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const bar = await withBar(v);
+    const table2 = await v.table("Mesa 2");
+    const { partyId, tabId } = await seat(v, table2);
+    await inTx(v, (tx) =>
+      addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.item("Caña"), quantity: "2" }]),
+    );
+    const readySignals = async () =>
+      (await floorRow(v, table2)).signals.filter((signal) => signal.kind === "ready");
+    const item = async () => {
+      const [row] = await inTx(v, (tx) =>
+        tx
+          .select({
+            id: ticketItems.id,
+            state: ticketItems.state,
+            preparingAt: ticketItems.preparingAt,
+            readyAt: ticketItems.readyAt,
+          })
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, tabId)),
+      );
+      return row!;
+    };
+
+    await makeReady(v, tabId, "Caña");
+    expect(await readySignals()).toEqual([
+      { kind: "ready", byStation: [expect.objectContaining({ stationId: bar })] },
+    ]);
+    const ready = await item();
+
+    await inTx(v, (tx) => advanceTicketItem(tx, ready.id, "preparing"));
+    expect(await item()).toEqual({
+      ...ready,
+      state: "preparing",
+      preparingAt: ready.preparingAt,
+      readyAt: null,
+    });
+    expect(await readySignals()).toEqual([]);
+
+    await makeReady(v, tabId, "Caña");
+    const line1 = await lineId(v, tabId, 1);
+    const serveOne = async () => {
+      const serve = await command(v, partyId);
+      await inTx(v, (tx) =>
+        markServed(tx, v.cfg, partyId, [{ lineId: line1, quantity: "1" }], serve),
+      );
+    };
+    await serveOne();
+    await inTx(v, (tx) => advanceTicketItem(tx, ready.id, "preparing"));
+    expect((await item()).state).toBe("preparing");
+
+    await makeReady(v, tabId, "Caña");
+    await serveOne();
+    await expect(
+      inTx(v, (tx) => advanceTicketItem(tx, ready.id, "preparing")),
+    ).rejects.toMatchObject({
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: ready.id },
+    });
+    expect((await item()).state).toBe("ready");
+  });
+});
+
 describe("the counter's tab list", () => {
   it("shows a counter tab without a table, labelled Ana, with its ready and long-wait signals", async () => {
     const v = await setupPartyVenue(suite.db);

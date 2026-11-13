@@ -184,11 +184,13 @@ minutos cuentan desde que su primer plato se envió a esta estación para prepar
 ella. Toca la cabecera de una columna, que muestra cuántas tarjetas tiene, para plegarla en una
 franja estrecha que conserva su nombre y su número (**Listo · 3**); tócala otra vez para abrirla.
 Toca un plato para avanzarlo un paso, o toca la cabecera de la tarjeta para avanzar la tarjeta: solo
-avanzan los platos que la retienen, así que un plato que ya va más adelante se queda donde está. En
-una tarjeta de **Toda la comanda**, un toque en un plato avanza los platos de la tarjeta que están
-en la misma fase. El borde superior de una tarjeta pasa de verde a ámbar mientras espera, y después
-todo el borde a rojo, según los avisos de demora de la estación, y el borde de una tarjeta olvidada
-late; en un dispositivo configurado para reducir el movimiento se queda quieto.
+avanzan los platos que la retienen, así que un plato que ya va más adelante se queda donde está.
+Toca un plato **Listo** para devolverlo a **Preparando**, por ejemplo tras un toque por error; se
+puede hasta que se sirve. En una tarjeta de **Toda la comanda**, un toque en un plato avanza los
+platos de la tarjeta que están en la misma fase. El borde superior de una tarjeta pasa de verde a
+ámbar mientras espera, y después todo el borde a rojo, según los avisos de demora de la estación, y
+el borde de una tarjeta olvidada late; en un dispositivo configurado para reducir el movimiento se
+queda quieto.
 
 Una tarjeta cuyos platos están todos en espera tiene el borde discontinuo y no muestra minutos. Dice
 **En espera, sin marchar** hasta que el camarero [pida la
@@ -419,6 +421,10 @@ platos de la estación van a la columna **Por marchar** del pase, y esperan en l
 estación hasta que el pase los marcha. Activarlo o desactivarlo solo decide adónde van los platos
 que se piden después; un plato ya pedido se queda donde está. Una exportación de la configuración
 incluye el ajuste.
+
+Un plato que espera al pase y cambia a una estación que no espera, a mano o al cerrar su estación
+por hoy, se empieza allí enseguida, y su comanda dice **Viene de Parrilla**. Si cambia a otra
+estación que espera, sigue esperando.
 
 Un plato que no espera al pase se empieza enseguida. Si su grupo tiene también platos para el pase,
 esperándolo o ya marchados por él y sin servir, la comanda del plato y su tarjeta en la pantalla de

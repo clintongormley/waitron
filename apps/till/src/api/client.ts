@@ -3527,10 +3527,11 @@ export class TillApi {
   }
 
   /**
-   * Advance ONE ticket item one kitchen step → `POST /api/ticket-items/:id/advance`. `to` is the NEXT
-   * state; a skip, repeat or backwards move rejects with `ticket.invalid_transition`, and an
-   * unknown item with `ticket_item.not_found`. A dish now at a station other than `stationId`
-   * rejects with `device.forbidden_station`.
+   * Advance ONE ticket item one kitchen step, or a Ready item still on its station's screen back to
+   * `preparing` → `POST /api/ticket-items/:id/advance`. A skip, a repeat, or a Ready item going back
+   * once it is off that screen (fully served, its order collected or cancelled) rejects with
+   * `ticket.invalid_transition`, and an unknown item with `ticket_item.not_found`. A
+   * dish now at a station other than `stationId` rejects with `device.forbidden_station`.
    */
   async advanceTicketItem(
     itemId: string,

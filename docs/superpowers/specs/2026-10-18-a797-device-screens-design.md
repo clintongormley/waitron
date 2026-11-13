@@ -340,6 +340,7 @@ A757's fast speed.
   _2026-10-27, slice 8b: a counter order delivered to a table names the table ("#12 T4"), not
   "Counter #12"; a bill's label is not shown beside its table's short name; see the build plan's
   slice 8b, D2, D3._
+  _2026-11-13, R2 proposal 5: tapping a Ready dish puts it back to Preparing while it is still on the screen (until it is served, or its order is handed over or cancelled); a heading tap still only moves forward._
 - **The Tickets view goes**, with its Board/Tickets switch: the card is the ticket. Merged/Stacked
   stays for a screen showing several stations.
 - **Tap a column's heading to collapse it** (Q42 (e)): a collapsed column keeps its heading and

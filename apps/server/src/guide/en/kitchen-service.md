@@ -164,10 +164,11 @@ was sent to this station to be cooked, or moved here. Tap a column's heading, wh
 cards the column holds, to collapse it to a narrow strip that keeps its name and count
 (**Ready · 3**); tap it again to open it. Tap a dish to move it on one step, or tap the card's
 heading to move the card on: only the dishes holding it back move, so a dish already further on
-stays where it is. On a **Whole ticket** card, a tap on a dish moves the card's dishes at the same
-stage. A card's top edge turns from green to amber as it waits, then its whole border red, by the
-station's late flags, and a forgotten card's border pulses; it holds still on a device set to
-reduce motion.
+stays where it is. Tap a **Ready** dish to put it back to **Preparing**, for example after a
+mistaken tap; this works until it is served. On a **Whole ticket** card, a tap on a dish moves the
+card's dishes at the same stage. A card's top edge turns from green to amber as it waits, then its
+whole border red, by the station's late flags, and a forgotten card's border pulses; it holds still
+on a device set to reduce motion.
 
 A card whose dishes are all held is dashed and shows no minutes. It says **Held, not released**
 until the waiter [requests cooking](kitchen-service.md#request-cooking), and **Waiting for the
@@ -381,6 +382,10 @@ in its **Waits for the pass** column. When the waiter then requests cooking, the
 to the pass's **To fire** column, and they wait on the station's screen until the pass fires them.
 Switching it on or off decides only where dishes requested afterwards go; a dish already requested
 stays where it is. A configuration export carries the setting.
+
+A dish waiting for the pass that moves to a station that does not wait, by hand or when its station
+closes for today, starts there at once, and its ticket says **From Grill**. Moved to another station
+that waits, it keeps waiting.
 
 A dish that does not wait for the pass starts at once. When its group also has dishes for the pass,
 waiting for it or fired by it and not yet served, the dish's ticket and its card on the station's

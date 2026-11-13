@@ -7753,7 +7753,8 @@ export type { TicketState } from "./kitchen-print.js";
 export type WorkingOrderStatus = (typeof workingOrderStatus.enumValues)[number];
 
 /** The forward kitchen transitions, keyed by target state: the one legal predecessor and the column
- *  stamped. `queued` is not a target: a fire reaches it. */
+ *  stamped. `queued` is not a target: a fire reaches it. `advanceTicketItem` also takes a Ready item
+ *  back to `preparing`. */
 const TICKET_TRANSITIONS = {
   preparing: { from: "queued", stampedAt: "preparingAt" },
   ready: { from: "preparing", stampedAt: "readyAt" },
@@ -7771,10 +7772,12 @@ export function advanceSet(to: Exclude<TicketState, "queued">) {
     : { state: to, readyAt: at };
 }
 
-/** Advance one fired ticket item one step. A `to` outside the transition table is refused
- *  `management.request_invalid` on `to`, an unknown item `ticket_item.not_found`, and an item not
- *  released yet (`fired_at` is null: held, or Requested and waiting for the pass)
- *  `ticket.item_held`, and a skip, repeat or backwards move `ticket.invalid_transition`. */
+/** Advance one fired ticket item one step, or put a Ready item still on its station's screen
+ *  ({@link kitchenWork}) back to `preparing` (clearing `readyAt`, keeping `preparingAt`). A `to`
+ *  outside the transition table is refused `management.request_invalid` on `to`, an unknown item
+ *  `ticket_item.not_found`, an item not released yet (`fired_at` is null: held, or Requested and
+ *  waiting for the pass) `ticket.item_held`, and a skip, a repeat or a Ready item going back once it
+ *  is off that screen `ticket.invalid_transition`. */
 export async function advanceTicketItem(
   tx: Transaction,
   itemId: string,
@@ -7800,6 +7803,30 @@ export async function advanceTicketItem(
       ),
     )
     .returning({ id: ticketItems.id, orderId: ticketItems.workingOrderId });
+  if (updated.length === 0 && validTo === "preparing") {
+    updated.push(
+      ...(await tx
+        .update(ticketItems)
+        .set({ state: "preparing", readyAt: null })
+        .where(
+          and(
+            eq(ticketItems.id, itemId),
+            eq(ticketItems.state, "ready"),
+            isNotNull(ticketItems.firedAt),
+            exists(
+              tx
+                .select({ id: workingOrderLines.id })
+                .from(workingOrderLines)
+                .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+                .where(
+                  and(eq(workingOrderLines.id, ticketItems.workingOrderLineId), kitchenWork()),
+                ),
+            ),
+          ),
+        )
+        .returning({ id: ticketItems.id, orderId: ticketItems.workingOrderId })),
+    );
+  }
   if (updated.length === 0) {
     const [item] = await tx
       .select({ firedAt: ticketItems.firedAt })

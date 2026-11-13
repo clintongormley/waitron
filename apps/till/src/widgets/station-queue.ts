@@ -74,10 +74,16 @@ const NOTICE_ICONS: Record<`notice-${KitchenNoticeKind}`, string> = {
 // needs them.
 registerIcons(NOTICE_ICONS);
 
-/** `ready` is terminal: a counter order's handover is an order-level collect, not a kitchen state. */
-const NEXT: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
+/** A tap's step: forward, except that a Ready dish goes back to Preparing. A card heading only moves
+ *  forward, so it reads {@link FORWARD}. */
+const NEXT: Record<TicketState, Exclude<TicketState, "queued">> = {
   queued: "preparing",
   preparing: "ready",
+  ready: "preparing",
+};
+
+const FORWARD: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
+  ...NEXT,
   ready: undefined,
 };
 
@@ -317,8 +323,8 @@ export class TillStationQueue extends LitElement {
       }
 
       /* A line cell — the tappable bump target (a plain button so it themes like the floor cards). A
-         ready-tail cell renders the same box as a non-interactive span (.line.terminal). Column layout so
-         the dish row (.line-main) can carry an indented modifiers list beneath it. */
+         held cell renders the same box as a non-interactive span. Column layout so the dish row
+         (.line-main) can carry an indented modifiers list beneath it. */
       .line {
         display: flex;
         flex-direction: column;
@@ -864,7 +870,7 @@ export class TillStationQueue extends LitElement {
   #advanceHeading(card: KitchenCard, stage: TicketState): void {
     const [first] = card.orders as [MergedQueueGroup, ...MergedQueueGroup[]];
     const stationId = first.stationId ?? this.stationId;
-    const to = NEXT[stage];
+    const to = FORWARD[stage];
     if (stationId === undefined || to === undefined) return;
     this.#advanceDishes(dishesAt(card, stage), stationId, to);
   }
@@ -1428,21 +1434,18 @@ export class TillStationQueue extends LitElement {
     const diet = dietBadges(item.asServedDiet, `line-diet-${item.id}`);
     const held = item.firedAt === null;
     const next = NEXT[item.state];
-    const line =
-      held || next === undefined
-        ? html`<span
-            class="line state-${item.state} ${held ? "held" : "terminal"}"
-            data-item=${item.id}
-            >${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}${allergy}</span
-          >`
-        : html`<button
-            class="line state-${item.state}"
-            data-item=${item.id}
-            @click=${() => this.#bump(card, group, members, next)}
-          >
-            ${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}${allergy}
-            <span class="visually-hidden">${this.#bumpLabel(group)}</span>
-          </button>`;
+    const line = held
+      ? html`<span class="line state-${item.state} held" data-item=${item.id}
+          >${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}${allergy}</span
+        >`
+      : html`<button
+          class="line state-${item.state}"
+          data-item=${item.id}
+          @click=${() => this.#bump(card, group, members, next)}
+        >
+          ${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}${allergy}
+          <span class="visually-hidden">${this.#bumpLabel(group, item.state)}</span>
+        </button>`;
     if (!this.#movable(item)) return line;
     return html`<div class="movable">
       ${line}
@@ -1472,8 +1475,13 @@ export class TillStationQueue extends LitElement {
     return dishLine(portions === 1 ? item : { ...item, quantity: String(portions) }, item.name);
   }
 
-  #bumpLabel(group: StationQueueGroup): string {
-    const verb = group.bumpMode === "ticket" ? t("station.bump_ticket") : t("station.advance");
+  #bumpLabel(group: StationQueueGroup, state: TicketState): string {
+    const verb =
+      state === "ready"
+        ? t("station.back_to_preparing")
+        : group.bumpMode === "ticket"
+          ? t("station.bump_ticket")
+          : t("station.advance");
     return `${verb} #${group.orderNumber}`;
   }
 }

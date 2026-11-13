@@ -14,7 +14,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedDeviceProfiles, seedNode } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -76,6 +76,7 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+import { setMadeHereStations } from "./made-here.js";
 
 describe("counter handover timing", () => {
   it("never treats the retired invoice-first mode as pay-after-sending", () => {
@@ -461,6 +462,14 @@ async function ticketStateOf(id: string): Promise<string | null> {
     select state from ticket_items where working_order_id = ${id}
   `);
   return rows[0]?.state ?? null;
+}
+
+/** The `ready_at` stamp of the ticket item fired for this SINGLE-line order. */
+async function readyAtOf(id: string): Promise<string | null | undefined> {
+  const { rows } = await suite.db.execute<{ ready_at: string | null }>(sql`
+    select ready_at from ticket_items where working_order_id = ${id}
+  `);
+  return rows[0]?.ready_at;
 }
 
 /** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location —
@@ -2337,7 +2346,7 @@ describe("prepare & collect — zone payment timing", () => {
 // `ticket_items`. `payWorkingOrder` (Mode P, at payment) and `placeOrder` (Modes I/T) are the fires
 
 describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
-  it("advanceTicketItem walks a line queued → preparing → ready; a skip, a repeat, a backwards move and to='queued' are all refused", async () => {
+  it("advanceTicketItem walks a line queued → preparing → ready and back to preparing; a skip, a repeat and to='queued' are all refused", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("prepay");
     const id = randomUUID();
     await payWorkingOrder(
@@ -2368,19 +2377,127 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
     await asTenant((tx) => advanceTicketItem(tx, item!, "ready"));
     expect(await ticketStateOf(id)).toBe("ready");
 
-    // A repeat (ready → ready) and a backwards move (ready → preparing) both match no row now.
-    for (const to of ["ready", "preparing"] as const) {
-      await expect(asTenant((tx) => advanceTicketItem(tx, item!, to))).rejects.toMatchObject({
-        code: "ticket.invalid_transition",
-        params: { ticketItemId: item },
-      });
-    }
+    await expect(asTenant((tx) => advanceTicketItem(tx, item!, "ready"))).rejects.toMatchObject({
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: item },
+    });
     // No kitchen state advances INTO `queued` — refused before any query (reaching queued is a fire's job).
     await expect(asTenant((tx) => advanceTicketItem(tx, item!, "queued"))).rejects.toMatchObject({
       code: "management.request_invalid",
       params: { field: "to" },
     });
     expect(await ticketStateOf(id)).toBe("ready"); // every refusal left the item untouched
+
+    await asTenant((tx) => advanceTicketItem(tx, item!, "preparing"));
+    expect(await ticketStateOf(id)).toBe("preparing");
+  });
+
+  it("advanceTicketItem refuses to put a Ready item back to preparing once its order is collected", async () => {
+    const { cfg, coffee, zoneId } = await modeVenue("prepay");
+    const collected = randomUUID();
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: collected,
+        zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    const [collectedItem] = await ticketItemIdsFor(collected);
+    await asTenant((tx) => advanceTicketItem(tx, collectedItem!, "preparing"));
+    await asTenant((tx) => advanceTicketItem(tx, collectedItem!, "ready"));
+    const collectedReadyAt = await readyAtOf(collected);
+    expect(collectedReadyAt).toEqual(expect.any(String));
+    await markCollected({ db: suite.db }, cfg, collected);
+    expect(await collectedAtSet(collected)).toBe(true);
+
+    await expect(
+      asTenant((tx) => advanceTicketItem(tx, collectedItem!, "preparing")),
+    ).rejects.toMatchObject({
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: collectedItem },
+    });
+    expect(await ticketStateOf(collected)).toBe("ready");
+    expect(await readyAtOf(collected)).toBe(collectedReadyAt);
+  });
+
+  it("advanceTicketItem refuses to put a made-here item back to preparing", async () => {
+    const { cfg, coffee, zoneId } = await modeVenue("prepay");
+    const station = await defaultStationId();
+    const deviceId = await asTenant(async (tx) => {
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Bar till",
+        formFactor: "till",
+        capabilities: [],
+      });
+      const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Bar till" });
+      await setMadeHereStations(tx, deviceId, [station]);
+      return deviceId;
+    });
+    const id = randomUUID();
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      { ...cfg, sendingDeviceId: deviceId },
+      {
+        id,
+        zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    const [item] = await ticketItemIdsFor(id);
+    const { rows } = await suite.db.execute<{ made_here: number }>(sql`
+      select made_here from ticket_items where id = ${item}`);
+    expect(rows[0]!.made_here).toBe(1);
+    expect(await ticketStateOf(id)).toBe("ready");
+    const readyAt = await readyAtOf(id);
+    expect(readyAt).toEqual(expect.any(String));
+
+    await expect(asTenant((tx) => advanceTicketItem(tx, item!, "preparing"))).rejects.toMatchObject(
+      { code: "ticket.invalid_transition", params: { ticketItemId: item } },
+    );
+    expect(await ticketStateOf(id)).toBe("ready");
+    expect(await readyAtOf(id)).toBe(readyAt);
+  });
+
+  it("advanceTicketItem refuses to put a Ready item back to preparing once its order is cancelled", async () => {
+    const { cfg: counter, coffee, zoneId } = await modeVenue("ticket_then_pay");
+    const cancelled = randomUUID();
+    await parkOrder({ db: suite.db }, counter, {
+      id: cancelled,
+      zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
+    });
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      counter,
+      cancelled,
+      OPERATOR,
+    );
+    const [cancelledItem] = await ticketItemIdsFor(cancelled);
+    await asTenant((tx) => advanceTicketItem(tx, cancelledItem!, "preparing"));
+    await asTenant((tx) => advanceTicketItem(tx, cancelledItem!, "ready"));
+    const cancelledReadyAt = await readyAtOf(cancelled);
+    await cancelPlacedOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      counter,
+      cancelled,
+      "customer left",
+      UNUSED_SESSION_OPERATOR,
+    );
+
+    await expect(
+      asTenant((tx) => advanceTicketItem(tx, cancelledItem!, "preparing")),
+    ).rejects.toMatchObject({
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: cancelledItem },
+    });
+    expect(await ticketStateOf(cancelled)).toBe("ready");
+    expect(await readyAtOf(cancelled)).toBe(cancelledReadyAt);
   });
 
   it("listStationQueue lists this station's items grouped by order oldest-first, dropping collected and abandoned orders", async () => {
