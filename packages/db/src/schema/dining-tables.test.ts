@@ -112,6 +112,10 @@ describe("dining_tables columns", () => {
       "created_at",
       "id",
       "label",
+      "merge_before_rotation",
+      "merge_before_x",
+      "merge_before_y",
+      "merge_id",
       "needs_clearing_since",
       "on_floor",
       "plan_table_id",
@@ -238,5 +242,96 @@ describe("today's map on dining_tables", () => {
         sql`select on_floor, today_x, today_seats, taken_off from dining_tables where id='today-table'`,
       ),
     ).toEqual({ on_floor: 1, today_x: null, today_seats: null, taken_off: 0 });
+  });
+});
+
+describe("merge membership on the live table", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  beforeEach(async () => {
+    const zone = await seedZone(suite.db, { id: "merge-zone", name: "Merge" });
+    await suite.db
+      .insert(diningTables)
+      .values({ id: "member", label: "Member", zoneId: zone.id, onFloor: true });
+    await suite.db.run(
+      sql`insert into table_merges (id, zone_id, seats) values ('merge', 'merge-zone', 4)`,
+    );
+  });
+  it.each([
+    [
+      "a missing before-x",
+      sql`update dining_tables set merge_id='merge', merge_before_y=2, merge_before_rotation=90 where id='member'`,
+      "dining_tables_merge_before_ck",
+    ],
+    [
+      "a before-place without a merge",
+      sql`update dining_tables set merge_before_x=1, merge_before_y=2, merge_before_rotation=90 where id='member'`,
+      "dining_tables_merge_before_ck",
+    ],
+    [
+      "a missing before-y",
+      sql`update dining_tables set merge_id='merge', merge_before_x=1, merge_before_rotation=90 where id='member'`,
+      "dining_tables_merge_before_ck",
+    ],
+    [
+      "a missing before-rotation",
+      sql`update dining_tables set merge_id='merge', merge_before_x=1, merge_before_y=2 where id='member'`,
+      "dining_tables_merge_before_ck",
+    ],
+    [
+      "an off-floor member",
+      sql`update dining_tables set on_floor=0, merge_id='merge', merge_before_x=1, merge_before_y=2, merge_before_rotation=90 where id='member'`,
+      "dining_tables_off_floor_ck",
+    ],
+    [
+      "a before-x out of range",
+      sql`update dining_tables set merge_id='merge', merge_before_x=1000, merge_before_y=2, merge_before_rotation=90 where id='member'`,
+      "dining_tables_merge_before_x_ck",
+    ],
+    [
+      "a before-y out of range",
+      sql`update dining_tables set merge_id='merge', merge_before_x=1, merge_before_y=-1, merge_before_rotation=90 where id='member'`,
+      "dining_tables_merge_before_y_ck",
+    ],
+    [
+      "an invalid before-rotation",
+      sql`update dining_tables set merge_id='merge', merge_before_x=1, merge_before_y=2, merge_before_rotation=14 where id='member'`,
+      "dining_tables_merge_before_rotation_ck",
+    ],
+    [
+      "an unknown merge",
+      sql`update dining_tables set merge_id='unknown', merge_before_x=1, merge_before_y=2, merge_before_rotation=90 where id='member'`,
+      "FOREIGN KEY constraint failed",
+    ],
+  ])("refuses %s", async (_name, query, constraint) => {
+    const error = await captureError(() => suite.db.execute(query));
+    expect(engineErrorMessage(error)).toContain(constraint);
+  });
+  it("ends a merge only after its members leave", async () => {
+    await suite.db.run(
+      sql`update dining_tables set merge_id='merge', merge_before_x=0, merge_before_y=999, merge_before_rotation=270 where id='member'`,
+    );
+    expect(
+      suite.db.get(
+        sql`select merge_id, merge_before_x, merge_before_y, merge_before_rotation from dining_tables where id='member'`,
+      ),
+    ).toEqual({
+      merge_id: "merge",
+      merge_before_x: 0,
+      merge_before_y: 999,
+      merge_before_rotation: 270,
+    });
+    const error = await captureError(() =>
+      suite.db.run(sql`delete from table_merges where id='merge'`),
+    );
+    expect(engineErrorMessage(error)).toBe("FOREIGN KEY constraint failed");
+    await suite.db.run(
+      sql`update dining_tables set merge_id=null, merge_before_x=null, merge_before_y=null, merge_before_rotation=null where id='member'`,
+    );
+    await suite.db.run(sql`delete from table_merges where id='merge'`);
+    expect(suite.db.all(sql`select id from table_merges`)).toEqual([]);
+    expect(suite.db.get(sql`select id, merge_id from dining_tables where id='member'`)).toEqual({
+      id: "member",
+      merge_id: null,
+    });
   });
 });

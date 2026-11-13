@@ -6,7 +6,6 @@ import {
   diningTables,
   floorResetTables,
   tableMerges,
-  floorTodayJoinTables,
   needsMoving,
   OFF_FLOOR,
   todaySet,
@@ -111,8 +110,9 @@ describe("movesTable and the SQL rule the till and the refusals read", () => {
         });
         if (c.inMerge) {
           await tx
-            .insert(floorTodayJoinTables)
-            .values({ joinId: join!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+            .update(diningTables)
+            .set({ mergeId: join!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+            .where(eq(diningTables.id, tableId));
         }
       }
     });

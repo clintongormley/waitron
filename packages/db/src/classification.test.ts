@@ -58,6 +58,10 @@ describe("CORE_CHANGE_SOURCES", () => {
         "today_rotation",
         "taken_off",
         "today_name",
+        "merge_id",
+        "merge_before_x",
+        "merge_before_y",
+        "merge_before_rotation",
       ],
     });
     expect(CORE_CHANGE_SOURCES.find((source) => source.table === "floor_zones")?.quiet).toEqual({

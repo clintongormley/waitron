@@ -15,7 +15,7 @@ import {
   tableNames,
 } from "./party-table-labels.js";
 import { diningTables } from "./schema/dining-tables.js";
-import { tableMerges, floorTodayJoinTables } from "./schema/floor-plans.js";
+import { tableMerges } from "./schema/floor-plans.js";
 import { parties, partyTables } from "./schema/parties.js";
 import { seedVenue, seedZone } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
@@ -404,8 +404,15 @@ describe("party table labels", () => {
         .returning({ id: tableMerges.id });
       for (const tableId of tableIds) {
         await tx
-          .insert(floorTodayJoinTables)
-          .values({ joinId: join!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+          .update(diningTables)
+          .set({
+            onFloor: true,
+            mergeId: join!.id,
+            mergeBeforeX: 0,
+            mergeBeforeY: 0,
+            mergeBeforeRotation: 0,
+          })
+          .where(eq(diningTables.id, tableId));
       }
     });
   }

@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { floorTodayJoinTables, tableMerges, partyTableLabels } from "@waitron/db";
+import { diningTables, tableMerges, partyTableLabels } from "@waitron/db";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { partyTablesName } from "@waitron/shared";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
@@ -234,8 +234,8 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
             tx
               .select({ name: tableMerges.name })
               .from(tableMerges)
-              .innerJoin(floorTodayJoinTables, eq(floorTodayJoinTables.joinId, tableMerges.id))
-              .where(eq(floorTodayJoinTables.tableId, table.c3!)),
+              .innerJoin(diningTables, eq(diningTables.mergeId, tableMerges.id))
+              .where(eq(diningTables.id, table.c3!)),
           )
         )[0]!.name,
       },
@@ -265,8 +265,8 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
             tx
               .select({ name: tableMerges.name })
               .from(tableMerges)
-              .innerJoin(floorTodayJoinTables, eq(floorTodayJoinTables.joinId, tableMerges.id))
-              .where(eq(floorTodayJoinTables.tableId, table.c3!)),
+              .innerJoin(diningTables, eq(diningTables.mergeId, tableMerges.id))
+              .where(eq(diningTables.id, table.c3!)),
           )
         )[0]!.name,
       );

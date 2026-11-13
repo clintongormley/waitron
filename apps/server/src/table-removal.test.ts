@@ -14,7 +14,6 @@ import {
   floorPlanTables,
   floorResetTables,
   tableMerges,
-  floorTodayJoinTables,
   partyTables,
   ticketItems,
   withTransaction,
@@ -367,9 +366,6 @@ describe("what a removed table's delete waits on", () => {
   const LETS_GO: Record<string, string> = {
     "bookings.table_id": "BOOKINGS_TABLE_REMOVAL.release, passed when bookings has been installed",
     "floor_reset_tables.table_id": "removeLiveTables deletes it",
-    "floor_today_join_tables.table_id": "leaveMerges",
-    "floor_today_split_parts.joined_table_id": "empty dormant table; no runtime writer",
-    "floor_today_split_parts.part_table_id": "empty dormant table; no runtime writer",
     "party_tables.table_id": "closePartyTables when the party closes; an open party ties the table",
     "working_orders.delivery_table_id": "releaseDeliveries",
   };
@@ -383,8 +379,8 @@ describe("what a removed table's delete waits on", () => {
     const rows = await inTx(
       v,
       async (tx) =>
-        await tx.all<{ name: string; column: string }>(
-          sql`select m.name, p."from" as "column" from sqlite_master m, pragma_foreign_key_list(m.name) p where m.type = 'table' and p."table" = 'dining_tables'`,
+        await tx.all<{ name: string; column: string; onDelete: string }>(
+          sql`select m.name, p."from" as "column", p.on_delete as "onDelete" from sqlite_master m, pragma_foreign_key_list(m.name) p where m.type = 'table' and p."table" = 'dining_tables'`,
         ),
     );
     const named = Object.fromEntries(
@@ -395,6 +391,12 @@ describe("what a removed table's delete waits on", () => {
     );
 
     expect(named).toEqual(LETS_GO);
+    expect(rows.map((row) => [row.name, row.column, row.onDelete]).sort()).toEqual([
+      ["bookings", "table_id", "NO ACTION"],
+      ["floor_reset_tables", "table_id", "NO ACTION"],
+      ["party_tables", "table_id", "NO ACTION"],
+      ["working_orders", "delivery_table_id", "NO ACTION"],
+    ]);
   });
 
   it.each(["leave", "join"] as const)(
@@ -667,8 +669,9 @@ describe("removeLiveTables", () => {
         .where(eq(diningTables.id, t2!));
       for (const tableId of [t1!, t2!]) {
         await tx
-          .insert(floorTodayJoinTables)
-          .values({ joinId: merge!.id, tableId, beforeX: 3, beforeY: 4, beforeRotation: 90 });
+          .update(diningTables)
+          .set({ mergeId: merge!.id, mergeBeforeX: 3, mergeBeforeY: 4, mergeBeforeRotation: 90 })
+          .where(eq(diningTables.id, tableId));
       }
     });
 

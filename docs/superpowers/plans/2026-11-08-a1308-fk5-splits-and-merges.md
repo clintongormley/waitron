@@ -17,6 +17,20 @@ here is a pure deletion. Reconcile the historical consumer/test paths below with
 port only surviving merge work. Original size figures below predate that deletion; all predictions
 remain unverified and are checked on the selected base.
 
+**Current-main reconciliation, 2026-11-13:** the watcher cleared this bounded port in
+Lane E `questions.md` at 03:15. fk4b's four merge columns join the `dining_tables` quiet
+group; surviving today-merge subscription readers use `dining_tables.today`, retaining their
+base interests and the old twelve-reader set. Transfers/menu keep the cleared polling choice.
+The preflight predicted both update-trigger `.when` and `.body`. The measured comparison changes
+only `.when`: the trigger body tests the unchanged complement of saved columns. Classification and till
+`live-connection` dependency assertions follow the retired table names. The exact column
+inventory in `packages/db/src/schema/dining-tables.test.ts` gains only the four `merge_*`
+columns; `apps/server/src/backup-verification-target.test.ts`'s steady pin changes only for
+the two retired tables and the merge rename, with the inventory difference checked first.
+These are storage assertion ports; every changed expectation is listed in the pull request.
+At 04:03 the watcher also cleared excluding `seed.madrid-baseline.test.ts` from the rename CLI:
+its adapter reads the frozen capture's historical names, while the capture files stay byte for byte.
+
 **Goal:** the last two of the floor's seven tables retire; surviving merge membership folds into `dining_tables`:
 ~~`floor_today_split_parts` (a part split off its joined table today) becomes
 `dining_tables.split_from_table_id`~~; delete that dormant table instead, and `floor_today_join_tables` (a table in one of today's merges,
@@ -138,7 +152,7 @@ Under all six venue headers unless "change-feed only".
 | `floor_today_split_parts` (pure deletion after PR B; no split-origin column or replacement protections) | `missing table floor_today_split_parts`; `missing index floor_today_split_parts_joined_idx`; `missing index floor_today_split_parts_part_key`; `missing index floor_today_split_parts.primary key(id)`; change-feed only: three `missing trigger waitron_change_floor_today_split_parts_*` |
 | `floor_today_join_tables` (§5: key and table FK "implicit: same row"; join FK and before-CHECKs move) | `missing table floor_today_join_tables`; `missing index floor_today_join_tables_table_key`; `missing index floor_today_join_tables.primary key(id)`; change-feed only: three `missing trigger waitron_change_floor_today_join_tables_*` |
 | `floor_today_joins` → `table_merges` (§5: "kept on `table_merges`") | `missing table floor_today_joins`; `missing index floor_today_joins_zone_idx`; `missing index floor_today_joins.primary key(id)`; `extra table table_merges`; `extra index table_merges_zone_idx`; `extra index table_merges.primary key(id)`; change-feed only: three `missing trigger waitron_change_floor_today_joins_*` and three `extra trigger waitron_change_table_merges_*` |
-| `dining_tables` | ~~`extra table dining_tables.columns[split_from_table_id]`~~; `extra table dining_tables.columns[merge_id]`, `[merge_before_x]`, `[merge_before_y]`, `[merge_before_rotation]`; `changed table dining_tables.columnOrder`; ~~`extra table dining_tables.foreignKeys[split_from_table_id->dining_tables(id)]`~~; `extra table dining_tables.foreignKeys[merge_id->table_merges(id)]`; ~~`extra table dining_tables.checks[dining_tables_split_from_not_self_ck]`~~; `extra table dining_tables.checks[dining_tables_merge_before_x_ck]`, `[dining_tables_merge_before_y_ck]`, `[dining_tables_merge_before_rotation_ck]`, `[dining_tables_merge_before_ck]`; `changed table dining_tables.checks[dining_tables_off_floor_ck].expression`; ~~`extra index dining_tables_split_from_idx`~~; `extra index dining_tables_merge_idx`; change-feed only: `changed trigger waitron_change_dining_tables_update.when` |
+| `dining_tables` | ~~`extra table dining_tables.columns[split_from_table_id]`~~; `extra table dining_tables.columns[merge_id]`, `[merge_before_x]`, `[merge_before_y]`, `[merge_before_rotation]`; `changed table dining_tables.columnOrder`; ~~`extra table dining_tables.foreignKeys[split_from_table_id->dining_tables(id)]`~~; `extra table dining_tables.foreignKeys[merge_id->table_merges(id)]`; ~~`extra table dining_tables.checks[dining_tables_split_from_not_self_ck]`~~; `extra table dining_tables.checks[dining_tables_merge_before_x_ck]`, `[dining_tables_merge_before_y_ck]`, `[dining_tables_merge_before_rotation_ck]`, `[dining_tables_merge_before_ck]`; `changed table dining_tables.checks[dining_tables_off_floor_ck].expression`; ~~`extra index dining_tables_split_from_idx`~~; `extra index dining_tables_merge_idx`; change-feed only: `changed trigger waitron_change_dining_tables_update.when` and `.body` |
 
 `dining_tables_merge_idx` is not in the appendix: `floor_today_join_tables` had no index on
 `join_id`, but members are now found by `merge_id` and a merge's delete checks the key, so it is

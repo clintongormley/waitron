@@ -2,18 +2,13 @@ import { sql, type AnyColumn, type SQL, type SQLWrapper } from "drizzle-orm";
 import { diningTables } from "./schema/dining-tables.js";
 import { todayColumns } from "./floor-today-columns.js";
 import { alias } from "drizzle-orm/sqlite-core";
-import { floorResetTables, floorTodayJoinTables } from "./schema/floor-plans.js";
+import { floorResetTables } from "./schema/floor-plans.js";
 
 type ResetRowColumns = Record<
   "tableId" | "x" | "y" | "width" | "height" | "shape" | "rotation",
   AnyColumn
 >;
 
-/**
- * `movesTable`'s rule (apps/server/src/floor-reset-plan.ts) in SQL, for reset row `row`: its table
- * is on today's map, drawn and not taken off, and is in a merge, split off, or not exactly at the
- * row's placement.
- */
 export function resetRowMoves(row: ResetRowColumns): SQL {
   const t = todayColumns;
   return sql`exists (
@@ -22,7 +17,7 @@ export function resetRowMoves(row: ResetRowColumns): SQL {
       ${t.x} is not ${row.x} or ${t.y} is not ${row.y} or ${t.width} is not ${row.width}
       or ${t.height} is not ${row.height} or ${t.shape} is not ${row.shape}
       or ${t.rotation} is not ${row.rotation}
-      or exists (select 1 from ${floorTodayJoinTables} where ${floorTodayJoinTables.tableId} = ${row.tableId})
+      or ${diningTables.mergeId} is not null
     )
   )`;
 }

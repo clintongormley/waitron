@@ -1,12 +1,5 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
-import {
-  diningTables,
-  floorZones,
-  floorTodayJoinTables,
-  needsMoving,
-  todayColumns,
-  type TodayRow,
-} from "@waitron/db";
+import { diningTables, floorZones, needsMoving, todayColumns, type TodayRow } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { holdersOf } from "./parties.js";
@@ -27,11 +20,10 @@ export async function todayOf(tx: Transaction, tableId: string): Promise<Today> 
       zoneId: diningTables.zoneId,
       onFloor: diningTables.onFloor,
       row: todayColumns,
-      joinId: floorTodayJoinTables.joinId,
+      joinId: diningTables.mergeId,
     })
     .from(diningTables)
     .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
-    .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
     .where(and(eq(diningTables.id, tableId), eq(floorZones.active, true)));
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   const { zoneId, row, joinId } = table;
@@ -39,13 +31,9 @@ export async function todayOf(tx: Transaction, tableId: string): Promise<Today> 
   if (joinId === null) return { tableId, zoneId, row, merge: null };
   const members = await tx
     .select({ row: todayColumns })
-    .from(floorTodayJoinTables)
-    .innerJoin(
-      diningTables,
-      and(eq(diningTables.id, floorTodayJoinTables.tableId), eq(diningTables.onFloor, true)),
-    )
-    .where(eq(floorTodayJoinTables.joinId, joinId))
-    .orderBy(asc(floorTodayJoinTables.tableId));
+    .from(diningTables)
+    .where(and(eq(diningTables.mergeId, joinId), eq(diningTables.onFloor, true)))
+    .orderBy(asc(diningTables.id));
   return { tableId, zoneId, row, merge: { joinId, members: members.map((m) => m.row) } };
 }
 

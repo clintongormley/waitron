@@ -1,6 +1,6 @@
 import { and, eq, inArray, or, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { diningTables, floorResetTables, floorTodayJoinTables, needsMoving } from "@waitron/db";
+import { diningTables, floorResetTables, needsMoving } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -121,13 +121,13 @@ async function refuseHeldBack(
     size = tied.size;
     const ids = [...tied];
     const joins = tx
-      .select({ id: floorTodayJoinTables.joinId })
-      .from(floorTodayJoinTables)
-      .where(inArray(floorTodayJoinTables.tableId, ids));
+      .select({ id: diningTables.mergeId })
+      .from(diningTables)
+      .where(inArray(diningTables.id, ids));
     const merged = await tx
-      .select({ id: floorTodayJoinTables.tableId })
-      .from(floorTodayJoinTables)
-      .where(inArray(floorTodayJoinTables.joinId, joins));
+      .select({ id: diningTables.id })
+      .from(diningTables)
+      .where(inArray(diningTables.mergeId, joins));
     for (const row of merged) tied.add(row.id);
     for (const id of await pendingGroupTables(tx, ids)) tied.add(id);
   }

@@ -1,3 +1,5 @@
+import { isNotNull } from "drizzle-orm";
+import { mergeOf as mergeColumns } from "@waitron/db";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -11,7 +13,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   diningTables,
-  floorTodayJoinTables,
   tableMerges,
   parties,
   partyTables,
@@ -218,9 +219,9 @@ async function groupRowsOf(joinId: string) {
   return inTx(v, async (tx) => ({
     joins: await tx.select().from(tableMerges).where(eq(tableMerges.id, joinId)),
     members: await tx
-      .select()
-      .from(floorTodayJoinTables)
-      .where(eq(floorTodayJoinTables.joinId, joinId)),
+      .select(mergeColumns)
+      .from(diningTables)
+      .where(eq(diningTables.mergeId, joinId)),
   }));
 }
 
@@ -252,9 +253,10 @@ async function everything() {
       .orderBy(asc(diningTables.id)),
     joins: await tx.select().from(tableMerges).orderBy(asc(tableMerges.id)),
     joinTables: await tx
-      .select()
-      .from(floorTodayJoinTables)
-      .orderBy(asc(floorTodayJoinTables.tableId)),
+      .select(mergeColumns)
+      .from(diningTables)
+      .where(isNotNull(diningTables.mergeId))
+      .orderBy(asc(diningTables.id)),
     partyTables: await tx.select().from(partyTables).orderBy(asc(partyTables.id)),
     parties: await tx
       .select({ id: parties.id, revision: parties.revision })
@@ -557,10 +559,7 @@ describe("Split tables… on a group with guests seated", () => {
 
     const groupId = (await mergeOf(v, table.bar!))!.joinId;
     const [group] = await inTx(v, (tx) =>
-      tx
-        .select({ name: tableMerges.name })
-        .from(tableMerges)
-        .where(eq(tableMerges.id, groupId)),
+      tx.select({ name: tableMerges.name }).from(tableMerges).where(eq(tableMerges.id, groupId)),
     );
     await ok(splitOff(table.bar!, [table.bar!], 10));
 

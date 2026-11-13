@@ -20,9 +20,7 @@ import {
   floorPlanSets,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoinTables,
   tableMerges,
-  floorTodaySplitParts,
   rangeCheck,
 } from "./floor-plans.js";
 import { floorZones } from "./floor-zones.js";
@@ -260,7 +258,7 @@ describe("floor plan tables", () => {
     ).toBe(true);
   });
 
-  it("keeps one reset row per live table, and a table in one merge at a time", async () => {
+  it("keeps one reset row per live table", async () => {
     const extra = await inTx(async (tx) => {
       const [row] = await tx
         .insert(diningTables)
@@ -278,33 +276,6 @@ describe("floor plan tables", () => {
     );
     expect(
       refusalOn(reset, UNIQUE_VIOLATION, { table: "floor_reset_tables", columns: ["table_id"] }),
-    ).toBe(true);
-
-    const [first, second] = await inTx(async (tx) => {
-      const a = await tx
-        .insert(tableMerges)
-        .values({ zoneId: OTHER_ZONE, seats: 6 })
-        .returning({ id: tableMerges.id });
-      const b = await tx
-        .insert(tableMerges)
-        .values({ zoneId: OTHER_ZONE, seats: 6 })
-        .returning({ id: tableMerges.id });
-      return [a[0]!.id, b[0]!.id];
-    });
-    const before = { beforeX: 1, beforeY: 2, beforeRotation: 30 };
-    await inTx((tx) =>
-      tx.insert(floorTodayJoinTables).values({ joinId: first!, tableId: extra, ...before }),
-    );
-    const merge = await captureError(() =>
-      inTx((tx) =>
-        tx.insert(floorTodayJoinTables).values({ joinId: second!, tableId: extra, ...before }),
-      ),
-    );
-    expect(
-      refusalOn(merge, UNIQUE_VIOLATION, {
-        table: "floor_today_join_tables",
-        columns: ["table_id"],
-      }),
     ).toBe(true);
   });
 
@@ -370,11 +341,18 @@ describe("floor plan tables", () => {
         });
         return inTx((tx) =>
           tx
-            .insert(floorTodayJoinTables)
-            .values({ joinId, tableId: TABLE_2, beforeX: 1, beforeY: 1, beforeRotation: 20 }),
+            .update(diningTables)
+            .set({
+              onFloor: true,
+              mergeId: joinId,
+              mergeBeforeX: 1,
+              mergeBeforeY: 1,
+              mergeBeforeRotation: 20,
+            })
+            .where(eq(diningTables.id, TABLE_2)),
         );
       },
-      "floor_today_join_tables_before_rotation_ck",
+      "dining_tables_merge_before_rotation_ck",
     ],
     [
       "a merged table that stood at x 1000",
@@ -388,11 +366,18 @@ describe("floor plan tables", () => {
         });
         return inTx((tx) =>
           tx
-            .insert(floorTodayJoinTables)
-            .values({ joinId, tableId: TABLE_2, beforeX: 1000, beforeY: 1, beforeRotation: 0 }),
+            .update(diningTables)
+            .set({
+              onFloor: true,
+              mergeId: joinId,
+              mergeBeforeX: 1000,
+              mergeBeforeY: 1,
+              mergeBeforeRotation: 0,
+            })
+            .where(eq(diningTables.id, TABLE_2)),
         );
       },
-      "floor_today_join_tables_before_x_ck",
+      "dining_tables_merge_before_x_ck",
     ],
   ] as const)("refuses %s", async (_name, write, constraint) => {
     const error = await captureError(write);
@@ -822,90 +807,12 @@ describe("floor plan tables", () => {
     expect(sizes).toHaveLength(1);
   });
 
-  async function insertLiveCounterTables(): Promise<{
-    long: string;
-    counter3: string;
-    counter4: string;
-    counter5: string;
-    bar: string;
-  }> {
-    return inTx(async (tx) => {
-      const rows = await tx
-        .insert(diningTables)
-        .values(
-          ["Long table", "Counter 3", "Counter 4", "Counter 5", "Bar"].map((label) => ({
-            locationId: LOCATION,
-            label,
-            zoneId: ZONE,
-          })),
-        )
-        .returning({ id: diningTables.id });
-      return {
-        long: rows[0]!.id,
-        counter3: rows[1]!.id,
-        counter4: rows[2]!.id,
-        counter5: rows[3]!.id,
-        bar: rows[4]!.id,
-      };
-    });
-  }
-
-  it("keeps a live table split off one joined table only", async () => {
-    const t = await insertLiveCounterTables();
-    await inTx((tx) =>
-      tx.insert(floorTodaySplitParts).values([
-        { joinedTableId: t.long, partTableId: t.counter3 },
-        { joinedTableId: t.long, partTableId: t.counter4 },
-      ]),
-    );
-    const twice = await captureError(() =>
-      inTx((tx) =>
-        tx.insert(floorTodaySplitParts).values({ joinedTableId: t.bar, partTableId: t.counter3 }),
-      ),
-    );
-    expect(
-      refusalOn(twice, UNIQUE_VIOLATION, {
-        table: "floor_today_split_parts",
-        columns: ["part_table_id"],
-      }),
-    ).toBe(true);
-    const itself = await captureError(() =>
-      inTx((tx) =>
-        tx.insert(floorTodaySplitParts).values({ joinedTableId: t.long, partTableId: t.long }),
-      ),
-    );
-    expect(checkFailed(itself, "floor_today_split_parts_not_self_ck")).toBe(true);
-    const splits = await inTx((tx) => tx.select().from(floorTodaySplitParts));
-    expect(splits).toHaveLength(2);
-  });
-
-  it("refuses deleting a live table a split record names, either way round", async () => {
-    const t = await insertLiveCounterTables();
-    await inTx((tx) =>
-      tx.insert(floorTodaySplitParts).values({ joinedTableId: t.long, partTableId: t.counter3 }),
-    );
-    for (const doomed of [t.counter3, t.long]) {
-      const error = await captureError(() =>
-        inTx((tx) => tx.delete(diningTables).where(eq(diningTables.id, doomed))),
-      );
-      expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
-    }
-    const live = await inTx((tx) => tx.select({ id: diningTables.id }).from(diningTables));
-    expect(live.map((row) => row.id)).toEqual(expect.arrayContaining([t.long, t.counter3]));
-    const splits = await inTx((tx) => tx.select().from(floorTodaySplitParts));
-    expect(splits).toHaveLength(1);
-  });
-
-  it("round-trips a kept size and a split record", async () => {
+  it("round-trips a kept size", async () => {
     const plan = await insertCounterTables();
-    const live = await insertLiveCounterTables();
     await inTx(async (tx) => {
       await tx
         .insert(floorPlanPlacements)
         .values({ planId: PLAN, planTableId: plan.counter3, width: 2, height: 3 });
-      await tx
-        .insert(floorTodaySplitParts)
-        .values({ joinedTableId: live.long, partTableId: live.counter5 });
     });
     const sizes = await inTx((tx) =>
       tx
@@ -917,15 +824,6 @@ describe("floor plan tables", () => {
         .from(floorPlanPlacements),
     );
     expect(sizes).toEqual([{ planTableId: plan.counter3, width: 2, height: 3 }]);
-    const splits = await inTx((tx) =>
-      tx
-        .select({
-          joinedTableId: floorTodaySplitParts.joinedTableId,
-          partTableId: floorTodaySplitParts.partTableId,
-        })
-        .from(floorTodaySplitParts),
-    );
-    expect(splits).toEqual([{ joinedTableId: live.long, partTableId: live.counter5 }]);
   });
 
   it("has no saved joins: their four tables are gone", () => {

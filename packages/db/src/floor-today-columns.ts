@@ -54,3 +54,24 @@ export const OFF_FLOOR = {
   takenOff: false,
   todayName: null,
 };
+
+export const mergeOf = {
+  tableId: diningTables.id,
+  mergeId: diningTables.mergeId,
+  beforeX: diningTables.mergeBeforeX,
+  beforeY: diningTables.mergeBeforeY,
+  beforeRotation: diningTables.mergeBeforeRotation,
+};
+export type MergeMember = {
+  tableId: TableRow["id"];
+  mergeId: TableRow["mergeId"];
+  beforeX: TableRow["mergeBeforeX"];
+  beforeY: TableRow["mergeBeforeY"];
+  beforeRotation: TableRow["mergeBeforeRotation"];
+};
+export const LEFT_MERGE = {
+  mergeId: null,
+  mergeBeforeX: null,
+  mergeBeforeY: null,
+  mergeBeforeRotation: null,
+};

@@ -8,7 +8,7 @@ import {
   floorPlans,
   floorPlanTables,
   floorPlanPlacements,
-  floorTodayJoinTables,
+  mergeOf as mergeColumns,
   tableMerges,
   floorZones,
   todayColumns,
@@ -355,22 +355,26 @@ export async function mergeOf(
 } | null> {
   return inTx(v, async (tx) => {
     const [own] = await tx
-      .select({ joinId: floorTodayJoinTables.joinId, seats: tableMerges.seats })
-      .from(floorTodayJoinTables)
-      .innerJoin(tableMerges, eq(tableMerges.id, floorTodayJoinTables.joinId))
-      .where(eq(floorTodayJoinTables.tableId, tableId));
+      .select({ joinId: diningTables.mergeId, seats: tableMerges.seats })
+      .from(diningTables)
+      .innerJoin(tableMerges, eq(tableMerges.id, diningTables.mergeId))
+      .where(eq(diningTables.id, tableId));
     if (own === undefined) return null;
     const members = await tx
-      .select({
-        tableId: floorTodayJoinTables.tableId,
-        beforeX: floorTodayJoinTables.beforeX,
-        beforeY: floorTodayJoinTables.beforeY,
-        beforeRotation: floorTodayJoinTables.beforeRotation,
-      })
-      .from(floorTodayJoinTables)
-      .where(eq(floorTodayJoinTables.joinId, own.joinId));
+      .select(mergeColumns)
+      .from(diningTables)
+      .where(eq(diningTables.mergeId, own.joinId!));
     members.sort((a, b) => a.tableId.localeCompare(b.tableId));
-    return { joinId: own.joinId, seats: own.seats, members };
+    return {
+      joinId: own.joinId!,
+      seats: own.seats,
+      members: members.map((m) => ({
+        tableId: m.tableId,
+        beforeX: m.beforeX!,
+        beforeY: m.beforeY!,
+        beforeRotation: m.beforeRotation!,
+      })),
+    };
   });
 }
 

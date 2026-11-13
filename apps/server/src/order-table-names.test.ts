@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   tableMerges,
-  floorTodayJoinTables,
   parties,
   partyTables,
   workingOrders,
@@ -65,13 +64,10 @@ describe("A765 table names in order lists", () => {
         .returning();
       const [party] = await tx.insert(parties).values({ openedBy: venue.operatorId }).returning();
       for (const table of tables) {
-        await tx.insert(floorTodayJoinTables).values({
-          joinId: join!.id,
-          tableId: table.id,
-          beforeX: 0,
-          beforeY: 0,
-          beforeRotation: 0,
-        });
+        await tx
+          .update(diningTables)
+          .set({ mergeId: join!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+          .where(eq(diningTables.id, table.id));
         await tx.insert(partyTables).values({ partyId: party!.id, tableId: table.id });
       }
       await seedWorkingOrder(tx, {

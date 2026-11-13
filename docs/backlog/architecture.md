@@ -1126,7 +1126,8 @@ the helper's constant status is not evidence of the write.
   saved joined designs form ordinary live groups. Zones now carry their department and sale overrides;
   saved designs now carry membership, placements retain off-layout sizes, and sets carry their
   department, name and default. Today's map now lives on the live table and zone rows;
-  the remaining group storage fold stays open. Today-only table and room updates now use narrower
+  merge membership and its before-place values now live there too, with group names and seats
+  in `table_merges`. Today-only table and room updates now use narrower
   notifications for the floor, kitchen and their dashboard readers. Transfers and the menu's zone
   status keep their existing 15-second polls for these updates (watcher, 2026-11-13).
   Management and device events share one loop with read-only wake checks; device events carry types

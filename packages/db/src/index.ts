@@ -112,9 +112,7 @@ export {
   floorPlans,
   floorPlanTables,
   floorResetTables,
-  floorTodayJoinTables,
   tableMerges,
-  floorTodaySplitParts,
 } from "./schema/floor-plans.js";
 export {
   parties,
@@ -520,4 +518,12 @@ export { dayCutoverChanges } from "./schema/day-cutover-changes.js";
 
 export { staffRoles, personStaffRoles } from "./schema/identity/staff-roles.js";
 
-export { todayColumns, todaySet, OFF_FLOOR, type TodayRow } from "./floor-today-columns.js";
+export {
+  todayColumns,
+  todaySet,
+  OFF_FLOOR,
+  type TodayRow,
+  mergeOf,
+  LEFT_MERGE,
+  type MergeMember,
+} from "./floor-today-columns.js";

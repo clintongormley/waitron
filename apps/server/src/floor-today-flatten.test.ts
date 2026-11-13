@@ -1,3 +1,5 @@
+import { isNotNull } from "drizzle-orm";
+import { mergeOf as mergeColumns } from "@waitron/db";
 import { and, asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -5,7 +7,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
   floorResetTables,
-  floorTodayJoinTables,
   tableMerges,
   partyTables,
   workingOrders,
@@ -137,9 +138,10 @@ async function everything() {
       .orderBy(asc(diningTables.id)),
     joins: await tx.select().from(tableMerges).orderBy(asc(tableMerges.id)),
     joinTables: await tx
-      .select()
-      .from(floorTodayJoinTables)
-      .orderBy(asc(floorTodayJoinTables.tableId)),
+      .select(mergeColumns)
+      .from(diningTables)
+      .where(isNotNull(diningTables.mergeId))
+      .orderBy(asc(diningTables.id)),
     partyTables: await tx.select().from(partyTables).orderBy(asc(partyTables.id)),
   }));
 }

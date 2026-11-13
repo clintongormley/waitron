@@ -9,7 +9,6 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   captureError,
-  floorTodayJoinTables,
   tableMerges,
   kitchenStations,
   parties,
@@ -19,6 +18,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  diningTables,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -757,8 +757,9 @@ async function group(v: PartyVenue, name: string, tableIds: string[]): Promise<v
       .returning({ id: tableMerges.id });
     for (const tableId of tableIds)
       await tx
-        .insert(floorTodayJoinTables)
-        .values({ joinId: row!.id, tableId, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+        .update(diningTables)
+        .set({ mergeId: row!.id, mergeBeforeX: 0, mergeBeforeY: 0, mergeBeforeRotation: 0 })
+        .where(eq(diningTables.id, tableId));
   });
 }
 

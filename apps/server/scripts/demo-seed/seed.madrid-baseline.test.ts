@@ -769,6 +769,17 @@ for (const locale of ["en", "es"] as const) {
           },
         },
         {
+          from: "floor_today_join_tables",
+          into: "dining_tables",
+          match: { from: "table_id", into: "id" },
+          columns: {
+            join_id: "merge_id",
+            before_x: "merge_before_x",
+            before_y: "merge_before_y",
+            before_rotation: "merge_before_rotation",
+          },
+        },
+        {
           from: "station_day_states",
           into: "kitchen_stations",
           match: { from: "station_id", into: "id" },
@@ -778,6 +789,32 @@ for (const locale of ["en", "es"] as const) {
           },
         },
       ]);
+      const memberKeys = expected[phase].tables.dining_tables!.foreignKeys;
+      const zoneKey = memberKeys.find((key) => key.from === "zone_id")!;
+      const mergeKey = memberKeys.find((key) => key.from === "merge_id")!;
+      const planKey = memberKeys.find((key) => key.from === "plan_table_id")!;
+      expected[phase].tables.dining_tables!.foreignKeys = [zoneKey, mergeKey, planKey].map(
+        (key, id) => ({ ...key, id }),
+      );
+      for (const column of expected[phase].tables.dining_tables!.columns)
+        if (column.name.startsWith("merge_")) column.notnull = 0;
+      expected[phase].tables.table_merges = expected[phase].tables.floor_today_joins!;
+      delete expected[phase].tables.floor_today_joins;
+      expect(expected[phase].tables.floor_today_split_parts!.rows).toEqual({});
+      delete expected[phase].tables.floor_today_split_parts;
+      for (const table of Object.values(expected[phase].tables))
+        for (const key of table.foreignKeys)
+          if (key.table === "floor_today_joins") key.table = "table_merges";
+      phases[phase]!.table_merges = phases[phase]!.floor_today_joins!;
+      delete phases[phase]!.floor_today_joins;
+      delete phases[phase]!.floor_today_join_tables;
+      delete phases[phase]!.floor_today_split_parts;
+      expected[phase].tables = Object.fromEntries(
+        Object.entries(expected[phase].tables).sort(([a], [b]) => a.localeCompare(b)),
+      );
+      phases[phase] = Object.fromEntries(
+        Object.entries(phases[phase]!).sort(([a], [b]) => a.localeCompare(b)),
+      );
       const zoneColumns = expected[phase].tables.floor_zones!.columns;
       const todayZoneColumns = zoneColumns.splice(-5);
       todayZoneColumns.find((column) => column.name === "today_business_day")!.notnull = 0;

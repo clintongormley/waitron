@@ -48,7 +48,7 @@ export const rangeCheck = (column: SQLiteColumn, low: number, high: number): SQL
   return sql`${column} is null or ${column} between ${sql.raw(String(low))} and ${sql.raw(String(high))}`;
 };
 
-const rotationCheck = (column: SQLiteColumn): SQL =>
+export const rotationCheck = (column: SQLiteColumn): SQL =>
   sql`${column} is null or (${column} between 0 and 345 and ${column} % 15 = 0)`;
 
 type Placed = {
@@ -255,59 +255,5 @@ export const tableMerges = table(
       name: "table_merges_zone_fk",
     }),
     check("table_merges_seats_ck", sql`${t.seats} >= 1`),
-  ],
-);
-
-/** A table in one of today's merges, with where it stood before the merge moved it. */
-export const floorTodayJoinTables = table(
-  "floor_today_join_tables",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    joinId: id("join_id").notNull(),
-    tableId: id("table_id").notNull(),
-    beforeX: smallCount("before_x").notNull(),
-    beforeY: smallCount("before_y").notNull(),
-    beforeRotation: smallCount("before_rotation").notNull(),
-  },
-  (t) => [
-    unique("floor_today_join_tables_table_key").on(t.tableId),
-    foreignKey({
-      columns: [t.joinId],
-      foreignColumns: [tableMerges.id],
-      name: "floor_today_join_tables_join_fk",
-    }),
-    foreignKey({
-      columns: [t.tableId],
-      foreignColumns: [diningTables.id],
-      name: "floor_today_join_tables_table_fk",
-    }),
-    check("floor_today_join_tables_before_x_ck", rangeCheck(t.beforeX, 0, 999)),
-    check("floor_today_join_tables_before_y_ck", rangeCheck(t.beforeY, 0, 999)),
-    check("floor_today_join_tables_before_rotation_ck", rotationCheck(t.beforeRotation)),
-  ],
-);
-
-/** A part split off its joined table today. */
-export const floorTodaySplitParts = table(
-  "floor_today_split_parts",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    joinedTableId: id("joined_table_id").notNull(),
-    partTableId: id("part_table_id").notNull(),
-  },
-  (t) => [
-    unique("floor_today_split_parts_part_key").on(t.partTableId),
-    index("floor_today_split_parts_joined_idx").on(t.joinedTableId),
-    check("floor_today_split_parts_not_self_ck", sql`${t.joinedTableId} <> ${t.partTableId}`),
-    foreignKey({
-      columns: [t.joinedTableId],
-      foreignColumns: [diningTables.id],
-      name: "floor_today_split_parts_joined_fk",
-    }),
-    foreignKey({
-      columns: [t.partTableId],
-      foreignColumns: [diningTables.id],
-      name: "floor_today_split_parts_part_fk",
-    }),
   ],
 );

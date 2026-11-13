@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "14ef5e69-5b68-400e-9b48-c3a292a23675",
+  "id": "f3c058a4-424b-4d73-8e94-26977713c7cb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1765,9 +1765,44 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "merge_id": {
+          "name": "merge_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "merge_before_x": {
+          "name": "merge_before_x",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "merge_before_y": {
+          "name": "merge_before_y",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "merge_before_rotation": {
+          "name": "merge_before_rotation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
+        "dining_tables_merge_idx": {
+          "name": "dining_tables_merge_idx",
+          "columns": [
+            "merge_id"
+          ],
+          "isUnique": false
+        },
         "dining_tables_short_name_key_uq": {
           "name": "dining_tables_short_name_key_uq",
           "columns": [
@@ -1797,6 +1832,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "dining_tables_merge_id_table_merges_id_fk": {
+          "name": "dining_tables_merge_id_table_merges_id_fk",
+          "tableFrom": "dining_tables",
+          "tableTo": "table_merges",
+          "columnsFrom": [
+            "merge_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "dining_tables_zone_fk": {
           "name": "dining_tables_zone_fk",
           "tableFrom": "dining_tables",
@@ -1814,6 +1862,22 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
+        "dining_tables_merge_before_x_ck": {
+          "name": "dining_tables_merge_before_x_ck",
+          "value": "\"dining_tables\".\"merge_before_x\" is null or \"dining_tables\".\"merge_before_x\" between 0 and 999"
+        },
+        "dining_tables_merge_before_y_ck": {
+          "name": "dining_tables_merge_before_y_ck",
+          "value": "\"dining_tables\".\"merge_before_y\" is null or \"dining_tables\".\"merge_before_y\" between 0 and 999"
+        },
+        "dining_tables_merge_before_rotation_ck": {
+          "name": "dining_tables_merge_before_rotation_ck",
+          "value": "\"dining_tables\".\"merge_before_rotation\" is null or (\"dining_tables\".\"merge_before_rotation\" between 0 and 345 and \"dining_tables\".\"merge_before_rotation\" % 15 = 0)"
+        },
+        "dining_tables_merge_before_ck": {
+          "name": "dining_tables_merge_before_ck",
+          "value": "(\"dining_tables\".\"merge_id\" is null) = (\"dining_tables\".\"merge_before_x\" is null) and (\"dining_tables\".\"merge_id\" is null) = (\"dining_tables\".\"merge_before_y\" is null) and (\"dining_tables\".\"merge_id\" is null) = (\"dining_tables\".\"merge_before_rotation\" is null)"
+        },
         "dining_tables_today_seats_ck": {
           "name": "dining_tables_today_seats_ck",
           "value": "\"dining_tables\".\"today_seats\" is null or \"dining_tables\".\"today_seats\" between 0 and 999"
@@ -1848,7 +1912,7 @@
         },
         "dining_tables_off_floor_ck": {
           "name": "dining_tables_off_floor_ck",
-          "value": "\"dining_tables\".\"on_floor\" = 1 or (\"dining_tables\".\"today_seats\" is null and \"dining_tables\".\"today_fixed\" = 0 and \"dining_tables\".\"today_x\" is null and \"dining_tables\".\"today_y\" is null and \"dining_tables\".\"today_width\" is null and \"dining_tables\".\"today_height\" is null and \"dining_tables\".\"today_shape\" is null and \"dining_tables\".\"today_rotation\" is null and \"dining_tables\".\"taken_off\" = 0 and \"dining_tables\".\"today_name\" is null)"
+          "value": "\"dining_tables\".\"on_floor\" = 1 or (\"dining_tables\".\"today_seats\" is null and \"dining_tables\".\"today_fixed\" = 0 and \"dining_tables\".\"today_x\" is null and \"dining_tables\".\"today_y\" is null and \"dining_tables\".\"today_width\" is null and \"dining_tables\".\"today_height\" is null and \"dining_tables\".\"today_shape\" is null and \"dining_tables\".\"today_rotation\" is null and \"dining_tables\".\"taken_off\" = 0 and \"dining_tables\".\"today_name\" is null and \"dining_tables\".\"merge_id\" is null)"
         }
       }
     },
@@ -2528,108 +2592,8 @@
         }
       }
     },
-    "floor_today_join_tables": {
-      "name": "floor_today_join_tables",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "join_id": {
-          "name": "join_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "table_id": {
-          "name": "table_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "before_x": {
-          "name": "before_x",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "before_y": {
-          "name": "before_y",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "before_rotation": {
-          "name": "before_rotation",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "floor_today_join_tables_table_key": {
-          "name": "floor_today_join_tables_table_key",
-          "columns": [
-            "table_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "floor_today_join_tables_join_fk": {
-          "name": "floor_today_join_tables_join_fk",
-          "tableFrom": "floor_today_join_tables",
-          "tableTo": "floor_today_joins",
-          "columnsFrom": [
-            "join_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "floor_today_join_tables_table_fk": {
-          "name": "floor_today_join_tables_table_fk",
-          "tableFrom": "floor_today_join_tables",
-          "tableTo": "dining_tables",
-          "columnsFrom": [
-            "table_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "floor_today_join_tables_before_x_ck": {
-          "name": "floor_today_join_tables_before_x_ck",
-          "value": "\"floor_today_join_tables\".\"before_x\" is null or \"floor_today_join_tables\".\"before_x\" between 0 and 999"
-        },
-        "floor_today_join_tables_before_y_ck": {
-          "name": "floor_today_join_tables_before_y_ck",
-          "value": "\"floor_today_join_tables\".\"before_y\" is null or \"floor_today_join_tables\".\"before_y\" between 0 and 999"
-        },
-        "floor_today_join_tables_before_rotation_ck": {
-          "name": "floor_today_join_tables_before_rotation_ck",
-          "value": "\"floor_today_join_tables\".\"before_rotation\" is null or (\"floor_today_join_tables\".\"before_rotation\" between 0 and 345 and \"floor_today_join_tables\".\"before_rotation\" % 15 = 0)"
-        }
-      }
-    },
-    "floor_today_joins": {
-      "name": "floor_today_joins",
+    "table_merges": {
+      "name": "table_merges",
       "columns": {
         "id": {
           "name": "id",
@@ -2661,8 +2625,8 @@
         }
       },
       "indexes": {
-        "floor_today_joins_zone_idx": {
-          "name": "floor_today_joins_zone_idx",
+        "table_merges_zone_idx": {
+          "name": "table_merges_zone_idx",
           "columns": [
             "zone_id"
           ],
@@ -2670,9 +2634,9 @@
         }
       },
       "foreignKeys": {
-        "floor_today_joins_zone_fk": {
-          "name": "floor_today_joins_zone_fk",
-          "tableFrom": "floor_today_joins",
+        "table_merges_zone_fk": {
+          "name": "table_merges_zone_fk",
+          "tableFrom": "table_merges",
           "tableTo": "floor_zones",
           "columnsFrom": [
             "zone_id"
@@ -2687,87 +2651,9 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "floor_today_joins_seats_ck": {
-          "name": "floor_today_joins_seats_ck",
-          "value": "\"floor_today_joins\".\"seats\" >= 1"
-        }
-      }
-    },
-    "floor_today_split_parts": {
-      "name": "floor_today_split_parts",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "joined_table_id": {
-          "name": "joined_table_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "part_table_id": {
-          "name": "part_table_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "floor_today_split_parts_joined_idx": {
-          "name": "floor_today_split_parts_joined_idx",
-          "columns": [
-            "joined_table_id"
-          ],
-          "isUnique": false
-        },
-        "floor_today_split_parts_part_key": {
-          "name": "floor_today_split_parts_part_key",
-          "columns": [
-            "part_table_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "floor_today_split_parts_joined_fk": {
-          "name": "floor_today_split_parts_joined_fk",
-          "tableFrom": "floor_today_split_parts",
-          "tableTo": "dining_tables",
-          "columnsFrom": [
-            "joined_table_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "floor_today_split_parts_part_fk": {
-          "name": "floor_today_split_parts_part_fk",
-          "tableFrom": "floor_today_split_parts",
-          "tableTo": "dining_tables",
-          "columnsFrom": [
-            "part_table_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "floor_today_split_parts_not_self_ck": {
-          "name": "floor_today_split_parts_not_self_ck",
-          "value": "\"floor_today_split_parts\".\"joined_table_id\" <> \"floor_today_split_parts\".\"part_table_id\""
+        "table_merges_seats_ck": {
+          "name": "table_merges_seats_ck",
+          "value": "\"table_merges\".\"seats\" >= 1"
         }
       }
     },

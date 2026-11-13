@@ -127,7 +127,6 @@ it.each([
   ["getOverdueOrders", [], "dining_tables"],
   ["getOverdueOrders", [], "dining_tables.today"],
   ["getSalesOverview", [], "dining_tables.today"],
-  ["getOverdueOrders", [], "floor_today_join_tables"],
   ["getOverdueOrders", [], "table_merges"],
   ["getDailyClose", ["2026-09-11"], "sale_substitutions"],
   ["getDailyClose", ["2026-09-11"], "sale_lines"],
@@ -1049,7 +1048,6 @@ const stationDeleteReads = [
   "routing_cells",
   "routing_cell_periods",
   "floor_zones",
-  "floor_today_join_tables",
   "table_merges",
 ] as const;
 it("kitchen delete impact subscribes to every refusal, setting and naming source", () => {
@@ -1127,7 +1125,6 @@ it.each(["Zone", "Department"] as const)(
       "floor_plan_tables",
       "floor_reset_tables",
       "table_merges",
-      "floor_today_join_tables",
       "parties",
       "party_tables",
       "working_orders",
