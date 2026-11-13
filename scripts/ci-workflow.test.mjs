@@ -1094,6 +1094,7 @@ const STREAM_TEST_FILES = [
   "src/handover-placement-full-disk.e2e.test.ts",
   "src/restore-full-disk.e2e.test.ts",
   "src/spare-store.test.ts",
+  "src/spare-join.e2e.test.ts",
 ];
 const STREAM_BINARY_INSTALLERS = [
   "node scripts/setup-litestream.mjs",
