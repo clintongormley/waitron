@@ -273,10 +273,8 @@ export class BoxStatusScreen extends LitElement {
   /** The times the open check compares; null while it is asked for, or when it was refused. */
   @state() private clockReading: ClockReading | null = null;
   @state() private settingClock = false;
-  /** Set once the box has set its clock from this device's; null otherwise. */
-  @state() private clockSetDone: { signInAgain: boolean } | null = null;
-  /** Set once the open check has confirmed a waiting start's time. */
-  @state() private clockConfirmedHere = false;
+  /** What the open check did to the box's clock; null until it did anything. */
+  @state() private clockDone: "set" | "set-sign-in" | "confirmed" | null = null;
   /** The check's refusal, shown above the dialog's buttons. */
   @state() private clockCheckError = "";
   @state() private confirmingClock = false;
@@ -325,6 +323,7 @@ export class BoxStatusScreen extends LitElement {
     void this.#healthQueries
       .watch("getBoxHealth", [], (health) => {
         this.health = health;
+        if (health.clock.waiting === undefined) this.clockConfirmError = "";
         this.awaitingFigure = false;
         this.awaitingRetryRead = false;
         this.#nothingLeftToRetry = this.#nothingToRetry(health);
@@ -386,7 +385,6 @@ export class BoxStatusScreen extends LitElement {
     return clockUnusable(health) || health.clock.waiting !== undefined;
   }
 
-  /** A waiting start's clock can be set only through its host, so a silent one is not checked. */
   #deviceCheckOffered(health: BoxHealth): boolean {
     return clockUnusable(health) || health.clock.waiting?.hostAnswers === true;
   }
@@ -423,8 +421,7 @@ export class BoxStatusScreen extends LitElement {
     const run = ++this.#clockCheckRun;
     this.clockReading = null;
     this.clockCheckError = "";
-    this.clockSetDone = null;
-    this.clockConfirmedHere = false;
+    this.clockDone = null;
     this.clockCheckOpen = true;
     try {
       const { challengeId, reading } = await this.#readBoxTime();
@@ -432,7 +429,7 @@ export class BoxStatusScreen extends LitElement {
       if (reading.agrees && this.health?.clock.waiting !== undefined) {
         await this.api.clockConfirm({ challengeId, asShown: true });
         if (run !== this.#clockCheckRun) return;
-        this.clockConfirmedHere = true;
+        this.clockDone = "confirmed";
         this.api.liveData.refresh();
       }
       this.clockReading = reading;
@@ -450,7 +447,7 @@ export class BoxStatusScreen extends LitElement {
       const { challengeId, reading } = await this.#readBoxTime();
       fresh = reading;
       const { stepMs } = await this.api.clockSet({ challengeId, deviceAt: Date.now() });
-      this.clockSetDone = { signInAgain: Math.abs(stepMs) > SESSION_IDLE_MS };
+      this.clockDone = Math.abs(stepMs) > SESSION_IDLE_MS ? "set-sign-in" : "set";
     } catch (error) {
       const reason = setRefusalReason(error);
       if (fresh !== null && reason === "agrees") {
@@ -477,7 +474,10 @@ export class BoxStatusScreen extends LitElement {
       const { challengeId } = await this.api.clockChallenge();
       await this.api.clockConfirm({ challengeId, asShown: true });
     } catch (error) {
-      this.clockConfirmError = setRefusal(error);
+      this.clockConfirmError =
+        setRefusalReason(error) === "stale"
+          ? t("box_status.clock.confirm_refused_stale")
+          : setRefusal(error);
     } finally {
       this.api.liveData.refresh();
       this.confirmingClock = false;
@@ -521,6 +521,7 @@ export class BoxStatusScreen extends LitElement {
       <wt-button
         variant="secondary"
         data-test="clock-check"
+        ?disabled=${this.confirmingClock}
         @click=${() => void this.#openClockCheck()}
         >${t("box_status.clock.admin.open")}</wt-button
       ><wt-help-tooltip
@@ -536,7 +537,7 @@ export class BoxStatusScreen extends LitElement {
   #renderClockCheckDialog(): TemplateResult | typeof nothing {
     if (!this.canCheckClock) return nothing;
     const reading = this.clockReading;
-    const done = this.clockSetDone;
+    const done = this.clockDone;
     const offeringSet =
       done === null && reading !== null && !reading.agrees && this.#canSetClock(this.health);
     const cancel = html`<wt-button
@@ -560,39 +561,35 @@ export class BoxStatusScreen extends LitElement {
     >
       ${
         done !== null
-          ? html`<p data-test="clock-set-done">
-              ${t("box_status.clock.admin.set.done")}${
-                done.signInAgain ? ` ${t("box_status.clock.admin.set.sign_in_again")}` : nothing
-              }
+          ? html`<p data-test=${done === "confirmed" ? "clock-confirmed" : "clock-set-done"}>
+              ${clockDoneWords(done)}
             </p>`
-          : this.clockConfirmedHere
-            ? html`<p data-test="clock-confirmed">${t("box_status.clock.admin.confirmed")}</p>`
-            : reading === null
-              ? nothing
-              : offeringSet
-                ? html`<p data-test="clock-set-question">
+          : reading === null
+            ? nothing
+            : offeringSet
+              ? html`<p data-test="clock-set-question">
+                  ${wholeTimes(
+                    fill("box_status.clock.admin.set.question", {
+                      box: atSeconds(reading.boxAt),
+                      device: atSeconds(reading.deviceAt),
+                    }),
+                  )}
+                </p>`
+              : html`<p data-test="clock-check-times">
                     ${wholeTimes(
-                      fill("box_status.clock.admin.set.question", {
+                      fill("box_status.clock.admin.times", {
                         box: atSeconds(reading.boxAt),
                         device: atSeconds(reading.deviceAt),
                       }),
                     )}
-                  </p>`
-                : html`<p data-test="clock-check-times">
-                      ${wholeTimes(
-                        fill("box_status.clock.admin.times", {
-                          box: atSeconds(reading.boxAt),
-                          device: atSeconds(reading.deviceAt),
-                        }),
-                      )}
-                    </p>
-                    ${
-                      reading.agrees
-                        ? nothing
-                        : html`<p data-test="clock-check-verdict">
-                            ${t("box_status.clock.admin.differ")}
-                          </p>`
-                    }`
+                  </p>
+                  ${
+                    reading.agrees
+                      ? nothing
+                      : html`<p data-test="clock-check-verdict">
+                          ${t("box_status.clock.admin.differ")}
+                        </p>`
+                  }`
       }
       <wt-form-actions slot="footer" .error=${this.clockCheckError}>
         ${
@@ -776,7 +773,11 @@ export class BoxStatusScreen extends LitElement {
         ${
           row.id === "clock" && this.canCheckClock && offersConfirm(health)
             ? html`<p class="aside" data-test="clock-confirm-help">
-                  ${t("box_status.clock.confirm_help")}
+                  ${t(
+                    health.clock.waiting?.hostAnswers === false
+                      ? "box_status.clock.confirm_help_host_silent"
+                      : "box_status.clock.confirm_help",
+                  )}
                 </p>
                 ${
                   this.clockConfirmError === ""
@@ -1039,6 +1040,12 @@ export class BoxStatusScreen extends LitElement {
 function atSeconds(ms: number): string {
   const at = new Date(ms);
   return `${formatIsoMinute(at.toISOString())}:${String(at.getSeconds()).padStart(2, "0")}`;
+}
+
+function clockDoneWords(done: "set" | "set-sign-in" | "confirmed"): string {
+  if (done === "confirmed") return t("box_status.clock.admin.confirmed");
+  const set = t("box_status.clock.admin.set.done");
+  return done === "set" ? set : `${set} ${t("box_status.clock.admin.set.sign_in_again")}`;
 }
 
 /** A waiting start's time as it stands, which the box refuses before 28-10-2024. */

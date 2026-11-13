@@ -214,8 +214,8 @@ an administrator sets it with **Check with this device's time**, or, during
 [start-up](box-status.md#clock-at-start), a staff member from a till.
 
 The **Clock** row then shows administrators a **Check with this device's time** button.
-Anyone else who can open this page sees **Only an administrator can check the box's clock with
-this device's time. Signing in as one signs you out here first.** and a **Sign in as an
+Anyone else who can open this page sees **Only an administrator can confirm or correct the box's
+date and time. Signing in as one signs you out here first.** and a **Sign in as an
 administrator** button. The button opens a dialog that shows both times: **The box's clock says …
 This device says …**
 

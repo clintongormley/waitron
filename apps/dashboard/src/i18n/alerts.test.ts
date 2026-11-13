@@ -786,7 +786,7 @@ describe("the box waiting for its start's time", () => {
   const WAITING_EN =
     "The box has not confirmed its time since it started, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time (1 of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.";
   const SILENT_EN =
-    "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start.";
+    "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start, and its clock cannot be corrected from Waitron until that part answers.";
 
   it("says what the box waits for, with the count, and adds why only when its host is silent", () => {
     expect(alertMessage("clock.unconfirmed", { agreed: 1, hostSilent: false }, "en")).toBe(
@@ -799,7 +799,7 @@ describe("the box waiting for its start's time", () => {
 
   it("says the same in Spanish", () => {
     expect(alertMessage("clock.unconfirmed", { agreed: 0, hostSilent: true }, "es")).toBe(
-      "El equipo no ha confirmado su hora desde que arrancó, así que no acepta cobros. Está esperando a que se conecten terminales y coincidan con su hora (0 de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del equipo; el personal puede usar «Comprobar la hora» en un terminal. No puede ver su hora de internet porque la parte del equipo que la lee no responde, así que espera así en cada arranque.",
+      "El equipo no ha confirmado su hora desde que arrancó, así que no acepta cobros. Está esperando a que se conecten terminales y coincidan con su hora (0 de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del equipo; el personal puede usar «Comprobar la hora» en un terminal. No puede ver su hora de internet porque la parte del equipo que la lee no responde, así que espera así en cada arranque, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
     );
   });
 });

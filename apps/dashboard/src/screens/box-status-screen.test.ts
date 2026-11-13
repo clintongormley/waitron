@@ -742,7 +742,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(openButton(el)).toBeNull();
     expect(text(signIn(el))).toBe(t("staff.sign_in_as_admin"));
     expect(text(q(el, "[data-test=row-clock] [data-test=clock-admin-hint]"))).toBe(
-      t("box_status.clock.admin.sign_in_hint"),
+      "Only an administrator can confirm or correct the box's date and time. Signing in as one signs you out here first.",
     );
     const asked = vi.fn();
     document.body.addEventListener("admin-sign-in", asked);
@@ -760,7 +760,9 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
     expect(tooltip.getAttribute("mode")).toBe("help-mode");
     expect(tooltip.getAttribute("aria-label")).toBe("What this check does");
     expect(tooltip.getAttribute("aria-label")).toBe(t("box_status.clock_check_help_label"));
-    expect(text(tooltip)).toBe(t("box_status.clock_check_help"));
+    expect(text(tooltip)).toBe(
+      "Compares the box's clock with this device's. While payments wait for the box's time, a match within a minute confirms it and payments start again; otherwise you can set the box from this device. Check that this device shows the right time first. It does not work on the box's own screen.",
+    );
     expect(tooltip.getAttribute("guide-label")).toBe(t("box_status.clock_check_help_guide"));
   });
 
@@ -1316,22 +1318,55 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       expect(openButton(el)).toBeNull();
     });
 
-    it.each([
-      ["not_stopped", "The box's clock no longer needs setting. See the Clock row."],
-      [
-        "stopped",
-        "The box's clock reads a date before 28 October 2024, so it cannot be kept as it is. See the Clock row.",
-      ],
-    ])("shows a confirmation refused as %s beside its button", async (reason, words) => {
+    it("shows a confirmation refused because the clock changed beside its button", async () => {
       const el = await mountClock(
-        waitingApi(WAITING_CLOCK, { clockConfirm: vi.fn().mockRejectedValue(REFUSED(reason)) }),
+        waitingApi(WAITING_CLOCK, { clockConfirm: vi.fn().mockRejectedValue(REFUSED("stale")) }),
       );
       await userEvent.click(confirmButton(el)!);
       await flush(el);
       const refusal = q(el, "[data-test=row-clock] [data-test=clock-confirm-refused]");
       expect(refusal!.getAttribute("role")).toBe("alert");
-      expect(text(refusal)).toBe(words);
+      expect(text(refusal)).toBe(
+        "The box's clock changed while this was being sent. Check the date and time above again, then press the button again.",
+      );
       expect(confirmButton(el)!.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("forgets a refused confirmation once a read shows the wait has ended", async () => {
+      const api = waitingApi(WAITING_CLOCK, {
+        clockConfirm: vi.fn().mockRejectedValue(REFUSED("stale")),
+      });
+      vi.mocked(api.getBoxHealth)
+        .mockResolvedValueOnce({ ...health(), clock: WAITING_CLOCK })
+        .mockResolvedValueOnce({ ...health(), clock: WAITING_CLOCK })
+        .mockResolvedValueOnce(health())
+        .mockResolvedValue({ ...health(), clock: WAITING_CLOCK });
+      const el = await mountClock(api);
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      expect(q(el, "[data-test=clock-confirm-refused]")).not.toBeNull();
+      api.liveData.refresh();
+      await flush(el);
+      expect(confirmButton(el)).toBeNull();
+      api.liveData.refresh();
+      await flush(el);
+      expect(confirmButton(el)).not.toBeNull();
+      expect(q(el, "[data-test=clock-confirm-refused]")).toBeNull();
+    });
+
+    it("holds the check with this device's time while the confirmation is sent", async () => {
+      let answer: (value: unknown) => void = () => undefined;
+      const el = await mountClock(
+        waitingApi(WAITING_CLOCK, {
+          clockConfirm: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+        }),
+      );
+      await userEvent.click(confirmButton(el)!);
+      await flush(el);
+      expect(openButton(el)!.hasAttribute("disabled")).toBe(true);
+      answer(CONFIRMED);
+      await flush(el);
+      expect(openButton(el)?.hasAttribute("disabled") ?? false).toBe(false);
     });
 
     it("sets the clock from this device when it is two days off the box's", async () => {
@@ -1372,9 +1407,19 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       const el = await mountClock(waitingApi(SILENT_CLOCK));
       expect(openButton(el)).toBeNull();
       expect(text(confirmButton(el))).toBe(t("box_status.clock.confirm"));
-      expect(text(q(el, "[data-test=row-clock] .line"))).toContain(
-        t("box_status.clock.waiting_host_silent"),
+      expect(text(q(el, "[data-test=row-clock] .line"))).toBe(
+        `${fill("box_status.clock.waiting", { agreed: "0", boxAt: formatIsoMinute(BOX_AT) })} It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start.`,
       );
+      expect(text(q(el, "[data-test=row-clock] [data-test=clock-confirm-help]"))).toBe(
+        "Press this only if the date and time above match a clock you trust. If they do not, do not press it: the box cannot correct its clock while the part that reads its internet time is not answering, so payments keep waiting.",
+      );
+    });
+
+    it("offers the check with this device's time, but not the confirmation, while the clock reads before 28-10-2024", async () => {
+      const el = await mountClock(clockApi({ notices: [CLOCK_UNUSABLE], clock: WAITING_CLOCK }));
+      expect(openButton(el)).not.toBeNull();
+      expect(confirmButton(el)).toBeNull();
+      expect(q(el, "[data-test=row-clock] [data-test=clock-confirm-help]")).toBeNull();
     });
 
     it("offers a manager an administrator sign-in in place of both", async () => {

@@ -261,8 +261,8 @@ export const ALERT_MESSAGES: Readonly<
     variants: {
       hostSilent: {
         mode: "append",
-        en: "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start.",
-        es: "No puede ver su hora de internet porque la parte del equipo que la lee no responde, así que espera así en cada arranque.",
+        en: "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start, and its clock cannot be corrected from Waitron until that part answers.",
+        es: "No puede ver su hora de internet porque la parte del equipo que la lee no responde, así que espera así en cada arranque, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
       },
     },
   },

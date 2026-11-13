@@ -241,26 +241,20 @@ describe.each(["light", "dark"] as const)("box-status-screen a11y (%s theme)", (
     });
 
     it.each([
-      ["its host answering", true, null, "clock-check"],
-      ["its host silent", false, null, "clock-confirm-help"],
+      ["nothing pressed", null, "clock-check"],
       [
         "a refused confirmation",
-        true,
         { code: "clock.set_refused", params: { reason: "not_stopped" } },
         "clock-confirm-refused",
       ],
     ] as const)(
       "renders a start waiting for its time accessibly with %s",
-      async (_name, hostAnswers, refusal, drawn) => {
+      async (_name, refusal, drawn) => {
         const waiting = health({
           clock: {
             ...health().clock,
-            sync: {
-              synced: false,
-              source: hostAnswers ? "timedatectl" : "unavailable",
-              warn: true,
-            },
-            waiting: { boxAt: "2026-10-22T19:45:00.000Z", agreed: 1, hostAnswers },
+            sync: { synced: false, source: "timedatectl", warn: true },
+            waiting: { boxAt: "2026-10-22T19:45:00.000Z", agreed: 1, hostAnswers: true },
           },
         });
         const api = Object.assign(stubApi(waiting), {

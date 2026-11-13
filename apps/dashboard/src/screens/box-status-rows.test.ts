@@ -713,25 +713,20 @@ describe("the Clock row while the start waits for its time", () => {
     expect(other).toBe(0);
   });
 
-  it("adds why when the box's clock service does not answer", () => {
-    expect(row(boxStatusRows(waitingHealth(false), []).rows, "clock").line).toBe(
-      `${fill("box_status.clock.waiting", { agreed: "1", boxAt: formatIsoMinute(BOX_AT) })} ${t("box_status.clock.waiting_host_silent")}`,
-    );
-    expect(t("box_status.clock.waiting_host_silent")).toBe(
-      "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start.",
-    );
+  it("tells the Sales row that payments wait, pointing at the Clock row", () => {
+    expect(row(boxStatusRows(waitingHealth(true), []).rows, "sales")).toMatchObject({
+      state: "stopped",
+      line: "Payments wait until the box's time is confirmed: see the Clock row",
+    });
   });
 
-  it("words the wait in Spanish", () => {
-    setLocale("es");
-    expect(row(boxStatusRows(waitingHealth(false), []).rows, "clock").line).toBe(
-      `${es["box_status.clock.waiting"].replace("{agreed}", "1").replace("{boxAt}", formatIsoMinute(BOX_AT))} ${es["box_status.clock.waiting_host_silent"]}`,
-    );
-  });
-
-  it("reads as correct once the start is confirmed", () => {
-    const clock = row(boxStatusRows(quietHealth(), []).rows, "clock");
-    expect(clock.state).toBe("ok");
-    expect(clock.line).toBe(t("box_status.clock.ok"));
+  it("leaves the bell's sentence off the Clock row once the wait has ended", () => {
+    const { rows, other } = boxStatusRows(quietHealth(), [UNCONFIRMED]);
+    expect(row(rows, "clock")).toMatchObject({
+      state: "ok",
+      line: t("box_status.clock.ok"),
+      alerts: [],
+    });
+    expect(other).toBe(0);
   });
 });

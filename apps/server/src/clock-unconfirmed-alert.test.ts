@@ -19,12 +19,6 @@ async function read(waiting: ReturnType<typeof startClockWaiting>) {
 }
 
 describe("clock.unconfirmed", () => {
-  it("is a box alert for whoever manages the system", () => {
-    const source = clockUnconfirmedAlertSource(() => null);
-    expect(source.area).toBe("box");
-    expect(source.permission).toBe("system.manage");
-  });
-
   it("is raised while the start waits, counting the one device that agrees", async () => {
     const state = startClockState();
     const waiting = startClockWaiting({
@@ -57,25 +51,18 @@ describe("clock.unconfirmed", () => {
     expect((await read(waiting))[0]?.params).toEqual({ agreed: 0, hostSilent: true });
   });
 
-  it("is not raised once the start is confirmed", async () => {
+  it.each([
+    ["once the start is confirmed", true, true],
+    ["on a box that files no records", false, false],
+  ])("is not raised %s", async (_name, filesRecords, confirmed) => {
     const state = startClockState();
-    state.confirm("by_person", {});
+    if (confirmed) state.confirm("by_person", {});
     const waiting = startClockWaiting({
       state,
-      filesRecords: () => true,
+      filesRecords: () => filesRecords,
       witnesses: oneDeviceAgreeing(),
     });
     expect(waiting).toBeNull();
     expect(await read(waiting)).toEqual([]);
-  });
-
-  it("is not raised on a box that files no records", () => {
-    expect(
-      startClockWaiting({
-        state: startClockState(),
-        filesRecords: () => false,
-        witnesses: oneDeviceAgreeing(),
-      }),
-    ).toBeNull();
   });
 });

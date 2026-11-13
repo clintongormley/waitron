@@ -20,8 +20,6 @@ export function startClockWaiting(deps: {
   };
 }
 
-/** `hostSilent` rather than `hostAnswers`: an alert's extra sentence is chosen by a param that
- * is true. */
 export function clockUnconfirmedAlertSource(waiting: () => StartClockWaiting | null): AlertSource {
   return {
     area: "box",

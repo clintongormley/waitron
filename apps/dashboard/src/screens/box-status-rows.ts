@@ -91,8 +91,8 @@ export function boxStatusRows(
     for (const id of on) noticesOn.get(id)!.push(notice);
   }
   for (const alert of alerts) {
-    // The row's own line says what the box waits for.
-    if (alert.code === "clock.unconfirmed" && health.clock.waiting !== undefined) continue;
+    // The row's line says what the box waits for, from the box's read; the bell's list can lag it.
+    if (alert.code === "clock.unconfirmed") continue;
     const part = partOfAlert(alert);
     const id =
       part === "bucket" && health.spare != null && health.stream.toSpare === true ? "spare" : part;
@@ -129,7 +129,7 @@ export function boxStatusRows(
 }
 
 function waitingOn(id: PartId, health: BoxHealth): boolean {
-  return id === "clock" && health.clock.waiting !== undefined;
+  return (id === "clock" || id === "sales") && health.clock.waiting !== undefined;
 }
 
 /** The box's own read can see drift before the bell's slower alert read carries it. */
@@ -149,7 +149,9 @@ function lineOf(
     const reason =
       stopped.find((notice) => notice.code === "storage.disk_full") ??
       stopped.find((notice) => notice.code === "clock.unusable");
-    return reason === undefined ? t("box_status.sales.ok") : t(STOPPED_WORDS[reason.code]!);
+    if (reason !== undefined) return t(STOPPED_WORDS[reason.code]!);
+    if (health.clock.waiting !== undefined) return t("box_status.sales.clock_waiting");
+    return t("box_status.sales.ok");
   }
   const words = stopped.find((notice) => Object.hasOwn(STOPPED_WORDS, notice.code));
   if (words !== undefined) return t(STOPPED_WORDS[words.code]!);

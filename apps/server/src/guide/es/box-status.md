@@ -231,7 +231,7 @@ durante el [arranque](box-status.md#clock-at-start), un empleado desde una caja.
 
 La fila **Reloj** muestra entonces a los administradores un botón
 **Comprobar con la hora de este dispositivo**. Cualquier otra persona que pueda abrir esta página ve
-**Solo un administrador puede comprobar la hora del servidor con la de este dispositivo. Iniciar
+**Solo un administrador puede confirmar o corregir la fecha y la hora del servidor. Iniciar
 sesión como administrador cierra primero tu sesión aquí.** y un botón **Iniciar sesión como
 administrador**. El botón abre un diálogo que muestra las dos horas: **El reloj del servidor marca …
 Este dispositivo marca …**
