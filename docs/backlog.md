@@ -780,11 +780,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **The till top bar fits at phone width, 1024 and 1280** (bundle of 9, 1 important, size M). Holds A1082, A921, A1219. [Detail](backlog/till.md#bundle-the-till-top-bar-fits-at-phone-width-1024-and-1280)
 
-- **A1094. After a dialog is closed with Escape, the next till dialog draws a blue focus ring around
-  the whole dialog** in the light theme; a first opening draws none. Seen, 2026-10-25 (A789 slice
-  4's look, `06` and `08` against `33` in `~/waitron-campaign-c/a789-4-shots/`). I believe it is
-  the shared dialog's keyboard-focus style reacting to the Escape key; not checked.
-
 - **The owner's yes-or-no read: built defaults that wait only for a nod** (bundle, 2 important, size M, needs the owner). Holds A723, A762, A1059, A1060, A1063, A1067, A1068, A1080, A1081, A1250, A1253, A893, A936, A900, A923, A1011, A1020 (remaining words and choices), A1031, A924, A925, A952, A953, A954, A956, A957, A958, A959, A292, A856, A859, A841, A841, A841. [Detail](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
 
 

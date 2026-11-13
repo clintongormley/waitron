@@ -79,6 +79,11 @@ export class WtDialog extends LitElement {
         overflow: hidden;
       }
 
+      /* A body with nothing focusable gives opening focus to the box itself, which is not a control. */
+      dialog:focus-visible {
+        outline: none;
+      }
+
       dialog::backdrop {
         background: var(--wt-color-scrim);
       }
