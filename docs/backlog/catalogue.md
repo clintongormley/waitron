@@ -1083,8 +1083,8 @@ the adviser wait for that scope; takeaway/delivery set menus are adviser questio
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement).
 The catalogue save/publish APIs retain the set-lunch marker, and the order API accepts later choices
 using its recorded menu prices and table-service VAT class. The editor switch and guide stay hidden
-until later choices can be sent and corrected; that service work and the lunch bill/receipt
-presentation remain unbuilt.
+until later choices can be sent and corrected. Till controls for later choices, independent course
+sending and lunch bill/receipt presentation remain unbuilt.
 Most Spanish restaurants sell a fixed-price
 lunch menu. Waitron has no way to sell one: the demo's "Set lunch" is an ordinary menu whose dishes
 each carry their own price, sold, printed and taxed one by one. The catalogue design names this

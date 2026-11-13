@@ -2903,6 +2903,7 @@ it("reads the recorded version after another publication changes its price", asy
 it("reuses a live document when reading the same recorded version without another query", async () => {
   const f = await menusFixture(fx.db);
   const published = await publish(f.lunch);
+  const cold = await publish(f.dinner);
   await app(async (tx) => {
     const live = (await readLiveDocuments(tx, [f.lunch])).get(f.lunch)!.document;
     const session = (
@@ -2913,10 +2914,21 @@ it("reuses a live document when reading the same recorded version without anothe
     const queries = vi.spyOn(session, "prepareQuery");
     try {
       const recorded = await readRecordedDocuments(tx, [published.versionId]);
-      expect(recorded.get(published.versionId)).toBe(live);
       expect(
         queries.mock.calls.filter(([query]) => query.sql.includes("menu_versions")),
       ).toHaveLength(0);
+      expect(recorded.get(published.versionId)).toBe(live);
+      queries.mockClear();
+      const firstCold = await readRecordedDocuments(tx, [cold.versionId]);
+      expect(
+        queries.mock.calls.filter(([query]) => query.sql.includes("menu_versions")).length,
+      ).toBeGreaterThan(0);
+      queries.mockClear();
+      const secondCold = await readRecordedDocuments(tx, [cold.versionId]);
+      expect(
+        queries.mock.calls.filter(([query]) => query.sql.includes("menu_versions")),
+      ).toHaveLength(0);
+      expect(secondCold.get(cold.versionId)).toBe(firstCold.get(cold.versionId));
     } finally {
       queries.mockRestore();
     }
