@@ -57,7 +57,7 @@ const PATH = "/management-api/me/personal-data/export";
 /** The route's clock: the venue's date (Europe/Madrid) is 2026-06-01. */
 const AT = new Date("2026-06-01T10:00:00.000Z");
 const SESSION_OPENED_AT = "2026-06-01T10:19:19.993Z";
-/** Marta's first time entry's local day (00:30 at +01:00); its UTC date is 2026-03-02. */
+/** Martha's first time entry's local day (00:30 at +01:00); its UTC date is 2026-03-02. */
 const FIRST_DAY = "2026-03-03";
 /** The day after the venue's date, which is later than her last entry. */
 const BEFORE = "2026-06-02";
@@ -83,14 +83,14 @@ const FILES = [
 ];
 
 const MARTA = {
-  name: "Marta Canary",
+  name: "Martha Canary",
   email: "marta.canary@example.test",
   passkeyOfferedAt: "2026-02-27T11:11:11.000Z",
 };
 /** Every clock-in and clock-out the fixture records is at this offset. */
 const CLOCK_OFFSET_MINUTES = 60;
 const COLLEAGUE = {
-  name: "Colleague Ruiz",
+  name: "Colleague Green",
   email: "colleague.ruiz@example.test",
   passkeyOfferedAt: "2026-03-13T13:13:13.000Z",
   payRateCents: 1999,
@@ -129,10 +129,10 @@ const MARTA_ACTIONS = {
   billRefundAmountCents: 2864,
   billRefundedAt: "2026-05-15T18:03:00.000Z",
 };
-const ADMIN = { name: "Ana Admin", email: "ana.admin@example.test" };
-const MANAGER = { name: "Luis Manager", email: "luis.manager@example.test" };
+const ADMIN = { name: "Anna Admin", email: "ana.admin@example.test" };
+const MANAGER = { name: "Lewis Manager", email: "luis.manager@example.test" };
 
-/** One of Marta's values per file and table, each beside the file it must be found in. */
+/** One of Martha's values per file and table, each beside the file it must be found in. */
 const MARTA_VALUES: [file: string, value: string][] = [
   ["profile.json", MARTA.email],
   ["sign-in.json", MARTA.passkeyOfferedAt],
@@ -164,7 +164,7 @@ const MARTA_VALUES: [file: string, value: string][] = [
   ["actions.json", MARTA_ACTIONS.billRefundedAt],
 ];
 
-/** The colleague's values in the same places as Marta's. */
+/** The colleague's values in the same places as Martha's. */
 const COLLEAGUE_VALUES = [
   COLLEAGUE.email,
   COLLEAGUE.passkeyOfferedAt,
@@ -549,8 +549,8 @@ beforeEach(async () => {
 type Sale = { code: string; number: number; total: number };
 
 /**
- * Marta's sale void, refund, drawer opening and bill-payment refund, and the colleague's, each on a
- * sale of its own. Marta's refunds are authorised by the colleague and the colleague's by the manager.
+ * Martha's sale void, refund, drawer opening and bill-payment refund, and the colleague's, each on a
+ * sale of its own. Martha's refunds are authorised by the colleague and the colleague's by the manager.
  */
 async function seedActions(colleague: string): Promise<void> {
   const { deviceId } = await seedDevice(suite.db);
@@ -692,7 +692,7 @@ async function download(path = PATH, as = cookie): Promise<Record<string, Uint8A
   return unzipSync(new Uint8Array(await response.arrayBuffer()));
 }
 
-/** The existing own export of the working-time record, as Marta asks for it. */
+/** The existing own export of the working-time record, as Martha asks for it. */
 async function existingExport(locale: "en" | "es"): Promise<Uint8Array> {
   const app = new Hono();
   mountAttendanceExportApi(

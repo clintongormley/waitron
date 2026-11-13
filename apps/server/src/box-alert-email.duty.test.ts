@@ -264,7 +264,7 @@ const RESTART: EmailedIncident = {
   params: {
     confirmationId: "c-1",
     confirmedBy: "admin",
-    person: "Ana",
+    person: "Anna",
     clockAt: "2025-03-14T08:12:00.000Z",
     lastRecordAt: "2026-10-18T21:40:00.000Z",
   },

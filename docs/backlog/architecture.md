@@ -837,6 +837,8 @@ the helper's constant status is not evidence of the write.
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.**
+  Local workforce-export staff use Martha Canary, Colleague Green, Anna Admin and Lewis Manager;
+  the adjustment-approval and box-email incident samples use Paul and Anna.
   Local session-person and recovery-page route fixtures use Anna for their staff display sample.
   The invoice-PDF download suite uses Martha for its manager sample and audit readback.
   The recovery-pack status suite uses Martha Green for its staff sample and name readback.
