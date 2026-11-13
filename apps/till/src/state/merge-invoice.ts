@@ -42,8 +42,8 @@ function sameIdentity(a: InvoiceIdentity | null, b: InvoiceIdentity | null): boo
   );
 }
 
-/** The question the server refuses a merge without (`bill.merge_invoice_choice_required`): the bill
- * merged away is set for a full invoice whose customer the receiving bill does not already name. A
+/** The question the server refuses a merge, or a move of every dish, without
+ * (`bill.merge_invoice_choice_required`): the bill merged away or emptied is set for a full invoice whose customer the receiving bill does not already name. A
  * null `intoBillId` is a new bill, which names no customer. Null when it does not apply, or when
  * either bill is not in `bills`. */
 export function mergeInvoiceQuestion(

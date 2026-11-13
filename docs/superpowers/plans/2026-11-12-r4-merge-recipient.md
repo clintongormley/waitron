@@ -34,7 +34,8 @@ progress on either bill is already refused in the same transaction by `bumpRevis
 (`bill-actions.ts:268` → `refusePaymentInFlight`, `working-order.ts:5812`), so no extra check.
 **Known gap, outside the owner's question, not built:** Move dishes of every dish off a
 full-invoice bill, then Finish table, abandons the emptied bill with its recipient
-(`parties.ts:798-811`).
+(`parties.ts:798-811`). (2026-11-13: closed by A1519,
+[its plan](2026-11-13-a1519-move-dishes-invoice-question.md).)
 
 **Relation to #2866** (`feat/r4-bill-rules`, open). It lets a part-paid open bill receive a merge.
 This work does not depend on it and is built on main now; whoever lands second rebases. Overlap:
@@ -118,7 +119,9 @@ full invoice's customer would change."
 
 **Backlog.** The known gap above (Move dishes of every dish off a full-invoice bill, then Finish
 table, loses the customer) could cost a filing, so this PR gives it a short entry of its own in
-`docs/backlog.md`'s fiscal area, worded as what a person would see (watcher, 00:52).
+`docs/backlog.md`'s fiscal area, worded as what a person would see (watcher, 00:52). (2026-11-13:
+that entry, A1519, is closed and deleted by
+[its plan](2026-11-13-a1519-move-dishes-invoice-question.md).)
 
 **RED tests first.** Server (`party-bill-actions.test.ts`, "merge bills"): **"refuses when the
 receiving bill got a full invoice after the till asked"** (first); "refuses merging away a

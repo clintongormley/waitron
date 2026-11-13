@@ -2115,8 +2115,8 @@ export interface InvoiceIdentity {
   identifierCountryCode?: string;
 }
 
-/** Which bill's invoice a merged bill keeps, and each bill's customer as the till read it; `into`
- * is null when the receiving bill was simplified. */
+/** Which bill's invoice a merged bill, or the bill every dish moves to, keeps, and each bill's
+ * customer as the till read it; `into` is null when the receiving bill was simplified or new. */
 export interface MergeInvoiceChoice {
   keep: "into" | "from";
   into: InvoiceIdentity | null;

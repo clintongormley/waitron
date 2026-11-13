@@ -792,9 +792,10 @@ declare module "@waitron/shared" {
     /** An order named a bill that is not the party's: a bill of another party, or of none. */
     "bill.other_party": { workingOrderId: string };
     /**
-     * A merge would move `workingOrderId`'s full invoice onto `intoWorkingOrderId` without the till
-     * saying which customer the merged bill is invoiced to, or either bill's full invoice changed
-     * since the till asked.
+     * A merge, or a move of every dish, would move `workingOrderId`'s full invoice onto
+     * `intoWorkingOrderId` without the till saying which customer the dishes are invoiced to, or
+     * either bill's full invoice changed since the till asked, or a move sent an answer but leaves a
+     * dish on `workingOrderId`.
      */
     "bill.merge_invoice_choice_required": { workingOrderId: string; intoWorkingOrderId: string };
     /** No bill payment with this id; `paymentId` is the id the caller sent. */
