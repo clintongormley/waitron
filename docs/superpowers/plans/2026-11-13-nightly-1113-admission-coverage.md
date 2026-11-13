@@ -1,6 +1,6 @@
 # NIGHTLY-1113: restore the fiscal fixture and provisioning coverage
 
-**Author:** Codex. **Status:** Claude reviewed; corrected for watcher clearance.
+**Author:** Codex. **Status:** Claude reviewed; corrected plan cleared by watcher 2026-11-13 03:54.
 **Request:** Lane K queue, NIGHTLY-1113, watcher 2026-11-13 03:42. Repair CI
 43350911465 on f46da9fc0e: four correction-amount huella cases fail to sign in; provisioning
 statements/functions fall below 98%. The queue requires clearance before editing a protected
@@ -41,4 +41,4 @@ Seek an outside opinion before 300 changed test lines. The two fixes share no im
 
 **Review:** Claude plan read, 150s, lane K receipts/nightly-1113/plan-review.md. Accepted its
 move instead of duplicate tests, omitted the extra fallback case, and removed the open-ended
-backlog work. Watcher clearance of this corrected approach is pending; no owner plan approval is claimed.
+backlog work. The watcher cleared this corrected approach at03:54; no owner plan approval is claimed.
