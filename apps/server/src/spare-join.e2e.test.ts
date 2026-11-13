@@ -44,15 +44,22 @@ describe("a spare joins a main box that does not file with Veri*Factu", () => {
   afterAll(async () => {
     const failures: unknown[] = [];
     stop.abort();
-    if (running !== undefined && !(await settleWithin(running, ABORT_SETTLE_MS))) {
-      failures.push(new Error(`the spare join did not stop within ${ABORT_SETTLE_MS} ms`));
+    // The scenario settles only once both boxes' servers have closed; until then a box may still
+    // be writing in the scratch folder.
+    const stopped = running === undefined || (await settleWithin(running, ABORT_SETTLE_MS));
+    if (!stopped) {
+      failures.push(
+        new Error(
+          `the spare join did not stop within ${ABORT_SETTLE_MS} ms; its scratch folder ${String(scratch)} is kept`,
+        ),
+      );
     }
     for (const cleanup of [
       async () => {
         if (s3 !== undefined) await s3.stop();
       },
       async () => {
-        if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+        if (scratch !== undefined && stopped) await rm(scratch, { recursive: true, force: true });
       },
     ]) {
       try {

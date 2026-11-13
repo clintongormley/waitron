@@ -71,9 +71,16 @@ const VENUE_M = {
 /** `provisionStreamBox`'s administrator. */
 const ADMIN = { email: "owner@example.test", password: "dashPass123" };
 const STAFF_PIN = "5555";
+/** Adopting restarts S once, into the start that takes the first copy. */
+const SPARE_RESTARTS_AT_ADOPT = 1;
+/**
+ * Then S restarts twice: once the first copy is ready, into the start that places it and finishes
+ * joining, and once joining has finished, into the mirror's start.
+ */
+const SPARE_RESTARTS_AFTER_FIRST_COPY = 2;
 
-// A caller's timeout adds this sum (CLAUDE.md §4). BOOT_MS, per start, and UNTIMED_MS, for
-// migrations, provisioning and closes, are budgets nothing here enforces; the health wait is
+// A caller's timeout adds this sum (CLAUDE.md §4). BOOT_MS is per start; UNTIMED_MS, for
+// migrations, provisioning and closes, is a budget nothing here enforces; the health wait is
 // `fetchHealthOk`'s poll budget. S starts four times: setup, the latch start that takes the copy,
 // the start that places it and finishes joining, and the mirror's; M starts three times: first, in
 // the middle of S's join, and for the start check.
@@ -181,12 +188,13 @@ async function boundedStart(starting: Promise<void>, what: string): Promise<void
  * One box's server, started again in place whenever it asks to restart: the `restart` seam closes
  * it and starts it on the same folders and environment.
  */
-class TestBox {
+export class TestBox {
   server: StartedServer | undefined;
   /** How many restarts the box asked for, or the test asked of it. */
   restarts = 0;
   /** Every name this box's servers asked the injected lookup for, in order. */
   readonly lookups: string[] = [];
+  private starting: Promise<void> | undefined;
   private restarting: Promise<void> | undefined;
   private restartFailure: unknown;
   private closed = false;
@@ -202,7 +210,13 @@ class TestBox {
     return `https://${BOX_HOSTNAME}:${this.port}`;
   }
 
-  async start(): Promise<void> {
+  start(): Promise<void> {
+    const starting = this.boot();
+    this.starting = starting.catch(() => {});
+    return starting;
+  }
+
+  private async boot(): Promise<void> {
     const server = await startServer(
       await loadBoxEnv(this.env, this.dirs.state),
       {},
@@ -215,12 +229,10 @@ class TestBox {
         restart: () => void this.restart(),
       },
     );
-    // A close that began while this start ran found no server to close.
-    if (this.closed) {
-      await server.close();
-      throw new ClosedWhileStarting(`the box on port ${this.port} was closed while it started`);
-    }
     this.server = server;
+    // `close` closes it once this start has settled.
+    if (this.closed)
+      throw new ClosedWhileStarting(`the box on port ${this.port} was closed while it started`);
   }
 
   /** Settles once this restart, and every one asked for before it, has finished. */
@@ -255,11 +267,15 @@ class TestBox {
     if (this.server === undefined) throw new Error(`the box on port ${this.port} did not start`);
   }
 
-  /** Settles a pending restart, then closes; returns what failed, the restart's failure first. */
+  /**
+   * Settles a pending restart and a pending start, then closes the server; returns what failed, the
+   * restart's failure first. It waits for a start however long it runs.
+   */
   async close(): Promise<unknown[]> {
     this.closed = true;
     const failures: unknown[] = [];
     await this.restarting;
+    await this.starting;
     if (this.restartFailure !== undefined) failures.push(this.restartFailure);
     const server = this.server;
     this.server = undefined;
@@ -270,6 +286,14 @@ class TestBox {
     }
     return failures;
   }
+}
+
+/** Closes every box at once, emptying `boxes`; returns every box's failures. */
+export async function closeBoxes(boxes: TestBox[]): Promise<unknown[]> {
+  const closing = await Promise.allSettled(boxes.splice(0).map((box) => box.close()));
+  return closing.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [result.reason],
+  );
 }
 
 /** What a till on M needs to ring a counter sale through M's own routes. */
@@ -384,16 +408,6 @@ async function readNodeMembershipOf(venueDir: string) {
   }
 }
 
-/** Reads M's pair link, from outside M's server. */
-async function pairLinkOf(venueDir: string, nodeId: string) {
-  const store = await openVenueDatabase(venueDir, { exclusive: false });
-  try {
-    return await readPairLink(store.node, nodeId);
-  } finally {
-    await store.close();
-  }
-}
-
 /** The public key `venue.db`'s `nodes` row holds for `nodeId`, read-only. */
 function nodeKeyIn(venueFile: string, nodeId: string): string | null | undefined {
   const db = new DatabaseSync(venueFile, { readOnly: true });
@@ -463,11 +477,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
   });
   const boxes: TestBox[] = [];
   const agents: Agent[] = [];
-  const closeAll = async (): Promise<unknown[]> => {
-    const failures: unknown[] = [];
-    for (const box of boxes.splice(0)) failures.push(...(await box.close()));
-    return failures;
-  };
+  const closeAll = (): Promise<unknown[]> => closeBoxes(boxes);
   let abortClose: Promise<unknown[]> | undefined;
   const onAbort = (): void => {
     abortClose = closeAll();
@@ -520,34 +530,6 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
       boxHost: synchronisedBoxHost(),
     });
     boxes.push(boxM);
-    await boundedStart(boxM.start(), "M's first start");
-    const caM = await readFile(join(dirsM.state, "tls", "ca.crt"), "utf8");
-    const urlM = `https://127.0.0.1:${portM}`;
-    const viaM = new Agent({ connect: { ca: caM } });
-    agents.push(viaM);
-    const health = await fetchHealthOk(`${urlM}/health`, { dispatcher: viaM } as RequestInit);
-    const healthBody = (await health.json()) as { tradingAvailable?: unknown };
-    expect(healthBody.tradingAvailable, JSON.stringify(healthBody)).not.toBe(false);
-
-    const workingOrderId = randomUUID();
-    const sold = await fetch(`${urlM}/api/sales`, {
-      dispatcher: viaM,
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        cookie: till.cookie,
-        [PERSON_HEADER]: till.personId,
-      },
-      body: JSON.stringify({
-        lines: [{ menuItemId: till.menuItemId, quantity: "1" }],
-        tender: { method: "cash", amount: "5.00" },
-        workingOrderId,
-        zoneId: till.zoneId,
-      }),
-    } as RequestInit);
-    expect(sold.status, await sold.text()).toBe(200);
-    expect(saleOf(join(dirsM.venue, "venue.db"), workingOrderId)).toBe(true);
-
     const dirsS = await boxDirs(scratch, "box-s");
     const boxS = new TestBox(
       dirsS,
@@ -562,7 +544,42 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
       { spareCopy: { hold: copyHold } },
     );
     boxes.push(boxS);
-    await boundedStart(boxS.start(), "S's setup start");
+
+    const urlM = `https://127.0.0.1:${portM}`;
+    const workingOrderId = randomUUID();
+    const sellingOnM = (async () => {
+      await boundedStart(boxM.start(), "M's first start");
+      const caM = await readFile(join(dirsM.state, "tls", "ca.crt"), "utf8");
+      const viaM = new Agent({ connect: { ca: caM } });
+      agents.push(viaM);
+      const health = await fetchHealthOk(`${urlM}/health`, { dispatcher: viaM } as RequestInit);
+      const healthBody = (await health.json()) as { tradingAvailable?: unknown };
+      expect(healthBody.tradingAvailable, JSON.stringify(healthBody)).not.toBe(false);
+
+      const sold = await fetch(`${urlM}/api/sales`, {
+        dispatcher: viaM,
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: till.cookie,
+          [PERSON_HEADER]: till.personId,
+        },
+        body: JSON.stringify({
+          lines: [{ menuItemId: till.menuItemId, quantity: "1" }],
+          tender: { method: "cash", amount: "5.00" },
+          workingOrderId,
+          zoneId: till.zoneId,
+        }),
+      } as RequestInit);
+      expect(sold.status, await sold.text()).toBe(200);
+      expect(saleOf(join(dirsM.venue, "venue.db"), workingOrderId)).toBe(true);
+      return { caM, viaM };
+    })();
+    // S's setup start reads nothing of M's, so it runs while M starts and sells.
+    const [{ caM, viaM }] = await Promise.all([
+      sellingOnM,
+      boundedStart(boxS.start(), "S's setup start"),
+    ]);
     const urlS = `https://127.0.0.1:${portS}`;
     const caS = await readFile(join(dirsS.state, "tls", "ca.crt"), "utf8");
     // In setup S answers under its own authority; once it adopts, under the venue's, M's.
@@ -599,10 +616,11 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     };
 
     clock.begin("spare-refused");
+    const bucketStore = createS3ObjectStore(bucket);
     const pointer = await wait(
       "M's pointer in the bucket",
       POINTER_WAIT_MS,
-      async () => (await readPointer(createS3ObjectStore(bucket), m.locationId)) ?? undefined,
+      async () => (await readPointer(bucketStore, m.locationId)) ?? undefined,
     );
     expect(pointer.pointer.body.generation).toEqual(expect.any(String));
     const before = await joinState(dirsM.venue, m.nodeId);
@@ -648,16 +666,21 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     const joined = await adopt();
     expect(joined.status, JSON.stringify(joined.body)).toBe(200);
     expect(joined.body).toMatchObject({ adopted: true, restarting: true });
-    const link = await wait("M's pair link to reach streaming", LINK_WAIT_MS, async () => {
-      const current = await pairLinkOf(dirsM.venue, m.nodeId);
-      return current?.state === "streaming" ? current : undefined;
-    });
+    const readerM = await openVenueDatabase(dirsM.venue, { exclusive: false });
+    let link: NonNullable<Awaited<ReturnType<typeof readPairLink>>>;
+    try {
+      link = await wait("M's pair link to reach streaming", LINK_WAIT_MS, async () => {
+        const current = await readPairLink(readerM.node, m.nodeId);
+        return current?.state === "streaming" ? current : undefined;
+      });
+    } finally {
+      await readerM.close();
+    }
     expect(link.role).toBe("streams");
     const nodeIdS = link.peerNodeId;
 
     clock.begin("main-restart-mid-join");
-    // Adopt's: S is in its latch start, its copy attempts held.
-    expect(boxS.restarts - restartsBeforeJoin).toBe(1);
+    expect(boxS.restarts - restartsBeforeJoin).toBe(SPARE_RESTARTS_AT_ADOPT);
     const serverBeforeRestart = boxM.server;
     const restartsM = boxM.restarts;
     await boxM.restartNow();
@@ -702,8 +725,7 @@ export async function runSpareJoinScenario(fixture: SpareJoinFixture): Promise<v
     expect(await node.json()).toMatchObject({ acceptingSales: false });
     for (const event of ["spare.first_copy_placed", "adoption.established"])
       expect(linesSince(logAtCopy).map((line) => line.event)).toContain(event);
-    // The first copy's and finishing joining's.
-    expect(boxS.restarts - restartsBeforeCopy).toBe(2);
+    expect(boxS.restarts - restartsBeforeCopy).toBe(SPARE_RESTARTS_AFTER_FIRST_COPY);
     const venueS = join(dirsS.venue, "venue.db");
     expect(saleOf(venueS, workingOrderId)).toBe(true);
     expect(nodeKeyIn(venueS, nodeIdS)).toBe(link.peerPublicKey);
