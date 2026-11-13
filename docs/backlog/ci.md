@@ -388,7 +388,8 @@ settleStructure, both animation frames, and every row, action and assertion.
 The printer pick-up-role matrix runs without its two save-only captures, keeping
 every interaction, flush, geometry and accessibility assertion. The shared axe helper stays unchanged; reducing unused result detail did not justify a shared change.
 Dashboard packing uses refreshed complete-run file durations. Measure the current-head
-coverage-on whole jobs before claiming a speed gain or the four-minute goal; any
+coverage-on whole jobs from a green full run with healthy checkout timings before claiming a
+speed gain or the four-minute goal; any
 remaining product-editor, product-list or menu cut still needs a demonstrated cause.
 The 12 November diagnosis traced the warm-cache rebuild to a cache writer without
 compiler tools. The root pnpm setting now skips the optional `cpu-features` and
