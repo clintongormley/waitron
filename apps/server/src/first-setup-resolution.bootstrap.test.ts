@@ -28,7 +28,7 @@ async function fixture(frozen: "production" | "preproduction" | null) {
     venueDir = join(root, "venue");
   await mkdir(stateDir);
   await mkdir(venueDir);
-  if (frozen === null) await writeFile(join(stateDir, "first-setup.json"), "torn");
+  if (frozen === null) await writeFile(join(stateDir, "flows/setup/record.json"), "torn");
   else {
     const host = createFirstSetupModuleHost({
       stateDir,

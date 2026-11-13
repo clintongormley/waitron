@@ -88,7 +88,7 @@ it.each([
   await filesystem.mkdir(stateDir);
   await filesystem.mkdir(venueDir);
   const directory =
-    kind === "local" ? join(stateDir, "first-fiscal-documents") : join(root, "receipts");
+    kind === "local" ? join(stateDir, "flows/setup/documents") : join(root, "receipts");
   await filesystem.mkdir(directory);
   const path = join(directory, "one.json");
   await filesystem.writeFile(path, '{"position":42}');

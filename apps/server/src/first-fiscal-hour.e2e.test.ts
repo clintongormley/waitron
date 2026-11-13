@@ -140,7 +140,7 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       origin = `https://127.0.0.1:${child.port}`;
       expect(await ready(child, origin, agent)).toEqual({ claimed: false });
       expect(await readFile(join(f.stateDir, "tls", "ca.crt"))).toEqual(ca);
-      await expect(stat(join(f.stateDir, "first-setup.json"))).rejects.toMatchObject({
+      await expect(stat(join(f.stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
         code: "ENOENT",
       });
     } finally {

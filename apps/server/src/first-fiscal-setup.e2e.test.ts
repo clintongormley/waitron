@@ -222,7 +222,7 @@ it.each([
             error: { code: "setup.request_invalid", params: { field: "configurationImport" } },
           },
         });
-        await expect(readFile(join(stateDir, "first-setup.json"))).rejects.toMatchObject({
+        await expect(readFile(join(stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
           code: "ENOENT",
         });
       }
@@ -263,7 +263,7 @@ it.each([
             status: 400,
             body: { error: { code: "setup.request_invalid", params: { field } } },
           });
-          await expect(readFile(join(stateDir, "first-setup.json"))).rejects.toMatchObject({
+          await expect(readFile(join(stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
             code: "ENOENT",
           });
         }
@@ -390,11 +390,11 @@ it.each([
         const replacement = decodeConfigurationBundle(artifact, "synthetic import passphrase");
         replacement.createdAt = "2026-10-16T12:00:00.000Z";
         await writeFile(
-          join(stateDir, "configuration-import.artifact"),
+          join(stateDir, "flows/setup/import/artifact"),
           encodeConfigurationBundle(replacement, "synthetic import passphrase"),
         );
       } else if (change === "missing") {
-        await rm(join(stateDir, "configuration-import.json"));
+        await rm(join(stateDir, "flows/setup/import/marker.json"));
       }
       if (change === "none" && launch === "direct" && !newTaxpayer) {
         const { email: _email, ...beforeEmail } = live;
@@ -414,10 +414,10 @@ it.each([
             },
           },
         });
-        const disk = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+        const disk = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
         expect(disk.status).toBe("consumption-intent");
         expect(disk.consumptionIntent).toBe(true);
-        expect(await readFile(join(stateDir, "configuration-import.artifact"))).not.toHaveLength(0);
+        expect(await readFile(join(stateDir, "flows/setup/import/artifact"))).not.toHaveLength(0);
         await server!.close();
         server = undefined;
         const untouched = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
@@ -487,13 +487,13 @@ it.each([
       } finally {
         isolated.close();
       }
-      const persisted = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+      const persisted = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
       expect(persisted.status).toBe("complete");
       expect(persisted.frozen.configurationImport).toEqual({
         digest: expect.stringMatching(/^[a-f0-9]{64}$/),
         newTaxpayer,
       });
-      await expect(readFile(join(stateDir, "configuration-import.json"))).rejects.toMatchObject({
+      await expect(readFile(join(stateDir, "flows/setup/import/marker.json"))).rejects.toMatchObject({
         code: "ENOENT",
       });
       const merged = await loadBoxEnv(env, stateDir);
@@ -506,7 +506,7 @@ it.each([
       expect(setup.status).toBe(404);
       await server.close();
       server = undefined;
-      const restarted = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+      const restarted = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
       expect(restarted.frozen).toEqual(persisted.frozen);
       expect(restarted.result).toEqual(persisted.result);
     } finally {
@@ -651,7 +651,7 @@ it("accepts real retained readiness before the wizard collects email settings", 
       status: 200,
       body: { status: "accepted", testedAt: expect.any(String) },
     });
-    const retained = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+    const retained = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
     expect(retained.status).toBe("claimed");
     expect(retained.consumptionIntent).toBe(false);
   } finally {

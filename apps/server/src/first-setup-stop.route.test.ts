@@ -73,7 +73,7 @@ it.each([
 
 it("a stop the repair page would refuse is refused, and writes nothing", async () => {
   const s = await ordinaryServer();
-  await writeFile(join(s.stateDir, "setup-operation.json"), JSON.stringify({ left: "behind" }));
+  await writeFile(join(s.stateDir, "flows/setup/operation.json"), JSON.stringify({ left: "behind" }));
   const ids = await s.ids();
   const summary = await createFirstSetupResolutionActions({
     stateDir: s.stateDir,
@@ -201,7 +201,7 @@ it.each([
   [
     "leaves a file Start again refuses",
     async (s: Server) => {
-      await writeFile(join(s.stateDir, "setup-operation.json"), JSON.stringify({ left: "behind" }));
+      await writeFile(join(s.stateDir, "flows/setup/operation.json"), JSON.stringify({ left: "behind" }));
     },
     409,
     "setup.attempt_conflict",

@@ -22,11 +22,11 @@ const DELETED = {
   ],
   state: [
     "module-preparation-state.json",
-    "first-fiscal-documents",
-    "first-setup-node-key.json",
-    "module-operation-public.json",
+    "flows/setup/documents",
+    "flows/setup/node-key.json",
+    "flows/setup/public-evidence.json",
     "first-setup-resolutions",
-    "first-setup.json",
+    "flows/setup/record.json",
   ],
 } as const;
 

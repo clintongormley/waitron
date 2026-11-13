@@ -148,7 +148,7 @@ it.each(["demo", "prepare"])(
       { code: "FF-0CNNW", purpose: "full", nextNumber: 1 },
       { code: "R-0CNNW", purpose: "rectificative", nextNumber: 1 },
     ]);
-    await expect(readFile(join(stateDir, "first-setup.json"))).rejects.toMatchObject({
+    await expect(readFile(join(stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
     await expect(readFile(join(stateDir, "module-preparation-state.json"))).rejects.toMatchObject({

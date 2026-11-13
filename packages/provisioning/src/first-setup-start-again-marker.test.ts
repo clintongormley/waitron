@@ -47,16 +47,16 @@ const VENUE_FILES: Record<string, string> = {
 };
 const STATE_FILES: Record<string, string> = {
   "module-preparation-state.json": "{}",
-  "first-fiscal-documents/a.json": "document",
-  [`first-fiscal-documents/.first-setup-${randomUUID()}.tmp`]: "half-written",
-  "first-setup-node-key.json": "key",
-  "module-operation-public.json": "public",
+  "flows/setup/documents/a.json": "document",
+  [`flows/setup/documents/.first-setup-${randomUUID()}.tmp`]: "half-written",
+  "flows/setup/node-key.json": "key",
+  "flows/setup/public-evidence.json": "public",
   [`first-setup-resolutions/${RECORD}/000001.json`]: "record",
   [`first-setup-resolutions/${RECORD}/manifest.json`]: "manifest",
   [`first-setup-resolutions/${RECORD}/.first-setup-${randomUUID()}.tmp`]: "half-written",
   [`first-setup-resolutions/${RECORD}/step-000003/original-1.json`]: "chunk",
   [`first-setup-resolutions/${RECORD}/step-000003/manifest.json`]: "step manifest",
-  "first-setup.json": "state",
+  "flows/setup/record.json": "state",
 };
 const KEPT_STATE: Record<string, string> = {
   "records/choices/1-x.json": "confirmation",
@@ -194,9 +194,9 @@ it.each([
 });
 
 it("an attempt that never chose a name is finished from the marker alone", async () => {
-  const roots = await attemptFolders({}, { "first-setup.json": "state" });
+  const roots = await attemptFolders({}, { "flows/setup/record.json": "state" });
   const marker = await marked(roots);
-  expect(marker.files.map((entry) => entry.name).sort()).toEqual(["first-setup.json"]);
+  expect(marker.files.map((entry) => entry.name).sort()).toEqual(["flows/setup/record.json"]);
   await finishStartAgainDeletion(roots);
   await expectOnlyKept(roots);
 });
@@ -314,7 +314,7 @@ it.each<[string, (roots: { venueDir: string; stateDir: string }) => Promise<void
   ],
   [
     "beside a file newly added inside first-fiscal-documents/",
-    (roots) => writeFile(join(roots.stateDir, "first-fiscal-documents", "b.json"), "new"),
+    (roots) => writeFile(join(roots.stateDir, "flows/setup/documents", "b.json"), "new"),
   ],
   [
     "with a marker naming other folders",
@@ -330,12 +330,12 @@ it.each<[string, (roots: { venueDir: string; stateDir: string }) => Promise<void
     "beside a symbolic link in place of venue.db",
     async (roots) => {
       await fs.unlink(join(roots.venueDir, "venue.db"));
-      await symlink(join(roots.stateDir, "first-setup.json"), join(roots.venueDir, "venue.db"));
+      await symlink(join(roots.stateDir, "flows/setup/record.json"), join(roots.venueDir, "venue.db"));
     },
   ],
   [
     "beside a folder inside first-fiscal-documents/",
-    (roots) => mkdir(join(roots.stateDir, "first-fiscal-documents", "inner")),
+    (roots) => mkdir(join(roots.stateDir, "flows/setup/documents", "inner")),
   ],
   [
     "beside a record subfolder not named step-NNNNNN",
@@ -345,7 +345,7 @@ it.each<[string, (roots: { venueDir: string; stateDir: string }) => Promise<void
     "beside a symbolic link inside a record folder",
     (roots) =>
       symlink(
-        join(roots.stateDir, "first-setup.json"),
+        join(roots.stateDir, "flows/setup/record.json"),
         join(roots.stateDir, "first-setup-resolutions", RECORD, "link.json"),
       ),
   ],
@@ -356,8 +356,8 @@ it.each<[string, (roots: { venueDir: string; stateDir: string }) => Promise<void
   [
     "beside first-fiscal-documents as a file",
     async (roots) => {
-      await rm(join(roots.stateDir, "first-fiscal-documents"), { recursive: true });
-      await writeFile(join(roots.stateDir, "first-fiscal-documents"), "x");
+      await rm(join(roots.stateDir, "flows/setup/documents"), { recursive: true });
+      await writeFile(join(roots.stateDir, "flows/setup/documents"), "x");
     },
   ],
 ])("a pending deletion %s is refused, and nothing is deleted", async (_name, change) => {
@@ -394,7 +394,7 @@ it("a row written into venue.db-wal after the cut is refused, and nothing is del
 it("a file newly added inside first-fiscal-documents/ stops the folder's rmdir and is kept", async () => {
   const roots = await attemptFolders();
   const marker = await marked(roots);
-  const added = join(roots.stateDir, "first-fiscal-documents", "b.json");
+  const added = join(roots.stateDir, "flows/setup/documents", "b.json");
   await writeFile(added, "new");
   await expect(deleteMarkedAttempt(roots, marker)).rejects.toMatchObject(incomplete);
   expect(await readFile(added, "utf8")).toBe("new");
@@ -406,7 +406,7 @@ it("a marker over 1 MiB is refused setup.not_ready before anything is written", 
   const marker = await startAgainMarkerFor(roots, ATTEMPT);
   const files = Array.from({ length: 6000 }, (_, index) => ({
     root: "state" as const,
-    name: `first-fiscal-documents/${String(index).padStart(100, "0")}.json`,
+    name: `flows/setup/documents/${String(index).padStart(100, "0")}.json`,
     size: 1,
     sha256: "b".repeat(64),
   }));
@@ -456,12 +456,12 @@ it("a damaged marker file is refused, not read as absent", async () => {
 it("a pending deletion beside a folder it cannot read is refused, and nothing is deleted", async () => {
   const roots = await attemptFolders();
   await marked(roots);
-  const documents = join(roots.stateDir, "first-fiscal-documents");
+  const documents = join(roots.stateDir, "flows/setup/documents");
   await fs.chmod(documents, 0o000);
   try {
     await expect(finishStartAgainDeletion(roots)).rejects.toMatchObject({
       ...incomplete,
-      reason: `check failed: EACCES ${join(await fs.realpath(roots.stateDir), "first-fiscal-documents")}`,
+      reason: `check failed: EACCES ${join(await fs.realpath(roots.stateDir), "flows/setup/documents")}`,
     });
   } finally {
     await fs.chmod(documents, 0o700);
@@ -557,12 +557,12 @@ it.each<[string, unknown]>([
     "a document in a subfolder",
     {
       ...markerJson,
-      files: [{ ...file0, root: "state", name: "first-fiscal-documents/x/y.json" }],
+      files: [{ ...file0, root: "state", name: "flows/setup/documents/x/y.json" }],
     },
   ],
   [
     "an empty path segment",
-    { ...markerJson, files: [{ ...file0, root: "state", name: "first-fiscal-documents//y.json" }] },
+    { ...markerJson, files: [{ ...file0, root: "state", name: "flows/setup/documents//y.json" }] },
   ],
   ["a venue name not on the list", { ...markerJson, files: [{ ...file0, name: "venue.db-shm" }] }],
 ])("a marker with %s is refused as damaged", async (_name, value) => {
@@ -577,7 +577,7 @@ it.each([
 ])(
   "an attempt whose marker names no venue.db: a venue.db %s after the marker",
   async (_name, placed) => {
-    const roots = await attemptFolders({}, { "first-setup.json": "state" });
+    const roots = await attemptFolders({}, { "flows/setup/record.json": "state" });
     const marker = await marked(roots);
     expect(marker.files.some((entry) => entry.name === "venue.db")).toBe(false);
     if (!placed) {
@@ -626,12 +626,12 @@ it("a deletion that throws names the error's code and path in its reason", async
 it("a deletion that meets an unexpected layout names it, and deletes nothing", async () => {
   const roots = await attemptFolders();
   const marker = await marked(roots);
-  const link = join(roots.stateDir, "first-fiscal-documents", "link.json");
-  await symlink(join(roots.stateDir, "first-setup.json"), link);
+  const link = join(roots.stateDir, "flows/setup/documents", "link.json");
+  await symlink(join(roots.stateDir, "flows/setup/record.json"), link);
   const before = await snapshot(roots);
   await expect(deleteMarkedAttempt(roots, marker)).rejects.toMatchObject({
     ...incomplete,
-    reason: `layout unexpected: ${join(await fs.realpath(roots.stateDir), "first-fiscal-documents", "link.json")}`,
+    reason: `layout unexpected: ${join(await fs.realpath(roots.stateDir), "flows/setup/documents", "link.json")}`,
   });
   expect(await snapshot(roots)).toEqual(before);
 });
@@ -639,12 +639,12 @@ it("a deletion that meets an unexpected layout names it, and deletes nothing", a
 it("a deletion whose walk cannot read a folder names that folder in its reason", async () => {
   const roots = await attemptFolders();
   const marker = await marked(roots);
-  const documents = join(roots.stateDir, "first-fiscal-documents");
+  const documents = join(roots.stateDir, "flows/setup/documents");
   await fs.chmod(documents, 0o000);
   try {
     await expect(deleteMarkedAttempt(roots, marker)).rejects.toMatchObject({
       ...incomplete,
-      reason: `deletion failed: EACCES ${join(await fs.realpath(roots.stateDir), "first-fiscal-documents")}`,
+      reason: `deletion failed: EACCES ${join(await fs.realpath(roots.stateDir), "flows/setup/documents")}`,
     });
   } finally {
     await fs.chmod(documents, 0o700);
@@ -680,7 +680,7 @@ it("an attempt with no node.db may start again, and none is created", async () =
 it.each<[string, object, (roots: { venueDir: string; stateDir: string }) => Promise<unknown>]>([
   ...[
     "trading.env",
-    "setup-operation.json",
+    "flows/setup/operation.json",
     "flows/restore/record.json",
     "reset-request.json",
     "modules.json",
@@ -884,12 +884,12 @@ it.each<[string, boolean, (f: Awaited<ReturnType<typeof pendingDeletion>>) => Pr
 
 it("a listed file the marker cannot hash is refused as a failed check, naming the file", async () => {
   const roots = await attemptFolders();
-  const file = join(roots.stateDir, "module-operation-public.json");
+  const file = join(roots.stateDir, "flows/setup/public-evidence.json");
   await fs.chmod(file, 0o000);
   try {
     await expect(startAgainMarkerFor(roots, ATTEMPT)).rejects.toMatchObject({
       ...incomplete,
-      reason: `check failed: EACCES ${join(await fs.realpath(roots.stateDir), "module-operation-public.json")}`,
+      reason: `check failed: EACCES ${join(await fs.realpath(roots.stateDir), "flows/setup/public-evidence.json")}`,
     });
   } finally {
     await fs.chmod(file, 0o600);

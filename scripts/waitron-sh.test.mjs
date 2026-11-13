@@ -2212,8 +2212,8 @@ describe("waitron.sh reset", () => {
     writeFileSync(join(state, "records/choices", "choice.json"), "{}");
     mkdirSync(join(state, "records/set-aside"));
     writeFileSync(join(state, "records/set-aside", "venue.db"), "db");
-    writeFileSync(join(state, "first-setup-start-again-guesses.json"), "{}");
-    writeFileSync(join(state, "first-setup.json"), "{}");
+    writeFileSync(join(state, "flows/setup/start-again-guesses.json"), "{}");
+    writeFileSync(join(state, "flows/setup/record.json"), "{}");
     const r = spawnSync("sh", ["-c", match[1]], {
       encoding: "utf8",
       env: { PATH: process.env.PATH, WAITRON_STATE_DIR: state },

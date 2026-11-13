@@ -33,7 +33,7 @@ async function fixture() {
       f.ownerAttempt,
       await f.owner.reconfirm(f.ownerAttempt, PASSWORD, "block-use"),
     );
-  return { ...f, keys, stage, options, path: join(f.stateDir, "first-setup-node-key.json") };
+  return { ...f, keys, stage, options, path: join(f.stateDir, "flows/setup/node-key.json") };
 }
 async function committed(f: Awaited<ReturnType<typeof fixture>>) {
   let state = (await f.store.read())!;
@@ -58,7 +58,7 @@ it("stages 192 random bits without installing or persisting the raw node key", a
   expect(persisted).not.toContain(PASSWORD);
   const metadata = await f.keys.readStage(f.ownerAttempt);
   expect(await verifySecretAsync(result.key.secret, metadata.verifier)).toBe(true);
-  expect(await readdir(f.stateDir)).toContain("first-setup-node-key.json");
+  expect(await readdir(f.stateDir)).toContain("flows/setup/node-key.json");
 });
 it("same-visit delivery returns exactly the same key and stage", async () => {
   const f = await fixture();

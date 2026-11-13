@@ -76,7 +76,7 @@ describe("fiscal activation readiness", () => {
       vi.fn().mockResolvedValue({ status: "accepted" }),
       evidenceKey,
     ).run(input);
-    const path = join(dir, "fiscal-readiness.json");
+    const path = join(dir, "flows/setup/readiness.json");
     const evidence = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
     await writeFile(path, JSON.stringify({ ...evidence, mac: "00".repeat(32) }));
 
@@ -107,7 +107,7 @@ describe("fiscal activation readiness", () => {
       vi.fn().mockResolvedValue({ status: "accepted" }),
       evidenceKey,
     ).run(input);
-    const path = join(dir, "fiscal-readiness.json");
+    const path = join(dir, "flows/setup/readiness.json");
     const evidence = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
     await writeFile(path, JSON.stringify({ ...evidence, ...change }));
 
@@ -118,7 +118,7 @@ describe("fiscal activation readiness", () => {
 
   it("treats unreadable stored evidence as absent and submits again", async () => {
     const dir = await stateDir();
-    await writeFile(join(dir, "fiscal-readiness.json"), "not json");
+    await writeFile(join(dir, "flows/setup/readiness.json"), "not json");
     const submit = vi.fn().mockResolvedValue({ status: "accepted" });
     const store = createFiscalReadinessStore(dir, submit, evidenceKey);
     await expect(store.assertReady(input)).rejects.toMatchObject({

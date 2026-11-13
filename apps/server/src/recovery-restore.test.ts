@@ -116,7 +116,7 @@ it.each(["placing", "first-start", "unreadable"] as const)(
       "backup.env",
       "modules.json",
       "backup-room-note.json",
-      "setup-operation.json",
+      "flows/setup/operation.json",
     ])
       await writeFile(join(f.stateDir, name), "partial");
     for (const name of ["node.db", "venue.db.incoming", "venue.db-wal", "node.db-shm"])
@@ -135,7 +135,7 @@ it.each(["placing", "first-start", "unreadable"] as const)(
       "backup.env",
       "modules.json",
       "backup-room-note.json",
-      "setup-operation.json",
+      "flows/setup/operation.json",
       "flows/restore",
     ])
       await expect(stat(join(f.stateDir, name)), name).rejects.toMatchObject({ code: "ENOENT" });

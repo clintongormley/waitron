@@ -258,7 +258,7 @@ it("claims only the validated wizard identity and conceals all owner state from 
   expect(await status.json()).toEqual({ claimed: true });
   const owner = await f.app.request("/setup-api/first-setup/status", { headers: f.headers() });
   expect(await owner.json()).toEqual({ claimed: true, state: f.claim.state });
-  const disk = await readFile(join(f.stateDir, "first-setup.json"), "utf8");
+  const disk = await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8");
   expect(disk).not.toContain(PASSWORD);
   expect(disk).not.toContain(f.claim.capability);
 });

@@ -72,7 +72,7 @@ it.each([
 );
 
 it("the repair app's answer to whether the next start deletes old logs cannot say when the disk reads as having room, where the next start deletes no log", async () => {
-  writeFileSync(join(stateDir, "first-setup.json"), "opaque retained attempt");
+  writeFileSync(join(stateDir, "flows/setup/record.json"), "opaque retained attempt");
   const repair = await restartDeletesLogsIn(join(root, "logs"), { statfs: freeIs(512 * MiB) });
   expect(await repair.ask()).toBeUndefined();
 });

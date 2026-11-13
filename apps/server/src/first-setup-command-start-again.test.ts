@@ -355,7 +355,7 @@ it.each(["activation-started", "uncertain"] as const)(
 it("a command cut off before its stamp, beside an earlier attempt that had begun activation: Start again refuses and deletes nothing", async () => {
   const f = await cutOffSetup("uncertain");
   // Stands in for an earlier attempt kept in the record: this attempt as it is, past activation.
-  const path = join(f.folders.stateDir, "first-setup.json");
+  const path = join(f.folders.stateDir, "flows/setup/record.json");
   const record = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown> & {
     previous: unknown[];
   };
@@ -473,10 +473,10 @@ it.each(["activation-started", "uncertain"] as const)(
     const kept = await files(f.folders.stateDir);
     expect(Object.keys(kept).filter((name) => !name.includes("/"))).toEqual(
       expect.arrayContaining([
-        "fiscal-readiness.json",
-        "configuration-import.artifact",
-        "configuration-import.key",
-        "configuration-import.json",
+        "flows/setup/readiness.json",
+        "flows/setup/import/artifact",
+        "flows/setup/import/key",
+        "flows/setup/import/marker.json",
       ]),
     );
     expect(Object.keys(kept).some((name) => name.startsWith("fiscal-readiness-db-"))).toBe(true);
@@ -492,7 +492,7 @@ it.each(["activation-started", "uncertain"] as const)(
       Object.fromEntries(
         Object.entries(kept).filter(
           ([name]) =>
-            name === "fiscal-readiness.json" ||
+            name === "flows/setup/readiness.json" ||
             name.startsWith("fiscal-readiness-db-") ||
             name.startsWith("configuration-import."),
         ),

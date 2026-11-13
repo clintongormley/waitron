@@ -94,11 +94,11 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
       expect(summary.headers.get("Cache-Control")).toBe("no-store");
       const shown = await summary.json();
       expect(shown).toEqual({ reached: "named" });
-      const attemptFile = await readFile(join(f.stateDir, "first-setup.json"));
+      const attemptFile = await readFile(join(f.stateDir, "flows/setup/record.json"));
       const unconfirmed = await post("start-again", { ...ids, register });
       expect(unconfirmed.status).toBe(503);
       expect(await unconfirmed.json()).toMatchObject({ error: { code: "setup.not_ready" } });
-      expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(attemptFile);
+      expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(attemptFile);
       expect(
         await readdir(join(f.stateDir, "first-setup-start-again-confirmations")).catch(
           (error: NodeJS.ErrnoException) => {
@@ -117,7 +117,7 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
       expect(selected).toEqual({ restarting: true });
       expect(JSON.stringify(selected)).not.toContain(f.root);
       await vi.waitFor(() => expect(restart).toHaveBeenCalledOnce());
-      await expect(stat(join(f.stateDir, "first-setup.json"))).rejects.toMatchObject({
+      await expect(stat(join(f.stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
         code: "ENOENT",
       });
       await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
@@ -159,7 +159,7 @@ it("HTTPS rejects foreign origins, stale snapshots and malformed resolution requ
     ).json();
     expect(JSON.stringify(inspection)).not.toContain(f.stateDir);
     expect(JSON.stringify(inspection)).not.toContain("scrypt$");
-    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
     const base = {
       inspectionId: inspection.inspectionId,
       revision: inspection.revision,
@@ -237,7 +237,7 @@ it("HTTPS rejects foreign origins, stale snapshots and malformed resolution requ
       } as RequestInit);
       expect(response.status, JSON.stringify(test)).toBe(test.status);
       expect(await response.json()).toMatchObject({ error: { code: test.code } });
-      expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+      expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
     }
   } finally {
     await server?.close();
@@ -270,7 +270,7 @@ it("a shown summary carrying held counts is refused setup.request_invalid", asyn
         dispatcher: agent,
       } as RequestInit)
     ).json();
-    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
     const send = (held: unknown) =>
       fetch(`${origin}/setup-api/first-setup/resolution/start-again`, {
         dispatcher: agent,
@@ -292,7 +292,7 @@ it("a shown summary carrying held counts is refused setup.request_invalid", asyn
         error: { code: "setup.request_invalid", params: { field: "body" } },
       });
     }
-    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
   } finally {
     await server?.close();
     await agent?.close();
@@ -324,7 +324,7 @@ it("confirmUnreadableDatabase is parsed only with a shown summary that said the 
         dispatcher: agent,
       } as RequestInit)
     ).json();
-    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
     const send = (confirmUnreadableDatabase: unknown) =>
       fetch(`${origin}/setup-api/first-setup/resolution/start-again`, {
         dispatcher: agent,
@@ -354,7 +354,7 @@ it("confirmUnreadableDatabase is parsed only with a shown summary that said the 
     const accepted = await send({ shown: { reached: "named", databaseUnreadable: true } });
     expect(await accepted.json()).toMatchObject({ error: { code: "setup.not_ready" } });
     expect(accepted.status).toBe(503);
-    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
   } finally {
     await server?.close();
     await agent?.close();
@@ -394,13 +394,13 @@ it("HTTP refuses start-again before reading secrets even with forwarded HTTPS", 
       WAITRON_VENUE_DIR: f.venueDir,
       WAITRON_HTTP_PORT: String(port),
     });
-    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
     const route = `http://127.0.0.1:${port}/setup-api/first-setup/resolution/start-again`;
     const headers = { "Content-Type": "application/json", "X-Forwarded-Proto": "https" };
     const response = await fetch(route, { method: "POST", headers, body: "not even JSON" });
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("404 Not Found");
-    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
     expect((await fetch(`http://127.0.0.1:${port}/setup-api/first-setup/resolution`)).status).toBe(
       404,
     );
@@ -425,7 +425,7 @@ it("HTTP refuses start-again before reading secrets even with forwarded HTTPS", 
     });
     expect(valid.status).toBe(404);
     expect(await valid.text()).toBe("404 Not Found");
-    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
   } finally {
     await server?.close();
     await f.dispose();

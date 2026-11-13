@@ -228,7 +228,7 @@ async function fixture(
   old = await oldHost.preparation.import(oldOwner, MODULE, input);
   if (retained?.document) {
     await keepHourRecoveryDocument(oldHost, ownerFor(old, oldClaim.capability), PASSWORD);
-    const path = join(anchor.stateDir, "first-fiscal-documents", `${MODULE}.recovery.json`);
+    const path = join(anchor.stateDir, "flows/setup/documents", `${MODULE}.recovery.json`);
     if (retained.damage === "missing-original") await unlink(path);
     if (retained.damage === "syntax") await writeFile(path, "{damaged recovery document");
     if (retained.damage === "binding" || retained.damage === "digest") {
@@ -241,7 +241,7 @@ async function fixture(
   const publicPath =
     retained?.source === "outside"
       ? outsidePath
-      : join(anchor.stateDir, "module-operation-public.json");
+      : join(anchor.stateDir, "flows/setup/public-evidence.json");
   if (retained?.history !== undefined) {
     await writeFile(
       publicPath,
@@ -313,7 +313,7 @@ async function expectStartAgainRefused(made: Promise<unknown>, code: string) {
   await expect(made).rejects.toMatchObject({ code });
   const root = roots.at(-1)!;
   const anchor = { stateDir: join(root, "state"), venueDir: join(root, "venue") };
-  await expect(lstat(join(anchor.stateDir, "first-setup.json"))).resolves.toBeDefined();
+  await expect(lstat(join(anchor.stateDir, "flows/setup/record.json"))).resolves.toBeDefined();
   expect(await readStartAgainMarker(anchor.venueDir)).toBeNull();
 }
 

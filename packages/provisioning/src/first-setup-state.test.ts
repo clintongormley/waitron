@@ -84,7 +84,7 @@ async function fixture() {
     options,
     store,
     claim,
-    statePath: join(options.stateDir, "first-setup.json"),
+    statePath: join(options.stateDir, "flows/setup/record.json"),
   };
 }
 afterEach(async () => {

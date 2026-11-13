@@ -365,13 +365,13 @@ describe("contained upgrade data checks", () => {
 
   it.each([
     { name: "first-setup-deleting.json", code: "setup.start_again_incomplete" },
-    { name: "first-setup.json", code: "setup.attempt_invalid" },
+    { name: "flows/setup/record.json", code: "setup.attempt_invalid" },
   ])(
     "keeps an unfinished setup in $name refused without changing the copy",
     async ({ name, code }) => {
       const { checkUpgradeData } = await import("./upgrade-checks.js");
       const { config, env } = await copiedConfig();
-      const marker = join(name === "first-setup.json" ? config.stateDir : config.venueDir, name);
+      const marker = join(name === "flows/setup/record.json" ? config.stateDir : config.venueDir, name);
       await writeFile(marker, "{}");
       const before = await readdir(config.venueDir);
       await expect(checkUpgradeData(config, env)).rejects.toMatchObject({ code });

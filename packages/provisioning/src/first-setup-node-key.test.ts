@@ -79,7 +79,7 @@ async function fixture(stage = true) {
     coordinator,
     grant,
     staged,
-    path: join(stateDir, "first-setup-node-key.json"),
+    path: join(stateDir, "flows/setup/node-key.json"),
     async committed(result: unknown = { venue: { nodeId: access.nodeId } }) {
       let state = (await store.read())!;
       for (const change of [

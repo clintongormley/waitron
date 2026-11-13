@@ -355,7 +355,7 @@ async function postSummary(
 
 async function attemptFiles(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) {
   return Promise.all(
-    [join(f.stateDir, "first-setup.json"), join(f.stateDir, "module-preparation-state.json")].map(
+    [join(f.stateDir, "flows/setup/record.json"), join(f.stateDir, "module-preparation-state.json")].map(
       (path) => readFile(path),
     ),
   );
@@ -972,12 +972,12 @@ async function expectRefusedUnchanged(
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 }
 
-it.each(["first-setup.json"])(
+it.each(["flows/setup/record.json"])(
   "with the database present, a damaged %s beside a damaged picks file leaves the box reading no revision, so Start again is refused setup.attempt_conflict for the revision it sends, and nothing changes",
   async (file) => {
     const { f, actions, startRequest } = await abandonedAttempt();
     await damagePicks(f);
-    await writeFile(join(file === "first-setup.json" ? f.stateDir : f.venueDir, file), "{damaged");
+    await writeFile(join(file === "flows/setup/record.json" ? f.stateDir : f.venueDir, file), "{damaged");
     const inspected = await f.host.resolution.inspectFirstSetupResolution();
     expect(inspected.revision).toBeNull();
     await expectRefusedUnchanged(

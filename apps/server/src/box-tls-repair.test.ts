@@ -54,7 +54,7 @@ async function fixture(initial: SelfSignedMaterial | null = material) {
       await writeFile(join(stateDir, "tls", name), values[i]!);
   }
   await writeFile(join(stateDir, "secrets.env"), "retained-vault-key\n");
-  await writeFile(join(stateDir, "first-setup.json"), "retained-attempt\n");
+  await writeFile(join(stateDir, "flows/setup/record.json"), "retained-attempt\n");
   return {
     stateDir,
     hostnames: names,
@@ -120,7 +120,7 @@ it("preserves a usable CA when the leaf is lost", async () => {
   expect(saved.manifest.absent).toContain("server.pem");
   await validInstalled(f.stateDir);
   expect(await readFile(join(f.stateDir, "secrets.env"), "utf8")).toBe("retained-vault-key\n");
-  expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe("retained-attempt\n");
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe("retained-attempt\n");
 });
 
 it.each(["missing-cert", "malformed", "expired", "mismatched", "wrong-host", "wrong-ip"])(

@@ -158,7 +158,7 @@ it.each(["archive", "bucket", "cloud"])(
       expect(restarted.stageBucketRestore).not.toHaveBeenCalled();
       const replay = request(kind);
       expect((await restarted.app.request(replay.path, replay.init)).status).toBe(202);
-      const persisted = await readFile(join(dir, "setup-operation.json"), "utf8");
+      const persisted = await readFile(join(dir, "flows/setup/operation.json"), "utf8");
       expect(persisted).not.toContain("node-paper-key");
       expect(persisted).not.toContain("archive-key");
       expect(persisted).not.toContain("outsideAllocation");
@@ -324,7 +324,7 @@ it.each(["archive", "bucket", "cloud"])(
       expect(next.stageBucketRestore).not.toHaveBeenCalled();
       const replay = contextRequest(kind, context);
       expect((await next.app.request(replay.path, replay.init)).status).toBe(202);
-      expect(await readFile(join(directory, "setup-operation.json"), "utf8")).not.toContain(
+      expect(await readFile(join(directory, "flows/setup/operation.json"), "utf8")).not.toContain(
         "node-paper-key",
       );
       await new Promise((resolve) => setTimeout(resolve, 0));

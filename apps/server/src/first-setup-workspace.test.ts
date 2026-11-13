@@ -16,7 +16,7 @@ it("raw boot refuses an unfinishable deletion with setup.start_again_incomplete"
     stateDir = join(root, "state");
   await mkdir(venueDir);
   await mkdir(stateDir);
-  await writeFile(join(stateDir, "first-setup.json"), '{"synthetic":"attempt"}');
+  await writeFile(join(stateDir, "flows/setup/record.json"), '{"synthetic":"attempt"}');
   await writeStartAgainMarker(
     { venueDir, stateDir },
     await startAgainMarkerFor(
@@ -24,7 +24,7 @@ it("raw boot refuses an unfinishable deletion with setup.start_again_incomplete"
       { attemptId: "33333333-3333-4333-8333-333333333333", frozenDigest: "a".repeat(64) },
     ),
   );
-  await writeFile(join(stateDir, "first-setup.json"), '{"changed":"after the marker"}');
+  await writeFile(join(stateDir, "flows/setup/record.json"), '{"changed":"after the marker"}');
   const [port] = await freePorts(1);
   let server: Awaited<ReturnType<typeof startServer>> | undefined;
   try {
@@ -41,7 +41,7 @@ it("raw boot refuses an unfinishable deletion with setup.start_again_incomplete"
   } finally {
     await server?.close();
   }
-  expect(await readFile(join(stateDir, "first-setup.json"), "utf8")).toBe(
+  expect(await readFile(join(stateDir, "flows/setup/record.json"), "utf8")).toBe(
     '{"changed":"after the marker"}',
   );
   await expect(stat(join(venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });

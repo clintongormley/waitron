@@ -157,7 +157,7 @@ it.each<[string, (f: Awaited<ReturnType<typeof actionsFixture>>) => Promise<void
   },
 );
 
-it.each(["module-operation-public.json", "first-setup-node-key.json", "modules.json"])(
+it.each(["flows/setup/public-evidence.json", "flows/setup/node-key.json", "modules.json"])(
   "absence of a paper signer does not make %s history eligible for password-free reset",
   async (name) => {
     const f = await actionsFixture();
@@ -206,7 +206,7 @@ it.each(["file", "directory"] as const)(
       },
     });
     const inspection = await resolution.inspectFirstSetupResolution();
-    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
     await expect(
       actions.startAgainFirstSetup({
         inspectionId: inspection.inspectionId,
@@ -215,7 +215,7 @@ it.each(["file", "directory"] as const)(
         register: { kind: "no-current-master", confirmed: true },
       }),
     ).rejects.toMatchObject({ code: "setup.not_ready" });
-    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
     await unchanged();
   },
 );
@@ -223,12 +223,12 @@ it("a missing-database Start again, once confirmed, deletes first-setup.json and
   const f = await actionsFixture();
   await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });
   await rm(join(f.venueDir, "venue.db"));
-  await mkdir(join(f.stateDir, "first-fiscal-documents"));
+  await mkdir(join(f.stateDir, "flows/setup/documents"));
   await writeFile(
-    join(f.stateDir, "first-fiscal-documents", "orphan.json"),
+    join(f.stateDir, "flows/setup/documents", "orphan.json"),
     "retained malformed public chunk",
   );
-  const before = await readFile(join(f.stateDir, "first-setup.json"));
+  const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
   const startAgain = async (confirmMissingDatabase?: {
     nothingFiledOrSold: true;
     shown: StartAgainSummary;
@@ -245,7 +245,7 @@ it("a missing-database Start again, once confirmed, deletes first-setup.json and
       ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
     });
   await expect(startAgain()).rejects.toMatchObject({ code: "setup.not_ready" });
-  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
   await expect(
     readdir(join(f.stateDir, "first-setup-start-again-confirmations")),
   ).rejects.toMatchObject({ code: "ENOENT" });
@@ -257,11 +257,11 @@ it("a missing-database Start again, once confirmed, deletes first-setup.json and
   });
   expect(shown).toEqual({ reached: "named" });
   await startAgain({ nothingFiledOrSold: true, shown });
-  await expect(readFile(join(f.stateDir, "first-setup.json"))).rejects.toMatchObject({
+  await expect(readFile(join(f.stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
   await expect(readFile(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
-  await expect(readdir(join(f.stateDir, "first-fiscal-documents"))).rejects.toMatchObject({
+  await expect(readdir(join(f.stateDir, "flows/setup/documents"))).rejects.toMatchObject({
     code: "ENOENT",
   });
 });
@@ -451,11 +451,11 @@ it("refuses empty-only restart with retained catalogue rows and no taxpayer or l
   const unchanged = await startAgainUnchanged(f);
   const inspection = await f.service.inspectFirstSetupResolution();
   expect(inspection.database).toBe("no-venue-rows");
-  const before = await readFile(join(f.stateDir, "first-setup.json"));
+  const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
   await expect(f.actions.startAgainFirstSetup(await f.startRequest())).rejects.toMatchObject({
     code: "setup.not_ready",
   });
-  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
   await unchanged();
 });
 

@@ -54,7 +54,7 @@ async function fixture() {
       socket ? { incoming: { socket } } : undefined,
     );
   };
-  return { ...f, host, staged, post, keyPath: join(f.stateDir, "first-setup-node-key.json") };
+  return { ...f, host, staged, post, keyPath: join(f.stateDir, "flows/setup/node-key.json") };
 }
 it("reissues through the authenticated setup route while retaining the same frozen hour and attempt", async () => {
   const f = await fixture();

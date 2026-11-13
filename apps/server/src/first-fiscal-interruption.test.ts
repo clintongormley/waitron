@@ -204,7 +204,7 @@ it("activates the frozen assignment once and completes only after host publicati
   expect(await f.db.select().from(fiscalAllocations)).toHaveLength(1);
   expect((await f.db.select().from(invoiceSeries)).map((s) => s.nextNumber)).toEqual([1, 1, 1]);
   expect(f.counts()).toEqual({ applied: 1, publication: 1 });
-  const disk = await readFile(join(f.stateDir, "first-setup.json"), "utf8");
+  const disk = await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8");
   expect(disk).not.toContain('"password":"test"');
 });
 it("refuses activation while the This device clock-step note cannot be written, then activates once it can", async () => {
@@ -295,7 +295,7 @@ it("retires an attempt whose saved committed result no longer matches the actual
   const f = await fixture("publication");
   await f.confirm();
   expect((await f.activate()).status).toBe(500);
-  const path = join(f.stateDir, "first-setup.json"),
+  const path = join(f.stateDir, "flows/setup/record.json"),
     disk = JSON.parse(await readFile(path, "utf8"));
   disk.result.modules[MODULE].sifId = "wrong-sif";
   await writeFile(path, JSON.stringify(disk));

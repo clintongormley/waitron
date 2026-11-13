@@ -149,7 +149,7 @@ const LEFT_VENUE = /^(venue|recovery|migrations)\.lock(-journal)?$|^venue\.holde
 /** Leaves the fiscal module's recovery-key record unreadable, as a damaged disk would. */
 const damageRecoveryRecord = (f: Held) =>
   writeFile(
-    join(f.roots.stateDir, "first-fiscal-documents", "fiscal-verifactu.recovery.json"),
+    join(f.roots.stateDir, "flows/setup/documents", "fiscal-verifactu.recovery.json"),
     "{}",
   );
 
@@ -193,7 +193,7 @@ async function startAgainMissing(f: Held) {
     ...ids,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown },
   });
-  await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
+  await expect(access(join(f.roots.stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
 }

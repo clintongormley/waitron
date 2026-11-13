@@ -35,7 +35,7 @@ it.each(["bin.ts", "node-entry.ts"])(
       }))
         await writeFile(join(stateDir, "tls", name), value);
       await mkdir(venueDir);
-      await writeFile(join(stateDir, "first-setup.json"), "{}");
+      await writeFile(join(stateDir, "flows/setup/record.json"), "{}");
       await cp(resolve("src/assets"), join(root, "assets"), { recursive: true });
       await symlink(resolve("node_modules"), join(root, "node_modules"));
       const entry = join(root, "direct.mjs");

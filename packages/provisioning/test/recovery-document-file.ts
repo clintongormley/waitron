@@ -7,7 +7,7 @@ export async function readRecoveryDocumentFile(
   module: string,
 ): Promise<RecoveryDeliveryInput> {
   const saved = JSON.parse(
-    await readFile(join(stateDir, "first-fiscal-documents", `${module}.recovery.json`), "utf8"),
+    await readFile(join(stateDir, "flows/setup/documents", `${module}.recovery.json`), "utf8"),
   ) as RecoveryDeliveryInput;
   return {
     module: saved.module,

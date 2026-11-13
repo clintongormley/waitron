@@ -234,7 +234,7 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
     });
     await server.close();
     server = undefined;
-    const completed = await readFile(join(stateDir, "first-setup.json"), "utf8");
+    const completed = await readFile(join(stateDir, "flows/setup/record.json"), "utf8");
     expect(JSON.parse(completed).status).toBe("complete");
 
     const databasePath = join(venueDir, "venue.db");
@@ -305,7 +305,7 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
     await restart();
     await restart();
     expect(databaseReads).toEqual([]);
-    expect(await readFile(join(stateDir, "first-setup.json"), "utf8")).toBe(completed);
+    expect(await readFile(join(stateDir, "flows/setup/record.json"), "utf8")).toBe(completed);
   } finally {
     await server?.close();
     await agent?.close();

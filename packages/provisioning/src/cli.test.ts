@@ -1054,7 +1054,7 @@ it("leaves the venue folder untouched when refusing a damaged setup record", asy
   try {
     await mkdir(venueDir);
     await mkdir(stateDir);
-    await writeFile(join(stateDir, "first-setup.json"), "{}");
+    await writeFile(join(stateDir, "flows/setup/record.json"), "{}");
     const h = harness({
       env: { ...VENUE_ENV, WAITRON_STATE_DIR: stateDir },
       openVenue: openVenueDatabase,
@@ -1080,7 +1080,7 @@ it("rechecks a claim that appears while the store is opening", async () => {
     const h = harness({
       env: { ...VENUE_ENV, WAITRON_STATE_DIR: stateDir },
       openVenue: async () => {
-        await writeFile(join(stateDir, "first-setup.json"), "{}");
+        await writeFile(join(stateDir, "flows/setup/record.json"), "{}");
         return {
           venue: {},
           node: {},

@@ -46,7 +46,7 @@ async function torn() {
     venueDir = join(root, "venue");
   await mkdir(stateDir);
   await mkdir(venueDir);
-  await writeFile(join(stateDir, "first-setup.json"), "{}");
+  await writeFile(join(stateDir, "flows/setup/record.json"), "{}");
   await mkdir(join(stateDir, "flows/restore"), { recursive: true });
   await writeFile(join(stateDir, "flows/restore/record.json"), "retained restore");
   await writeFile(join(stateDir, "reset-request.json"), "retained reset");
@@ -160,7 +160,7 @@ it("a strictly paired attempt with a missing database reaches resolution without
 
 it("direct entry still boots a normal unclaimed workspace", async () => {
   const f = await torn();
-  await rm(join(f.stateDir, "first-setup.json"));
+  await rm(join(f.stateDir, "flows/setup/record.json"));
   const boot = vi.fn(stopped);
   await entry.startServerOrFirstSetupResolution(
     { WAITRON_STATE_DIR: f.stateDir, WAITRON_VENUE_DIR: f.venueDir },

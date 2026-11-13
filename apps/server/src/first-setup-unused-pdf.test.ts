@@ -145,7 +145,7 @@ async function abandonedWithMissingDatabase(
         : { confirmMissingDatabase: { nothingFiledOrSold: true as const, shown } }),
     });
   const attemptFiles = () =>
-    Promise.all([join(f.stateDir, "first-setup.json")].map((path) => readFile(path)));
+    Promise.all([join(f.stateDir, "flows/setup/record.json")].map((path) => readFile(path)));
   const confirmations = () =>
     readdir(join(f.stateDir, CONFIRMATIONS)).catch((error: { code?: string }) => {
       if (error.code === "ENOENT") return [];
@@ -192,10 +192,10 @@ it.each([
   "orphan-document",
 ] as const)("unused-PDF reset refuses %s evidence", async (why) => {
   const f = await fixture();
-  const directory = join(f.stateDir, "first-fiscal-documents");
-  if (why === "key") await writeFile(join(f.stateDir, "first-setup-node-key.json"), "{}");
+  const directory = join(f.stateDir, "flows/setup/documents");
+  if (why === "key") await writeFile(join(f.stateDir, "flows/setup/node-key.json"), "{}");
   if (why === "stage") {
-    const path = join(f.stateDir, "first-setup-node-key.json");
+    const path = join(f.stateDir, "flows/setup/node-key.json");
     const key = JSON.parse(await readFile(path, "utf8"));
     key.stageId = "11111111-1111-4111-8111-111111111111";
     await writeFile(path, JSON.stringify(key));
@@ -203,7 +203,7 @@ it.each([
   if (why === "modules") await writeFile(join(f.stateDir, "modules.json"), "{}");
   if (why === "missing-db") await rm(join(f.venueDir, "venue.db"));
   if (why === "unknown-input") {
-    const path = join(f.stateDir, "first-setup.json");
+    const path = join(f.stateDir, "flows/setup/record.json");
     const state = JSON.parse(await readFile(path, "utf8"));
     state.inputs.unknown = { evidence: "not understood" };
     await writeFile(path, JSON.stringify(state));
@@ -266,7 +266,7 @@ async function damageRecord(
   f: Awaited<ReturnType<typeof fixture>>,
   why: "manifest" | "binding" | "rehashed",
 ) {
-  const directory = join(f.stateDir, "first-fiscal-documents");
+  const directory = join(f.stateDir, "flows/setup/documents");
   if (why === "manifest") await writeFile(join(directory, `${f.module}.recovery.json`), "{}");
   if (why === "binding") {
     const path = join(directory, `${f.module}.recovery.json`);
@@ -294,7 +294,7 @@ async function inspectionIds(f: Awaited<ReturnType<typeof fixture>>) {
 }
 it("a rehashed document with an invalid module confirmation is refused without the warning shown, and starts again with it", async () => {
   const f = await fixture();
-  const directory = join(f.stateDir, "first-fiscal-documents");
+  const directory = join(f.stateDir, "flows/setup/documents");
   const manifestPath = join(directory, `${f.module}.recovery.json`);
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   expect(manifest.kind).toBe("recovery-key-delivery");
@@ -367,16 +367,16 @@ it.each(["key", "stage", "unknown-input", "orphan-document"] as const)(
   "other damaged evidence (%s) still refuses setup.not_ready",
   async (why) => {
     const f = await fixture();
-    const directory = join(f.stateDir, "first-fiscal-documents");
-    if (why === "key") await writeFile(join(f.stateDir, "first-setup-node-key.json"), "{}");
+    const directory = join(f.stateDir, "flows/setup/documents");
+    if (why === "key") await writeFile(join(f.stateDir, "flows/setup/node-key.json"), "{}");
     if (why === "stage") {
-      const path = join(f.stateDir, "first-setup-node-key.json");
+      const path = join(f.stateDir, "flows/setup/node-key.json");
       const key = JSON.parse(await readFile(path, "utf8"));
       key.stageId = "11111111-1111-4111-8111-111111111111";
       await writeFile(path, JSON.stringify(key));
     }
     if (why === "unknown-input") {
-      const path = join(f.stateDir, "first-setup.json");
+      const path = join(f.stateDir, "flows/setup/record.json");
       const state = JSON.parse(await readFile(path, "utf8"));
       state.inputs.unknown = { evidence: "not understood" };
       await writeFile(path, JSON.stringify(state));
@@ -397,10 +397,10 @@ it.each(["key", "stage", "unknown-input", "orphan-document"] as const)(
 it("a damaged record and no staged node key is refused setup.not_ready, and nothing changes", async () => {
   const f = await fixture();
   await damageRecord(f, "manifest");
-  await rm(join(f.stateDir, "first-setup-node-key.json"));
+  await rm(join(f.stateDir, "flows/setup/node-key.json"));
   const ids = await inspectionIds(f);
   const unchanged = await startAgainUnchanged(f);
-  const before = await readFile(join(f.stateDir, "first-setup.json"));
+  const before = await readFile(join(f.stateDir, "flows/setup/record.json"));
   await expect(
     f.actions.startAgainFirstSetup({
       ...ids,
@@ -409,7 +409,7 @@ it("a damaged record and no staged node key is refused setup.not_ready, and noth
     }),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
   await unchanged();
-  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  expect(await readFile(join(f.stateDir, "flows/setup/record.json"))).toEqual(before);
 });
 it("a damaged record beside a refused artifact refuses setup.not_ready", async () => {
   const f = await fixture();

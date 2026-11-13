@@ -232,14 +232,14 @@ it("does not acknowledge a renamed ledger whose directory sync fails", async () 
 it("a successor preparation state keeps spent module history in the attempt's own folders", async () => {
   const f = await fixture();
   await f.store.withState(binding, async (state) => state.replace({ identities: ["06RB"] }));
-  await fs.writeFile(join(f.stateDir, "first-setup.json"), "original state");
+  await fs.writeFile(join(f.stateDir, "flows/setup/record.json"), "original state");
   const successor = createModulePreparationState({ ...f.options });
   await successor.withState({ ...binding, eventId: "successor" }, async (state) => {
     expect(state.value).toEqual({ identities: ["06RB"] });
     await state.replace({ identities: ["06RB", "06RC"] });
   });
   expect(JSON.parse(await fs.readFile(f.path, "utf8")).revisions).toHaveLength(2);
-  expect(await fs.readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe("original state");
+  expect(await fs.readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe("original state");
 });
 
 it("a temporary-file sync refusal preserves the previous committed revision", async () => {

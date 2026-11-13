@@ -93,7 +93,7 @@ describe("setup operation store", () => {
 
   it("reads a well-formed saved operation back as it was written", async () => {
     const dir = await stateDir();
-    await writeFile(join(dir, "setup-operation.json"), JSON.stringify(validState));
+    await writeFile(join(dir, "flows/setup/operation.json"), JSON.stringify(validState));
     await expect(createSetupOperationStore(dir).read()).resolves.toEqual(validState);
   });
 
@@ -112,7 +112,7 @@ describe("setup operation store", () => {
     ["has no update time", JSON.stringify({ ...validState, updatedAt: undefined })],
   ])("refuses a saved operation that %s", async (_label, raw) => {
     const dir = await stateDir();
-    await writeFile(join(dir, "setup-operation.json"), raw);
+    await writeFile(join(dir, "flows/setup/operation.json"), raw);
     const store = createSetupOperationStore(dir);
     await expect(store.read()).rejects.toMatchObject({ code: "setup.operation_conflict" });
     await expect(store.run("provision", "request-a", async () => {})).rejects.toMatchObject({
@@ -125,7 +125,7 @@ describe("setup operation store", () => {
     const store = createSetupOperationStore(dir);
     await expect(
       store.run("provision", "request-a", async () => {
-        await unlink(join(dir, "setup-operation.json"));
+        await unlink(join(dir, "flows/setup/operation.json"));
         throw new AppError("person.email_invalid", {});
       }),
     ).rejects.toMatchObject({ code: "person.email_invalid" });

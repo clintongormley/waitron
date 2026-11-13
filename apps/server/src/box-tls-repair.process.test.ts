@@ -28,7 +28,7 @@ async function fixture() {
   await writeFile(join(stateDir, "tls/ca.key"), material.caKeyPem);
   await writeFile(join(stateDir, "tls/server.pem"), material.serverCertPem);
   await writeFile(join(stateDir, "secrets.env"), "unchanged synthetic vault");
-  await writeFile(join(stateDir, "first-setup.json"), "unchanged synthetic attempt");
+  await writeFile(join(stateDir, "flows/setup/record.json"), "unchanged synthetic attempt");
   const script = join(root, "repair.mts");
   await writeFile(
     script,
@@ -111,7 +111,7 @@ it.each([
     expect(await readFile(join(f.stateDir, "secrets.env"), "utf8")).toBe(
       "unchanged synthetic vault",
     );
-    expect(await readFile(join(f.stateDir, "first-setup.json"), "utf8")).toBe(
+    expect(await readFile(join(f.stateDir, "flows/setup/record.json"), "utf8")).toBe(
       "unchanged synthetic attempt",
     );
     if (candidate !== null) expect(await readdir(archiveRoot)).toEqual(before);

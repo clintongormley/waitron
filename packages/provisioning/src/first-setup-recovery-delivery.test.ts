@@ -94,7 +94,7 @@ async function fixture() {
     ...reference,
     statement,
   });
-  const path = join(options.stateDir, "first-fiscal-documents", `${MODULE}.recovery.json`);
+  const path = join(options.stateDir, "flows/setup/documents", `${MODULE}.recovery.json`);
   const bytes = await readFile(path);
   const manifest = JSON.parse(bytes.toString()) as Record<string, unknown>;
   const state = (await runtime.store.read())!;
@@ -104,7 +104,7 @@ async function fixture() {
       state,
       [
         {
-          name: `state/first-fiscal-documents/${MODULE}.recovery.json`,
+          name: `state/flows/setup/documents/${MODULE}.recovery.json`,
           bytes: Buffer.from(JSON.stringify(value)),
         },
       ],
@@ -322,7 +322,7 @@ it("distinguishes absent snapshot bytes from malformed or oversized delivery", a
   const f = await fixture();
   const read = (originals: { name: string; bytes: Uint8Array | null }[]) =>
     readFirstSetupRecoveryDeliverySnapshot(MODULE, f.state, originals, f.runtime.modules);
-  const name = `state/first-fiscal-documents/${MODULE}.recovery.json`;
+  const name = `state/flows/setup/documents/${MODULE}.recovery.json`;
   expect(read([])).toBeNull();
   expect(read([{ name, bytes: null }])).toBeNull();
   expect(read([{ name: "state/other.recovery.json", bytes: f.bytes }])).toBeNull();

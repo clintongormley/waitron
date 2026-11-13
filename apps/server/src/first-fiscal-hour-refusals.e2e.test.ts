@@ -127,7 +127,7 @@ it.each([
   async ({ script, interrupted }) => {
     const f = await fixture();
     if (interrupted === "torn") {
-      await writeFile(join(f.stateDir, "first-setup.json"), "torn-write");
+      await writeFile(join(f.stateDir, "flows/setup/record.json"), "torn-write");
     } else {
       const host = createFirstSetupModuleHost({ ...f, modules: ALL_MODULES, environment: f.env });
       await host.owner.claimFirstSetup({ environment: "preproduction", request });

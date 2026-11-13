@@ -51,7 +51,7 @@ async function box() {
   directories.push(root);
   const roots = { venueDir: join(root, "venue"), stateDir: join(root, "state") };
   for (const path of Object.values(roots)) await mkdir(path);
-  await writeFile(join(roots.stateDir, "first-setup.json"), "attempt record");
+  await writeFile(join(roots.stateDir, "flows/setup/record.json"), "attempt record");
   await writeFile(join(roots.venueDir, "venue.db"), "attempt database bytes");
   (await lockVenueDatabase(roots.venueDir)).release();
   return roots;
@@ -122,7 +122,7 @@ it.each([
 
 it("the disk check refuses an unexpected folder in the venue's documents as an unexpected layout", async () => {
   const roots = await box();
-  await mkdir(join(roots.stateDir, "first-fiscal-documents", "inner"), { recursive: true });
+  await mkdir(join(roots.stateDir, "flows/setup/documents", "inner"), { recursive: true });
   expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
     code: "setup.not_ready",
     params: { cause: "unexpected" },
@@ -144,7 +144,7 @@ it("a marker naming modules.json is read back, finished, and deletes it", async 
   await finishStartAgainDeletion(roots);
   expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
   expect(await exists(join(roots.stateDir, "modules.json"))).toBe(false);
-  expect(await exists(join(roots.stateDir, "first-setup.json"))).toBe(false);
+  expect(await exists(join(roots.stateDir, "flows/setup/record.json"))).toBe(false);
 });
 
 it("a marker not naming modules.json still finds it a refused artifact, and the finisher deletes nothing", async () => {
@@ -159,7 +159,7 @@ it("a marker not naming modules.json still finds it a refused artifact, and the 
     reason: "refused artifact present: state/modules.json",
   });
   expect(await exists(join(roots.stateDir, "modules.json"))).toBe(true);
-  expect(await exists(join(roots.stateDir, "first-setup.json"))).toBe(true);
+  expect(await exists(join(roots.stateDir, "flows/setup/record.json"))).toBe(true);
 });
 
 it("a modules.json changed after the marker named it is a changed finding, and the finisher deletes nothing", async () => {
@@ -174,7 +174,7 @@ it("a modules.json changed after the marker named it is a changed finding, and t
     reason: "size or hash differs: state/modules.json",
   });
   expect(await exists(join(roots.stateDir, "modules.json"))).toBe(true);
-  expect(await exists(join(roots.stateDir, "first-setup.json"))).toBe(true);
+  expect(await exists(join(roots.stateDir, "flows/setup/record.json"))).toBe(true);
 });
 
 const TRADING = "state/trading.env";
@@ -213,7 +213,7 @@ it.each([[["trading.env"]], [["modules.json"]], [["modules.json", "trading.env"]
     await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt, { held: true }));
     expect(await collectStartAgainFindings(roots)).toMatchObject({ findings: [], blocker: null });
     await finishStartAgainDeletion(roots);
-    for (const name of [...names, "first-setup.json"])
+    for (const name of [...names, "flows/setup/record.json"])
       expect(await exists(join(roots.stateDir, name))).toBe(false);
     expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
   },
@@ -284,6 +284,6 @@ it.each(["staged", "placing"] as const)(
       reason: "refused artifact present: state/flows/restore/record.json",
     });
     expect(await exists(join(roots.venueDir, "venue.db"))).toBe(true);
-    expect(await exists(join(roots.stateDir, "first-setup.json"))).toBe(true);
+    expect(await exists(join(roots.stateDir, "flows/setup/record.json"))).toBe(true);
   },
 );

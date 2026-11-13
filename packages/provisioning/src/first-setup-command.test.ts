@@ -592,7 +592,7 @@ it("the command runtime retains public delivery bindings but requires a fresh ke
     code: "setup.not_ready",
   });
   const manifest = JSON.parse(
-    await readFile(join(f.root, "state/first-fiscal-documents", `${MODULE}.recovery.json`), "utf8"),
+    await readFile(join(f.root, "state/flows/setup/documents", `${MODULE}.recovery.json`), "utf8"),
   );
   expect(manifest).toMatchObject({
     ...f.reference,
@@ -654,7 +654,7 @@ it("a restarted command runtime reads the staged verifier but has no delivery gr
       await runtime.owner.reconfirm(f.owner, PASSWORD, "block-use"),
     ),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  expect(await readFile(join(f.root, "state/first-setup-node-key.json"), "utf8")).not.toContain(
+  expect(await readFile(join(f.root, "state/flows/setup/node-key.json"), "utf8")).not.toContain(
     f.staged.key.secret,
   );
 });
@@ -714,7 +714,7 @@ it("an expired kept grant cannot authorize resumption", async () => {
 it("a changed staged key cannot authorize resumption with the original kept document", async () => {
   const f = await resumptionFixture();
   const { writeFile } = await import("node:fs/promises");
-  const path = join(f.root, "state/first-setup-node-key.json");
+  const path = join(f.root, "state/flows/setup/node-key.json");
   const stage = JSON.parse(await readFile(path, "utf8"));
   stage.name = stage.name.endsWith("AAAA") ? "2026-10-16 · CCCC" : "2026-10-16 · AAAA";
   await writeFile(path, JSON.stringify(stage));

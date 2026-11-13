@@ -210,7 +210,7 @@ describe("staged restore requests", () => {
       recoveryKey: "recovery",
       environment: "preproduction",
     });
-    await writeFile(join(stateDir, "setup-operation.json"), "restore receipt");
+    await writeFile(join(stateDir, "flows/setup/operation.json"), "restore receipt");
     const restore = vi.fn(async () => {});
     const onManagedCloudRestored = vi.fn(async () => {});
     expect(
@@ -234,7 +234,7 @@ describe("staged restore requests", () => {
         venueDir: join(stateDir, "venue"),
       }),
     );
-    await expect(readFile(join(stateDir, "setup-operation.json"))).rejects.toMatchObject({
+    await expect(readFile(join(stateDir, "flows/setup/operation.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
     expect(await firstStartPending(stateDir)).toEqual({ source: "archive" });
@@ -274,7 +274,7 @@ describe("staged restore requests", () => {
       recoveryKey: "recovery",
       environment: "production",
     });
-    await writeFile(join(stateDir, "setup-operation.json"), "restore receipt");
+    await writeFile(join(stateDir, "flows/setup/operation.json"), "restore receipt");
     await expect(
       runStagedRestore(
         {
@@ -299,7 +299,7 @@ describe("staged restore requests", () => {
       version: 1,
       environment: "production",
     });
-    expect(await readFile(join(stateDir, "setup-operation.json"), "utf8")).toBe("restore receipt");
+    expect(await readFile(join(stateDir, "flows/setup/operation.json"), "utf8")).toBe("restore receipt");
   });
 
   it("refuses an unreadable restore flow without starting the box", async () => {
@@ -479,7 +479,7 @@ describe("staged restore requests from the bucket", () => {
   it("runs the bucket source through its own restore, never the archive's, and clears it", async () => {
     const stateDir = await fresh();
     await staged(stateDir);
-    await writeFile(join(stateDir, "setup-operation.json"), "restore receipt");
+    await writeFile(join(stateDir, "flows/setup/operation.json"), "restore receipt");
     const archive = vi.fn(async () => {});
     const stream = vi.fn(async () => {});
     expect(
@@ -509,7 +509,7 @@ describe("staged restore requests from the bucket", () => {
     expect(await firstStartPending(stateDir)).toEqual({ source: "stream" });
     for (const name of [
       ...STREAM_FILES.filter((name) => !name.endsWith("record.json")),
-      "setup-operation.json",
+      "flows/setup/operation.json",
     ]) {
       await expect(readFile(join(stateDir, name))).rejects.toMatchObject({ code: "ENOENT" });
     }

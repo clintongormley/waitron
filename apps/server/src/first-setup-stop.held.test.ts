@@ -65,7 +65,7 @@ async function stopOnOrdinaryServer(f: Awaited<ReturnType<typeof heldSetup>>) {
   const app = new Hono();
   mountSetup(app, { environment: "production", firstFiscal: f.host, requestRestart }, log);
   const inspection = await f.host.resolution.inspectFirstSetupResolution();
-  const record = () => readFile(join(f.roots.stateDir, "first-setup.json"));
+  const record = () => readFile(join(f.roots.stateDir, "flows/setup/record.json"));
   const before = await record();
   const socket = new TLSSocket(new Socket());
   try {

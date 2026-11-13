@@ -39,7 +39,7 @@ async function attemptWithMigratedNode() {
   const store = await openVenueDatabase(roots.venueDir);
   await runMigrations(store.node, NODE_MIGRATIONS);
   await store.close();
-  await writeFile(join(roots.stateDir, "first-setup.json"), "state");
+  await writeFile(join(roots.stateDir, "flows/setup/record.json"), "state");
   return roots;
 }
 

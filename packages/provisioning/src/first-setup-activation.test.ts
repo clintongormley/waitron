@@ -635,7 +635,7 @@ it("derives the complete frozen provision request and preserves configuration-im
 
 it("a missing retained key stops publication before selection or identity work", async () => {
   const f = await publicationFixture();
-  await rm(join(f.root, "state", "first-setup-node-key.json"));
+  await rm(join(f.root, "state", "flows/setup/node-key.json"));
   await expect(f.publish(f.state, f.checked)).rejects.toMatchObject({
     code: "setup.attempt_uncertain",
   });

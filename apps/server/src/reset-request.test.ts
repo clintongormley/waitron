@@ -182,7 +182,7 @@ async function snapshot(stateDir: string): Promise<string[]> {
     "venue/.venue.db-litestream/generation",
     "modules.json",
     PENDING_ADOPTION_FILE,
-    "setup-operation.json",
+    "flows/setup/operation.json",
     "trading.env",
     "tls/ca.crt",
     "secrets.env",

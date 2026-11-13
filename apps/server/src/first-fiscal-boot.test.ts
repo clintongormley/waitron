@@ -291,7 +291,7 @@ it.each(["trading", "completion-state"])(
       const fileIo = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
       vi.spyOn(filesystem, "rename").mockImplementation(async (from, to) => {
         const target = String(to);
-        if (!injected && point === "completion-state" && target.endsWith("/first-setup.json")) {
+        if (!injected && point === "completion-state" && target.endsWith("/flows/setup/record.json")) {
           const value = JSON.parse(await fileIo.readFile(from, "utf8"));
           if (value.status === "complete") {
             injected = true;
@@ -306,7 +306,7 @@ it.each(["trading", "completion-state"])(
       ready.mockRestore();
       await server.close();
       server = undefined;
-      const persisted = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+      const persisted = JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8"));
       expect(persisted.status).toBe(
         point === "trading"
           ? "committed"
@@ -403,17 +403,17 @@ it.each(["trading", "completion-state"])(
       expect(ownerStatus.status).toBe(200);
       expect((await ownerStatus.json()).state.attemptId).toBe(claim.body.state.attemptId);
       expect(
-        JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8")).frozen.attemptId,
+        JSON.parse(await readFile(join(stateDir, "flows/setup/record.json"), "utf8")).frozen.attemptId,
       ).toBe(claim.body.state.attemptId);
       await server.close();
       server = undefined;
-      await rm(join(stateDir, "first-setup.json"));
+      await rm(join(stateDir, "flows/setup/record.json"));
       ({ server, port } = await startRetainedServer(env, { testClock }));
       const lost = await post("/setup-api/first-setup/claim", {
         venue: request,
       });
       expect(lost.status).toBe(409);
-      await expect(readFile(join(stateDir, "first-setup.json"))).rejects.toMatchObject({
+      await expect(readFile(join(stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
         code: "ENOENT",
       });
       await server.close();
@@ -480,7 +480,7 @@ it("refuses a fresh owner claim when only a taxpayer survives in the database", 
     } as RequestInit);
     expect(response.status).toBe(409);
     expect((await response.json()).error.code).toBe("setup.attempt_conflict");
-    await expect(readFile(join(stateDir, "first-setup.json"))).rejects.toMatchObject({
+    await expect(readFile(join(stateDir, "flows/setup/record.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   } finally {

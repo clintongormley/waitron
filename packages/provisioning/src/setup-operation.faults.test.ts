@@ -40,7 +40,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 });
 
 const failure = (code: string) => Object.assign(new Error(`simulated ${code}`), { code });
-const STATE = "setup-operation.json";
+const STATE = "flows/setup/operation.json";
 
 const dirs: string[] = [];
 async function stateDir(): Promise<string> {

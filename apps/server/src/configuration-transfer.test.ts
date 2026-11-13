@@ -6998,9 +6998,9 @@ describe("a deleted printer in a configuration transfer", () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     try {
       const names = [
-        "configuration-import.artifact",
-        "configuration-import.key",
-        "configuration-import.json",
+        "flows/setup/import/artifact",
+        "flows/setup/import/key",
+        "flows/setup/import/marker.json",
       ];
       for (const name of names) await writeFile(join(stateDir, name), `retained ${name}`);
       const ring = loadKeyRing({

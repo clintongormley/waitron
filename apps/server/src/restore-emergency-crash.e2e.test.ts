@@ -63,7 +63,7 @@ it.each([
     const previousIdentity = `# the original box\nWAITRON_NODE_ID=${f.node.nodeId}\nWAITRON_ENV=preproduction\n`;
     await writeFile(join(f.stateDir, "trading.env"), previousIdentity);
     await f.seedDestination();
-    await writeFile(join(f.stateDir, "setup-operation.json"), "pending operation");
+    await writeFile(join(f.stateDir, "flows/setup/operation.json"), "pending operation");
     if (kind === "archive") {
       const old = await openVenueDatabase(f.venueDir);
       try {
@@ -94,7 +94,7 @@ it.each([
     await killRestore(f, phase);
     const committed = await f.snapshot();
     if (phase === "before-completion")
-      await expect(readFile(join(f.stateDir, "setup-operation.json"))).rejects.toMatchObject({
+      await expect(readFile(join(f.stateDir, "flows/setup/operation.json"))).rejects.toMatchObject({
         code: "ENOENT",
       });
     expect(committed.records).toEqual(f.originalRecords);

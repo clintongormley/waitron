@@ -410,7 +410,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   it("keeps setup status healthy when persisted operation state needs operator recovery", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-api-corrupt-operation-"));
     try {
-      writeFileSync(join(dir, "setup-operation.json"), "not-json");
+      writeFileSync(join(dir, "flows/setup/operation.json"), "not-json");
       const app = new Hono();
       mountSetup(
         app,
