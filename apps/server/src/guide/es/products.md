@@ -492,3 +492,11 @@ Elige **Volver a poner a la venta** cuando esté listo; el interruptor no se res
 Al recuperar el plato, los tamaños marcados individualmente como agotados siguen sin estar a la venta.
 En una lista de opciones, vuelve a poner otra a la venta antes de marcar su última opción disponible como agotada.
 Esto también se aplica a una lista deshabilitada en el panel que siga en tu carta.
+
+## Revisa la carta como cliente {#guest-preview}
+
+Abre una carta en **Cartas** y elige **Vista previa para clientes**. Verás sus platos,
+precios, tamaños, extras y declaraciones publicados. Elige el idioma del cliente para revisar
+los nombres y las descripciones; los nombres que falten usan el idioma predeterminado y después
+el nombre interno. Publica los cambios antes de revisarlos aquí. Esta vista previa no comparte
+la carta con los clientes.

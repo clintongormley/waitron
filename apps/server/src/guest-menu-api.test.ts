@@ -41,6 +41,7 @@ it("renders the publication, keeping later draft names and prices out", async ()
   expect(body.html).toContain("Soup for guests");
   expect(body.html).not.toContain("Unpublished soup");
   expect(body.html).not.toContain("92.34");
+  expect(body.html).not.toContain("€92.34");
   expect(body.html).not.toContain(f.soup);
   expect(body).toMatchObject({ language: "en", languages: ["en"] });
   const unpublished = await f.app.request(`/management-api/catalogues/${f.dinner}/guest-preview`, {

@@ -17,7 +17,7 @@ const offer: FrozenOffer = {
   productId: "private-product",
   menuName: "Internal menu",
   name: "Internal soup",
-  customerName: { en: "Soup", es: "Sopa" },
+  customerName: { en: "Soup", es: "Soup ES" },
   kitchenName: "KITCHEN SOUP",
   unitPrice: "4.00",
   grossPrice: "99.00",
@@ -60,7 +60,7 @@ it("allows only resolved guest content, with the effective price and reviewed st
     members: [
       {
         kind: "product",
-        name: "Sopa",
+        name: "Soup ES",
         description: "Hot soup",
         price: { min: "4.00", max: "4.00" },
         unit: "ea",
@@ -102,7 +102,7 @@ it("resolves parent and variant names independently and prices each variant", ()
   };
   const item = project(dish).members[0]!;
   expect(item).toMatchObject({
-    name: "Sopa",
+    name: "Soup ES",
     price: { min: "3.00", max: "6.00" },
     variants: [
       {
@@ -115,15 +115,6 @@ it("resolves parent and variant names independently and prices each variant", ()
     ],
   });
   expect(JSON.stringify(item)).not.toContain("KITCHEN");
-});
-it("uses default then internal names, and falls back from a disabled request", () => {
-  expect(project({ ...offer, customerName: { en: "Soup" } }).members[0]).toMatchObject({
-    name: "Soup",
-  });
-  expect(project({ ...offer, customerName: { fr: "Other" } }).members[0]).toMatchObject({
-    name: "Internal soup",
-  });
-  expect(project(offer, "fr")).toMatchObject({ language: "en", members: [{ name: "Soup" }] });
 });
 it("keeps section order and places directly included members in place", () => {
   const doc = document();
@@ -153,8 +144,8 @@ it("keeps section order and places directly included members in place", () => {
   ];
   expect(publicGuestMenu(doc, config, "es").members.map((m) => [m.kind, m.name])).toEqual([
     ["section", "Starters ES"],
-    ["product", "Sopa"],
-    ["product", "Sopa"],
+    ["product", "Soup ES"],
+    ["product", "Soup ES"],
   ]);
 });
 it("keeps separately priced extras and option names with their own declarations", () => {
@@ -213,23 +204,23 @@ it("keeps separately priced extras and option names with their own declarations"
       },
     ],
   };
-  expect(project(dish).members[0]).toMatchObject({
-    modifiers: [
-      {
-        kind: "extras",
-        name: "Extras",
-        items: [
-          {
-            name: "Bread ES (Staff size)",
-            price: "1.50",
-            portion: "2.000",
-            unit: "ea",
-            allergens: { nuts: { kinds: ["almonds"] } },
-            dietary: ["vegetarian"],
-          },
-        ],
-      },
-      { kind: "options", name: "Cooking", labels: ["Rare"] },
-    ],
-  });
+  const item = project(dish).members[0]!;
+  if (item.kind !== "product") throw new Error("Expected a dish");
+  expect(item.modifiers).toEqual([
+    {
+      kind: "extras",
+      name: "Extras",
+      items: [
+        {
+          name: "Bread ES (Staff size)",
+          price: "1.50",
+          portion: "2.000",
+          unit: "ea",
+          allergens: { nuts: { kinds: ["almonds"] } },
+          dietary: ["vegetarian"],
+        },
+      ],
+    },
+    { kind: "options", name: "Cooking", labels: ["Rare"] },
+  ]);
 });

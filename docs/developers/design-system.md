@@ -6918,3 +6918,15 @@ textual and omit the unreviewed-allergen warning.
 
 Shift+F10 or the context-menu key opens the same information window for a focused product. Enter
 still selects the dish (owner decision, 2026-10-16).
+
+### Guest menu preview
+
+The menu editor’s **Guest menu preview** opens an authenticated preview of its published content.
+Its language choice uses the venue’s enabled content languages. The server renders one HTML page
+in an isolated frame; the guest page keeps fixed light styling while the surrounding dashboard
+follows its theme. Section links retain that page’s language. Allergen/diet symbols are native
+popover buttons: focus alone opens nothing, Enter or Space opens the explanation, and Escape
+dismisses it. Specific cereal/nut kinds remain written beside their symbol; the written key names
+the wording bundle’s language and asks guests to tell staff about allergies. No missing or empty
+declaration becomes an absence claim. EN/ES/CA/GL wording falls back as a whole bundle to the
+venue default, then English, independently of dish text.

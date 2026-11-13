@@ -466,3 +466,10 @@ Choose **Back on sale** when it is ready again; nothing resets the switch the ne
 Restoring the dish keeps any individually sold-out sizes off sale.
 For an option list, put another choice back on sale before marking its last available choice sold out,
 even if the list has been disabled on the dashboard but is still on your menu.
+
+## Check the menu as a guest {#guest-preview}
+
+Open a menu in **Menus** and choose **Guest menu preview**. You see its published dishes,
+prices, sizes, extras and declarations. Choose a guest language to check the names and descriptions;
+missing names use your default language, then the internal name. Publish your changes before
+checking them here. This preview does not share the menu with guests.

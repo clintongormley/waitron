@@ -1,5 +1,6 @@
 import {
   guestMenuWords,
+  formatMoney,
   type PublicGuestMenu,
   type GuestMember,
   type GuestDeclarations,
@@ -44,7 +45,7 @@ export function renderGuestMenuPage(
     );
     return `<div class="declarations" lang="${language}">${allergens}${diets.map((code) => mark(`diet-${code}`, label(code))).join("")}</div>`;
   };
-  const price = (amount: string, unit: string) => `${esc(amount)} € <small>/ ${esc(unit)}</small>`;
+  const price = (amount: string, unit: string) => `${esc(amount)} <small>/ ${esc(unit)}</small>`;
   const walk = (members: GuestMember[]): string =>
     members
       .map((member) => {
@@ -55,11 +56,11 @@ export function renderGuestMenuPage(
         }
         const range =
           member.price.min === member.price.max
-            ? member.price.min
-            : `${member.price.min}–${member.price.max}`;
+            ? formatMoney(member.price.min, menu.language)
+            : `${formatMoney(member.price.min, menu.language)}–${formatMoney(member.price.max, menu.language)}`;
         return `<article><div class="line"><h3>${esc(member.name)}</h3><span>${price(range, member.unit)}</span></div>${member.description ? `<p>${esc(member.description)}</p>` : ""}${declarations(member)}
-      ${member.variants.map((v) => `<div class="choice"><div class="line"><span>${esc(v.name)}</span><span>${price(v.price, v.unit)}</span></div>${declarations(v)}</div>`).join("")}
-      ${member.modifiers.map((m) => `<div class="choice"><h4>${esc(m.name)}</h4>${m.kind === "options" ? `<p>${m.labels.map(esc).join(" · ")}</p>` : m.items.map((extra) => `<div class="line"><span>${esc(extra.name)} <small>${esc(extra.portion)} ${esc(extra.unit)}</small></span><span>${esc(extra.price)} €</span></div>${declarations(extra)}`).join("")}</div>`).join("")}</article>`;
+      ${member.variants.map((v) => `<div class="choice"><div class="line"><span>${esc(v.name)}</span><span>${price(formatMoney(v.price, menu.language), v.unit)}</span></div>${declarations(v)}</div>`).join("")}
+      ${member.modifiers.map((m) => `<div class="choice"><h4>${esc(m.name)}</h4>${m.kind === "options" ? `<p>${m.labels.map(esc).join(" · ")}</p>` : m.items.map((extra) => `<div class="line"><span>${esc(extra.name)} <small>${esc(extra.portion)} ${esc(extra.unit)}</small></span><span>${esc(formatMoney(extra.price, menu.language))}</span></div>${declarations(extra)}`).join("")}</div>`).join("")}</article>`;
       })
       .join("");
   const body = walk(menu.members);

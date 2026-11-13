@@ -161,6 +161,12 @@ export async function verifyPackage(
         );
       }
     }
+    if (packageNameSuffix === "ui-core")
+      for (const notice of ["Erudus-LICENSE.txt", "Pictogrammers-LICENSE.txt", "README.md"])
+        assert(
+          files.includes(`package/dist/third-party/nutrition-icons/${notice}`),
+          `missing nutrition notice: ${notice}`,
+        );
     await cp(join(root, "test/consumer"), dir, { recursive: true });
     if (variant === "registry") {
       for (const file of node ? ["main.ts"] : ["main.ts", "input-only.ts"]) {

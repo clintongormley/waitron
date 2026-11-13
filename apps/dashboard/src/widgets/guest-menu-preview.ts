@@ -64,11 +64,11 @@ export class GuestMenuPreview extends LitElement {
           this.error
             ? html`<p role="alert">${this.error}</p>
                 <wt-button variant="secondary" @click=${() => this.#load(this.answer?.language)}
-                  >${t("action.retry")}</wt-button
+                  >${t("content_languages.retry")}</wt-button
                 >`
             : nothing
         }
-        ${this.loading ? html`<p role="status">${t("common.loading")}</p>` : nothing}
+        ${this.loading ? html`<p role="status">${t("menus.loading")}</p>` : nothing}
         ${
           this.answer
             ? html`<wt-combobox

@@ -42,3 +42,8 @@ for (const name of ["colors", "structure"]) {
 for (const notice of ["LICENSE", "LICENSE-GRANTS.md"]) {
   await cp(resolve(root, "../..", notice), resolve(root, "dist", notice));
 }
+await cp(
+  resolve(root, "../../deploy/third-party/nutrition-icons"),
+  resolve(root, "dist/third-party/nutrition-icons"),
+  { recursive: true },
+);
