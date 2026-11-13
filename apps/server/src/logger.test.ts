@@ -113,7 +113,7 @@ describe("createLogger personal data", () => {
     ["legalName", "Jordi Puig Ferrer", "J***i P***g F***r"],
     ["taxId", "12345678Z", "1***Z"],
     ["idEmisorFactura", "12345678Z", "1***Z"],
-    ["todayName", "Soler", "S***r"],
+    ["todayName", "Spencer", "S***r"],
   ])("masks %s %j as %j", (key, value, masked) => {
     const line = writeLine({ [key]: value });
     expect(JSON.parse(line)).toEqual({ [key]: masked, at, level: "warn", event: "x" });
@@ -223,7 +223,7 @@ describe("stringifyMasked", () => {
     ["no listed key", { sleepMs: 3600000, nextDueAt: null, label: "T4", ok: true }],
     ["a nested list and no listed key", { zone: "Patio", tables: nested, count: 20 }],
     ["a listed key at the top", { email: "marta.soler@example.test", id: 1 }],
-    ["a listed key nested", { edit: { editorName: "Marta Soler", editorVersion: 3 } }],
+    ["a listed key nested", { edit: { editorName: "Martha Spencer", editorVersion: 3 } }],
     ["a listed key inside an array", { conflicts: [{ editorName: "Jordi Puig" }, { id: 2 }] }],
     [
       "the merchants path",
@@ -263,7 +263,7 @@ describe("stringifyMasked", () => {
   });
 
   // A key added to the list without an entry here fails, so its rule is chosen on purpose.
-  const MARTA_SOLER_UNDER: Record<string, string> = {
+  const MARTHA_SPENCER_UNDER: Record<string, string> = {
     email: "M***r",
     displayName: "M***a S***r",
     ownerName: "M***a S***r",
@@ -278,9 +278,9 @@ describe("stringifyMasked", () => {
   };
 
   it.each([...PERSONAL_LOG_KEYS])("masks the listed key %s", (key) => {
-    expect(MARTA_SOLER_UNDER[key]).toBeDefined();
-    expect(stringifyMasked({ [key]: "Marta Soler" })).toBe(
-      `{"${key}":"${MARTA_SOLER_UNDER[key]}"}`,
+    expect(MARTHA_SPENCER_UNDER[key]).toBeDefined();
+    expect(stringifyMasked({ [key]: "Martha Spencer" })).toBe(
+      `{"${key}":"${MARTHA_SPENCER_UNDER[key]}"}`,
     );
   });
 
@@ -289,7 +289,7 @@ describe("stringifyMasked", () => {
       [...children].map((child) => [parent, child]),
     ),
   )("masks %s[].%s", (parent, child) => {
-    expect(stringifyMasked({ [parent]: [{ [child]: "Marta Soler" }] })).toBe(
+    expect(stringifyMasked({ [parent]: [{ [child]: "Martha Spencer" }] })).toBe(
       `{"${parent}":[{"${child}":"M***a S***r"}]}`,
     );
   });
@@ -331,17 +331,17 @@ describe("maskPersonalData keeps the first and last character of each piece", ()
     ["marta@example.", "m***."],
     ["marta@example.com1", "m***1"],
     ["marta@example.xn--p1ai", "m***i"],
-    ["Marta Soler", "M***r"],
+    ["Martha Spencer", "M***r"],
   ])("writes the email-key value %j, which is not an address, as %j", (value, masked) => {
     expect(maskPersonalData("email", value)).toBe(masked);
   });
 
   it.each([
     ["Jordi Puig Ferrer", "J***i P***g F***r"],
-    ["Marta Soler", "M***a S***r"],
-    ["Soler", "S***r"],
+    ["Martha Spencer", "M***a S***r"],
+    ["Spencer", "S***r"],
     ["  Jordi   Puig\tFerrer\n", "J***i P***g F***r"],
-    ["Marta Puig-Ferrer", "M***a P***r"],
+    ["Martha Parker-Foster", "M***a P***r"],
     ["Àngel", "À***l"],
     ["Ana Bo", "*** ***"],
     ["Bar del Port", "*** *** P***t"],
@@ -369,8 +369,8 @@ describe("maskPersonalData keeps the first and last character of each piece", ()
   });
 
   it.each([
-    ["an object", { id: "p1", displayName: "Marta Soler" }],
-    ["an array", ["Marta", "Soler"]],
+    ["an object", { id: "p1", displayName: "Martha Spencer" }],
+    ["an array", ["Martha", "Spencer"]],
     ["a number", 12345678],
     ["a boolean", true],
     ["a BigInt", 12n],
@@ -379,8 +379,8 @@ describe("maskPersonalData keeps the first and last character of each piece", ()
   });
 
   it("keeps null and undefined, and returns a function or symbol for JSON to drop", () => {
-    const fn = () => "Marta Soler";
-    const sym = Symbol("Marta Soler");
+    const fn = () => "Martha Spencer";
+    const sym = Symbol("Martha Spencer");
     expect(maskPersonalData("email", null)).toBeNull();
     expect(maskPersonalData("email", undefined)).toBeUndefined();
     expect(maskPersonalData("person", fn)).toBe(fn);
