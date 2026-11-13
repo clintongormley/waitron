@@ -730,12 +730,10 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 
 ## Bundle: Series and module-preparation gaps at handover
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size M.
 
-- **A dormant setup held from an earlier event can drop a series the old box added; settle before
-  Slice 13 or 3b-F.** The switch-on then activates on the old series and says nothing (run, A1018
-  Slice 5's Ruling R39). Beside it: a second live standard series made a sale answer a plain
-  `server.internal` 500 in a test fixture, cause not traced.
+- **A second live standard series made a sale answer `server.internal` in a test fixture;
+  the production cause is untraced.** Left open by A1018 Slice 5 (Ruling R39).
 - **The first hand-back is refused after the giving box has stopped filing; settle before Slice 13
   or 3b-F.** M2 to M1 answers `sif.allocation_invalid` `standby_already_active` at the first request,
   because M1's registration stays active (run on a promoted database standing in for the copy).
@@ -947,6 +945,10 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
   as a refactor larger than that PR (its simplify review, 2026-10-15).
 
 ## Decisions and deliberate limits
+
+**A1018 R39, 2026-11-14:** The dormant-series prerequisite is dropped: the bounded source check
+found no production route or duty that changes a filing box's live series outside an allocation.
+The fixture-only mismatch does not authorise a build.
 
 ### Returned originals and their recorded facts (A1342, 2026-11-10)
 
