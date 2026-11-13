@@ -756,6 +756,45 @@ describe("never sending what staff did not confirm (review fix round 1)", () => 
     await vi.waitFor(() => expect(resend(el).shadowRoot!.contains(focused())).toBe(true));
   });
 
+  it("sends nothing when the amount changes while a pressed Confirm waits for its preview, and sends the new amount on the next press", async () => {
+    const api = sendingApi();
+    api.getRefundableTenders.mockResolvedValue([TENDERS[0]!]);
+    api.openInvoiceCorrection.mockImplementation(async (_sale, request) => ({
+      correction: { ...OPEN, gross: request.gross, left: request.gross },
+      replayed: false,
+    }));
+    api.previewInvoiceCorrection.mockRejectedValueOnce(lost());
+    const { el } = await mountSending(api);
+    await type(el, "6.05");
+    await choose(el, "overcharged");
+    await vi.waitFor(() =>
+      expect(root(el).querySelector("wt-form-actions")!.error).toBe(
+        t("invoice_correction.read_failed"),
+      ),
+    );
+    let release!: (value: InvoiceCorrectionPreview) => void;
+    api.previewInvoiceCorrection.mockImplementationOnce(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+
+    confirm(el).click();
+    await vi.waitFor(() => expect(api.previewInvoiceCorrection).toHaveBeenCalledTimes(2));
+    await type(el, "9.00");
+    await vi.waitFor(() => expect(api.previewInvoiceCorrection).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(root(el).querySelector("[data-split]")).not.toBeNull());
+    release(answer("6.05"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(api.openInvoiceCorrection).not.toHaveBeenCalled();
+    expect(api.giveInvoiceCorrectionCash).not.toHaveBeenCalled();
+
+    confirm(el).click();
+    await vi.waitFor(() => expect(api.giveInvoiceCorrectionCash).toHaveBeenCalledOnce());
+    expect(api.openInvoiceCorrection.mock.calls.map((call) => call[1].gross)).toEqual(["9.00"]);
+    expect(api.giveInvoiceCorrectionCash.mock.calls.map((call) => call[1].amount)).toEqual([
+      "9.00",
+    ]);
+  });
+
   it("offers a saved Open from an earlier visit, and forgets it once the correction it may have opened is found", async () => {
     const session = new InvoiceCorrectionSession(SCOPE, {
       openInvoiceCorrection: () => Promise.reject(lost()),

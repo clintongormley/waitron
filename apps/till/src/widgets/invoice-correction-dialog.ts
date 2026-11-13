@@ -368,10 +368,14 @@ export class TillInvoiceCorrectionDialog extends LitElement {
       return;
     }
     if (this.#answer() === null) {
+      // The fields stay editable while the preview is asked again; what is sent must be what was
+      // on screen at the press, so an edit meanwhile needs a press of its own.
+      const pressed = JSON.stringify(this.#comparable(this.draft));
       this.confirming = true;
       await this.#preview();
       this.confirming = false;
       if (!this.isConnected || !this.active || this.busy) return;
+      if (JSON.stringify(this.#comparable(this.draft)) !== pressed) return;
     }
     const answer = this.#answer();
     if (answer === null || this.#errors().size > 0) return;
