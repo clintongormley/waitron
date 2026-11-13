@@ -10,7 +10,7 @@ import {
   type WtVenueLogo,
 } from "@waitron/ui";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
-import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
+import { nextLogoLoad, png, within } from "@waitron/ui/test/venue-logo-fixture.js";
 import { cleanupWidgets, mountWidget as mountBaseWidget } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
@@ -48,6 +48,8 @@ const mount = (props: Partial<TillShell> = {}, theme?: "light" | "dark") =>
   mountBaseWidget<TillShell>("till-shell", { ...bar, ...props }, theme);
 
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+const WAIT_MS = 2_000;
 
 async function settle(el: TillShell): Promise<void> {
   for (let i = 0; i < 4; i++) {
@@ -99,10 +101,10 @@ function natural(el: TillShell): number {
   return width;
 }
 
-function nextLogoError(el: TillShell): Promise<void> {
-  return new Promise((resolve) => {
-    el.addEventListener("wt-logo-error", () => resolve(), { once: true });
-  });
+function logoErrorSeen(el: TillShell): () => boolean {
+  let seen = false;
+  el.addEventListener("wt-logo-error", () => (seen = true), { once: true });
+  return () => seen;
 }
 
 async function atViewport(width: number, run: () => Promise<void>): Promise<void> {
@@ -433,16 +435,27 @@ describe("the bar refits when the logo changes", () => {
         observer.observe({ type: "resource" });
         // Observe delivery: the retained resource-timing buffer can fill before a retry.
         const requests = () => requestCount;
+        // The six waits below must fit inside the case's 15 s limit together, so they share one allowance.
+        let allowance = 5_000;
         // vi.waitFor advances faked timers on each check, which would bring a retry forward.
+        const waitUpTo = async (done: () => boolean) => {
+          const started = performance.now();
+          await within(allowance, done);
+          allowance = Math.max(0, allowance - (performance.now() - started));
+        };
         const requestsReach = async (count: number) => {
-          for (let i = 0; i < 300 && requests() < count; i++) await frame();
+          await waitUpTo(() => requests() >= count);
           expect(requests()).toBe(count);
+        };
+        const reported = async (failed: () => boolean) => {
+          await waitUpTo(failed);
+          expect(failed(), "the logo should report its failed load").toBe(true);
         };
         vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
         try {
-          let failed = nextLogoError(el);
+          let failed = logoErrorSeen(el);
           applyVenueTheme(withLogo(address, null, "broken"));
-          await failed;
+          await reported(failed);
           await settle(el);
           await requestsReach(1);
           for (const attempt of [2, 3]) {
@@ -452,9 +465,9 @@ describe("the bar refits when the logo changes", () => {
             await settle(el);
             expect(requests()).toBe(attempt - 1);
             expect(logoOf(el)).toBeNull();
-            failed = nextLogoError(el);
+            failed = logoErrorSeen(el);
             await vi.advanceTimersByTimeAsync(1_001);
-            await failed;
+            await reported(failed);
             await settle(el);
             await requestsReach(attempt);
           }
@@ -507,7 +520,7 @@ describe("the bar refits when the logo changes", () => {
         await settle(el);
         expect(currentVenueLogo()).toMatchObject({ failed: true });
         el.style.width = `${Math.round(natural(el) * 0.6)}px`;
-        for (let i = 0; i < 300 && steps(el) < 2; i++) await frame();
+        await within(WAIT_MS, () => steps(el) >= 2);
         await settle(el);
         expect(steps(el)).toBeGreaterThanOrEqual(2);
         expect(logoOf(el)).toBeNull();

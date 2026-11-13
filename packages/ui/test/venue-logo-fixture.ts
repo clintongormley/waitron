@@ -31,3 +31,27 @@ export function nextLogoLoad(): Promise<{ logo: WtVenueLogo; img: HTMLImageEleme
     );
   });
 }
+
+// Taken when this module loads, before any case fakes `setTimeout`, so a deadline stays in real time.
+const realSetTimeout = window.setTimeout.bind(window);
+const realClearTimeout = window.clearTimeout.bind(window);
+
+/** Checks `done` once a frame until it holds or `ms` of real time pass, even if frames stop. */
+export async function within(ms: number, done: () => boolean): Promise<void> {
+  let expired = false;
+  let wake = () => {};
+  const timer = realSetTimeout(() => {
+    expired = true;
+    wake();
+  }, ms);
+  try {
+    while (!done() && !expired) {
+      await new Promise<void>((resolve) => {
+        wake = resolve;
+        requestAnimationFrame(() => resolve());
+      });
+    }
+  } finally {
+    realClearTimeout(timer);
+  }
+}
