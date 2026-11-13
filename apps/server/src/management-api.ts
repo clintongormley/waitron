@@ -244,6 +244,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "station.screen_in_use": 409,
   "station.work_in_progress": 409,
   "station.thresholds_invalid": 400,
+  "station.destination_invalid": 400,
   "course.not_found": 404,
   "course.name_taken": 409,
   "device_profile.not_found": 404,
@@ -1623,6 +1624,7 @@ export function mountManagementApi(
         readyWarningAfterMinutes?: unknown;
         printerIds?: unknown;
         waitsForPass?: unknown;
+        whenClosedSendsTo?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1644,6 +1646,7 @@ export function mountManagementApi(
         forgottenAfterMinutes?: number;
         readyWarningAfterMinutes?: number;
         printerIds?: string[];
+        whenClosedSendsTo?: string | null;
       } = {};
       if (body.name !== undefined) {
         if (typeof body.name !== "string")
@@ -1683,6 +1686,14 @@ export function mountManagementApi(
       Object.assign(patch, parseStationTimingPatch(body));
       const printerIds = parseStationPrinterIds(body.printerIds);
       if (printerIds !== undefined) patch.printerIds = printerIds;
+      if (body.whenClosedSendsTo !== undefined) {
+        if (
+          body.whenClosedSendsTo !== null &&
+          (typeof body.whenClosedSendsTo !== "string" || !isUuid(body.whenClosedSendsTo))
+        )
+          throw new AppError("management.request_invalid", { field: "whenClosedSendsTo" });
+        patch.whenClosedSendsTo = body.whenClosedSendsTo?.toLowerCase() ?? null;
+      }
       await withVenueAuth(deps, sessionId, async (tx) => {
         await authorizeStationPrinters(tx, sessionId, patch.printerIds);
         await updateStation(tx, id, patch);

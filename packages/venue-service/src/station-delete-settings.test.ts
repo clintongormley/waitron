@@ -267,6 +267,32 @@ it("clears owned daily dates and incoming destinations without reopening their o
   });
 });
 
+it("A1510 lists and clears the stations that send their dishes to it when closed, and its own choice", async () => {
+  await run(async (tx) => {
+    const f = await fixture(tx);
+    await tx
+      .update(kitchenStations)
+      .set({ whenClosedSendsToStationId: f.gone })
+      .where(eq(kitchenStations.id, f.other));
+    await tx
+      .update(kitchenStations)
+      .set({ whenClosedSendsToStationId: f.home })
+      .where(eq(kitchenStations.id, f.gone));
+    expect((await module.readStationDeleteSettings(tx, f.gone)).removes).toEqual([
+      { key: "station_closed_defaults", count: 1, targets: [{ id: f.other, name: "Survivor" }] },
+    ]);
+    await module.clearStationDeleteSettings(tx, f.gone);
+    expect(
+      sorted(
+        await tx
+          .select({ id: kitchenStations.id, to: kitchenStations.whenClosedSendsToStationId })
+          .from(kitchenStations)
+          .where(inArray(kitchenStations.id, [f.gone, f.other, f.home])),
+      ),
+    ).toEqual(sorted([f.gone, f.other, f.home].map((id) => ({ id, to: null }))));
+  });
+});
+
 it("a deleted kitchen display does not block deleting a station", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);

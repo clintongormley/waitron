@@ -587,13 +587,27 @@ describe("the till's station day", () => {
     expect(choices.json).toEqual({
       openDishCount: 0,
       destinations: [
-        { id: bar, name: "Bar", isDefault: true },
-        { id: pastry, name: "Pastry", isDefault: false },
+        { id: bar, name: "Bar", isDefault: true, preferred: false },
+        { id: pastry, name: "Pastry", isDefault: false, preferred: false },
       ],
     });
     const authorizers = await call("GET", "/api/service-day/authorizers", undefined, staffCookie);
     expect(authorizers.status).toBe(200);
     expect(authorizers.json).toEqual([{ personId: manager, displayName: "Administrator" }]);
+  });
+  it("A1510 marks the station's own when-closed choice as preferred", async () => {
+    await suite.db
+      .update(kitchenStations)
+      .set({ whenClosedSendsToStationId: pastry })
+      .where(eq(kitchenStations.id, grill));
+    const choices = await call("GET", today(), undefined, staffCookie);
+    expect(choices.status).toBe(200);
+    expect(choices.json).toMatchObject({
+      destinations: [
+        { id: bar, name: "Bar", isDefault: true, preferred: false },
+        { id: pastry, name: "Pastry", isDefault: false, preferred: true },
+      ],
+    });
   });
   it.each([
     ["GET", "/api/service-day/authorizers"],
@@ -863,8 +877,8 @@ describe("the kitchen display's station day", () => {
     expect(answer.json).toEqual({
       openDishCount: 0,
       destinations: [
-        { id: bar, name: "Bar", isDefault: true },
-        { id: pastry, name: "Pastry", isDefault: false },
+        { id: bar, name: "Bar", isDefault: true, preferred: false },
+        { id: pastry, name: "Pastry", isDefault: false, preferred: false },
       ],
       authorizers: [{ personId: manager, displayName: "Administrator" }],
     });

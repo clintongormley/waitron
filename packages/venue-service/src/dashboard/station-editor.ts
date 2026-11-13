@@ -50,6 +50,8 @@ export type StationEditorStation = {
   bumpMode: BumpMode;
   changesAfterSending: ChangesAfterSending;
   printerIds: readonly string[];
+  isDefault: boolean;
+  whenClosedSendsTo: string | null;
 } & StationTiming;
 export interface StationEditorPrinter {
   id: string;
@@ -68,6 +70,7 @@ export type StationEditorSave = {
   waitsForPass?: boolean;
   bumpMode?: BumpMode;
   changesAfterSending?: ChangesAfterSending;
+  whenClosedSendsTo?: string | null;
 } & Partial<StationTiming>;
 
 const TIMING_FIELDS = [
@@ -85,7 +88,7 @@ const TIMING_LABELS = {
 } as const;
 const isTimingField = (value: unknown): value is TimingField =>
   (TIMING_FIELDS as readonly unknown[]).includes(value);
-type Field = "name" | "colour" | "printers" | TimingField;
+type Field = "name" | "colour" | "printers" | "whenClosedSendsTo" | TimingField;
 
 type Draft = {
   name: string;
@@ -98,6 +101,8 @@ type Draft = {
   waitsForPass: boolean;
   bumpMode: BumpMode;
   changesAfterSending: ChangesAfterSending;
+  /** "" when not set. */
+  whenClosedSendsTo: string;
 } & { [K in TimingField]: string };
 export type StationRefusal = { code: string; params?: Record<string, unknown> };
 type Refusal = StationRefusal;
@@ -134,6 +139,7 @@ const equal = (a: Draft, b: Draft) =>
   a.waitsForPass === b.waitsForPass &&
   a.bumpMode === b.bumpMode &&
   a.changesAfterSending === b.changesAfterSending &&
+  a.whenClosedSendsTo === b.whenClosedSendsTo &&
   sameSet(a.printerIds, b.printerIds) &&
   TIMING_FIELDS.every((field) => timingText(a[field]) === timingText(b[field]));
 
@@ -198,6 +204,11 @@ export function stationRefusalField(refusal: Refusal | undefined): Field | undef
   if (refusal.code === "management.request_invalid" && refusal.params?.field === "colour")
     return "colour";
   if (
+    refusal.code === "station.destination_invalid" ||
+    (refusal.code === "management.request_invalid" && refusal.params?.field === "whenClosedSendsTo")
+  )
+    return "whenClosedSendsTo";
+  if (
     (refusal.code === "station.thresholds_invalid" ||
       refusal.code === "management.request_invalid") &&
     isTimingField(refusal.params?.field)
@@ -220,6 +231,8 @@ function refusalText(refusal: Refusal): string {
       return t("prep.name_taken");
     case "colour":
       return t("prep.colour_invalid");
+    case "whenClosedSendsTo":
+      return t("prep.when_closed_invalid");
     case "printers":
       return refusal.code === "authorization.not_permitted"
         ? t("prep.printers_not_permitted")
@@ -258,6 +271,22 @@ const CHANGES_LABELS = {
 
 function changesOptions() {
   return CHANGES_AFTER_SENDING.map((value) => ({ value, label: t(CHANGES_LABELS[value]) }));
+}
+
+/** Every other active station, plus a chosen one that is no longer active. */
+function whenClosedOptions(
+  stations: readonly StationColourUser[],
+  stationId: string,
+  chosen: string,
+) {
+  const others = stations.filter((station) => station.id !== stationId);
+  return [
+    { value: "", label: t("prep.when_closed_not_set") },
+    ...others.map((station) => ({ value: station.id, label: station.name })),
+    ...(chosen !== "" && !others.some((station) => station.id === chosen)
+      ? [{ value: chosen, label: t("prep.when_closed_unavailable"), disabled: true, fixed: true }]
+      : []),
+  ];
 }
 
 function timingDraft(station: StationTiming) {
@@ -345,6 +374,7 @@ export class StationEditor extends LitElement {
     waitsForPass: false,
     bumpMode: "line",
     changesAfterSending: "held-or-waiting",
+    whenClosedSendsTo: "",
     warmAfterMinutes: "",
     overdueAfterMinutes: "",
     forgottenAfterMinutes: "",
@@ -405,6 +435,7 @@ export class StationEditor extends LitElement {
         waitsForPass: station.waitsForPass,
         bumpMode: station.bumpMode,
         changesAfterSending: station.changesAfterSending,
+        whenClosedSendsTo: station.whenClosedSendsTo ?? "",
         ...timingDraft(station),
       };
       this.baseline = copy(this.draft);
@@ -484,7 +515,8 @@ export class StationEditor extends LitElement {
       | "printHeldWork"
       | "waitsForPass"
       | "bumpMode"
-      | "changesAfterSending",
+      | "changesAfterSending"
+      | "whenClosedSendsTo",
   ) {
     this.draft = draft;
     this.printerDropped = false;
@@ -515,6 +547,9 @@ export class StationEditor extends LitElement {
       ...(draft.bumpMode !== base.bumpMode ? { bumpMode: draft.bumpMode } : {}),
       ...(draft.changesAfterSending !== base.changesAfterSending
         ? { changesAfterSending: draft.changesAfterSending }
+        : {}),
+      ...(draft.whenClosedSendsTo !== base.whenClosedSendsTo
+        ? { whenClosedSendsTo: draft.whenClosedSendsTo || null }
         : {}),
       ...Object.fromEntries(
         TIMING_FIELDS.filter((field) => timingText(draft[field]) !== timingText(base[field])).map(
@@ -653,6 +688,33 @@ export class StationEditor extends LitElement {
                 this.changed({ ...this.draft, colour: event.detail.value }, "colour");
             }}
           ></wt-colour-chooser>
+          ${
+            this.station.isDefault
+              ? nothing
+              : html`<wt-combobox
+                  name="whenClosedSendsTo"
+                  label=${t("prep.when_closed_sends_to")}
+                  hint=${t("prep.when_closed_sends_to_hint")}
+                  search="auto"
+                  .value=${this.draft.whenClosedSendsTo}
+                  .options=${whenClosedOptions(
+                    this.stations,
+                    this.station.id,
+                    this.draft.whenClosedSendsTo,
+                  )}
+                  .error=${refusedField === "whenClosedSendsTo" ? fieldMessage : ""}
+                  .searchPlaceholder=${t("prep.when_closed_sends_to")}
+                  .noResultsLabel=${t("venue.combobox_no_results")}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (current())
+                      this.changed(
+                        { ...this.draft, whenClosedSendsTo: event.detail.value },
+                        "whenClosedSendsTo",
+                      );
+                  }}
+                ></wt-combobox>`
+          }
           ${this.printersField(current, refusedField === "printers" ? fieldMessage : "")}
           ${
             this.canManagePrinters && !this.station.active

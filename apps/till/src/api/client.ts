@@ -1411,6 +1411,8 @@ export interface StationDestination {
   id: string;
   name: string;
   isDefault: boolean;
+  /** The closing station's own "When closed, send to" choice; at most one row. */
+  preferred: boolean;
 }
 
 export interface StationMoveBody {

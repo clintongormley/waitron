@@ -36,6 +36,27 @@ test("a narrow field keeps enough value room beside the larger chevron", async (
   expect(value.clientWidth).toBeGreaterThanOrEqual(159);
 });
 
+test.each(["placeholder", "chosen label"])(
+  "a long %s is cut inside a grid column instead of widening it",
+  async (shown) => {
+    const long = "Close for today starts with this station chosen, whatever the screen width";
+    const el = (await mount(
+      `<wt-combobox label="Station" ${shown === "placeholder" ? `hint="${long}"` : ""}></wt-combobox>`,
+    )) as WtCombobox;
+    if (shown === "chosen label") {
+      el.options = [{ value: "a", label: long }];
+      el.value = "a";
+      await el.updateComplete;
+    }
+    host.style.display = "grid";
+    host.style.width = "200px";
+    const value = el.shadowRoot!.querySelector<HTMLElement>(".value")!;
+    expect(value.textContent).toBe(long);
+    expect(el.getBoundingClientRect().width).toBeLessThanOrEqual(200);
+    expect(value.scrollWidth).toBeGreaterThan(value.clientWidth);
+  },
+);
+
 const pageLanguage = document.documentElement.lang;
 afterEach(() => {
   cleanup();

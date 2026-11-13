@@ -360,6 +360,11 @@ const en = {
     "Prints a held group at once, marked HOLD, and again marked FIRE when it is fired.",
   "prep.waits_for_pass": "Waits for the pass",
   "prep.waits_for_pass_hint": "Its dishes wait at the pass until the pass fires them.",
+  "prep.when_closed_sends_to": "When closed, send to",
+  "prep.when_closed_sends_to_hint": "Close for today starts with this station chosen.",
+  "prep.when_closed_not_set": "Not set",
+  "prep.when_closed_unavailable": "A disabled station",
+  "prep.when_closed_invalid": "Choose another active station.",
   "prep.name_required": "Enter a name.",
   "prep.name_taken": "This name is already in use.",
   "prep.threshold_invalid": "Use whole minutes with waiting < overdue < forgotten.",
@@ -431,6 +436,10 @@ const en = {
   "prep.delete_station_daily_states": "Remove {count} daily station settings.",
   "prep.delete_station_daily_destinations_one": "This closed station uses normal routing: {names}.",
   "prep.delete_station_daily_destinations": "These closed stations use normal routing: {names}.",
+  "prep.delete_station_closed_defaults_one":
+    "This station no longer sends its dishes here when closed: {names}.",
+  "prep.delete_station_closed_defaults":
+    "These stations no longer send their dishes here when closed: {names}.",
   "prep.actions": "Actions",
   "prep.service_zone": "Service zone",
   "hours.clock_change_conflict":
@@ -1309,6 +1318,11 @@ const es: Record<keyof typeof en, string> = {
     "Imprime un grupo en espera en el momento, marcado HOLD, y otra vez marcado FIRE al marcharlo.",
   "prep.waits_for_pass": "Espera al pase",
   "prep.waits_for_pass_hint": "Sus platos esperan en el pase hasta que el pase los marcha.",
+  "prep.when_closed_sends_to": "Al cerrar, enviar a",
+  "prep.when_closed_sends_to_hint": "Cerrar por hoy empieza con esta estación elegida.",
+  "prep.when_closed_not_set": "Sin elegir",
+  "prep.when_closed_unavailable": "Una estación deshabilitada",
+  "prep.when_closed_invalid": "Elige otra estación activa.",
   "prep.name_required": "Escribe un nombre.",
   "prep.name_taken": "Este nombre ya está en uso.",
   "prep.threshold_invalid": "Usa minutos enteros con esperando < con retraso < olvidado.",
@@ -1384,6 +1398,10 @@ const es: Record<keyof typeof en, string> = {
     "Esta estación cerrada usa el enrutamiento normal: {names}.",
   "prep.delete_station_daily_destinations":
     "Estas estaciones cerradas usan el enrutamiento normal: {names}.",
+  "prep.delete_station_closed_defaults_one":
+    "Esta estación ya no envía aquí sus platos cuando cierra: {names}.",
+  "prep.delete_station_closed_defaults":
+    "Estas estaciones ya no envían aquí sus platos cuando cierran: {names}.",
   "prep.actions": "Acciones",
   "prep.service_zone": "Zona de servicio",
   "hours.clock_change_conflict":

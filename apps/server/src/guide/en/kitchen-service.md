@@ -150,6 +150,7 @@ changed, under **Identical dishes on a kitchen ticket**, **Print held groups in 
 **Changes after sending**: **Not allowed**, **While held**, or
 **While held or waiting**. It also sets whether its dishes wait for the pass to fire them, under
 **Waits for the pass**: see [Make a station wait for the pass](kitchen-service.md#station-waits).
+**Close for today** starts with the station chosen under **When closed, send to**.
 A dish the kitchen has started cannot be changed. A dish that went to no station, with no extra
 that went to a station of its own, can be changed whatever the stations allow.
 

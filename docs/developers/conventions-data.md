@@ -592,7 +592,7 @@ Courses clear every product default; a course referenced before cleanup remains 
 Stations refuse the default, explicit effective KDS bindings (including off devices), and
 unfinished food. Fired ready food may remain. A permitted station delete removes its base
 routing rules and all their period children, clears incoming daily destinations without
-reopening those stations, and clears only eligible unsent/open-draft choices. Recorded tickets, sent
+reopening those stations, clears its own "When closed, send to" choice and every other station's that names it, and clears only eligible unsent/open-draft choices. Recorded tickets, sent
 order lines, draft events and groups stay unchanged.
 
 An Every station screen keeps the deleted station visible while its queue has dishes. The

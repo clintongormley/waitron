@@ -25,7 +25,10 @@ describe.each(["light", "dark"] as const)("station today dialog %s", (theme) => 
       {
         stationName: "Parrilla",
         openDishCount: ["unfinished", "send", "leave"].includes(state) ? 3 : 0,
-        destinations: state === "empty" ? [] : [{ id: "pass", name: "Pase", isDefault: true }],
+        destinations:
+          state === "empty"
+            ? []
+            : [{ id: "pass", name: "Pase", isDefault: true, preferred: false }],
         busy: state === "busy",
         refusal: state === "refused" ? "station.destination_invalid" : null,
       },
@@ -63,11 +66,13 @@ for (const locale of ["en", "es"] as const) {
                   id: "pass",
                   name: locale === "en" ? "Main kitchen" : "Cocina principal",
                   isDefault: true,
+                  preferred: false,
                 },
                 {
                   id: "bar",
                   name: locale === "en" ? "Downstairs bar" : "Barra de la planta baja",
                   isDefault: false,
+                  preferred: false,
                 },
               ],
             },

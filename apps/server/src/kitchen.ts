@@ -17,6 +17,7 @@ import {
 import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
+import { assertStationDestination } from "@waitron/venue-service";
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { replaceStationPrinters } from "./station-printers.js";
@@ -48,6 +49,7 @@ export interface Station {
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
   readyWarningAfterMinutes: number;
+  whenClosedSendsTo: string | null;
 }
 
 /**
@@ -142,6 +144,7 @@ export async function listStations(tx: Transaction): Promise<Station[]> {
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
       readyWarningAfterMinutes: kitchenStations.readyWarningAfterMinutes,
+      whenClosedSendsTo: kitchenStations.whenClosedSendsToStationId,
     })
     .from(kitchenStations)
     .where(eq(kitchenStations.active, true))
@@ -181,6 +184,7 @@ export async function updateStation(
     changesAfterSending?: ChangesAfterSending;
     waitsForPass?: boolean;
     printerIds?: readonly string[];
+    whenClosedSendsTo?: string | null;
   } & StationTimingPatch,
 ): Promise<void> {
   if (Object.hasOwn(patch, "active"))
@@ -192,8 +196,10 @@ export async function updateStation(
     forgottenAfterMinutes,
     readyWarningAfterMinutes,
     printerIds,
+    whenClosedSendsTo,
     ...set
   } = patch;
+  if (whenClosedSendsTo != null) await assertStationDestination(tx, id, whenClosedSendsTo);
   const timingPatch: StationTimingPatch = {};
   if (warmAfterMinutes !== undefined) timingPatch.warmAfterMinutes = warmAfterMinutes;
   if (overdueAfterMinutes !== undefined) timingPatch.overdueAfterMinutes = overdueAfterMinutes;
@@ -214,7 +220,11 @@ export async function updateStation(
   if (Object.keys(timingPatch).length > 0) {
     assertStationTiming(timingPatch, station, { id, name: station.name });
   }
-  const changes = { ...set, ...timingPatch };
+  const changes = {
+    ...set,
+    ...timingPatch,
+    ...(whenClosedSendsTo === undefined ? {} : { whenClosedSendsToStationId: whenClosedSendsTo }),
+  };
   try {
     if (Object.keys(changes).length > 0) {
       await tx.update(kitchenStations).set(changes).where(eq(kitchenStations.id, id));

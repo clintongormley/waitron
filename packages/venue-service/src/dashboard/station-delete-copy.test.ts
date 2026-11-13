@@ -97,6 +97,11 @@ it.each([
     "These closed stations use normal routing: Grill, Bar.",
     "Estas estaciones cerradas usan el enrutamiento normal: Grill, Bar.",
   ],
+  [
+    "station_closed_defaults",
+    "These stations no longer send their dishes here when closed: Grill, Bar.",
+    "Estas estaciones ya no envían aquí sus platos cuando cierran: Grill, Bar.",
+  ],
 ] as const)("discloses %s in both languages", (key, en, es) => {
   for (const [locale, line] of [
     ["en", en],
@@ -229,6 +234,12 @@ it.each([
     grill,
     "This closed station uses normal routing: Grill.",
     "Esta estación cerrada usa el enrutamiento normal: Grill.",
+  ],
+  [
+    "station_closed_defaults",
+    grill,
+    "This station no longer sends its dishes here when closed: Grill.",
+    "Esta estación ya no envía aquí sus platos cuando cierra: Grill.",
   ],
 ] as const)("words %s in the singular for one item in both languages", (key, targets, en, es) => {
   for (const [locale, line] of [

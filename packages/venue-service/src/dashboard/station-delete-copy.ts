@@ -54,6 +54,10 @@ export function stationDeleteCopy(): DeleteDialogCopy {
           "prep.delete_station_daily_destinations",
           "prep.delete_station_daily_destinations_one",
         ],
+        station_closed_defaults: [
+          "prep.delete_station_closed_defaults",
+          "prep.delete_station_closed_defaults_one",
+        ],
       } as const;
       const [many, one] = keys[item.key as keyof typeof keys];
       const single = item.count === 1;

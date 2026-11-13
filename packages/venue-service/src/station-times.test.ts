@@ -675,10 +675,25 @@ describe("station today controls", () => {
     expect(
       await db.transaction((tx) => stationTimes.stationDestinations(tx, f.upstairs, at)),
     ).toEqual([
-      { id: "00000000-0000-4000-8000-000000000002", name: "Ásador", isDefault: false },
-      { id: "00000000-0000-4000-8000-000000000003", name: "barra", isDefault: false },
-      { id: f.kitchen, name: "Kitchen", isDefault: true },
-      { id: "00000000-0000-4000-8000-000000000001", name: "Ñandú", isDefault: false },
+      {
+        id: "00000000-0000-4000-8000-000000000002",
+        name: "Ásador",
+        isDefault: false,
+        preferred: false,
+      },
+      {
+        id: "00000000-0000-4000-8000-000000000003",
+        name: "barra",
+        isDefault: false,
+        preferred: false,
+      },
+      { id: f.kitchen, name: "Kitchen", isDefault: true, preferred: false },
+      {
+        id: "00000000-0000-4000-8000-000000000001",
+        name: "Ñandú",
+        isDefault: false,
+        preferred: false,
+      },
     ]);
   });
 
@@ -691,17 +706,54 @@ describe("station today controls", () => {
     expect(
       await db.transaction((tx) => stationTimes.stationDestinations(tx, f.upstairs, at)),
     ).toEqual([
-      { id: f.downstairs, name: "Downstairs bar", isDefault: false },
-      { id: f.kitchen, name: "Kitchen", isDefault: true },
+      { id: f.downstairs, name: "Downstairs bar", isDefault: false, preferred: false },
+      { id: f.kitchen, name: "Kitchen", isDefault: true, preferred: false },
     ]);
     expect(
       await db.transaction((tx) =>
         stationTimes.stationDestinations(tx, f.upstairs, new Date("2026-10-03T04:00:00Z")),
       ),
     ).toEqual([
-      { id: f.downstairs, name: "Downstairs bar", isDefault: false },
-      { id: f.kitchen, name: "Kitchen", isDefault: true },
+      { id: f.downstairs, name: "Downstairs bar", isDefault: false, preferred: false },
+      { id: f.kitchen, name: "Kitchen", isDefault: true, preferred: false },
     ]);
+  });
+
+  it("A1510 marks the station's own when-closed choice as preferred, and nothing when it has none", async () => {
+    const f = await db.transaction(fixture);
+    const destinations = () =>
+      db.transaction((tx) => stationTimes.stationDestinations(tx, f.upstairs, at));
+    expect(await destinations()).toEqual([
+      { id: f.downstairs, name: "Downstairs bar", isDefault: false, preferred: false },
+      { id: f.kitchen, name: "Kitchen", isDefault: true, preferred: false },
+    ]);
+    await db
+      .update(kitchenStations)
+      .set({ whenClosedSendsToStationId: f.downstairs })
+      .where(eq(kitchenStations.id, f.upstairs));
+    await db
+      .update(kitchenStations)
+      .set({ whenClosedSendsToStationId: f.kitchen })
+      .where(eq(kitchenStations.id, f.downstairs));
+    expect(await destinations()).toEqual([
+      { id: f.downstairs, name: "Downstairs bar", isDefault: false, preferred: true },
+      { id: f.kitchen, name: "Kitchen", isDefault: true, preferred: false },
+    ]);
+  });
+
+  it("A1510 prefers nothing when the station's when-closed choice is itself closed today", async () => {
+    const f = await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await tx
+        .update(kitchenStations)
+        .set({ whenClosedSendsToStationId: f.downstairs })
+        .where(eq(kitchenStations.id, f.upstairs));
+      await setStationToday(tx, f.downstairs, "closed", at, await seedActivityActor(tx));
+      return f;
+    });
+    expect(
+      await db.transaction((tx) => stationTimes.stationDestinations(tx, f.upstairs, at)),
+    ).toEqual([{ id: f.kitchen, name: "Kitchen", isDefault: true, preferred: false }]);
   });
 
   it("reopens by removing today's row and stays open later", async () => {

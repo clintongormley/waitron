@@ -222,8 +222,8 @@ describe("station day seats", () => {
       const f = await stationFixture(tx);
       await setStationToday(tx, f.closed, "closed", AT, await seedActivityActor(tx));
       expect(await VENUE_SERVICE.stationDestinations(tx, f.grill, AT)).toEqual([
-        { id: f.bar, name: "Bar", isDefault: false },
-        { id: f.kitchen, name: "Kitchen", isDefault: true },
+        { id: f.bar, name: "Bar", isDefault: false, preferred: false },
+        { id: f.kitchen, name: "Kitchen", isDefault: true, preferred: false },
       ]);
     });
   });

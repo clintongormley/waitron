@@ -33,6 +33,8 @@ const GRILL: StationEditorStation = {
   overdueAfterMinutes: 12,
   forgottenAfterMinutes: 15,
   readyWarningAfterMinutes: 3,
+  isDefault: false,
+  whenClosedSendsTo: null,
 };
 
 const STATIONS = [
@@ -767,6 +769,101 @@ it("reads the bump mode in Spanish", async () => {
     "Un plato cada vez",
     "Toda la comanda a la vez",
   ]);
+});
+
+const closedField = (el: StationEditor) =>
+  $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=whenClosedSendsTo]");
+async function pickClosed(el: StationEditor, value: string) {
+  closedField(el)!.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+  await el.updateComplete;
+}
+
+it("A1510: offers every other active station as where its dishes go when closed, after the colour", async () => {
+  const el = await mount({ ...GRILL, whenClosedSendsTo: "bar" });
+  const field = closedField(el)!;
+  expect(field.label).toBe("When closed, send to");
+  expect(field.required).toBe(false);
+  expect(field.hint).toBe("Close for today starts with this station chosen.");
+  expect(field.value).toBe("bar");
+  expect(field.options.map(({ value, label }) => [value, label])).toEqual([
+    ["", "Not set"],
+    ["bar", "Bar"],
+    ["pizza", "Pizza oven"],
+  ]);
+  expect(field.previousElementSibling).toBe(picker(el));
+  expect(field.nextElementSibling).toBe(printersField(el));
+  cleanup();
+  const unset = await mount();
+  expect(closedField(unset)!.value).toBe("");
+});
+
+it("A1510: the default station has no when-closed choice", async () => {
+  const el = await mount({ ...GRILL, isDefault: true, whenClosedSendsTo: "bar" });
+  expect(closedField(el)).toBeNull();
+});
+
+it("A1510: a chosen station that has since been disabled stays chosen, named as disabled", async () => {
+  const el = await mount({ ...GRILL, whenClosedSendsTo: "old-station" });
+  expect(closedField(el)!.value).toBe("old-station");
+  expect(closedField(el)!.options.map(({ value, label }) => [value, label])).toEqual([
+    ["", "Not set"],
+    ["bar", "Bar"],
+    ["pizza", "Pizza oven"],
+    ["old-station", "A disabled station"],
+  ]);
+  expect(closedField(el)!.options.at(-1)).toEqual({
+    value: "old-station",
+    label: "A disabled station",
+    disabled: true,
+    fixed: true,
+  });
+});
+
+it("A1510: sends only a changed when-closed choice, null once cleared, and nothing for a choice put back", async () => {
+  const el = await mount({ ...GRILL, whenClosedSendsTo: "bar" });
+  const seen = saves(el);
+  await pickClosed(el, "pizza");
+  expect(saveButton(el).disabled).toBe(false);
+  await pickClosed(el, "bar");
+  expect(saveButton(el).disabled).toBe(true);
+  await pickClosed(el, "pizza");
+  await save(el);
+  expect(seen).toEqual([{ whenClosedSendsTo: "pizza" }]);
+  cleanup();
+  const cleared = await mount({ ...GRILL, whenClosedSendsTo: "bar" });
+  const clearedSeen = saves(cleared);
+  await pickClosed(cleared, "");
+  await save(cleared);
+  expect(clearedSeen).toEqual([{ whenClosedSendsTo: null }]);
+});
+
+it("A1510: a refused when-closed choice shows under its field until it changes", async () => {
+  const el = await mount();
+  await pickClosed(el, "bar");
+  el.refusal = {
+    code: "station.destination_invalid",
+    params: { stationId: "grill", sendsToStationId: "bar", reason: "inactive" },
+  };
+  await el.updateComplete;
+  expect(closedField(el)!.error).toBe("Choose another active station.");
+  expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
+  expect(nameField(el).error).toBe("");
+  expect(saveButton(el).disabled).toBe(false);
+  await pickClosed(el, "pizza");
+  expect(closedField(el)!.error).toBe("");
+  expect(formMessage(el)).toBe("");
+});
+
+it("A1510: reads the when-closed choice in Spanish", async () => {
+  const el = await mount(GRILL, { locale: "es" });
+  const field = closedField(el)!;
+  expect(field.label).toBe("Al cerrar, enviar a");
+  expect(field.hint).toBe("Cerrar por hoy empieza con esta estación elegida.");
+  expect(field.options[0]!.label).toBe("Sin elegir");
+  await pickClosed(el, "bar");
+  el.refusal = { code: "station.destination_invalid", params: { reason: "self" } };
+  await el.updateComplete;
+  expect(field.error).toBe("Elige otra estación activa.");
 });
 
 it("opens on the station's changes after sending, last before the buttons", async () => {

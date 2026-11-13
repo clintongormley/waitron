@@ -58,7 +58,10 @@ export class TillStationTodayDialog extends LitElement {
   #choice(): string {
     return this.destinations.some((d) => d.id === this.selected)
       ? this.selected!
-      : (this.destinations.find((d) => d.isDefault)?.id ?? this.destinations[0]?.id ?? "");
+      : (this.destinations.find((d) => d.preferred)?.id ??
+          this.destinations.find((d) => d.isDefault)?.id ??
+          this.destinations[0]?.id ??
+          "");
   }
   #draft() {
     return { destination: this.#choice(), openDishes: this.openDishes };

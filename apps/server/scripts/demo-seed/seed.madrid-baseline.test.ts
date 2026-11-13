@@ -789,6 +789,28 @@ for (const locale of ["en", "es"] as const) {
       expected[phase].tables.floor_zones!.foreignKeys = expected[phase].tables
         .floor_zones!.foreignKeys.reverse()
         .map((key, id) => ({ ...key, id }));
+      const stations = expected[phase].tables.kitchen_stations!;
+      stations.columns.push({
+        name: "when_closed_sends_to_station_id",
+        type: "TEXT",
+        notnull: 0,
+        dflt_value: null,
+        pk: 0,
+      });
+      for (const row of Object.values(stations.rows)) row.when_closed_sends_to_station_id = null;
+      stations.foreignKeys = [
+        {
+          id: 0,
+          seq: 0,
+          table: "kitchen_stations",
+          from: "when_closed_sends_to_station_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "NO ACTION",
+          match: "NONE",
+        },
+        ...stations.foreignKeys,
+      ].map((key, id) => ({ ...key, id }));
       delete phases[phase]!.floor_today_tables;
       delete phases[phase]!.floor_today_zones;
       for (const table of ["floor_zones", "kitchen_stations"])

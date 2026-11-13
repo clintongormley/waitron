@@ -80,6 +80,7 @@ const view: PrepStationsView = {
       waitsForPass: false,
       bumpMode: "line",
       changesAfterSending: "held-or-waiting",
+      whenClosedSendsTo: null,
     },
   ],
   categories: [
@@ -1308,6 +1309,53 @@ it("A773 station policy: hands the station's pass waiting to the editor and save
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
   await settle(el);
   expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { waitsForPass: false });
+});
+it("A1510: hands a station's when-closed choice to the editor and saves it cleared; the default station has none", async () => {
+  setLocale("en");
+  const a = api({
+    load: vi.fn().mockResolvedValue({
+      ...view,
+      stations: [
+        view.stations[0]!,
+        {
+          ...view.stations[0]!,
+          id: "grill",
+          name: "Grill",
+          colour: "orange",
+          isDefault: false,
+          whenClosedSendsTo: "bar",
+        },
+      ],
+    }),
+  });
+  const el = await mount(a);
+  const edit = async (id: string) => {
+    el.shadowRoot!.querySelector("prep-station-table")!
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>(`[data-test="edit-${id}"]`)!
+      .click();
+    await settle(el);
+    const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
+    await editor.updateComplete;
+    return editor;
+  };
+  const closedField = (editor: HTMLElementTagNameMap["prep-station-editor"]) =>
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "wt-combobox[name=whenClosedSendsTo]",
+    );
+  const bar = await edit("bar");
+  expect(closedField(bar)).toBeNull();
+  bar.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-station-edit]")!.click();
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull());
+  const grill = await edit("grill");
+  const field = closedField(grill)!;
+  expect(field.value).toBe("bar");
+  expect(field.options.map(({ value }) => value)).toEqual(["", "bar"]);
+  field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
+  await grill.updateComplete;
+  grill.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("grill", { whenClosedSendsTo: null });
 });
 function fallbackView(): PrepStationsView {
   return {

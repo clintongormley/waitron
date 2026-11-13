@@ -22,6 +22,7 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
     "moved slips print",
     "moved slips don't print",
     "waits for the pass",
+    "when closed refused",
   ])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed(
@@ -40,6 +41,8 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
       waitsForPass: state === "waits for the pass",
       bumpMode: "ticket",
       changesAfterSending: "held",
+      isDefault: false,
+      whenClosedSendsTo: state === "when closed refused" ? "bar" : null,
       printerIds: ["epson"],
       warmAfterMinutes: 3,
       overdueAfterMinutes: 5,
@@ -70,7 +73,9 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
         el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.error,
       ).toBe("Enter a name.");
       expect(
-        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox")!.error,
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          "wt-combobox[name=printerIds]",
+        )!.error,
       ).toBe("Choose active printers.");
     }
     const timing = (name: string) =>
@@ -131,6 +136,14 @@ describe.each(["light", "dark"] as const)("Station editor (%s)", (theme) => {
           "wt-switch[name=printHeldWork]",
         )!.checked,
       ).toBe(!printing);
+    }
+    if (state === "when closed refused") {
+      el.refusal = { code: "station.destination_invalid", params: { reason: "inactive" } };
+      await el.updateComplete;
+      const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "wt-combobox[name=whenClosedSendsTo]",
+      )!;
+      expect([field.value, field.error]).toEqual(["bar", "Choose another active station."]);
     }
     if (state === "waits for the pass")
       expect(

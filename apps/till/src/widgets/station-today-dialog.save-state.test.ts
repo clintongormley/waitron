@@ -9,8 +9,8 @@ async function mount() {
   const { el } = await mountWidget<TillStationTodayDialog>("till-station-today-dialog", {
     stationName: "Grill",
     destinations: [
-      { id: "pass", name: "Pass", isDefault: true },
-      { id: "bar", name: "Bar", isDefault: false },
+      { id: "pass", name: "Pass", isDefault: true, preferred: false },
+      { id: "bar", name: "Bar", isDefault: false, preferred: false },
     ],
   });
   expect(el.shadowRoot).not.toBeNull();
