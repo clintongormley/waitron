@@ -562,7 +562,8 @@ T9 · 1**. Each station is judged by its own time, so a salad from a 6-minute st
 dish from a 3-minute one warn at different moments. Tables whose food has waited that long come
 first, in amber, and the minutes keep counting while you watch. On a device set to reduce motion,
 the bar stays amber without pulsing. Tap a table to open it, or tap **Open ›** to open the first
-table listed.
+table listed. When more tables are ready than fit, slide the list sideways; a faded edge shows there
+are more that way.
 
 The bar lists only the tables in the zones this device shows, and it goes away once nothing is ready. A
 till instead shows a **Ready** list above the tables, one line for each station. The list counts

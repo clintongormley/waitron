@@ -310,6 +310,114 @@ test("closes on a real Escape press when dismissible", async () => {
   expect(closes).toHaveBeenCalledOnce();
 });
 
+test("draws no focus ring round a text-only dialog opened after another closed on Escape", async () => {
+  await mount(
+    "<div><wt-dialog>first</wt-dialog><wt-dialog>second</wt-dialog><wt-dialog><wt-button>Go</wt-button></wt-dialog></div>",
+  );
+  const [first, second, withButton] = [...host.querySelectorAll("wt-dialog")] as Openable[];
+  first.open = true;
+  await first.updateComplete;
+  const closed = new Promise((resolve) => first.addEventListener("wt-close", resolve));
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  await closeReportsDelivered();
+
+  second.open = true;
+  await second.updateComplete;
+  const dialog = second.shadowRoot!.querySelector("dialog")!;
+  expect(deepActiveElement()).toBe(dialog);
+  expect(dialog.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(dialog).outlineStyle).toBe("none");
+
+  // Control: a control inside a dialog keeps its own ring after Escape.
+  const closedSecond = new Promise((resolve) => second.addEventListener("wt-close", resolve));
+  await userEvent.keyboard("{Escape}");
+  await closedSecond;
+  await closeReportsDelivered();
+  withButton.open = true;
+  await withButton.updateComplete;
+  const button = deepActiveElement()!;
+  expect(button.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(button).outlineStyle).toBe("solid");
+});
+
+test("draws no focus ring on an overflowing body it opens on after another dialog closed on Escape", async () => {
+  await mount(
+    `<div><wt-dialog>first</wt-dialog><wt-dialog heading="Edit order"><div style="height: 3000px">Long order</div>${SAVE_OR_CANCEL}</wt-dialog></div>`,
+  );
+  const [first, second] = [...host.querySelectorAll("wt-dialog")] as Openable[];
+  first.open = true;
+  await first.updateComplete;
+  const closed = new Promise((resolve) => first.addEventListener("wt-close", resolve));
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  await closeReportsDelivered();
+  second.open = true;
+  await second.updateComplete;
+  const body = second.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+  expect(deepActiveElement()).toBe(body);
+  expect(body.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(body).outlineStyle).toBe("none");
+
+  // Control: Shift+Tab back from Cancel, a keyboard user reaching the body, shows the ring.
+  expect(await bodyIsTabStop(second, second.querySelector("wt-button")!)).toBe(true);
+  expect(body.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(body).outlineStyle).toBe("solid");
+});
+
+test("keeps its body's focus ring, or its absence, when it is taken off the page and put back", async () => {
+  await mount(
+    `<div><wt-dialog>first</wt-dialog><wt-dialog heading="Edit order"><div style="height: 3000px">Long order</div>${SAVE_OR_CANCEL}</wt-dialog></div>`,
+  );
+  const [first, second] = [...host.querySelectorAll("wt-dialog")] as Openable[];
+  first.open = true;
+  await first.updateComplete;
+  const closed = new Promise((resolve) => first.addEventListener("wt-close", resolve));
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  await closeReportsDelivered();
+  second.open = true;
+  await second.updateComplete;
+  const body = second.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  const moveOffAndBack = async () => {
+    takeOut(second)();
+    await second.updateComplete;
+    expect(nativeOf(second).matches(":modal")).toBe(true);
+    expect(deepActiveElement()).toBe(body);
+    expect(body.matches(":focus-visible")).toBe(true);
+  };
+
+  // Still the opening focus: no key has been pressed on the body.
+  await moveOffAndBack();
+  expect(getComputedStyle(body).outlineStyle).toBe("none");
+
+  expect(await bodyIsTabStop(second, second.querySelector("wt-button")!)).toBe(true);
+  expect(getComputedStyle(body).outlineStyle).toBe("solid");
+  await moveOffAndBack();
+  expect(getComputedStyle(body).outlineStyle).toBe("solid");
+});
+
+test("keeps the focus ring on an overflowing body it did not open on", async () => {
+  await mount(
+    `<div><wt-dialog>first</wt-dialog><wt-dialog heading="Edit order"><label>Note <input name="note" /></label><div style="height: 3000px">Long order</div></wt-dialog></div>`,
+  );
+  const [first, second] = [...host.querySelectorAll("wt-dialog")] as Openable[];
+  first.open = true;
+  await first.updateComplete;
+  const closed = new Promise((resolve) => first.addEventListener("wt-close", resolve));
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  await closeReportsDelivered();
+  second.open = true;
+  await second.updateComplete;
+  expect(deepActiveElement()).toBe(second.querySelector("input"));
+  const body = second.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  body.focus();
+  expect(body.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(body).outlineStyle).toBe("solid");
+});
+
 test("stays open through repeated Escape presses when dismissible is off", async () => {
   const el = (await mount("<wt-dialog>body</wt-dialog>")) as Openable & { dismissible: boolean };
   el.dismissible = false;

@@ -2470,6 +2470,22 @@ side the check expects the box, that a larger font still fits, or the check meas
 and timing rather than placement. A control that forced the box to 240 px only once filled (wrapping `show`) failed the
 reordered check five times in five without the added room, and passed five times in five with it.
 
+## A check of what fits on a phone draws in a font loaded from a file
+
+The page's `system-ui` is San Francisco on macOS and DejaVu Sans on CI's ubuntu-26.04 runner. On
+2026-11-13 the Ready bar's "three short-named tables fit without scrolling at 390 px" cases
+(`apps/till/src/screens/till-floor-screen.ready-bar.test.ts`) passed on macOS and failed every
+warning case in CI run 43397178586, at `expected 189 to be less than or equal to` 160, 150, 172
+and 162. DejaVu Sans, copied from Debian trixie's `fonts-dejavu-core` and loaded into the test on
+macOS, gave the same six numbers. A phone draws Roboto or San Francisco, so those cases measured
+CI's font rather than the bar. Such a check now sets `--wt-font-family` to `PHONE_FONT` after
+`loadPhoneFont()` (`apps/till/src/widgets/test-helpers.ts`), which loads the server's variable
+Noto Sans file. Measured that day for the three entries beside "Ready 10 min" at 390 px: Noto Sans
+164 px of the 172 the strip has, San Francisco 166 of 172, Roboto 164 of 181, DejaVu Sans 189 of
+150. With A1105's narrower padding and gap reverted, the Noto Sans check failed all six
+warning cases (196 px against 164 to 183). With it pinned, the file passed on macOS and in a
+`node:26-trixie` container with Playwright's Chromium, where `fc-match system-ui` names DejaVu Sans.
+
 ## A check of what an observer's first report does polls for it, never counts frames
 
 On 2026-10-29 "shows the first tab at the strip's start when the strip comes back after the Floor

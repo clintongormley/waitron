@@ -1300,3 +1300,54 @@ test("still follows its message's height after it is moved in the page", async (
     await page.viewport(1280, 900);
   }
 });
+
+/** Opens a text-only modal just after another dialog was closed with a real Escape press, which
+ * leaves Chromium treating the focus the modal moves on opening as keyboard focus. */
+async function openAfterEscape() {
+  await mount(`<div>
+    <wt-dialog>Previous</wt-dialog>
+    <wt-modal heading="Guide">Printer settings
+      <wt-form-actions slot="footer">
+        <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+        <wt-button>Save</wt-button>
+      </wt-form-actions>
+    </wt-modal>
+  </div>`);
+  const previous = host.querySelector("wt-dialog")!;
+  const modal = host.querySelector("wt-modal")!;
+  previous.open = true;
+  await previous.updateComplete;
+  const closed = new Promise((resolve) => previous.addEventListener("wt-close", resolve));
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  modal.open = true;
+  await modal.updateComplete;
+  const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  expect(modal.shadowRoot!.activeElement).toBe(body);
+  expect(body.matches(":focus-visible")).toBe(true);
+  return { modal, body };
+}
+
+test("opens with no focus ring on its body after another dialog closed on Escape", async () => {
+  const { body } = await openAfterEscape();
+  expect(getComputedStyle(body).outlineStyle).toBe("none");
+});
+
+test("shows the focus ring on its body once a key is pressed there", async () => {
+  const { body } = await openAfterEscape();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(body.matches(":focus")).toBe(true);
+  expect(getComputedStyle(body).outlineStyle).toBe("solid");
+});
+
+test("shows the focus ring on its body when Shift+Tab brings focus back to it", async () => {
+  const { modal, body } = await openAfterEscape();
+  // Moved by script, so no key is pressed on the body before it loses focus.
+  const cancel = modal.querySelector("wt-button")!;
+  cancel.focus();
+  expect(modal.shadowRoot!.activeElement).not.toBe(body);
+  await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+  expect(modal.shadowRoot!.activeElement).toBe(body);
+  expect(body.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(body).outlineStyle).toBe("solid");
+});

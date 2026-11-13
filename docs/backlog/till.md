@@ -1404,15 +1404,6 @@ visible part of the sheet and only the list shows (`c2-refused-390-light-en.png`
 in the list leaves the form scrolled the same way (`a0-select-as-lands-390-light-en.png`).
 
 
-## A1105. At 390 px in English the till's Ready bar hides its last entry under "Open ›".
-
-Seen,
-2026-10-25 (the A797 slice 1 look, `e-bar-dining-390-light-en.png` in
-`~/waitron-campaign-c/a797-1-shots/`): with three entries the last, "W1 · 1", is cut off by the
-"Open ›" button and the bar scrolls sideways to reach it; in Spanish all three fit
-(`e-bar-dining-390-light-es.png`).
-
-
 ## A1108. The till order screen's Sent panel reads "Sent !" and "Held ·".
 
 Seen, 2026-10-25 (the

@@ -773,11 +773,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **The till top bar fits at phone width, 1024 and 1280** (bundle of 9, 1 important, size M). Holds A1082, A921, A1219. [Detail](backlog/till.md#bundle-the-till-top-bar-fits-at-phone-width-1024-and-1280)
 
-- **A1094. After a dialog is closed with Escape, the next till dialog draws a blue focus ring around
-  the whole dialog** in the light theme; a first opening draws none. Seen, 2026-10-25 (A789 slice
-  4's look, `06` and `08` against `33` in `~/waitron-campaign-c/a789-4-shots/`). I believe it is
-  the shared dialog's keyboard-focus style reacting to the Escape key; not checked.
-
 - **The owner's yes-or-no read: built defaults that wait only for a nod** (bundle, 2 important, size M, needs the owner). Holds A723, A762, A1059, A1060, A1063, A1067, A1068, A1080, A1081, A1250, A1253, A893, A936, A900, A923, A1011, A1020 (remaining words and choices), A1031, A924, A925, A952, A953, A954, A956, A957, A958, A959, A292, A856, A859, A841, A841, A841. [Detail](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
 
 
@@ -1075,13 +1070,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   move cases use "Mesa 9" and "Mesa 7", and many other till test files use "Mesa …" labels (`git
   grep -l '"Mesa ' -- 'apps/till/src/*.test.ts'`), against the English-only rule (CLAUDE.md §3).
   [Detail](backlog/till.md#a1102-the-tills-tests-name-tables-in-spanish)
-
-- **A1105. At 390 px in English the till's Ready bar hides its last entry under "Open ›".** Seen,
-  2026-10-25 (the A797 slice 1 look, `e-bar-dining-390-light-en.png` in
-  `~/waitron-campaign-c/a797-1-shots/`): with three entries the last, "W1 · 1", is cut off by the
-  "Open ›" button and the bar scrolls sideways to reach it; in Spanish all three fit
-  (`e-bar-dining-390-light-es.png`).
-  [Detail](backlog/till.md#a1105-at-390-px-in-english-the-tills-ready-bar-hides-its-last-entry-under-open-)
 
 - **A1112. The server, the API and a configuration file still accept a "+" in a short name.** The
   dashboard's floor plan editor refuses a "+" in a short name it would save, unless the table

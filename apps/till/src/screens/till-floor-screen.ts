@@ -12,6 +12,7 @@ import {
   unsafeCSS,
 } from "lit";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
+import { edgeFadeStyles, markOverflow, oncePerFrame } from "../widgets/edge-fade.js";
 import type { FloorView, FloorViewChoices } from "../state/floor-view-memory.js";
 import { MediaQueryController } from "../state/media-query-controller.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -321,6 +322,7 @@ export class TillFloorScreen extends LitElement {
   static override styles = [
     baseStyles,
     servicePeriodStyles,
+    edgeFadeStyles,
     floorTrayStyles,
     floorRingStyles,
     signalChipStyles,
@@ -828,6 +830,12 @@ export class TillFloorScreen extends LitElement {
         white-space: nowrap;
       }
 
+      /* Narrower than a small button's own, so three short names fit beside a two-digit warning
+         heading on a phone. */
+      .ready-bar wt-button::part(button) {
+        padding-inline: var(--wt-space-2);
+      }
+
       .ready-tables wt-button::part(button) {
         border-radius: var(--wt-radius-full);
       }
@@ -885,9 +893,10 @@ export class TillFloorScreen extends LitElement {
       .ready-tables {
         display: flex;
         flex: 1;
-        gap: var(--wt-space-2);
+        gap: var(--wt-space-1);
         min-width: 0;
         overflow-x: auto;
+        --fade-width: var(--wt-space-6);
       }
     `,
   ];
@@ -1000,6 +1009,8 @@ export class TillFloorScreen extends LitElement {
   #drawnEdges = "";
   #tabsObserver?: IntersectionObserver;
   #stripResize?: ResizeObserver;
+  #readyStrip?: HTMLElement;
+  #readyResize?: ResizeObserver;
   /** The strip being watched: `null` while there is none, `undefined` while not watching. */
   #tabsStrip?: HTMLElement | null;
   #tabsKeys?: string;
@@ -1024,6 +1035,7 @@ export class TillFloorScreen extends LitElement {
       this.#watchReminders();
       this.#watchFloor();
       this.#watchTabs();
+      this.#watchReadyStrip();
     }
   }
 
@@ -1035,6 +1047,7 @@ export class TillFloorScreen extends LitElement {
     this.#rereadTimer?.stop();
     this.#rereadTimer = undefined;
     this.#stopWatchingTabs();
+    this.#stopWatchingReadyStrip();
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -1088,6 +1101,7 @@ export class TillFloorScreen extends LitElement {
     this.#watchReminders();
     this.#watchFloor();
     this.#watchTabs();
+    this.#watchReadyStrip();
     this.#restStrip();
     const drawn = [...this.shadowRoot!.querySelectorAll<HTMLElement>("[data-tabs-edge]")]
       .map((edge) => edge.dataset.tabsEdge)
@@ -2933,7 +2947,9 @@ export class TillFloorScreen extends LitElement {
             : t("floor.ready_bar_waited").replace("{n}", String(waitedMinutes))
         }
       </h2>
-      <div class="ready-tables">${ready.map((entry) => this.#readyEntry(entry))}</div>
+      <div class="ready-tables edge-fade" @scroll=${this.#readyScroll.schedule}>
+        ${ready.map((entry) => this.#readyEntry(entry))}
+      </div>
       <wt-button
         size="sm"
         variant="secondary"
@@ -2947,6 +2963,36 @@ export class TillFloorScreen extends LitElement {
       })}
     </section>`;
   }
+
+  /** Keeps the fade on whichever end of the Ready bar's strip hides an entry as the strip resizes,
+   * and once a redraw's entries have drawn, since entries added to the strip do not resize it. */
+  #watchReadyStrip(): void {
+    const strip = this.shadowRoot!.querySelector<HTMLElement>("[data-ready-bar] .ready-tables");
+    if (strip !== this.#readyStrip) {
+      this.#stopWatchingReadyStrip();
+      this.#readyStrip = strip ?? undefined;
+      if (strip !== null) {
+        this.#readyResize = new ResizeObserver(this.#markReadyOverflow);
+        this.#readyResize.observe(strip);
+      }
+    }
+    if (strip === null) return;
+    const entries = [...strip.children] as Partial<LitElement>[];
+    void Promise.all(entries.map((entry) => entry.updateComplete)).then(this.#markReadyOverflow);
+  }
+
+  #stopWatchingReadyStrip(): void {
+    this.#readyResize?.disconnect();
+    this.#readyResize = undefined;
+    this.#readyStrip = undefined;
+    this.#readyScroll.cancel();
+  }
+
+  readonly #markReadyOverflow = () => {
+    if (this.#readyStrip !== undefined) markOverflow(this.#readyStrip);
+  };
+
+  readonly #readyScroll = oncePerFrame(this.#markReadyOverflow);
 
   #readyEntry(entry: ReadyBarTable): TemplateResult {
     return html`<wt-button
