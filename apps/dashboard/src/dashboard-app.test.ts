@@ -3513,11 +3513,9 @@ describe("dashboard-app", () => {
     await flush(el);
     const page = venueSettings(el)!;
     expect(page.shadowRoot!.querySelector("dashboard-receipts-screen")).toBeNull();
-    expect(
-      (
-        page.shadowRoot!.querySelector("wt-tabs") as HTMLElement & { items: { key: string }[] }
-      ).items.map((tab) => tab.key),
-    ).toEqual(["venue-details"]);
+    expect(page.shadowRoot!.querySelector("wt-tabs")!.items.map((tab) => tab.key)).toEqual([
+      "venue-details",
+    ]);
     expect(page.shadowRoot!.querySelector("h1")).not.toBeNull();
   });
 
