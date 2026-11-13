@@ -3,9 +3,14 @@ import { publishState } from "./live-publish.js";
 import type { ServiceDefinition } from "./job-runner.js";
 import { STREAM_DIR } from "@waitron/store";
 import { isDeepStrictEqual } from "node:util";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { nodeSigningPublicKey, tryGetCredential, type KeyRing } from "@waitron/credentials";
+import {
+  nodeSigningPublicKey,
+  readPairSecret,
+  tryGetCredential,
+  type KeyRing,
+} from "@waitron/credentials";
 import {
   readNodeMembership,
   withTransaction,
@@ -14,9 +19,10 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { signBytes, verifyEndorsement } from "@waitron/membership";
+import { readPairLink } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { VENUE_FILE, WAL_SUFFIX } from "@waitron/store";
+import { TLS_CLIENT_CERT_FILE, TLS_CLIENT_KEY_FILE, VENUE_FILE, WAL_SUFFIX } from "@waitron/store";
 import {
   DEFAULT_WAL_LIMIT_BYTES,
   createS3ObjectStore,
@@ -31,6 +37,9 @@ import {
   type StreamView,
 } from "@waitron/stream";
 import { boundObjectStore } from "./bounded-store.js";
+import { caCertPath } from "./box-secrets.js";
+import { startStorePipe, type StorePipe, type StorePipeDeps } from "./spare-pipe.js";
+import { SPARE_STORE_BUCKET, SPARE_STORE_REGION } from "./spare-store.js";
 import type { Logger } from "./logger.js";
 import { credentialField } from "./credentials.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -147,6 +156,11 @@ export async function readNewerBucketMain(
   }
 }
 
+interface PairTarget {
+  venueId: string;
+  pair: { storeUrl: string; accessKeyId: string; secretAccessKey: string; authorityPem: string };
+}
+
 export interface StreamHostDeps {
   bus?: LiveEvents;
   db: Database;
@@ -170,6 +184,7 @@ export interface StreamHostDeps {
   store?: ObjectStore;
   walLimitBytes?: number;
   mainCheckIntervalMs?: number;
+  storeLookup?: StorePipeDeps["lookup"];
 }
 
 /**
@@ -180,6 +195,8 @@ export interface StreamHostDeps {
 export class StreamHost {
   readonly #deps: StreamHostDeps;
   #supervisor: StreamSupervisor | undefined;
+  /** The link to the spare's store, while the running supervisor streams through it. */
+  #pipe: StorePipe | undefined;
   /** Set when the settings are stored but no supervisor could start, so the status can say why. */
   #notStarted: StreamNotStarted | undefined;
   #reloading = false;
@@ -251,8 +268,8 @@ export class StreamHost {
       return;
     }
     try {
-      const settings = await readStreamSettings(db, ring);
-      if (settings === null) {
+      const target = await this.#target();
+      if (target === null) {
         log("info", "stream.not_configured", {});
         return;
       }
@@ -276,19 +293,47 @@ export class StreamHost {
         this.#notStartedFor("reseal_required");
         return;
       }
+      const superseded = () =>
+        this.#stopped || this.#supervisor !== undefined || this.#reloadCount !== reloadCount;
       // A supervisor still stopping may still have Litestream running; and a stop() or an
       // overlapping start() may land while this waits.
       await this.#retiring;
-      if (this.#stopped || this.#supervisor !== undefined || this.#reloadCount !== reloadCount)
-        return;
+      if (superseded()) return;
+      let bucket: BucketConfig;
+      if ("bucket" in target) {
+        bucket = target.bucket;
+      } else {
+        const { pair } = target;
+        const pipe = await startStorePipe({
+          storeUrl: pair.storeUrl,
+          authorityPem: pair.authorityPem,
+          clientCertFile: join(this.#deps.stateDir, TLS_CLIENT_CERT_FILE),
+          clientKeyFile: join(this.#deps.stateDir, TLS_CLIENT_KEY_FILE),
+          lookup: this.#deps.storeLookup,
+          log,
+        });
+        if (superseded()) {
+          await pipe.close();
+          return;
+        }
+        this.#pipe = pipe;
+        bucket = {
+          endpoint: pipe.loopbackUrl,
+          region: SPARE_STORE_REGION,
+          bucket: SPARE_STORE_BUCKET,
+          prefix: "",
+          accessKeyId: pair.accessKeyId,
+          secretAccessKey: pair.secretAccessKey,
+        };
+      }
       const venueDbPath = join(this.#deps.venueDir, VENUE_FILE);
       const supervisor = new StreamSupervisor({
         litestreamBin: this.#deps.litestreamBin,
         venueDbPath,
         configDir: join(this.#deps.stateDir, STREAM_DIR),
-        bucket: settings.bucket,
-        streamKey: deriveStreamKey(recoveryKey, settings.venueId),
-        venueId: settings.venueId,
+        bucket,
+        streamKey: deriveStreamKey(recoveryKey, target.venueId),
+        venueId: target.venueId,
         nodeId: this.#deps.nodeId,
         term: membership.body.term,
         sign: async (message) =>
@@ -307,9 +352,31 @@ export class StreamHost {
       this.#supervisor = supervisor;
       await supervisor.start();
     } catch (error) {
+      if (this.#supervisor === undefined) await this.#closePipe();
       log("error", "stream.start_failed", { errorCode: codeOf(error) });
       this.#notStartedFor("start_failed");
     }
+  }
+
+  /**
+   * Where the copy goes: the spare's store while this box's pair link streams to it, otherwise the
+   * owner's bucket; null when neither is set up.
+   */
+  async #target(): Promise<StreamSettings | PairTarget | null> {
+    const { db, node, ring, nodeId, stateDir } = this.#deps;
+    const link = await readPairLink(node, nodeId);
+    if (link?.role !== "streams" || link.state !== "streaming") {
+      return readStreamSettings(db, ring);
+    }
+    return {
+      venueId: link.venueId,
+      pair: {
+        storeUrl: link.storeUrl,
+        accessKeyId: link.accessKeyId,
+        secretAccessKey: await readPairSecret(node, ring, nodeId),
+        authorityPem: await readFile(caCertPath(stateDir), "utf8"),
+      },
+    };
   }
 
   #publish(): void {
@@ -342,11 +409,21 @@ export class StreamHost {
   /** Stops the running supervisor, if any; resolves once every stop begun so far has finished. */
   #retire(): Promise<void> {
     const supervisor = this.#supervisor;
+    const pipe = this.#pipe;
     this.#supervisor = undefined;
+    this.#pipe = undefined;
     if (supervisor !== undefined) {
-      this.#retiring = Promise.all([this.#retiring, supervisor.stop()]).then(() => undefined);
+      // Litestream's last writes on stopping travel through the pipe, so it closes after.
+      const stopped = supervisor.stop().finally(() => pipe?.close());
+      this.#retiring = Promise.all([this.#retiring, stopped]).then(() => undefined);
     }
     return this.#retiring;
+  }
+
+  async #closePipe(): Promise<void> {
+    const pipe = this.#pipe;
+    this.#pipe = undefined;
+    await pipe?.close();
   }
 
   /**
@@ -370,7 +447,12 @@ export class StreamHost {
   }
 
   status(): StreamView {
-    return this.#supervisor?.status() ?? this.#notStarted ?? { state: "off" };
+    const view = this.#supervisor?.status();
+    if (view === undefined) return this.#notStarted ?? { state: "off" };
+    const pipeProblem = this.#pipe?.problem() ?? null;
+    return view.bucketProblem === null && pipeProblem !== null
+      ? { ...view, bucketProblem: pipeProblem }
+      : view;
   }
 }
 

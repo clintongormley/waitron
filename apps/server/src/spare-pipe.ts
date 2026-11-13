@@ -1,7 +1,14 @@
 import { readFile } from "node:fs/promises";
-import { connect, type AddressInfo, type Socket } from "node:net";
-import { createServer, type TLSSocket } from "node:tls";
-import { AppError } from "@waitron/shared";
+import {
+  connect,
+  createServer as createTcpServer,
+  isIP,
+  type AddressInfo,
+  type Socket,
+} from "node:net";
+import { connect as connectTls, createServer, type TLSSocket } from "node:tls";
+import { AppError, isAppError } from "@waitron/shared";
+import { lookupBoxName, RememberedAnswers, type BoxAddresses } from "./box-lookup.js";
 import "./errors.js";
 import type { Logger } from "./logger.js";
 
@@ -116,6 +123,133 @@ export async function startStoreListener(deps: StoreListenerDeps): Promise<Store
   deps.log("info", "server.listening", { listener: LISTENER, port });
   return {
     port,
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        for (const socket of open) socket.destroy();
+      }),
+  };
+}
+
+export interface StorePipeDeps {
+  /** The spare's store, `https://<its name>:<port>`, as its pair link holds it. */
+  storeUrl: string;
+  /** The venue authority, the only one whose certificate the spare's store may present. */
+  authorityPem: string;
+  clientCertFile: string;
+  clientKeyFile: string;
+  /** The addresses a host name answers to; the venue network's answer, kept while it lives, when absent. */
+  lookup?: (hostname: string) => Promise<BoxAddresses>;
+  log: Logger;
+}
+
+export interface StorePipe {
+  /** Where Litestream and the object store speak plain HTTP, on this box's loopback. */
+  loopbackUrl: string;
+  /** Why the last connection could not reach the spare's store; null once one does. */
+  problem(): { reason: string; since: string } | null;
+  close(): Promise<void>;
+}
+
+/**
+ * The main box's end of the link to its spare's store: a loopback port whose every connection is
+ * carried over TLS pinned to the venue authority, under this box's client certificate, to the first
+ * of the store host's addresses that completes the handshake. The client files are read for each
+ * connection, so a reissued pair is picked up without a restart.
+ */
+export async function startStorePipe(deps: StorePipeDeps): Promise<StorePipe> {
+  const store = new URL(deps.storeUrl);
+  const host = store.hostname.replace(/^\[(.*)\]$/, "$1");
+  const port = Number(store.port || 443);
+  const remembered = new RememberedAnswers();
+  const lookup = deps.lookup ?? ((name: string) => lookupBoxName(name, { remembered }));
+  let problem: { reason: string; since: string } | null = null;
+  const refused = (reason: string) => {
+    if (problem?.reason === reason) return;
+    deps.log("warn", "stream.spare_store_refused", { reason });
+    problem = { reason, since: new Date().toISOString() };
+  };
+  const reasonOf = (error: unknown) =>
+    isAppError(error) ? error.code : ((error as NodeJS.ErrnoException).code ?? "unknown");
+
+  const reach = async (): Promise<TLSSocket | undefined> => {
+    let addresses: string[];
+    try {
+      ({ addresses } = await lookup(host));
+    } catch (error) {
+      refused(reasonOf(error));
+      return undefined;
+    }
+    const [cert, key] = await Promise.all([
+      readFile(deps.clientCertFile, "utf8"),
+      readFile(deps.clientKeyFile, "utf8"),
+    ]);
+    for (const address of addresses) {
+      const reached = await new Promise<TLSSocket | string>((resolve) => {
+        const socket = connectTls({
+          host: address,
+          port,
+          ...(isIP(host) === 0 ? { servername: host } : {}),
+          ca: deps.authorityPem,
+          cert,
+          key,
+          rejectUnauthorized: true,
+        });
+        const failed = (error: NodeJS.ErrnoException) => {
+          socket.destroy();
+          resolve(error.code ?? "unknown");
+        };
+        socket.once("error", failed);
+        socket.once("secureConnect", () => {
+          socket.off("error", failed);
+          resolve(socket);
+        });
+      });
+      if (typeof reached !== "string") return reached;
+      refused(reached);
+    }
+    return undefined;
+  };
+
+  const open = new Set<Socket>();
+  const track = (socket: Socket) => {
+    open.add(socket);
+    socket.on("close", () => open.delete(socket));
+  };
+  const server = createTcpServer({ pauseOnConnect: true }, (local) => {
+    track(local);
+    local.on("error", () => local.destroy());
+    void reach().then(
+      (remote) => {
+        if (remote === undefined || local.destroyed) {
+          remote?.destroy();
+          local.destroy();
+          return;
+        }
+        problem = null;
+        track(remote);
+        remote.on("error", () => local.destroy());
+        local.on("error", () => remote.destroy());
+        local.pipe(remote).pipe(local);
+        local.resume();
+      },
+      (error: unknown) => {
+        refused(reasonOf(error));
+        local.destroy();
+      },
+    );
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const loopbackPort = (server.address() as AddressInfo).port;
+  return {
+    loopbackUrl: `http://127.0.0.1:${loopbackPort}`,
+    problem: () => problem,
     close: () =>
       new Promise<void>((resolve) => {
         server.close(() => resolve());

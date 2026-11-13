@@ -1,10 +1,16 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer as createHttpServer, type IncomingHttpHeaders, type Server } from "node:http";
+import {
+  createServer as createHttpServer,
+  request as httpRequest,
+  type IncomingHttpHeaders,
+  type Server,
+} from "node:http";
 import { request } from "node:https";
 import { connect } from "node:tls";
-import type { AddressInfo } from "node:net";
+import { connect as connectTcp, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { AppError } from "@waitron/shared";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   issueClientCert,
@@ -12,7 +18,12 @@ import {
   reissueServerLeaf,
   type SelfSignedMaterial,
 } from "./self-signed-cert.js";
-import { startStoreListener, type StoreListenerDeps } from "./spare-pipe.js";
+import {
+  startStoreListener,
+  startStorePipe,
+  type StoreListenerDeps,
+  type StorePipeDeps,
+} from "./spare-pipe.js";
 
 vi.mock("node:tls", async (original) => {
   const actual = await original<typeof import("node:tls")>();
@@ -47,6 +58,17 @@ beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "waitron-spare-pipe-"));
   await writeFile(join(dir, "server.pem"), spareLeaf.serverCertPem + spareLeaf.serverKeyPem);
   await writeFile(join(dir, "ca.crt"), venue.caCertPem);
+  const strangerLeaf = reissueServerLeaf({
+    caCertPem: other.caCertPem,
+    caKeyPem: other.caKeyPem,
+    hostnames: [SPARE_NAME],
+    ipAddresses: ["127.0.0.1"],
+    now,
+  });
+  await writeFile(join(dir, "other.pem"), strangerLeaf.serverCertPem + strangerLeaf.serverKeyPem);
+  const mainClient = clientFor(venue, MAIN_NAME);
+  await writeFile(join(dir, "client.crt"), mainClient.cert);
+  await writeFile(join(dir, "client.key"), mainClient.key);
   upstream = createHttpServer((req, res) => {
     seen.push(req.headers);
     res.end("stored");
@@ -250,5 +272,149 @@ describe("startStoreListener", () => {
     await vi.waitFor(() => expect(refusals()).toHaveLength(3));
     expect(refusals()[2]!.fields).toEqual({ reason: "name_mismatch", refused: 4 });
     expect(seen).toEqual([]);
+  });
+});
+
+describe("startStorePipe", () => {
+  let pipe: Awaited<ReturnType<typeof startStorePipe>> | undefined;
+
+  afterEach(async () => {
+    await pipe?.close();
+    pipe = undefined;
+  });
+
+  async function open(overrides: Partial<StorePipeDeps> = {}) {
+    pipe = await startStorePipe({
+      storeUrl: `https://${SPARE_NAME}:${listener!.port}`,
+      authorityPem: venue.caCertPem,
+      clientCertFile: join(dir, "client.crt"),
+      clientKeyFile: join(dir, "client.key"),
+      lookup: async () => ({ addresses: ["127.0.0.1"], remembered: false }),
+      log: (level, event, fields) => logged.push({ level, event, ...(fields ? { fields } : {}) }),
+      ...overrides,
+    });
+    return pipe;
+  }
+
+  /** A GET through the pipe's loopback address, as Litestream sends one: "200 stored", or the error's code. */
+  function getThrough(loopbackUrl: string): Promise<string> {
+    return new Promise((resolve) => {
+      const req = httpRequest(`${loopbackUrl}/waitron/db`, { agent: false }, (res) => {
+        let body = "";
+        res.on("data", (chunk: Buffer) => (body += chunk.toString()));
+        res.on("end", () => resolve(`${res.statusCode} ${body}`));
+      });
+      req.on("error", (error: NodeJS.ErrnoException) => resolve(error.code ?? error.message));
+      req.end();
+    });
+  }
+
+  it("carries a request from loopback to the spare's store under this box's client certificate", async () => {
+    await listen();
+    const { loopbackUrl, problem } = await open();
+
+    expect(loopbackUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect(await getThrough(loopbackUrl)).toBe("200 stored");
+    expect(seen.map((headers) => headers.host)).toEqual([new URL(loopbackUrl).host]);
+    expect(problem()).toBeNull();
+    expect(refusals()).toEqual([]);
+  });
+
+  it("asks for the store's host name and tries each address it answers to in turn", async () => {
+    await listen();
+    const asked: string[] = [];
+    const { loopbackUrl, problem } = await open({
+      lookup: async (hostname) => {
+        asked.push(hostname);
+        return { addresses: ["::1", "127.0.0.1"], remembered: false };
+      },
+    });
+
+    expect(await getThrough(loopbackUrl)).toBe("200 stored");
+    expect(asked).toEqual([SPARE_NAME]);
+    expect(problem()).toBeNull();
+  });
+
+  it("refuses a spare whose certificate another authority signed, keeps why, and pipes nothing", async () => {
+    await listen({ certFile: join(dir, "other.pem"), keyFile: join(dir, "other.pem") });
+    const { loopbackUrl, problem } = await open();
+
+    expect(await getThrough(loopbackUrl)).not.toBe("200 stored");
+
+    expect(problem()).toEqual({
+      reason: "CERT_SIGNATURE_FAILURE",
+      since: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    });
+    expect(logged).toContainEqual({
+      level: "warn",
+      event: "stream.spare_store_refused",
+      fields: { reason: "CERT_SIGNATURE_FAILURE" },
+    });
+    expect(seen).toEqual([]);
+  });
+
+  it("refuses a spare whose certificate does not carry the store's host name", async () => {
+    await listen();
+    const { loopbackUrl, problem } = await open({
+      storeUrl: `https://box-9e0d.waitron.local:${listener!.port}`,
+    });
+
+    expect(await getThrough(loopbackUrl)).not.toBe("200 stored");
+
+    expect(problem()?.reason).toBe("ERR_TLS_CERT_ALTNAME_INVALID");
+    expect(seen).toEqual([]);
+  });
+
+  it("keeps a name nobody answers for as the problem", async () => {
+    await listen();
+    const { loopbackUrl, problem } = await open({
+      lookup: async () => {
+        throw new AppError("mirror.peer_unresolved", {});
+      },
+    });
+
+    expect(await getThrough(loopbackUrl)).not.toBe("200 stored");
+
+    expect(problem()?.reason).toBe("mirror.peer_unresolved");
+  });
+
+  it("clears the problem once a connection gets through again", async () => {
+    await listen();
+    let addresses = ["::1"];
+    const { loopbackUrl, problem } = await open({
+      lookup: async () => ({ addresses, remembered: false }),
+    });
+    expect(await getThrough(loopbackUrl)).not.toBe("200 stored");
+    expect(problem()?.reason).toBe("ECONNREFUSED");
+
+    addresses = ["127.0.0.1"];
+    expect(await getThrough(loopbackUrl)).toBe("200 stored");
+
+    expect(problem()).toBeNull();
+  });
+
+  it("logs a refusal once while its reason stays the same", async () => {
+    await listen({ certFile: join(dir, "other.pem"), keyFile: join(dir, "other.pem") });
+    const { loopbackUrl } = await open();
+
+    for (let i = 0; i < 3; i++) expect(await getThrough(loopbackUrl)).not.toBe("200 stored");
+
+    expect(logged.filter((line) => line.event === "stream.spare_store_refused")).toHaveLength(1);
+  });
+
+  it("close ends a held connection and stops accepting", async () => {
+    await listen();
+    const opened = await open();
+    const port = Number(new URL(opened.loopbackUrl).port);
+    const held = connectTcp(port, "127.0.0.1");
+    held.on("error", () => {});
+    const ended = new Promise<void>((resolve) => held.on("close", () => resolve()));
+    await new Promise<void>((resolve) => held.once("connect", () => resolve()));
+
+    await opened.close();
+    pipe = undefined;
+
+    await ended;
+    expect(await getThrough(opened.loopbackUrl)).toBe("ECONNREFUSED");
   });
 });
