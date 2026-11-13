@@ -477,14 +477,22 @@ describe("stack samples from a browser page that a file has kept busy", () => {
 
   const hangPath = "src/hang.test.ts";
 
-  async function runningHangFile(options) {
+  async function runningHangFile({ config, ...options } = {}) {
     const page = fakePage([frameFor(hangPath)]);
-    const project = browserProject([page]);
+    const project = { ...browserProject([page]), config };
     const h = stackHarness(options);
     h.reporter.onInit({ projects: [{ name: "node" }, project] });
     h.reporter.onTestModuleQueued(browserModule(hangPath, project));
     await settle();
-    return { ...h, page, project };
+    const caseOf = (name, timeout, caseOptions = {}) => ({
+      id: `case-${name}`,
+      module: browserModule(hangPath, project),
+      fullName: name,
+      options: { timeout, ...caseOptions },
+      result: () => ({ state: "passed" }),
+    });
+    const pauses = () => page.cdp.sent.filter((method) => method === "Debugger.pause");
+    return { ...h, page, project, caseOf, pauses };
   }
 
   it("attaches to each browser page once and enables its debugger", async () => {
@@ -529,6 +537,14 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     expect(page.cdp.sent).toEqual(["Debugger.enable", "Debugger.pause", "Debugger.resume"]);
   });
 
+  it("does not disable the debugger after a pause it caught", async () => {
+    const { page, tick } = await runningHangFile();
+    page.cdp.pauseWith = [];
+    tick(60_000);
+    await settle();
+    expect(page.cdp.sent).not.toContain("Debugger.disable");
+  });
+
   it("prints at most thirty frames, each on one line", async () => {
     const { page, tick, stackLines } = await runningHangFile();
     page.cdp.pauseWith = Array.from({ length: 40 }, (_, i) => ({
@@ -567,6 +583,16 @@ describe("stack samples from a browser page that a file has kept busy", () => {
       [3000, true],
       [2000, true],
     ]);
+  });
+
+  it("cancels the pause it left waiting when nothing paused in time", async () => {
+    const { page, tick, fire } = await runningHangFile();
+    tick(60_000);
+    await settle();
+    fire(3000);
+    await settle();
+    const afterPause = page.cdp.sent.slice(page.cdp.sent.indexOf("Debugger.pause") + 1);
+    expect(afterPause.slice(0, 2)).toEqual(["Debugger.disable", "Debugger.enable"]);
   });
 
   it("says nothing paused and the page did not answer when it does not answer in 2 seconds", async () => {
@@ -820,27 +846,9 @@ describe("stack samples from a browser page that a file has kept busy", () => {
   });
 
   describe("pauses only a page whose file has gone silent past its time limits", () => {
-    function configuredHangFile(config) {
-      const page = fakePage([frameFor(hangPath)]);
-      const project = { ...browserProject([page]), config };
-      const h = stackHarness();
-      h.reporter.onInit({ projects: [project] });
-      h.reporter.onTestModuleQueued(browserModule(hangPath, project));
-      const caseOf = (name, timeout, options = {}) => ({
-        id: `case-${name}`,
-        module: browserModule(hangPath, project),
-        fullName: name,
-        options: { timeout, ...options },
-        result: () => ({ state: "passed" }),
-      });
-      const pauses = () => page.cdp.sent.filter((method) => method === "Debugger.pause");
-      return { ...h, page, project, caseOf, pauses };
-    }
-
     it("never samples a file whose cases keep starting and ending, however long it runs", async () => {
-      const { reporter, tick, caseOf, pauses, stackLines, page } = configuredHangFile(undefined);
+      const { reporter, tick, caseOf, pauses, stackLines, page } = await runningHangFile();
       page.cdp.pauseWith = [];
-      await settle();
       for (let round = 0; round < 30; round += 1) {
         const testCase = caseOf(`case ${round}`, undefined);
         reporter.onTestCaseReady(testCase);
@@ -854,9 +862,8 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     });
 
     it("counts every progress event as a sign of life, not only case starts and ends", async () => {
-      const { reporter, tick, pauses, page, project } = configuredHangFile(undefined);
+      const { reporter, tick, pauses, page, project } = await runningHangFile();
       page.cdp.pauseWith = [];
-      await settle();
       const module = browserModule(hangPath, project);
       const steps = [
         () => reporter.onTestModuleStart(module),
@@ -875,12 +882,10 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     });
 
     it("waits 60 seconds plus the project's test and hook timeouts after the last case event", async () => {
-      const { reporter, tick, caseOf, pauses, page } = configuredHangFile({
-        testTimeout: 30_000,
-        hookTimeout: 30_000,
+      const { reporter, tick, caseOf, pauses, page } = await runningHangFile({
+        config: { testTimeout: 30_000, hookTimeout: 30_000 },
       });
       page.cdp.pauseWith = [];
-      await settle();
       const testCase = caseOf("first", undefined);
       tick(1000);
       reporter.onTestCaseReady(testCase);
@@ -895,12 +900,10 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     });
 
     it("lets a running case's own longer timeout extend the wait", async () => {
-      const { reporter, tick, caseOf, pauses, page } = configuredHangFile({
-        testTimeout: 30_000,
-        hookTimeout: 30_000,
+      const { reporter, tick, caseOf, pauses, page } = await runningHangFile({
+        config: { testTimeout: 30_000, hookTimeout: 30_000 },
       });
       page.cdp.pauseWith = [];
-      await settle();
       reporter.onTestCaseReady(caseOf("slow", 90_000));
       tick(179_999);
       await settle();
@@ -911,12 +914,10 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     });
 
     it("returns to the project's timeouts once the long case reports its result", async () => {
-      const { reporter, tick, caseOf, pauses, page } = configuredHangFile({
-        testTimeout: 30_000,
-        hookTimeout: 30_000,
+      const { reporter, tick, caseOf, pauses, page } = await runningHangFile({
+        config: { testTimeout: 30_000, hookTimeout: 30_000 },
       });
       page.cdp.pauseWith = [];
-      await settle();
       const slow = caseOf("slow", 90_000);
       reporter.onTestCaseReady(slow);
       tick(1000);
@@ -930,12 +931,10 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     });
 
     it("keeps a longer concurrent case's timeout after a shorter one beside it reports", async () => {
-      const { reporter, tick, caseOf, pauses, page } = configuredHangFile({
-        testTimeout: 30_000,
-        hookTimeout: 30_000,
+      const { reporter, tick, caseOf, pauses, page } = await runningHangFile({
+        config: { testTimeout: 30_000, hookTimeout: 30_000 },
       });
       page.cdp.pauseWith = [];
-      await settle();
       const short = caseOf("short", 1000);
       reporter.onTestCaseReady(caseOf("long", 90_000));
       reporter.onTestCaseReady(short);
@@ -950,12 +949,10 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     });
 
     it("takes the longest timeout among concurrent cases, whichever started last", async () => {
-      const { reporter, tick, caseOf, pauses, page } = configuredHangFile({
-        testTimeout: 30_000,
-        hookTimeout: 30_000,
+      const { reporter, tick, caseOf, pauses, page } = await runningHangFile({
+        config: { testTimeout: 30_000, hookTimeout: 30_000 },
       });
       page.cdp.pauseWith = [];
-      await settle();
       reporter.onTestCaseReady(caseOf("long", 90_000));
       reporter.onTestCaseReady(caseOf("short", 1000));
       tick(179_999);
@@ -967,12 +964,10 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     });
 
     it("never pauses while a concurrent case with a 0 timeout is still running", async () => {
-      const { reporter, tick, caseOf, pauses, page, stackLines } = configuredHangFile({
-        testTimeout: 30_000,
-        hookTimeout: 30_000,
+      const { reporter, tick, caseOf, pauses, page, stackLines } = await runningHangFile({
+        config: { testTimeout: 30_000, hookTimeout: 30_000 },
       });
       page.cdp.pauseWith = [];
-      await settle();
       const short = caseOf("short", 1000);
       reporter.onTestCaseReady(caseOf("unbounded", 0));
       reporter.onTestCaseReady(short);
@@ -996,12 +991,10 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     ])(
       "allows a case with %s its timeout and the hook timeout once per try",
       async (_, options, tries) => {
-        const { reporter, tick, caseOf, pauses, page } = configuredHangFile({
-          testTimeout: 30_000,
-          hookTimeout: 30_000,
+        const { reporter, tick, caseOf, pauses, page } = await runningHangFile({
+          config: { testTimeout: 30_000, hookTimeout: 30_000 },
         });
         page.cdp.pauseWith = [];
-        await settle();
         reporter.onTestCaseReady(caseOf("retried", 30_000, options));
         tick(60_000 + tries * (30_000 + 30_000) - 1);
         await settle();
@@ -1036,9 +1029,10 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     ])(
       "never pauses a file when %s is %s, and says so once",
       async (_, __, config, caseTimeout) => {
-        const { reporter, tick, caseOf, pauses, page, stackLines } = configuredHangFile(config);
+        const { reporter, tick, caseOf, pauses, page, stackLines } = await runningHangFile({
+          config,
+        });
         page.cdp.pauseWith = [];
-        await settle();
         reporter.onTestCaseReady(caseOf("unbounded", caseTimeout));
         tick(59_999);
         await settle();
@@ -1057,12 +1051,10 @@ describe("stack samples from a browser page that a file has kept busy", () => {
     );
 
     it("pauses later once an unbounded case ends and a bounded one goes silent past its limit", async () => {
-      const { reporter, tick, caseOf, pauses, page, stackLines } = configuredHangFile({
-        testTimeout: 30_000,
-        hookTimeout: 30_000,
+      const { reporter, tick, caseOf, pauses, page, stackLines } = await runningHangFile({
+        config: { testTimeout: 30_000, hookTimeout: 30_000 },
       });
       page.cdp.pauseWith = [];
-      await settle();
       const unbounded = caseOf("unbounded", 0);
       reporter.onTestCaseReady(unbounded);
       tick(60_000);
@@ -1096,23 +1088,5 @@ describe("stack samples from a browser page that a file has kept busy", () => {
         "[file-progress] still running: src/node.test.ts [node] 60.0s",
       ]);
     });
-  });
-
-  it("cancels the pause it left waiting when nothing paused in time", async () => {
-    const { page, tick, fire } = await runningHangFile();
-    tick(60_000);
-    await settle();
-    fire(3000);
-    await settle();
-    const afterPause = page.cdp.sent.slice(page.cdp.sent.indexOf("Debugger.pause") + 1);
-    expect(afterPause.slice(0, 2)).toEqual(["Debugger.disable", "Debugger.enable"]);
-  });
-
-  it("does not disable the debugger after a pause it caught", async () => {
-    const { page, tick } = await runningHangFile();
-    page.cdp.pauseWith = [];
-    tick(60_000);
-    await settle();
-    expect(page.cdp.sent).not.toContain("Debugger.disable");
   });
 });
