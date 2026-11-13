@@ -3668,7 +3668,10 @@ Guard: the "reuse lint results only on runs that are not full" case in
 
 A stalled cache or initialization action should end within its own limit rather than consume
 its job. Browser caches get two minutes and `continue-on-error: true`: a restore or save timeout
-does not itself fail the job, and the following browser-install step still runs. Lint's existing
+does not itself fail the job. After a failed restore, the next step removes the browser cache
+folder before the browser install runs. The normal install step skips a browser folder with
+its completion marker even when its executable is missing. The cleanup
+runs only for the restore's failure; a successful restore stays in place. Lint's existing
 one-minute optional caches stay as they are. Docker setup and login, and CodeQL initialization,
 get one minute. Docker and CodeQL failures still fail the job; analysis uses CodeQL's 60-minute
 job limit.
@@ -3718,7 +3721,7 @@ replaces the old backlog question about an unused remote-cache exporter.
 Guard: the remaining-network-transfers cases in `scripts/ci-workflow.test.mjs`, weaker than
 the behavior: they read workflow text, enforce literal positive step limits within each job
 (and the analysis job limit), two-minute optional browser caches at the declared browser path,
-build limits equal to their jobs, and fatal Docker/CodeQL failures. They do not run the
+build limits equal to their jobs, immediate failure-only browser cleanup, and fatal Docker/CodeQL failures. They do not run the
 actions, prove network cancellation, or reach the runner's earlier action-repository download.
 That setup-download residual stays open.
 

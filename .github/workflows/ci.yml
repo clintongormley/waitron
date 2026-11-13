@@ -652,11 +652,17 @@ jobs:
 
       - name: Restore cached Playwright browsers
         uses: actions/cache/restore@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - name: Install bundle-smoke Chromium
         timeout-minutes: 7
@@ -1231,11 +1237,17 @@ jobs:
       # save from here would put a shell-only folder under their key.
       - name: Restore cached Playwright browsers
         uses: actions/cache/restore@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - name: Install setup download Chromium
         timeout-minutes: 7
@@ -1617,11 +1629,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - name: Install fiscal custody Chromium
         timeout-minutes: 7
@@ -1826,11 +1844,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       # `pnpm exec` at the repo root does not resolve a bin scoped to a workspace member (only
       # `pnpm -w exec` walks up for root-level bins), so plain `pnpm exec playwright ...` fails here
@@ -1964,11 +1988,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       # Same as test-ui: scope the exec to the @waitron/till workspace (where playwright is a
       # devDependency) — plain `pnpm exec` at the repo root does not resolve a member-scoped bin —
@@ -2176,11 +2206,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       # Same as test-ui and test-till: scope the exec to the @waitron/dashboard workspace (where
       # playwright is a devDependency) — plain `pnpm exec` at the repo root does not resolve a
@@ -2384,11 +2420,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       # Same as test-ui/till/dashboard: scope the exec to the @waitron/setup workspace (where
       # playwright is a devDependency) — plain `pnpm exec` at the repo root does not resolve a
@@ -2476,11 +2518,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - run: pnpm --filter @waitron/venue-service exec playwright install chromium
 
@@ -2724,11 +2772,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - run: pnpm --filter @waitron/adjustments exec playwright install chromium
 
@@ -2805,11 +2859,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - run: pnpm --filter @waitron/staffing exec playwright install chromium
 
@@ -2888,11 +2948,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - run: pnpm --filter @waitron/bookings exec playwright install chromium
 
@@ -2973,11 +3039,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - run: pnpm --filter @waitron/media exec playwright install chromium
 
@@ -3059,11 +3131,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - run: pnpm --filter @waitron/payments-stripe exec playwright install chromium
 
@@ -3144,11 +3222,17 @@ jobs:
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
+        id: browser-cache
         timeout-minutes: 2
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - run: pnpm --filter @waitron/payments-sumup exec playwright install chromium
 

@@ -5808,7 +5808,8 @@ function downloadAttempts(text) {
 function networkTransfers(text) {
   return jobBlocks(text).flatMap(({ id, lines }) => {
     const jobMinutes = Number(/^ {4}timeout-minutes: ([1-9]\d*)$/m.exec(lines.join("\n"))?.[1]);
-    return workflowSteps(lines.join("\n"))
+    const steps = workflowSteps(lines.join("\n"));
+    return steps
       .filter((step) =>
         /^(?:actions\/cache(?:\/(?:restore|save))?|docker\/[^@]+|github\/codeql-action\/[^@]+)@/.test(
           step.uses ?? "",
@@ -5827,10 +5828,23 @@ function networkTransfers(text) {
         const browserBudget =
           !browserCache || (Number(step.timeoutMinutes) >= 2 && step.continueOnError === "true");
         const buildBudget = !build || Number(step.timeoutMinutes) === jobMinutes;
+        const cleanup = steps[steps.indexOf(step) + 1];
+        const browserCleanup =
+          !browserCache ||
+          (typeof step.id === "string" &&
+            cleanup?.if === `steps.${step.id}.outcome == 'failure'` &&
+            cleanup.timeoutMinutes === "1" &&
+            failureIsFatal(cleanup) &&
+            cleanup.command.trim() === 'rm -rf -- "$HOME/.cache/ms-playwright"');
         return {
           job: id,
           action: step.uses,
-          bounded: bounded && browserBudget && buildBudget && (cache || failureIsFatal(step)),
+          bounded:
+            bounded &&
+            browserBudget &&
+            buildBudget &&
+            browserCleanup &&
+            (cache || failureIsFatal(step)),
         };
       });
   });
@@ -5853,11 +5867,23 @@ describe("remaining network transfers", () => {
     },
   );
   it("keeps browser caches optional with two minutes for server transfers", () => {
-    const browser = "        with:\n          path: ~/.cache/ms-playwright\n";
+    const browser =
+      "        id: browser-cache\n        with:\n          path: ~/.cache/ms-playwright\n";
     const optional = "        continue-on-error: true\n";
-    expect(networkTransfers(fixture("2", optional + browser))[0].bounded).toBe(true);
-    expect(networkTransfers(fixture("2", browser))[0].bounded).toBe(false);
-    expect(networkTransfers(fixture("1", optional + browser))[0].bounded).toBe(false);
+    const cleanup = `      - name: Clear incomplete browser cache
+        if: steps.browser-cache.outcome == 'failure'
+        timeout-minutes: 1
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
+`;
+    const restore = (limit, extra) => fixture(limit, extra + browser) + cleanup;
+    const valid = restore("2", optional);
+    expect(networkTransfers(valid)[0].bounded).toBe(true);
+    expect(networkTransfers(restore("2", ""))[0].bounded).toBe(false);
+    expect(networkTransfers(restore("1", optional))[0].bounded).toBe(false);
+    expect(networkTransfers(valid.replace(cleanup, ""))[0].bounded).toBe(false);
+    expect(
+      networkTransfers(valid.replace("outcome == 'failure'", "outcome == 'success'"))[0].bounded,
+    ).toBe(false);
   });
   it("leaves Docker builds the enclosing job's existing retry opportunity", () => {
     const build = "docker/build-push-action@v7";
