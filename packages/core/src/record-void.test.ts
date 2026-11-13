@@ -366,8 +366,16 @@ describe("recordVoid — error propagation", () => {
     // Any other insert failure must reach the caller as it arrived, not as `sale.already_voided`.
     // A stub drives `recordVoid`'s catch directly. Its `select` also has to satisfy `authorize`,
     // which runs between the sale lookup and the insert: the sale lookup is `.from().where()` and
-    // authorize's is `.from().innerJoin().where()`, so `from()` exposes both.
-    const row = [{ nodeId, personId: "operator", role: "manager" }];
+    // authorize's reads are `.from().innerJoin().where()`, so `from()` exposes both.
+    const row = [
+      {
+        nodeId,
+        personId: "operator",
+        id: "role-manager",
+        builtInKey: "manager",
+        permissions: ["sale.void"],
+      },
+    ];
     const fakeTx = {
       select: () => ({
         from: () => ({
