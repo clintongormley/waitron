@@ -10,6 +10,7 @@ import {
 import { lstat, readdir, rmdir, unlink } from "node:fs/promises";
 import { AppError } from "@waitron/shared";
 import { dirname, join } from "node:path";
+import { errnoOf } from "./errno.js";
 import { canonicalFirstSetupDirectory } from "./first-setup-directories.js";
 import { inTurn } from "./attempt-turns.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
@@ -90,8 +91,7 @@ export async function endFinishedSetup(stateDir: string): Promise<void> {
     try {
       return await operation();
     } catch (error) {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT")
-        return undefined;
+      if (errnoOf(error) === "ENOENT") return undefined;
       throw error;
     }
   };
@@ -109,7 +109,11 @@ export async function endFinishedSetup(stateDir: string): Promise<void> {
     const entries = await readdir(folder, { withFileTypes: true });
     for (const entry of entries)
       if (entry.isFile()) await ifPresent(() => unlink(join(folder, entry.name)));
-    await rmdir(folder);
+    try {
+      await rmdir(folder);
+    } catch (error) {
+      if (!["ENOTEMPTY", "EEXIST"].includes(errnoOf(error) ?? "")) throw error;
+    }
   }
   await rmdir(join(stateDir, SETUP_FLOW_DIR));
 }

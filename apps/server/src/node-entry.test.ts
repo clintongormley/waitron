@@ -2715,11 +2715,13 @@ describe("finished setup cleanup", () => {
         scheduleStayedUp.mock.calls[0]![1]();
         await vi.waitFor(() =>
           expect(log).toHaveBeenCalledWith("warn", "setup.finished_cleanup_failed", {
-            errorCode: expect.any(String),
+            errorCode: "unknown",
+            errno: "ENOTEMPTY",
           }),
         );
         expect(await readFile(path, "utf8")).toBe("keep this");
         expect(existsSync(join(f.stateDir, "flows/setup/record.json"))).toBe(false);
+        expect(existsSync(join(f.stateDir, "flows/setup/import"))).toBe(false);
         expect(close).not.toHaveBeenCalled();
       } finally {
         await f.dispose();
