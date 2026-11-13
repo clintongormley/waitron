@@ -54,7 +54,7 @@ useVenueDb({
       .where(eq(deviceProfiles.id, device!.deviceProfileId));
     await db
       .update(deviceProfiles)
-      .set({ capabilities: [...profile!.capabilities, "run-the-pass"] })
+      .set({ capabilities: [...(profile!.capabilities as string[]), "run-the-pass"] })
       .where(eq(deviceProfiles.id, profile!.id));
   },
 });

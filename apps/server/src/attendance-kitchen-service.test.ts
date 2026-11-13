@@ -54,7 +54,7 @@ beforeEach(async () => {
     .where(eq(deviceProfiles.id, device!.deviceProfileId));
   await suite.db
     .update(deviceProfiles)
-    .set({ capabilities: [...profile!.capabilities, "run-the-pass"] })
+    .set({ capabilities: [...(profile!.capabilities as string[]), "run-the-pass"] })
     .where(eq(deviceProfiles.id, profile!.id));
   await withTransaction(suite.db, async (tx) => {
     stationId = (await createStation(tx, { name: "Kitchen", isDefault: true })).id;
