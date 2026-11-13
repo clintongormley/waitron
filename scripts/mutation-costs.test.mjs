@@ -211,9 +211,7 @@ describe("main", () => {
       "src/schema/sales.ts",
     ]);
     expect(result.status).toBe(1);
-    expect(result.errors.join("\n")).toMatch(
-      /src\/schema\/sales.ts.*use reports from runs after this change/,
-    );
+    expect(result.errors.join("\n")).toMatch(/src\/schema\/sales.ts.*use reports from later runs/);
     expect(result.written).toEqual({});
   });
 

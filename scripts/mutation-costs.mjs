@@ -87,11 +87,13 @@ export function main(argv, { selection, readFile, writeFile, stderr }) {
     const parsed = JSON.parse(readFile(path));
     try {
       for (const target of parsed.config?.mutate ?? []) {
-        const path = target.replace(/:\d+-\d+$/, "");
-        if (path !== target && selected.includes(path) && !Object.hasOwn(HEAVY_FILES[pkg], path))
-          throw new Error(
-            `${path}: use reports from runs after this change; this file is now mutated whole`,
+        const file = target.replace(/:\d+-\d+$/, "");
+        if (file !== target && selected.includes(file) && !Object.hasOwn(HEAVY_FILES[pkg], file)) {
+          stderr(
+            `${file} is now mutated whole; ${path} holds only a line range; use reports from later runs; ${out} left unchanged`,
           );
+          return 1;
+        }
       }
       seconds.push(fileSecondsFromReport(parsed));
     } catch (error) {

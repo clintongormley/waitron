@@ -1087,7 +1087,8 @@ measurement of a whole-file run. Every other cost remains unchanged.
 split `sales.ts` into three reports, and `costTable` no longer excludes it: feeding those reports
 would take the median of partial costs and understate the file's cost. The builder refuses a
 line-range report for a currently selected whole file, naming it and directing you to post-change
-reports; current UI ranges remain accepted. When a db shard drifts towards its limit, after `packages/db` gains files
+reports; current UI ranges remain accepted. When a db shard drifts towards its limit, after
+`packages/db` gains files
 (a file the table does not name is weighed by its bytes), or after a change like A1309's that removes timed-out
 mutants:
 
@@ -2666,6 +2667,15 @@ of 5, and never under 5. A run that failed its own checks ran to its end and cou
 mutation run `37267389722` did); a cancelled run does not. The window: ci.yml's latest 264 runs, 2026-10-07 08:24
 to 2026-10-08T09:03:33Z, read 2026-10-08; the other workflows' latest 30 runs; `mutation-db` only
 since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a different engine.
+
+Current sharded mutation limits are unchanged by the shared workflow:
+
+| caller in mutation.yml | job in mutation-sharded.yml | minutes |
+| --- | --- | --- |
+| mutation-ui-core | mutation | 25 |
+| mutation-ui | mutation | 50 |
+| mutation-db | mutation | 25 |
+| each selected caller | aggregate | 5 |
 
 The following measurements describe the October window above. Since 13 November, the three
 sharded mutation callers use `mutation-sharded.yml`'s `mutation` and `aggregate` jobs; the old
