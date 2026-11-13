@@ -46,6 +46,7 @@ import "../widgets/device-home-preview.js";
 import "../widgets/home-shortcut-picker.js";
 import "../widgets/menu-patch-dialog.js";
 import "../widgets/menu-copy-dialog.js";
+import "../widgets/guest-menu-preview.js";
 import { overtakeSentence } from "../widgets/menu-publications.js";
 import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
@@ -3878,6 +3879,10 @@ export class MenusScreen extends LitElement {
         <div class="title">
           <h1>${name || t("menus.title")}</h1>
           ${this.#renderLiveWords()}
+          <dashboard-guest-menu-preview
+            .api=${this.api}
+            .menuId=${menuId}
+          ></dashboard-guest-menu-preview>
         </div>
       </div>
       ${this.#renderClashes(menuId)} ${this.#renderLoadState()} ${this.#renderMemberError()}

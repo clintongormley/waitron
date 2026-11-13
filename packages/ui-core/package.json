@@ -47,7 +47,8 @@
     "./unsaved-changes": "./src/unsaved-changes.ts",
     "./decimal-input": "./src/decimal-input.ts",
     "./theme": "./src/theme/index.ts",
-    "./theme/waitron": "./src/theme/waitron.ts"
+    "./theme/waitron": "./src/theme/waitron.ts",
+    "./nutrition-icons": "./src/nutrition-icons.ts"
   },
   "peerDependencies": {
     "lit": "^3.2.0"
@@ -133,6 +134,10 @@
       "./theme/waitron": {
         "types": "./dist/types/theme/waitron.d.ts",
         "import": "./dist/theme/waitron.js"
+      },
+      "./nutrition-icons": {
+        "types": "./dist/types/nutrition-icons.d.ts",
+        "import": "./dist/nutrition-icons.js"
       }
     }
   }

@@ -14,32 +14,8 @@ export interface GuidePagesDeps {
   root?: string;
 }
 
-/** Copies of `packages/ui-core/src/tokens/*.css`, as [light, dark] or one value; `scripts/guide-page-tokens.test.ts` compares them. */
-export const GUIDE_PAGE_TOKENS: Readonly<Record<string, readonly [string, string] | string>> = {
-  "--wt-color-bg": ["#f7f7f8", "#101216"],
-  "--wt-color-surface-sunken": ["#d6d9e0", "#101216"],
-  "--wt-color-border": ["#d6d9e0", "#333945"],
-  "--wt-color-text": ["#16181d", "#eceef2"],
-  "--wt-color-text-muted": ["#5c626e", "#a1a7b3"],
-  "--wt-color-primary": ["#1f6feb", "#4c8dff"],
-  "--wt-color-primary-text": ["#1a5fd0", "#78a9ff"],
-  "--wt-color-focus": ["#1f6feb", "#4c8dff"],
-  "--wt-color-highlight": ["#fff3b0", "#614a0f"],
-  "--wt-color-on-highlight": ["#241500", "#fff3b0"],
-  "--wt-space-1": "4px",
-  "--wt-space-2": "8px",
-  "--wt-space-3": "12px",
-  "--wt-space-4": "16px",
-  "--wt-space-5": "24px",
-  "--wt-space-6": "32px",
-  "--wt-radius-md": "8px",
-  "--wt-focus-ring": "2px solid var(--wt-color-focus)",
-  "--wt-focus-offset": "2px",
-  "--wt-font-family": 'system-ui, -apple-system, "Segoe UI", sans-serif',
-  "--wt-font-size-md": "14px",
-  "--wt-font-size-lg": "18px",
-  "--wt-font-size-xl": "22px",
-};
+import { GUIDE_PAGE_TOKENS } from "./html-page-tokens.js";
+export { GUIDE_PAGE_TOKENS } from "./html-page-tokens.js";
 
 export { GUIDE_THEME_KEY } from "./page-theme.js";
 

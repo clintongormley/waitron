@@ -346,6 +346,7 @@ import {
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
 import { moduleCoreServices } from "./parties.js";
+import { mountGuestMenuApi } from "./guest-menu-api.js";
 import { mountCatalogueApi, translationContextFor } from "./catalogue-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -3138,6 +3139,7 @@ async function bootServer(
     },
     log,
   );
+  mountGuestMenuApi(app, { db, venueLocale }, log);
   mountUnitsApi(app, { db, venueLocale }, log);
   mountPurchasingApi(app, { db }, log);
   const drainWaker = createLoopWaker({ minTickMs: timings.minTickMs });
