@@ -26,9 +26,10 @@ const venue = (taxId: string) => ({
   },
 });
 
-for (const mode of [true, false, "empty"] as const) {
+for (const mode of [true, false, "empty", "no-target-job"] as const) {
   const hasRoles = mode === true;
-  it(`after an import the administrator holds ${mode === "empty" ? "the starter Team when the source has no job roles" : hasRoles ? "the exporting administrator's job roles" : "every imported visible job role when the source administrator held none"}`, async () => {
+  const empty = mode === "empty" || mode === "no-target-job";
+  it(`after an import ${mode === "no-target-job" ? "without a target starter job, " : ""}the administrator holds ${empty ? "the starter Team when the source has no job roles" : hasRoles ? "the exporting administrator's job roles" : "every imported visible job role when the source administrator held none"}`, async () => {
     const source = await applyVenue(planVenue(venue("B24681390"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -38,7 +39,7 @@ for (const mode of [true, false, "empty"] as const) {
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`delete from person_staff_roles`);
       await tx.execute(sql`delete from staff_roles`);
-      if (mode !== "empty")
+      if (!empty)
         await tx.execute(sql`insert into staff_roles (id, name, hidden_at) values
         ('source-waiter', 'Waiter', null), ('source-kitchen', 'Kitchen', null),
         ('source-hidden', 'Retired', '2026-11-01T00:00:00Z')`);
@@ -62,7 +63,13 @@ for (const mode of [true, false, "empty"] as const) {
     await applyVenue(planVenue(venue("B42086431"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
+      beforeCommit: async (tx) => {
+        if (mode === "no-target-job") {
+          await tx.execute(sql`delete from person_staff_roles`);
+          await tx.execute(sql`delete from staff_roles`);
+        }
+        await importConfigurationTables(tx, bundle, ALL_MODULES, versions);
+      },
     });
     const held = targetSuite.db.all<{
       id: string;
@@ -71,11 +78,7 @@ for (const mode of [true, false, "empty"] as const) {
       join person_staff_roles h on h.staff_role_id = r.id join persons p on p.id = h.person_id
       where p.role = 'admin' order by r.name`);
     expect(held.map((r) => r.name)).toEqual(
-      mode === "empty"
-        ? [STARTER_JOB_ROLE_NAMES.Team.es]
-        : hasRoles
-          ? ["Waiter"]
-          : ["Kitchen", "Waiter"],
+      empty ? [STARTER_JOB_ROLE_NAMES.Team.es] : hasRoles ? ["Waiter"] : ["Kitchen", "Waiter"],
     );
     expect(held.every((r) => !r.id.startsWith("source-"))).toBe(true);
     const targetAdmin = targetSuite.db.all<{ id: string }>(

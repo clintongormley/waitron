@@ -5,7 +5,12 @@ import {
   importSettingsDocuments,
   type TransferredSettings,
 } from "./settings-transfer.js";
-import { requireCountryTimeZone } from "@waitron/country-packs";
+import {
+  requireCountryTimeZone,
+  resolveInstalledStarterLanguages,
+  starterName,
+} from "@waitron/country-packs";
+import { STARTER_JOB_ROLE_NAMES } from "./starter-content.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import {
@@ -928,7 +933,17 @@ export async function importConfigurationTables(
         : importedRoles.filter((role) => role.hiddenAt === null).map((role) => role.id);
     const roleNames = new Map(importedRoles.map((role) => [role.id, role.name]));
     if (administratorRoles.length === 0 && administrators.length > 0) {
-      const name = starterRole?.name ?? "Team";
+      const name =
+        starterRole?.name ??
+        starterName(
+          STARTER_JOB_ROLE_NAMES,
+          "Team",
+          resolveInstalledStarterLanguages({
+            country: bundle.venue.country,
+            area: bundle.venue.province,
+            receiptLocale: bundle.venue.invoiceLocales[0],
+          }).staffLanguage,
+        );
       const id = await createStarterStaffRole(tx, name);
       administratorRoles.push(id);
       roleNames.set(id, name);

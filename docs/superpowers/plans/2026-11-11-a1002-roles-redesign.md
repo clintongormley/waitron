@@ -902,6 +902,11 @@ leaves nobody able to sign in on: {profiles}." / ES "Al eliminarlo nadie podrá 
 
 ---
 
+**2026-11-13 addition (watcher 04:02 and 04:06, Lane K questions.md):** when an import must
+create Team and no target starter name exists, resolve its translated name through the existing
+starter-language resolver using the bundle's country, area and receipt language. Add the
+no-target-job case to the import tests moved by NIGHTLY-1113; that repair lands first.
+
 ## PR 9 — One authority reading for every permission check (A1002 cut 10)
 
 **Outcome:** every permission check reads a person's authority instead of a level. Behaviour
