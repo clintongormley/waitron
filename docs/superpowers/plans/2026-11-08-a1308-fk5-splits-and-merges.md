@@ -213,7 +213,9 @@ by hand.
    the merge ends. Test: existing `floor-today-merges.test.ts`, unchanged.
 4. **Taking a merged table off today's map** must leave the merge first, or the off-floor CHECK
    refuses it. Test: existing take-off cases, unchanged (they pass only if `leaveMerges` runs first,
-   which `hideTable` does, `floor-today-store.ts:845-848`).
+   which `hideTable` does, `floor-today-store.ts:870-873`). The new
+   `table-removal.test.ts` case, "a reset hides a removed merged table while an unpaid delivery still
+   names it", also checks the reset/hide path.
 5. **The room's print** still reads the merge's name and seats ~~and the split~~. Test: existing
    `floor-revision.test.ts`, unchanged.
 
