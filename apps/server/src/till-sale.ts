@@ -253,6 +253,8 @@ export interface TillSaleRequest {
  * list cannot diverge from the invoice.
  */
 export interface TillSaleLine {
+  /** Presentation only, derived from the line's recorded menu version. */
+  setLunch?: true;
   /** F1 figures read from the filed sale line; unitPrice is per priceQuantity, base is the line total. */
   net?: { unitPrice: string; priceQuantity: string; base: string; rate: string; tax?: string };
   /** locale → text: the line's goods descriptions, snapshotted at add-time and filed verbatim. */

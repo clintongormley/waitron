@@ -3,7 +3,8 @@ import { readBillEditState } from "./bill-editing.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as ADJUSTMENTS from "@waitron/adjustments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -13,7 +14,6 @@ import {
   tenants,
   workingOrderLines,
   workingOrders,
-  type Transaction,
 } from "@waitron/db";
 import type { AdjustmentAction } from "@waitron/adjustments";
 import { decimal, decimalToCents, sumDecimals } from "@waitron/shared";
@@ -584,20 +584,24 @@ describe("receiptLines", () => {
     ]);
   });
 
-  it("reads nothing when no line was comped or discounted", async () => {
+  it("reads no adjustments when no line was comped or discounted", async () => {
     const billId = await bill([{ name: "Burger" }]);
-    const stored = await inTx(venue, (tx) => readStoredOrder(tx, billId));
-    // A line with a unit name reads whether it was sold in Each; this case is about adjustments.
-    const gross = { lines: stored.gross.lines.map((line) => ({ ...line, unitName: null })) };
-    const unreadable = new Proxy({} as Transaction, {
-      get: () => {
-        throw new Error("the bill's adjustments were read");
-      },
-    });
-
-    await expect(receiptLines(unreadable, billId, gross, stored.identities)).resolves.toEqual({
-      lines: ticketLinesFrom(gross, stored.identities),
-    });
+    const read = vi.spyOn(ADJUSTMENTS, "readBillAdjustments");
+    try {
+      await inTx(venue, async (tx) => {
+        const stored = await readStoredOrder(tx, billId);
+        const receipt = await receiptLines(tx, billId, stored.gross, stored.identities);
+        expect(receipt.lines).toEqual(
+          ticketLinesFrom(stored.gross, stored.identities).map((line) => ({
+            ...line,
+            soldInEach: true,
+          })),
+        );
+      });
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      read.mockRestore();
+    }
   });
 
   it("prints a paid bill's comp, percentage off a line and discount on the bill, adding up", async () => {

@@ -343,7 +343,34 @@ export function buildReceiptDocument({
     for (const answer of answers(dishFigured!.line)) {
       tableRows.push({ units: "", item: answer, itemIndent: 2, price: "", amount: "" });
     }
-    for (const option of optionsFigured) tableRows.push(filedRow(option, 2));
+    for (const option of optionsFigured) {
+      if (
+        !dishFigured!.line.setLunch ||
+        option.line.listGross !== undefined ||
+        compareDecimal(decimal(option.line.gross), decimal("0")) !== 0
+      )
+        tableRows.push({
+          ...filedRow(option, 2),
+          ...(dishFigured!.line.setLunch
+            ? {
+                item: label.supplement.replace(
+                  "{item}",
+                  lineName(option.line.descriptions, namesLocale),
+                ),
+              }
+            : {}),
+        });
+    }
+    if (dishFigured!.line.setLunch) {
+      for (const option of optionsFigured)
+        tableRows.push({
+          units: quantityText(option.line, namesLocale, locale),
+          item: lineName(option.line.descriptions, namesLocale),
+          itemIndent: 2,
+          price: "",
+          amount: "",
+        });
+    }
     for (const discount of discounts.under.get(at) ?? []) {
       tableRows.push(discountRow(discount, 2));
     }
@@ -360,7 +387,8 @@ export function buildReceiptDocument({
     );
     for (const answer of answers(dish)) text(`  ${answer}`, 2);
     for (const option of options) {
-      const name = lineName(option.descriptions, namesLocale);
+      const dishName = lineName(option.descriptions, namesLocale);
+      const name = dish.setLunch ? label.supplement.replace("{item}", dishName) : dishName;
       let caption: string;
       if (!simplified) {
         const { quantity: count, unitName, soldInEach } = option;
@@ -371,8 +399,25 @@ export function buildReceiptDocument({
       } else {
         caption = `  ${name} ${formatDecimalInput(option.quantity, locale)} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
       }
-      row(caption, itemAmount(option.listGross ?? option.gross), 2);
+      if (
+        !dish.setLunch ||
+        option.listGross !== undefined ||
+        compareDecimal(decimal(option.gross), decimal("0")) !== 0
+      )
+        row(caption, itemAmount(option.listGross ?? option.gross), 2);
     }
+    if (dish.setLunch)
+      for (const option of options) {
+        const name = lineName(option.descriptions, namesLocale);
+        const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
+        const quantity =
+          option.unitName != null && option.soldInEach !== true
+            ? ` ${quantityText(option, namesLocale, locale)}`
+            : perDish > 1
+              ? ` x${perDish}`
+              : "";
+        text(`  ${name}${quantity}`, 2);
+      }
     for (const line of [dish, ...options]) {
       for (const adjustment of line.adjustments ?? []) takenOff(adjustment, 2);
     }

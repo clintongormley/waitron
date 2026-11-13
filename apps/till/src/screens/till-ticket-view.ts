@@ -120,6 +120,7 @@ function summed(left: TillSaleLine, right: TillSaleLine): TillSaleLine {
 
 function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {
   const lines = (group: LineGroup) => [group.dish, ...group.options];
+  if (a.dish.setLunch || b.dish.setLunch) return false;
   if (a.options.length !== b.options.length) return false;
   if (![...lines(a), ...lines(b)].every(groupable)) return false;
   if (answersKey(a.dish) !== answersKey(b.dish)) return false;
@@ -1278,28 +1279,55 @@ export class TillTicketView extends LitElement {
               </li>
               ${r.invoiceType === "F1" ? netFacts(group.dish, names, format, labels) : nothing}
               ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale: names }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
-              ${group.options.map((option) => {
-                let amount: string;
-                if (r.invoiceType === "F1") {
-                  const unit =
-                    option.unitName == null
-                      ? ""
-                      : ` ${resolveSnapshotText(option.unitName, names, names)}`;
-                  amount = ` ${formatDecimalInput(option.quantity, format)}${unit}`;
-                } else if (option.unitName == null || option.soldInEach === true) {
-                  const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
-                  amount = perDish > 1 ? ` x${perDish}` : "";
-                } else {
-                  amount = ` ${formatDecimalInput(option.quantity, format)} ${resolveSnapshotText(option.unitName, names, names)}`;
-                }
-                return html`
-                  <li class="line option">
-                    <span class="line-name">${lineName(option.descriptions, names)}${amount}</span>
-                    ${r.invoiceType === "F1" && option.net !== undefined ? nothing : lineGross(option, format)}
-                  </li>
-                  ${r.invoiceType === "F1" ? netFacts(option, names, format, labels) : nothing}
-                `;
-              })}
+              ${group.options
+                .filter(
+                  (option) =>
+                    !group.dish.setLunch ||
+                    option.listGross !== undefined ||
+                    compareDecimal(decimal(option.gross), decimal("0")) !== 0,
+                )
+                .map((option) => {
+                  let amount: string;
+                  if (r.invoiceType === "F1") {
+                    const unit =
+                      option.unitName == null
+                        ? ""
+                        : ` ${resolveSnapshotText(option.unitName, names, names)}`;
+                    amount = ` ${formatDecimalInput(option.quantity, format)}${unit}`;
+                  } else if (option.unitName == null || option.soldInEach === true) {
+                    const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
+                    amount = perDish > 1 ? ` x${perDish}` : "";
+                  } else {
+                    amount = ` ${formatDecimalInput(option.quantity, format)} ${resolveSnapshotText(option.unitName, names, names)}`;
+                  }
+                  return html`
+                    <li class="line option">
+                      <span class="line-name"
+                        >${group.dish.setLunch ? labels.supplement.replace("{item}", lineName(option.descriptions, names)) : lineName(option.descriptions, names)}${amount}</span
+                      >
+                      ${r.invoiceType === "F1" && option.net !== undefined ? nothing : lineGross(option, format)}
+                    </li>
+                    ${r.invoiceType === "F1" ? netFacts(option, names, format, labels) : nothing}
+                  `;
+                })}
+              ${
+                group.dish.setLunch
+                  ? group.options.map((option) => {
+                      const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
+                      const quantity =
+                        option.unitName != null && option.soldInEach !== true
+                          ? ` ${formatDecimalInput(option.quantity, format)} ${resolveSnapshotText(option.unitName, names, names)}`
+                          : perDish > 1
+                            ? ` x${perDish}`
+                            : "";
+                      return html`<li class="line option">
+                        <span class="line-name"
+                          >${lineName(option.descriptions, names)}${quantity}</span
+                        >
+                      </li>`;
+                    })
+                  : nothing
+              }
               ${[group.dish, ...group.options].flatMap((line) =>
                 (line.adjustments ?? []).map((adjustment) =>
                   adjustmentRow(adjustment, format, labels, "adjustment", r.invoiceType),

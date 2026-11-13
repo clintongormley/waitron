@@ -20,6 +20,9 @@ se mantienen.
 Si el comensal no toma café, usa **Cobrar** como siempre. Dejar esa opción pendiente mantiene
 el precio del menú y no envía nada por ella. Estos menús son para servicio en mesa.
 
+El recibo mantiene separado el menú de cada comensal, con su precio base y los suplementos
+indicados debajo. Los platos elegidos se muestran sin precios separados.
+
 ## Invitar o aplicar un descuento {#comps-and-discounts}
 
 Elige un motivo al dejar un artículo gratis o aplicar un descuento. Con **Aplicar invitaciones**,

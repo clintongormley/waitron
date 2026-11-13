@@ -1074,24 +1074,6 @@ tests. Media still validates required image names and translates its refusal to
   (`apps/server/src/receipt-figures.ts:205-212`), so moving its words can change printed text: its
   own pull request waits for the owner.
 
-## A1515. Set lunch menus, the menú del día
-
-**Go-live (owner, 2026-11-11).** The [design proposal](../superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md)
-records the owner’s extras, later-choice and course-send decisions. The [build plan](../superpowers/plans/2026-11-12-a1515-set-lunch-build.md)
-was reviewed by Claude and cleared by the watcher at 22:04 on 12 November. The owner’s table-service 10% decision removes
-the adviser wait for that scope; takeaway/delivery set menus are adviser question
-[T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement).
-The catalogue save/publish APIs retain the set-lunch marker, and the order API accepts later choices
-using its recorded menu prices and table-service VAT class. The editor can configure it, and the service API sends its dishes by course, permits changing an
-unsent choice and preserves service state through table moves. The till keeps each lunch separate,
-shows outstanding choices, reopens its recorded choices and sends selected courses independently.
-The remaining table-service work is slice 5 of the build plan:
-
-- bill, receipt and invoice presentation with one lunch price, each premium supplement charged
-  once and included dishes shown without separate prices, including reprints after catalogue edits.
-
-Takeaway/delivery VAT treatment stays with S10/Lane L and adviser question T17.
-
 ## A1517. Allergen points to revisit before go-live
 
 **Before go-live (owner, 2026-11-11).** The original observations below came from reading,
@@ -1106,6 +1088,16 @@ The proposal distinguishes the narrower measured cases from these original obser
    venues to put a notice "on the menu or allergen sheet".
 
 ## Decisions and deliberate limits
+
+### Set lunches use existing extras and course service
+
+The owner's A1515 decisions, recorded in the [proposal](../superpowers/specs/2026-11-12-a1515-set-lunch-proposal.md),
+keep one lunch per diner, permit later choices and independent course sends, and price each premium
+supplement separately. Table service is one 10% service; takeaway/delivery VAT treatment remains
+with S10/Lane L and adviser question [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement).
+Existing menus and service periods govern availability. An unchosen course never changes the
+price or blocks payment.
+
 
 - **Sent declarations (A1517 decision 6, owner 2026-11-11, “As recommended”).** Sent till dishes and
   Orders history detail use declarations captured at the first send, including each extra's own

@@ -1,4 +1,4 @@
-import { getCountryPack } from "@waitron/country-packs";
+import { getCountryPack, receiptLabelsFor } from "@waitron/country-packs";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { formatReceipt } from "./receipt-ticket.js";
@@ -1438,4 +1438,78 @@ describe("recorded issue offsets on plain F2 receipts", () => {
       );
     }
   });
+});
+
+describe("set lunch presentation", () => {
+  const supplement = receiptLabelsFor("es-ES").supplement.replace("{item}", "Hake");
+  it.each(["F2", "F1"] as const)(
+    "keeps each lunch and its supplement separate on %s",
+    (invoiceType) => {
+      const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+      input.result.invoiceType = invoiceType;
+      input.result.total = "42.00";
+      input.result.vatBreakdown = [{ rate: "10", base: "38.18", tax: "3.82" }];
+      const lunch = {
+        descriptions: { "es-ES": "House lunch" },
+        quantity: "1",
+        gross: "18.00",
+        setLunch: true as const,
+        net: { unitPrice: "16.36", priceQuantity: "1.000", base: "16.36", tax: "1.64", rate: "10" },
+      };
+      const main = {
+        descriptions: { "es-ES": "Hake" },
+        quantity: "1",
+        gross: "3.00",
+        net: { unitPrice: "2.73", priceQuantity: "1.000", base: "2.73", tax: "0.27", rate: "10" },
+      };
+      const coffee = {
+        descriptions: { "es-ES": "Coffee" },
+        quantity: "2",
+        gross: "0.00",
+        net: { unitPrice: "0.00", priceQuantity: "1.000", base: "0.00", tax: "0.00", rate: "10" },
+      };
+      input.result.lines = [
+        lunch,
+        { ...main, parentLineNo: 1 },
+        { ...coffee, parentLineNo: 1 },
+        lunch,
+        { ...main, parentLineNo: 4 },
+        { ...coffee, parentLineNo: 4 },
+      ];
+      const elements = buildReceiptDocument(input).elements;
+      if (invoiceType === "F1") {
+        const rows = elements.flatMap((el) => (el.kind === "table" ? el.table.rows : []));
+        expect(rows.map((row) => [row.item, row.amount])).toEqual([
+          ["House lunch", "16,36"],
+          [supplement, "2,73"],
+          ["Hake", ""],
+          ["Coffee", ""],
+          ["House lunch", "16,36"],
+          [supplement, "2,73"],
+          ["Hake", ""],
+          ["Coffee", ""],
+        ]);
+        expect(
+          rows.filter((row) => row.amount === "").every((row) => row.price === "" && !row.rate),
+        ).toBe(true);
+      } else {
+        expect(
+          elements.filter((el) => el.kind === "amount" && el.caption.includes("House lunch")),
+        ).toMatchObject([{ amount: "18,00" }, { amount: "18,00" }]);
+        expect(
+          elements.filter((el) => el.kind === "amount" && el.caption.trim() === supplement),
+        ).toMatchObject([{ amount: "3,00" }, { amount: "3,00" }]);
+        expect(
+          elements.filter(
+            (el) => el.kind === "text" && ["Hake", "Coffee x2"].includes(el.text.trim()),
+          ),
+        ).toMatchObject([
+          { text: "  Hake" },
+          { text: "  Coffee x2" },
+          { text: "  Hake" },
+          { text: "  Coffee x2" },
+        ]);
+      }
+    },
+  );
 });

@@ -151,6 +151,7 @@ function summed(left: TillSaleLine, right: TillSaleLine): TillSaleLine {
 
 function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {
   const lines = (group: LineGroup) => [group.dish, ...group.options];
+  if (a.dish.setLunch || b.dish.setLunch) return false;
   if (a.options.length !== b.options.length) return false;
   if (![...lines(a), ...lines(b)].every(groupable)) return false;
   if (answersKey(a.dish) !== answersKey(b.dish)) return false;
