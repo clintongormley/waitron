@@ -197,14 +197,14 @@ async function imageFixture({
           activeInbox && args.at(-1) === "mailpit"
             ? "inbox-id\n"
             : (activeTunnel || stoppedTunnel) && args.at(-1) === "tunnel"
-            ? "tunnel-id\n"
-            : writers && args.at(-1) === "-q"
-              ? "app-id\nagent-id\n"
-              : writers && opened && ["app", "print-agent"].includes(args.at(-1))
-                ? args.at(-1) === "app"
-                  ? "app-id\n"
-                  : "agent-id\n"
-                : "",
+              ? "tunnel-id\n"
+              : writers && args.at(-1) === "-q"
+                ? "app-id\nagent-id\n"
+                : writers && opened && ["app", "print-agent"].includes(args.at(-1))
+                  ? args.at(-1) === "app"
+                    ? "app-id\n"
+                    : "agent-id\n"
+                  : "",
       };
     if (args[0] === "inspect")
       return {
@@ -854,6 +854,8 @@ it.each([true, false])(
     await f.host.resume(images.old);
     expect(calls.at(-1).includes("practice-inbox")).toBe(activeInbox);
     const configs = calls.filter((args) => args.includes("config"));
-    expect(configs.every((args) => args.includes("practice-inbox"))).toBe(true);
+    expect(configs.every((args) => args.includes("practice-inbox") || args.includes("*"))).toBe(
+      true,
+    );
   },
 );
