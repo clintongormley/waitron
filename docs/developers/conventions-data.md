@@ -4372,7 +4372,11 @@ gate holds is left pending by `clockStopsRefund` (boot hands `clockUnconfirmed` 
 mounts, which `boot.start-clock-gate.test.ts` checks; the refund-wait rows in
 `clock-unconfirmed-gate.test.ts` pass it themselves), and the bill payments loop leaves a card payment charged before the start
 pending and raises no `payment.bill_settle_failed` for it, also when the gate starts holding
-partway through a pass; it records it at its first pass once the gate opens (`bill-payments-loop.test.ts`). The gate holds while the box files records (`filesRecords()`) and the start
+partway through a pass; it records it at its first pass once the gate opens (`bill-payments-loop.test.ts`). While paused, `recoverTenderRefunds` still runs
+`sweepInvoiceCorrections` (`apps/server/src/invoice-correction-alerts.ts`) with `fileSettled: false`,
+which files nothing, raises `invoice_correction.unfinished` and touches no refund row; an unpaused
+pass also tries to file every open correction whose money is all back (`fileCorrectionAutomatically`),
+raising `invoice_correction.filing_refused` when refused. The gate holds while the box files records (`filesRecords()`) and the start
 is `waiting` or a clock set is with the host, each asked at each call, so a box that starts filing while it waits is gated from
 that call. Orders still reach the kitchen (the owner's "Orders still go"): sending one is not among
 the wrapped calls (read, not run). The administrator's record remedies call the chain directly, so their route asks the gate before
