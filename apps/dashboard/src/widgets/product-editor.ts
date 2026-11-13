@@ -1,5 +1,7 @@
 import { unitPresentation } from "@waitron/catalogue/src/unit-presentation.js";
 import {
+  FormFeedback,
+  bottomMessage,
   ReorderController,
   ContentLanguageController,
   currentContentLanguages,
@@ -413,10 +415,7 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
   @property({ attribute: false }) api?: DashboardApi;
   @state() private draft: ProductEditorDraft = emptyDraft();
-  /** Set by the first press of Save; from then on the form re-checks itself on every change. */
-  @state() private attempted = false;
-  /** Refusal keys the operator has since changed the field of, or submitted past. */
-  @state() private dismissed: ReadonlySet<string> = new Set();
+  private readonly feedback = new FormFeedback(this);
   @property() initialField = "";
   @state() private imageOpen = false;
   @state() private unitPickerOpen = false;
@@ -504,8 +503,7 @@ export class ProductEditor extends LitElement {
         : { ...emptyDraft(this.defaultVatClass), primaryCategoryId: this.newCategoryId };
       this.generation++;
       this.imageOpen = false;
-      this.attempted = false;
-      this.dismissed = new Set();
+      this.feedback.reset();
       this.submitted = false;
       this.unitPickerOpen = false;
       this.variantOpen = false;
@@ -542,7 +540,7 @@ export class ProductEditor extends LitElement {
     // A field error the SERVER reported is surfaced the same way a local one is: its section opens
     // and focus goes to it, so a rejected save never hides its reason behind a folded header.
     if (changed.has("fieldErrors")) {
-      this.dismissed = new Set();
+      this.feedback.newRefusal();
       // A refused unit opens the chooser once, so its message is on screen beside the dropdown.
       if (this.inherited === null && this.fieldErrors.unit) {
         this.#unitOpener = "price";
@@ -650,18 +648,13 @@ export class ProductEditor extends LitElement {
       keys.push("primary", "product-color", "unit", "ordering", "modifier");
     return new Set(keys);
   }
-  private dismiss(...keys: string[]): void {
-    if (keys.every((key) => this.dismissed.has(key))) return;
-    this.dismissed = new Set([...this.dismissed, ...keys]);
-  }
   /** Refusals not yet dismissed, over the form's own checks for everything but a variant row. A
    * refusal wins where both name one field. */
   private standingErrors(local: Record<string, string>): Record<string, string> {
     const own = Object.fromEntries(Object.entries(local).filter(([key]) => !VARIANT_KEY.test(key)));
     const refused = Object.fromEntries(
-      Object.entries(this.fieldErrors).filter(
-        ([key, message]) =>
-          Boolean(message) && !this.dismissed.has(key) && !this.#variantRefusalKeys.has(key),
+      Object.entries(this.feedback.remaining(this.fieldErrors)).filter(
+        ([key, message]) => Boolean(message) && !this.#variantRefusalKeys.has(key),
       ),
     );
     return { ...own, ...refused };
@@ -677,7 +670,7 @@ export class ProductEditor extends LitElement {
       .filter(([key]) => !shown.has(key))
       .map(([, message]) => message);
     const marked = fieldKeys.length > 0 || Object.keys(rows).length > 0;
-    const bottom = [...formMessages, ...(marked ? [t("form.fix_fields")] : [])].join(" ");
+    const bottom = bottomMessage(...formMessages, marked ? t("form.fix_fields") : null);
     return { errors, fieldKeys, rows, bottom };
   }
   /**
@@ -789,12 +782,12 @@ export class ProductEditor extends LitElement {
     if (errorKey?.endsWith("-")) {
       const before = (this.draft[key] ?? {}) as LocalizedText;
       const after = (value ?? {}) as LocalizedText;
-      this.dismiss(
+      this.feedback.dismiss(
         ...[...new Set([...Object.keys(before), ...Object.keys(after)])]
           .filter((locale) => before[locale] !== after[locale])
           .map((locale) => `${errorKey}${locale}`),
       );
-    } else if (errorKey !== undefined) this.dismiss(errorKey);
+    } else if (errorKey !== undefined) this.feedback.dismiss(errorKey);
     const hadVariant = this.hasActiveVariant;
     this.draft = { ...this.draft, [key]: value };
     if (key === "variants" && hadVariant !== this.hasActiveVariant) {
@@ -899,9 +892,8 @@ export class ProductEditor extends LitElement {
     if (this.suspended || this.submitted) return;
     if (saveActionState(this.#draftScope).unchanged) return;
     const errors = this.validate();
-    if (this.attempted && Object.keys(errors).length) return;
-    this.attempted = true;
-    this.dismiss(...Object.keys(this.fieldErrors));
+    if (this.feedback.attempted && Object.keys(errors).length) return;
+    this.feedback.press(...Object.keys(this.fieldErrors));
     this.#variantProblems = new Map();
     if (Object.keys(errors).length) {
       this.#focusField = Object.keys(errors)[0]!;
@@ -1388,7 +1380,7 @@ export class ProductEditor extends LitElement {
           event.stopPropagation();
           if (this.suspended) return;
           if (event.detail.field === "allergens")
-            this.dismiss(
+            this.feedback.dismiss(
               ...Object.keys(this.fieldErrors).filter((key) => key.startsWith("allergens")),
             );
           this.draft = { ...this.draft, ...applyNutritionChange(this.draft, event.detail) };
@@ -1916,7 +1908,7 @@ export class ProductEditor extends LitElement {
   }
 
   override render() {
-    const local = this.attempted ? this.validate() : {};
+    const local = this.feedback.attempted ? this.validate() : {};
     const { errors, fieldKeys, rows, bottom } = this.assess(local);
     const invalid = Object.keys(local).length > 0;
     const saveAction = saveActionState(this.#draftScope);

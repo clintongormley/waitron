@@ -1258,6 +1258,11 @@ it("puts a refusal for a folded field under it, opening its section, until that 
   expect(description.getAttribute("aria-invalid")).toBe("false");
   expect(await bottomOf(el)).toBe("");
   expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+
+  el.fieldErrors = { "description-en": "Try another description" };
+  await el.updateComplete;
+  expect(description.getAttribute("aria-invalid")).toBe("true");
+  expect(errorOf(el, "description-en")).toBe("Try another description");
 });
 
 it("submits past a refusal beside a field or on a variant's row, which then go", async () => {
