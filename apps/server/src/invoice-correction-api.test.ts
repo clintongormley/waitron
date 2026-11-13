@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
   deviceProfiles,
@@ -225,6 +225,32 @@ describe("POST /api/transactions/:saleId/corrections/preview", () => {
       json: { id: readable, state: "open" },
     });
   });
+});
+
+it("still gives money back through Refund a payment while the invoice records need checking", async () => {
+  const saleId = await sold(["10.00"]);
+  const [cash] = await inTx(venue, (tx) => readRefundableTenders(tx, saleId));
+  const unsound = vi.spyOn(venue.backend, "checkIntegrity").mockResolvedValue({
+    ok: false,
+    checked: 1,
+    issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+  } as Awaited<ReturnType<typeof venue.backend.checkIntegrity>>);
+  onTestFinished(() => unsound.mockRestore());
+
+  expect(await preview(saleId, { gross: "2.00" })).toMatchObject({
+    status: 409,
+    json: { code: "invoice_correction.chain_unsound" },
+  });
+  expect(
+    await send(venue.app, venue.cookie, "POST", `/api/transactions/${saleId}/refunds`, {
+      submissionId: randomUUID(),
+      tenderId: cash!.tenderId,
+      appliedAmount: "2.00",
+      tipAmount: "0.00",
+      reason: "Goodwill",
+      override: supervisor(),
+    }),
+  ).toMatchObject({ status: 200, json: { state: "completed", appliedAmount: "2.00" } });
 });
 
 describe("GET /api/transactions/:saleId/corrections/lines", () => {
@@ -584,7 +610,7 @@ describe("GET /api/invoice-corrections", () => {
     ]);
   });
 
-  it("reads the list in the same number of statements however many corrections are open", async () => {
+  it("reads the list of one open correction and of several in the same number of statements", async () => {
     const statementsFor = () =>
       inTx(venue, async (tx) => {
         let statements = 0;
@@ -603,6 +629,7 @@ describe("GET /api/invoice-corrections", () => {
         const corrections = await listOpenInvoiceCorrections(counted);
         return { statements, rows: corrections.length };
       });
+    await opened(await sold(["10.00"]));
     const before = await statementsFor();
     const id = await opened(await sold(["10.00"]));
     expect((await giveCash(id, cashBody({ amount: "1.00" }))).status).toBe(200);

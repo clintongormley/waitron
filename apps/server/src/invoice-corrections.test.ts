@@ -516,11 +516,15 @@ describe("openInvoiceCorrection", () => {
 
     expect(await readWith(admittingNot("voided"))).toMatchObject({
       moneyBack: "4.00",
-      fileNow: { refusal: "sale.correction_not_admitted", closable: true },
+      fileNow: { refusal: "sale.correction_not_admitted", reason: "voided", closable: true },
     });
     expect(await readWith(admittingNot("filing_refused"))).toMatchObject({
       moneyBack: "4.00",
-      fileNow: { refusal: "sale.correction_not_admitted", closable: false },
+      fileNow: {
+        refusal: "sale.correction_not_admitted",
+        reason: "filing_refused",
+        closable: false,
+      },
     });
   });
 

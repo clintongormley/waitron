@@ -92,10 +92,13 @@ export interface InvoiceCorrectionView {
   correctiveSaleId: string | null;
   legs: TenderRefundView[];
   /** What /file would file now: `previewCorrectionAmounts` for the money back over the
-   * correction's lineIds, or the code it refused with and whether /close may end the correction
-   * keeping its refunds; null while a leg is pending, nothing is back, or the correction has ended. */
+   * correction's lineIds, or the code it refused with, the refusal's `reason` when it gave one, and
+   * whether /close may end the correction keeping its refunds; null while a leg is pending, nothing
+   * is back, or the correction has ended. */
   fileNow:
-    { gross: string; vatBreakdown: SplitLine[] } | { refusal: string; closable: boolean } | null;
+    | { gross: string; vatBreakdown: SplitLine[] }
+    | { refusal: string; reason?: string; closable: boolean }
+    | null;
 }
 
 export type InvoiceCorrectionDeps = Pick<TenderRefundDeps, "backend" | "clock" | "attendance">;
@@ -305,7 +308,8 @@ function summaryFrom(row: InvoiceCorrectionRow, { refunds, money }: CorrectionLe
 }
 
 /** The open corrections whose invoice's working order `inZones` admits, oldest first, each without
- * `fileNow` and with the number of the invoice it corrects; two reads whatever their number. */
+ * `fileNow` and with the number of the invoice it corrects: one read of the corrections, then one
+ * read of their refunds per `SQL_VARIABLE_LIMIT` corrections, none when no correction is open. */
 export async function listOpenInvoiceCorrections(
   tx: Transaction,
   inZones?: OrderZoneCondition,
@@ -531,7 +535,15 @@ async function fileNowFor(
   selection: { gross: Decimal; lineIds?: readonly string[] },
 ): Promise<InvoiceCorrectionView["fileNow"]> {
   const filing = await previewOrRefusal(tx, backend, cfg, saleId, selection);
-  if ("refusal" in filing) return { refusal: filing.refusal.code, closable: filing.closable };
+  if ("refusal" in filing) {
+    const { code, params } = filing.refusal;
+    const reason = (params as { reason?: unknown }).reason;
+    return {
+      refusal: code,
+      ...(typeof reason === "string" ? { reason } : {}),
+      closable: filing.closable,
+    };
+  }
   return { gross: filing.gross, vatBreakdown: splitOf(filing) };
 }
 
