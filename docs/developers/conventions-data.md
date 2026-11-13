@@ -6766,3 +6766,19 @@ _2026-11-11, A1308 fl4: Cloud names now live in the layout. See [One state-folde
 > reason" and `apps/server/src/job-catalogue.test.ts`, weaker than their names: one five-second
 > watch of named services, and a field's presence, not what the duty does; none sees a duty boot
 > starts but leaves out of the table.
+
+## Root receipts moved on 2026-11-14
+
+These excerpts are from `CLAUDE.md` at `6504819171ef04d2f95b81e19f4eb8eba028d33e`; they are not
+new measurements. Each heading names the root entry the excerpt was cut from; the entry keeps its
+rule, guard and pointer.
+
+### Every start of a box that files records writes no fiscal record and moves no money until its time is confirmed
+
+> (owner, 2026-11-10: "we rely on NTP only, we don't bother about AEAT … If we are not on the
+> internet then we either wait for two devices … Or we stop and ask a user to confirm that our
+> current date+time is correct (or we ask them to correct it)"; "Orders still go").
+
+> weaker than the rule: the seat's four writers and the money routes
+> `clock-unconfirmed-gate.test.ts` lists, on a seat wrapped as boot wraps it, and one cash sale
+> through boot; the record remedies, off in production, are outside it.
