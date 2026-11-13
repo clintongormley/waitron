@@ -62,7 +62,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/dashboard/src/screens/my-schedule-screen.hours.test.ts",
   "apps/dashboard/src/screens/my-schedule-screen.test.ts",
   "apps/dashboard/src/screens/node-recovery-panel.test.ts",
-  "apps/dashboard/src/screens/orders-screen.test.ts",
   "apps/dashboard/src/screens/payments-screen.bill-recovery.test.ts",
   "apps/dashboard/src/screens/payments-screen.delete.test.ts",
   "apps/dashboard/src/screens/payments-screen.disable.test.ts",
