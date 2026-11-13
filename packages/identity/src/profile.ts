@@ -36,6 +36,8 @@ import {
 } from "./mfa.js";
 import { DUMMY, issueCheck, trustedVerdict, type SecretCheck } from "./secret-check.js";
 
+import { assertUsableAdminRemains } from "./admin-anchor.js";
+
 interface Owner {
   /** The dashboard cookie's value — the session's token, which this package hashes. */
   managementSessionId: string;
@@ -230,6 +232,7 @@ export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credential
   const person = await ownPerson(tx, input);
   await verifyCurrent(tx, person, input);
   await tx.update(persons).set({ googleSubject: null }).where(eq(persons.id, person.id));
+  await assertUsableAdminRemains(tx);
 }
 
 async function invalidateLinks(tx: Transaction, personId: string): Promise<void> {
@@ -403,4 +406,5 @@ export async function removeOwnPasskey(
     .where(and(eq(webauthnCredentials.id, input.id), eq(webauthnCredentials.personId, person.id)))
     .returning({ id: webauthnCredentials.id });
   if (removed.length === 0) throw new AppError("passkey.not_registered", {});
+  await assertUsableAdminRemains(tx);
 }

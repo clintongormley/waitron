@@ -8326,3 +8326,48 @@ it.each([false, true])(
     expect(await targetSuite.db.select().from(outgoingMail)).toEqual([]);
   },
 );
+
+it.each([false, true])(
+  "configuration import requires a usable target Admin (usable=%s)",
+  async (usable) => {
+    const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-11-13T12:00:00Z"),
+      versions,
+    );
+    const importing = applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: async (tx) => {
+        await tx
+          .update(persons)
+          .set({ passwordHash: null, googleSubject: usable ? "google-only-admin" : null });
+        await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
+      },
+    });
+    if (!usable) {
+      await expect(importing).rejects.toMatchObject({ code: "person.last_admin" });
+      expect(await targetSuite.db.select().from(persons)).toEqual([]);
+    } else {
+      await importing;
+      const admins = await listAdminHolders(targetSuite.db, { status: "active" });
+      expect(admins).toHaveLength(1);
+      expect(admins[0]!.passwordHash).toBeNull();
+      const [admin] = await targetSuite.db
+        .select()
+        .from(persons)
+        .where(eq(persons.id, admins[0]!.id));
+      expect(admin!.googleSubject).toBe("google-only-admin");
+    }
+  },
+);

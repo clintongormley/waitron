@@ -185,6 +185,7 @@ describe("management account actions", () => {
   });
 
   it("stores only a token hash and consumes an invitation into a fresh session", async () => {
+    await seedManager(suite.db, { email: "usable-admin@example.test", role: "admin" });
     const personId = await seedManager(suite.db, {
       email: "new-person@x.com",
     });

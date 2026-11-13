@@ -10,6 +10,7 @@
  * from this log. State each kind's additional privacy rules beside its data declaration.
  */
 export interface ActivityKindData {
+  readonly "person.email_changed": Record<string, never>;
   /** A count only; never a guest's label or allergens. */
   readonly "party.allergy_answered": {
     readonly answer: "none" | "allergies";
@@ -87,6 +88,7 @@ export interface ActivityKindRule {
   readonly subject: string;
 }
 export const ACTIVITY_KINDS = {
+  "person.email_changed": { subject: "person" },
   "party.allergy_answered": { subject: "party" },
   "access_role.member_added": { subject: "person" },
   "access_role.member_removed": { subject: "person" },

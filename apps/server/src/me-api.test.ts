@@ -1364,6 +1364,11 @@ describe("mountMeApi — own credentials and second factor", () => {
   });
 
   it("unlinks the person's Google sign-in inside the confirmation window", async () => {
+    await seedPersons(suite.db, {
+      displayName: "Usable Admin",
+      role: "admin",
+      passwordHash: "admin-password",
+    });
     const personId = await personWithPassword({ googleSubject: "google-subject-unlink" });
     const res = await send(mountApp(), "DELETE", "/management-api/session/me/google", {
       cookie: await cookieFor(personId),
