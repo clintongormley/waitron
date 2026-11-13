@@ -31,7 +31,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { joinTables, moveGuests } from "./testing/table-action-fixture.js";
-import { mergeBills } from "./testing/bill-action-fixture.js";
+import { mergeBills, moveDishes } from "./testing/bill-action-fixture.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
@@ -425,6 +425,37 @@ describe("a full-invoice bill merged away", () => {
     });
   }
 
+  async function moveEveryDishInto(
+    cfg: DeviceRequestConfig,
+    tInto: string,
+    intoTab: string,
+    fromTab: string,
+    invoiceChoice: unknown,
+  ): Promise<void> {
+    const { rows: dishes } = await suite.db.execute<{ id: string }>(
+      sql`select id from working_order_lines
+          where working_order_id = ${fromTab} and parent_line_id is null`,
+    );
+    const move = await tableAction(fromTab, intoTab);
+    await withTransaction(suite.db, async (tx) => {
+      await moveGuests(tx, cfg, move.partyId, tInto, move.options);
+      const into = (await partyRevisionOfOrder(tx, intoTab))!;
+      await moveDishes(
+        tx,
+        cfg,
+        fromTab,
+        intoTab,
+        dishes.map((row) => row.id),
+        {
+          partyId: into.id,
+          expectedPartyRevision: into.revision,
+          operatorId: move.options.operatorId,
+          invoiceChoice,
+        },
+      );
+    });
+  }
+
   async function paymentsOf(tab: string): Promise<Record<string, unknown>[]> {
     const { rows } = await suite.db.execute<Record<string, unknown>>(
       sql`select * from bill_payments where working_order_id = ${tab} order by id`,
@@ -459,6 +490,26 @@ describe("a full-invoice bill merged away", () => {
     await chooseFullInvoice(cfg, fromTab, "Acme Travel SL", acme);
 
     await mergeInto(cfg, tInto, intoTab, fromTab, {
+      keep: "from",
+      into: null,
+      from: { taxId: acme },
+    });
+    expect((await pay(cfg, intoTab, "3.50")).invoice).toBeDefined();
+
+    const rows = await filedRecords(intoTab, fromTab);
+    expect(rows.map((row) => row.tipo_factura)).toEqual(["F1"]);
+    expect(JSON.parse(rows[0]!.destinatarios)).toMatchObject({
+      IDDestinatario: [{ NombreRazon: "Acme Travel SL", NIF: acme }],
+    });
+    expect(await filedSaleTotal(intoTab)).toBe("3.50");
+  });
+
+  it("moving every dish off an Acme bill and keeping Acme files one F1 naming Acme", async () => {
+    const { cfg, tInto, intoTab, fromTab } = await fullInvoiceVenue();
+    const acme = nextNif();
+    await chooseFullInvoice(cfg, fromTab, "Acme Travel SL", acme);
+
+    await moveEveryDishInto(cfg, tInto, intoTab, fromTab, {
       keep: "from",
       into: null,
       from: { taxId: acme },

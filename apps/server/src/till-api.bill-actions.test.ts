@@ -126,6 +126,30 @@ function bodyFor(route: Route, other: string, extra: Record<string, unknown> = {
   return { toBillId: other, lineIds: [firstLineBeside(other)], ...extra };
 }
 
+/** Sets `billId` for a full invoice to Acme Travel SL through the till's own route. */
+async function chooseAcmeInvoice(billId: string): Promise<void> {
+  const chosen = await send(
+    venue.app,
+    venue.cookie,
+    "PUT",
+    `/api/working-orders/${billId}/invoice-choice`,
+    {
+      revision: venue.db.all<{ revision: number }>(
+        sql`select revision from working_orders where id = ${billId}`,
+      )[0]!.revision,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Acme Travel SL",
+        address: "2 Main Street, 28013 Madrid, Madrid",
+        countryCode: "ES",
+      },
+    },
+  );
+  expect(chosen.status).toBe(200);
+}
+
 /** The id of the bill's dish at `lineNo`. */
 function lineIdAt(billId: string, lineNo: number): string {
   const [row] = venue.db.all<{ id: string }>(
@@ -360,26 +384,7 @@ describe("the bill action routes", () => {
 
   it("merging away a full-invoice bill without a choice is 409 bill.merge_invoice_choice_required", async () => {
     const { partyId, main, second } = await twoBills();
-    const chosen = await send(
-      venue.app,
-      venue.cookie,
-      "PUT",
-      `/api/working-orders/${second}/invoice-choice`,
-      {
-        revision: venue.db.all<{ revision: number }>(
-          sql`select revision from working_orders where id = ${second}`,
-        )[0]!.revision,
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, second)),
-        invoiceType: "F1",
-        recipient: {
-          taxId: "B12345674",
-          legalName: "Acme Travel SL",
-          address: "2 Main Street, 28013 Madrid, Madrid",
-          countryCode: "ES",
-        },
-      },
-    );
-    expect(chosen.status).toBe(200);
+    await chooseAcmeInvoice(second);
 
     const answer = await post(`/api/bills/${main}/merge`, {
       fromBillId: second,
@@ -392,6 +397,36 @@ describe("the bill action routes", () => {
       params: { workingOrderId: second, intoWorkingOrderId: main },
     });
     expect(await statusOf(venue, second)).toBe("open");
+  });
+
+  it("move-dishes taking every dish off a full-invoice bill is 409 bill.merge_invoice_choice_required without a choice, and moves with one", async () => {
+    const { partyId, main, second } = await twoBills();
+    await chooseAcmeInvoice(second);
+    const body = { toBillId: main, lineIds: [lineIdAt(second, 1)] };
+
+    const refusedMove = await post(`/api/bills/${second}/move-dishes`, {
+      ...body,
+      expectedPartyRevision: await revisionOf(partyId),
+    });
+
+    expect(refusedMove.status).toBe(409);
+    expect(refusedMove.json).toMatchObject({
+      code: "bill.merge_invoice_choice_required",
+      params: { workingOrderId: second, intoWorkingOrderId: main },
+    });
+
+    const moved = await post(`/api/bills/${second}/move-dishes`, {
+      ...body,
+      expectedPartyRevision: await revisionOf(partyId),
+      invoiceChoice: { keep: "from", into: null, from: { taxId: "B12345674" } },
+    });
+
+    expect(moved.status).toBe(200);
+    const [row] = venue.db.all<{ invoiceType: string; taxId: string | null }>(
+      sql`select invoice_type as invoiceType, recipient_tax_id as taxId
+          from working_orders where id = ${main}`,
+    );
+    expect(row).toEqual({ invoiceType: "F1", taxId: "B12345674" });
   });
 
   it("a stale revision is 409 party.out_of_date", async () => {

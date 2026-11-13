@@ -14119,33 +14119,34 @@ it.each(["en-GB", "es-ES"] as const)(
   },
 );
 
+const acme = {
+  taxId: "B11111111",
+  legalName: "Acme Travel SL",
+  address: "Carrer Major 1, Valencia",
+  countryCode: "ES",
+};
+const barSol = {
+  taxId: "B22222222",
+  legalName: "Bar Sol SL",
+  address: "Calle Sol 2, Madrid",
+  countryCode: "ES",
+};
+const question = (el: TillApp) =>
+  el.shadowRoot!.querySelector<WtDialog & HTMLElement>("[data-merge-invoice]");
+const buttons = (el: TillApp) =>
+  [...question(el)!.querySelectorAll<HTMLElement>("wt-button")].map((b) => b.textContent!.trim());
+const press = async (el: TillApp, selector: string) => {
+  question(el)!.querySelector<HTMLElement>(selector)!.click();
+  await flush(el);
+};
+
 describe("till-app: merging a bill set for a full invoice", () => {
-  const acme = {
-    taxId: "B11111111",
-    legalName: "Acme Travel SL",
-    address: "Carrer Major 1, Valencia",
-    countryCode: "ES",
-  };
-  const barSol = {
-    taxId: "B22222222",
-    legalName: "Bar Sol SL",
-    address: "Calle Sol 2, Madrid",
-    countryCode: "ES",
-  };
   const acmeCheck: PartyBill = { ...checkBill, invoiceType: "F1", recipient: acme };
   const barSolTab: PartyBill = { ...tabBill, invoiceType: "F1", recipient: barSol };
   const mergeEdits = {
     expectedPartyRevision: 3,
     partyId: "v1",
     expectedEdits: closingEdits,
-  };
-  const question = (el: TillApp) =>
-    el.shadowRoot!.querySelector<WtDialog & HTMLElement>("[data-merge-invoice]");
-  const buttons = (el: TillApp) =>
-    [...question(el)!.querySelectorAll<HTMLElement>("wt-button")].map((b) => b.textContent!.trim());
-  const press = async (el: TillApp, selector: string) => {
-    question(el)!.querySelector<HTMLElement>(selector)!.click();
-    await flush(el);
   };
 
   async function mergeCheckInto(
@@ -14384,5 +14385,267 @@ describe("till-app: merging a bill set for a full invoice", () => {
       "The bills' invoice details have changed. Check them and merge again.",
     );
     expect(api.mergeBills).toHaveBeenCalledOnce();
+  });
+});
+
+describe("till-app: moving every dish off a bill set for a full invoice", () => {
+  const acmeTab: PartyBill = { ...tabBill, invoiceType: "F1", recipient: acme };
+  const barSolCheck: PartyBill = { ...checkBill, invoiceType: "F1", recipient: barSol };
+  const moveEdits = {
+    expectedPartyRevision: 3,
+    partyId: "v1",
+    expectedEdits: [
+      { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+      { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+    ],
+  };
+  const newBillEdits = {
+    expectedPartyRevision: 3,
+    partyId: "v1",
+    expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
+  };
+
+  async function moveEveryDish(
+    bills: PartyBill[],
+    toBillId: string | null,
+    overrides: Record<string, unknown> = {},
+    language?: "es",
+  ) {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue(bills),
+      ...overrides,
+    });
+    const order = await openPartyTable(el);
+    if (language !== undefined) setLocale(language);
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId });
+    await flush(el);
+    return el;
+  }
+
+  it("asks before moving every dish onto a simplified bill, in English", async () => {
+    const el = await moveEveryDish([acmeTab, checkBill], "wo-check");
+
+    expect(question(el)!.heading).toBe("Bill 1 has a full invoice");
+    expect(question(el)!.textContent).toContain(
+      "Bill 1 is set for a full invoice to Acme Travel SL · B11111111. Moving every dish puts them on Bill 2, invoiced to Acme Travel SL · B11111111.",
+    );
+    expect(buttons(el)).toEqual(["Do not move", "Move and invoice Acme Travel SL · B11111111"]);
+    expect(api.moveDishes).not.toHaveBeenCalled();
+  });
+
+  it("asks before moving every dish onto a simplified bill, in Spanish", async () => {
+    try {
+      const el = await moveEveryDish([acmeTab, checkBill], "wo-check", {}, "es");
+
+      expect(question(el)!.heading).toBe("La cuenta 1 tiene factura completa");
+      expect(question(el)!.textContent).toContain(
+        "La cuenta 1 está a nombre de Acme Travel SL · B11111111 para factura completa. Si mueves todos los platos, pasan a la cuenta 2, facturada a Acme Travel SL · B11111111.",
+      );
+      expect(buttons(el)).toEqual(["No mover", "Mover y facturar a Acme Travel SL · B11111111"]);
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("asks before moving every dish to a new bill, in English and Spanish", async () => {
+    const el = await moveEveryDish([acmeTab, checkBill], null);
+
+    expect(question(el)!.heading).toBe("Bill 1 has a full invoice");
+    expect(question(el)!.textContent).toContain(
+      "Bill 1 is set for a full invoice to Acme Travel SL · B11111111. Moving every dish puts them on a new bill, invoiced to Acme Travel SL · B11111111.",
+    );
+    expect(buttons(el)).toEqual(["Do not move", "Move and invoice Acme Travel SL · B11111111"]);
+
+    try {
+      setLocale("es");
+      await flush(el);
+      expect(question(el)!.textContent).toContain(
+        "La cuenta 1 está a nombre de Acme Travel SL · B11111111 para factura completa. Si mueves todos los platos, pasan a una cuenta nueva, facturada a Acme Travel SL · B11111111.",
+      );
+      expect(buttons(el)).toEqual(["No mover", "Mover y facturar a Acme Travel SL · B11111111"]);
+    } finally {
+      setLocale("en");
+    }
+    expect(api.moveDishes).not.toHaveBeenCalled();
+  });
+
+  it("asks which customer to keep when both bills have a different full invoice, in English and Spanish", async () => {
+    const el = await moveEveryDish([acmeTab, barSolCheck], "wo-check");
+
+    expect(question(el)!.heading).toBe("Each bill has a full invoice");
+    expect(question(el)!.textContent).toContain(
+      "Bill 2 is invoiced to Bar Sol SL · B22222222 and Bill 1 to Acme Travel SL · B11111111. The dishes can be invoiced to only one.",
+    );
+    expect(buttons(el)).toEqual([
+      "Do not move",
+      "Invoice Bar Sol SL · B22222222",
+      "Invoice Acme Travel SL · B11111111",
+    ]);
+
+    try {
+      setLocale("es");
+      await flush(el);
+      expect(question(el)!.textContent).toContain(
+        "La cuenta 2 se factura a Bar Sol SL · B22222222 y la cuenta 1 a Acme Travel SL · B11111111. Los platos solo se pueden facturar a uno de los dos.",
+      );
+      expect(buttons(el)).toEqual([
+        "No mover",
+        "Facturar a Bar Sol SL · B22222222",
+        "Facturar a Acme Travel SL · B11111111",
+      ]);
+    } finally {
+      setLocale("en");
+    }
+    expect(api.moveDishes).not.toHaveBeenCalled();
+  });
+
+  it("Do not move closes the question and sends nothing", async () => {
+    const el = await moveEveryDish([acmeTab, checkBill], "wo-check");
+
+    await press(el, "[data-merge-cancel]");
+
+    expect(question(el)).toBeNull();
+    expect(api.moveDishes).not.toHaveBeenCalled();
+  });
+
+  it("Move and invoice sends the moved-from bill's customer to keep, and the receiving bill as simplified", async () => {
+    const el = await moveEveryDish([acmeTab, checkBill], "wo-check");
+
+    await press(el, '[data-merge-keep="from"]');
+
+    expect(question(el)).toBeNull();
+    expect(api.moveDishes).toHaveBeenCalledWith("wo-4", ["line-1"], "wo-check", moveEdits, {
+      keep: "from",
+      into: null,
+      from: { taxId: "B11111111" },
+    });
+  });
+
+  it("moving to a new bill sends the moved-from bill's customer and no receiving bill, without asking for different people", async () => {
+    const big = { ...acmeTab, total: "3500.00", outstanding: "3500.00" };
+    const el = await moveEveryDish([big, checkBill], null);
+
+    await press(el, '[data-merge-keep="from"]');
+
+    expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
+    expect(api.moveDishes).toHaveBeenCalledWith("wo-4", ["line-1"], null, newBillEdits, {
+      keep: "from",
+      into: null,
+      from: { taxId: "B11111111" },
+    });
+  });
+
+  it("each customer's button sends its choice, naming both customers as the till read them", async () => {
+    const el = await moveEveryDish([acmeTab, barSolCheck], "wo-check");
+    await press(el, '[data-merge-keep="into"]');
+    expect(api.moveDishes).toHaveBeenLastCalledWith("wo-4", ["line-1"], "wo-check", moveEdits, {
+      keep: "into",
+      into: { taxId: "B22222222" },
+      from: { taxId: "B11111111" },
+    });
+
+    emit(tableOrder(el)!, "move-dishes", { lineIds: ["line-1"], toBillId: "wo-check" });
+    await flush(el);
+    await press(el, '[data-merge-keep="from"]');
+    expect(api.moveDishes).toHaveBeenLastCalledWith("wo-4", ["line-1"], "wo-check", moveEdits, {
+      keep: "from",
+      into: { taxId: "B22222222" },
+      from: { taxId: "B11111111" },
+    });
+  });
+
+  it("asks when every dish moves even though one of them carries an extra that is not picked", async () => {
+    const extra: TabLine = { ...tabLine, id: "line-2", lineNo: 2, parentLineNo: 1 };
+    const el = await moveEveryDish([acmeTab, checkBill], "wo-check", {
+      getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine, extra], revision: 0 }),
+    });
+
+    expect(question(el)!.heading).toBe("Bill 1 has a full invoice");
+    expect(api.moveDishes).not.toHaveBeenCalled();
+  });
+
+  it("asks nothing and sends no invoice choice when a dish stays on the full-invoice bill", async () => {
+    const other: TabLine = { ...tabLine, id: "line-2", lineNo: 2 };
+    const el = await moveEveryDish([acmeTab, checkBill], "wo-check", {
+      getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine, other], revision: 0 }),
+    });
+
+    expect(question(el)).toBeNull();
+    expect(api.moveDishes).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.moveDishes).mock.calls[0]).toEqual([
+      "wo-4",
+      ["line-1"],
+      "wo-check",
+      moveEdits,
+    ]);
+  });
+
+  it("asks nothing and sends no invoice choice when the receiving bill names the same customer", async () => {
+    const el = await moveEveryDish(
+      [acmeTab, { ...checkBill, invoiceType: "F1", recipient: acme }],
+      "wo-check",
+    );
+
+    expect(question(el)).toBeNull();
+    expect(vi.mocked(api.moveDishes).mock.calls).toEqual([
+      ["wo-4", ["line-1"], "wo-check", moveEdits],
+    ]);
+  });
+
+  it("a refusal for a changed invoice reads the bills again and asks the question they now raise", async () => {
+    let bills: PartyBill[] = [acmeTab, checkBill];
+    const el = await moveEveryDish([], "wo-check", {
+      getPartyBills: vi.fn(async () => bills),
+      moveDishes: vi.fn(async () => {
+        bills = [acmeTab, barSolCheck];
+        throw { code: "bill.merge_invoice_choice_required" };
+      }),
+    });
+    const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+
+    await press(el, '[data-merge-keep="from"]');
+
+    expect(api.getPartyBills).toHaveBeenCalledTimes(reads + 1);
+    expect(question(el)!.heading).toBe("Each bill has a full invoice");
+    expect(question(el)!.textContent).toContain("The dishes can be invoiced to only one.");
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a refusal for a changed invoice whose bills now raise no question says the details changed", async () => {
+    let bills: PartyBill[] = [acmeTab, checkBill];
+    const el = await moveEveryDish([], "wo-check", {
+      getPartyBills: vi.fn(async () => bills),
+      moveDishes: vi.fn(async () => {
+        bills = [tabBill, checkBill];
+        throw { code: "bill.merge_invoice_choice_required" };
+      }),
+    });
+
+    await press(el, '[data-merge-keep="from"]');
+
+    expect(question(el)).toBeNull();
+    expect(banner(el)!.textContent).toContain(
+      "The bills' invoice details have changed. Check them and move the dishes again.",
+    );
+    expect(api.moveDishes).toHaveBeenCalledOnce();
+  });
+
+  it("a refusal for a changed invoice after another dish joined the bill asks nothing and says the details changed", async () => {
+    let lines: TabLine[] = [tabLine];
+    const el = await moveEveryDish([acmeTab, checkBill], "wo-check", {
+      getTabLines: vi.fn(async () => ({ lines, revision: 0 })),
+      moveDishes: vi.fn(async () => {
+        lines = [tabLine, { ...tabLine, id: "line-2", lineNo: 2 }];
+        throw { code: "bill.merge_invoice_choice_required" };
+      }),
+    });
+
+    await press(el, '[data-merge-keep="from"]');
+
+    expect(question(el)).toBeNull();
+    expect(banner(el)!.textContent).toContain(
+      "The bills' invoice details have changed. Check them and move the dishes again.",
+    );
+    expect(api.moveDishes).toHaveBeenCalledOnce();
   });
 });

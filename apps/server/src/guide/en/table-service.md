@@ -70,8 +70,8 @@ issues the invoice; recording an unpaid departure also issues it, leaving the am
 bill's name; both open the same form for the bill on screen. Neither is offered once the bill is
 paid or an invoice has been issued for it. Turning a paid bill into a full invoice would correct an
 invoice already issued, and Waitron does not offer that correction yet. Once a customer is chosen,
-their name and identifier show under the payment area's **Full invoice**. Merging bills asks
-before a full invoice's customer would change.
+their name and identifier show under the payment area's **Full invoice**. Merging bills, or
+moving every dish to another bill, asks before a full invoice's customer would change.
 
 Choose **Spanish tax ID** for a NIF, NIE or CIF. For a passport or another accepted document,
 choose its actual **Identifier type**, **Issuing country** and **Document number**. Enter the
@@ -486,6 +486,9 @@ bill**. A bill that has already taken a payment simply owes more afterwards. **M
 After the move, a new bill is put on screen; moving onto another bill leaves this one on screen.
 Each dish keeps its course and stays sent, fired or served as it was. Moving the last unpaid
 dishes off a part-paid bill leaves it paid in full, and its invoice is issued.
+
+If a bill is set for a full invoice and you move every dish to a bill that does not name the same
+customer, the till asks first: choose the customer the dishes are invoiced to, or **Do not move**.
 
 If someone pays a dish on another till while the panel is open, its row turns **Paid** when the
 till next reads the bill, and that dish drops out of what you picked. If you tap **Move** before

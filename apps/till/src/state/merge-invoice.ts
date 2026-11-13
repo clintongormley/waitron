@@ -2,9 +2,10 @@ import { countryNameFor } from "@waitron/country-packs";
 import type { InvoiceIdentity, MergeInvoiceChoice, PartyBill } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 
-/** What merging `from` into `into` asks before it is sent. */
+/** What merging `from` into `into`, or moving every dish of `from` to it, asks before it is sent.
+ * `into` is null for a move to a new bill. */
 export interface MergeInvoiceQuestion {
-  into: PartyBill;
+  into: PartyBill | null;
   from: PartyBill;
 }
 
@@ -20,8 +21,8 @@ function identifierOf(bill: PartyBill): string {
     : `${type} · ${countryNameFor(identifierCountryCode, currentLocale())}`;
 }
 
-function identityOf(bill: PartyBill): InvoiceIdentity | null {
-  const recipient = bill.invoiceType === "F1" ? bill.recipient : null;
+function identityOf(bill: PartyBill | null): InvoiceIdentity | null {
+  const recipient = bill?.invoiceType === "F1" ? bill.recipient : null;
   if (recipient === null) return null;
   return {
     taxId: recipient.taxId,
@@ -41,15 +42,18 @@ function sameIdentity(a: InvoiceIdentity | null, b: InvoiceIdentity | null): boo
   );
 }
 
-/** The question the server refuses a merge without (`bill.merge_invoice_choice_required`): the bill
- * merged away is set for a full invoice whose customer the receiving bill does not already name.
- * Null when it does not apply, or when either bill is not in `bills`. */
+/** The question the server refuses a merge, or a move of every dish, without
+ * (`bill.merge_invoice_choice_required`): the bill merged away or emptied is set for a full
+ * invoice whose customer the receiving bill does not already name. A null `intoBillId` is a new
+ * bill, which names no customer. Null when it does not apply, or when either bill is not in
+ * `bills`. */
 export function mergeInvoiceQuestion(
   bills: readonly PartyBill[],
-  intoBillId: string,
+  intoBillId: string | null,
   fromBillId: string,
 ): MergeInvoiceQuestion | null {
-  const into = bills.find((bill) => bill.workingOrderId === intoBillId);
+  const into =
+    intoBillId === null ? null : bills.find((bill) => bill.workingOrderId === intoBillId);
   const from = bills.find((bill) => bill.workingOrderId === fromBillId);
   if (into === undefined || from === undefined) return null;
   const fromIdentity = identityOf(from);
@@ -59,14 +63,14 @@ export function mergeInvoiceQuestion(
 
 /** Each bill's customer as the question names it, in the till's current language: legal name and
  * tax number, plus identifier type and issuing country when those alone tell the two apart. The
- * receiving bill's is null when it is simplified. */
+ * receiving bill's is null when it is simplified or new. */
 export function mergeInvoiceNames(question: MergeInvoiceQuestion): {
   intoName: string | null;
   fromName: string;
 } {
   const { into, from } = question;
   const fromName = customerOf(from);
-  if (identityOf(into) === null) return { intoName: null, fromName };
+  if (into === null || identityOf(into) === null) return { intoName: null, fromName };
   const intoName = customerOf(into);
   if (intoName !== fromName) return { intoName, fromName };
   return {

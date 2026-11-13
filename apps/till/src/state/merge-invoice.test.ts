@@ -77,6 +77,26 @@ describe("mergeInvoiceQuestion", () => {
     });
   });
 
+  it("asks before moving every dish of a full-invoice bill to a new bill", () => {
+    const from = full("wo-from", acme);
+    const question = mergeInvoiceQuestion([simplifiedInto, from], null, "wo-from")!;
+    expect(question.into).toBeNull();
+    expect(question.from).toBe(from);
+    expect(mergeInvoiceNames(question)).toEqual({
+      intoName: null,
+      fromName: "Acme Travel SL · B11111111",
+    });
+    expect(mergeInvoiceChoice(question, "from")).toEqual({
+      keep: "from",
+      into: null,
+      from: { taxId: "B11111111" },
+    });
+  });
+
+  it("asks nothing before moving every dish of a simplified bill to a new bill", () => {
+    expect(mergeInvoiceQuestion([simplifiedInto], null, "wo-into")).toBeNull();
+  });
+
   it("asks which customer to keep when each bill has a different full invoice", () => {
     const into = full("wo-into", barSol);
     const from = full("wo-from", acme);

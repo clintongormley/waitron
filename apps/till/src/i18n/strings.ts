@@ -1339,6 +1339,16 @@ export const en = {
     "{into} is invoiced to {intoName} and {from} to {fromName}. The merged bill can have only one.",
   "table.merge_invoice_keep": "Invoice {name}",
   "table.merge_invoice_cancel": "Do not merge",
+  "table.move_invoice_text":
+    "{from} is set for a full invoice to {name}. Moving every dish puts them on {into}, invoiced to {name}.",
+  "table.move_invoice_new_text":
+    "{from} is set for a full invoice to {name}. Moving every dish puts them on a new bill, invoiced to {name}.",
+  "table.move_invoice_both_text":
+    "{into} is invoiced to {intoName} and {from} to {fromName}. The dishes can be invoiced to only one.",
+  "table.move_invoice_action": "Move and invoice {name}",
+  "table.move_invoice_cancel": "Do not move",
+  "table.move_invoice_changed":
+    "The bills' invoice details have changed. Check them and move the dishes again.",
   "table.split_quantity": "Quantity",
   "line.quantity_invalid": "Enter a positive quantity that fits this dish’s unit.",
   "table.split_quantity_whole_error": "Choose a whole quantity from 1 up to the amount ordered",
@@ -3309,6 +3319,16 @@ export const es: Record<StringKey, string> = {
     "La {intoInText} se factura a {intoName} y la {fromInText} a {fromName}. La cuenta juntada solo puede tener una.",
   "table.merge_invoice_keep": "Facturar a {name}",
   "table.merge_invoice_cancel": "No juntar",
+  "table.move_invoice_text":
+    "La {fromInText} está a nombre de {name} para factura completa. Si mueves todos los platos, pasan a la {intoInText}, facturada a {name}.",
+  "table.move_invoice_new_text":
+    "La {fromInText} está a nombre de {name} para factura completa. Si mueves todos los platos, pasan a una cuenta nueva, facturada a {name}.",
+  "table.move_invoice_both_text":
+    "La {intoInText} se factura a {intoName} y la {fromInText} a {fromName}. Los platos solo se pueden facturar a uno de los dos.",
+  "table.move_invoice_action": "Mover y facturar a {name}",
+  "table.move_invoice_cancel": "No mover",
+  "table.move_invoice_changed":
+    "Los datos de factura de las cuentas han cambiado. Revísalos y vuelve a mover los platos.",
   "table.split_quantity": "Cantidad",
   "line.quantity_invalid": "Introduce una cantidad positiva válida para la unidad de este plato.",
   "table.split_quantity_whole_error": "Elige una cantidad entera entre 1 y la cantidad pedida",

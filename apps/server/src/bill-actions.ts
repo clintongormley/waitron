@@ -1,6 +1,6 @@
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -15,7 +15,12 @@ import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireBillEditors } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { carryMergeInvoice, checkMergeInvoice } from "./merge-invoice.js";
+import {
+  carryMergeInvoice,
+  checkMergeInvoice,
+  parseMergeInvoiceChoice,
+  type MergeInvoices,
+} from "./merge-invoice.js";
 import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { guardParty, refuseMovedParty, requireBillOfParty } from "./parties.js";
@@ -223,6 +228,39 @@ export async function resolveMoveLines(
   return { transfers };
 }
 
+/** Whether moving `moving` distinct dishes of the bill leaves it with none: extras are not dishes. */
+async function takesEveryDish(tx: Transaction, billId: string, moving: number): Promise<boolean> {
+  const [row] = await tx
+    .select({ dishes: count() })
+    .from(workingOrderLines)
+    .where(
+      and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
+    );
+  return row!.dishes === moving;
+}
+
+/**
+ * A move that empties the bill is a merge for its invoice, asked as {@link checkMergeInvoice}
+ * asks. A choice sent with a move that leaves a dish is refused rather than dropped: the till sent
+ * it for a bill it saw emptied.
+ */
+async function checkMoveInvoice(
+  tx: Transaction,
+  intoBillId: string,
+  fromBillId: string,
+  empties: boolean,
+  invoiceChoice: unknown,
+): Promise<MergeInvoices | null> {
+  if (empties) return checkMergeInvoice(tx, intoBillId, fromBillId, invoiceChoice);
+  if (parseMergeInvoiceChoice(invoiceChoice) !== undefined) {
+    throw new AppError("bill.merge_invoice_choice_required", {
+      workingOrderId: fromBillId,
+      intoWorkingOrderId: intoBillId,
+    });
+  }
+  return null;
+}
+
 /**
  * Move the chosen dishes, whole and with their extras, from an open bill to another bill of its
  * party, or to a new bill (a new counter order when the bill has none). The source may be partly
@@ -235,7 +273,11 @@ export async function moveDishes(
   fromBillId: string,
   toBillId: string | null,
   lineIds: readonly string[],
-  command: BillCommand & { expectedEdits: BillEditExpected[]; admission: TradingAdmission },
+  command: BillCommand & {
+    expectedEdits: BillEditExpected[];
+    admission: TradingAdmission;
+    invoiceChoice?: unknown;
+  },
 ): Promise<{ billId: string }> {
   await requireEconomicWrite(tx, cfg, command.admission);
   if (lineIds.length === 0) throw new AppError("sale.empty_basket", {});
@@ -250,6 +292,11 @@ export async function moveDishes(
     await assertServiceModesMatch(tx, fromBillId, toBillId);
   }
   const { transfers } = await resolveMoveLines(tx, fromBillId, lineIds);
+  const empties = await takesEveryDish(tx, fromBillId, transfers.length);
+  let invoices =
+    toBillId === null
+      ? null
+      : await checkMoveInvoice(tx, toBillId, fromBillId, empties, command.invoiceChoice);
   await requireBillEditors(
     tx,
     toBillId === null ? [fromBillId] : [fromBillId, toBillId],
@@ -273,7 +320,16 @@ export async function moveDishes(
         { workingOrderId: destinationId },
         "copy",
       );
+    invoices = await checkMoveInvoice(
+      tx,
+      destinationId,
+      fromBillId,
+      empties,
+      command.invoiceChoice,
+    );
   }
+  // Before the dishes move: their check of the simplified-invoice limit reads the kept invoice type.
+  if (invoices !== null) await carryMergeInvoice(tx, destinationId, invoices);
   const before = await readSentWork(tx, fromBillId);
   await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
     actorId: command.operatorId,

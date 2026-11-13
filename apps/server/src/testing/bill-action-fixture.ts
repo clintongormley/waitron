@@ -158,7 +158,11 @@ export async function moveDishes(
   from: string,
   to: string | null,
   lineIds: readonly string[],
-  command: BillCommand & { expectedEdits?: BillEditExpected[]; admission?: TradingAdmission },
+  command: BillCommand & {
+    expectedEdits?: BillEditExpected[];
+    admission?: TradingAdmission;
+    invoiceChoice?: unknown;
+  },
 ) {
   return moveLines(tx, cfg, from, to, lineIds, {
     admission: testTradingAdmission(),

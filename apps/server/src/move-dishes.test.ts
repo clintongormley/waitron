@@ -13,7 +13,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimalToCents } from "@waitron/shared";
+import { decimal, decimalToCents } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { kitchenNoteKey, readKitchenNotes, writeKitchenNote } from "@waitron/venue-service";
@@ -41,6 +41,15 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import {
+  ACME,
+  BAR_SOL,
+  SIMPLIFIED,
+  fullInvoice,
+  invoiceOf,
+  invoiceTo,
+  setReceiptLanguage,
+} from "./testing/bill-invoice-fixture.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { advanceTicketItem, storedOrderTotal } from "./working-order.js";
 import { readPaidQuantities } from "./bill-payments.js";
@@ -985,5 +994,189 @@ describe("A803 move dishes race: the second of two writes is refused, changing n
       tabId: id,
       lineId: burger,
     });
+  });
+});
+
+describe("A1519 moving every dish off a full-invoice bill", () => {
+  const KEEP_ACME = { keep: "from", into: null, from: { taxId: ACME.taxId } } as const;
+
+  async function moveChoosing(
+    p: { partyId: string; bill1: string },
+    to: string | null,
+    lineIds: readonly string[],
+    invoiceChoice: unknown,
+  ) {
+    return sendMove(p.bill1, to, lineIds, {
+      ...(await readMove(p.partyId, p.bill1, to)),
+      invoiceChoice,
+    });
+  }
+
+  it("A1519 move dishes refuses: every dish of a full-invoice bill onto a simplified bill without a choice is bill.merge_invoice_choice_required", async () => {
+    const p = await party([dish("Caña"), dish("Burger")]);
+    await fullInvoice(v, p.bill1, ACME);
+    const dishes = await dishIds(p.bill1);
+
+    await refused(
+      () => move(p.partyId, p.bill1, p.bill2, dishes),
+      "bill.merge_invoice_choice_required",
+      { workingOrderId: p.bill1, intoWorkingOrderId: p.bill2 },
+    );
+  });
+
+  it("A1519 move dishes: carries the customer, delivery and language onto the bill the dishes join when told to keep the moved-from bill's", async () => {
+    const p = await party([dish("Caña"), dish("Burger")]);
+    await fullInvoice(v, p.bill1, ACME, { medium: "receipt" });
+    await setReceiptLanguage(v, p.bill1, "en-GB");
+    const dishes = await dishIds(p.bill1);
+
+    await moveChoosing(p, p.bill2, dishes, KEEP_ACME);
+
+    expect(await dishIds(p.bill1)).toEqual([]);
+    expect(await dishIds(p.bill2)).toEqual(dishes);
+    expect(await invoiceOf(v, p.bill2)).toEqual({
+      ...invoiceTo(ACME),
+      delivery: { medium: "receipt" },
+      language: "en-GB",
+    });
+  });
+
+  it("A1519 move dishes: every dish to a new bill carries the customer when told to, and without a choice is bill.merge_invoice_choice_required, leaving no new bill", async () => {
+    const p = await party([dish("Caña"), dish("Burger")]);
+    await fullInvoice(v, p.bill1, ACME);
+    const dishes = await dishIds(p.bill1);
+
+    await refused(
+      () => move(p.partyId, p.bill1, null, dishes),
+      "bill.merge_invoice_choice_required",
+      { workingOrderId: p.bill1 },
+    );
+    const { billId } = await moveChoosing(p, null, dishes, KEEP_ACME);
+
+    expect(await dishIds(billId)).toEqual(dishes);
+    expect(await invoiceOf(v, billId)).toMatchObject(invoiceTo(ACME));
+  });
+
+  it("A1519 move dishes: keeps the receiving bill's own customer when told to", async () => {
+    const p = await party([dish("Caña")], "fire", [dish("Water")]);
+    await fullInvoice(v, p.bill1, ACME);
+    await fullInvoice(v, p.bill2, BAR_SOL);
+    const dishes = await dishIds(p.bill1);
+
+    await moveChoosing(p, p.bill2, dishes, {
+      keep: "into",
+      into: { taxId: BAR_SOL.taxId },
+      from: { taxId: ACME.taxId },
+    });
+
+    expect(await dishIds(p.bill1)).toEqual([]);
+    expect(await invoiceOf(v, p.bill2)).toMatchObject(invoiceTo(BAR_SOL));
+  });
+
+  it("A1519 move dishes refuses: the receiving bill's invoice changed after the till asked is bill.merge_invoice_choice_required", async () => {
+    const p = await party([dish("Caña")]);
+    await fullInvoice(v, p.bill1, ACME);
+    // The till asked with Bill 2 simplified; another till then set it for Bar Sol SL.
+    await fullInvoice(v, p.bill2, BAR_SOL);
+    const dishes = await dishIds(p.bill1);
+
+    await refused(
+      () => moveChoosing(p, p.bill2, dishes, KEEP_ACME),
+      "bill.merge_invoice_choice_required",
+      { workingOrderId: p.bill1, intoWorkingOrderId: p.bill2 },
+    );
+  });
+
+  it("A1519 move dishes: asks nothing when one dish stays on the full-invoice bill", async () => {
+    const p = await party([dish("Caña"), dish("Burger")]);
+    await fullInvoice(v, p.bill1, ACME);
+    const [cana, burger] = await dishIds(p.bill1);
+
+    await move(p.partyId, p.bill1, p.bill2, [cana!]);
+
+    expect(await dishIds(p.bill1)).toEqual([burger]);
+    expect(await invoiceOf(v, p.bill1)).toMatchObject(invoiceTo(ACME));
+    expect(await invoiceOf(v, p.bill2)).toMatchObject(SIMPLIFIED);
+  });
+
+  it("A1519 move dishes: asks nothing when the receiving bill names the same customer", async () => {
+    const p = await party([dish("Caña")]);
+    await fullInvoice(v, p.bill1, ACME, { medium: "receipt" });
+    await setReceiptLanguage(v, p.bill1, "en-GB");
+    await fullInvoice(v, p.bill2, ACME);
+    const dishes = await dishIds(p.bill1);
+
+    await move(p.partyId, p.bill1, p.bill2, dishes);
+
+    expect(await dishIds(p.bill2)).toEqual(dishes);
+    expect(await invoiceOf(v, p.bill2)).toEqual({
+      ...invoiceTo(ACME),
+      delivery: { medium: "receipt" },
+      language: "en-GB",
+    });
+  });
+
+  it("A1519 move dishes refuses: a choice sent with a move that leaves a dish on the bill is bill.merge_invoice_choice_required", async () => {
+    const p = await party([dish("Caña"), dish("Burger")]);
+    await fullInvoice(v, p.bill1, ACME);
+    const [cana] = await dishIds(p.bill1);
+
+    await refused(
+      () => moveChoosing(p, p.bill2, [cana!], KEEP_ACME),
+      "bill.merge_invoice_choice_required",
+      { workingOrderId: p.bill1, intoWorkingOrderId: p.bill2 },
+    );
+  });
+
+  it.each([
+    ["a null choice", null],
+    ["a choice that is not an object", "from"],
+    ["a bad keep", { keep: "both", into: null, from: { taxId: ACME.taxId } }],
+    ["a from without a tax number", { keep: "from", into: null, from: { taxId: 5 } }],
+  ])(
+    "A1519 move dishes refuses: %s is management.request_invalid whether or not the move empties the bill",
+    async (_, invoiceChoice) => {
+      const p = await party([dish("Caña"), dish("Burger")]);
+      await fullInvoice(v, p.bill1, ACME);
+      const dishes = await dishIds(p.bill1);
+      const invalid = { field: "invoiceChoice" };
+
+      await refused(
+        () => moveChoosing(p, p.bill2, [dishes[0]!], invoiceChoice),
+        "management.request_invalid",
+        invalid,
+      );
+      await refused(
+        () => moveChoosing(p, p.bill2, dishes, invoiceChoice),
+        "management.request_invalid",
+        invalid,
+      );
+    },
+  );
+
+  it("A1519 move dishes refuses: every dish, one with an extra, counts as emptying and is bill.merge_invoice_choice_required", async () => {
+    const p = await party([{ ...dish("Burger"), cheese: 1 }, dish("Caña")]);
+    await fullInvoice(v, p.bill1, ACME);
+    expect((await rowsOf(p.bill1)).some((row) => row.parentLineId !== null)).toBe(true);
+    const dishes = await dishIds(p.bill1);
+
+    await refused(
+      () => move(p.partyId, p.bill1, p.bill2, dishes),
+      "bill.merge_invoice_choice_required",
+      { workingOrderId: p.bill1, intoWorkingOrderId: p.bill2 },
+    );
+  });
+
+  it("A1519 move dishes: moves every dish of a full-invoice bill over the simplified limit onto a simplified bill once its invoice is kept", async () => {
+    const p = await party([dish("Red wine bottle")]);
+    await fullInvoice(v, p.bill1, ACME);
+    const dishes = await dishIds(p.bill1);
+    const limited = { ...v.cfg, simplifiedInvoiceLimit: decimal("20.00") };
+    const ask = { ...(await readMove(p.partyId, p.bill1, p.bill2)), invoiceChoice: KEEP_ACME };
+
+    await inTx(v, (tx) => moveDishes(tx, limited, p.bill1, p.bill2, dishes, ask));
+
+    expect(await dishIds(p.bill2)).toEqual(dishes);
+    expect(await invoiceOf(v, p.bill2)).toMatchObject(invoiceTo(ACME));
   });
 });

@@ -4172,6 +4172,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             admission: deps.admission,
             ...command,
             expectedEdits: parseBillEditExpecteds(body.expectedEdits),
+            invoiceChoice: body.invoiceChoice,
           });
           const invoice = await issueIfFullyPaid(tx, fiscal, saleCfg, fromBillId, personId);
           await captureKitchenActivity(

@@ -993,16 +993,17 @@ describe("growing a bill with a saved full-invoice choice", () => {
   });
 
   it("keeps the F2 destination ceiling when the source selected F1", async () => {
-    const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Lote: 1 });
+    const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Lote: 1, Mitad: 1 });
     await chooseFull(secondBill);
     const before = written();
     const choice = savedChoice(secondBill);
-    const answer = await moved(limited, partyId, secondBill, mainBill, lineIdsOf(secondBill));
+    const lote = lineIdsOf(secondBill).slice(0, 1);
+    const answer = await moved(limited, partyId, secondBill, mainBill, lote);
 
     expect(answer.status).toBe(409);
     expect(answer.json.code).toBe(REFUSED.code);
     expect(storedLines(mainBill)).toEqual(["1:1000"]);
-    expect(storedLines(secondBill)).toEqual(["1:1000"]);
+    expect(storedLines(secondBill)).toEqual(["1:1000", "2:1000"]);
     expect(savedChoice(secondBill)).toEqual(choice);
     expect(written()).toEqual(before);
   });

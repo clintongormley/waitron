@@ -2115,8 +2115,8 @@ export interface InvoiceIdentity {
   identifierCountryCode?: string;
 }
 
-/** Which bill's invoice a merged bill keeps, and each bill's customer as the till read it; `into`
- * is null when the receiving bill was simplified. */
+/** Which bill's invoice a merged bill, or the bill every dish moves to, keeps, and each bill's
+ * customer as the till read it; `into` is null when the receiving bill was simplified or new. */
 export interface MergeInvoiceChoice {
   keep: "into" | "from";
   into: InvoiceIdentity | null;
@@ -4887,17 +4887,21 @@ export class TillApi {
    * the party when `toBillId` is null → `POST /api/bills/:fromBillId/move-dishes`, answering the
    * bill they went to. Rejects, among others, `bill.line_paid`,
    * `tab.line_not_found`, `draft.taken_over`, `party.out_of_date` and `sale.empty_basket`.
+   * `invoiceChoice` answers `bill.merge_invoice_choice_required` for a move that takes every dish,
+   * and is sent only when given, as {@link mergeBills} sends it.
    */
   moveDishes(
     fromBillId: string,
     lineIds: readonly string[],
     toBillId: string | null,
     revisions: BillRevisions & { expectedEdits: BillEditExpected[] },
+    invoiceChoice?: MergeInvoiceChoice,
   ): Promise<{ billId: string; invoice?: TillSaleResult }> {
     return this.#request(`/api/bills/${fromBillId}/move-dishes`, "POST", {
       lineIds,
       toBillId,
       ...revisions,
+      ...(invoiceChoice === undefined ? {} : { invoiceChoice }),
     });
   }
 

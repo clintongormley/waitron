@@ -3522,8 +3522,9 @@ export class TillApp extends LitElement {
     proceed: () => Promise<void>;
     cancel: () => void;
   } | null = null;
-  /** A merge waiting on which bill's full invoice the merged bill keeps. */
+  /** A merge, or a move of every dish, waiting on which bill's full invoice the dishes keep. */
   @state() private mergeInvoiceAsk: {
+    kind: "merge" | "move";
     question: MergeInvoiceQuestion;
     answer: (keep: "into" | "from") => Promise<void>;
   } | null = null;
@@ -16041,8 +16042,9 @@ export class TillApp extends LitElement {
     if (ask === null) return nothing;
     const { question } = ask;
     const { intoName, fromName } = mergeInvoiceNames(question);
-    const into = billLabel(question.into);
+    const into = question.into === null ? "" : billLabel(question.into);
     const from = billLabel(question.from);
+    const move = ask.kind === "move";
     const bills = {
       into,
       from,
@@ -16055,7 +16057,7 @@ export class TillApp extends LitElement {
       variant="secondary"
       data-merge-cancel
       @click=${() => void this.#answerMergeInvoice(null)}
-      >${t("table.merge_invoice_cancel")}</wt-button
+      >${t(move ? "table.move_invoice_cancel" : "table.merge_invoice_cancel")}</wt-button
     >`;
     const keep = (side: "into" | "from", text: string) =>
       html`<wt-button
@@ -16065,6 +16067,15 @@ export class TillApp extends LitElement {
         >${text}</wt-button
       >`;
     const simplified = intoName === null;
+    const text = move
+      ? simplified
+        ? question.into === null
+          ? "table.move_invoice_new_text"
+          : "table.move_invoice_text"
+        : "table.move_invoice_both_text"
+      : simplified
+        ? "table.merge_invoice_text"
+        : "table.merge_invoice_both_text";
     return html`<wt-dialog
       ${trackDialog()}
       data-merge-invoice
@@ -16075,17 +16086,17 @@ export class TillApp extends LitElement {
       )}
       @wt-close=${() => void this.#answerMergeInvoice(null)}
     >
-      <p>
-        ${fill(
-          t(simplified ? "table.merge_invoice_text" : "table.merge_invoice_both_text"),
-          simplified ? { ...bills, name: fromName } : bills,
-        )}
-      </p>
+      <p>${fill(t(text), simplified ? { ...bills, name: fromName } : bills)}</p>
       <div slot="footer">
         ${cancel}
         ${
           simplified
-            ? keep("from", fill(t("table.merge_invoice_action"), { name: fromName }))
+            ? keep(
+                "from",
+                fill(t(move ? "table.move_invoice_action" : "table.merge_invoice_action"), {
+                  name: fromName,
+                }),
+              )
             : html`${keep("into", fill(t("table.merge_invoice_keep"), { name: bills.intoName }))}
               ${keep("from", fill(t("table.merge_invoice_keep"), { name: fromName }))}`
         }
@@ -17620,6 +17631,7 @@ export class TillApp extends LitElement {
     const question = mergeInvoiceQuestion(bills, asked.billId, fromBillId);
     if (question === null) return false;
     this.mergeInvoiceAsk = {
+      kind: "merge",
       question,
       answer: async (keep) => {
         if (!this.#billCompositionCurrent(asked)) return;
@@ -17699,7 +17711,11 @@ export class TillApp extends LitElement {
     await pending.proceed();
   }
 
-  async #onMoveDishes(event: Event, confirmed?: BillComposition): Promise<void> {
+  async #onMoveDishes(
+    event: Event,
+    confirmed?: BillComposition,
+    choice?: MergeInvoiceChoice,
+  ): Promise<void> {
     const { lineIds, toBillId } = (
       event as CustomEvent<{ lineIds: string[]; toBillId: string | null }>
     ).detail;
@@ -17710,6 +17726,12 @@ export class TillApp extends LitElement {
     if (asked === null || !this.#billCompositionUnchanged(asked)) return;
     if (
       confirmed === undefined &&
+      this.#movesEveryDish(lineIds) &&
+      this.#askMoveInvoice(event, asked, this.partyBills)
+    )
+      return;
+    if (
+      confirmed === undefined &&
       (await this.#askDifferentPeople(() =>
         this.#ownBillsChange(() => this.#onMoveDishes(event, asked)),
       ))
@@ -17718,10 +17740,11 @@ export class TillApp extends LitElement {
     if (!this.#billCompositionUnchanged(asked)) return;
     this.errorKey = undefined;
     try {
-      const moved = await asked.api.moveDishes(asked.billId, lineIds, toBillId, {
-        ...asked.revisions,
-        expectedEdits: asked.expectedEdits,
-      });
+      const revisions = { ...asked.revisions, expectedEdits: asked.expectedEdits };
+      const moved =
+        choice === undefined
+          ? await asked.api.moveDishes(asked.billId, lineIds, toBillId, revisions)
+          : await asked.api.moveDishes(asked.billId, lineIds, toBillId, revisions, choice);
       if (!this.#billCompositionCurrent(asked)) return;
       if (toBillId === null) this.#chooseBill(moved.billId);
       if (moved.invoice !== undefined) {
@@ -17730,6 +17753,20 @@ export class TillApp extends LitElement {
       }
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
+      if ((error as { code?: string } | undefined)?.code === "bill.merge_invoice_choice_required") {
+        // The server also refuses a choice sent with a move that no longer takes every dish, so the
+        // question is asked again only if the fresh lines still empty the bill.
+        const [, read] = await this.#loadLinesAndBills();
+        if (!this.#billCompositionCurrent(asked)) return;
+        if (
+          read.bills === null ||
+          !this.#movesEveryDish(lineIds) ||
+          !this.#askMoveInvoice(event, asked, read.bills)
+        )
+          this.errorKey = "table.move_invoice_changed";
+        if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
+        return;
+      }
       if (
         await this.#recoverSettlingEdit(
           asked.billId,
@@ -17775,6 +17812,31 @@ export class TillApp extends LitElement {
     }
     await this.#reloadOrder();
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
+  }
+
+  /** Whether `lineIds` are every dish of the bill on screen, as last read: its extras go with them. */
+  #movesEveryDish(lineIds: readonly string[]): boolean {
+    const dishes = this.tabLines.filter((line) => line.parentLineNo == null);
+    return dishes.length > 0 && dishes.every((line) => lineIds.includes(line.id));
+  }
+
+  /** Opens the full-invoice question moving every dish of the bill on screen raises in `bills`, if
+   * it raises one; an answer moves again, sending the choice built from `bills`. */
+  #askMoveInvoice(event: Event, asked: BillComposition, bills: readonly PartyBill[]): boolean {
+    const { toBillId } = (event as CustomEvent<{ toBillId: string | null }>).detail;
+    const question = mergeInvoiceQuestion(bills, toBillId, asked.billId);
+    if (question === null) return false;
+    this.mergeInvoiceAsk = {
+      kind: "move",
+      question,
+      answer: async (keep) => {
+        if (!this.#billCompositionCurrent(asked)) return;
+        await this.#ownBillsChange(() =>
+          this.#onMoveDishes(event, asked, mergeInvoiceChoice(question, keep)),
+        );
+      },
+    };
+    return true;
   }
 
   /** The label of the bill among `billIds` a refusal names, when that is not the bill on screen: the
