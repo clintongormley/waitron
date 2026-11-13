@@ -36,3 +36,38 @@ it("rejects changed rows after reboot without replacing the original comparison 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+it.each(["restore", "keep"])(
+  "joins the queued boot gate after %s before another host operation",
+  (choice) => {
+    const root = mkdtempSync(join(tmpdir(), "upgrade-gate-"));
+    try {
+      const bin = join(root, "bin"),
+        script = join(root, "waitron.sh"),
+        held = join(root, "held");
+      mkdirSync(bin);
+      writeFileSync(script, '#!/bin/sh\ntouch "$GATE_HOLD"\n');
+      writeFileSync(
+        join(bin, "systemctl"),
+        '#!/bin/sh\n[ "$*" = "start waitron-app.service" ] || exit 2\nrm "$GATE_HOLD"\n',
+        { mode: 0o700 },
+      );
+      writeFileSync(join(bin, "flock"), '#!/bin/sh\n[ ! -e "$GATE_HOLD" ]\n', { mode: 0o700 });
+      const payload = upgradePayload("manual"),
+        start = payload.indexOf(`bash /opt/waitron-host/waitron.sh ${choice}\n`);
+      const end = payload.indexOf(
+        "/opt/waitron-host/node-v26.7.0/bin/node --input-type=module",
+        start,
+      );
+      const commands = payload.slice(start, end).replaceAll("/opt/waitron-host/waitron.sh", script);
+      const result = spawnSync("bash", ["-ec", `${commands}\nflock -n host-operation true`], {
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GATE_HOLD: held },
+        encoding: "utf8",
+        timeout: 5000,
+      });
+      expect(result.status, result.stderr).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);

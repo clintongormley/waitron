@@ -90,9 +90,11 @@ jq -e '.phase=="committed" and .target=="candidate" and ([.checks[]|select(.name
 ${compare}
 ${failed}
 ${shell} restore
+systemctl start waitron-app.service
 ${compare}
 ${failed}
 ${shell} keep
+systemctl start waitron-app.service
 ${compare}
 echo A950_MANUAL_OK
 `;
@@ -114,6 +116,7 @@ ${cli} status /opt/waitron >/opt/waitron/status.json
 jq -e '.phase=="awaiting-choice" and .copied==false' /opt/waitron/status.json
 test -z "$(docker ps -q --filter label=com.docker.compose.project=waitron)"
 ${shell} restore
+systemctl start waitron-app.service
 ${compare}
 echo A950_HELD_OK
 `;
