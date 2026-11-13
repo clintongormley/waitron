@@ -366,7 +366,7 @@ describe("Me API — the identity property: the session's person, never the body
 });
 
 it.each(["passkey", "google"])(
-  "refuses losing the last usable Admin through the own %s route with409",
+  "refuses losing the last usable Admin through the own %s route with 409",
   async (method) => {
     const [admin] = await seedPersons(suite.db, {
       displayName: "Admin",
