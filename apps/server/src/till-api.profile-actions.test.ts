@@ -549,10 +549,17 @@ const EXTERNAL_ACTION_ROUTES: readonly RouteGroup[] = [
   },
   {
     proof: "matching request (source)",
-    actions: ["take-cash"],
+    actions: ["take-cash", "print-receipt"],
     basis:
-      'Cash only: withCorrectionAuthorization asks for sale.refund and a profile that takes cash, as POST /api/transactions/:saleId/refunds does for a cash payment; invoice-correction-api.test.ts: "refuses a till whose profile cannot take cash, writing nothing, and gives cash once it can"',
+      'Cash only: withCorrectionAuthorization asks for sale.refund and a profile that takes cash, as POST /api/transactions/:saleId/refunds does for a cash payment; invoice-correction-api.test.ts: "refuses a till whose profile cannot take cash, writing nothing, and gives cash once it can". print-receipt never refuses: the leg that files the corrective queues its receipt only when the profile allows print-receipt; invoice-correction-api.test.ts: "files the corrective on the last cash leg but prints nothing on a till that cannot print receipts"',
     routes: ["POST /api/invoice-corrections/:id/cash"],
+  },
+  {
+    proof: "matching request (source)",
+    actions: ["print-receipt"],
+    basis:
+      'File now files the corrective for money its refunds already gave back; it moves no money and opens no drawer. print-receipt never refuses: the corrective\'s receipt is queued only when the profile allows print-receipt; invoice-correction-api.test.ts: "File now files the corrective but prints nothing on a till that cannot print receipts"; zones and admission: invoice-correction-api.test.ts "refuses a till outside the invoice\'s zone, writing nothing, and files and closes once the zone is its own"',
+    routes: ["POST /api/invoice-corrections/:id/file"],
   },
   {
     proof: "device cookie (source)",
@@ -705,8 +712,8 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     proof: "matching request (source)",
     actions: [],
     basis:
-      'File now files the corrective for money its refunds already gave back, and Close ends a correction; neither moves money nor opens the drawer. invoice-correction-api.ts; zones and admission: invoice-correction-api.test.ts "refuses a till outside the invoice\'s zone, writing nothing, and files and closes once the zone is its own"',
-    routes: ["POST /api/invoice-corrections/:id/file", "POST /api/invoice-corrections/:id/close"],
+      'Close ends a correction without filing; it moves no money, prints nothing and opens no drawer. invoice-correction-api.ts; zones and admission: invoice-correction-api.test.ts "refuses a till outside the invoice\'s zone, writing nothing, and files and closes once the zone is its own"',
+    routes: ["POST /api/invoice-corrections/:id/close"],
   },
   {
     proof: "matching request (source)",
