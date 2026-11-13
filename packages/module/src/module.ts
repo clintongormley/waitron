@@ -194,6 +194,7 @@ export interface ServiceZoneSummary {
 }
 
 export interface ZoneMenuOffer {
+  readonly setLunch?: true;
   readonly id: string;
   readonly menuId: string;
   readonly productId: string;
@@ -1166,6 +1167,10 @@ export interface VenueServiceContribution {
     tx: Transaction,
     workingOrderIds: readonly string[],
   ): Promise<ReadonlyMap<string, string>>;
+  readLunchOffers(
+    tx: Transaction,
+    workingOrderId: string,
+  ): Promise<ReadonlyMap<string, { offer: ZoneMenuOffer; versionId: string }>>;
   listLineContexts(
     tx: Transaction,
     workingOrderId: string,
@@ -1195,6 +1200,7 @@ export interface VenueServiceContribution {
     lines: readonly {
       workingOrderLineId: string;
       menuItemId: string;
+      recorded?: { offer: ZoneMenuOffer; versionId: string };
       unit?: {
         id: string;
         name: Record<string, string>;

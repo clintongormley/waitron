@@ -224,6 +224,7 @@ export {
   previewMenu,
   publishMenu,
   readLiveDocuments,
+  readRecordedDocuments,
   readLiveMenu,
 } from "./menu-publication.js";
 export type {

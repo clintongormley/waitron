@@ -21,6 +21,9 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
+  updateProduct,
+  createExtraList,
+  writeProductModifiers,
 } from "@waitron/catalogue";
 import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -601,6 +604,54 @@ describe("table + tab routes", () => {
     };
     return { tabId, partyId, revision };
   }
+
+  it("PUT accepts a later included choice on the same lunch line", async () => {
+    const choice = await withTransaction(suite.db, async (tx) => {
+      const catalogue = await createCatalogue(tx, { name: "Lunch choices" });
+      const extra = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Included coffee",
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
+      const list = await createExtraList(
+        tx,
+        {
+          name: "Lunch coffee",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 1,
+          maxPicks: 1,
+          active: true,
+          items: [{ productId: extra.id, maxQuantity: 1, preselected: false, price: "0.00" }],
+        },
+        "en",
+      );
+      await updateProduct(tx, productId, { setLunch: true });
+      await writeProductModifiers(tx, productId, [{ kind: "extras", id: list.id }]);
+      await offerProducts(tx, cfg, { zone: { zoneId: tablesZoneId }, orderStart: "table" });
+      return { productId: extra.id, listId: list.id };
+    });
+    const { tabId, revision } = await firedTab();
+    const response = await request(`/api/working-orders/${tabId}/lines/1`, {
+      method: "PUT",
+      body: JSON.stringify({
+        revision,
+        portionLineNos: [],
+        extras: [{ listId: choice.listId, picks: [{ productId: choice.productId, quantity: 1 }] }],
+      }),
+    });
+    expect(response.status).toBe(200);
+    const answer = (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
+      lines: { productId: string; quantity: string }[];
+    };
+    expect(answer.lines.map((line) => [line.productId, line.quantity])).toEqual([
+      [productId, "1.000"],
+      [choice.productId, "1.000"],
+    ]);
+  });
 
   it("PUT .../lines/:lineNo changes one line made from the current copy, and answers 409 working_order.out_of_date for an older one", async () => {
     const { tabId, revision } = await firedTab();

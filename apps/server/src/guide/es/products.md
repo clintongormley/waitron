@@ -33,6 +33,9 @@ elige por él.
 Elige la miniatura marcada con un lápiz junto a Nombre para cambiar la imagen o el color. El cuadrado
 muestra el cambio de color antes de guardar. Cierra el panel con Escape para volver a la miniatura.
 
+Para un menú del día a precio fijo servido en mesa, activa **Menú del día** en **Venta**. Prepara las opciones con listas de extras: introduce **0** para un plato incluido o el suplemento de una opción especial. Añade el menú del día a la carta que ofrece su periodo de servicio.
+
+
 ## Elige una unidad de venta {#selling-unit}
 
 Un producto se vende de uno en uno salvo que elijas una unidad. Elige una cuando lo vendas por peso o

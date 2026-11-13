@@ -494,8 +494,9 @@ export function takesExtras(unit: ExtrasUnit): boolean {
 function extrasListsFor(
   lists: ResolvedExtraList[],
   unit: ExtrasUnit | undefined,
+  setLunch = false,
 ): ResolvedExtraList[] {
-  return unit === undefined || takesExtras(unit)
+  return !setLunch && (unit === undefined || takesExtras(unit))
     ? lists
     : lists.map((list) => ({ ...list, minPicks: 0 }));
 }
@@ -577,6 +578,7 @@ async function readBasketOffers(
  * so it orders no new portion of the dish. A symbol, so no JSON body can set it.
  */
 const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
+const RECORDED_OFFER = Symbol("recordedOffer");
 
 /**
  * Marks a requested line that prices a raised quantity of a stored line: after its period it is
@@ -589,9 +591,7 @@ const FROZEN_OPTIONS = Symbol("frozenOptions");
 const FROZEN_EXTRAS = Symbol("frozenExtras");
 
 /**
- * Price requested lines from the order's zone's live menu versions — the dish, variant, extras and
- * options alike, each at the VAT class the version froze — and classify each line's product as it
- * stands now. Return both the insertable line snapshots and their gross lines, so a caller filing
+ * Return insertable snapshots and their gross lines together, so a caller filing
  * the same basket rates those rather than pricing it twice. The stored gross unit price, class and
  * classification are what the line files.
  */
@@ -600,7 +600,6 @@ export async function priceOrderLines(
   cfg: TradingContext,
   workingOrderId: string,
   // `courseId` absent or null = the offer's default course; a string is an override.
-  // Each extras pick becomes a CHILD row taxed at the picked product's frozen class, never the dish's.
   // An ACTIVE options list must be answered even when `options` is absent.
   requestedLines: ({
     menuItemId: string;
@@ -611,6 +610,7 @@ export async function priceOrderLines(
     [FROZEN_OPTIONS]?: OptionSnapshot[];
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
+    [RECORDED_OFFER]?: { offer: ZoneMenuOffer; versionId: string };
     [STORED_RISE]?: true;
   } & LineExtras &
     RetainedCourseLine)[],
@@ -629,6 +629,7 @@ export async function priceOrderLines(
   lineContexts: {
     workingOrderLineId: string;
     menuItemId: string;
+    recorded?: { offer: ZoneMenuOffer; versionId: string };
     unit?: ExtraChild["unitContext"];
     late?: { periodName: string; confirmedBy: string };
   }[];
@@ -714,7 +715,7 @@ export async function priceOrderLines(
     ) {
       throw new AppError("management.request_invalid", { field: "lines" });
     }
-    const offer = offerById.get(line.menuItemId);
+    const offer = line[RECORDED_OFFER]?.offer ?? offerById.get(line.menuItemId);
     if (offer === undefined) {
       throw new AppError("service_zone.offer_not_allowed", {
         zoneId: zoneId!,
@@ -773,10 +774,10 @@ export async function priceOrderLines(
   const savedLanguages = await readSavedContentLanguages(tx);
   const contentConfig = contentLanguagesOr(savedLanguages, cfg.locale);
 
-  const modifiersByOffer = new Map<string, OfferModifiers>();
+  const modifiersByOffer = new Map<ZoneMenuOffer, OfferModifiers>();
   for (const { offer } of lines) {
-    if (!modifiersByOffer.has(offer.id)) {
-      modifiersByOffer.set(offer.id, offerModifiers(offer, contentConfig));
+    if (!modifiersByOffer.has(offer)) {
+      modifiersByOffer.set(offer, offerModifiers(offer, contentConfig));
     }
   }
   // A product with an Active variant is never sold as itself, and an extras pick cannot name a
@@ -812,6 +813,7 @@ export async function priceOrderLines(
   type LineMeta =
     | {
         kind: "parent";
+        recorded?: { offer: ZoneMenuOffer; versionId: string };
         productId: string;
         menuItemId: string;
         courseId: string | null;
@@ -823,12 +825,31 @@ export async function priceOrderLines(
       }
     | {
         kind: "child";
+        courseId: string | null;
+        recorded?: { offer: ZoneMenuOffer; versionId: string };
         productId: string;
         menuItemId: string;
         extraListId: string;
         unit?: ExtraChild["unitContext"];
         late?: { periodName: string; confirmedBy: string };
       };
+  const lunchProducts = [
+    ...new Set(
+      lines.flatMap((line) =>
+        line.offer.setLunch ? picksOf(line).map((pick) => pick.productId) : [],
+      ),
+    ),
+  ];
+  const lunchCourses = new Map(
+    lunchProducts.length === 0
+      ? []
+      : (
+          await tx
+            .select({ id: products.id, courseId: products.courseId })
+            .from(products)
+            .where(inArray(products.id, lunchProducts))
+        ).map((row) => [row.id, row.courseId]),
+  );
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
   for (const [index, line] of lines.entries()) {
@@ -864,11 +885,13 @@ export async function priceOrderLines(
       }
     }
 
-    const modifiers = modifiersByOffer.get(offer.id)!;
+    const modifiers = modifiersByOffer.get(offer)!;
     const built = buildLineExtras(
       {
         extras:
-          line[FROZEN_EXTRAS] === undefined ? extrasListsFor(modifiers.extras, selection.unit) : [],
+          line[FROZEN_EXTRAS] === undefined
+            ? extrasListsFor(modifiers.extras, selection.unit, offer.setLunch === true)
+            : [],
         options: line[FROZEN_OPTIONS] === undefined ? modifiers.options : [],
       },
       modifiers.extraProducts,
@@ -906,8 +929,7 @@ export async function priceOrderLines(
         kitchenName: child.kitchenName,
         // The GROSS price of ONE of this extra.
         priceDelta: child.price,
-        // Always set, so the dish's class is never inherited.
-        vatClass: child.vatClass,
+        vatClass: offer.setLunch ? product.vatClass : child.vatClass,
         quantity: child.quantity,
         physicalQuantity: child.physicalQuantity,
         priceQuantity: child.priceQuantity,
@@ -915,9 +937,9 @@ export async function priceOrderLines(
         unitPrecision: child.unitContext?.id === EACH_UNIT_ID ? undefined : child.unitPrecision,
       })),
     });
-    // A CHILD row takes no course: kitchen coursing is per dish.
     lineMeta.push({
       kind: "parent",
+      recorded: line[RECORDED_OFFER],
       productId: selection.productId,
       menuItemId: line.menuItemId,
       courseId: line.courseId ?? product.courseId ?? null,
@@ -942,6 +964,8 @@ export async function priceOrderLines(
     for (const child of extraChildren) {
       lineMeta.push({
         kind: "child",
+        courseId: offer.setLunch ? (lunchCourses.get(child.productId) ?? null) : null,
+        recorded: line[RECORDED_OFFER],
         productId: child.productId,
         menuItemId: line.menuItemId,
         extraListId: child.listId,
@@ -1015,7 +1039,7 @@ export async function priceOrderLines(
       // customer see is gross, so the held-orders list's `sum(line_total)` must be too.
       lineTotal: decimalToCents(line.lineGross),
       category: line.category ?? null,
-      courseId: meta.kind === "parent" ? meta.courseId : null,
+      courseId: meta.courseId,
       note: meta.kind === "parent" ? meta.note : null,
       makeAtStationId: meta.kind === "parent" ? meta.makeAt : null,
       extraListId: meta.kind === "child" ? meta.extraListId : null,
@@ -1036,6 +1060,7 @@ export async function priceOrderLines(
   const lineContexts = lineMeta.map((meta, index) => ({
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
+    ...(meta.recorded === undefined ? {} : { recorded: meta.recorded }),
     ...(meta.unit !== undefined ? { unit: meta.unit } : {}),
     ...(meta.late !== undefined ? { late: meta.late } : {}),
   }));
@@ -5697,6 +5722,9 @@ async function applyLineEdits(
       ])
     : undefined;
   const offerById = new Map(snapshot?.offers.map((offer) => [offer.id, offer]));
+  const lunches = needsModifiers
+    ? await VENUE_SERVICE.readLunchOffers(tx, orderId)
+    : new Map<string, { offer: ZoneMenuOffer; versionId: string }>();
   // A stored line whose dish the live version no longer offers has no published lists left: its
   // options answer, which carries no price, is checked against the dish's own lists instead.
   const withdrawnDishes = needsModifiers
@@ -5705,23 +5733,23 @@ async function applyLineEdits(
       )
     : [];
   const ownOptions = await productOptionLists(tx, withdrawnDishes);
-  const modifiersByOffer = new Map<string, OfferModifiers>();
+  const modifiersByOffer = new Map<ZoneMenuOffer, OfferModifiers>();
   const modifiersOf = (line: EditableParent): OfferModifiers => {
-    const offer = offerById.get(menuItemOf(line));
+    const offer = lunches.get(line.id)?.offer ?? offerById.get(menuItemOf(line));
     if (offer === undefined) {
       const dishId = (line.parentProductId ?? line.productId!).toLowerCase();
       return { ...NO_MODIFIERS, options: ownOptions.get(dishId) ?? [] };
     }
-    let modifiers = modifiersByOffer.get(offer.id);
+    let modifiers = modifiersByOffer.get(offer);
     if (modifiers === undefined) {
       modifiers = offerModifiers(offer, contentConfig!);
-      modifiersByOffer.set(offer.id, modifiers);
+      modifiersByOffer.set(offer, modifiers);
     }
     return modifiers;
   };
   /** The unit the live offer sells the line's dish or variant in; none where it no longer sells it. */
   const liveUnitOf = (line: EditableParent) => {
-    const offer = offerById.get(menuItemOf(line));
+    const offer = lunches.get(line.id)?.offer ?? offerById.get(menuItemOf(line));
     if (line.parentProductId === null) return offer?.unit;
     return offer?.variants.find((variant) => variant.id === line.productId)?.unit;
   };
@@ -5815,7 +5843,7 @@ async function applyLineEdits(
             removed: [],
           }
         : editLineExtras(
-            extrasListsFor(modifiers.extras, liveUnitOf(parent)),
+            extrasListsFor(modifiers.extras, liveUnitOf(parent), lunches.has(parent.id)),
             modifiers.extraProducts,
             intent.extras.set,
             {
@@ -5841,8 +5869,18 @@ async function applyLineEdits(
     // Changed in place or replaced, a paid line would no longer be what was paid for.
     await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
     const refusedDrop = rise < 0 && plan.refuseSentDrop === true;
-    if (changed || refusedDrop) refuseServed(parent);
-    const fired = kitchenHas(parent, changed || rise > 0, !changed && rise > 0);
+    const laterChoice =
+      lunches.has(parent.id) &&
+      rise === 0 &&
+      extras.added.length > 0 &&
+      extras.removed.length === 0 &&
+      intent.note === parent.note &&
+      optionSnapshots === parent.optionSnapshots &&
+      (intent.makeAt === undefined || intent.makeAt === parent.makeAtStationId);
+    if ((changed || refusedDrop) && !laterChoice) refuseServed(parent);
+    const fired = laterChoice
+      ? false
+      : kitchenHas(parent, changed || rise > 0, !changed && rise > 0);
     if (refusedDrop) refuseSent(parent, fired);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
     // Widening an adjusted line would sell the added units at its adjusted price (ruling R12).
@@ -5919,6 +5957,7 @@ async function applyLineEdits(
         [FROZEN_OPTIONS]: [],
         [FROZEN_EXTRAS]: extras.added,
         [ADDED_EXTRAS_ONLY]: true,
+        ...(lunches.has(parent.id) ? { [RECORDED_OFFER]: lunches.get(parent.id)! } : {}),
       });
       pricedAs.push({ kind: "extras" });
     }
@@ -6368,6 +6407,7 @@ async function applyLineEdits(
   const addedToExisting = changes.filter(
     (change) =>
       change.action === "free" &&
+      !lunches.has(change.parent.id) &&
       change.addedAt !== null &&
       (change.parent.ticket !== null ||
         change.parent.sentAt !== null ||

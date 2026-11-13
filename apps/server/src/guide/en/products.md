@@ -33,6 +33,9 @@ by it.
 Choose the pencil-marked thumbnail beside Name to change the image or colour. The square previews
 a colour change before you save. Close the panel with Escape to return to the thumbnail.
 
+For a fixed-price lunch served at the table, turn on **Set lunch** in **Selling**. Build its dish choices with extras lists: enter **0** for an included dish or the extra charge for a premium choice. Put the lunch on the menu offered by its service period.
+
+
 ## Choose a selling unit {#selling-unit}
 
 A product is sold one at a time unless you choose a unit. Choose one when you sell it by weight or

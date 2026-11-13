@@ -318,6 +318,25 @@ export async function assertLiveVersions(
   return live;
 }
 
+/** Recorded versions retain their prices after a later publication. */
+export async function readRecordedDocuments(
+  tx: Transaction,
+  versionIds: readonly string[],
+): Promise<Map<string, MenuDocument>> {
+  const documents = new Map<string, MenuDocument>();
+  for (const batch of batches([...new Set(versionIds)])) {
+    const rows = await tx
+      .select({ id: menuVersions.id, menuId: menuVersions.menuId, document: menuVersions.document })
+      .from(menuVersions)
+      .where(inArray(menuVersions.id, batch));
+    for (const row of rows) {
+      requireCurrentFormat(row.menuId, row.document.format);
+      documents.set(row.id, deepFreeze(row.document));
+    }
+  }
+  return documents;
+}
+
 /** The menu each version belongs to, by version id; an id that names no version is left out. */
 export async function menusOfVersions(
   tx: Transaction,

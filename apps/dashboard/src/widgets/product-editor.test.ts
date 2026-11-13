@@ -6696,3 +6696,21 @@ it("refreshes live unit choice labels after a content default change without res
     setLocale(before);
   }
 });
+
+it("marks a parent as set lunch and includes that choice in its saved draft", async () => {
+  const el = await mountPricing({ ...saved, setLunch: false });
+  await openSection(el, "selling");
+  const control =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="setLunch"]');
+  expect(control).not.toBeNull();
+  control!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(el.currentValue.setLunch).toBe(true);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.setLunch).toBe(true);
+  expect(section(el, "selling").textContent).toContain("Set lunch");
+});
