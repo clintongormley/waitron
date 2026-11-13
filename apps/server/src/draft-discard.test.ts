@@ -604,7 +604,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   it("refuses a discard naming another person signed in on the device, and serves the session's own", async () => {
     // Both sessions are open on the one till; the staff member edits the draft.
     const p = await setup();
-    const ana = venue.managerId;
+    const anna = venue.managerId;
     const ben = venue.staffId;
     const discardNaming = async (person: string) => {
       const res = await venue.app.request(
@@ -622,9 +622,9 @@ describe("Discard resolves the whole owned draft atomically", () => {
       return { status: res.status, json: (await res.json()) as unknown };
     };
     const before = await frozen();
-    expect(await discardNaming(ana)).toEqual({
+    expect(await discardNaming(anna)).toEqual({
       status: 409,
-      json: { error: { code: "session.person_not_signed_in", params: { personId: ana } } },
+      json: { error: { code: "session.person_not_signed_in", params: { personId: anna } } },
     });
     expect(await frozen()).toEqual(before);
     const answer = await discardNaming(ben.toUpperCase());

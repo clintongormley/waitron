@@ -50,7 +50,7 @@ import type { TradingContext } from "./trading-context.js";
 // The HTTP shape of the coursing, fire, station-queue and expo routes: the session guard, the id
 // screens and the STATUS mapping. The verbs' logic is pinned in `working-order.test.ts`.
 let cfg: TradingContext;
-let ana: { id: string };
+let anna: { id: string };
 let starterCourseId: string;
 let mainCourseId: string;
 // The products offered in the counter zone (a parked order's) and in a tables zone (a tab's). One
@@ -87,7 +87,7 @@ const suite = useVenueDb({
       pinHash: hashPin("5555"),
       role: "staff",
     });
-    ana = { id: person!.id };
+    anna = { id: person!.id };
     cfg = makeCfg(nodeId);
 
     // Through the verbs rather than direct inserts, so the course FK and the active/assignment
@@ -176,7 +176,7 @@ async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
       deviceId,
-      personId: ana.id,
+      personId: anna.id,
       pin: "5555",
     });
   });
@@ -281,7 +281,7 @@ async function tabWithSoupAndSteak(): Promise<string> {
     revision: number;
   };
   await withTransaction(suite.db, (tx) =>
-    VENUE_SERVICE.writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, ana.id),
+    VENUE_SERVICE.writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, anna.id),
   );
   const round = await app.request(`/api/parties/${partyId}/groups`, {
     method: "POST",

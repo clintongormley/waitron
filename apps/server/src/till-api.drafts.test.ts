@@ -86,7 +86,7 @@ async function seated(): Promise<Seated> {
 }
 
 /** Anna, the venue's staff session. */
-async function ana(method: string, path: string, body?: unknown) {
+async function anna(method: string, path: string, body?: unknown) {
   return send(venue.app, venue.cookie, method, path, await draftBody(method, path, body));
 }
 
@@ -115,7 +115,7 @@ const dish = (name: string, quantity = "1") => ({ menuItemId: venue.offerFor(nam
 
 /** A new draft of the caller's on the party, holding the lines. */
 async function newDraft(
-  caller: typeof ana,
+  caller: typeof anna,
   partyId: string,
   lines: ReturnType<typeof dish>[],
   billId?: string,
@@ -203,7 +203,7 @@ describe("draft metadata for closing a joined party", () => {
         .values({ billId: historical.tabId, editorId: null, editorVersion: 6 });
     });
     const before = await snapshot();
-    const read = await ana("GET", `/api/parties/${current.partyId}/drafts`);
+    const read = await anna("GET", `/api/parties/${current.partyId}/drafts`);
     expect(read.status).toBe(200);
     expect(read.json).toEqual({
       drafts: [],
@@ -243,7 +243,7 @@ describe("GET /api/parties/:id/drafts", () => {
         .where(eq(devices.id, venue.deviceId)),
     );
     const before = await snapshot();
-    const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    const read = await anna("GET", `/api/parties/${party.partyId}/drafts`);
     expect(read.status).toBe(200);
     expect(await snapshot()).toEqual(before);
     expect(read.json).toEqual({
@@ -259,7 +259,7 @@ describe("GET /api/parties/:id/drafts", () => {
         },
       ],
     });
-    expect((await ana("GET", `/api/parties/${party.partyId.toUpperCase()}/drafts`)).json).toEqual(
+    expect((await anna("GET", `/api/parties/${party.partyId.toUpperCase()}/drafts`)).json).toEqual(
       read.json,
     );
     expect(await snapshot()).toEqual(before);
@@ -289,7 +289,7 @@ describe("GET /api/parties/:id/drafts", () => {
         openedAt: main!.openedAt,
       });
     });
-    const first = await newDraft(ana, party.partyId, [dish("Caña")]);
+    const first = await newDraft(anna, party.partyId, [dish("Caña")]);
     const saved = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: secondId,
       draftId: null,
@@ -308,7 +308,7 @@ describe("GET /api/parties/:id/drafts", () => {
         await tx.update(billEditStates).set(row).where(eq(billEditStates.billId, row.billId));
     });
     const before = await snapshot();
-    const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    const read = await anna("GET", `/api/parties/${party.partyId}/drafts`);
     expect(read.status).toBe(200);
     const { drafts, billEdits } = read.json as unknown as {
       drafts: DraftAnswer[];
@@ -352,7 +352,7 @@ describe("GET /api/parties/:id/drafts", () => {
       tx.insert(billEditStates).values({ billId: party.tabId, editorVersion: 9 }),
     );
     const before = await snapshot();
-    const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    const read = await anna("GET", `/api/parties/${party.partyId}/drafts`);
     expect(read.status).toBe(200);
     expect(read.json).toEqual({
       drafts: [],
@@ -379,7 +379,7 @@ describe("GET /api/parties/:id/drafts", () => {
 
   it("answers every open draft on the party, each person's, with the owner's name", async () => {
     const party = await seated();
-    const anas = await newDraft(ana, party.partyId, [dish("Caña", "2")]);
+    const annas = await newDraft(anna, party.partyId, [dish("Caña", "2")]);
     const admins = await newDraft(
       admin,
       party.partyId,
@@ -387,22 +387,22 @@ describe("GET /api/parties/:id/drafts", () => {
       await anotherBill(party.partyId),
     );
 
-    const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
-    const upper = await ana("GET", `/api/parties/${party.partyId.toUpperCase()}/drafts`);
+    const read = await anna("GET", `/api/parties/${party.partyId}/drafts`);
+    const upper = await anna("GET", `/api/parties/${party.partyId.toUpperCase()}/drafts`);
 
     expect(read.status).toBe(200);
     const { drafts } = read.json as unknown as { drafts: DraftAnswer[] };
     expect([...drafts].sort((a, b) => a.ownerName.localeCompare(b.ownerName))).toEqual([
       admins,
-      anas,
+      annas,
     ]);
-    expect(anas).toMatchObject({ ownerId: venue.operatorId, ownerName: "Anna" });
+    expect(annas).toMatchObject({ ownerId: venue.operatorId, ownerName: "Anna" });
     expect(admins).toMatchObject({ ownerId: venue.adminId, ownerName: "Administrator" });
     expect(upper).toEqual(read);
   });
 
   it("refuses 409 party.not_open for an id that is not one", async () => {
-    const refused = await ana("GET", "/api/parties/not-a-uuid/drafts");
+    const refused = await anna("GET", "/api/parties/not-a-uuid/drafts");
 
     expect(refused.status).toBe(409);
     expect(refused.json).toEqual(refusal("party.not_open", { partyId: "not-a-uuid" }));
@@ -413,7 +413,7 @@ describe("PUT /api/parties/:id/drafts", () => {
   it("returns the bill supplied by the till and refuses another party's bill", async () => {
     const party = await seated();
     const other = await seated();
-    const first = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+    const first = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: party.tabId.toUpperCase(),
       draftId: null,
       revision: 0,
@@ -421,7 +421,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     });
     expect(first.status).toBe(200);
     expect(first.json.draft).toMatchObject({ partyId: party.partyId, billId: party.tabId });
-    const foreign = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+    const foreign = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: other.tabId,
       draftId: null,
       revision: 0,
@@ -429,7 +429,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     });
     expect(foreign.status).toBe(409);
     expect(foreign.json).toEqual(refusal("bill.other_party", { workingOrderId: other.tabId }));
-    const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    const read = await anna("GET", `/api/parties/${party.partyId}/drafts`);
     expect(read.json).toEqual({ drafts: [first.json.draft], billEdits: expect.any(Array) });
   });
 
@@ -452,9 +452,9 @@ describe("PUT /api/parties/:id/drafts", () => {
             }),
           );
         }
-        const draft = await newDraft(ana, party.partyId, [dish("Octopus")]);
+        const draft = await newDraft(anna, party.partyId, [dish("Octopus")]);
         const before = await snapshot();
-        const answer = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+        const answer = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
           billId: await openBillOf(party.partyId),
           draftId: draft.id,
           revision: draft.revision,
@@ -490,7 +490,7 @@ describe("PUT /api/parties/:id/drafts", () => {
       { slot: 0, joinGroupId: groupId, afterGroupId: null },
       { slot: 3, joinGroupId: null, afterGroupId: groupId },
     ];
-    const saved = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+    const saved = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
       draftId: null,
       revision: 0,
@@ -505,14 +505,14 @@ describe("PUT /api/parties/:id/drafts", () => {
     expect(draft.lines).toMatchObject(places);
     expect(draft.lines).toHaveLength(4);
     expect(draft.lines.map((line) => line.quantity)).toEqual(["2.000", "0.375", "1.000", "1.000"]);
-    const again = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+    const again = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
       draftId: draft.id,
       revision: draft.revision,
       lines: draft.lines,
     });
     expect(again.status).toBe(200);
-    const reread = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    const reread = await anna("GET", `/api/parties/${party.partyId}/drafts`);
     expect(reread.status).toBe(200);
     expect(reread.json).toEqual({ drafts: [again.json.draft], billEdits: expect.any(Array) });
     expect((again.json.draft as unknown as DraftAnswer).lines).toMatchObject(places);
@@ -535,9 +535,9 @@ describe("PUT /api/parties/:id/drafts", () => {
     [{ afterGroupId: "aaaaaaaa-0000-4000-8000-000000000001" }, "lines.0.afterGroupId"],
   ] as const)("refuses malformed placement %j as 400 naming %s", async (place, field) => {
     const party = await seated();
-    const draft = await newDraft(ana, party.partyId, [dish("Octopus")]);
+    const draft = await newDraft(anna, party.partyId, [dish("Octopus")]);
     const before = await snapshot();
-    const answer = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+    const answer = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
       draftId: draft.id,
       revision: draft.revision,
@@ -558,7 +558,7 @@ describe("PUT /api/parties/:id/drafts", () => {
         })
         .returning({ id: kitchenStations.id }),
     );
-    const saved = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+    const saved = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
       draftId: null,
       revision: 0,
@@ -586,7 +586,7 @@ describe("PUT /api/parties/:id/drafts", () => {
         })
         .returning({ id: kitchenStations.id }),
     );
-    const first = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+    const first = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
       draftId: null,
       revision: 0,
@@ -597,7 +597,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     await inTx(venue, (tx) =>
       tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, bar!.id)),
     );
-    const second = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+    const second = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
       draftId: draft.id,
       revision: draft.revision,
@@ -606,7 +606,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     expect(second.status).toBe(200);
     expect(second.json.draft).toMatchObject({ lines: [{ quantity: "2.000", makeAt: bar!.id }] });
     const updated = second.json.draft as unknown as DraftAnswer;
-    const newChoice = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+    const newChoice = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
       draftId: draft.id,
       revision: updated.revision,
@@ -725,7 +725,7 @@ describe("PUT /api/parties/:id/drafts", () => {
   it("saves the session's person's draft, whatever operatorId the body carries", async () => {
     const party = await seated();
 
-    const saved = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+    const saved = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
       draftId: null,
       revision: 0,
@@ -744,28 +744,28 @@ describe("PUT /api/parties/:id/drafts", () => {
 
   it("refuses 409 draft.taken_over for a save or a submit by someone other than the owner, writing nothing", async () => {
     const party = await seated();
-    const anas = await newDraft(ana, party.partyId, [dish("Caña")]);
+    const annas = await newDraft(anna, party.partyId, [dish("Caña")]);
     const before = await snapshot();
     const taken = refusal("draft.taken_over", {
       billId: party.tabId,
       edit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
-      draftId: anas.id,
+      draftId: annas.id,
       ownerId: venue.operatorId,
       ownerName: "Anna",
     });
 
     const saved = await admin("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
-      draftId: anas.id,
-      revision: anas.revision,
+      draftId: annas.id,
+      revision: annas.revision,
       operatorId: venue.operatorId,
       lines: [dish("Octopus")],
     });
     const submitted = await admin(
       "POST",
-      `/api/parties/${party.partyId}/drafts/${anas.id}/submit`,
+      `/api/parties/${party.partyId}/drafts/${annas.id}/submit`,
       {
-        ...(await submitBody(party.partyId, anas)),
+        ...(await submitBody(party.partyId, annas)),
         operatorId: venue.operatorId,
       },
     );
@@ -781,7 +781,7 @@ describe("PUT /api/parties/:id/drafts", () => {
 describe("POST /api/dead-ends/draft", () => {
   it("answers a selected draft line with the closed station and current station choices", async () => {
     const party = await seated();
-    const draft = await newDraft(ana, party.partyId, [dish("Caña")]);
+    const draft = await newDraft(anna, party.partyId, [dish("Caña")]);
     const [bar] = await inTx(venue, (tx) =>
       tx
         .insert(kitchenStations)
@@ -814,7 +814,7 @@ describe("POST /api/dead-ends/draft", () => {
         .where(eq(kitchenStations.id, defaultStation!.id)),
     );
     try {
-      const response = await ana("POST", "/api/dead-ends/draft", {
+      const response = await anna("POST", "/api/dead-ends/draft", {
         partyId: party.partyId,
         draftId: draft.id,
         lineIds: [draft.lines[0]!.id],
@@ -874,7 +874,7 @@ describe("a draft's chosen station at submission", () => {
       );
       await setStationToday(tx, bar!.id, "closed", new Date(), await seedActivityActor(tx));
     });
-    const chosen = await ana("PUT", `/api/parties/${party.partyId}/drafts`, {
+    const chosen = await anna("PUT", `/api/parties/${party.partyId}/drafts`, {
       billId: await openBillOf(party.partyId),
       draftId: null,
       revision: 0,
@@ -882,7 +882,7 @@ describe("a draft's chosen station at submission", () => {
     });
     expect(chosen.status).toBe(200);
     const draft = chosen.json.draft as unknown as DraftAnswer;
-    const sent = await ana(
+    const sent = await anna(
       "POST",
       `/api/parties/${party.partyId}/drafts/${draft.id}/submit`,
       await submitBody(party.partyId, draft),
@@ -908,9 +908,9 @@ describe("a draft's chosen station at submission", () => {
         .where(eq(kitchenStations.id, defaultStation!.id)),
     );
     try {
-      const another = await newDraft(ana, party.partyId, [dish("Caña")]);
+      const another = await newDraft(anna, party.partyId, [dish("Caña")]);
       const before = await snapshot();
-      const refused = await ana(
+      const refused = await anna(
         "POST",
         `/api/parties/${party.partyId}/drafts/${another.id}/submit`,
         await submitBody(party.partyId, another),
@@ -948,7 +948,7 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
         .returning({ id: kitchenStations.id }),
     );
     const own = await newDraft(
-      ana,
+      anna,
       party.partyId,
       [dish("Tarta")],
       await anotherBill(party.partyId),
@@ -961,7 +961,7 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
     });
     expect(other.status).toBe(200);
     const otherDraft = other.json.draft as unknown as DraftAnswer;
-    const taken = await ana(
+    const taken = await anna(
       "POST",
       `/api/parties/${party.partyId}/drafts/${otherDraft.id}/take-over`,
       { revision: otherDraft.revision },
@@ -973,35 +973,39 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
       ownerId: venue.operatorId,
       lines: [{ id: otherDraft.lines[0]!.id, menuItemId: venue.offerFor("Caña"), makeAt: bar!.id }],
     });
-    const read = await ana("GET", `/api/parties/${party.partyId}/drafts`);
+    const read = await anna("GET", `/api/parties/${party.partyId}/drafts`);
     expect((read.json.drafts as DraftAnswer[]).find((d) => d.id === own.id)).toEqual(own);
   });
 
   it("makes the session's person the owner, and refuses 409 draft.out_of_date for a stale revision and current released facts for a sent draft", async () => {
     const party = await seated();
-    const anas = await newDraft(ana, party.partyId, [dish("Croquettes")]);
+    const annas = await newDraft(anna, party.partyId, [dish("Croquettes")]);
 
-    const taken = await admin("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`, {
-      revision: anas.revision,
-    });
+    const taken = await admin(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${annas.id}/take-over`,
+      {
+        revision: annas.revision,
+      },
+    );
 
     expect(taken.status).toBe(200);
     const admins = taken.json.draft as unknown as DraftAnswer;
     expect(admins).toMatchObject({
-      id: anas.id,
+      id: annas.id,
       ownerId: venue.adminId,
-      revision: anas.revision + 1,
+      revision: annas.revision + 1,
     });
     const before = await snapshot();
-    const stale = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`, {
-      revision: anas.revision,
+    const stale = await anna("POST", `/api/parties/${party.partyId}/drafts/${annas.id}/take-over`, {
+      revision: annas.revision,
     });
     expect(stale.status).toBe(409);
     expect(stale.json).toEqual(
       refusal("draft.out_of_date", {
         billId: party.tabId,
         edit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
-        draftId: anas.id,
+        draftId: annas.id,
         revision: admins.revision,
       }),
     );
@@ -1009,12 +1013,12 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
 
     const sent = await admin(
       "POST",
-      `/api/parties/${party.partyId}/drafts/${anas.id}/submit`,
+      `/api/parties/${party.partyId}/drafts/${annas.id}/submit`,
       await submitBody(party.partyId, admins),
     );
     expect(sent.status).toBe(200);
     const afterSending = await snapshot();
-    const late = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`, {
+    const late = await anna("POST", `/api/parties/${party.partyId}/drafts/${annas.id}/take-over`, {
       revision: admins.revision + 1,
     });
     expect(late.status).toBe(409);
@@ -1031,14 +1035,14 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
 
   it("refuses 409 session.person_not_signed_in for a take-over naming someone else, changing nothing, and goes through once it names the session's person", async () => {
     const party = await seated();
-    const anas = await newDraft(ana, party.partyId, [dish("Croquettes")]);
-    const path = `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`;
+    const annas = await newDraft(anna, party.partyId, [dish("Croquettes")]);
+    const path = `/api/parties/${party.partyId}/drafts/${annas.id}/take-over`;
     const owner = async () => {
       const [row] = await inTx(venue, (tx) =>
         tx
           .select({ ownerId: orderDrafts.ownerId })
           .from(orderDrafts)
-          .where(eq(orderDrafts.id, anas.id)),
+          .where(eq(orderDrafts.id, annas.id)),
       );
       return row!.ownerId;
     };
@@ -1050,7 +1054,7 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
         adminCookie,
         "POST",
         path,
-        await draftBody("POST", path, { revision: anas.revision }),
+        await draftBody("POST", path, { revision: annas.revision }),
         { [PERSON_HEADER]: personId },
       );
     const recorded = async () =>
@@ -1078,43 +1082,47 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
 
   it("goes through when the session's person is named with a capitalised id", async () => {
     const party = await seated();
-    const anas = await newDraft(ana, party.partyId, [dish("Croquettes")]);
-    const path = `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`;
+    const annas = await newDraft(anna, party.partyId, [dish("Croquettes")]);
+    const path = `/api/parties/${party.partyId}/drafts/${annas.id}/take-over`;
 
     const taken = await send(
       venue.app,
       adminCookie,
       "POST",
       path,
-      await draftBody("POST", path, { revision: anas.revision }),
+      await draftBody("POST", path, { revision: annas.revision }),
       { [PERSON_HEADER]: venue.adminId.toUpperCase() },
     );
 
     expect(taken.status).toBe(200);
-    expect(taken.json.draft).toMatchObject({ id: anas.id, ownerId: venue.adminId });
+    expect(taken.json.draft).toMatchObject({ id: annas.id, ownerId: venue.adminId });
   });
 });
 
 describe("POST /api/parties/:id/drafts/:did/submit", () => {
   it("sends the named lines as groups, answers the groups and the draft left, and replays a retry with the first answer", async () => {
     const party = await seated();
-    const anas = await newDraft(ana, party.partyId, [dish("Caña"), dish("Octopus")]);
-    const body = await submitBody(party.partyId, anas, [anas.lines[0]!]);
+    const annas = await newDraft(anna, party.partyId, [dish("Caña"), dish("Octopus")]);
+    const body = await submitBody(party.partyId, annas, [annas.lines[0]!]);
 
-    const first = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, body);
+    const first = await anna(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${annas.id}/submit`,
+      body,
+    );
 
     expect(first.status).toBe(200);
     expect(first.json).toMatchObject({
       tabId: party.tabId,
       revision: party.revision + 1,
       groups: [{ state: "fired", summary: "1 × Caña" }],
-      draft: { id: anas.id, revision: anas.revision + 1, lines: [anas.lines[1]] },
+      draft: { id: annas.id, revision: annas.revision + 1, lines: [annas.lines[1]] },
     });
     const before = await snapshot();
     // The retry spells both ids in upper case: the path's party is folded as it is stored.
-    const again = await ana(
+    const again = await anna(
       "POST",
-      `/api/parties/${party.partyId.toUpperCase()}/drafts/${anas.id.toUpperCase()}/submit`,
+      `/api/parties/${party.partyId.toUpperCase()}/drafts/${annas.id.toUpperCase()}/submit`,
       body,
     );
     expect(again.status).toBe(200);
@@ -1124,16 +1132,16 @@ describe("POST /api/parties/:id/drafts/:did/submit", () => {
 
   it("adds the lines to the held group joinGroupId names", async () => {
     const party = await seated();
-    const anas = await newDraft(ana, party.partyId, [dish("Tarta"), dish("Croquettes")]);
-    const held = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, {
-      ...(await submitBody(party.partyId, anas, [anas.lines[0]!])),
-      groups: [{ lineIds: [anas.lines[0]!.id], release: "hold" }],
+    const annas = await newDraft(anna, party.partyId, [dish("Tarta"), dish("Croquettes")]);
+    const held = await anna("POST", `/api/parties/${party.partyId}/drafts/${annas.id}/submit`, {
+      ...(await submitBody(party.partyId, annas, [annas.lines[0]!])),
+      groups: [{ lineIds: [annas.lines[0]!.id], release: "hold" }],
     });
     const heldAnswer = held.json as unknown as { groups: { id: string }[]; draft: DraftAnswer };
 
-    const joined = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, {
+    const joined = await anna("POST", `/api/parties/${party.partyId}/drafts/${annas.id}/submit`, {
       ...(await submitBody(party.partyId, heldAnswer.draft)),
-      groups: [{ lineIds: [anas.lines[1]!.id], release: "hold" }],
+      groups: [{ lineIds: [annas.lines[1]!.id], release: "hold" }],
       joinGroupId: heldAnswer.groups[0]!.id,
     });
 
@@ -1148,11 +1156,11 @@ describe("POST /api/parties/:id/drafts/:did/submit", () => {
 describe("POST /api/parties/:id/drafts/:did/submit uses its saved bill", () => {
   it("ignores a body bill override and replays the same submission without that extra field", async () => {
     const party = await seated();
-    const anas = await newDraft(ana, party.partyId, [dish("Caña"), dish("Octopus")]);
-    const first = await ana(
+    const annas = await newDraft(anna, party.partyId, [dish("Caña"), dish("Octopus")]);
+    const first = await anna(
       "POST",
-      `/api/parties/${party.partyId}/drafts/${anas.id}/submit`,
-      await submitBody(party.partyId, anas, [anas.lines[0]!]),
+      `/api/parties/${party.partyId}/drafts/${annas.id}/submit`,
+      await submitBody(party.partyId, annas, [annas.lines[0]!]),
     );
     expect(first.status).toBe(200);
     const left = (first.json as unknown as { draft: DraftAnswer }).draft;
@@ -1168,7 +1176,11 @@ describe("POST /api/parties/:id/drafts/:did/submit uses its saved bill", () => {
       billId: checkId.toUpperCase(),
     };
 
-    const named = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, body);
+    const named = await anna(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${annas.id}/submit`,
+      body,
+    );
 
     expect(named.status).toBe(200);
     expect(named.json).toMatchObject({ tabId: party.tabId });
@@ -1178,7 +1190,7 @@ describe("POST /api/parties/:id/drafts/:did/submit uses its saved bill", () => {
     const before = await snapshot();
 
     // `undefined` leaves the key out of the JSON body.
-    const reused = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, {
+    const reused = await anna("POST", `/api/parties/${party.partyId}/drafts/${annas.id}/submit`, {
       ...body,
       billId: undefined,
     });
@@ -1193,23 +1205,23 @@ describe("a draft named on another party", () => {
   it("is refused 404 draft.not_found by the save, the take-over and the submit, as is an id that is not one", async () => {
     const firstParty = await seated();
     const secondParty = await seated();
-    const anas = await newDraft(ana, firstParty.partyId, [dish("Caña")]);
+    const annas = await newDraft(anna, firstParty.partyId, [dish("Caña")]);
     const before = await snapshot();
 
     const answers = [
-      await ana("PUT", `/api/parties/${secondParty.partyId}/drafts`, {
+      await anna("PUT", `/api/parties/${secondParty.partyId}/drafts`, {
         billId: await openBillOf(secondParty.partyId),
-        draftId: anas.id,
-        revision: anas.revision,
+        draftId: annas.id,
+        revision: annas.revision,
         lines: [],
       }),
-      await admin("POST", `/api/parties/${secondParty.partyId}/drafts/${anas.id}/take-over`, {
-        revision: anas.revision,
+      await admin("POST", `/api/parties/${secondParty.partyId}/drafts/${annas.id}/take-over`, {
+        revision: annas.revision,
       }),
-      await ana(
+      await anna(
         "POST",
-        `/api/parties/${secondParty.partyId}/drafts/${anas.id}/submit`,
-        await submitBody(secondParty.partyId, anas),
+        `/api/parties/${secondParty.partyId}/drafts/${annas.id}/submit`,
+        await submitBody(secondParty.partyId, annas),
       ),
     ];
     const notAnId = await admin(
@@ -1222,7 +1234,7 @@ describe("a draft named on another party", () => {
 
     for (const answer of answers) {
       expect(answer.status).toBe(404);
-      expect(answer.json).toEqual(refusal("draft.not_found", { draftId: anas.id }));
+      expect(answer.json).toEqual(refusal("draft.not_found", { draftId: annas.id }));
     }
     expect(notAnId.status).toBe(404);
     expect(notAnId.json).toEqual(refusal("draft.not_found", { draftId: "draft-1" }));
@@ -1231,13 +1243,17 @@ describe("a draft named on another party", () => {
 
   it("refuses 404 draft.not_found for a submit to an id that is not one, even under a submission id the party has used", async () => {
     const party = await seated();
-    const anas = await newDraft(ana, party.partyId, [dish("Caña"), dish("Octopus")]);
-    const body = await submitBody(party.partyId, anas, [anas.lines[0]!]);
-    const sent = await ana("POST", `/api/parties/${party.partyId}/drafts/${anas.id}/submit`, body);
+    const annas = await newDraft(anna, party.partyId, [dish("Caña"), dish("Octopus")]);
+    const body = await submitBody(party.partyId, annas, [annas.lines[0]!]);
+    const sent = await anna(
+      "POST",
+      `/api/parties/${party.partyId}/drafts/${annas.id}/submit`,
+      body,
+    );
     expect(sent.status).toBe(200);
     const before = await snapshot();
 
-    const refused = await ana("POST", `/api/parties/${party.partyId}/drafts/draft-1/submit`, body);
+    const refused = await anna("POST", `/api/parties/${party.partyId}/drafts/draft-1/submit`, body);
 
     expect(refused.status).toBe(404);
     expect(refused.json).toEqual(refusal("draft.not_found", { draftId: "draft-1" }));
@@ -1265,7 +1281,7 @@ describe("a malformed body", () => {
     "refuses a save 400 management.request_invalid naming %s for %j",
     async (field, body) => {
       const party = await seated();
-      await newDraft(ana, party.partyId, [dish("Caña")]);
+      await newDraft(anna, party.partyId, [dish("Caña")]);
       const before = await snapshot();
 
       const refused = await admin("PUT", `/api/parties/${party.partyId}/drafts`, body);
@@ -1285,12 +1301,12 @@ describe("a malformed body", () => {
     "refuses a take-over 400 management.request_invalid naming %s for %j",
     async (field, body) => {
       const party = await seated();
-      const anas = await newDraft(ana, party.partyId, [dish("Caña")]);
+      const annas = await newDraft(anna, party.partyId, [dish("Caña")]);
       const before = await snapshot();
 
       const refused = await admin(
         "POST",
-        `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`,
+        `/api/parties/${party.partyId}/drafts/${annas.id}/take-over`,
         body,
       );
 
@@ -1319,12 +1335,12 @@ describe("a malformed body", () => {
     "refuses a submit 400 management.request_invalid naming %s for %j",
     async (field, body) => {
       const party = await seated();
-      const anas = await newDraft(ana, party.partyId, [dish("Caña")]);
+      const annas = await newDraft(anna, party.partyId, [dish("Caña")]);
       const before = await snapshot();
 
-      const refused = await ana(
+      const refused = await anna(
         "POST",
-        `/api/parties/${party.partyId}/drafts/${anas.id}/submit`,
+        `/api/parties/${party.partyId}/drafts/${annas.id}/submit`,
         body,
       );
 
@@ -1353,7 +1369,7 @@ describe("a line's answers of the wrong shape", () => {
     "refuses a save 400 %s naming %s, as a group submission pricing the same line does",
     async (code, field, answers) => {
       const party = await seated();
-      await newDraft(ana, party.partyId, [dish("Caña")]);
+      await newDraft(anna, party.partyId, [dish("Caña")]);
       const before = await snapshot();
       const line = { ...dish("Caña"), ...answers };
 
@@ -1363,7 +1379,7 @@ describe("a line's answers of the wrong shape", () => {
         revision: 0,
         lines: [line],
       });
-      const priced = await ana("POST", `/api/parties/${party.partyId}/groups`, {
+      const priced = await anna("POST", `/api/parties/${party.partyId}/groups`, {
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(party.partyId),
         groups: [{ lines: [line], release: "fire" }],
@@ -1384,7 +1400,7 @@ describe("source-backed draft HTTP boundary", () => {
     async (operation) => {
       const party = await seated();
       if (operation === "save") {
-        const sent = await ana("POST", `/api/parties/${party.partyId}/groups`, {
+        const sent = await anna("POST", `/api/parties/${party.partyId}/groups`, {
           submissionId: randomUUID(),
           expectedPartyRevision: await revisionOf(party.partyId),
           allergy: { party: { answer: "none", guests: [] }, ticks: [] },
@@ -1392,7 +1408,7 @@ describe("source-backed draft HTTP boundary", () => {
         });
         expect(sent.status).toBe(200);
       }
-      const draft = await newDraft(ana, party.partyId, [dish("Caña")]);
+      const draft = await newDraft(anna, party.partyId, [dish("Caña")]);
       await venue.db.insert(billPayments).values({
         workingOrderId: party.tabId,
         submissionId: randomUUID(),
@@ -1413,13 +1429,13 @@ describe("source-backed draft HTTP boundary", () => {
         operation === "save"
           ? { billId: party.tabId, draftId: draft.id, revision: draft.revision, lines: [] }
           : await submitBody(party.partyId, draft);
-      const answer = await ana(method, path, body);
+      const answer = await anna(method, path, body);
       expect(answer.status, JSON.stringify(answer.json)).toBe(200);
       expect(answer.json).toMatchObject({ invoice: { total: "3.00", invoiceType: "F2" } });
       if (operation === "submit") {
         const before = await snapshot();
         const records = fiscalRecordCount(venue);
-        expect(await ana(method, path, body)).toEqual(answer);
+        expect(await anna(method, path, body)).toEqual(answer);
         expect(fiscalRecordCount(venue)).toEqual(records);
         expect(await snapshot()).toEqual(before);
       }
@@ -1430,7 +1446,7 @@ describe("source-backed draft HTTP boundary", () => {
 describe("per-group HTTP destinations draft", () => {
   async function prepared() {
     const party = await seated();
-    const initial = await ana("POST", `/api/parties/${party.partyId}/groups`, {
+    const initial = await anna("POST", `/api/parties/${party.partyId}/groups`, {
       submissionId: randomUUID(),
       expectedPartyRevision: party.revision,
       allergy: { party: { answer: "none", guests: [] }, ticks: [] },
@@ -1446,7 +1462,7 @@ describe("per-group HTTP destinations draft", () => {
 
   it("preserves joins and insert-after through the real request", async () => {
     const { party, first, second } = await prepared();
-    const draft = await newDraft(ana, party.partyId, [
+    const draft = await newDraft(anna, party.partyId, [
       dish("Caña"),
       dish("Octopus"),
       dish("Croquettes"),
@@ -1464,7 +1480,7 @@ describe("per-group HTTP destinations draft", () => {
       groups,
       draftRevision: draft.revision,
     };
-    const response = await ana(
+    const response = await anna(
       "POST",
       `/api/parties/${party.partyId}/drafts/${draft.id}/submit`,
       body,
@@ -1481,16 +1497,16 @@ describe("per-group HTTP destinations draft", () => {
     });
     const before = await snapshot();
     expect(
-      await ana("POST", `/api/parties/${party.partyId}/drafts/${draft.id}/submit`, body),
+      await anna("POST", `/api/parties/${party.partyId}/drafts/${draft.id}/submit`, body),
     ).toEqual(response);
     expect(await snapshot()).toEqual(before);
   });
 
   it("keeps the entire draft and all stored rows when a later join target is missing", async () => {
     const { party, first } = await prepared();
-    const draft = await newDraft(ana, party.partyId, [dish("Caña"), dish("Octopus")]);
+    const draft = await newDraft(anna, party.partyId, [dish("Caña"), dish("Octopus")]);
     const before = await snapshot();
-    const refused = await ana("POST", `/api/parties/${party.partyId}/drafts/${draft.id}/submit`, {
+    const refused = await anna("POST", `/api/parties/${party.partyId}/drafts/${draft.id}/submit`, {
       ...(await submitBody(party.partyId, draft)),
       groups: [
         { release: "hold", joinGroupId: first, lineIds: [draft.lines[0]!.id] },
@@ -1506,7 +1522,7 @@ describe("per-group HTTP destinations draft", () => {
     "refuses malformed %s values instead of ignoring them",
     async (field) => {
       const { party } = await prepared();
-      const draft = await newDraft(ana, party.partyId, [
+      const draft = await newDraft(anna, party.partyId, [
         dish("Caña"),
         dish("Octopus"),
         dish("Croquettes"),
@@ -1514,7 +1530,7 @@ describe("per-group HTTP destinations draft", () => {
       ]);
       for (const value of [null, 2, [], {}, "", "missing"]) {
         const before = await snapshot();
-        const refused = await ana(
+        const refused = await anna(
           "POST",
           `/api/parties/${party.partyId}/drafts/${draft.id}/submit`,
           {
