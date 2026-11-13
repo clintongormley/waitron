@@ -40,6 +40,12 @@ const reference = {
   NumSerieFactura: "PRIOR/1",
   FechaExpedicionFactura: "2026-07-19",
 };
+/** The reference `targetRefusedOfType`'s R5 corrects and F3 replaces, as a request states it. */
+const ownReference = {
+  IDEmisorFactura: "89890001K",
+  NumSerieFactura: "PRIOR/0",
+  FechaExpedicionFactura: "2026-07-18",
+};
 
 beforeEach(async () => {
   instant = NOW;
@@ -244,6 +250,9 @@ it.each([
     facts: { invoiceType: "F3", substitutedInvoices: [reference], recipients: [recipient] },
     field: "invoiceType",
   },
+  { facts: { correctionType: "S" }, field: "correctionType" },
+  { facts: { correctedInvoices: [reference] }, field: "correctedInvoices" },
+  { facts: { substitutedInvoices: [reference] }, field: "substitutedInvoices" },
 ])("refuses a fix that changes a printed fact, without a write: %j", async ({ facts, field }) => {
   const before = await snapshot();
   const res = await send({ description: "Corrected restaurant service", ...facts });
@@ -296,10 +305,11 @@ it.each(["R5", "F3"] as const)(
   async (invoiceType) => {
     await targetRefusedOfType(invoiceType);
     instant = new Date("2026-12-20T17:20:35Z");
+    const own = Object.fromEntries(Object.entries(ownReference).reverse());
     const facts =
       invoiceType === "R5"
-        ? { invoiceType, correctedInvoices: [reference] }
-        : { invoiceType, substitutedInvoices: [reference], recipients: [recipient] };
+        ? { invoiceType, correctionType: "I", correctedInvoices: [own] }
+        : { invoiceType, substitutedInvoices: [own], recipients: [recipient] };
     const res = await send(facts);
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
     const { registroId } = (await res.json()) as { registroId: string };
@@ -314,11 +324,11 @@ it.each(["R5", "F3"] as const)(
       tipoRectificativa: invoiceType === "R5" ? "I" : null,
       facturasRectificadas:
         invoiceType === "R5"
-          ? { IDFacturaRectificada: [{ ...reference, FechaExpedicionFactura: "19-07-2026" }] }
+          ? { IDFacturaRectificada: [{ ...ownReference, FechaExpedicionFactura: "18-07-2026" }] }
           : null,
       facturasSustituidas:
         invoiceType === "F3"
-          ? { IDFacturaSustituida: [{ ...reference, FechaExpedicionFactura: "19-07-2026" }] }
+          ? { IDFacturaSustituida: [{ ...ownReference, FechaExpedicionFactura: "18-07-2026" }] }
           : null,
       importeRectificacion: null,
     });
@@ -335,29 +345,49 @@ it("accepts the record's own recipients sent back in another key order", async (
 });
 
 it.each([
-  { correctionType: "S", correctionAmounts: { BaseRectificada: "0.00", CuotaRectificada: "0.00" } },
-  { correctedInvoices: [{ ...reference, NumSerieFactura: "PRIOR/2" }] },
-])(
-  "refuses changed corrective-reference decisions under a saved action key: %j",
-  async (change) => {
-    await targetRefusedOfType("R5");
-    const facts = { invoiceType: "R5", correctedInvoices: [reference] };
-    expect((await send(facts)).status).toBe(200);
+  {
+    type: "R5",
+    facts: {
+      correctionType: "S",
+      correctionAmounts: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
+    },
+    field: "correctionType",
+  },
+  { type: "R5", facts: { correctionType: null }, field: "correctionType" },
+  {
+    type: "R5",
+    facts: { correctedInvoices: [{ ...ownReference, NumSerieFactura: "OTHER/9" }] },
+    field: "correctedInvoices",
+  },
+  { type: "R5", facts: { correctedInvoices: null }, field: "correctedInvoices" },
+  { type: "F3", facts: { substitutedInvoices: null }, field: "substitutedInvoices" },
+  {
+    type: "F3",
+    facts: { substitutedInvoices: [{ ...ownReference, FechaExpedicionFactura: "2026-07-19" }] },
+    field: "substitutedInvoices",
+  },
+] as const)(
+  "refuses a fix that changes or removes a printed fact the record carries, without a write: %j",
+  async ({ type, facts, field }) => {
+    await targetRefusedOfType(type);
     const before = await snapshot();
-    const res = await send({ ...facts, ...change });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "filing_case.action_mismatch" } });
+    const res = await send({ description: "Corrected restaurant service", ...facts });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "fiscal.remedy_printed_fact_changed",
+        params: { registroId: body.registroId, field },
+      },
+    });
     expect(await snapshot()).toEqual(before);
   },
 );
 
-it("removes a fact the record carries when sent null, and accepts null for facts it does not carry", async () => {
+it("accepts null for facts the record does not carry", async () => {
   await targetRefusedOfType("F3");
   const before = await snapshot();
   const original = before.records.find((row) => row.id === body.registroId)!;
-  expect(original.facturasSustituidas).not.toBeNull();
   const res = await send({
-    substitutedInvoices: null,
     correctionType: null,
     correctedInvoices: null,
     correctionAmounts: null,
@@ -368,7 +398,7 @@ it("removes a fact the record carries when sent null, and accepts null for facts
   expect(after.records.find((row) => row.id === body.registroId)).toEqual(original);
   expect(after.records.find((row) => row.id === registroId)).toMatchObject({
     tipoFactura: "F3",
-    facturasSustituidas: null,
+    facturasSustituidas: original.facturasSustituidas,
     tipoRectificativa: null,
     facturasRectificadas: null,
     importeRectificacion: null,
@@ -623,9 +653,7 @@ it.each(
   expect(await snapshot()).toEqual(before);
 });
 
-it.each(
-  [{ correctionType: "S" }, { substitutedInvoices: [reference] }].map((facts) => ({ facts })),
-)(
+it.each([{ description: "x".repeat(501) }].map((facts) => ({ facts })))(
   "keeps complete-record fiscal validation after applying structurally valid facts: %j",
   async ({ facts }) => {
     const before = await snapshot();

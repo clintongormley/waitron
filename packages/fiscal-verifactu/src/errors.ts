@@ -119,11 +119,16 @@ declare module "@waitron/shared" {
     };
     /** The issuer's name is printed on the invoice, so changing it takes a corrective invoice. */
     "fiscal.remedy_issuer_changed": { registroId: string };
-    /** The invoice type and recipients are printed on the invoice, so changing either takes a
-     * corrective invoice. */
+    /** The invoice type, recipients, correction type and the invoices it corrects or replaces
+     * are printed on the invoice, so changing or removing any of them takes a corrective invoice. */
     "fiscal.remedy_printed_fact_changed": {
       registroId: string;
-      field: "invoiceType" | "recipients";
+      field:
+        | "invoiceType"
+        | "recipients"
+        | "correctionType"
+        | "correctedInvoices"
+        | "substitutedInvoices";
     };
     /** A fix re-files the same invoice, so each breakdown line keeps its filed tax type, regime and
      * taxed, not-subject or exempt class. */
