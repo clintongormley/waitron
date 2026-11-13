@@ -2818,12 +2818,15 @@ describe("the Edit dialog", () => {
       });
 
       it("adds the A4 marker when the printer list arrives after the devices", async () => {
-        const pages = Promise.withResolvers<PagePrinterRow[]>();
+        let resolvePages!: (rows: PagePrinterRow[]) => void;
+        const pages = new Promise<PagePrinterRow[]>((resolve) => {
+          resolvePages = resolve;
+        });
         const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
           api: invoiceApi(
             { ...onDefault, equipment: [invoiceOn(null)] },
             {
-              listPagePrinters: vi.fn(() => pages.promise),
+              listPagePrinters: vi.fn(() => pages),
             },
           ),
         });
@@ -2832,7 +2835,7 @@ describe("the Edit dialog", () => {
             `Office (${t("devices.default_mark")})`,
           ),
         );
-        pages.resolve([office]);
+        resolvePages([office]);
         await vi.waitFor(() =>
           expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
             `Office · A4 (${t("devices.default_mark")})`,
