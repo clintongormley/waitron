@@ -106,8 +106,10 @@ The page lists the backup's environment, country, taxpayer NIF and time zone one
 **Proceed**, when the clocks differ, the clock step the first-setup runbook describes
 (`recovery-hour.browser.test.ts`, "Check this venue lists the backup's details one to a row, and no
 clock rows" and
-"clocks that differ show one time per clock and ask which is correct; neither answer sends
-anything"). Before **Proceed**, **Edit these details** sends nothing and goes back to choosing the
+"clocks that differ show one time per clock and ask which is correct; The server and Both times
+are wrong send nothing"). There, **This device** sets the box's clock and the page makes the series with nobody
+pressing (the same file's "a restore on clocks that differ sets the server's clock from This device
+and makes the series with nobody pressing"). Before **Proceed**, **Edit these details** sends nothing and goes back to choosing the
 backup (the same file's "Edit these details sends nothing and asks to go back to choosing the
 backup", and `apps/setup/src/screens/recovery-copy.test.ts`, "Edit these details from the restore
 page goes back to choosing the backup and sends nothing"). Once the series are made the page shows

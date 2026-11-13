@@ -1,5 +1,5 @@
 import { html, nothing, type ReactiveControllerHost } from "lit";
-import type { HourClockDecision } from "../hour-clock.js";
+import { AGREEMENT_MS, type HourClockDecision } from "../hour-clock.js";
 import "@waitron/ui/src/components/wt-button.js";
 import { createWaitCountdown, formatRemaining, type WaitCountdown } from "./wait-countdown.js";
 import { detailRow } from "./check-venue.js";
@@ -31,6 +31,13 @@ export interface ClockWords {
   inUse: string;
   minuteTaken: string;
   newCodeIn: string;
+  deviceSet: string;
+  deviceSynchronised: string;
+  deviceWitnessed: string;
+  deviceSameMachine: string;
+  deviceLater: string;
+  deviceFailed: string;
+  laterAfterSet: string;
 }
 
 type ClockRowWords = Pick<ClockWords, "serverTime" | "thisDevice" | "internetTime" | "unavailable">;
@@ -70,6 +77,19 @@ export const clockWaitStrings = {
     minuteTaken:
       "This invoice series code has already been used. Waitron creates a new one by itself when the countdown ends.",
     newCodeIn: "New invoice series in",
+    deviceSet: "The server's time is now set from this device.",
+    deviceSynchronised:
+      "The server keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the server.",
+    deviceWitnessed:
+      "The server has the tax agency's time and sets its clock from it by itself. If the times still differ in a minute, press This device again.",
+    deviceSameMachine:
+      "This screen is on the server itself, so it cannot set the server's time. Open this page on a phone or computer.",
+    deviceLater:
+      "The server's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+    deviceFailed:
+      "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
+    laterAfterSet:
+      "The invoice series cannot be created: the server's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
   },
   es: {
     whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
@@ -92,6 +112,19 @@ export const clockWaitStrings = {
     minuteTaken:
       "Este código de serie de facturas ya se ha usado. Waitron creará otro por sí solo cuando termine la cuenta atrás.",
     newCodeIn: "Nueva serie de facturas en",
+    deviceSet: "La hora del servidor ya está puesta desde este dispositivo.",
+    deviceSynchronised:
+      "El servidor se pone en hora por internet, así que su hora es correcta. Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
+    deviceWitnessed:
+      "El servidor tiene la hora de Hacienda y se pone en hora con ella por sí solo. Si dentro de un minuto las horas siguen sin coincidir, vuelve a pulsar Este dispositivo.",
+    deviceSameMachine:
+      "Esta pantalla está en el propio servidor, así que no puede poner su hora. Abre esta página en un móvil o un ordenador.",
+    deviceLater:
+      "La hora del servidor no ha cambiado: la hora de este dispositivo es anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente está mal. Corrige la hora de este dispositivo, vuelve a conectarte al servidor y elige de nuevo qué hora es la correcta.",
+    deviceFailed:
+      "El servidor no ha podido ponerse en hora con este dispositivo. Comprueba la fecha y la hora de este dispositivo y vuelve a pulsar Este dispositivo.",
+    laterAfterSet:
+      "No se pueden crear las series de facturas: la hora del servidor es ahora anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, vuelve a conectarte al servidor y elige de nuevo qué hora es la correcta.",
   },
 } satisfies Record<"en" | "es", Omit<ClockWords, "secondClockDo" | "secondClockEnds">>;
 
@@ -174,6 +207,36 @@ export async function readClocks(
   return compared as unknown as ClockComparison;
 }
 
+type DeviceClock =
+  { status: "sending" } | { status: "set" } | { status: "refused"; reason: string };
+
+/** Asks the box for a fresh clock challenge, then to set its clock from this browser's time. */
+async function sendDeviceClock(
+  send: (proposal: unknown) => Promise<unknown>,
+): Promise<{ status: "set" } | { status: "refused"; reason: string }> {
+  const challenge = await send({ action: "clock-challenge" });
+  if (!record(challenge) || typeof challenge.id !== "string") throw new Error("invalid challenge");
+  const answer = await send({
+    action: "set-clock",
+    browser: { challengeId: challenge.id, instantMs: Date.now() },
+  });
+  if (record(answer) && answer.status === "set") return { status: "set" };
+  if (record(answer) && answer.status === "refused" && typeof answer.reason === "string")
+    return { status: "refused", reason: answer.reason };
+  throw new Error("invalid clock set");
+}
+
+const deviceRefusal = (words: ClockWords, reason: string): string =>
+  reason === "synchronised" || reason === "not_stopped"
+    ? words.deviceSynchronised
+    : reason === "witnessed"
+      ? words.deviceWitnessed
+      : reason === "same_machine"
+        ? words.deviceSameMachine
+        : reason === "later"
+          ? words.deviceLater
+          : words.deviceFailed;
+
 /** Checks again every 15 seconds; starting it again while it runs keeps its rhythm. */
 function createRecheckPoll(host: ReactiveControllerHost, run: () => void) {
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -207,6 +270,10 @@ export class ClockWait<Selected extends { status: "selected" }> {
   #minuteTaken = false;
   /** The person answered which clock is correct, for the disagreement on screen. */
   #answered = false;
+  /** This device's request to set the box's clock, and what the box answered. */
+  #device: DeviceClock | undefined;
+  /** The box's clock was set from this device while this page was open. */
+  #setHere = false;
 
   constructor(host: ReactiveControllerHost, recheck: () => void) {
     this.#host = host;
@@ -242,6 +309,8 @@ export class ClockWait<Selected extends { status: "selected" }> {
     this.#problem = problem;
     this.#result = result;
     this.#answered = false;
+    if (this.#device?.status !== "set" || (problem === undefined && result === undefined))
+      this.#device = undefined;
     this.#host.requestUpdate();
     if (problem?.kind === "next-minute")
       this.#countdown.start(problem.remainingMs, problem.recheckInMs);
@@ -291,6 +360,28 @@ export class ClockWait<Selected extends { status: "selected" }> {
     }
   }
 
+  /**
+   * Sets the box's clock from this device's time. True when the page should compare the clocks
+   * again: the clock was set, or it already agreed. A failed request or an answer it cannot read is
+   * thrown for the page to show.
+   */
+  async setFromDevice(send: (proposal: unknown) => Promise<unknown>): Promise<boolean> {
+    this.#device = { status: "sending" };
+    this.#host.requestUpdate();
+    let answer: Awaited<ReturnType<typeof sendDeviceClock>>;
+    try {
+      answer = await sendDeviceClock(send);
+    } catch (error) {
+      this.#device = undefined;
+      this.#host.requestUpdate();
+      throw error;
+    }
+    if (answer.status === "set") this.#setHere = true;
+    this.#device = answer.status === "set" || answer.reason !== "agrees" ? answer : undefined;
+    this.#host.requestUpdate();
+    return this.#device?.status !== "refused";
+  }
+
   renderWait(words: ClockWords) {
     return renderWait(words, this.#countdown, this.#minuteTaken);
   }
@@ -300,10 +391,12 @@ export class ClockWait<Selected extends { status: "selected" }> {
     clock: HourClockDecision | undefined,
     locale: "en" | "es",
     timeZone: string,
+    setClock?: () => void,
   ) {
-    return renderClockProblem(
+    const device = this.#device;
+    const problem = renderClockProblem(
       this.#problem,
-      words,
+      this.#setHere ? { ...words, later: words.laterAfterSet } : words,
       clock,
       {
         answered: this.#answered,
@@ -311,9 +404,18 @@ export class ClockWait<Selected extends { status: "selected" }> {
           this.#answered = true;
           this.#host.requestUpdate();
         },
+        device: {
+          set: setClock,
+          sending: device?.status === "sending",
+          line: device?.status === "refused" ? deviceRefusal(words, device.reason) : undefined,
+        },
       },
       { locale, timeZone },
     );
+    return device?.status === "set" && this.#result?.status !== "selected"
+      ? html`<p role="status" data-test="device-clock">${words.deviceSet}</p>
+          ${problem}`
+      : problem;
   }
 }
 
@@ -324,7 +426,12 @@ export function renderClockProblem(
   problem: ClockProblem | undefined,
   words: ClockWords,
   clock: HourClockDecision | undefined,
-  choice: { answered: boolean; answer: () => void },
+  choice: {
+    answered: boolean;
+    answer: () => void;
+    /** This device's answer: offered when the page can set the box's clock (`set`). */
+    device?: { set: (() => void) | undefined; sending: boolean; line: string | undefined };
+  },
   place?: { locale: "en" | "es"; timeZone: string },
 ) {
   if (problem?.kind === "second-clock")
@@ -337,7 +444,15 @@ export function renderClockProblem(
       }
       ${sentence(words.secondClockDo)} ${sentence(words.secondClockEnds)}
     </section>`;
-  if (problem?.kind === "disagreement")
+  if (problem?.kind === "disagreement") {
+    const device = choice.device;
+    const choices = [
+      ["server-correct", words.theServer, () => choice.answer()],
+      ...(device?.set && !onlyThisDeviceDiffers(clock)
+        ? ([["device-correct", words.thisDevice, device.set]] as const)
+        : []),
+      ["both-wrong", words.bothWrong, () => choice.answer()],
+    ] as const;
     return html`<section data-test="clock-refused">
       ${
         choice.answered
@@ -355,23 +470,22 @@ export function renderClockProblem(
         choice.answered
           ? nothing
           : html`<div class="choices" role="group" aria-labelledby="which-correct">
-              ${(
-                [
-                  ["server-correct", words.theServer],
-                  ["both-wrong", words.bothWrong],
-                ] as const
-              ).map(
-                ([test, label]) =>
+              ${choices.map(
+                ([test, label, press]) =>
                   html`<wt-button
                     data-test=${test}
                     variant="secondary"
-                    @click=${() => choice.answer()}
+                    ?disabled=${device?.sending}
+                    ?loading=${device?.sending && test === "device-correct"}
+                    @click=${press}
                     >${label}</wt-button
                   >`,
               )}
             </div>`
       }
+      ${device?.line ? html`<p role="status" data-test="device-clock">${device.line}</p>` : nothing}
     </section>`;
+  }
   if (problem?.kind === "later" || problem?.kind === "in-use")
     return html`<p
       role="status"
@@ -384,6 +498,21 @@ export function renderClockProblem(
 
 const middle = (reading: { lowerMs: number; upperMs: number }) =>
   (reading.lowerMs + reading.upperMs) / 2;
+
+/** The internet's time agrees with the server's and only this device's differs (A1482 Q3). */
+function onlyThisDeviceDiffers(clock: HourClockDecision | undefined): boolean {
+  const at = (source: string) => clock?.usable.find((r) => r.source === source);
+  const box = at("box"),
+    internet = at("internet"),
+    browser = at("browser");
+  return (
+    box !== undefined &&
+    internet !== undefined &&
+    browser !== undefined &&
+    Math.abs(middle(internet) - middle(box)) <= AGREEMENT_MS &&
+    Math.abs(middle(browser) - middle(box)) > AGREEMENT_MS
+  );
+}
 
 /**
  * The clock step's rows: the server's time, this device's, and the internet's when it was read. The

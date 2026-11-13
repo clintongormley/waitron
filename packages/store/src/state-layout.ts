@@ -36,6 +36,7 @@ export const FIRST_SETUP_FILE = "first-setup.json";
 export const FIRST_SETUP_NODE_KEY_FILE = "first-setup-node-key.json";
 export const FISCAL_READINESS_FILE = "fiscal-readiness.json";
 export const SETUP_OPERATION_FILE = "setup-operation.json";
+export const SETUP_CLOCK_STEP_FILE = "setup-clock-step.json";
 export const SETUP_OPERATION_LOCK_FILE = "setup-operation.lock";
 export const CONFIGURATION_IMPORT_FILE = "configuration-import.json";
 export const CONFIGURATION_IMPORT_ARTIFACT = "configuration-import.artifact";
@@ -127,6 +128,12 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "file",
     reset: "deleted",
     why: "Password attempt limits survive a restart.",
+  },
+  {
+    name: SETUP_CLOCK_STEP_FILE,
+    kind: "file",
+    reset: "deleted",
+    why: "Clock steps made before the venue existed, alerted at its first full start that is neither a mirror nor fenced.",
   },
   {
     name: SECRETS_ENV_FILE,

@@ -91,6 +91,9 @@ export const CLOCK_CORRECTED_EMAIL_WORDS = {
     authority:
       "The box set its clock from the tax agency's time: {step}, from {before} to {after}.",
     admin: "The box's clock was set from {person}'s device: {step}, from {before} to {after}.",
+    setup:
+      "The box's clock was set from the device showing the setup or restore page{person}: {step}, from {before} to {after}.",
+    setupPerson: ", by {name}",
     staff:
       "The box's clock was set from the time on {till}, confirmed by {person}, a staff member: {step}, from {before} to {after}.",
     unverifiedSubject: "{venue}: the box could not confirm it set its clock",
@@ -107,6 +110,9 @@ export const CLOCK_CORRECTED_EMAIL_WORDS = {
     authority: "El equipo puso su reloj con la hora de Hacienda: {step}, de {before} a {after}.",
     admin:
       "El reloj del equipo se puso con la hora del dispositivo de {person}: {step}, de {before} a {after}.",
+    setup:
+      "El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración{person}: {step}, de {before} a {after}.",
+    setupPerson: ", por {name}",
     staff:
       "El reloj del equipo se puso con la hora de {till}, confirmada por {person}, miembro del personal: {step}, de {before} a {after}.",
     unverifiedSubject: "{venue}: el equipo no pudo confirmar que puso su reloj",

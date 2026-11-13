@@ -18,6 +18,7 @@ import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./pr
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { PASSWORD, MODULE } from "../test/first-fiscal.js";
 import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
+import { AppError } from "@waitron/shared";
 
 vi.mock("./module-config.js", { spy: true });
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -46,7 +47,11 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(fixtures.splice(0).map((f) => f.dispose()));
 });
-async function fixture(fault?: string, moduleConfig?: ModuleConfig) {
+async function fixture(
+  fault?: string,
+  moduleConfig?: ModuleConfig,
+  extra: Partial<SetupDeps> = {},
+) {
   // The fiscal schema is real; unrelated optional product seeds are disabled in this focused venue.
   const installed =
     moduleConfig === undefined
@@ -132,6 +137,7 @@ async function fixture(fault?: string, moduleConfig?: ModuleConfig) {
     },
     requestRestart: () => {},
     assertFiscalReady: async () => {},
+    ...extra,
   };
   const app = new Hono();
   mountSetup(app, deps, () => {});
@@ -200,6 +206,31 @@ it("activates the frozen assignment once and completes only after host publicati
   expect(f.counts()).toEqual({ applied: 1, publication: 1 });
   const disk = await readFile(join(f.stateDir, "first-setup.json"), "utf8");
   expect(disk).not.toContain('"password":"test"');
+});
+it("refuses activation while the This device clock-step note cannot be written, then activates once it can", async () => {
+  const writeClockSteps = vi
+    .fn<() => Promise<void>>()
+    .mockRejectedValueOnce(new AppError("setup.clock_step_unsaved", {}))
+    .mockResolvedValueOnce(undefined);
+  const requestRestart = vi.fn();
+  const f = await fixture(undefined, undefined, { writeClockSteps, requestRestart });
+  await f.confirm();
+  const refused = await f.activate();
+  expect(refused.status).toBe(500);
+  expect((await refused.json()).error.code).toBe("setup.clock_step_unsaved");
+  expect(f.counts()).toEqual({ applied: 0, publication: 0 });
+  // The route schedules its restart on a timer; let one that the refusal set fire first.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(requestRestart).not.toHaveBeenCalled();
+  expect(await f.db.select().from(nodes)).toEqual([]);
+  expect((await f.host.store.read())?.status).toBe("consumption-intent");
+  const response = await f.activate();
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ provisioned: true, restarting: true });
+  expect((await f.host.store.read())!.status).toBe("complete");
+  expect(f.counts()).toEqual({ applied: 1, publication: 1 });
+  await vi.waitFor(() => expect(requestRestart).toHaveBeenCalledOnce());
+  expect(writeClockSteps).toHaveBeenCalledTimes(2);
 });
 it("retains a consumed uncertain assignment after rollback and refuses blind activation", async () => {
   const f = await fixture("rollback");

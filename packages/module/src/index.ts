@@ -181,5 +181,9 @@ export type {
   InitialSetupCommandResult,
 } from "./initial-setup.js";
 export { initialSetupFor } from "./initial-setup-selection.js";
-export type { ModuleOperationHost } from "./operation-preparation.js";
+export type {
+  ModuleClockSetAnswer,
+  ModuleClockSetRequest,
+  ModuleOperationHost,
+} from "./operation-preparation.js";
 export { configureModuleOperations } from "./operation-preparation.js";

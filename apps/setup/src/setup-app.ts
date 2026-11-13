@@ -340,6 +340,8 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
 
 /** A join's refusal in words; the clocks refusal shows both servers' times in the wizard's language. */
 function adoptErrorWords(code: string, params: Record<string, unknown> | undefined): Message {
+  const finishKey = finishRefusalKey({ code, params }, "shell.clock_step_unsaved");
+  if (finishKey !== undefined) return say(finishKey);
   const { primaryAt, standbyAt } = params ?? {};
   if (
     code === "mirror.clocks_apart" &&
@@ -354,17 +356,35 @@ function adoptErrorWords(code: string, params: Record<string, unknown> | undefin
   return say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
 }
 
+/** A full disk's words say a restart frees space only where the server says it does. */
+function diskFullKey(params: Record<string, unknown> | undefined): StringKey {
+  return params?.restartDeletesLogs === true
+    ? "shell.first_setup.disk_full"
+    : "shell.first_setup.disk_full_restart_unknown";
+}
+
 /**
  * The repair page's steps before activation, the claim included; activation keeps the first-setup
- * map. A full disk's words say a restart frees space only where the server says it does.
+ * map.
  */
 function repairErrorKey(error: unknown): StringKey | undefined {
   const { code, params } = (error ?? {}) as { code?: string; params?: Record<string, unknown> };
-  if (code === "storage.disk_full")
-    return params?.restartDeletesLogs === true
-      ? "shell.first_setup.disk_full"
-      : "shell.first_setup.disk_full_restart_unknown";
+  if (code === "storage.disk_full") return diskFullKey(params);
   return code === undefined ? undefined : FIRST_SETUP_ERROR_MESSAGES[code];
+}
+
+/**
+ * A finish that restarts into the full start (activation, provision, adopt, each restore) saves
+ * the clock steps "This device" made first, and is refused while it cannot; pressing again retries.
+ */
+function finishRefusalKey(
+  error: unknown,
+  unsaved: "shell.clock_step_unsaved" | "shell.first_setup.clock_step_unsaved",
+): StringKey | undefined {
+  const { code, params } = (error ?? {}) as { code?: unknown; params?: Record<string, unknown> };
+  if (code === "setup.clock_step_unsaved") return unsaved;
+  if (code === "storage.disk_full") return diskFullKey(params);
+  return undefined;
 }
 
 const RESET_ERROR_MESSAGES: Record<string, StringKey> = {
@@ -532,6 +552,8 @@ function describeBucketRefusal(
   params: Record<string, unknown> | undefined,
 ): Message {
   if (typeof code !== "string") return say("shell.bucket.no_answer");
+  const finishKey = finishRefusalKey({ code, params }, "shell.clock_step_unsaved");
+  if (finishKey !== undefined) return say(finishKey);
   if (
     code === "backup.stream_kit_invalid" &&
     (params?.reason === "encoding" || params?.reason === "shape")
@@ -1336,7 +1358,8 @@ export class SetupApp extends LitElement {
     }
   }
   #describeFirstError(error: unknown): Message {
-    const key = firstSetupErrorKey(error);
+    const key =
+      finishRefusalKey(error, "shell.first_setup.clock_step_unsaved") ?? firstSetupErrorKey(error);
     return key ? say(key) : () => initialOwnerStrings[setupLocale()].error;
   }
   #describeRepairError(error: unknown): Message {
@@ -1738,6 +1761,11 @@ export class SetupApp extends LitElement {
         this.provisionMessage = say("shell.not_ready");
         this.provisionCanRetry = true;
         return;
+      case "setup.clock_step_unsaved":
+      case "storage.disk_full":
+        this.provisionMessage = say(finishRefusalKey(error, "shell.clock_step_unsaved")!);
+        this.provisionCanRetry = true;
+        return;
       default:
         this.provisionMessage = say("shell.provision.failed");
         this.provisionCanRetry = true;
@@ -1838,18 +1866,21 @@ export class SetupApp extends LitElement {
           RESTORE_FIELD_CODES,
           RESTORE_FIELD_PATHS,
         );
+        const finishKey = finishRefusalKey(error, "shell.clock_step_unsaved");
         this.restoreError =
-          code === "restore.administrator_password_missing"
-            ? say("shell.restore.administrator_password_missing")
-            : code === "restore.environment_mismatch"
-              ? say("shell.restore.environment_mismatch")
-              : code === "restore.schema_too_new"
-                ? say("shell.restore.other_version")
-                : this.restoreInvalidField !== undefined
-                  ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
-                  : typeof code === "string"
-                    ? sayWith("shell.restore.staging_failed_code", { code })
-                    : say("shell.restore.staging_failed");
+          finishKey !== undefined
+            ? say(finishKey)
+            : code === "restore.administrator_password_missing"
+              ? say("shell.restore.administrator_password_missing")
+              : code === "restore.environment_mismatch"
+                ? say("shell.restore.environment_mismatch")
+                : code === "restore.schema_too_new"
+                  ? say("shell.restore.other_version")
+                  : this.restoreInvalidField !== undefined
+                    ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
+                    : typeof code === "string"
+                      ? sayWith("shell.restore.staging_failed_code", { code })
+                      : say("shell.restore.staging_failed");
       }
       this.screen = "restore";
     }
@@ -2027,7 +2058,8 @@ export class SetupApp extends LitElement {
           );
         } else {
           this.cloudRecoveryError = say(
-            (typeof code === "string" ? CLOUD_ERROR_MESSAGES[code] : undefined) ??
+            finishRefusalKey(error, "shell.clock_step_unsaved") ??
+              (typeof code === "string" ? CLOUD_ERROR_MESSAGES[code] : undefined) ??
               (event.detail.action === "restore"
                 ? "shell.cloud.restore_unavailable"
                 : "shell.cloud.unavailable"),

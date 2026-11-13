@@ -5237,6 +5237,21 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     },
   );
 
+  it.each([
+    ["setup.clock_step_unsaved", 500, {}, shellEn["shell.clock_step_unsaved"]],
+    ["storage.disk_full", 507, {}, shellEn["shell.first_setup.disk_full_restart_unknown"]],
+  ])(
+    "a Cloud restore refused with %s says what happened",
+    async (code, status, params, sentence) => {
+      const el = await approvedCloudApp({
+        restoreFromCloud: vi.fn().mockRejectedValue({ code, params, status }),
+      });
+      cloudRecoveryAction(el, "restore", pointId, false);
+      await flush(el);
+      expect((await cloudScreen(el)).errorMessage).toBe(sentence);
+    },
+  );
+
   const unavailable =
     "Cloud recovery is unavailable. Check the connection or request expiry, then try again.";
 
@@ -6400,3 +6415,82 @@ it.each(["setup-restore-screen", "setup-restore-bucket-screen", "setup-cloud-res
     ).toBe(true);
   },
 );
+
+describe("a finish refused while a clock step's note is unsaved", () => {
+  const unsaved = { code: "setup.clock_step_unsaved", params: {}, status: 500 };
+  const diskFull = { code: "storage.disk_full", params: {}, status: 507 };
+  afterEach(() => setLocale("en-GB"));
+
+  it.each([
+    ["en-GB", shellEn],
+    ["es-ES", shellEs],
+  ] as const)("provision says what happened and offers Try again, in %s", async (locale, words) => {
+    const el = await mountSetupApp(stubApi({ provision: vi.fn().mockRejectedValue(unsaved) }));
+    setLocale(locale);
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toBe(
+      words["shell.clock_step_unsaved"],
+    );
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).not.toBeNull();
+  });
+
+  it("provision on a full disk says the disk is full and offers Try again", async () => {
+    const el = await mountSetupApp(stubApi({ provision: vi.fn().mockRejectedValue(diskFull) }));
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toBe(
+      shellEn["shell.first_setup.disk_full_restart_unknown"],
+    );
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).not.toBeNull();
+  });
+
+  it.each([
+    [unsaved, shellEn["shell.clock_step_unsaved"]],
+    [diskFull, shellEn["shell.first_setup.disk_full_restart_unknown"]],
+    [{ ...diskFull, params: { restartDeletesLogs: true } }, shellEn["shell.first_setup.disk_full"]],
+  ])(
+    "an archive restore refused %o stays on the restore form with its words",
+    async (refusal, sentence) => {
+      const el = await mountSetupApp(stubApi({ restore: vi.fn().mockRejectedValue(refusal) }));
+      restoreRequest(el, {
+        artifact: new File(["encrypted"], "waitron.backup"),
+        recoveryKey: "recovery-key",
+        environment: "production",
+      });
+      await flush(el);
+      expect(await bottomOf(await screenHost(el, "restore"))).toBe(sentence);
+    },
+  );
+
+  it.each([
+    [unsaved, shellEn["shell.clock_step_unsaved"]],
+    [diskFull, shellEn["shell.first_setup.disk_full_restart_unknown"]],
+  ])("a bucket restore refused %o stays on its form with its words", async (refusal, sentence) => {
+    const el = await mountSetupApp(
+      stubApi({ restoreFromBucket: vi.fn().mockRejectedValue(refusal) }),
+    );
+    bucketRequest(el);
+    await flush(el);
+    await flush(el);
+    const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
+    expect(screen.errorMessage).toBe(sentence);
+  });
+
+  it.each([
+    [unsaved, shellEn["shell.clock_step_unsaved"]],
+    [diskFull, shellEn["shell.first_setup.disk_full_restart_unknown"]],
+  ])(
+    "an adopt refused %o goes back to the connect form with its words",
+    async (refusal, sentence) => {
+      const el = await mountSetupApp(stubApi({ adopt: vi.fn().mockRejectedValue(refusal) }));
+      adoptRequest(el);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
+      const { connectError } = readState(el, ["connectError"]) as { connectError: () => string };
+      expect(connectError()).toBe(sentence);
+    },
+  );
+});

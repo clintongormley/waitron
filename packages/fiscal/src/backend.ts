@@ -293,7 +293,9 @@ export interface ClockAdminConfirm {
 
 /** A step of the box's clock from `before` to `after`, read on the boot-time clock either side.
  * `stepMs` is the measured step; `verified` false when the box could not confirm the step took.
- * `admin` names the person for the `admin` and `staff` sources, with `role: "staff"` for `staff`. */
+ * `admin` names the person for the `admin` and `staff` sources, with `role: "staff"` for `staff`,
+ * and for a `setup` step on first setup. A `setup` step, made from the setup or restore page before
+ * the venue exists, goes to the setup note and is never handed to a regime. */
 export interface ClockStepRequest {
   before: Pick<TrustedReading, "instant" | "offsetMinutes">;
   after: Pick<TrustedReading, "instant" | "offsetMinutes">;
@@ -303,7 +305,7 @@ export interface ClockStepRequest {
   stepMs: number;
   verified: boolean;
   reason: "behind_chain" | "unusable" | "start";
-  source: "authority" | "admin" | "staff";
+  source: "authority" | "admin" | "staff" | "setup";
   witnesses: readonly ClockWitness[];
   admin?: ClockAdminConfirm;
   nodeId: string;

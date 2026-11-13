@@ -648,8 +648,29 @@ describe("the box's clock was stepped", () => {
     );
   });
 
+  it("says the setup or restore page's device set it, naming the administrator on first setup", () => {
+    const named = both({ ...base, source: "setup", person: "Luis", bySetupAdmin: true });
+    expect(named.english).toBe(
+      `The box's clock was set from the device showing the setup or restore page, by Luis: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
+    );
+    expect(named.spanish).toBe(
+      `El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración, por Luis: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
+    );
+    const nobody = both({ ...base, source: "setup", bySetup: true });
+    expect(nobody.english).toBe(
+      `The box's clock was set from the device showing the setup or restore page: moved forward 2 days and 3 hours, from ${from} to ${to}.`,
+    );
+    expect(nobody.spanish).toBe(
+      `El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración: adelantado 2 días y 3 horas, de ${from} a ${to}.`,
+    );
+  });
+
   it("says a change it could not confirm was tried, and only what the clock read, whoever asked", () => {
-    for (const who of [{}, { source: "staff", person: "Ana", device: "Bar 1", byStaff: true }]) {
+    for (const who of [
+      {},
+      { source: "staff", person: "Ana", device: "Bar 1", byStaff: true },
+      { source: "setup", bySetup: true },
+    ]) {
       const params = { ...base, ...who, confirmationId: null, verified: false, unverified: true };
       const { english, spanish } = both(params);
       expect(english).toBe(

@@ -28,6 +28,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
+import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -80,7 +81,8 @@ import {
   seedTradingVenue,
   fetchHealthOk,
 } from "./testing/boot-harness.js";
-import { createHourTestClock } from "./testing/hour-test-clock.js";
+import { createHourTestClock, type HourTestClock } from "./testing/hour-test-clock.js";
+import { clockServiceAnswer, synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 import * as bootHarness from "./testing/boot-harness.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
@@ -104,6 +106,25 @@ vi.mock("./setup-api.js", async (original) => {
         return c.body(null, 204);
       });
       return actual.mountSetup(...args);
+    },
+  };
+});
+
+/** The options boot hands the setup start's restore preparation. */
+const recovery = vi.hoisted(() => ({
+  options: undefined as
+    | Parameters<typeof import("./recovery-preparation.js").createSetupRecoveryPreparation>[0]
+    | undefined,
+}));
+vi.mock("./recovery-preparation.js", async (original) => {
+  const actual = await original<typeof import("./recovery-preparation.js")>();
+  return {
+    ...actual,
+    createSetupRecoveryPreparation: (
+      options: Parameters<typeof actual.createSetupRecoveryPreparation>[0],
+    ) => {
+      recovery.options = options;
+      return actual.createSetupRecoveryPreparation(options);
     },
   };
 });
@@ -366,6 +387,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       kills: { pid: number; signal: string | number | undefined }[];
       stateDir: string;
       extraPorts: number[];
+      /** The server's clock, unless `seams` brings its own. */
+      testClock: HourTestClock;
     }) => Promise<void>,
     {
       extraPortCount = 0,
@@ -471,6 +494,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             kills,
             stateDir,
             extraPorts: drawn,
+            testClock,
           });
         } finally {
           try {
@@ -520,6 +544,212 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       }
     }
   });
+
+  it("the setup and restore pages set the box's clock through the setup start's own setter", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const boxHost = { ...synchronisedBoxHost(), setClock: vi.fn() };
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, stateDir }) => {
+          const json = { "content-type": "application/json" };
+          const claimed = await post("/setup-api/first-setup/claim", {
+            headers: json,
+            body: JSON.stringify({ venue: provisionVenueBody("60000010W") }),
+          });
+          expect(claimed.status).toBe(200);
+          const claim = await claimed.json();
+          const headers = {
+            ...json,
+            "X-Waitron-Setup-Owner": claim.capability,
+            "X-Waitron-Setup-Attempt": claim.state.attemptId,
+            "X-Waitron-Setup-Revision": String(claim.state.revision),
+            "X-Waitron-Setup-Generation": String(claim.state.ownerGeneration),
+          };
+          const prepare = async (proposal: unknown) =>
+            (
+              await (
+                await post("/setup-api/first-setup/preparation", {
+                  headers,
+                  body: JSON.stringify({ module: "fiscal-verifactu", proposal }),
+                })
+              ).json()
+            ).preparation;
+          const challenge = await prepare({ action: "clock-challenge" });
+          // Only the setter answers `synchronised`: the module alone answers host_unavailable.
+          expect(
+            await prepare({
+              action: "set-clock",
+              browser: { challengeId: challenge.id, instantMs: Date.now() + 3_600_000 },
+            }),
+          ).toEqual({ status: "refused", reason: "synchronised" });
+          // Only the setter answers `stale`, here for a reading taken at the epoch.
+          expect(
+            await recovery.options!.setBoxClock!(
+              {
+                offsetMs: 3_600_000,
+                agreesWithinMs: 30_000,
+                measuredAt: { wallMs: 0, monoMs: 0 },
+                reading: { boxAt: "", witnessAt: "", uncertaintyMs: 0 },
+              },
+              async () => null,
+            ),
+          ).toEqual({ status: "refused", reason: "stale" });
+          expect(boxHost.setClock).not.toHaveBeenCalled();
+          await expect(readFile(join(stateDir, SETUP_CLOCK_STEP_FILE))).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+        },
+        { seams: { boxHost, requestFromBox: () => false } },
+      );
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to finish a restore while a clock step's note cannot be written, and writes it on the next try", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const clock = createHourTestClock(Date.parse("2026-10-16T11:40:00Z"));
+    const boxHost = {
+      clockStatus: async () => clockServiceAnswer(false),
+      setClock: async ({ targetMs }: { targetMs: number }) => {
+        const beforeMs = clock.wall();
+        clock.set(targetMs);
+        return { available: true as const, beforeMs, afterMs: clock.wall() };
+      },
+    };
+    const restore = (post: (path: string, init: RequestInit) => Promise<Response>) =>
+      post("/setup-api/restore", {
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-waitron-recovery-key": "not-the-key-that-sealed-it",
+          "x-waitron-restore-environment": "preproduction",
+        },
+        body: new Uint8Array(
+          encryptArtifact(
+            packArchive([{ name: "manifest.json", bytes: Buffer.from("{}") }]),
+            "the key that really sealed it",
+          ),
+        ),
+      });
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, kills, stateDir }) => {
+          const notePath = join(stateDir, SETUP_CLOCK_STEP_FILE);
+          // A folder where the note goes, so writing it fails.
+          await mkdir(notePath);
+          expect(
+            await recovery.options!.setBoxClock!(
+              {
+                offsetMs: 3_600_000,
+                agreesWithinMs: 30_000,
+                measuredAt: { wallMs: clock.wall(), monoMs: clock.monotonic() },
+                reading: { boxAt: "", witnessAt: "", uncertaintyMs: 0 },
+              },
+              async () => null,
+            ),
+          ).toEqual({ status: "set" });
+
+          const refused = await restore(post);
+          expect(refused.status).toBe(500);
+          expect(((await refused.json()) as { error?: { code: string } }).error?.code).toBe(
+            "setup.clock_step_unsaved",
+          );
+          expect(kills).toEqual([]);
+
+          await rm(notePath, { recursive: true });
+          const retried = await restore(post);
+          // Past the note, the restore goes on to refuse the copy for its own reason.
+          expect(((await retried.json()) as { error?: { code: string } }).error?.code).toBe(
+            "recovery.passphrase_invalid",
+          );
+          const entries = JSON.parse(await readFile(notePath, "utf8")) as {
+            params: { stepMs: number; source: string };
+          }[];
+          expect(entries).toHaveLength(1);
+          expect(entries[0]!.params.source).toBe("setup");
+          expect(kills).toEqual([]);
+        },
+        { seams: { boxHost, testClock: clock, requestFromBox: () => false } },
+      );
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses to finish a live first setup while a clock step's note cannot be written, and writes it on the next try", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const server: { clock?: HourTestClock } = {};
+    const boxHost = {
+      clockStatus: async () => clockServiceAnswer(false),
+      setClock: async ({ targetMs }: { targetMs: number }) => {
+        const beforeMs = server.clock!.wall();
+        server.clock!.set(targetMs);
+        return { available: true as const, beforeMs, afterMs: server.clock!.wall() };
+      },
+    };
+    const sent = vi.spyOn(globalThis, "fetch");
+    try {
+      await withSetupBoot(
+        venue.directory,
+        // A development box, so a live setup needs no tax agency certificate.
+        { WAITRON_ENV: "dev" },
+        async ({ post, kills, stateDir, testClock }) => {
+          server.clock = testClock;
+          const notePath = join(stateDir, SETUP_CLOCK_STEP_FILE);
+          await mkdir(notePath);
+          // A step a little over a second, so the hour setup's own clocks still agree.
+          expect(
+            await recovery.options!.setBoxClock!(
+              {
+                offsetMs: 1_500,
+                agreesWithinMs: 0,
+                measuredAt: { wallMs: testClock.wall(), monoMs: testClock.monotonic() },
+                reading: { boxAt: "", witnessAt: "", uncertaintyMs: 0 },
+              },
+              async () => null,
+            ),
+          ).toEqual({ status: "set" });
+
+          const refused = await post("/setup-api/provision", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ mode: "live", venue: provisionVenueBody("60000014Y") }),
+          });
+          expect(refused.status, await refused.clone().text()).toBe(500);
+          expect(((await refused.json()) as { error?: { code: string } }).error?.code).toBe(
+            "setup.clock_step_unsaved",
+          );
+          expect(kills).toEqual([]);
+
+          await rm(notePath, { recursive: true });
+          const [url, init] = sent.mock.calls
+            .filter(([input]) => String(input).endsWith("/setup-api/provision"))
+            .at(-1)!;
+          const retried = await fetch(url, init);
+          expect(retried.status, await retried.clone().text()).toBe(200);
+          await poll(() => (kills.length > 0 ? kills.length : undefined));
+          const entries = JSON.parse(await readFile(notePath, "utf8")) as {
+            params: { source: string };
+          }[];
+          expect(entries).toHaveLength(1);
+          expect(entries[0]!.params.source).toBe("setup");
+        },
+        { seams: { boxHost, requestFromBox: () => false } },
+      );
+    } finally {
+      sent.mockRestore();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 120_000);
 
   it("the setup start's ask timer stops when the server closes", async () => {
     beforeServerStarts();

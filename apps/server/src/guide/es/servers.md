@@ -21,7 +21,9 @@ ninguna fecha disponible, la página lo indica.
 Lee las advertencias, marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
 el servidor principal anterior**. En la comprobación del reloj, marca **Estos datos son correctos.**
 y elige **Continuar**: la página compara los relojes, crea las series de facturas nuevas e inicia
-el local en este servidor sola. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
+el local en este servidor sola. Si los relojes no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
+hora de este equipo con la del dispositivo que estás usando y la página sigue; después de **El
+servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Mantén la página abierta durante el reinicio. Introduces tu contraseña y código una sola vez; si
 el código caduca, introduce el código actual cuando se te pida y vuelve a intentar el paso. El
 motivo y las declaraciones se conservan.
 
@@ -58,7 +60,9 @@ Mantén los dos equipos conectados. La página de traspaso se abre en el equipo 
 transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador y elige
 **Continuar a la comprobación del reloj**. Marca **Estos datos son correctos.** y elige
 **Continuar**: la página compara los relojes y crea las series de facturas nuevas sola, también tras
-cualquier espera, y después inicia el local en el equipo de reserva. Un código del autenticador dura
+cualquier espera, y después inicia el local en el equipo de reserva. Si los relojes no coinciden, la página pregunta qué hora es la correcta: **Este dispositivo** pone la
+hora del equipo de reserva con la del dispositivo que estás usando y la página sigue; después de **El
+servidor** o **Las dos horas están mal**, corrige la hora de este dispositivo y vuelve a conectarte. Un código del autenticador dura
 menos de un minuto. Si el tuyo caduca antes de que la página lo use, la página te pide revisar la contraseña y el código: introduce un código nuevo y elige
 **Volver a intentarlo** para seguir. Antes de **Continuar**,
 **Editar estos datos** vuelve a la identificación. Si la página indica que el

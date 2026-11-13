@@ -10,6 +10,7 @@ import { Agent } from "undici";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  incidents,
   invoiceSeries,
   locations,
   nodes,
@@ -52,6 +53,14 @@ import { locationId } from "@waitron/shared";
 import { startServer, type StartedServer } from "./boot.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
+import type {
+  ClockStepRequest,
+  ClockStopState,
+  ClockWitness,
+  TrustedReading,
+} from "@waitron/fiscal";
+import type { ClockServiceStatus } from "./box-host-client.js";
+import { clockCorrection } from "./clock-correction.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import {
   assertBindingNamesOperation,
@@ -62,7 +71,9 @@ import { keysInTurn } from "./attempt-turns.js";
 import { advanceHandover, beginHandover, HANDOVER_EVENT } from "./handover-store.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { startClockState } from "./start-clock-check.js";
 import { promoteMirrorToPrimary } from "./promote.js";
+import { mountPromoteApi } from "./promote-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { freePorts } from "./testing/free-ports.js";
 
@@ -245,8 +256,9 @@ afterEach(async () => {
   if (root) await rm(root, { recursive: true, force: true });
 });
 
-function service(modules = fiscalModules) {
+function service(modules = fiscalModules, correction?: ReturnType<typeof clockCorrection>) {
   return createNodeOperationPreparation({
+    ...(correction === undefined ? {} : { clockCorrection: correction }),
     stateDir: join(root, "state"),
     venueDir: join(root, "venue"),
     db: suite.db,
@@ -996,21 +1008,43 @@ describe("the handover's preparation route", () => {
     const [port] = await freePorts(1);
     let server: StartedServer | undefined;
     let agent: Agent | undefined;
+    // This test's requests are loopback; the last one stands in for a phone's.
+    let fromBox = true;
     try {
-      server = await startServer({
-        WAITRON_VENUE_DIR: dirname(database),
-        WAITRON_STATE_DIR: stateDir,
-        WAITRON_MIGRATIONS_DIR: join(root, "migrations"),
-        WAITRON_HTTP_HOST: "127.0.0.1",
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_HTTP_LANDING_PORT: "0",
-        WAITRON_NODE_ID: standby.nodeId,
-        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
-        WAITRON_CREDENTIALS_KEY_VERSION: "1",
-        WAITRON_ENV: "dev",
-        WAITRON_MANAGEMENT_RP_ID: "localhost",
-        WAITRON_MANAGEMENT_ORIGIN: `https://localhost:${port}`,
-      });
+      server = await startServer(
+        {
+          WAITRON_VENUE_DIR: dirname(database),
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_MIGRATIONS_DIR: join(root, "migrations"),
+          WAITRON_HTTP_HOST: "127.0.0.1",
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_HTTP_LANDING_PORT: "0",
+          WAITRON_NODE_ID: standby.nodeId,
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+          WAITRON_ENV: "dev",
+          WAITRON_MANAGEMENT_RP_ID: "localhost",
+          WAITRON_MANAGEMENT_ORIGIN: `https://localhost:${port}`,
+        },
+        {},
+        {
+          requestFromBox: () => fromBox,
+          boxHost: {
+            clockStatus: async () => ({
+              available: true,
+              service: "on",
+              unit: null,
+              synchronised: false,
+              lastSyncAt: null,
+            }),
+            setClock: async ({ targetMs }) => {
+              const beforeMs = Date.now();
+              vi.setSystemTime(targetMs);
+              return { available: true, beforeMs, afterMs: targetMs };
+            },
+          },
+        },
+      );
       agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
       const send = async (proposal: unknown) => {
         const response = await fetch(
@@ -1040,11 +1074,306 @@ describe("the handover's preparation route", () => {
       expect(await send({ action: "select", comparisonId: compared.id })).toMatchObject({
         status: "selected",
       });
+      // A refusal only boot's own setter gives: the mirror's gate let the set through to it.
+      fromBox = false;
+      const setChallenge = await send({ action: "clock-challenge" });
+      expect(
+        await send({
+          action: "set-clock",
+          browser: { challengeId: setChallenge.id, instantMs: Date.UTC(2101, 0, 1) },
+        }),
+      ).toEqual({ status: "refused", reason: "target_invalid" });
+      const corrected = () =>
+        suite.db
+          .select({ code: incidents.code })
+          .from(incidents)
+          .where(eq(incidents.code, "clock.corrected"));
+      expect(await corrected()).toEqual([]);
+      const ahead = await send({ action: "clock-challenge" });
+      expect(
+        await send({
+          action: "set-clock",
+          browser: { challengeId: ahead.id, instantMs: Date.now() + 45_000 },
+        }),
+      ).toEqual({ status: "set" });
+      expect(await corrected()).toEqual([{ code: "clock.corrected" }]);
     } finally {
       await agent?.close();
       await server?.close();
     }
   }, 120_000);
+});
+
+describe("setting the spare's clock from this device", () => {
+  type Answer = { status: string; reason?: string };
+  const NOT_SYNCED = {
+    available: true,
+    service: "on",
+    unit: null,
+    synchronised: false,
+    lastSyncAt: null,
+  } as const;
+
+  /** Boot's own setter, on a host that moves the wall clock to the target it is given. */
+  function setter(
+    options: {
+      status?: ClockServiceStatus;
+      byInternet?: boolean;
+      aeatSpoke?: boolean;
+    } = {},
+  ) {
+    const hostSets: number[] = [];
+    const steps: ClockStepRequest[] = [];
+    const start = startClockState();
+    if (options.byInternet === true) start.confirm("by_internet", {});
+    const authority: ClockWitness = {
+      kind: "authority",
+      id: "authority",
+      boxAt: new Date().toISOString(),
+      witnessAt: new Date().toISOString(),
+      uncertaintyMs: 40,
+    };
+    const correction = clockCorrection({
+      host: {
+        clockStatus: async () => options.status ?? NOT_SYNCED,
+        setClock: async ({ targetMs }) => {
+          hostSets.push(targetMs);
+          const beforeMs = Date.now();
+          vi.setSystemTime(targetMs);
+          return { available: true, beforeMs, afterMs: targetMs };
+        },
+      },
+      backend: {
+        confirmClockStep: async (_tx, request) => {
+          steps.push(request);
+          return { confirmation: null, corrected: null };
+        },
+        assertRecordableAt: () => {},
+        ...(options.aeatSpoke === true
+          ? {
+              clockStopState: async (): Promise<ClockStopState> => ({
+                clockAt: new Date().toISOString(),
+                offsetMinutes: 0,
+                lastRecordAt: new Date().toISOString(),
+                lastRecordOffsetMinutes: 0,
+                recordId: "record-1",
+                gapMs: 0,
+                proof: "contrary",
+                agreeing: { authority: null, devices: [] },
+                contrary: { authority, devices: [] },
+                confirmation: null,
+              }),
+            }
+          : {}),
+      },
+      store: { clear: () => {}, witnesses: () => [] },
+      clock: {
+        now: () =>
+          ({
+            instant: new Date(),
+            offsetMinutes: 0,
+            confident: true,
+            confidence: "anchored",
+            anchorAgeSeconds: 0,
+          }) satisfies TrustedReading,
+      },
+      boot: { readBoot: () => ({ ms: 0, id: null }) },
+      read: (fn) => suite.db.withWriteLock(() => fn(suite.db)),
+      transaction: (fn) => withTransaction(suite.db, fn),
+      nodeId: standby.nodeId,
+      log: () => {},
+      start: { state: start, heads: async () => ({}) },
+    });
+    const set = vi.spyOn(correction, "set");
+    return { correction, set, hostSets, steps };
+  }
+
+  async function setFrom(app: Hono, deviceAheadMs: number) {
+    const challenge = await post(app, request({ action: "clock-challenge" }));
+    expect(challenge.status, JSON.stringify(challenge.body)).toBe(200);
+    return post(
+      app,
+      request({
+        action: "set-clock",
+        browser: { challengeId: challenge.body.id, instantMs: Date.now() + deviceAheadMs },
+      }),
+    );
+  }
+
+  it("sets the clock from a device 45 seconds ahead, as the signed-in node.manage person", async () => {
+    const box = setter();
+    await controlledAtFilingAssumed();
+    const before = Date.now();
+    const answer = await setFrom(route(service(fiscalModules, box.correction)), 45_000);
+    expect(answer).toMatchObject({ status: 200, body: { status: "set" } });
+    expect(box.hostSets).toEqual([before + 45_000]);
+    expect(box.set).toHaveBeenCalledWith({
+      reason: "start",
+      source: "admin",
+      offsetMs: 45_000,
+      measuredAt: { wallMs: before, monoMs: performance.now() },
+      stepsSeen: 0,
+      witnesses: [],
+      agreesWithinMs: 30_000,
+      admin: {
+        personId: ADMIN,
+        personName: "Administrator",
+        reading: {
+          boxAt: new Date(before).toISOString(),
+          witnessAt: new Date(before + 45_000).toISOString(),
+          uncertaintyMs: 0,
+        },
+      },
+      requester: { source: "admin", person: ADMIN },
+    });
+    expect(box.steps).toHaveLength(1);
+    expect(box.steps[0]).toMatchObject({ reason: "start", source: "admin", verified: true });
+  });
+
+  it("an emergency at emergency_declared sets it too", async () => {
+    const box = setter();
+    await emergencyDeclared();
+    const answer = await setFrom(route(service(fiscalModules, box.correction)), 45_000);
+    expect(answer.body as unknown as Answer).toEqual({ status: "set" });
+  });
+
+  it("a second set reads the steps the first one made", async () => {
+    const box = setter();
+    await controlledAtFilingAssumed();
+    const app = route(service(fiscalModules, box.correction));
+    await setFrom(app, 45_000);
+    await setFrom(app, -45_000);
+    expect(box.set.mock.calls.map(([input]) => input.stepsSeen)).toEqual([0, 1]);
+    expect(box.hostSets).toHaveLength(2);
+  });
+
+  it.each([
+    ["synchronised", { status: { ...NOT_SYNCED, synchronised: true } }, 45_000],
+    ["not_stopped", { byInternet: true }, 45_000],
+    ["witnessed", { aeatSpoke: true }, 45_000],
+    ["agrees", {}, 20_000],
+    ["target_invalid", {}, Date.UTC(2101, 0, 1)],
+    [
+      "host_unavailable",
+      { status: { available: false, reason: "missing" } as ClockServiceStatus },
+      45_000,
+    ],
+  ] as const)(
+    "answers the setter's %s, and never moves the clock",
+    async (reason, options, ahead) => {
+      const box = setter(options);
+      await controlledAtFilingAssumed();
+      const answer = await setFrom(route(service(fiscalModules, box.correction)), ahead);
+      expect(answer).toMatchObject({ status: 200 });
+      expect(answer.body as unknown as Answer).toEqual({ status: "refused", reason });
+      expect(box.hostSets).toEqual([]);
+    },
+  );
+
+  it("from a browser on the box itself, answers same_machine and never asks the setter", async () => {
+    const box = setter();
+    await controlledAtFilingAssumed();
+    const answer = await setFrom(
+      route(service(fiscalModules, box.correction), () => true),
+      45_000,
+    );
+    expect(answer.body as unknown as Answer).toEqual({ status: "refused", reason: "same_machine" });
+    expect(box.set).not.toHaveBeenCalled();
+  });
+
+  it("is refused without the sign-in, as the comparison is, and never asks the setter", async () => {
+    const box = setter();
+    await controlledAtFilingAssumed();
+    const app = route(service(fiscalModules, box.correction));
+    const challenge = await post(app, request({ action: "clock-challenge" }));
+    for (const signIn of [undefined, { email: ADMIN_EMAIL, password: "wrong" }]) {
+      const answer = await post(
+        app,
+        request(
+          {
+            action: "set-clock",
+            browser: { challengeId: challenge.body.id, instantMs: Date.now() + 45_000 },
+          },
+          { signIn },
+        ),
+      );
+      expect(answer).toMatchObject({ status: 401, body: { error: { code: "password.invalid" } } });
+    }
+    await setBuiltInRoleForTest(suite.db, ADMIN, "staff");
+    const staff = await post(
+      app,
+      request({
+        action: "set-clock",
+        browser: { challengeId: challenge.body.id, instantMs: Date.now() + 45_000 },
+      }),
+    );
+    expect(staff).toMatchObject({
+      status: 403,
+      body: { error: { code: "authorization.not_permitted" } },
+    });
+    expect(box.set).not.toHaveBeenCalled();
+  });
+
+  it("on a box that is now primary, the older promote preparation route refuses not_mirror and never asks the setter", async () => {
+    const box = setter();
+    const s = service(fiscalModules, box.correction);
+    // The setup a join wrote while this box was a mirror stays in its state folder once promoted.
+    await setupFromAJoin(s);
+    await setNodeMode({ venue: suite.db, node: suite.node }, standby.nodeId, "primary");
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: suite.db,
+      nodeDb: suite.node,
+      nodeId: standby.nodeId,
+      credentialKeyRing: TOTP_KEY_RING,
+      nodePreparation: s,
+      requestFromBox: () => false,
+      isMirror: false,
+      run: async () => {
+        throw new Error("not promoting");
+      },
+    });
+    const socket = new TLSSocket(new Socket());
+    sockets.push(socket);
+    const send = async (proposal: unknown) => {
+      const response = await app.request(
+        "https://box.test/management-api/promote/preparation",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            oldNodeNeutralised: true,
+            noParallelRecovery: true,
+            ...credentials,
+            moduleOperation: { binding, input: null },
+            proposal,
+          }),
+        },
+        { incoming: { socket } },
+      );
+      const value = (await response.json()) as { id: string };
+      expect(response.status, JSON.stringify(value)).toBe(200);
+      return value;
+    };
+    const challenge = await send({ action: "clock-challenge" });
+    expect(
+      await send({
+        action: "set-clock",
+        browser: { challengeId: challenge.id, instantMs: Date.now() + 45_000 },
+      }),
+    ).toEqual({ status: "refused", reason: "not_mirror" });
+    expect(box.set).not.toHaveBeenCalled();
+    expect(box.hostSets).toEqual([]);
+  });
+
+  it("with no setter, the module answers host_unavailable", async () => {
+    await controlledAtFilingAssumed();
+    const answer = await setFrom(route(service()), 45_000);
+    expect(answer.body as unknown as Answer).toEqual({
+      status: "refused",
+      reason: "host_unavailable",
+    });
+  });
 });
 
 describe("the spare's dormant setup, written at a good sign-in", () => {

@@ -199,8 +199,11 @@ deja de cobrar al terminar la recuperación hasta que su reloj las alcance o se 
 
 Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si la comprobación
 del reloj lo impide, resuelve la causa y elige **Volver a comparar los relojes**. Si los relojes no
-coinciden, después de **Continuar** la página muestra la hora del servidor y la de este dispositivo y pregunta cuál es la correcta; corrige la hora de
-este dispositivo, vuelve a conectarte al servidor y elige **Volver a comparar los relojes**. Si después el servidor muestra una
+coinciden, después de **Continuar** la página muestra la hora del servidor y la de este dispositivo y
+pregunta cuál es la correcta: **El servidor**, **Este dispositivo** o **Las dos horas están mal**.
+**Este dispositivo** pone la hora del servidor con la del dispositivo que estás usando, y la página
+sigue sola. Después de cualquiera de las otras dos, corrige la hora de este dispositivo, vuelve a
+conectarte al servidor y elige **Volver a comparar los relojes**. Si después el servidor muestra una
 página que dice que no pudo crear sus nuevas series de facturas, conéctalo a internet y pulsa
 **Reintentar un arranque normal**.
 

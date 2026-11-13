@@ -4755,8 +4755,8 @@ The app's container cannot set the clock, so a small root program on the box's o
 the container — the **host service** — sets it when the server asks. The box sets its clock
 inside a stop it already has (the clock behind the latest record, or before 28-10-2024,
 `clock.unusable`), and, from a till's time, while a start waits for its time to be
-confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)). It opens no stop of its
-own.
+confirmed ([below](#every-start-confirms-the-boxs-time-before-it-trades)), and from the setup,
+restore and handover pages' clock step. It opens no stop of its own.
 
 _2026-11-12, B3:_ the installed recipe also forwards `tag.write` (up to 4096 characters) and
 `network.read` (up to 700) to their installed adapters. An absent adapter keeps `unknown_request`
@@ -4806,7 +4806,7 @@ reply, not `lost`; the routes in `apps/server/src/box-host-api.ts` call it for e
 clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
 
 **Who may set it** (`apps/server/src/clock-correction.ts`, one correction per server, built in
-`boot.ts`):
+`boot.ts`; setup mode builds its own, in the last item):
 
 - the clock watch, from AEAT's time, by itself, when AEAT disagrees during the clock-behind stop
   (`setFromAuthority`, `apps/server/src/clock-watch.ts`); `clock.unusable` has no automatic set;
@@ -4817,11 +4817,47 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
   (`apps/server/src/till-box-clock-api.ts`): any staff member the till's profile admits, while
   the start has not been confirmed by the internet (during a stop, or while the start waits) or
   during the start-up window (below), or an administrator signed in on the till or named with their
-  PIN, at any time.
+  PIN, at any time;
+- the person on the first-setup, restore or handover page, from their own device, when the clocks
+  differ and they choose **This device** (A1482,
+  [plan](../superpowers/plans/2026-11-12-a1482-this-device-in-setup.md)). The page sends
+  `clock-challenge` then `set-clock` through the preparation path it already uses for
+  `compare-clocks`, so each page's own authority admits it: the setup owner's pass on first setup,
+  the recovery key or kit on restore, a `node.manage` sign-in on handover
+  (`packages/fiscal-verifactu/src/initial-hour-setup.ts`, `hosted-hour-recovery.ts`). The module
+  (`packages/fiscal-verifactu/src/hour-setup-clock.ts`) refuses `same_machine` for a page on the
+  box itself, and `later` when the device's time is earlier than when the hour already chosen for
+  the page's event was issued (`chosenHourIssuedAtMs`), before the host is asked; it sends `AGREEMENT_MS` (30 seconds) as
+  the set's `agreesWithinMs`, so a device within 30 seconds answers `agrees`, not a minute. The set
+  is at reason `start`. On handover it is boot's own correction, source `admin`, and only while the
+  spare is still a mirror: the older promote preparation route reaches the same seat on any box, and
+  on a box that is now primary it answers `not_mirror` (`apps/server/src/node-operation-preparation.ts`);
+  on a mirror that route answers only a request from the box itself
+  (`apps/server/src/read-only-exemptions.ts`), so it reaches `same_machine`. On first setup and
+  restore there is no venue database, so setup mode builds a second correction
+  (`createSetupClockSet`, `apps/server/src/setup-clock-set.ts`), source `setup`, naming the
+  administrator on first setup and nobody on restore, whose step goes into the note
+  `<state>/setup-clock-step.json` (`reset: "deleted"`), one entry per step. At the first full start
+  that is neither a mirror nor fenced, `raiseSetupClockSteps` makes each entry a `clock.corrected`
+  alert under its id, each later one marking the earlier handled as on a running box, hands each to
+  the email duty, then deletes the note; an id already present is not inserted again. A step whose
+  box never fully starts before a reset, or one made before an environment-mismatch Move sets the
+  note aside with the other `reset: "deleted"` entries
+  (`packages/provisioning/src/environment-recovery-move.ts`), is never alerted or emailed: the host's
+  journal line and Waitron's `clock_correction.stepped` log line are its only record. Start again
+  keeps the note, so a step from an abandoned attempt is alerted at the next attempt's first full
+  start, naming the administrator of the attempt that made it. An entry that could
+  not be written stays in the process, under one id across retries: the next **This device** press
+  writes it before setting anything, and every finish that restarts into the full start (the first
+  setup's activation, `apps/server/src/first-fiscal-activation.ts`, and each setup operation,
+  `runOperation` in `apps/server/src/setup-api.ts`) writes it first and is refused while it cannot.
+  Start again and the adopt reset restart without writing it, so it is lost there, as it is when
+  the process ends first.
 
 Never from devices alone, never while the host says the clock is synchronised, and never when the
 host service does not answer. A person's set hands the correction no witnesses: what set the clock
-is that person's device, stored as their reading.
+is that person's device, stored as their reading; a setup or restore set stores no reading, only
+the before and after times in the note, and a restore set names nobody.
 
 **The order** (`setInTurn`). Every set, and every confirmation that can lift or close a stop (the
 watch's `confirm` and `closeWaiting`, `POST /api/box/clock-confirm`, a till's agreeing check), runs
@@ -4842,8 +4878,8 @@ Inside the turn, each refusal asking nothing further:
 4. the host's status: `host_unavailable`, then `synchronised`;
 5. for a person: `witnessed` when AEAT has a reading taken during this stop, agreeing or not, so the
    box sets or confirms from AEAT itself (at reason `start`, only while the clock-behind stop also
-   holds); then `agrees` when the device is within a minute, so
-   confirming is the way;
+   holds); then `agrees` when the device is within a minute (or the caller's
+   `agreesWithinMs`), so confirming is the way;
 6. each anchor's `stepComing` (a throw refuses `pending_disproofs`); then steps 3 and 5 again,
    because AEAT can answer or the stop end during the waits (a refusal there re-anchors every
    anchor; so does an error thrown there, which is then passed on); then `stale` again;
@@ -5022,6 +5058,23 @@ Guards: `apps/server/src/clock-correction.test.ts`, `clock-watch.correction.test
 `timedatectl`, `systemctl` and the rest, never systemd; the route suites cover the routes they name.
 Nothing checks that a new caller takes the turn outside its transaction, or that a new job comparing
 a stored time with the clock is in the table below.
+The page's **This device** (A1482): `apps/server/src/setup-clock-set.test.ts`, weaker than its name:
+a stub host, and it calls `raiseSetupClockSteps` directly rather than through a start; "boot raises
+and emails each clock step the setup page noted, then deletes the note" in
+`apps/server/src/boot.box-emails.test.ts`, which goes through a start;
+`packages/fiscal-verifactu/src/clock-step.setup-source.test.ts`, that the regime's step refuses a
+`setup` source whatever person it names, and nothing else; and "a clock step made while the
+handover page is open" in `apps/server/src/handover-activation.test.ts`, which writes the alert with
+`recordCorrected` rather than through the page's set, at `filing_assumed` and `emergency_declared`
+only, and checks it stays open through activation and its restart and that the box, then primary,
+queues its email; and the two "while a clock step's note cannot be written" cases in
+`apps/server/src/boot.setup-routes.test.ts`, which refuse one restore and one live provision sent
+without the setup owner's pass, then on the next try write the note (the provision then
+restarts; the restore goes on to refuse the copy for its own reason), not an adopt or the other
+restores; and "refuses activation while the This device clock-step note cannot be written, then activates once it can" in
+`apps/server/src/first-fiscal-interruption.test.ts`, which sends the first setup's activation with
+the setup owner's pass and a stand-in note writer that fails once, and checks that the refused try
+provisions nothing and asks for no restart and that the next try activates.
 
 #### Jobs that compare a stored time with the clock, across a step of days
 
@@ -6467,20 +6520,27 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   unguarded. **The box's internet time service keeps its clock; Waitron sets it only through the host
   service, from a till's time (a staff member's while the start waits for its time, or during a stop
   until the internet confirms that start or during start-up; a Box administration holder's at any time), a
-  Box administration holder's own device, or AEAT only inside the clock-behind stop — never from devices alone
+  Box administration holder's own device, the device showing the clock step of the setup page (under its
+  owner's pass), the restore page (under its recovery key or kit) or the handover page (signed in as
+  a `node.manage` holder), when that person chooses **This device** (owner, 2026-11-10: "yes";
+  2026-11-12: "add \"This device\" to #2693 now"), or AEAT only inside the clock-behind stop — never from devices alone
   and never while it keeps time over the internet — and every step it verifies, or sees move the
-  clock by over a second, is alerted and emailed** (owner, 2026-11-10: "we rely on NTP only, we
-  don't bother about AEAT"). Guards:
+  clock by over a second, is alerted and emailed (a step made before the venue exists, at its first
+  full start that is neither a mirror nor fenced, unless the topic file's losses apply)** (owner,
+  2026-11-10: "we rely on NTP only, we don't bother about AEAT"). Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
-  `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
-  rule: the handler's suite runs stubs, not systemd; the route suites cover the named routes only.
+  `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`,
+  `apps/server/src/setup-clock-set.test.ts`, `apps/server/src/boot.box-emails.test.ts`, weaker than
+  the rule: the handler's suite runs stubs, not systemd; the route suites cover the named routes only.
   [Detail](conventions-data.md#the-box-sets-its-own-clock).
 
 ### An installation name's minute: waits, refusals and repeats
 
 - **Restore and promotion start a new chain under a new installation name.**
   Setup/restore/promotion use five symbols for the box's UTC minute, after another machine's clock
-  agrees within 30 seconds (no confirmation); a minute whose name is already in a history the box
+  agrees within 30 seconds (no confirmation); a device that has just set the box's clock from that
+  page is that machine (A1482 plan, cleared by the watcher 2026-11-12 18:33; not owner-approved); a
+  minute whose name is already in a history the box
   reads is not taken (the box waits for the next free one if it starts within 150 seconds, and
   otherwise refuses with when it can; the setup and restore pages count that down and check again by
   themselves; owner, 2026-10-30, A1207), and no other name or record

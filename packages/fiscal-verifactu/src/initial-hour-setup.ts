@@ -230,20 +230,22 @@ export function createHourInitialSetup(
         );
       if (proposal.action === "clock-challenge" && exact(proposal, ["action"]))
         return session.clockChallenge(context.binding);
-      if (proposal.action === "compare-clocks" && exact(proposal, ["action", "browser"])) {
+      if (
+        (proposal.action === "compare-clocks" || proposal.action === "set-clock") &&
+        exact(proposal, ["action", "browser"])
+      ) {
         if (
-          proposal.browser !== null &&
+          (proposal.browser !== null || proposal.action === "set-clock") &&
           (!record(proposal.browser) ||
             !exact(proposal.browser, ["challengeId", "instantMs"]) ||
             typeof proposal.browser.challengeId !== "string" ||
             !Number.isSafeInteger(proposal.browser.instantMs))
         )
           return refuse("malformed_allocation");
-        return session.compareClocks(
-          context.binding,
-          proposal.browser as { challengeId: string; instantMs: number } | null,
-          client,
-        );
+        const browser = proposal.browser as { challengeId: string; instantMs: number } | null;
+        return proposal.action === "set-clock"
+          ? session.setClock(context.binding, browser!, client)
+          : session.compareClocks(context.binding, browser, client);
       }
       return refuse("malformed_allocation");
     },

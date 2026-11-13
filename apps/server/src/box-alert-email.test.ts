@@ -372,6 +372,26 @@ describe("boxEmailMessage for the box setting its clock", () => {
     });
   });
 
+  it("says the setup or restore page's device set it, naming the administrator on first setup", () => {
+    const named = { ...STEP, source: "setup", person: "Ben", bySetupAdmin: true };
+    expect(message("en", named).text).toBe(
+      "The box's clock was set from the device showing the setup or restore page, by Ben: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to 18/10/2026 23:40.",
+    );
+    expect(message("es", named).text).toBe(
+      `El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración, por Ben: adelantado ${formatDuration(STEP.stepMs, "es-ES")}, de 14/03/2025 09:12 a 18/10/2026 23:40.`,
+    );
+    const nobody = { ...STEP, source: "setup", bySetup: true };
+    expect(message("en", nobody).text).toBe(
+      "The box's clock was set from the device showing the setup or restore page: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to 18/10/2026 23:40.",
+    );
+    expect(message("es", nobody).text).toBe(
+      `El reloj del equipo se puso en hora con el dispositivo que mostraba la página de configuración o restauración: adelantado ${formatDuration(STEP.stepMs, "es-ES")}, de 14/03/2025 09:12 a 18/10/2026 23:40.`,
+    );
+    expect(message("en", { ...nobody, verified: false, unverified: true }).subject).toBe(
+      "Corner Bistro: the box could not confirm it set its clock",
+    );
+  });
+
   it("names the administrator whose device set it, in both languages", () => {
     const params = { ...STEP, source: "admin", person: "Ben", byAdmin: true };
     expect(message("en", params).text).toBe(

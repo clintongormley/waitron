@@ -148,6 +148,10 @@ export interface SetupDeps {
   persistTrading?: (cfg: TradingConfig) => Promise<void>;
   /** Called on the next tick, so the wizard sees the success response before the box goes down. */
   requestRestart?: () => void;
+  /** Notes the clock steps this process made whose note could not be written; throws while one
+   * still cannot be. A finish that restarts into the full start calls it first, since the step
+   * lives only in this process until it is noted. */
+  writeClockSteps?: () => Promise<void>;
   /** The built setup-wizard SPA directory, or `undefined` to serve the inline
    * `SETUP_PLACEHOLDER_HTML` shell instead. */
   setupAppDir?: string;
@@ -245,6 +249,12 @@ const REVALIDATE_CACHE_CONTROL = "no-cache";
 export const MAX_RESTORE_UPLOAD_BYTES = 256 * 1024 * 1024;
 export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 
+/** A finish saves the clock steps first (`runOperation`); a note this box cannot write is its own
+ * fault, so 500. */
+const CLOCK_STEP_STATUS: Record<string, ContentfulStatusCode> = {
+  "setup.clock_step_unsaved": 500,
+};
+
 /**
  * The status of AppError codes the provision, fiscal-test and configuration routes throw inside
  * their error boundaries. A code not listed gets the boundary's default 400.
@@ -278,6 +288,7 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   // packages/media/src/routes.ts answers both.
   "image.invalid_metadata": 400,
   "content.language_invalid": 400,
+  ...CLOCK_STEP_STATUS,
 };
 
 // The tag is a log label for a non-`AppError` fault other than a full disk, never a wire code: the
@@ -306,6 +317,7 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.already_provisioning": 409,
   "setup.adopt_incomplete": 409,
   "deployment.already_stamped": 409,
+  ...CLOCK_STEP_STATUS,
 };
 
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
@@ -722,12 +734,15 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       );
     });
   }
-  const runOperation = <T>(
+  const runOperation = async <T>(
     request: Request,
     kind: Parameters<SetupOperationStore["run"]>[0],
     hash: string,
     body: (operation: ActiveSetupOperation) => Promise<T>,
-  ): Promise<T> => deps.operations!.run(kind, hash, body, holds.get(request));
+  ): Promise<T> => {
+    await deps.writeClockSteps?.();
+    return deps.operations!.run(kind, hash, body, holds.get(request));
+  };
   // Once at mount, not per request: the box's mode is not otherwise visible in the request log.
   log("info", "setup.mode_active", { environment: deps.environment });
 

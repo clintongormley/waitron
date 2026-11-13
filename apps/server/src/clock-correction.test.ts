@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
   ClockAdminConfirm,
+  ClockConfirmation,
   ClockStepRecorded,
   ClockStepRequest,
   ClockStopState,
@@ -210,7 +211,7 @@ function harness(
             ? {
                 id: `confirmation-${seatCalls.length}`,
                 seq: seatCalls.length,
-                source: input.source,
+                source: input.source as ClockConfirmation["source"],
                 personId: input.admin?.personId ?? null,
                 confirmedAt: input.after.instant.toISOString(),
                 checkId: "check-1",
@@ -906,6 +907,28 @@ describe("a person's set", () => {
   it("sets an administrator's offset that agrees only once its uncertainty is left out", async () => {
     const h = harness();
     expect(await h.correction.set(byAdmin(h, { offsetMs: 59_980 }))).toMatchObject({ set: true });
+  });
+
+  it("with a closer agreement given, refuses within it, uncertainty included, and sets past it", async () => {
+    const h = harness();
+    expect(
+      await h.correction.set(byAdmin(h, { offsetMs: 29_970, agreesWithinMs: 30_000 })),
+    ).toEqual({ set: false, reason: "agrees" });
+    expect(h.hostSets).toEqual([]);
+    expect(
+      await h.correction.set(byAdmin(h, { offsetMs: 29_980, agreesWithinMs: 30_000 })),
+    ).toMatchObject({ set: true });
+  });
+
+  it("without one, a 45-second offset still agrees: the minute holds", async () => {
+    const h = harness();
+    expect(await h.correction.set(byAdmin(h, { offsetMs: 45 * S }))).toEqual({
+      set: false,
+      reason: "agrees",
+    });
+    expect(
+      await h.correction.set(byAdmin(h, { offsetMs: 45 * S, agreesWithinMs: 30_000 })),
+    ).toMatchObject({ set: true });
   });
 
   it("sets an administrator's offset of 61 seconds", async () => {

@@ -10,7 +10,11 @@ import {
   promotionHourOperator,
   recoveryHourOperator,
 } from "./hour-recovery-preparation.js";
-import { createSetupHourClock, type SetupBrowserClockSample } from "./hour-setup-clock.js";
+import {
+  createSetupHourClock,
+  setBoxClockFrom,
+  type SetupBrowserClockSample,
+} from "./hour-setup-clock.js";
 import { testClockOptions } from "./hour-preparation.js";
 import type { HourHistorySource } from "./hour-history.js";
 import "./errors.js";
@@ -104,19 +108,33 @@ function createHostedHourRecovery(
       });
     if (exact(proposal, ["action"]) && proposal.action === "preview")
       return preparationFor(operation.binding).preview(operation);
-    return host.withPreparationState!(operation.binding, async () => {
+    return host.withPreparationState!(operation.binding, async (state) => {
       const current = await facts(operation.binding);
       check();
       if (exact(proposal, ["action"]) && proposal.action === "clock-challenge")
         return clocks.challenge(current.contextKey);
-      if (exact(proposal, ["action", "browser"]) && proposal.action === "compare-clocks") {
+      if (
+        exact(proposal, ["action", "browser"]) &&
+        (proposal.action === "compare-clocks" || proposal.action === "set-clock")
+      ) {
         if (
-          proposal.browser !== null &&
+          (proposal.browser !== null || proposal.action === "set-clock") &&
           (!exact(proposal.browser, ["challengeId", "instantMs"]) ||
             typeof proposal.browser.challengeId !== "string" ||
             !Number.isSafeInteger(proposal.browser.instantMs))
         )
           return refuse();
+        if (proposal.action === "set-clock")
+          return setBoxClockFrom(
+            host,
+            operation.binding,
+            state,
+            clocks.setFromBrowser(
+              current.contextKey,
+              proposal.browser as unknown as SetupBrowserClockSample,
+              client,
+            ),
+          );
         const result = await clocks.compare(
           current.contextKey,
           current.environment,

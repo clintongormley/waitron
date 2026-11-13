@@ -151,3 +151,11 @@ it("creates a recovery host without an outside-evidence reader", async () => {
     expect(await host.readRecoveryFacts!(binding)).toEqual(facts);
   });
 });
+
+it("hands the module the clock setter it is given, and none when it is given none", async () => {
+  const setBoxClock: NonNullable<ModuleOperationHost["setBoxClock"]> = async () => ({
+    status: "set",
+  });
+  expect(createModuleOperationHost({}, { setBoxClock }).setBoxClock).toBe(setBoxClock);
+  expect(createModuleOperationHost({}, {})).not.toHaveProperty("setBoxClock");
+});

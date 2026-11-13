@@ -16,6 +16,8 @@ import {
   readOperationAuthority,
   withOperationAuthority,
   withPreparedModuleOperations,
+  type ModuleClockSetAnswer,
+  type ModuleClockSetRequest,
   type ModuleOperationHost,
   type ModuleOperations,
   type OperationAuthority,
@@ -32,6 +34,8 @@ import {
   type FirstSetupCoordinator,
 } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
+import { requiredNameOf } from "./box-health-api.js";
+import { moduleClockSetAnswer, type clockCorrection } from "./clock-correction.js";
 import {
   withAuthenticatedOperation,
   withRecoveryKeyAuthority,
@@ -58,6 +62,8 @@ export function createNodeOperationPreparation(options: {
   environment: Readonly<Record<string, string | undefined>>;
   testClock?: ModuleOperationHost["testClock"];
   isLiveWritable?: () => boolean;
+  /** Boot's setter, behind the module host's `setBoxClock`. */
+  clockCorrection?: Pick<ReturnType<typeof clockCorrection>, "set" | "steps">;
 }) {
   const node = Object.freeze({ ...options.node });
   const scopes = new AsyncLocalStorage<{
@@ -138,9 +144,47 @@ export function createNodeOperationPreparation(options: {
       };
     },
   });
+  const correction = options.clockCorrection;
+  const setBoxClock =
+    correction === undefined
+      ? undefined
+      : async (
+          binding: OperationBinding,
+          request: ModuleClockSetRequest,
+        ): Promise<ModuleClockSetAnswer> => {
+          // Before any await: a step made meanwhile makes the device's offset stale.
+          const stepsSeen = correction.steps();
+          await authorize(binding);
+          // Only a mirror, which does not trade: the promote preparation route reaches this seat
+          // on any box.
+          if ((await readNodeMode(options.nodeDb, node.nodeId)).mode !== "mirror")
+            return { status: "refused", reason: "not_mirror" };
+          const { operatorId } = readOperationAuthority(scopes.getStore()!.authority, binding)!;
+          if (typeof operatorId !== "string") return { status: "refused", reason: "not_admitted" };
+          const answer = await correction.set({
+            reason: "start",
+            source: "admin",
+            offsetMs: request.offsetMs,
+            measuredAt: { ...request.measuredAt },
+            stepsSeen,
+            witnesses: [],
+            agreesWithinMs: request.agreesWithinMs,
+            admin: {
+              personId: operatorId,
+              personName: await requiredNameOf(options.db, operatorId),
+              reading: { ...request.reading },
+            },
+            requester: { source: "admin", person: operatorId },
+          });
+          return moduleClockSetAnswer(answer);
+        };
   const modules = configureModuleOperations(
     options.modules,
-    createModuleOperationHost(options.environment, { ...scoped, testClock: options.testClock }),
+    createModuleOperationHost(options.environment, {
+      ...scoped,
+      testClock: options.testClock,
+      ...(setBoxClock === undefined ? {} : { setBoxClock }),
+    }),
   );
   const invoke = async <T>(
     supplied: OperationBinding,

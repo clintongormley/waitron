@@ -7,6 +7,7 @@ import {
 import { readRecoveryKeyName } from "@waitron/node-db";
 import {
   configureModuleOperations,
+  type ModuleClockSetRequest,
   type ModuleOperationHost,
   type ModuleRecoveryFacts,
   type OperationBinding,
@@ -51,6 +52,7 @@ import { STAGED_RECOVERY_DIR } from "./restore-staging-dirs.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
+import type { SetupClockSetter } from "./setup-clock-set.js";
 import "./errors.js";
 
 interface BaseOptions {
@@ -69,6 +71,8 @@ interface BaseOptions {
   testClock?: ModuleOperationHost["testClock"];
   /** Recovery states already read from this same unchanging database, keyed by node and binding. */
   rememberedStates?(): Map<string, unknown> | undefined;
+  /** Sets the box's clock for the restore page, where nobody signs in. */
+  setBoxClock?: SetupClockSetter;
 }
 type Isolation = Pick<
   ModuleRecoveryFacts,
@@ -226,7 +230,23 @@ export function createSelectedRecoveryPreparation(options: Options): {
       };
     },
   });
-  const host = createModuleOperationHost({}, { ...scoped, testClock: options.testClock });
+  const setBoxClock = options.setBoxClock;
+  const host = createModuleOperationHost(
+    {},
+    {
+      ...scoped,
+      testClock: options.testClock,
+      ...(setBoxClock === undefined
+        ? {}
+        : {
+            setBoxClock: (held: OperationBinding, request: ModuleClockSetRequest) =>
+              setBoxClock(request, async () => {
+                await authorize(held);
+                return null;
+              }),
+          }),
+    },
+  );
   const modules = configureModuleOperations(options.modules, host);
   const contribution = modules.find((module) => module.name === binding.module)?.operations;
   return {
@@ -277,6 +297,7 @@ export function createInteractiveRecoveryPreparation(options: {
   modules: readonly WaitronModule[];
   coordinator: FirstSetupCoordinator;
   testClock?: ModuleOperationHost["testClock"];
+  setBoxClock?: SetupClockSetter;
 }) {
   const requests = new AsyncLocalStorage<{
     db: Database;

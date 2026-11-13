@@ -2398,7 +2398,7 @@ it.each([
   },
 );
 it.each(["en", "es"] as const)(
-  "%s: clocks that differ show one time per clock, ask which is correct, and neither answer sends anything",
+  "%s: clocks that differ show one time per clock, ask which is correct; The server and Both times are wrong send nothing",
   async (locale) => {
     const decision = {
       ...clock,
@@ -2508,4 +2508,158 @@ it("series that arrive while the person is in another field leave focus in that 
   await shows(el, "selected-hour");
   await el.updateComplete;
   expect(document.activeElement).toBe(elsewhere);
+});
+
+const deviceAhead = {
+  ...clock,
+  usable: [
+    { source: "box", lowerMs: instant, upperMs: instant },
+    { source: "browser", lowerMs: instant + 5 * 60_000, upperMs: instant + 5 * 60_000 },
+  ],
+  disagreement: true,
+};
+/** A box whose clocks differ until `set-clock` answers `set` or `agrees`, then agree. */
+function settableBox(answer: unknown) {
+  let set = false;
+  return {
+    prepare: async (proposal: unknown) => {
+      const action = (proposal as { action: string }).action;
+      if (action === "clock-challenge") return { id: "challenge" };
+      if (action === "set-clock") {
+        const { status, reason } = answer as { status?: string; reason?: string };
+        set = status === "set" || reason === "agrees";
+        return answer;
+      }
+      if (action === "compare-clocks")
+        return { id: "comparison", clock: set ? clock : deviceAhead };
+      if (action === "selection") return { status: "preview", identity: "0CSQW" };
+      throw new Error("unexpected action");
+    },
+  };
+}
+const deviceLine = (el: LitElement) =>
+  el.shadowRoot!.querySelector("[data-test=device-clock]")?.textContent?.trim();
+it("after Proceed on clocks that differ, This device sets the server's clock and the series are made with nobody pressing", async () => {
+  const { el, calls } = await mount({ prepare: settableBox({ status: "set" }).prepare });
+  await ready(el);
+  await proceed(el);
+  await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
+  expect(
+    [...el.shadowRoot!.querySelectorAll("[data-test=clock-refused] wt-button")].map((b) =>
+      b.textContent!.trim(),
+    ),
+  ).toEqual(["The server", "This device", "Both times are wrong"]);
+  const before = calls.length;
+  await userEvent.click(button(el, "device-correct"));
+  await shows(el, "selected-hour");
+  expect(actionsOf(calls.slice(before))).toEqual([
+    "clock-challenge",
+    "set-clock",
+    "clock-challenge",
+    "compare-clocks",
+    "candidates",
+    "input",
+  ]);
+  const set = calls[before + 1]!.value as { browser: { challengeId: string; instantMs: number } };
+  expect(set.browser.challengeId).toBe("challenge");
+  expect(Number.isSafeInteger(set.browser.instantMs)).toBe(true);
+});
+it("says the server's time was set while the next comparison waits", async () => {
+  const box = settableBox({ status: "set" });
+  const { el } = await mount({
+    prepare: box.prepare,
+    select: async () => ({ status: "waiting", targetMs: instant + 60_000, remainingMs: 40_000 }),
+  });
+  await ready(el);
+  await proceed(el);
+  await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
+  await userEvent.click(button(el, "device-correct"));
+  await vi.waitFor(() => expect(remaining(el)).toBeDefined());
+  expect(deviceLine(el)).toBe("The server's time is now set from this device.");
+});
+it.each([
+  [
+    "en",
+    "same_machine",
+    "This screen is on the server itself, so it cannot set the server's time. Open this page on a phone or computer.",
+  ],
+  [
+    "es",
+    "synchronised",
+    "El servidor se pone en hora por internet, así que su hora es correcta. Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
+  ],
+] as const)(
+  "in %s a refusal for %s says what happened and what to do, compares nothing and keeps the choices",
+  async (locale, reason, line) => {
+    const { el, calls } = await mount({
+      locale,
+      prepare: settableBox({ status: "refused", reason }).prepare,
+    });
+    await ready(el);
+    await proceed(el);
+    await vi.waitFor(() => expect(button(el, "device-correct")).not.toBeNull());
+    const before = calls.length;
+    await userEvent.click(button(el, "device-correct"));
+    await vi.waitFor(() => expect(deviceLine(el)).toBe(line));
+    expect(actionsOf(calls.slice(before))).toEqual(["clock-challenge", "set-clock"]);
+    expect(el.shadowRoot!.querySelectorAll("[data-test=clock-refused] wt-button")).toHaveLength(3);
+  },
+);
+it("a box that already agrees shows no line and makes the series", async () => {
+  const { el, calls } = await mount({
+    prepare: settableBox({ status: "refused", reason: "agrees" }).prepare,
+  });
+  await ready(el);
+  await proceed(el);
+  await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
+  await userEvent.click(button(el, "device-correct"));
+  await shows(el, "selected-hour");
+  expect(deviceLine(el)).toBeUndefined();
+  expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
+});
+it.each([
+  [
+    "en",
+    "The invoice series cannot be created: the server's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+  ],
+  [
+    "es",
+    "No se pueden crear las series de facturas: la hora del servidor es ahora anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, vuelve a conectarte al servidor y elige de nuevo qué hora es la correcta.",
+  ],
+] as const)(
+  "in %s a later minute after the set says this device's time is probably wrong",
+  async (locale, line) => {
+    const { el } = await mount({
+      locale,
+      prepare: settableBox({ status: "set" }).prepare,
+      select: async () => {
+        throw { code: "sif.allocation_invalid", params: { reason: "minute_not_later" } };
+      },
+    });
+    await ready(el);
+    await proceed(el);
+    await vi.waitFor(() => expect(button(el, "device-correct")).not.toBeNull());
+    await userEvent.click(button(el, "device-correct"));
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("[data-test=minute-not-later]")?.textContent?.trim(),
+      ).toBe(line),
+    );
+  },
+);
+it("offers no This device when the internet's time agrees with the server's", async () => {
+  const { el } = await mount({
+    decision: {
+      ...deviceAhead,
+      usable: [...deviceAhead.usable, { source: "internet", lowerMs: instant, upperMs: instant }],
+    },
+  });
+  await ready(el);
+  await proceed(el);
+  await vi.waitFor(() => expect(text(el)).toContain(DIFFER));
+  expect(
+    [...el.shadowRoot!.querySelectorAll("[data-test=clock-refused] wt-button")].map((b) =>
+      b.getAttribute("data-test"),
+    ),
+  ).toEqual(["server-correct", "both-wrong"]);
 });

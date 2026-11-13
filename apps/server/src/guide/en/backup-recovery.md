@@ -183,8 +183,10 @@ payments once the recovery finishes, until its clock catches up or is confirmed:
 
 A key that opens the backup does not bypass the history and clock checks. If the clock check
 refuses, resolve its cause and choose **Compare the clocks again**. If the clocks differ, after
-**Proceed** the page shows the server's time and this device's and asks which is correct; correct this device's time, reconnect to the box,
-then choose **Compare the clocks again**. If the box then shows a page saying it could not make
+**Proceed** the page shows the server's time and this device's and asks which is correct: **The
+server**, **This device** or **Both times are wrong**. **This device** sets the server's time from
+the device you are using, and the page carries on by itself. After either of the other two, correct
+this device's time, reconnect to the box, then choose **Compare the clocks again**. If the box then shows a page saying it could not make
 its new invoice series, connect it to the internet and press **Retry a normal boot**.
 
 If the backup has no active administrator with a password, choose another backup.

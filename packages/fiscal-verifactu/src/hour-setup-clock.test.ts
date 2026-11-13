@@ -401,3 +401,77 @@ it("a read with no comparison id and no reading refuses clock_stale", () => {
     expect.objectContaining({ params: { reason: "clock_stale" } }),
   );
 });
+it("measures a disagreeing device at the round trip's midpoint, give or take half of it", () => {
+  const f = fixture();
+  const challenge = f.clock.challenge("owned-scope");
+  f.advance(201);
+  const device = NOW + 100 + 120_000;
+  expect(
+    f.clock.setFromBrowser("owned-scope", { challengeId: challenge.id, instantMs: device }, PHONE),
+  ).toEqual({
+    status: "measured",
+    deviceMs: device,
+    request: {
+      offsetMs: 120_000,
+      agreesWithinMs: 30_000,
+      measuredAt: { wallMs: NOW + 100.5, monoMs: 10_100.5 },
+      reading: {
+        boxAt: new Date(NOW + 101).toISOString(),
+        witnessAt: new Date(device).toISOString(),
+        uncertaintyMs: 101,
+      },
+    },
+  });
+});
+it("never sets the box's clock from a browser on the box itself", () => {
+  const f = fixture();
+  const challenge = f.clock.challenge("owned-scope");
+  const browser = { challengeId: challenge.id, instantMs: NOW + 120_000 };
+  expect(f.clock.setFromBrowser("owned-scope", browser, BOX)).toEqual({
+    status: "refused",
+    reason: "same_machine",
+  });
+  expect(f.clock.setFromBrowser("owned-scope", browser, PHONE)).toEqual({
+    status: "refused",
+    reason: "challenge",
+  });
+});
+it("a set takes its challenge once", () => {
+  const f = fixture();
+  const challenge = f.clock.challenge("owned-scope");
+  const browser = { challengeId: challenge.id, instantMs: NOW + 120_000 };
+  expect(f.clock.setFromBrowser("owned-scope", browser, PHONE).status).toBe("measured");
+  expect(f.clock.setFromBrowser("owned-scope", browser, PHONE)).toEqual({
+    status: "refused",
+    reason: "challenge",
+  });
+});
+it.each([
+  ["expired", (f: ReturnType<typeof fixture>) => f.advance(5001)],
+  ["corrected", (f: ReturnType<typeof fixture>) => f.correct(1001)],
+])("a set refuses a %s challenge", (_name, change) => {
+  const f = fixture();
+  const challenge = f.clock.challenge("owned-scope");
+  change(f);
+  expect(
+    f.clock.setFromBrowser(
+      "owned-scope",
+      { challengeId: challenge.id, instantMs: NOW + 120_000 },
+      PHONE,
+    ),
+  ).toEqual({ status: "refused", reason: "challenge" });
+});
+it.each([NaN, NOW + 0.5])("a set refuses a device instant of %s", (instantMs) => {
+  const f = fixture();
+  const challenge = f.clock.challenge("owned-scope");
+  expect(
+    f.clock.setFromBrowser("owned-scope", { challengeId: challenge.id, instantMs }, PHONE),
+  ).toEqual({ status: "refused", reason: "challenge" });
+});
+it("a set refuses a challenge issued for another frozen scope", () => {
+  const f = fixture();
+  const challenge = f.clock.challenge("first");
+  expect(
+    f.clock.setFromBrowser("second", { challengeId: challenge.id, instantMs: NOW }, PHONE),
+  ).toEqual({ status: "refused", reason: "challenge" });
+});

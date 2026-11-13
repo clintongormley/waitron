@@ -594,3 +594,243 @@ describe("the question when the clocks differ", () => {
     expect(all).not.toMatch(/ask for help|pide ayuda/i);
   });
 });
+
+describe("This device sets the server's clock", () => {
+  let updates = 0;
+  const host: ReactiveControllerHost = {
+    addController: () => undefined,
+    removeController: () => undefined,
+    requestUpdate: () => void ++updates,
+    updateComplete: Promise.resolve(true),
+  };
+  const at = Date.parse("2026-10-18T12:30:00Z");
+  const reading = (source: string, ms: number) => ({ source, lowerMs: ms, upperMs: ms });
+  const decision = (usable: { source: string; lowerMs: number; upperMs: number }[]) =>
+    ({
+      usable,
+      unavailable: [],
+      secondClock: true,
+      disagreement: true,
+      releaseBlocked: false,
+      rangeBlocked: false,
+    }) as unknown as Parameters<typeof renderClockRows>[0];
+  const differing = decision([reading("box", at), reading("browser", at + 5 * 60_000)]);
+  const wordsIn = (locale: "en" | "es"): ClockWords => ({
+    ...clockWaitStrings[locale],
+    secondClockDo: "",
+    secondClockEnds: "",
+  });
+  const draw = (
+    wait: ClockWait<{ status: "selected" }>,
+    setClock?: () => void,
+    clock = differing,
+    locale: "en" | "es" = "en",
+  ) => {
+    const target = document.createElement("div");
+    render(wait.renderProblem(wordsIn(locale), clock, locale, "Europe/Madrid", setClock), target);
+    return target;
+  };
+  const buttons = (target: Element) =>
+    [...target.querySelectorAll("wt-button")].map((b) => [b.getAttribute("data-test"), text(b)]);
+  const disagreeing = () => {
+    const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+    wait.show({ kind: "disagreement" });
+    return wait;
+  };
+  /** A box that hands out one challenge and answers the set with `answer`. */
+  const box = (answer: unknown) => {
+    const sent: unknown[] = [];
+    const send = async (proposal: unknown) => {
+      sent.push(proposal);
+      return (proposal as { action: string }).action === "clock-challenge"
+        ? { id: "challenge-1" }
+        : answer;
+    };
+    return { sent, send };
+  };
+
+  it("offers three answers in order, and This device asks the page to set the clock", () => {
+    const setClock = vi.fn();
+    const target = draw(disagreeing(), setClock);
+    expect(buttons(target)).toEqual([
+      ["server-correct", "The server"],
+      ["device-correct", "This device"],
+      ["both-wrong", "Both times are wrong"],
+    ]);
+    target.querySelector<HTMLElement>("[data-test=device-correct]")!.click();
+    expect(setClock).toHaveBeenCalledOnce();
+    expect(text(target)).toContain("Which time is correct:");
+  });
+
+  it("names the button in Spanish", () => {
+    const target = draw(disagreeing(), () => undefined, differing, "es");
+    expect(buttons(target).map(([, label]) => label)).toEqual([
+      "El servidor",
+      "Este dispositivo",
+      "Las dos horas están mal",
+    ]);
+  });
+
+  it("is not offered when the internet's time agrees with the server's and only this device differs", () => {
+    const internetAgrees = decision([
+      reading("box", at),
+      reading("browser", at + 5 * 60_000),
+      reading("internet", at + 10_000),
+    ]);
+    expect(buttons(draw(disagreeing(), () => undefined, internetAgrees))).toEqual([
+      ["server-correct", "The server"],
+      ["both-wrong", "Both times are wrong"],
+    ]);
+    const internetDiffers = decision([
+      reading("box", at),
+      reading("browser", at + 5 * 60_000),
+      reading("internet", at + 5 * 60_000),
+    ]);
+    expect(buttons(draw(disagreeing(), () => undefined, internetDiffers))).toHaveLength(3);
+  });
+
+  it("takes a fresh challenge, sends this device's time, and on a set says so and asks for a new comparison", async () => {
+    const wait = disagreeing();
+    const { sent, send } = box({ status: "set" });
+    const before = Date.now();
+    const pending = wait.setFromDevice(send);
+    const during = draw(wait, () => undefined);
+    expect(
+      during.querySelector<HTMLElement & { loading: boolean }>("[data-test=device-correct]")!
+        .loading,
+    ).toBe(true);
+    expect(
+      [...during.querySelectorAll<HTMLElement & { disabled: boolean }>("wt-button")].map(
+        (b) => b.disabled,
+      ),
+    ).toEqual([true, true, true]);
+    expect(await pending).toBe(true);
+    expect(sent[0]).toEqual({ action: "clock-challenge" });
+    const set = sent[1] as { action: string; browser: { challengeId: string; instantMs: number } };
+    expect(set.action).toBe("set-clock");
+    expect(set.browser.challengeId).toBe("challenge-1");
+    expect(set.browser.instantMs).toBeGreaterThanOrEqual(before);
+    expect(set.browser.instantMs).toBeLessThanOrEqual(Date.now());
+    expect(sent).toHaveLength(2);
+    expect(text(draw(wait).querySelector("[data-test=device-clock]"))).toBe(
+      "The server's time is now set from this device.",
+    );
+    expect(
+      text(draw(wait, undefined, differing, "es").querySelector("[data-test=device-clock]")),
+    ).toBe("La hora del servidor ya está puesta desde este dispositivo.");
+  });
+
+  it("keeps saying the time was set while the next comparison's answer is a wait, until the person starts again", async () => {
+    const wait = disagreeing();
+    await wait.setFromDevice(box({ status: "set" }).send);
+    wait.show(undefined, { status: "waiting", targetMs: at, remainingMs: 30_000 });
+    expect(text(draw(wait).querySelector("[data-test=device-clock]"))).toBe(
+      "The server's time is now set from this device.",
+    );
+    wait.show();
+    expect(draw(wait).querySelector("[data-test=device-clock]")).toBeNull();
+    wait.show(undefined, { status: "selected" });
+    expect(draw(wait).querySelector("[data-test=device-clock]")).toBeNull();
+  });
+
+  it("a box that already agrees shows no line and asks for a new comparison", async () => {
+    const wait = disagreeing();
+    expect(await wait.setFromDevice(box({ status: "refused", reason: "agrees" }).send)).toBe(true);
+    expect(draw(wait).querySelector("[data-test=device-clock]")).toBeNull();
+  });
+
+  const INTERNET = [
+    "The server keeps its time over the internet, so its time is right. Correct the time on this device, then reconnect to the server.",
+    "El servidor se pone en hora por internet, así que su hora es correcta. Corrige la hora de este dispositivo y vuelve a conectarte al servidor.",
+  ];
+  const OTHER = [
+    "The server could not set its clock from this device. Check this device's date and time, then press This device again.",
+    "El servidor no ha podido ponerse en hora con este dispositivo. Comprueba la fecha y la hora de este dispositivo y vuelve a pulsar Este dispositivo.",
+  ];
+  it.each([
+    ["synchronised", ...INTERNET],
+    ["not_stopped", ...INTERNET],
+    [
+      "witnessed",
+      "The server has the tax agency's time and sets its clock from it by itself. If the times still differ in a minute, press This device again.",
+      "El servidor tiene la hora de Hacienda y se pone en hora con ella por sí solo. Si dentro de un minuto las horas siguen sin coincidir, vuelve a pulsar Este dispositivo.",
+    ],
+    [
+      "same_machine",
+      "This screen is on the server itself, so it cannot set the server's time. Open this page on a phone or computer.",
+      "Esta pantalla está en el propio servidor, así que no puede poner su hora. Abre esta página en un móvil o un ordenador.",
+    ],
+    [
+      "later",
+      "The server's time was not changed: this device's time is earlier than a time already used for this venue's invoice series, so it is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+      "La hora del servidor no ha cambiado: la hora de este dispositivo es anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente está mal. Corrige la hora de este dispositivo, vuelve a conectarte al servidor y elige de nuevo qué hora es la correcta.",
+    ],
+    ...[
+      "host_unavailable",
+      "refused",
+      "unverified",
+      "stale",
+      "pending_disproofs",
+      "target_invalid",
+      "challenge",
+      "not_mirror",
+      "not_admitted",
+      "history_invalid",
+      "something new",
+    ].map((reason) => [reason, ...OTHER]),
+  ])(
+    "a refusal for %s says what happened and what to do, and keeps the choices",
+    async (reason, en, es) => {
+      const wait = disagreeing();
+      expect(await wait.setFromDevice(box({ status: "refused", reason }).send)).toBe(false);
+      const target = draw(wait, () => undefined);
+      expect(text(target.querySelector("[data-test=device-clock]"))).toBe(en);
+      expect(buttons(target)).toHaveLength(3);
+      expect(
+        text(draw(wait, undefined, differing, "es").querySelector("[data-test=device-clock]")),
+      ).toBe(es);
+      wait.show({ kind: "disagreement" });
+      expect(draw(wait).querySelector("[data-test=device-clock]")).toBeNull();
+    },
+  );
+
+  it("an answer it cannot read is thrown to the page, leaving no line", async () => {
+    const wait = disagreeing();
+    await expect(wait.setFromDevice(box({ status: "maybe" }).send)).rejects.toThrow();
+    await expect(wait.setFromDevice(box({ status: "refused" }).send)).rejects.toThrow();
+    const lost = new TypeError("lost");
+    await expect(
+      wait.setFromDevice(async () => {
+        throw lost;
+      }),
+    ).rejects.toBe(lost);
+    const target = draw(wait, () => undefined);
+    expect(target.querySelector("[data-test=device-clock]")).toBeNull();
+    expect(
+      [...target.querySelectorAll<HTMLElement & { disabled: boolean }>("wt-button")].map(
+        (b) => b.disabled,
+      ),
+    ).toEqual([false, false, false]);
+  });
+
+  it("after a set, a later minute says this device's time is probably wrong, in both languages", async () => {
+    const wait = disagreeing();
+    wait.show({ kind: "later" });
+    expect(text(draw(wait).querySelector("[data-test=minute-not-later]"))).toBe(
+      clockWaitStrings.en.later,
+    );
+    wait.show({ kind: "disagreement" });
+    await wait.setFromDevice(box({ status: "set" }).send);
+    wait.show({ kind: "later" });
+    expect(text(draw(wait).querySelector("[data-test=minute-not-later]"))).toBe(
+      "The invoice series cannot be created: the server's time is now earlier than a time already used for this venue's invoice series, so this device's time is probably wrong. Correct the time on this device, reconnect to the server and choose which time is correct again.",
+    );
+    wait.show();
+    wait.show({ kind: "later" });
+    expect(
+      text(draw(wait, undefined, differing, "es").querySelector("[data-test=minute-not-later]")),
+    ).toBe(
+      "No se pueden crear las series de facturas: la hora del servidor es ahora anterior a una hora que ya se usó para las series de facturas de este local, así que probablemente la hora de este dispositivo está mal. Corrige la hora de este dispositivo, vuelve a conectarte al servidor y elige de nuevo qué hora es la correcta.",
+    );
+  });
+});

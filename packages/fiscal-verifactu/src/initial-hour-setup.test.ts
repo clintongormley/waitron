@@ -1197,3 +1197,117 @@ it("a paper register's numbered positions are not minute names", () => {
   const seat = configured().seat;
   expect(seat.retainedAssignments!({ history, known }).positions).toHaveLength(2);
 });
+
+const PHONE = { onBox: false };
+async function setClock(
+  f: ReturnType<typeof configured>,
+  offsetMs: number,
+  client = PHONE,
+  held = context,
+) {
+  const challenge = (await f.prepare({ action: "clock-challenge" })) as { id: string };
+  return f.seat.preparation!(
+    held,
+    {
+      action: "set-clock",
+      browser: { challengeId: challenge.id, instantMs: Date.now() + offsetMs },
+    },
+    client,
+  );
+}
+it("set-clock hands the host a disagreeing device's measurement and answers what it did", async () => {
+  const f = configured();
+  const setBoxClock = vi.fn(async () => ({ status: "set" as const }));
+  f.host.setBoxClock = setBoxClock;
+  expect(await setClock(f, 120_000)).toEqual({ status: "set" });
+  const now = Date.now();
+  expect(setBoxClock).toHaveBeenCalledWith(context.binding, {
+    offsetMs: 120_000,
+    agreesWithinMs: 30_000,
+    measuredAt: { wallMs: expect.closeTo(now, -2), monoMs: expect.any(Number) },
+    reading: {
+      boxAt: new Date(now).toISOString(),
+      witnessAt: new Date(now + 120_000).toISOString(),
+      uncertaintyMs: expect.any(Number),
+    },
+  });
+  setBoxClock.mockResolvedValueOnce({ status: "refused", reason: "synchronised" } as never);
+  expect(await setClock(f, 120_000)).toEqual({ status: "refused", reason: "synchronised" });
+  expect(f.history).toEqual([]);
+});
+it("set-clock answers host_unavailable where the host cannot set the clock", async () => {
+  expect(await setClock(configured(), 120_000)).toEqual({
+    status: "refused",
+    reason: "host_unavailable",
+  });
+});
+it("set-clock never asks the host from a browser on the box, or with a spent challenge", async () => {
+  const f = configured();
+  const setBoxClock = vi.fn(async () => ({ status: "set" as const }));
+  f.host.setBoxClock = setBoxClock;
+  expect(await setClock(f, 120_000, { onBox: true })).toEqual({
+    status: "refused",
+    reason: "same_machine",
+  });
+  const challenge = (await f.prepare({ action: "clock-challenge" })) as { id: string };
+  const proposal = {
+    action: "set-clock",
+    browser: { challengeId: challenge.id, instantMs: Date.now() },
+  };
+  await f.seat.preparation!(context, proposal, PHONE);
+  expect(await f.seat.preparation!(context, proposal, PHONE)).toEqual({
+    status: "refused",
+    reason: "challenge",
+  });
+  expect(setBoxClock).toHaveBeenCalledTimes(1);
+});
+it("set-clock refuses a device earlier than the hour already chosen, without asking the host", async () => {
+  startEarly();
+  const f = configured();
+  await f.clock();
+  await f.select();
+  const setBoxClock = vi.fn(async () => ({ status: "set" as const }));
+  f.host.setBoxClock = setBoxClock;
+  const issuedAt = Date.parse(input.allocation.issuedAt);
+  expect(await setClock(f, issuedAt - 1 - Date.now())).toEqual({
+    status: "refused",
+    reason: "later",
+  });
+  expect(setBoxClock).not.toHaveBeenCalled();
+  expect(await setClock(f, issuedAt - Date.now())).toEqual({ status: "set" });
+  expect(setBoxClock).toHaveBeenCalledTimes(1);
+});
+it.each(["compare-clocks", "set-clock"])(
+  "%s is refused for a page whose setup context does not hold",
+  async (action) => {
+    const f = configured();
+    const setBoxClock = vi.fn(async () => ({ status: "set" as const }));
+    f.host.setBoxClock = setBoxClock;
+    const challenge = (await f.prepare({ action: "clock-challenge" })) as { id: string };
+    await expect(
+      f.seat.preparation!(
+        { ...context, administratorId: " " },
+        { action, browser: { challengeId: challenge.id, instantMs: Date.now() } },
+        PHONE,
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "event_mismatch" },
+    });
+    expect(setBoxClock).not.toHaveBeenCalled();
+  },
+);
+it.each([
+  { action: "set-clock" },
+  { action: "set-clock", browser: null },
+  { action: "set-clock", browser: { challengeId: "challenge" } },
+  { action: "set-clock", browser: { challengeId: 1, instantMs: 1 } },
+  { action: "set-clock", browser: { challengeId: "challenge", instantMs: 1.5 } },
+  { action: "set-clock", browser: { challengeId: "challenge", instantMs: 1, extra: true } },
+  { action: "set-clock", browser: { challengeId: "challenge", instantMs: 1 }, extra: true },
+])("refuses a malformed set-clock proposal %j", async (proposal) => {
+  await expect(configured().prepare(proposal)).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "malformed_allocation" },
+  });
+});

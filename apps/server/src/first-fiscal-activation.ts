@@ -122,6 +122,7 @@ export async function activateFirstFiscal(
     req = firstFiscalProvisionRequest(state);
   if (state.frozen.environment === "production" && payload.email === undefined)
     throw new AppError("setup.email_required", { field: "email" });
+  await deps.writeClockSteps?.();
   return activateFirstSetup(
     host,
     {

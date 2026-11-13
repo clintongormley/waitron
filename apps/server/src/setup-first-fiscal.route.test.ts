@@ -12,7 +12,11 @@ import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
 
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { withOperationAuthority, withPreparedModuleOperations } from "@waitron/module";
+import {
+  withOperationAuthority,
+  withPreparedModuleOperations,
+  type ModuleClockSetRequest,
+} from "@waitron/module";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import { createFakeTimersHourClock, type HourTestClock } from "./testing/hour-test-clock.js";
 const database = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -60,6 +64,7 @@ async function fixture(
   extra: Partial<SetupDeps> = {},
   grantClock?: () => number,
   staffLanguage?: unknown,
+  setBoxClock?: Parameters<typeof createFirstSetupModuleHost>[0]["setBoxClock"],
 ) {
   const root = await mkdtemp(join(tmpdir(), "first-route-"));
   dirs.push(root);
@@ -72,6 +77,7 @@ async function fixture(
     modules: ALL_MODULES,
     database: () => database.db,
     grantClock,
+    setBoxClock,
   });
   const app = new Hono();
   mountSetup(
@@ -295,6 +301,66 @@ it("never counts a browser on the box itself as the second clock", async () => {
   expect(
     (await compare(await fixture(undefined, { requestFromBox: () => false }))).secondClock,
   ).toBe(true);
+});
+it("sets the box's clock from this device only under the setup owner's pass, naming the administrator", async () => {
+  internet.offline = true;
+  const people: unknown[] = [];
+  const setBoxClock = vi.fn(
+    async (
+      _request: ModuleClockSetRequest,
+      person: () => Promise<{ id: string; name: string }>,
+    ) => {
+      people.push(await person());
+      return { status: "set" as const };
+    },
+  );
+  const f = await fixture(
+    undefined,
+    { requestFromBox: () => false },
+    undefined,
+    undefined,
+    setBoxClock,
+  );
+  const setClock = async (headers: Record<string, string>) => {
+    const challenge = await f.post(
+      "/setup-api/first-setup/preparation",
+      { module: MODULE, proposal: { action: "clock-challenge" } },
+      f.headers(),
+    );
+    return f.post(
+      "/setup-api/first-setup/preparation",
+      {
+        module: MODULE,
+        proposal: {
+          action: "set-clock",
+          browser: {
+            challengeId: (await challenge.json()).preparation.id,
+            instantMs: internet.clock.wall() + 3_600_000,
+          },
+        },
+      },
+      headers,
+    );
+  };
+  const comparedWithoutPass = await f.post(
+    "/setup-api/first-setup/preparation",
+    { module: MODULE, proposal: { action: "compare-clocks", browser: null } },
+    {},
+  );
+  const withoutPass = await setClock({});
+  expect(withoutPass.status).toBe(comparedWithoutPass.status);
+  expect(await withoutPass.json()).toEqual(await comparedWithoutPass.json());
+  const wrongPass = await setClock({ ...f.headers(), "X-Waitron-Setup-Owner": "not-the-pass" });
+  expect(wrongPass.status).toBe(403);
+  expect((await wrongPass.json()).error.code).toBe("setup.owner_required");
+  expect(setBoxClock).not.toHaveBeenCalled();
+
+  const answered = await setClock(f.headers());
+  expect(answered.status).toBe(200);
+  expect((await answered.json()).preparation).toEqual({ status: "set" });
+  expect(setBoxClock).toHaveBeenCalledTimes(1);
+  expect(setBoxClock.mock.calls[0]![0]).toMatchObject({ agreesWithinMs: 30_000 });
+  expect(people).toEqual([{ id: f.claim.state.administratorId, name: "Elena" }]);
 });
 it("durably selects one hour before export and preserves its IDs after outside use becomes possible", async () => {
   const f = await fixture();

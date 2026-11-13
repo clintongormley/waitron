@@ -8,6 +8,8 @@ import {
   enabledModules,
   initialSetupFor,
   modulesWithSets,
+  type ModuleClockSetAnswer,
+  type ModuleClockSetRequest,
   type ModuleOperationHost,
   type OperationBinding,
   type WaitronModule,
@@ -41,11 +43,13 @@ export function createModuleOperationHost(
     readSetupFacts?: ModuleOperationHost["readSetupFacts"];
     readRecoveryFacts?: ModuleOperationHost["readRecoveryFacts"];
     testClock?: ModuleOperationHost["testClock"];
+    setBoxClock?: ModuleOperationHost["setBoxClock"];
   },
 ): ModuleOperationHost {
   return Object.freeze({
     environment: Object.freeze({ ...environment }),
     ...(evidence?.testClock === undefined ? {} : { testClock: evidence.testClock }),
+    ...(evidence?.setBoxClock === undefined ? {} : { setBoxClock: evidence.setBoxClock }),
     ...(evidence?.readSetupFacts === undefined ? {} : { readSetupFacts: evidence.readSetupFacts }),
     ...(evidence?.readRecoveryFacts === undefined
       ? {}
@@ -75,6 +79,11 @@ export function createFirstSetupRuntime(options: {
   testClock?: ModuleOperationHost["testClock"];
   /** Set only by a test: the clock that expires the owner's password grants. */
   grantClock?: () => number;
+  /** Sets the box's clock for the setup page, `person` naming the administrator reserved at claim. */
+  setBoxClock?: (
+    request: ModuleClockSetRequest,
+    person: () => Promise<{ id: string; name: string }>,
+  ) => Promise<ModuleClockSetAnswer>;
 }) {
   const sharedCoordinator = createFirstSetupCoordinator();
   const holds = new AsyncLocalStorage<FirstSetupHold>();
@@ -92,8 +101,22 @@ export function createFirstSetupRuntime(options: {
     held: (hold, body) => sharedCoordinator.held(hold, () => holds.run(hold, body)),
   };
   const preparation: { current?: ReturnType<typeof createSetupPreparationHost> } = {};
+  const setBoxClock = options.setBoxClock;
   const host = createModuleOperationHost(options.environment, {
     testClock: options.testClock,
+    ...(setBoxClock === undefined
+      ? {}
+      : {
+          setBoxClock: (_binding: OperationBinding, request: ModuleClockSetRequest) =>
+            setBoxClock(request, async () => {
+              const state = await store.read();
+              if (state === null) throw new AppError("setup.owner_required", {});
+              return {
+                id: state.frozen.administratorId,
+                name: state.frozen.request.admin.displayName,
+              };
+            }),
+        }),
     readSetupFacts: async (binding) => {
       if (preparation.current === undefined) throw new AppError("setup.not_ready", {});
       return preparation.current.readSetupFacts(binding);
