@@ -25,6 +25,7 @@ import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitr
 import { decimal, decimalToCents } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { readBillBalance } from "./bill-payments.js";
+import { requestBill } from "./bill-request.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { createCourse } from "./kitchen.js";
@@ -63,6 +64,7 @@ import {
   activeTablesOf,
   billRow,
   cashContribution,
+  commandFor,
   inTx,
   linesOf,
   nextMillisecond,
@@ -1805,6 +1807,71 @@ describe("a party combined into another (Review Focus 3)", () => {
 });
 
 describe("combineParties", () => {
+  it("keeps the earliest pending bill request when parties combine", async () => {
+    const [m1, m2, m3, m4] = await tables("Requested bill", 1, 2, 3, 4);
+    const a = await seat(v, m1);
+    const b = await seat(v, m2);
+    const c = await seat(v, m3);
+    const firstCommand = { submissionId: randomUUID(), ...(await commandFor(v, a.partyId)) };
+    const { billRequestedAt: requestedAt } = await act((tx) =>
+      requestBill(tx, a.partyId, true, firstCommand),
+    );
+    expect(requestedAt).not.toBeNull();
+    await nextMillisecond();
+    const laterCommand = { submissionId: randomUUID(), ...(await commandFor(v, c.partyId)) };
+    const later = await act((tx) => requestBill(tx, c.partyId, true, laterCommand));
+    expect(later.billRequestedAt! > requestedAt!).toBe(true);
+
+    const moving = await opts(a.partyId, b.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, a.partyId, m2, moving));
+    expect((await partyRow(v, b.partyId)).billRequestedAt).toBe(requestedAt);
+    expect((await floorRow(v, m2)).signals).toContainEqual({ kind: "bill_requested", requestedAt });
+
+    const joining = await opts(c.partyId, b.partyId);
+    await act((tx) => joinTables(tx, v.cfg, c.partyId, m2, joining));
+    expect((await partyRow(v, c.partyId)).billRequestedAt).toBe(requestedAt);
+    expect((await floorRow(v, m3)).signals).toContainEqual({ kind: "bill_requested", requestedAt });
+
+    const d = await seat(v, m4);
+    await nextMillisecond();
+    const lastCommand = { submissionId: randomUUID(), ...(await commandFor(v, d.partyId)) };
+    const last = await act((tx) => requestBill(tx, d.partyId, true, lastCommand));
+    expect(last.billRequestedAt! > requestedAt!).toBe(true);
+    const movingLater = await opts(d.partyId, c.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, d.partyId, m3, movingLater));
+    expect((await partyRow(v, c.partyId)).billRequestedAt).toBe(requestedAt);
+    expect((await floorRow(v, m3)).signals).toContainEqual({ kind: "bill_requested", requestedAt });
+  });
+
+  it("inherits a party name only when the survivor has none", async () => {
+    const [m1, m2, m3] = await tables("Named party", 1, 2, 3);
+    const a = await seat(v, m1);
+    const b = await seat(v, m2);
+    const c = await seat(v, m3);
+    await act((tx) =>
+      setPartyName(tx, {
+        partyId: a.partyId,
+        name: "Alex",
+        expectedPartyRevision: a.revision,
+      }),
+    );
+    await act((tx) =>
+      setPartyName(tx, {
+        partyId: c.partyId,
+        name: "Chris",
+        expectedPartyRevision: c.revision,
+      }),
+    );
+
+    const moving = await opts(a.partyId, b.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, a.partyId, m2, moving));
+    expect((await partyRow(v, b.partyId)).name).toBe("Alex");
+
+    const joining = await opts(b.partyId, c.partyId);
+    await act((tx) => joinTables(tx, v.cfg, b.partyId, m3, joining));
+    expect((await partyRow(v, b.partyId)).name).toBe("Alex");
+  });
+
   it("answers no bill merged away: every bill stays its own", async () => {
     const [m4, m7] = await tables("Combine", 4, 7);
     const ana = await seat(v, m4);

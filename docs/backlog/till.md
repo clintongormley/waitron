@@ -3146,7 +3146,8 @@ payment belongs to the table, so no payment is lost.
   - A bill request is cleared only when a PAYMENT leaves the party's family with nothing to pay;
     other ways of leaving nothing owed keep the request until staff press Cancel or Finish table
     closes the party.
-  - Merging a party that asked for the bill into another drops its request.
+  - Combining parties keeps the earlier pending bill request from either party and the receiving
+    party's name, falling back to the absorbed party's name (owner decision, 2026-11-11 17:12).
   - The long-wait chip counts only dishes sent to the kitchen, not held ones.
   - The floor's to-serve, ready and long-wait figures include paid bills and the bills of
     parties merged in, so a venue that never records serving sees a paid table's dishes as
