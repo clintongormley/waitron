@@ -1626,6 +1626,7 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
     "/assets/missing.js",
     "/missing.js",
     "/setup-api/missing",
+    "/setup-api/venue-defaults",
     "/management-api/missing",
     "/api/missing",
   ])("keeps missing files and API paths as 404: %s", async (path) => {
@@ -2989,17 +2990,6 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const response = await postAdopt(app, adoptBody());
     expect(response.status).toBe(409);
     expect((await response.json()).error.code).toBe("deployment.already_stamped");
-  });
-});
-
-it("serves fiscal-owned venue defaults without exposing provider secrets", async () => {
-  const app = new Hono();
-  mountSetup(app, { environment: "preproduction" }, noopLog);
-  const response = await app.request("/setup-api/venue-defaults");
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({
-    verifactu: { operationDescription: "Venta en establecimiento" },
-    none: { operationDescription: "" },
   });
 });
 
@@ -4372,12 +4362,4 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
-});
-
-it("reports an installed fiscal slot with no description contribution as an empty bootstrap", async () => {
-  const app = new Hono();
-  mountSetup(app, { environment: "preproduction" }, noopLog);
-  const response = await app.request("/setup-api/venue-defaults");
-  expect(response.status).toBe(200);
-  expect((await response.json()).none).toEqual({ operationDescription: "" });
 });

@@ -75,6 +75,9 @@ else.
    this default, would answer empty objects once it goes, and has no production reader; with it its
    two cases (`apps/server/src/setup-api.test.ts:2957, :4339`) and the backlog entry "The setup route
    `GET /setup-api/venue-defaults` has no production reader" (`docs/backlog/setup.md:636-638`).
+   > **2026-11-13:** branch `fix/setup-wizard-tidy` already deleted that route, its two cases and
+   > that backlog entry; the route's path now sits in `setup-api.test.ts`'s "keeps missing files and
+   > API paths as 404" list.
 4. `RecordSaleInput.operationDescription` (`packages/core/src/record-sale.ts:66`) and the matching
    fields of `record-correction.ts:38` and `record-substitution.ts:29` become `string` (required).
    Every caller passes one:
