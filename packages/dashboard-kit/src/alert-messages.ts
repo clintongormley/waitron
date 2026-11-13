@@ -12,7 +12,8 @@ export { formatBytes };
  * an instant in `toISOString`'s shape as `YYYY-MM-DD HH:MM` in the browser's zone, in either
  * language; `{name:duration}` writes a number of milliseconds, either sign, as its two largest
  * non-zero whole units from days to seconds (tenths of a second below one), in the alert's language;
- * `{name:list}` writes the words a registered word list gives the param's value.
+ * `{name:list}` writes the words a registered word list gives the param's value, with their own
+ * slots filled from the same params, except a word list, which shows a dash so no list can name itself.
  * A variant is chosen by its param being `true`: a `replace` variant's words stand instead of the
  * message, and otherwise each `append` variant's words follow it. `one` words stand instead of the
  * message's own when the param they name is the number 1; variants apply over them as usual. */
@@ -91,6 +92,39 @@ function chooseTemplate(
   return [base, ...chosen.map(([, variant]) => variant)].map((w) => pickLocale(w, l)).join(" ");
 }
 
+function fillSlots(
+  template: string,
+  params: Readonly<Record<string, unknown>>,
+  l: string,
+  withWordLists: boolean,
+): string {
+  return template.replace(
+    /\{([A-Za-z0-9_]+)(?::([a-z_]+))?\}/g,
+    (_match, name: string, kind: string | undefined) => {
+      const value = Object.hasOwn(params, name) ? params[name] : undefined;
+      if (kind === "money") {
+        return typeof value === "string" && DECIMAL.test(value)
+          ? formatMoney(value, l)
+          : formatParam(value);
+      }
+      if (kind === "date") return formatDay(value, l);
+      if (kind === "bytes") return formatBytes(value, l);
+      if (kind === "minute") return formatMinute(value);
+      if (kind === "duration") return formatDuration(value, l);
+      if (kind === undefined) return formatParam(value);
+      if (!withWordLists || !Object.hasOwn(wordLists, kind)) return formatParam(null);
+      const list = wordLists[kind]!;
+      const words = pickLocale(
+        typeof value === "string" && Object.hasOwn(list.words, value)
+          ? list.words[value]!
+          : list.otherwise,
+        l,
+      );
+      return fillSlots(words, params, l, false);
+    },
+  );
+}
+
 export function alertMessage(
   code: string,
   params: Readonly<Record<string, unknown>>,
@@ -105,31 +139,7 @@ export function alertWords(
   params: Readonly<Record<string, unknown>>,
   l: string = currentLocale(),
 ): string {
-  const template = chooseTemplate(entry, params, l);
-  const message = template.replace(
-    /\{([A-Za-z0-9_]+)(?::([a-z_]+))?\}/g,
-    (_match, name: string, kind: string | undefined) => {
-      const value = Object.hasOwn(params, name) ? params[name] : undefined;
-      if (kind === "money") {
-        return typeof value === "string" && DECIMAL.test(value)
-          ? formatMoney(value, l)
-          : formatParam(value);
-      }
-      if (kind === "date") return formatDay(value, l);
-      if (kind === "bytes") return formatBytes(value, l);
-      if (kind === "minute") return formatMinute(value);
-      if (kind === "duration") return formatDuration(value, l);
-      if (kind === undefined) return formatParam(value);
-      if (!Object.hasOwn(wordLists, kind)) return formatParam(null);
-      const list = wordLists[kind]!;
-      return pickLocale(
-        typeof value === "string" && Object.hasOwn(list.words, value)
-          ? list.words[value]!
-          : list.otherwise,
-        l,
-      );
-    },
-  );
+  const message = fillSlots(chooseTemplate(entry, params, l), params, l, true);
   const items = entry.items === undefined ? undefined : params[entry.items.param];
   if (entry.items === undefined || !Array.isArray(items)) return message;
   return [

@@ -1298,6 +1298,17 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       expect(text(openButton(el))).toBe(t("box_status.clock.admin.open"));
     });
 
+    it("offers both choices while a future-date refusal is why it waits", async () => {
+      const el = await mountClock(
+        waitingApi({
+          ...WAITING_CLOCK,
+          waiting: { ...WAITING_CLOCK.waiting!, cause: "future_date_refused" },
+        }),
+      );
+      expect(text(confirmButton(el))).toBe("The date and time are right");
+      expect(text(openButton(el))).toBe(t("box_status.clock.admin.open"));
+    });
+
     it("confirms the box's time as shown, and the row goes once the box is read again", async () => {
       const api = waitingApi();
       vi.mocked(api.getBoxHealth)

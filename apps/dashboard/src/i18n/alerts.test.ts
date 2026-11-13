@@ -168,10 +168,22 @@ const UNMARKED_SLOTS: readonly string[] = [
   "wallClockDeltaSeconds",
 ];
 
+const LISTED_WORDS = Object.values(ALERT_WORDS).flatMap((list) => [
+  ...Object.values(list.words),
+  list.otherwise,
+]);
+
 it("marks every amount slot :money; any other new unmarked slot must be added to UNMARKED_SLOTS", () => {
   const unmarked = new Set(
-    Object.values(ALERT_MESSAGES)
-      .flatMap((entry) => [entry, entry.one, entry.items, ...Object.values(entry.variants ?? {})])
+    [
+      ...Object.values(ALERT_MESSAGES).flatMap((entry) => [
+        entry,
+        entry.one,
+        entry.items,
+        ...Object.values(entry.variants ?? {}),
+      ]),
+      ...LISTED_WORDS,
+    ]
       .flatMap((words) => (words ? [words.en, words.es] : []))
       .flatMap((text) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1])),
   );
@@ -320,6 +332,15 @@ it("names only registered word lists in its word-list slots, variants and words 
       ),
   );
   expect(unknown).toEqual([]);
+});
+
+it("names no word list inside a word list's words, which would show a dash", () => {
+  const nested = LISTED_WORDS.flatMap((words) => [words.en, words.es]).flatMap((text) =>
+    [...text.matchAll(/\{[A-Za-z0-9_]+:([a-z_]+)\}/g)]
+      .filter((m) => !["money", "date", "bytes", "minute", "duration"].includes(m[1]!))
+      .map((m) => m[0]),
+  );
+  expect(nested).toEqual([]);
 });
 
 it("words the box's disk alerts, writing the free space in each language", () => {
@@ -804,7 +825,7 @@ describe("the box waiting for its start's time", () => {
   });
 
   it("keeps the start's words for the start and for a cause it does not name", () => {
-    for (const cause of ["start", "future_date_refused"])
+    for (const cause of ["start", "not_a_cause"])
       expect(alertMessage("clock.unconfirmed", { agreed: 1, hostSilent: true, cause }, "en")).toBe(
         `${WAITING_EN} ${SILENT_EN}`,
       );
@@ -831,6 +852,30 @@ describe("the box waiting for its start's time", () => {
     );
     expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: true }, "es")).toBe(
       `${JUMPED_ES} No puede ver su hora de internet porque la parte del servidor que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.`,
+    );
+  });
+
+  it("says the tax agency refused a sale dated in the future, with its date, and never offers devices", () => {
+    const REFUSED_EN =
+      "The tax agency refused a sale dated 2 Nov 2026 because that date was in the future when it was sent, so the box has stopped taking payments until its time is checked. Confirm or correct the date and time on the Box status page; staff can use “Check the time” on a till.";
+    const params = { agreed: 2, cause: "future_date_refused", refusedOn: "2026-11-02" };
+    expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: false }, "en")).toBe(
+      REFUSED_EN,
+    );
+    expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: true }, "en")).toBe(
+      `${REFUSED_EN} It cannot see its internet time, because the part of the box that reads it is not answering, and its clock cannot be corrected from Waitron until that part answers.`,
+    );
+  });
+
+  it("says the tax agency refused a sale dated in the future in Spanish", () => {
+    const REFUSED_ES =
+      "Hacienda rechazó una venta con fecha 2 nov 2026 porque esa fecha era futura cuando se envió, así que el equipo ha dejado de aceptar cobros hasta que se compruebe su hora. Confirma o corrige la fecha y la hora en Estado del equipo; el personal puede usar «Comprobar la hora» en un terminal.";
+    const params = { agreed: 2, cause: "future_date_refused", refusedOn: "2026-11-02" };
+    expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: false }, "es")).toBe(
+      REFUSED_ES,
+    );
+    expect(alertMessage("clock.unconfirmed", { ...params, hostSilent: true }, "es")).toBe(
+      `${REFUSED_ES} No puede ver su hora de internet porque la parte del equipo que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.`,
     );
   });
 });

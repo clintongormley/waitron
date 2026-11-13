@@ -12,6 +12,11 @@ const NOT_FIXED_ES = " Marcarla como resuelta no lo soluciona.";
 
 type Words = { readonly en: string; readonly es: string };
 
+const HOST_SILENT_AFTER_START: Words = {
+  en: "It cannot see its internet time, because the part of the box that reads it is not answering, and its clock cannot be corrected from Waitron until that part answers.",
+  es: "No puede ver su hora de internet porque la parte del servidor que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
+};
+
 export const ALERT_MESSAGES: Readonly<
   Record<
     string,
@@ -267,8 +272,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "{count} dispositivos coinciden en que marcan {deviceAt:minute}, pero el servidor marca {boxAt:minute}. Comprueba la fecha y la hora del servidor en Estado del servidor.",
   },
   "clock.unconfirmed": {
-    en: "{cause:clock_unconfirmed_lead}, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time ({agreed} of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
-    es: "{cause:clock_unconfirmed_lead}, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora ({agreed} de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
+    en: "{cause:clock_unconfirmed}",
+    es: "{cause:clock_unconfirmed}",
     variants: {
       hostSilent: {
         mode: "append",
@@ -707,25 +712,26 @@ export const ALERT_WORDS: Readonly<
       es: "El reloj del servidor no se mantiene en hora. Comprueba su fecha y hora en Estado del servidor.",
     },
   },
-  // `clock.unconfirmed`'s opening and silent-host sentences, by its `cause` param.
-  clock_unconfirmed_lead: {
+  clock_unconfirmed: {
     words: {
       clock_jumped: {
-        en: "The box's clock jumped and it cannot check the time over the internet",
-        es: "El reloj del servidor ha saltado y no puede comprobar la hora por internet",
+        en: "The box's clock jumped and it cannot check the time over the internet, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time ({agreed} of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
+        es: "El reloj del servidor ha saltado y no puede comprobar la hora por internet, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora ({agreed} de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
+      },
+      future_date_refused: {
+        en: "The tax agency refused a sale dated {refusedOn:date} because that date was in the future when it was sent, so the box has stopped taking payments until its time is checked. Confirm or correct the date and time on the Box status page; staff can use “Check the time” on a till.",
+        es: "Hacienda rechazó una venta con fecha {refusedOn:date} porque esa fecha era futura cuando se envió, así que el servidor ha dejado de aceptar cobros hasta que se compruebe su hora. Confirma o corrige la fecha y la hora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
       },
     },
     otherwise: {
-      en: "The box has not confirmed its time since it started",
-      es: "El servidor no ha confirmado su hora desde que arrancó",
+      en: "The box has not confirmed its time since it started, so it is not taking payments. It is waiting for tills or handhelds to connect and agree with its time ({agreed} of 2 so far), and confirms by itself once two do or once it reaches the internet. You can confirm or correct the date and time now on the Box status page; staff can use “Check the time” on a till.",
+      es: "El servidor no ha confirmado su hora desde que arrancó, así que no acepta cobros. Está esperando a que se conecten cajas o terminales y coincidan con su hora ({agreed} de 2 por ahora), y la confirma solo en cuanto lo hacen dos o en cuanto llega a internet. Puedes confirmar o corregir la fecha y la hora ahora en Estado del servidor; el personal puede usar «Comprobar la hora» en una caja.",
     },
   },
   clock_unconfirmed_host_silent: {
     words: {
-      clock_jumped: {
-        en: "It cannot see its internet time, because the part of the box that reads it is not answering, and its clock cannot be corrected from Waitron until that part answers.",
-        es: "No puede ver su hora de internet porque la parte del servidor que la lee no responde, y su reloj no se puede corregir desde Waitron hasta que esa parte responda.",
-      },
+      clock_jumped: HOST_SILENT_AFTER_START,
+      future_date_refused: HOST_SILENT_AFTER_START,
     },
     otherwise: {
       en: "It cannot see its internet time, because the part of the box that reads it is not answering, so it waits like this at every start, and its clock cannot be corrected from Waitron until that part answers.",

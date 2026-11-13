@@ -698,7 +698,10 @@ describe("the Clock row while the start waits for its time", () => {
     severity: "error",
     params: { agreed: 1, hostSilent: false },
   });
-  const waitingHealth = (hostAnswers: boolean, cause: "start" | "clock_jumped" = "start") =>
+  const waitingHealth = (
+    hostAnswers: boolean,
+    cause: "start" | "clock_jumped" | "future_date_refused" = "start",
+  ) =>
     quietHealth({
       clock: {
         ...quietHealth().clock,
@@ -727,6 +730,23 @@ describe("the Clock row while the start waits for its time", () => {
       state: "stopped",
       line: `${line} It cannot see its internet time, because the part of the box that reads it is not answering, and its clock cannot be corrected from Waitron until that part answers.`,
     });
+  });
+
+  it("says the tax agency refused a sale dated in the future, with no device count or every-start sentence", () => {
+    const line = `The tax agency refused a sale as dated in the future: no payments are taken until the time is checked. The box's clock says ${formatIsoMinute(BOX_AT)}.`;
+    for (const hostAnswers of [true, false])
+      expect(
+        row(boxStatusRows(waitingHealth(hostAnswers, "future_date_refused"), []).rows, "clock"),
+      ).toMatchObject({ state: "stopped", line });
+  });
+
+  it("says the tax agency refused a sale dated in the future in Spanish", () => {
+    setLocale("es");
+    expect(
+      row(boxStatusRows(waitingHealth(false, "future_date_refused"), []).rows, "clock").line,
+    ).toBe(
+      `Hacienda rechazó una venta por tener fecha futura: no se aceptan cobros hasta que se compruebe la hora. El reloj del equipo indica ${formatIsoMinute(BOX_AT)}.`,
+    );
   });
 
   it("tells the Sales row that payments wait, pointing at the Clock row", () => {
