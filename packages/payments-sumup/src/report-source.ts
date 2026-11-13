@@ -104,8 +104,7 @@ export function sumupSettlementReport(
           throw incomplete();
         const next = links.filter((link) => link.rel === "next");
         if (next.length === 0) break;
-        if (next.length !== 1 || !next[0]!.href || /[\/#\s]/.test(next[0]!.href))
-          throw incomplete();
+        if (next.length !== 1 || !next[0]!.href || /[/#\s]/.test(next[0]!.href)) throw incomplete();
         query = next[0]!.href.replace(/^\?/, "");
       }
       for (const id of known) {
