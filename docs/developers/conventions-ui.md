@@ -416,12 +416,20 @@ because a till runs full screen and has no tab bar to come back by (the design,
 ## The declaration pages
 
 The box serves the software's declaración responsable (A940) from `mountDeclarationPages`
-(`apps/server/src/declaration-pages.ts`), at four addresses that need no sign-in:
+(`apps/server/src/declaration-pages.ts`), at these addresses, which need no sign-in:
 
 - `/legal/declaration`: the declaration as a page, in Spanish whatever the reader's language, with
   «Descargar PDF» and «Descargar texto» links under it that download the two files below as
-  `waitron-<version>-declaration.pdf` and `.txt`.
+  `waitron-<version>-declaration.pdf` and `.txt`. Under the links, «Versiones anteriores» links to
+  each earlier version the venue has kept, lowest first by number; the running version and later ones are
+  left out, and with none kept the heading is not shown. A failed read of the kept versions logs
+  `declaration.kept_read_failed` and shows the page without them.
 - `/legal/declaration.pdf` and `/legal/declaration.txt`: the two files as written.
+- `/legal/declaration/<version>.txt`: an earlier version's kept text, as plain text named
+  `waitron-<version>-declaration.txt`, served even when the running release's folder is missing or
+  damaged. Only a release version (`isReleaseVersion`: three whole numbers without leading zeros,
+  at most 50 characters) that the venue kept is served; anything else answers "Page not found". A
+  failed read logs `declaration.kept_read_failed` and answers "cannot be shown", 500.
 - `/legal/about`: JSON `{ release: { version, releasedOn } | null, build }` (`LegalAbout`,
   `packages/shared/src/legal-about.ts`), where `build` is `applicationVersion(process.env)`, the
   value the main app sends as `x-waitron-build` (`apps/server/src/boot.ts:1283`, `:1311`).
@@ -467,17 +475,29 @@ The renderer's HTML has no style. So `/legal/declaration` takes the text between
 whole" case in `apps/server/src/declaration-pages.test.ts` pins this against a folder written by
 slice 2's real renderer.
 
+### The kept versions
+
+A box that accepts sales keeps the running release's text in the venue database as it starts
+(`apps/server/src/keep-declaration.ts`), through the fiscal module's `declarations` seat; a box in
+time-zone repair keeps nothing. The pages read the kept versions without a write-lock turn.
+
 ### Which listeners serve them
 
 These serve them:
 
-- the main app, in every mode, from `bootServer` beside the guides (`apps/server/src/boot.ts:1348`),
+- the main app, in every mode, from `bootServer` beside the guides (`apps/server/src/boot.ts:1412`),
   before the first branch on the box's mode and before the spare and read-only gates;
 - the waiting start, while a box waits for its peer (`apps/server/src/waiting-start.ts:107`);
-- the plain-HTTP listener, both its forms (`apps/server/src/landing-app.ts:28`);
+- the plain-HTTP listener, both its forms (`apps/server/src/landing-app.ts:29`);
 - the recovery listener (`apps/server/src/recovery-listener.ts:128`);
 - the Waitron Cloud staff entrance, which lets `/legal/` reads through beside `/help/`
   (`apps/server/src/cloud-remote.ts:143-144`).
+
+Only the main app, and the plain-HTTP listener `bootServer` starts beside it on a trading or
+time-zone repair start, list and serve the kept versions, and only when the venue's fiscal module
+has a `declarations` seat. Elsewhere, in setup, while adoption is pending, on a start restricted
+after a handover, and on the waiting start and recovery listeners, the page has no list and every
+`/legal/declaration/<version>.txt` answers "Page not found".
 
 The plain-HTTP page, in both forms (`trust-page.ts`, `connection-bootstrap-page.ts`), and the
 recovery page (`recovery-surface.ts`) link to `/legal/declaration` at their foot. The guides are
