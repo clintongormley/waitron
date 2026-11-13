@@ -12,10 +12,10 @@ export const startEn = {
 
   "role.heading": "Join or recover an existing restaurant",
   "role.intro":
-    "Restore a backup onto this server when no other server is still running with newer restaurant data, or rebuild from the continuous copy in your own storage bucket when the old server is gone. Adding a mirror is not finished in this version.",
+    "Restore a backup onto this server when no other server is still running with newer restaurant data, or rebuild from the continuous copy in your own storage bucket when the old server is gone. A mirror cannot take over yet.",
   "role.mirror.heading": "Add a mirror node",
   "role.mirror.copy":
-    "Adding a mirror is not finished in this version: this server can join the primary, but it does not yet receive the restaurant's data, so it cannot take over. To recover a restaurant, choose Restore from backup or Restore from my bucket.",
+    "This server joins the primary and keeps a copy of the restaurant's data. It cannot take over yet, and a restaurant that files with Veri*Factu cannot add one yet. To recover a restaurant, choose Restore from backup or Restore from my bucket.",
   "role.restore.heading": "Restore from backup",
   "role.restore.copy":
     "Recover onto this fresh server from an encrypted Waitron backup when no other server is still running with newer restaurant data.",
@@ -26,7 +26,7 @@ export const startEn = {
 
   "connect.heading": "Connect to the primary",
   "connect.intro":
-    "Adding a mirror is not finished in this version: this server can join the primary, but it does not yet receive the restaurant's data, so it stays waiting and cannot take over. Choose Back to restore a backup instead.",
+    "This server joins the primary and keeps a copy of the restaurant's data. It cannot take over yet. To restore a backup instead, choose Back.",
   "connect.primary_url.label": "Primary server address",
   "connect.primary_url.error": "Check the primary server address.",
   "connect.primary_url.hint": "Full HTTPS address of the primary server",
@@ -138,10 +138,10 @@ export const startEs: Record<keyof typeof startEn, string> = {
 
   "role.heading": "Unirse a un restaurante existente o recuperarlo",
   "role.intro":
-    "Restaura una copia de seguridad en este servidor cuando no haya otro servidor funcionando con datos más recientes del restaurante, o reconstrúyelo desde la copia continua de tu propio bucket cuando el servidor anterior ya no esté. Añadir una réplica aún no está terminado en esta versión.",
+    "Restaura una copia de seguridad en este servidor cuando no haya otro servidor funcionando con datos más recientes del restaurante, o reconstrúyelo desde la copia continua de tu propio bucket cuando el servidor anterior ya no esté. Una réplica aún no puede sustituir al principal.",
   "role.mirror.heading": "Añadir un nodo réplica",
   "role.mirror.copy":
-    "Añadir una réplica aún no está terminado en esta versión: este servidor puede unirse al principal, pero todavía no recibe los datos del restaurante, así que no puede sustituirlo. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
+    "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo, y un restaurante que presenta sus facturas con Veri*Factu aún no puede añadir una réplica. Para recuperar un restaurante, elige Restaurar desde una copia de seguridad o Restaurar desde mi bucket.",
   "role.restore.heading": "Restaurar desde una copia de seguridad",
   "role.restore.copy":
     "Recupera el restaurante en este servidor nuevo desde una copia de seguridad cifrada de Waitron cuando no haya ningún otro servidor funcionando con datos más recientes del restaurante.",
@@ -152,7 +152,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
 
   "connect.heading": "Conectar con el servidor principal",
   "connect.intro":
-    "Añadir una réplica aún no está terminado en esta versión: este servidor puede unirse al principal, pero todavía no recibe los datos del restaurante, así que se queda esperando y no puede sustituirlo. Elige Volver para restaurar una copia de seguridad.",
+    "Este servidor se une al principal y guarda una copia de los datos del restaurante. Aún no puede sustituirlo. Para restaurar una copia de seguridad, elige Volver.",
   "connect.primary_url.label": "Dirección del servidor principal",
   "connect.primary_url.error": "Revisa la dirección del servidor principal.",
   "connect.primary_url.hint": "Dirección HTTPS completa del servidor principal",
