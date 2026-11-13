@@ -39,6 +39,10 @@ export const shellEn = {
     "The box's disk is full, so Waitron cannot save anything. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
   "shell.first_setup.series_minute_taken":
     "The invoice series cannot be created: the minute this setup chose is already in this box's records. This is a fault in Waitron.",
+  "shell.first_setup.clock_step_unsaved":
+    "The server's time was set from this device, but the server could not save a note of that change, so setup cannot finish yet. Reconnect, then provision this server again: the server tries to save the note first.",
+  "shell.clock_step_unsaved":
+    "The server's time was set from this device, but the server could not save a note of that change, so it cannot finish yet. Try again: the server tries to save the note first.",
 
   "shell.document_title": "Waitron — set up your server",
   "shell.reload": "Reload",
@@ -257,6 +261,10 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "El disco del equipo está lleno, así que Waitron no puede guardar nada. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
   "shell.first_setup.series_minute_taken":
     "No se pueden crear las series de facturas: el minuto que eligió esta configuración ya está en los registros de este servidor. Es un fallo de Waitron.",
+  "shell.first_setup.clock_step_unsaved":
+    "La hora del servidor se puso desde este dispositivo, pero el servidor no pudo guardar una nota de ese cambio, así que la configuración todavía no puede terminar. Pulsa Reconectar y vuelve a configurar este servidor: el servidor intenta primero guardar la nota.",
+  "shell.clock_step_unsaved":
+    "La hora del servidor se puso desde este dispositivo, pero el servidor no pudo guardar una nota de ese cambio, así que todavía no puede terminar. Vuelve a intentarlo: el servidor intenta primero guardar la nota.",
 
   "shell.document_title": "Waitron — configura tu servidor",
   "shell.reload": "Recargar",

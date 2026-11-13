@@ -60,9 +60,10 @@ clock and the series are made with nobody pressing"); a refusal says what happen
 (the same file's "in %s a refusal for %s says what happened and what to do, compares nothing and
 keeps the choices"). It is not offered when the internet's time agrees with the box's (the same
 file's "offers no This device when the internet's time agrees with the server's"). Each step
-becomes an alert, handed to the managers' email duty, at the venue's first full start
-(`apps/server/src/boot.box-emails.test.ts`, "boot raises and emails each clock step the setup
-page noted, then deletes the note"). **Edit these details** sends nothing and asks the setup app for the venue step; while
+becomes an alert, handed to the managers' email duty, at the venue's first full start that is
+neither a mirror nor fenced (`apps/server/src/boot.box-emails.test.ts`, "boot raises and emails
+each clock step the setup page noted, then deletes the note"); a step whose note could not be saved
+is lost if setup restarts without saving it. **Edit these details** sends nothing and asks the setup app for the venue step; while
 the attempt is claimed the app shows its page saying the details are frozen, with **Start again**
 (`apps/setup/src/setup-app-first-fiscal.test.ts`, "Edit these details on the series page asks for
 the venue step, which a claimed attempt answers with its frozen-details page"). Once the series are

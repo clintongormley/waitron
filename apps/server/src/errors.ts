@@ -1227,6 +1227,10 @@ declare module "@waitron/shared" {
     "setup.start_again_refused": { cause: "setup-finished" | "kept-records" };
     /** Start again was asked for over a connection that is not encrypted. */
     "setup.connection_insecure": Record<string, never>;
+    /** Setup or a restore will not finish: a clock step made from the setup or restore page has
+     * no note saved yet (`setup-clock-set.ts`), and the box's full start alerts only noted steps.
+     * The failed write is its `cause`; a full disk answers `storage.disk_full` instead. */
+    "setup.clock_step_unsaved": Record<string, never>;
     /**
      * A manual open-drawer request found no active cash drawer choice on the requesting device (its
      * own, else its profile's default), so there is nothing to send the kick through. `deviceId`

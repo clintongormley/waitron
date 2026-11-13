@@ -5063,8 +5063,9 @@ handover page is open" in `apps/server/src/handover-activation.test.ts`, which w
 `recordCorrected` rather than through the page's set, at `filing_assumed` and `emergency_declared`
 only, and checks it stays open through activation and its restart and that the box, then primary,
 queues its email; and the two "while a clock step's note cannot be written" cases in
-`apps/server/src/boot.setup-routes.test.ts`, which refuse and then finish one restore and one live
-first setup, not an adopt or the other restores.
+`apps/server/src/boot.setup-routes.test.ts`, which refuse one restore and one live first setup,
+then on the next try write the note (the first setup then restarts; the restore goes on to refuse
+the copy for its own reason), not an adopt or the other restores.
 
 #### Jobs that compare a stored time with the clock, across a step of days
 
@@ -6515,11 +6516,12 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   2026-11-12: "add \"This device\" to #2693 now"), or AEAT only inside the clock-behind stop — never from devices alone
   and never while it keeps time over the internet — and every step it verifies, or sees move the
   clock by over a second, is alerted and emailed (a step made before the venue exists, at its first
-  full start, if one comes before a reset)** (owner, 2026-11-10: "we rely on NTP only, we
-  don't bother about AEAT"). Guards:
+  full start that is neither a mirror nor fenced, unless the topic file's losses apply)** (owner,
+  2026-11-10: "we rely on NTP only, we don't bother about AEAT"). Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
-  `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
-  rule: the handler's suite runs stubs, not systemd; the route suites cover the named routes only.
+  `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`,
+  `apps/server/src/setup-clock-set.test.ts`, `apps/server/src/boot.box-emails.test.ts`, weaker than
+  the rule: the handler's suite runs stubs, not systemd; the route suites cover the named routes only.
   [Detail](conventions-data.md#the-box-sets-its-own-clock).
 
 ### An installation name's minute: waits, refusals and repeats

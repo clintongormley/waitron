@@ -7,16 +7,18 @@ import { incidents, withTransaction, type Database, type Transaction } from "@wa
 import type { ClockStepRequest, TrustedClock } from "@waitron/fiscal";
 import type { ModuleClockSetAnswer, ModuleClockSetRequest } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
-import { jobOrigin, type ErrorParams } from "@waitron/shared";
+import { AppError, diskFullIn, jobOrigin, type ErrorParams } from "@waitron/shared";
 import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import { bootReader, type BootReader } from "./boot-reader.js";
 import type { EmailedIncident } from "./box-alert-email.js";
 import type { BoxHostClient } from "./box-host-client.js";
 import { clockCorrection, moduleClockSetAnswer } from "./clock-correction.js";
+import { errnoOf } from "./errno.js";
 import { writeFileDurable } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { startClockState } from "./start-clock-check.js";
 import { systemClock } from "./till-backend.js";
+import "./errors.js";
 
 /** One step noted while the venue did not exist yet, raised as `clock.corrected` under `id`. */
 export interface SetupClockStep {
@@ -76,9 +78,10 @@ export type SetupClockSetter = (
 ) => Promise<ModuleClockSetAnswer>;
 
 export interface SetupClockSet extends SetupClockSetter {
-  /** Notes the steps whose note could not be written when they were made; throws while one still
-   * cannot be. Setup and restore call it before they finish, since the step lives only in this
-   * process until it is noted. */
+  /** Notes the steps whose note could not be written when they were made; throws
+   * `storage.disk_full` while one cannot be for want of space, otherwise
+   * `setup.clock_step_unsaved`, each with the failed write as its cause. Setup and restore call it
+   * before they finish, since the step lives only in this process until it is noted. */
   writePending(): Promise<void>;
 }
 
@@ -152,7 +155,18 @@ export function createSetupClockSet(deps: {
       }),
     );
   };
-  return Object.assign(set, { writePending: () => correction.writePending() });
+  const writePending = async () => {
+    try {
+      await correction.writePending();
+    } catch (cause) {
+      const full = diskFullIn(cause) || errnoOf(cause) === "ENOSPC";
+      throw Object.assign(
+        full ? new AppError("storage.disk_full", {}) : new AppError("setup.clock_step_unsaved", {}),
+        { cause },
+      );
+    }
+  };
+  return Object.assign(set, { writePending });
 }
 
 /** At the venue's first full start: one `clock.corrected` per noted step under the step's id, each

@@ -41,6 +41,8 @@ const boundary = createErrorBoundary(
     "setup.start_again_incomplete": 409,
     "setup.workspace_unsupported": 409,
     "setup.start_again_refused": 409,
+    // Activation saves the clock steps first (`activateFirstFiscal`); this box's own file failed.
+    "setup.clock_step_unsaved": 500,
   },
   "setup.provision_failed",
 );

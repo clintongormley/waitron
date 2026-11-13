@@ -11,13 +11,19 @@ import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import type { ClockServiceStatus, ClockSetAnswer } from "./box-host-client.js";
 import { createSetupClockSet, raiseSetupClockSteps } from "./setup-clock-set.js";
 
-/** When set, the next note write lands and then throws, as a failed folder flush does. */
-const writes = vi.hoisted(() => ({ throwAfterNext: false }));
+/** `throwAfterNext`: the next note write lands and then throws, as a failed folder flush does.
+ * `refuseWith`: every note write throws that error code and writes nothing, until cleared. */
+const writes = vi.hoisted(() => ({
+  throwAfterNext: false,
+  refuseWith: undefined as string | undefined,
+}));
 vi.mock("./fs-atomic.js", async (original) => {
   const actual = await original<typeof import("./fs-atomic.js")>();
   return {
     ...actual,
     writeFileDurable: async (...args: Parameters<typeof actual.writeFileDurable>) => {
+      if (writes.refuseWith !== undefined)
+        throw Object.assign(new Error("write refused"), { code: writes.refuseWith });
       await actual.writeFileDurable(...args);
       if (writes.throwAfterNext) {
         writes.throwAfterNext = false;
@@ -223,12 +229,31 @@ describe("setting the box's clock from the setup and restore pages", () => {
     const h = await harness();
     await rm(h.dir, { recursive: true });
     expect(await h.setter(h.request(), async () => null)).toEqual({ status: "set" });
-    await expect(h.setter.writePending()).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(h.setter.writePending()).rejects.toMatchObject({
+      code: "setup.clock_step_unsaved",
+      cause: { code: "ENOENT" },
+    });
     expect(await note(h.dir)).toBeNull();
     await mkdir(h.dir);
     await h.setter.writePending();
     const entries = (await note(h.dir)) as { params: Record<string, unknown> }[];
     expect(entries.map((entry) => entry.params["direction"])).toEqual(["forward"]);
+    await h.setter.writePending();
+    expect(await note(h.dir)).toHaveLength(1);
+  });
+
+  it("answers storage.disk_full while a step's note cannot be written for want of space", async () => {
+    const h = await harness();
+    writes.refuseWith = "ENOSPC";
+    try {
+      expect(await h.setter(h.request(), async () => null)).toEqual({ status: "set" });
+      await expect(h.setter.writePending()).rejects.toMatchObject({
+        code: "storage.disk_full",
+        cause: { code: "ENOSPC" },
+      });
+    } finally {
+      writes.refuseWith = undefined;
+    }
     await h.setter.writePending();
     expect(await note(h.dir)).toHaveLength(1);
   });

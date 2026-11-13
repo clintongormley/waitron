@@ -959,7 +959,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   a `node.manage` holder), when that person chooses **This device** (owner, 2026-11-10: "yes";
   2026-11-12: "add \"This device\" to #2693 now"), or AEAT only inside the clock-behind stop — never from devices alone and never while it
   keeps time over the internet — and every step it verifies, or sees move the clock by over a second,
-  is alerted and emailed (a step made before the venue exists, at its first full start, if one comes before a reset)** (owner,
+  is alerted and emailed (a step made before the venue exists, at its first full start that is neither a mirror nor fenced, unless the topic file's losses apply)** (owner,
   2026-11-10: "we rely on NTP only, we don't bother about AEAT").
   Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,

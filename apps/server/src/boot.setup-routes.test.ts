@@ -658,6 +658,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
           const refused = await restore(post);
           expect(refused.status).toBe(500);
+          expect(((await refused.json()) as { error?: { code: string } }).error?.code).toBe(
+            "setup.clock_step_unsaved",
+          );
           expect(kills).toEqual([]);
 
           await rm(notePath, { recursive: true });
@@ -721,6 +724,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             body: JSON.stringify({ mode: "live", venue: provisionVenueBody("60000014Y") }),
           });
           expect(refused.status, await refused.clone().text()).toBe(500);
+          expect(((await refused.json()) as { error?: { code: string } }).error?.code).toBe(
+            "setup.clock_step_unsaved",
+          );
           expect(kills).toEqual([]);
 
           await rm(notePath, { recursive: true });

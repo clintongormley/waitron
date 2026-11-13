@@ -133,7 +133,7 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     name: SETUP_CLOCK_STEP_FILE,
     kind: "file",
     reset: "deleted",
-    why: "Clock steps made before the venue existed, alerted at its first full start.",
+    why: "Clock steps made before the venue existed, alerted at its first full start that is neither a mirror nor fenced.",
   },
   {
     name: SECRETS_ENV_FILE,

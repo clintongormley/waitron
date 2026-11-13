@@ -249,6 +249,12 @@ const REVALIDATE_CACHE_CONTROL = "no-cache";
 export const MAX_RESTORE_UPLOAD_BYTES = 256 * 1024 * 1024;
 export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 
+/** A finish saves the clock steps first (`runOperation`); a note this box cannot write is its own
+ * fault, so 500. */
+const CLOCK_STEP_STATUS: Record<string, ContentfulStatusCode> = {
+  "setup.clock_step_unsaved": 500,
+};
+
 /**
  * The status of AppError codes the provision, fiscal-test and configuration routes throw inside
  * their error boundaries. A code not listed gets the boundary's default 400.
@@ -282,6 +288,7 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   // packages/media/src/routes.ts answers both.
   "image.invalid_metadata": 400,
   "content.language_invalid": 400,
+  ...CLOCK_STEP_STATUS,
 };
 
 // The tag is a log label for a non-`AppError` fault other than a full disk, never a wire code: the
@@ -310,6 +317,7 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.already_provisioning": 409,
   "setup.adopt_incomplete": 409,
   "deployment.already_stamped": 409,
+  ...CLOCK_STEP_STATUS,
 };
 
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");

@@ -4,6 +4,8 @@ import { applyTokens, leaveCoordinatorFor } from "@waitron/ui";
 import { SetupApp } from "./setup-app.js";
 import { setLocale } from "./i18n/t.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
+import { shellEn, shellEs } from "./i18n/strings/shell.js";
+import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { venue, initial, wizardApi } from "../test/first-setup-browser.js";
 const mounted: HTMLElement[] = [];
 beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
@@ -564,6 +566,65 @@ it("reads back a completed activation after a lost response and offers no second
   await expect.poll(() => owner.textContent).toContain("Setup is complete.");
   expect(owner.textContent).not.toContain("resolve the incident");
   expect(requests.filter((r) => r.path.endsWith("/provision"))).toHaveLength(1);
+});
+
+/** Claims, readies the allocation screen and sends activation, which `refusal` answers. */
+async function activationRefused(refusal: { code: string; params: Record<string, unknown> }) {
+  const fixture = await mount({
+    intercept(path) {
+      if (path.endsWith("/provision"))
+        return Response.json(
+          { error: refusal },
+          { status: refusal.code === "storage.disk_full" ? 507 : 500 },
+        );
+    },
+  });
+  const { app } = fixture;
+  await liveVenue(app);
+  await screen(app, "cert");
+  emit(app, "setup-patch", {
+    patch: { aeatCert: { pfxBase64: "public-test-cert", passphrase: "pw", certKind: "sello" } },
+  });
+  emit(app, "setup-goto", { screen: "review" });
+  const allocation = await screen(app, "first-setup");
+  allocation.dispatchEvent(
+    new CustomEvent("initial-setup-ready", { bubbles: true, composed: true }),
+  );
+  await screen(app, "review");
+  emit(app, "provision-requested");
+  const owner = await screen(app, "first-owner");
+  await expect.poll(() => enabled(owner, "reconnect-first")).toBe(true);
+  expect(fixture.requests.filter((r) => r.path.endsWith("/provision"))).toHaveLength(1);
+  return { ...fixture, owner };
+}
+const ownerWords = (owner: HTMLElement) =>
+  owner.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error;
+
+for (const [locale, shell, ownerStrings] of [
+  ["en-GB", shellEn, initialOwnerStrings.en],
+  ["es-ES", shellEs, initialOwnerStrings.es],
+] as const)
+  it(`${locale}: an activation refused while a clock step's note is unsaved says to reconnect and provision again, not to leave activation alone`, async () => {
+    try {
+      const { app, owner } = await activationRefused({
+        code: "setup.clock_step_unsaved",
+        params: {},
+      });
+      setLocale(locale);
+      await app.updateComplete;
+      expect(ownerWords(owner)).toBe(shell["shell.first_setup.clock_step_unsaved"]);
+      expect(ownerWords(owner)).not.toBe(ownerStrings.error);
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
+it.each([
+  [{}, shellEn["shell.first_setup.disk_full_restart_unknown"]],
+  [{ restartDeletesLogs: true }, shellEn["shell.first_setup.disk_full"]],
+])("an activation refused storage.disk_full (%o) says the disk is full", async (params, words) => {
+  const { owner } = await activationRefused({ code: "storage.disk_full", params });
+  expect(ownerWords(owner)).toBe(words);
 });
 
 it("abandons an unconsumed attempt explicitly and collects fresh details before replacing it", async () => {

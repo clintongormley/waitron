@@ -295,8 +295,7 @@ export interface ClockAdminConfirm {
  * `stepMs` is the measured step; `verified` false when the box could not confirm the step took.
  * `admin` names the person for the `admin` and `staff` sources, with `role: "staff"` for `staff`,
  * and for a `setup` step on first setup. A `setup` step, made from the setup or restore page before
- * the venue exists, goes to the setup note and is never handed to a regime; a regime's
- * `confirmClockStep` refuses one. */
+ * the venue exists, goes to the setup note and is never handed to a regime. */
 export interface ClockStepRequest {
   before: Pick<TrustedReading, "instant" | "offsetMinutes">;
   after: Pick<TrustedReading, "instant" | "offsetMinutes">;
