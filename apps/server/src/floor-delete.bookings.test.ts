@@ -116,7 +116,7 @@ for (const enabled of [true, false]) {
               bookingTime: "20:00",
               partySize: 2,
               contactName: "Ana",
-              createdBy: await seedPerson(suite.db, { displayName: randomUUID() }),
+              createdBy: await seedPerson(tx, { displayName: randomUUID() }),
             }),
           );
         } else {

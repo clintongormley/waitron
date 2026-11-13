@@ -1,3 +1,4 @@
+import { ensureOperator } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -24,6 +25,7 @@ useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
     v = await setupPartyVenue(db);
+    await inTx(v, (tx) => ensureOperator(tx, OPERATOR));
   },
 });
 afterEach(() => vi.restoreAllMocks());

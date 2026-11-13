@@ -1,3 +1,4 @@
+import { ensureOperator } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -55,6 +56,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 const at = "2026-10-10T12:00:00.000Z";
 async function fixture() {
   const v = await setupPartyVenue(suite.db);
+  await inTx(v, (tx) => ensureOperator(tx, OPERATOR));
   const { id } = await inTx(v, (tx) => createStation(tx, { name: "Delete me" }));
   return { v, id };
 }

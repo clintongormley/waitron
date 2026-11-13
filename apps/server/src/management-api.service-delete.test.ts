@@ -1,3 +1,4 @@
+import { ensureOperator } from "./testing/cancel-line.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql, and } from "drizzle-orm";
@@ -70,6 +71,7 @@ let expired: string;
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(v.db, body);
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
+  await run((tx) => ensureOperator(tx, v.operator.personId));
   [manager, staff, expired] = await run(async (tx) => {
     const result: string[] = [];
     for (const role of ["manager", "staff", "manager"] as const) {

@@ -13,7 +13,7 @@ import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   assignCatalogueToVenue,
@@ -1360,8 +1360,12 @@ describe("readCurrentOrders (spec §4)", () => {
     // These historical group senders are missing; the party's opening person exists separately.
     await suite.db
       .update(orderGroups)
-      .set({ submittedBy: randomUUID(), firedBy: randomUUID() })
+      .set({ submittedBy: randomUUID() })
       .where(eq(orderGroups.partyId, s.partyId));
+    await suite.db
+      .update(orderGroups)
+      .set({ firedBy: randomUUID() })
+      .where(and(eq(orderGroups.partyId, s.partyId), isNotNull(orderGroups.firedBy)));
     const read = await currentOrders(s.partyId);
 
     expect(read).toEqual({

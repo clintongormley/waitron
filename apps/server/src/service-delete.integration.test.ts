@@ -1,3 +1,4 @@
+import { ensureOperator } from "./testing/cancel-line.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -76,6 +77,7 @@ const suite = useVenueDb({
 });
 beforeEach(async () => {
   venue = await setupPartyVenue(suite.db);
+  await run((tx) => ensureOperator(tx, venue.operator.personId));
 });
 
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(venue.db, body);
