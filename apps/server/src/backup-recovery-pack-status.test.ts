@@ -44,7 +44,7 @@ function pack(
     number,
     madeAt: new Date(madeAt),
     madeBy: "person",
-    madeByName: options.name === undefined ? "Marta Puig" : options.name,
+    madeByName: options.name === undefined ? "Martha Green" : options.name,
     receivedAt: options.received === false ? null : new Date(madeAt),
     parts: options.parts ?? [included.bucket, included.archives, included.serverKey(KEY_1, false)],
   };
@@ -87,7 +87,7 @@ describe("the latest pack", () => {
     expect(answer.latest).toEqual({
       number: 1,
       madeAt: "2026-10-12T10:00:00.000Z",
-      madeByName: "Marta Puig",
+      madeByName: "Martha Green",
       received: true,
       parts: [
         { part: "bucket", state: "included" },
