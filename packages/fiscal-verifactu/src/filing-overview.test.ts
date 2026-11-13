@@ -323,6 +323,19 @@ describe("readFilingOverview", () => {
     });
   });
 
+  it("gives an alta's stored operation description and null for a cancellation", async () => {
+    const { seeded, cancellation, diverged } = await seedOverview();
+    const overview = await inTx((tx) =>
+      readFilingOverview(tx, { nodeId: seeded.nodeId, limit: 200 }),
+    );
+    const caseOf = (registroId: string) =>
+      overview.cases.find((each) => each.registroId === registroId)!;
+
+    expect(caseOf(diverged).record.descripcionOperacion).toBe("Venta en establecimiento");
+    expect(caseOf(cancellation).record.tipoRegistro).toBe("anulacion");
+    expect(caseOf(cancellation).record.descripcionOperacion).toBeNull();
+  });
+
   it("gives this node's active conflicts, the diverged record and the live series' invoice this box did not issue, each with where it was found, and none for no node", async () => {
     const { seeded, installation } = await seedOverview();
 
@@ -428,6 +441,7 @@ describe("readFilingOverview", () => {
         "tipoFactura",
         "importeTotal",
         "cuotaTotal",
+        "descripcionOperacion",
         "huella",
         "anteriorHuella",
         "fechaHoraHusoGenRegistro",

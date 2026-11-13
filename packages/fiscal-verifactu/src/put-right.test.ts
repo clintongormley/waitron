@@ -23,6 +23,7 @@ function refused(
       tipoFactura,
       importeTotal: "12.10",
       cuotaTotal: "1.10",
+      descripcionOperacion: "Venta en establecimiento",
       huella: "H",
       anteriorHuella: null,
       fechaHoraHusoGenRegistro: "2026-11-13T11:00:00+01:00",

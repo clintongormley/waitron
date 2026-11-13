@@ -23,6 +23,7 @@ export function conflictCase(registroId: string, openedAt: string): FilingCaseVi
       tipoFactura: "F2",
       importeTotal: "12.10",
       cuotaTotal: "2.10",
+      descripcionOperacion: "Venta en establecimiento",
       huella: OURS,
       anteriorHuella: PREVIOUS,
       fechaHoraHusoGenRegistro: "2026-11-03T12:00:00+01:00",
