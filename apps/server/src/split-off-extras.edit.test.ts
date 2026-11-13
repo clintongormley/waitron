@@ -40,6 +40,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
+import { readTabLines } from "./working-order.js";
 import { fireGroup } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { placeGrouped } from "./testing/adjustment-venue.js";
@@ -904,6 +905,12 @@ it.each([false, true])(
       await offerProducts(tx, venue.cfg, {
         zone: { zoneId: venue.tables.zoneId },
         orderStart: "table",
+      });
+      const shown = (await readTabLines(tx, id)).find((row) => row.id === before.id)!;
+      expect(shown.lunchOffer?.setLunch).toBe(true);
+      expect(shown.lunchOffer?.offeredModifiers.find((list) => list.id === main.id)).toMatchObject({
+        minPicks: 1,
+        items: [expect.objectContaining({ price: "3.00" })],
       });
       await edit(tx, venue, before.lineNo, {
         portionLineNos: [],

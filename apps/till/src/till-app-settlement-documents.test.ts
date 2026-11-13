@@ -319,3 +319,27 @@ it.each(["open", "invoice read fails"])(
     else expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
   },
 );
+
+it.each([true, false])(
+  "reports a lunch-choice write outcome to its window: saved %s",
+  async (saved) => {
+    const api = stubApi({
+      updateOrderLine: saved
+        ? vi.fn().mockResolvedValue({ revision: 1, party: { id: "v1", revision: 4 } })
+        : vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const order = await openTable(el);
+    const completed = vi.fn();
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Lunch",
+      patch: { extras: [] },
+      revision: 0,
+      completed,
+    });
+    await vi.waitFor(() => expect(completed).toHaveBeenCalled());
+    expect(completed.mock.calls[0]![0]).toBe(saved);
+    if (!saved) expect(completed.mock.calls[0]![1]).toEqual(expect.any(String));
+  },
+);

@@ -129,6 +129,11 @@ export class TillModifierPicker extends LitElement {
       .min-quantity-action {
         margin-block: calc(-1 * var(--wt-space-2)) var(--wt-space-3);
       }
+      .request-refusal {
+        flex-basis: 100%;
+        margin: 0;
+        color: var(--wt-color-danger);
+      }
       .group {
         margin: 0 0 var(--wt-space-4);
       }
@@ -263,6 +268,8 @@ export class TillModifierPicker extends LitElement {
    * it is empty, which is how "the operator deliberately picked nothing" is told from a fresh open:
    * a fresh open seeds the offer's defaults, a reopen never does. */
   @property({ attribute: false }) initialSelections?: LineSelection;
+  @property({ attribute: false }) lockedExtras: readonly { listId: string; productId: string }[] =
+    [];
 
   @property({ attribute: false }) filters: MenuFilters = EMPTY_MENU_FILTERS;
   @state() private removedDefaults: string[] = [];
@@ -273,6 +280,7 @@ export class TillModifierPicker extends LitElement {
   @property() coursePlaceholder = "";
   @property({ attribute: false }) courseChoices: readonly ComboboxOption[] = [];
   @property({ type: Boolean }) disabled = false;
+  @property({ attribute: false }) refusal: unknown = nothing;
   @property({ type: Boolean }) lineDetails = false;
   /** With {@link lineDetails}, the line's quantity is neither drawn nor sent. */
   @property({ type: Boolean }) quantityReadOnly = false;
@@ -548,7 +556,7 @@ export class TillModifierPicker extends LitElement {
         return entry.labels.some((label) => label.id === this.answers[entry.id]);
       const total = totals.get(entry.id) ?? 0;
       return (
-        total >= entry.minPicks &&
+        (this.product.setLunch === true || total >= entry.minPicks) &&
         (entry.maxPicks === null || total <= entry.maxPicks) &&
         entry.items.every(
           (item) =>
@@ -616,7 +624,12 @@ export class TillModifierPicker extends LitElement {
     return formatMoney(lineGross(previewLine), currentLocale());
   }
 
+  #locked(listId: string, productId: string): boolean {
+    return this.lockedExtras.some((pick) => pick.listId === listId && pick.productId === productId);
+  }
+
   #setCount(listId: string, productId: string, quantity: number): void {
+    if (this.#locked(listId, productId)) return;
     if (!this.isConnected || !this.active) return;
     const next = { ...this.picks };
     if (quantity >= 1) {
@@ -993,6 +1006,7 @@ export class TillModifierPicker extends LitElement {
       @wt-close=${(event: Event) => this.#closed(event)}
     >
       ${fields}
+      ${this.refusal === nothing ? nothing : html`<p slot="footer" role="alert" class="request-refusal">${this.refusal}</p>`}
       ${!this.readOnly && this.attempted && this.lineDetails && this.#quantityInvalid() ? html`<p slot="footer" role="alert">${t("form.fix_fields")}</p>` : nothing}
       <wt-button
         slot="footer"
@@ -1055,11 +1069,14 @@ export class TillModifierPicker extends LitElement {
     const atListMax = list.maxPicks !== null && total >= list.maxPicks;
     return html`
       <fieldset class="group">
-        <legend class="group-name">${list.name}${list.minPicks >= 1 ? " *" : ""}</legend>
+        <legend class="group-name">
+          ${list.name}${list.minPicks >= 1 && !this.product.setLunch ? " *" : ""}
+        </legend>
         <p class="selected-total">
           ${t("modifier.selected_total")}:
           ${total}${list.maxPicks === null ? "" : ` / ${list.maxPicks}`}
         </p>
+        ${this.product.setLunch && total < list.minPicks ? html`<p class="selected-total" data-lunch-open>${t("lunch.choose_later")}</p>` : nothing}
         ${list.items.map((item) =>
           item.maxQuantity === null || item.maxQuantity > 1
             ? this.#renderStepper(list, item, atListMax)
@@ -1104,7 +1121,7 @@ export class TillModifierPicker extends LitElement {
           type="checkbox"
           name=${`extras-${list.id}`}
           .checked=${checked}
-          ?disabled=${!checked && atListMax}
+          ?disabled=${this.#locked(list.id, item.productId) || (!checked && atListMax)}
           @change=${(e: Event) => {
             e.stopPropagation();
             this.#setCount(list.id, item.productId, (e.target as HTMLInputElement).checked ? 1 : 0);
@@ -1129,7 +1146,7 @@ export class TillModifierPicker extends LitElement {
             size=${this.lineDetails ? "md" : "sm"}
             data-test="${test}-dec"
             aria-label=${`${t("modifier.decrease")} ${item.name}`}
-            ?disabled=${count <= 0}
+            ?disabled=${this.#locked(list.id, item.productId) || count <= 0}
             @click=${() => this.#step(list, item, -1)}
           >
             −
@@ -1140,7 +1157,7 @@ export class TillModifierPicker extends LitElement {
             size=${this.lineDetails ? "md" : "sm"}
             data-test="${test}-inc"
             aria-label=${`${t("modifier.increase")} ${item.name}`}
-            ?disabled=${(item.maxQuantity !== null && count >= item.maxQuantity) || atListMax}
+            ?disabled=${this.#locked(list.id, item.productId) || (item.maxQuantity !== null && count >= item.maxQuantity) || atListMax}
             @click=${() => this.#step(list, item, 1)}
           >
             +

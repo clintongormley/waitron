@@ -1068,6 +1068,16 @@ describe("WorkingOrderStore.addMerging (D10)", () => {
   const rows = (s: WorkingOrderStore) =>
     s.lines.map((line) => `${line.product.name} ×${line.quantity}`);
 
+  it("keeps each diner's lunch separate, including on the next draft save", () => {
+    const s = new WorkingOrderStore();
+    const lunch = product("lunch", { setLunch: true, unitPrice: "18.00" });
+    s.addMerging(lunch, "1");
+    s.addMerging(lunch, "1");
+    expect(s.lines.map((line) => line.quantity)).toEqual(["1", "1"]);
+    expect(s.lines.map((line) => line.noMerge)).toEqual([true, true]);
+    expect(s.total).toBe("36.00");
+  });
+
   it("gives one line Beer ×3 from three Beer adds", () => {
     const s = new WorkingOrderStore();
     for (let tap = 0; tap < 3; tap += 1) s.addMerging(beer, "1");

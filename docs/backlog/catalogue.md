@@ -1083,11 +1083,10 @@ the adviser wait for that scope; takeaway/delivery set menus are adviser questio
 [T17](../compliance/2026-11-06-adviser-questions.md#the-questions-that-need-judgement).
 The catalogue save/publish APIs retain the set-lunch marker, and the order API accepts later choices
 using its recorded menu prices and table-service VAT class. The editor can configure it, and the service API sends its dishes by course, permits changing an
-unsent choice and preserves service state through table moves. Dedicated till controls for later
-choices and lunch bill/receipt presentation remain unbuilt.
-The remaining table-service work is in slices 4–5 of the build plan:
+unsent choice and preserves service state through table moves. The till keeps each lunch separate,
+shows outstanding choices, reopens its recorded choices and sends selected courses independently.
+The remaining table-service work is slice 5 of the build plan:
 
-- till controls for choosing included dishes later on the same lunch and sending each course;
 - bill, receipt and invoice presentation with one lunch price, each premium supplement charged
   once and included dishes shown without separate prices, including reprints after catalogue edits.
 

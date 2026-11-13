@@ -1021,6 +1021,24 @@ export class TillBasket extends LitElement {
                     </div>
                   `,
                 )}
+                ${
+                  line.product.setLunch
+                    ? offeredListsOf(line.product)
+                        .filter(
+                          (list) =>
+                            list.kind === "extras" &&
+                            (line.extras ?? [])
+                              .filter((pick) => pick.listId === list.id)
+                              .reduce((sum, pick) => sum + pick.quantity, 0) < list.minPicks,
+                        )
+                        .map(
+                          (list) =>
+                            html`<div class="option" data-lunch-open>
+                              <span class="name">${list.name}: ${t("lunch.choose_later")}</span>
+                            </div>`,
+                        )
+                    : nothing
+                }
                 ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
                 <div class="line-after"><slot name=${`after-${index}`}></slot></div>
               </div>

@@ -5520,3 +5520,22 @@ describe("A803 portions: a sent table order stores one line per portion", () => 
     expect(await boundDishes(other)).toHaveLength(99);
   });
 });
+
+it("keeps identical lunches separate through save and group submission", async () => {
+  const v = await setupVenue();
+  await inTx(async (tx) => {
+    await updateProduct(tx, v.productId.beer, { setLunch: true });
+    await publishWorkingMenu(tx, v.menuId);
+  });
+  const party = await seated(v);
+  const draft = await save(v, party.partyId, ALEX, null, 0, [item(v, "beer"), item(v, "beer")]);
+  expect(draft.lines.map((line) => line.quantity)).toEqual(["1.000", "1.000"]);
+  expect(draft.lines.map((line) => line.noMerge)).toEqual([true, true]);
+  await submit(v, party.partyId, draft, ALEX, [
+    { lineIds: draft.lines.map((line) => line.id), release: "hold" },
+  ]);
+  const lines = await inTx((tx) =>
+    tx.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, party.tabId)),
+  );
+  expect(lines.map((line) => line.quantity)).toEqual([1000, 1000]);
+});

@@ -452,6 +452,18 @@ describe("till-modifier-picker", () => {
     expect(addButton(picker).disabled).toBe(false);
   });
 
+  it("lets a lunch be added with a required choice left for later", async () => {
+    const store = new WorkingOrderStore();
+    const lunch = { ...sandwich, setLunch: true };
+    const { picker } = await openPicker(lunch, "Bocadillo", store);
+    expect(addButton(picker).disabled).toBe(false);
+    expect(picker.shadowRoot!.textContent).toContain(t("lunch.choose_later"));
+    addButton(picker).click();
+    await vi.waitFor(() => expect(store.lines).toHaveLength(1));
+    expect(store.lines[0]!.extras).toBeUndefined();
+    expect(store.total).toBe("5.00");
+  });
+
   it("caps a list at maxPicks on the summed count", async () => {
     const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
     incButton(picker, "list-extras", "p-cheese")!.click();

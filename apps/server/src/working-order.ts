@@ -2651,12 +2651,19 @@ export async function sendLines(
   if (namedLines.some((line) => !isNamedDish(line))) {
     throw new AppError("management.request_invalid", { field: "lineNo" });
   }
-  const heldGroupLines = await tx
-    .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
-    .from(workingOrderLines)
-    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(orderGroups.state, "held")))
-    .orderBy(workingOrderLines.lineNo);
+  const selectedLunchChoices = new Set(
+    namedLines
+      .filter((line) => line.parentLineId !== null && isNamedDish(line))
+      .map((line) => line.id),
+  );
+  const heldGroupLines = (
+    await tx
+      .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+      .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(orderGroups.state, "held")))
+      .orderBy(workingOrderLines.lineNo)
+  ).filter((line) => !selectedLunchChoices.has(line.id));
   const named = new Set(lineNos);
   const namedHeld = heldGroupLines.find((line) => named.has(line.lineNo));
   if (namedHeld !== undefined) {
@@ -3566,11 +3573,7 @@ async function servableLines(
   });
 }
 
-/**
- * Whether a dish line is released work: the kitchen has it. A made-here line is released at its
- * send, even in a held group. Other held-group and unfired lines wait; an ungrouped line with no
- * kitchen item needs a sent time.
- */
+/** A course's own release survives while the rest of its group remains held. */
 export function isReleased(
   line: Pick<
     ServableLine,
@@ -3578,11 +3581,8 @@ export function isReleased(
   >,
 ): boolean {
   if (line.ticketMadeHere === true) return true;
-  return line.groupState === "held"
-    ? false
-    : line.ticketItemId !== null
-      ? line.ticketFiredAt !== null
-      : line.groupState !== null || line.sentAt !== null;
+  if (line.ticketItemId !== null) return line.ticketFiredAt !== null;
+  return line.sentAt !== null || (line.groupState !== null && line.groupState !== "held");
 }
 
 /** Whether the waiter has initiated a dish line, which is what serving needs (D21). The money
@@ -3599,11 +3599,11 @@ export function serviceRequested(
   >,
 ): boolean {
   if (line.ticketMadeHere === true) return true;
-  return line.groupState === "held"
-    ? false
-    : line.ticketItemId !== null
-      ? initiatedAt({ requestedAt: line.ticketRequestedAt, firedAt: line.ticketFiredAt }) !== null
-      : line.groupState !== null || line.sentAt !== null;
+  if (line.ticketItemId !== null)
+    return (
+      initiatedAt({ requestedAt: line.ticketRequestedAt, firedAt: line.ticketFiredAt }) !== null
+    );
+  return line.sentAt !== null || (line.groupState !== null && line.groupState !== "held");
 }
 
 /** The dishes with an extra the kitchen has not been asked for. */
@@ -4103,6 +4103,7 @@ export async function assertTabOpen(tx: Transaction, tabId: string): Promise<num
 /** One line of a bill. `unitPriceGross` is the gross unit price LOCKED at add time, NOT a
  *  re-price. */
 export interface TabLine {
+  lunchOffer?: ZoneMenuOffer;
   nutrition?: LineNutrition;
   /** The row's id, which a group move names. A dish in an order group is listed by it in the group's
    *  `lineIds`; a child extras row never is (`readGroups`, `apps/server/src/order-groups.ts`). */
@@ -4228,6 +4229,11 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
+  const lunches = await VENUE_SERVICE.readLunchOffers(
+    tx,
+    tabId,
+    rows.filter((row) => row.parentLineId === null).map((row) => row.id),
+  );
   const nutrition = await readDisplayLineNutrition(tx, rows);
   const contexts = await VENUE_SERVICE.listLineContexts(tx, tabId);
   const menuItemByLine = new Map(
@@ -4267,6 +4273,7 @@ export async function readBillLines(tx: Transaction, tabId: string): Promise<Tab
     return {
       id: row.id,
       ...(nutrition.has(row.id) ? { nutrition: nutrition.get(row.id)! } : {}),
+      ...(lunches.has(row.id) ? { lunchOffer: lunches.get(row.id)!.offer } : {}),
       lineNo: row.lineNo,
       name: staffPresentationName({ name: row.name, variantName: row.variantName }),
       optionSnapshots: row.optionSnapshots,

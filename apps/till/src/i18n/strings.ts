@@ -2,6 +2,8 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "lunch.choose_later": "Choose later",
+  "lunch.choices": "Lunch choices",
   "recovery.open": "Open recovery",
   "recovery.issuance_stopped":
     "New invoices are stopped. Open recovery with this server's current recovery key.",
@@ -1971,6 +1973,8 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "lunch.choose_later": "Elegir más tarde",
+  "lunch.choices": "Platos del menú del día",
   "recovery.open": "Abrir recuperación",
   "recovery.issuance_stopped":
     "La emisión de facturas está detenida. Abre la recuperación con la clave de recuperación actual de este servidor.",

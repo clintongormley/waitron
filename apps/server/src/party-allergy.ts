@@ -295,6 +295,17 @@ export async function readAllergySendView(
           .map((r) => `working:${r.lineId}`),
       ]);
     } else {
+      const selectedLunchChoices = new Set(
+        [...storedById.values()]
+          .filter(
+            (line) =>
+              line.workingOrderId === target.orderId &&
+              line.parentLineId !== null &&
+              isDish(line) &&
+              target.lineNos.includes(line.lineNo),
+          )
+          .map((line) => line.id),
+      );
       for (const n of target.lineNos) {
         if (!Number.isSafeInteger(n) || n < 1) invalid("lineNos");
         const named = [...storedById.values()].find(
@@ -305,7 +316,7 @@ export async function readAllergySendView(
         const held = current.groups.find(
           (g) => g.state === "held" && g.rows.some((r) => r.lineId === named.id),
         );
-        if (held !== undefined)
+        if (held !== undefined && !selectedLunchChoices.has(named.id))
           throw new AppError("group.line_held", { tabId: target.orderId, lineNo: n });
         if (!rows.some((r) => r.lineId === named.id)) invalid("lineNos");
       }
@@ -317,9 +328,10 @@ export async function readAllergySendView(
               !r.released &&
               active(r) &&
               (target.lineNos.length === 0 || target.lineNos.includes(r.lineNo)) &&
-              !current.groups.some(
-                (g) => g.state === "held" && g.rows.some((i) => i.lineId === r.lineId),
-              ),
+              (selectedLunchChoices.has(r.lineId) ||
+                !current.groups.some(
+                  (g) => g.state === "held" && g.rows.some((i) => i.lineId === r.lineId),
+                )),
           )
           .map((r) => `working:${r.lineId}`),
       );
