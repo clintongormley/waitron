@@ -383,6 +383,19 @@ describe("earlier declarations kept by the venue", () => {
     expect(listed).toStrictEqual(["1.0.0", "1.2.0", "1.9.0", "1.10.0"]);
   });
 
+  it("tells apart versions whose parts are past what a number holds exactly", async () => {
+    const root = await runningFolder("9007199254740993.0.0");
+    const kept = () => ({
+      versions: () => Promise.resolve(["9007199254740993.0.0", "9007199254740992.0.0"]),
+      text: () => Promise.resolve(null),
+    });
+    const html = await (await appFor(root, vi.fn(), kept).request("/legal/declaration")).text();
+    const listed = [...html.matchAll(/<a href="\/legal\/declaration\/([^"]*)\.txt">/g)].map(
+      (match) => match[1],
+    );
+    expect(listed).toStrictEqual(["9007199254740992.0.0"]);
+  });
+
   it("shows no list when no earlier version is kept", async () => {
     const root = await runningFolder("1.2.0");
     const plain = await (await appFor(root).request("/legal/declaration")).text();
@@ -421,6 +434,7 @@ describe("earlier declarations kept by the venue", () => {
     for (const address of [
       "/legal/declaration/9.9.9.txt",
       "/legal/declaration/1.0.txt",
+      "/legal/declaration/01.0.0.txt",
       "/legal/declaration/..%2Fx.txt",
       "/legal/declaration/1.0.0",
       "/legal/declaration/1.0.0.pdf",
@@ -452,6 +466,25 @@ describe("earlier declarations kept by the venue", () => {
     const response = await appFor(root, log, kept).request("/legal/declaration");
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(plain);
+    expect(log.mock.calls).toStrictEqual([
+      ["warn", "declaration.kept_read_failed", { errorCode: "storage.disk_full" }],
+    ]);
+  });
+
+  it("a failed read of a kept text answers that the declaration cannot be shown", async () => {
+    const root = await runningFolder("1.2.0");
+    const log = vi.fn();
+    const kept = () => ({
+      versions: () => Promise.resolve(["1.0.0"]),
+      text: () => Promise.reject(new AppError("storage.disk_full", {})),
+    });
+    const response = await appFor(root, log, kept).request("/legal/declaration/1.0.0.txt", {
+      headers: { "Accept-Language": "es" },
+    });
+    expect(response.status).toBe(500);
+    const html = await response.text();
+    expect(html).toContain(DECLARATION_PAGE_WORDS.es.damagedTitle);
+    expect(html).not.toContain(DECLARATION_PAGE_WORDS.es.damaged);
     expect(log.mock.calls).toStrictEqual([
       ["warn", "declaration.kept_read_failed", { errorCode: "storage.disk_full" }],
     ]);
