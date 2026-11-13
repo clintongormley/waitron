@@ -647,10 +647,15 @@ async function caseGroups(venue: BenchVenue, clock: BenchClock): Promise<BenchGr
               .select({ id: orderGroups.id })
               .from(orderGroups)
               .where(eq(orderGroups.partyId, bill.partyId));
-            await call(cookie, "POST", `/api/parties/${bill.partyId}/groups/${group!.id}/ready`, {
-              submissionId: randomUUID(),
-              expectedPartyRevision: revision(bill.partyId),
-            });
+            await call(
+              passScreen.cookie,
+              "POST",
+              `/api/device/parties/${bill.partyId}/groups/${group!.id}/ready`,
+              {
+                submissionId: randomUUID(),
+                expectedPartyRevision: revision(bill.partyId),
+              },
+            );
             await call(cookie, "POST", `/api/parties/${bill.partyId}/groups/${group!.id}/served`, {
               submissionId: randomUUID(),
               expectedPartyRevision: revision(bill.partyId),

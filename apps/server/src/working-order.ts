@@ -2776,17 +2776,16 @@ export async function bumpBillReady(
     .set(advanceSet("ready"))
     .where(
       and(
-        eq(ticketItems.workingOrderId, orderId),
         inArray(
           ticketItems.id,
           tx
             .select({ id: ticketItems.id })
             .from(ticketItems)
             .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-            .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
+            .innerJoin(workingOrders, eq(workingOrderLines.workingOrderId, workingOrders.id))
             .where(
               and(
-                eq(ticketItems.workingOrderId, orderId),
+                eq(workingOrderLines.workingOrderId, orderId),
                 isNull(workingOrderLines.groupId),
                 liveKitchenDish(),
               ),
