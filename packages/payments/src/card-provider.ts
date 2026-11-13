@@ -66,9 +66,7 @@ export interface CardProviderContribution {
   ): Promise<ConnectResult>;
   /** Build the live PaymentProvider from the sealed credential (called by the pool). */
   build(deps: CardProviderBuildDeps): PaymentProvider;
-  createReconciler?(
-    deps: CardProviderBuildDeps & { heldAlerts: HeldAlertSink; settlementLagMs?: number },
-  ): PaymentReconciler;
+  createReconciler?(deps: CardProviderBuildDeps & { heldAlerts: HeldAlertSink }): PaymentReconciler;
   readers: {
     /** Whether remove releases the device registration at the provider. */
     readonly canUnpair: boolean;

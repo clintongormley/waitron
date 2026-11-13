@@ -1,10 +1,6 @@
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import {
-  DEFAULT_SETTLEMENT_LAG_MS,
-  listAuditCandidates,
-  reconcilePayments,
-} from "@waitron/payments";
+import { listAuditCandidates, reconcilePayments } from "@waitron/payments";
 import type {
   HeldAlertSink,
   IncidentSink,
@@ -22,7 +18,6 @@ export class SumUpReconciler implements PaymentReconciler {
       resolveClient: () => Promise<SumUpClient>;
       incidents: IncidentSink;
       heldAlerts: HeldAlertSink;
-      settlementLagMs?: number;
     },
   ) {}
   async reconcile(period: ReconcilePeriod, now: Date) {
@@ -37,7 +32,7 @@ export class SumUpReconciler implements PaymentReconciler {
         provider: this.provider,
         report,
         mode: "audit-only",
-        settlementLagMs: this.deps.settlementLagMs ?? DEFAULT_SETTLEMENT_LAG_MS,
+        settlementLagMs: 0,
       },
       period,
       now,

@@ -2542,9 +2542,6 @@ async function bootServer(
                     current: currentIncidentsOf,
                     handle: markIncidentHandled,
                   },
-                  ...(timings.settlementLagMs === undefined
-                    ? {}
-                    : { settlementLagMs: timings.settlementLagMs }),
                 }),
               ),
               credentialPurpose: provider.credentialPurpose,

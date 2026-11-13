@@ -54,7 +54,7 @@ export interface SumUpHistoryItem {
 }
 export interface SumUpHistoryPage {
   items: SumUpHistoryItem[];
-  links: { rel: string; href: string }[];
+  links?: { rel: string; href: string }[];
 }
 
 /** A create call has three outcomes, not two: accepted (the reader will wake), REFUSED by SumUp

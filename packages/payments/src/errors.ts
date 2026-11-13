@@ -10,8 +10,8 @@ export type OrphanRemediation =
   /** The marker is stamped BEFORE the network call, so this means "is reversing it", NOT
    * "succeeded": a refused reversal still reads `claimed` and raises
    * `payment.reconcile_remediation_failed`. */
-  | "auditOnly"
   | "claimed"
+  | "auditOnly"
   | "workingOrderNotAbandoned"
   | "stateNotCaptured"
   | "amountDrifted"

@@ -1,4 +1,5 @@
-import { compareDecimal, decimal } from "@waitron/shared";
+import "./errors.js";
+import { AppError, compareDecimal, decimal } from "@waitron/shared";
 import type { SettlementRecord, SettlementReportSource } from "@waitron/payments";
 import type { SumUpClient, SumUpHistoryItem, SumUpTransaction } from "./client.js";
 import { fromMajorUnits } from "./client.js";
@@ -9,7 +10,7 @@ type AuditCandidate = {
   externalRef: string | null;
   workingOrderId: string;
 };
-const incomplete = () => new Error("incomplete SumUp audit");
+const incomplete = () => new AppError("payment.audit_incomplete", { providerId: "sumup" });
 const completed = (status: string | undefined) => status === "SUCCESSFUL" || status === "REFUNDED";
 
 function recordOf(t: SumUpTransaction): SettlementRecord {
@@ -64,7 +65,13 @@ export function sumupSettlementReport(
         if (pages.has(canonical.toString())) throw incomplete();
         pages.add(canonical.toString());
         const page = await client.historyPage(query);
-        if (!page || !Array.isArray(page.items) || !Array.isArray(page.links)) throw incomplete();
+        if (
+          !page ||
+          !Array.isArray(page.items) ||
+          (page.links !== undefined && !Array.isArray(page.links))
+        )
+          throw incomplete();
+        const links = page.links ?? [];
         for (const t of page.items) {
           if (!t || typeof t !== "object") {
             source.unreadableUnlinked++;
@@ -90,12 +97,12 @@ export function sumupSettlementReport(
           }
         }
         if (
-          page.links.some(
+          links.some(
             (link) => !link || typeof link.rel !== "string" || typeof link.href !== "string",
           )
         )
           throw incomplete();
-        const next = page.links.filter((link) => link.rel === "next");
+        const next = links.filter((link) => link.rel === "next");
         if (next.length === 0) break;
         if (next.length !== 1 || !next[0]!.href || /[\/#\s]/.test(next[0]!.href))
           throw incomplete();
@@ -106,6 +113,7 @@ export function sumupSettlementReport(
         const t = await client.findTransaction({ id });
         if (t === null) continue;
         if (t.id !== id) throw incomplete();
+        if (t.status === "PENDING" || t.status === "CANCELLED" || t.status === "FAILED") continue;
         records.set(id, recordOf(t));
       }
       for (const row of candidates) {

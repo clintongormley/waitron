@@ -97,7 +97,9 @@ describe("SumUp gross charge report", () => {
     async (over) => {
       const client = new FakeSumUp();
       vi.spyOn(client, "historyPage").mockResolvedValue({ items: [item(over)], links: [] });
-      await expect(source(client).fetch(period, ["tx"])).rejects.toThrow("incomplete SumUp audit");
+      await expect(source(client).fetch(period, ["tx"])).rejects.toMatchObject({
+        code: "payment.audit_incomplete",
+      });
     },
   );
 
@@ -107,26 +109,26 @@ describe("SumUp gross charge report", () => {
       items: [item(), item({ amount: 12 })],
       links: [],
     });
-    await expect(source(client).fetch(period, ["tx"])).rejects.toThrow("incomplete SumUp audit");
+    await expect(source(client).fetch(period, ["tx"])).rejects.toMatchObject({
+      code: "payment.audit_incomplete",
+    });
   });
 
   it("uses a saved client reference and refuses a detail belonging to a different payment", async () => {
     const client = new FakeSumUp();
-    const lookup = vi
-      .spyOn(client, "findTransaction")
-      .mockResolvedValue({
-        id: "tx",
-        status: "SUCCESSFUL",
-        amount: decimal("10.00"),
-        currency: "EUR",
-        timestamp: "2026-07-01T12:00:00Z",
-        foreignTransactionId: "other",
-      });
+    const lookup = vi.spyOn(client, "findTransaction").mockResolvedValue({
+      id: "tx",
+      status: "SUCCESSFUL",
+      amount: decimal("10.00"),
+      currency: "EUR",
+      timestamp: "2026-07-01T12:00:00Z",
+      foreignTransactionId: "other",
+    });
     await expect(
       source(client, [
         { state: "failed", paymentRef: "failed", externalRef: "client", workingOrderId: "order" },
       ]).fetch(period),
-    ).rejects.toThrow("incomplete SumUp audit");
+    ).rejects.toMatchObject({ code: "payment.audit_incomplete" });
     expect(lookup.mock.calls).toEqual([[{ clientTransactionId: "client" }]]);
   });
 
@@ -141,12 +143,20 @@ describe("SumUp gross charge report", () => {
     expect(report.unreadableUnlinked).toBe(1);
   });
 
-  it.each([{ items: [] }, { items: [], links: [{ rel: "next", href: "same=page" }] }])(
-    "refuses incomplete or repeated pages",
-    async (page) => {
-      const client = new FakeSumUp();
-      vi.spyOn(client, "historyPage").mockResolvedValue(page as never);
-      await expect(source(client).fetch(period)).rejects.toThrow("incomplete SumUp audit");
-    },
-  );
+  it("accepts the recorded empty last page without links", async () => {
+    const client = new FakeSumUp();
+    vi.spyOn(client, "historyPage").mockResolvedValue({ items: [] });
+    expect(await source(client).fetch(period)).toEqual([]);
+  });
+
+  it.each([
+    { items: [], links: "bad" },
+    { items: [], links: [{ rel: "next", href: "same=page" }] },
+  ])("refuses incomplete or repeated pages", async (page) => {
+    const client = new FakeSumUp();
+    vi.spyOn(client, "historyPage").mockResolvedValue(page as never);
+    await expect(source(client).fetch(period)).rejects.toMatchObject({
+      code: "payment.audit_incomplete",
+    });
+  });
 });
