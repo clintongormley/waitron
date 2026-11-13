@@ -349,7 +349,7 @@ it("saved draft keeps and submits its deleted course", async () => {
   ]);
   for (const item of items)
     expect(item.modifiers).toEqual([
-      { descriptions: { "es-ES": "Staff sauce" }, perDish: 1, addAllergens: null, suitableFor: [] },
+      { name: "K-SAUCE", perDish: 1, addAllergens: null, suitableFor: [] },
     ]);
   const tickets = await v.db
     .select()

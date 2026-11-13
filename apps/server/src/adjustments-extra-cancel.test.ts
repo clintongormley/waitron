@@ -289,10 +289,10 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     expect(slip!.kind).toBe("document");
     expect(slip!.lines[0]).toBe(`*** ${kitchenTicketWords("es").changed} ***`);
     expect(slip!.lines).toContain("1 x FULL BURG");
-    expect(slip!.lines).toContain("  + Fries");
-    expect(slip!.lines).toContain("  + Salad");
+    expect(slip!.lines).toContain("  + CHIPS");
+    expect(slip!.lines).toContain("  + GREENS");
     expect(slip!.lines).toContain(`  ${kitchenTicketWords("es").cancel} Gherkins`);
-    expect(slip!.lines).not.toContain("  + Gherkins");
+    expect(slip!.lines).not.toContain("  + PICK");
     const text = slip!.lines.join("\n");
     expect(text).not.toContain("Hamburger");
     expect(text).not.toContain("Full burger");
@@ -373,13 +373,13 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     const dishRow = async () => {
       const queue = await inTx(venue, (tx) => listStationQueue(tx, venue.stationId));
       const order = queue.find((group) => group.orderId === billId)!;
-      return order.items[0]!.modifiers.map((modifier) => modifier.descriptions[venue.cfg.locale]);
+      return order.items[0]!.modifiers.map((modifier) => modifier.name);
     };
-    expect(await dishRow()).toEqual(["Chips", "House salad", "Pickles"]);
+    expect(await dishRow()).toEqual(["CHIPS", "GREENS", "PICK"]);
 
     await cancelGherkins(billId);
 
-    expect(await dishRow()).toEqual(["Chips", "House salad"]);
+    expect(await dishRow()).toEqual(["CHIPS", "GREENS"]);
   });
 
   it("prints one slip and records one notice when the same cancel arrives twice", async () => {
@@ -552,8 +552,8 @@ describe("cancelling an extra of a held dish (B11g)", () => {
       expect(lines).toContain(`${kitchenTicketWords("es").group} 1`);
       expect(lines.slice(lines.indexOf("1 x FULL BURG"))).toEqual([
         "1 x FULL BURG",
-        "  + Fries",
-        "  + Salad",
+        "  + CHIPS",
+        "  + GREENS",
         `  ${kitchenTicketWords("es").cancel} Gherkins`,
       ]);
       expect(recorded).toEqual([

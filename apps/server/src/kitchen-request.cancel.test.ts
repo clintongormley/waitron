@@ -248,7 +248,7 @@ describe("A773 requested lifecycle: cancel", () => {
         ...header,
         groupLine,
         "3 x PIZZA",
-        "  + Olives x2",
+        "  + OLIV x2",
         "",
       ]);
       await pay(order);

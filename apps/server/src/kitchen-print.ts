@@ -334,7 +334,13 @@ async function buildTicketItems(
       continue;
     }
     const names = modifiersByParent.get(child.parentLineId!) ?? [];
-    const label = extraLabel(child.name, child.quantity, parent.quantity, language, extraUnit);
+    const label = extraLabel(
+      kitchenPresentationName(child),
+      child.quantity,
+      parent.quantity,
+      language,
+      extraUnit,
+    );
     const labels = allergenLabels(child.id);
     names.push(labels.length === 0 ? label : extraWithAllergens(label, labels, language));
     modifiersByParent.set(child.parentLineId!, names);

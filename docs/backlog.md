@@ -696,7 +696,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **What a kitchen card draws** (bundle of 3, 1 important, size S). Holds A1220. [Detail](backlog/kitchen.md#bundle-what-a-kitchen-card-draws)
+- **What a kitchen card draws** (bundle of 1, size S). [Detail](backlog/kitchen.md#bundle-what-a-kitchen-card-draws)
 
 
 - **Held paper followups** (bundle of 3, 1 important, size M). Holds A1066, A1369. [Detail](backlog/kitchen.md#bundle-held-paper-followups)

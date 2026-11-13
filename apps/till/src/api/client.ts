@@ -1448,12 +1448,10 @@ export interface StationTodayWrite {
   override?: { personId: string; pin: string };
 }
 
-/**
- * One selected option on a queue item: the child modifier line's SNAPSHOTTED `descriptions`, which the
- * display localises client-side. A modifier without its own ticket item rides beneath its parent.
- */
+/** A child line without its own ticket item, riding beneath its dish. */
 export interface QueueModifier {
-  descriptions: Record<string, string>;
+  /** The KITCHEN name, the same one the printed kitchen ticket carries. */
+  name: string;
   /** How many of a counted extra each dish has, as `QueueCrossRef.perDish` counts it. */
   perDish?: number;
   /** A measured extra's amount on each dish, in its unit. */

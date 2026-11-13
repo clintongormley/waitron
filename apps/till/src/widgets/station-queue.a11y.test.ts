@@ -203,10 +203,7 @@ const modifierGroups: StationQueueGroup[] = [
         readyAt: null,
         passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
-        modifiers: [
-          { descriptions: { "es-ES": "Grande" } },
-          { descriptions: { "es-ES": "Leche avena" } },
-        ],
+        modifiers: [{ name: "Grande" }, { name: "Leche avena" }],
       },
     ],
   },

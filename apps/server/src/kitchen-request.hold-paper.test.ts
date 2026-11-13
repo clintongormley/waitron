@@ -272,7 +272,7 @@ describe("A773 hold paper: cancel", () => {
         ...header,
         groupLine,
         "2 x PIZZA",
-        "  + Olives x2",
+        "  + OLIV x2",
         "",
       ]);
       expect(await notices(order)).toMatchObject([{ kind: "void", quantity: "2.000" }]);

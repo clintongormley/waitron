@@ -12,7 +12,7 @@ import {
 import type { ColumnKey } from "../state/kitchen-columns.js";
 import type { OverviewRow } from "../state/kitchen-overview.js";
 import { extraNutrition } from "./diet-badges.js";
-import { snapshotDescriptionFor, quantityText } from "./dish-format.js";
+import { quantityText } from "./dish-format.js";
 import { PHONE_WIDTH } from "./chooser-styles.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { extraAmount } from "./queue-crossrefs.js";
@@ -258,8 +258,8 @@ export function dishAllergens(item: DishLines, prefix: string): TemplateResult |
   </span>`;
 }
 
-/** A cook reads the kitchen wording of an answer, which carries no per-language text and so needs
- * no locale; an extra's own name is still a locale map. */
+/** A cook reads the kitchen wording of an answer and an extra's kitchen name, neither of which
+ * carries per-language text. */
 export function dishModifiers(item: DishLines, prefix: string): TemplateResult | typeof nothing {
   const modifiers = item.modifiers ?? [];
   const answers = optionAnswers(item.optionSnapshots, { reads: "kitchen" });
@@ -269,7 +269,7 @@ export function dishModifiers(item: DishLines, prefix: string): TemplateResult |
     ${modifiers.map(
       (modifier, i) =>
         html`<span class="modifier"
-          >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraAmount(modifier)}`}${extraNutrition(
+          >${`+ ${modifier.name}${extraAmount(modifier)}`}${extraNutrition(
             modifier,
             `item-modifier-allergens-${item.id}-${i}`,
             `item-modifier-diet-${item.id}-${i}`,

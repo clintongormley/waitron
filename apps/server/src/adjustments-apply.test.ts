@@ -3362,7 +3362,7 @@ describe("part of a dish with extras (B11d)", () => {
     const dish = slip.indexOf("1 x PIZZA");
     expect(slip).toContain(`*** ${kitchenTicketWords("es").void} ***`);
     expect(dish).toBeGreaterThanOrEqual(0);
-    expect(slip[dish + 1]).toBe("  + Olives");
+    expect(slip[dish + 1]).toBe("  + OLIV");
   });
 
   it("prints the comp beneath the carved pizza on the receipt, the other pizza and olive as sold", async () => {

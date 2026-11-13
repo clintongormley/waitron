@@ -435,8 +435,8 @@ describe("A803 portion grouping: a card's rows", () => {
   });
 
   it("A803 portion grouping: extras in another order still group", () => {
-    const cheese = { descriptions: { "en-GB": "Cheese" } };
-    const bacon = { descriptions: { "en-GB": "Bacon" } };
+    const cheese = { name: "Cheese" };
+    const bacon = { name: "Bacon" };
     const card = one(
       bill("o-1", [
         portion("a", { modifiers: [cheese, bacon] }),
@@ -447,7 +447,7 @@ describe("A803 portion grouping: a card's rows", () => {
   });
 
   it("A803 portion grouping: the same extra in another count shows apart", () => {
-    const cheese = (perDish: number) => ({ descriptions: { "en-GB": "Cheese" }, perDish });
+    const cheese = (perDish: number) => ({ name: "Cheese", perDish });
     const card = one(
       bill("o-1", [
         portion("a", { modifiers: [cheese(1)] }),
@@ -459,7 +459,7 @@ describe("A803 portion grouping: a card's rows", () => {
   });
 
   it("A803 portion grouping: the same measured extra in another amount shows apart", () => {
-    const ham = (amount: string) => ({ descriptions: { "en-GB": "Ham" }, amount });
+    const ham = (amount: string) => ({ name: "Ham", amount });
     const card = one(
       bill("o-1", [
         portion("a", { modifiers: [ham("50.000")] }),
@@ -486,7 +486,7 @@ describe("A803 portion grouping: a card's rows", () => {
 
   const apart: [string, Partial<StationQueueItem>][] = [
     ["another name", { name: "Fish" }],
-    ["another extra", { modifiers: [{ descriptions: { "en-GB": "Cheese" } }] }],
+    ["another extra", { modifiers: [{ name: "Cheese" }] }],
     ["another answer", { optionSnapshots: [answerFor("Cooking", "Rare")] }],
     ["another note", { note: "no salt" }],
     ["another state", { state: "preparing" }],

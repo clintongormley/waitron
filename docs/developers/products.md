@@ -221,9 +221,9 @@ Where each one surfaces:
 | --- | --- | --- |
 | Receipt line — the goods identification, art. 7.1.e | the product and relative variant's frozen customer maps joined in parentheses | `apps/server/src/receipt-lines.ts` |
 | Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts` |
-| Kitchen ticket | dishes and split-off extras read frozen kitchen names, falling back to staff names; a following extra's `+` line reads its frozen staff name; cross-references read kitchen names; options answers read kitchen names, falling back to staff names | `buildTicketItems`, `apps/server/src/kitchen-print.ts` |
+| Kitchen ticket | dishes, split-off extras and following extras read frozen kitchen names, falling back to staff names; cross-references read kitchen names; options answers read kitchen names, falling back to staff names | `buildTicketItems`, `apps/server/src/kitchen-print.ts` |
 | The rest of the order — "Also on this order" on a station's own ticket, on a ticket a printer shares between stations, and on the kitchen screen's card — listing dishes at stations not on the ticket or card | the kitchen names, through `kitchenPresentationName` | `readRestOfOrder`, `apps/server/src/rest-of-order.ts` |
-| Kitchen display and the expediter's pass | dishes and split-off extras read frozen kitchen names, falling back to staff names; a following extra reads its frozen customer `descriptions`, the default content language's text; cross-references read kitchen names | `readQueueSubItems`, `listStationQueue` and `readPassRows`, `apps/server/src/working-order.ts`; the pass reads `readPassRows` through `readScopedPassBoard`, `apps/server/src/pass-board.ts` |
+| Kitchen display and the expediter's pass | dishes, split-off extras and following extras read frozen kitchen names, falling back to staff names; cross-references read kitchen names | `readQueueSubItems`, `listStationQueue` and `readPassRows`, `apps/server/src/working-order.ts`; the pass reads `readPassRows` through `readScopedPassBoard`, `apps/server/src/pass-board.ts` |
 | Make now, on the till that sent made-here items | the staff names through `staffPresentationName`, each option answer's staff wording, and each extra's frozen staff name — followed by ` x<n>` when counted, or by its amount in the screen language's decimal mark and its recorded unit abbreviation when measured | `readMadeHereItems`, `apps/server/src/made-here.ts`, which sends each extra as data; written by `dishLine` and `extraLine`, `apps/till/src/widgets/dish-format.ts`; shown by `apps/till/src/widgets/make-now.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
@@ -235,9 +235,9 @@ Where each one surfaces:
 
 Two of those rows are worth reading twice.
 
-A cook sees the same dish name and options answers whether the order arrives on paper or on a
-screen: the ticket, the station queue and the pass resolve those through their kitchen wording.
-The extras rows above record how a following extra differs between paper and screen. Each dish is
+A cook sees the same dish name, options answers and extras whether the order arrives on paper or
+on a screen: the ticket, the station queue and the pass resolve those through their kitchen
+wording. Each dish is
 added from a zone's menu offer, which carries the product's and the variant's kitchen names as the
 menu's published version holds them (`priceOrderLines`, `apps/server/src/working-order.ts`), so a
 short dish kitchen name typed after publishing reaches all three surfaces on lines added once the

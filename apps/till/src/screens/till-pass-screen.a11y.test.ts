@@ -45,7 +45,7 @@ const detailed = {
       { kind: "for" as const, name: "BURG", stationName: "Grill" },
       { kind: "for" as const, name: "AGUA", stationName: null },
     ],
-    modifiers: [{ descriptions: { "es-ES": "Sin gluten" } }],
+    modifiers: [{ name: "GLUTEN FREE" }],
     asServed: { allergens: { milk: {} }, pending: false },
     asServedDiet: {
       vegan: "no" as const,

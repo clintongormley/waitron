@@ -48,7 +48,7 @@ describe("split extra queues", () => {
       expect(grill.flatMap((g) => g.items)).toHaveLength(1);
       expect(grill[0]!.items[0]!.name).toBe("BURG");
       expect(grill[0]!.items[0]!.modifiers).toHaveLength(1);
-      expect(grill[0]!.items[0]!.modifiers[0]!.descriptions).toEqual({ "es-ES": "Extra cheddar" });
+      expect(grill[0]!.items[0]!.modifiers[0]!.name).toBe("CHED");
       expect(grill[0]!.items[0]!.crossRefs).toEqual([
         {
           kind: "with",
