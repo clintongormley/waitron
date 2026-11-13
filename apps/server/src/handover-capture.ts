@@ -65,8 +65,8 @@ export function finalCopyPath(stateDir: string, operationId: string): string {
 
 const JOURNAL_TABLE = /^__drizzle_migrations_[a-z_]+$/;
 
-/** Each node handle's capture in flight, by operation, so two calls take one copy. */
-const inFlight = new WeakMap<NodeDatabase, Map<string, Promise<FinalStateEnvelope>>>();
+/** Captures given the same destination path share one capture. */
+const inFlight = new Map<string, Promise<FinalStateEnvelope>>();
 
 /**
  * Takes this stepped-down box's final copy of venue.db once and answers the indicator it signed
@@ -78,19 +78,15 @@ export async function captureFinalCopy(
   deps: CaptureDeps,
   operationId: string,
 ): Promise<FinalStateEnvelope> {
-  let running = inFlight.get(deps.node);
-  if (running === undefined) {
-    running = new Map();
-    inFlight.set(deps.node, running);
-  }
-  const first = running.get(operationId);
+  const path = finalCopyPath(deps.stateDir, operationId);
+  const first = inFlight.get(path);
   if (first !== undefined) return first;
   const capture = captureOnce(deps, operationId);
-  running.set(operationId, capture);
+  inFlight.set(path, capture);
   try {
     return await capture;
   } finally {
-    running.delete(operationId);
+    inFlight.delete(path);
   }
 }
 

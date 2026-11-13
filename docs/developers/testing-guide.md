@@ -1,5 +1,14 @@
 # Testing guide
 
+## Use promise gates supported by the package's TypeScript libraries
+
+Use a local `new Promise<void>` gate when the package's TypeScript libraries do not declare
+`Promise.withResolvers`; a passing Node test does not check that declaration. Keep the package's
+compiler target unchanged. The A1018 capture tests passed 71 cases on Node 26, but their pre-push
+`pnpm --filter "...@waitron/server" typecheck` failed with TS2550 for `Promise.withResolvers`
+on 14 November 2026. A fiscal-package test hit the same mismatch on 2 November. The capture
+suite's `gate` helper uses the Promise constructor, as the sibling handover-gate suite does.
+
 ## Distinct UUIDs can produce the same box name
 
 When a fixture needs distinct boxes, keep their derived hostnames distinct too. The mirror join
