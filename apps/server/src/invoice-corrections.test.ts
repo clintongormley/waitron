@@ -1481,10 +1481,9 @@ describe("a correction's hand-keyed card legs", () => {
 
   it("files a hand-keyed card last leg's corrective after recording the refund", async () => {
     const saleId = await soldForCash("Set menu", ["20.00", { card: "20.00" }]);
-    const [approver] = await venue.db
-      .insert(persons)
-      .values({ displayName: "Laura", pinHash: hashPin("7777"), role: "manager" })
-      .returning({ id: persons.id });
+    const [approver] = await inTx(venue, (tx) =>
+      seedPersons(tx, { displayName: "Laura", pinHash: hashPin("7777"), role: "manager" }),
+    );
     const { correction } = await open(saleId, {
       submissionId: randomUUID(),
       gross: "25.00",
