@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it, vi, type MockInstance } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   devices,
@@ -119,6 +119,14 @@ vi.mock("./promote.js", async (importOriginal) => {
   };
 });
 
+// An in-process boot installs no shutdown handlers, so the real `restartProcess` only keeps the
+// ask; these cases observe the ask itself.
+const restartAsked = vi.hoisted(() => vi.fn<() => void>());
+vi.mock("./run-server.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./run-server.js")>()),
+  restartProcess: restartAsked,
+}));
+
 const FISCAL_NONE_OFF = JSON.stringify({ modules: { "fiscal-none": false } });
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-promote-e2e-state-"));
 writeFileSync(join(STATE_ROOT, "modules.json"), FISCAL_NONE_OFF);
@@ -169,11 +177,6 @@ const stores = {} as Record<VenueName, VenueDatabase>;
 const db = {} as Record<VenueName, Database>;
 
 let migrationsRoot: string;
-
-// A promote schedules a REAL `process.kill(process.pid, "SIGTERM")` on the next macrotask
-// (`promoteMirrorRun` in boot.ts). The spy is file-scoped and restored only after every case: a
-// per-case restore can run before that timer fires, and the signal then kills the vitest worker.
-let killSpy: MockInstance<typeof process.kill>;
 
 async function seedMirror(
   admin: Database,
@@ -336,7 +339,6 @@ beforeAll(async () => {
       recursive: true,
     });
   }
-  killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
   for (const name of VENUES) {
     venueDir[name] = await mkdtemp(join(tmpdir(), `waitron-promote-e2e-venue-${name}-`));
     await applyMigrations(venueDir[name], fromSource);
@@ -346,7 +348,6 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
-  if (killSpy !== undefined) killSpy.mockRestore();
   for (const name of VENUES) if (stores[name] !== undefined) await stores[name].close();
   for (const name of VENUES)
     if (venueDir[name] !== undefined) await rm(venueDir[name], { recursive: true, force: true });
@@ -411,7 +412,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
     const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
     for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
 
-    killSpy.mockClear();
+    restartAsked.mockClear();
 
     const mirror = await startServer(
       {
@@ -468,7 +469,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       expect((await readNodeMode(stores.main.node, seed.nodeId)).mode).toBe("primary");
       expect((await readNodeMode(stores.main.node, seed.nodeId)).singletonRole).toBe("primary");
       await delay(50);
-      expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
+      expect(restartAsked).toHaveBeenCalled();
 
       const persisted = parseEnvFile(readFileSync(join(stateDir, "trading.env"), "utf8"));
       expect(persisted).not.toHaveProperty("WAITRON_TILL_SERIES_ID");

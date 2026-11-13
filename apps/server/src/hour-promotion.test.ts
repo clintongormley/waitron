@@ -60,6 +60,13 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
+// An in-process boot installs no shutdown handlers, so the real `restartProcess` only keeps the
+// ask; these cases observe the ask itself.
+const restartAsked = vi.hoisted(() => vi.fn<() => void>());
+vi.mock("./run-server.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./run-server.js")>()),
+  restartProcess: restartAsked,
+}));
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 const spare = useVenueDb({ migrations });
@@ -843,7 +850,7 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
   const [port] = await freePorts(1);
   let server: StartedServer | undefined;
   let agent: Agent | undefined;
-  const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+  restartAsked.mockReset();
   try {
     server = await startServer({
       WAITRON_VENUE_DIR: dirname(database),
@@ -896,11 +903,10 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
     expect(
       await send("", { ...body, moduleOperation: { binding, input: selected.input } }),
     ).toMatchObject({ alreadyPrimary: false, restarting: true });
-    await vi.waitFor(() => expect(kill).toHaveBeenCalledWith(process.pid, "SIGTERM"));
+    await vi.waitFor(() => expect(restartAsked).toHaveBeenCalled());
   } finally {
     await agent?.close();
     await server?.close();
-    kill.mockRestore();
   }
   expect((await rows()).allocations).toHaveLength(2);
   expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("primary");
@@ -958,7 +964,7 @@ it.each(["key", "manager"])(
     };
     let server: StartedServer | undefined;
     let agent: Agent | undefined;
-    const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+    restartAsked.mockReset();
     const send = async () => {
       const response = await fetch(`https://127.0.0.1:${port}/management-api/promote`, {
         method: "POST",
@@ -1008,7 +1014,7 @@ it.each(["key", "manager"])(
         browser: { challengeId: challenge.id, instantMs: Date.now() },
       });
       expect(await send()).toEqual({ alreadyPrimary: false, restarting: true });
-      await vi.waitFor(() => expect(kill).toHaveBeenCalledWith(process.pid, "SIGTERM"));
+      await vi.waitFor(() => expect(restartAsked).toHaveBeenCalled());
       await agent.close();
       agent = undefined;
       await server.close();
@@ -1028,12 +1034,12 @@ it.each(["key", "manager"])(
         ),
       );
       const journal = await readFile(join(stateDir, "module-preparation-state.json"), "utf8");
-      kill.mockClear();
+      restartAsked.mockClear();
       vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
       server = await startServer(env);
       agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
       expect(await send()).toEqual({ alreadyPrimary: true, restarting: false });
-      expect(kill).not.toHaveBeenCalled();
+      expect(restartAsked).not.toHaveBeenCalled();
       expect(await rows()).toEqual(before);
       expect(await readFile(join(stateDir, "module-preparation-state.json"), "utf8")).toBe(journal);
       expect((await readNodeMode(suite.node, standby.nodeId)).mode).toBe("primary");
@@ -1041,7 +1047,6 @@ it.each(["key", "manager"])(
     } finally {
       await agent?.close();
       await server?.close();
-      kill.mockRestore();
     }
   },
   120_000,
