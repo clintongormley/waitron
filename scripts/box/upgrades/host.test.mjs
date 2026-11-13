@@ -784,3 +784,56 @@ it("routes Apply through the host controller and retains a refused copy sale", a
   const directory = f.join(`${f.root}.upgrades`, (await f.fs.readdir(`${f.root}.upgrades`))[0]);
   expect(await f.fs.readFile(f.join(directory, "copies/0/retained"), "utf8")).toBe("intact source");
 });
+
+it.each(["restore", "keep"])(
+  "routes the CLI %s choice through the retained host attempt",
+  async (verb) => {
+    const { runUpgradeCli } = await import("./cli.mjs");
+    const { copyStoppedTree } = await import("./copy.mjs");
+    const { f, root, directory, fs, join, images, run: hostRun, calls } = await imageFixture();
+    const original = "original state";
+    await fs.writeFile(join(root, "state", "retained"), original);
+    await fs.mkdir(join(directory, "copies"));
+    for (const [index, path] of f.paths.entries())
+      await copyStoppedTree(path, join(directory, "copies", String(index)));
+    await fs.writeFile(join(root, "state", "retained"), "candidate state");
+    await fs.mkdir(join(directory, "check"));
+    await fs.writeFile(
+      join(directory, "attempt.json"),
+      JSON.stringify({
+        mode: "manual",
+        phase: "awaiting-choice",
+        copied: true,
+        paths: f.paths,
+        images,
+      }),
+    );
+    const removed = [];
+    const run = async (file, args, input) => {
+      if (args[0] === "inspect" && args[2]?.includes("Config.Labels")) {
+        if (args.at(-1).endsWith("-agent")) return { stdout: directory };
+        throw Object.assign(new Error("missing"), { code: 1, stderr: "No such container" });
+      }
+      if (args[0] === "rm") {
+        removed.push(args);
+        return { stdout: "" };
+      }
+      if (args.includes("up"))
+        await expect(fs.access(join(directory, "check"))).rejects.toMatchObject({ code: "ENOENT" });
+      return hostRun(file, args, input);
+    };
+    const result = await runUpgradeCli([verb, root], { run });
+    expect(result).toMatchObject({
+      phase: "committed",
+      target: verb === "restore" ? "old" : "candidate",
+    });
+    expect(removed).toEqual([["rm", "--force", expect.stringMatching(/-agent$/)]]);
+    const installed = JSON.parse(await fs.readFile(join(root, "compose.yml"), "utf8"));
+    expect(installed.services.app.image).toBe(images[verb === "restore" ? "old" : "candidate"].app);
+    expect(await fs.readFile(join(root, "state", "retained"), "utf8")).toBe(
+      verb === "restore" ? original : "candidate state",
+    );
+    await expect(fs.access(join(directory, "check"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(calls.some((args) => args.includes("up") && args.includes("--wait"))).toBe(true);
+  },
+);
