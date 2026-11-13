@@ -25,6 +25,7 @@ export type {
   FiscalCertificateJson,
   FiscalCertificateSeat,
   FiscalContribution,
+  FiscalDeclarationsSeat,
   FiscalDutyDeps,
   FiscalDutyLog,
 } from "./contribution.js";

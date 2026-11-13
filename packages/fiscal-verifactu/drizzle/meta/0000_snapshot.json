@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e73cd628-f7a4-43e7-855a-b22a21ccb67e",
+  "id": "b291192a-ee3f-49ba-80ee-dd6b9b6d16a6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "acks": {
@@ -505,6 +505,42 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "declaraciones_responsables": {
+      "name": "declaraciones_responsables",
+      "columns": {
+        "version": {
+          "name": "version",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "text": {
+          "name": "text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "first_started_at": {
+          "name": "first_started_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "declaraciones_responsables_version_ck": {
+          "name": "declaraciones_responsables_version_ck",
+          "value": "\"declaraciones_responsables\".\"version\" glob '[0-9]*.[0-9]*.[0-9]*' and \"declaraciones_responsables\".\"version\" not glob '*[^0-9.]*' and \"declaraciones_responsables\".\"version\" not glob '*..*' and \"declaraciones_responsables\".\"version\" not glob '.*' and \"declaraciones_responsables\".\"version\" not glob '*.' and length(\"declaraciones_responsables\".\"version\") - length(replace(\"declaraciones_responsables\".\"version\", '.', '')) = 2"
+        }
+      }
     },
     "envio_flujo": {
       "name": "envio_flujo",

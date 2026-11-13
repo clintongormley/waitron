@@ -161,6 +161,15 @@ export interface FiscalOutboxSeat {
   read(tx: Transaction): Promise<FiscalOutboxState>;
 }
 
+export interface FiscalDeclarationsSeat {
+  /** Stores the running release's declaration unless its version is already kept. */
+  keep(tx: Transaction, entry: { version: string; text: string; at: Date }): Promise<void>;
+  /** Every kept version, in no particular order. */
+  versions(tx: Transaction): Promise<string[]>;
+  /** The kept text of one version, or null when it was never kept. */
+  text(tx: Transaction, version: string): Promise<string | null>;
+}
+
 /**
  * A module's contribution to the fiscal slot — the one provision-only, swappable slot. Exactly one
  * enabled module fills it; the framework selects it and refuses zero or two.
@@ -224,6 +233,7 @@ export interface FiscalContribution {
   };
   readonly certificate?: FiscalCertificateSeat;
   readonly outbox?: FiscalOutboxSeat;
+  readonly declarations?: FiscalDeclarationsSeat;
   /** When the current installation began; null when the node has no live fiscal identity. A read
    * that fails throws. */
   installationStartedAt?(tx: Transaction, nodeId: NodeId): Promise<Date | null>;

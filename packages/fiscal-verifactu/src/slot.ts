@@ -16,6 +16,7 @@ import { diagnoseCertificate } from "./certificate-diagnosis.js";
 import { drain as runDrain, resetInFlightClaims } from "./drain.js";
 import { createRuntimeReconciliation } from "./reconcile-runtime.js";
 import { readOutbox } from "./outbox.js";
+import { keptDeclarations } from "./declaration/kept.js";
 import { currentSif } from "./registro-sif.js";
 import { parseAeatCert, sealAeatSecret, validateSetupAeatCert } from "./provisioning-secret.js";
 import {
@@ -137,6 +138,7 @@ export const FISCAL_SLOT: FiscalContribution = {
     reminders: { claim: claimReminder, report: reportReminder },
   },
   outbox: { read: readOutbox },
+  declarations: keptDeclarations,
   installationStartedAt: async (tx, nodeId) => {
     try {
       return (await currentSif(tx, nodeId)).registradoEn;

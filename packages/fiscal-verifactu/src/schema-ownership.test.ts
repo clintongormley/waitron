@@ -13,6 +13,7 @@ const OWNED = [
   "clock_checks",
   "clock_confirmations",
   "clock_stop_restarts",
+  "declaraciones_responsables",
   "envio_flujo",
   "envios",
   "filing_case_events",
