@@ -1134,31 +1134,41 @@ it.each(["bill", "presented"] as const)(
   },
 );
 
-it("recognizes an already-issued Counter invoice in the deferred-close window", async () => {
-  const { el } = await heldCounterPay("F2", {
-    listCounterWaiting: vi.fn().mockResolvedValue([
-      {
-        id: "wo-9",
-        orderNumber: 9,
-        label: null,
-        status: "placed",
-        openedAt: "2026-11-12T20:00:00.000Z",
-        settledAt: null,
-        collectedAt: null,
-        total: "30.00",
-        counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },
-        canHandOver: false,
-        serviceMode: "prepay",
-        invoiceNumber: "F-0007",
-        items: [],
-        movableDishes: [],
-      } satisfies CounterWaitingOrder,
-    ]),
-  });
-  deferredButton(el)!.click();
-  await flush(el);
-  expect(closing(el)!.bill).toMatchObject({ total: "30.00", issued: true });
-});
+it.each([false, true])(
+  "recognizes whether this Counter invoice is already issued (issued=%s)",
+  async (issued) => {
+    const waiting: CounterWaitingOrder = {
+      id: "wo-9",
+      orderNumber: 9,
+      label: null,
+      status: "placed",
+      openedAt: "2026-11-12T20:00:00.000Z",
+      settledAt: null,
+      collectedAt: null,
+      total: "30.00",
+      counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },
+      canHandOver: false,
+      serviceMode: "prepay",
+      ...(issued ? { invoiceNumber: "F-0007" } : {}),
+      items: [],
+      movableDishes: [],
+    };
+    const { el } = await heldCounterPay("F2", {
+      listCounterWaiting: vi
+        .fn()
+        .mockResolvedValue([
+          { ...waiting, id: "wo-other", orderNumber: 8, invoiceNumber: "F-0006" },
+          waiting,
+        ]),
+    });
+    deferredButton(el)!.click();
+    await flush(el);
+    expect(closing(el)!.bill).toMatchObject({ total: "30.00", issued });
+    expect(text(closing(el)!.shadowRoot!.querySelector("[data-deferred-close-confirm]"))).toBe(
+      t(issued ? "deferred_close.close" : "deferred_close.issue_and_close"),
+    );
+  },
+);
 
 it.each(["received", "refused"] as const)(
   "keeps a Counter deferred-close receipt %s after sign-out off the lock screen",
