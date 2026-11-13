@@ -323,8 +323,9 @@ no se pone en hora por internet: la fila **Reloj** empieza entonces con **Hacien
 venta**. Que los dispositivos coincidan con el servidor no termina esta espera: confirma o corrige la
 hora en esta página, o el personal usa **Comprobar la hora** en una caja.
 
-El servidor confirma su hora solo en cuanto llega a internet, o en cuanto dos cajas o terminales
-encendidos y conectados coinciden con su reloj, aunque estén en la pantalla de inicio de sesión.
+El servidor confirma su hora solo en cuanto llega a internet, o, salvo si espera por una venta
+rechazada, en cuanto dos cajas o terminales encendidos y conectados coinciden con su reloj, aunque
+estén en la pantalla de inicio de sesión.
 
 Un administrador puede confirmarla antes en esta página:
 

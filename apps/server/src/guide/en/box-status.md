@@ -299,8 +299,9 @@ kept in time over the internet: the **Clock** row then starts with **The tax age
 sale**. Devices agreeing with the box do not end this wait: confirm or correct the time on this page,
 or staff use **Check the time** on a till.
 
-The box confirms its time by itself as soon as it reaches the internet, or once two tills or
-handhelds that are switched on and connected agree with its clock, even at the sign-in screen.
+The box confirms its time by itself as soon as it reaches the internet, or, unless it waits because
+of a refused sale, once two tills or handhelds that are switched on and connected agree with its
+clock, even at the sign-in screen.
 
 An administrator can confirm it sooner on this page:
 
