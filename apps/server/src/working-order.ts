@@ -286,7 +286,6 @@ import {
   firedQuantity,
   isStarted,
   kitchenWork,
-  leftToServe,
   liveKitchenDish,
   readCancelledExtra,
   stationOrdersWithPrintProblem,
@@ -7773,12 +7772,12 @@ export function advanceSet(to: Exclude<TicketState, "queued">) {
     : { state: to, readyAt: at };
 }
 
-/** Advance one fired ticket item one step, or put a Ready item with something still to serve back
- *  to `preparing` (clearing `readyAt`, keeping `preparingAt`). A `to` outside the transition table
- *  is refused `management.request_invalid` on `to`, an unknown item `ticket_item.not_found`, an
- *  item not released yet (`fired_at` is null: held, or Requested and waiting for the pass)
- *  `ticket.item_held`, and a skip, a repeat or a fully served Ready item going back
- *  `ticket.invalid_transition`. */
+/** Advance one fired ticket item one step, or put a Ready item still on its station's screen
+ *  ({@link kitchenWork}) back to `preparing` (clearing `readyAt`, keeping `preparingAt`). A `to`
+ *  outside the transition table is refused `management.request_invalid` on `to`, an unknown item
+ *  `ticket_item.not_found`, an item not released yet (`fired_at` is null: held, or Requested and
+ *  waiting for the pass) `ticket.item_held`, and a skip, a repeat or a Ready item going back once it
+ *  is off that screen `ticket.invalid_transition`. */
 export async function advanceTicketItem(
   tx: Transaction,
   itemId: string,
@@ -7818,8 +7817,9 @@ export async function advanceTicketItem(
               tx
                 .select({ id: workingOrderLines.id })
                 .from(workingOrderLines)
+                .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
                 .where(
-                  and(eq(workingOrderLines.id, ticketItems.workingOrderLineId), leftToServe()),
+                  and(eq(workingOrderLines.id, ticketItems.workingOrderLineId), kitchenWork()),
                 ),
             ),
           ),

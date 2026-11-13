@@ -463,6 +463,14 @@ async function ticketStateOf(id: string): Promise<string | null> {
   return rows[0]?.state ?? null;
 }
 
+/** The `ready_at` stamp of the ticket item fired for this SINGLE-line order. */
+async function readyAtOf(id: string): Promise<string | null | undefined> {
+  const { rows } = await suite.db.execute<{ ready_at: string | null }>(sql`
+    select ready_at from ticket_items where working_order_id = ${id}
+  `);
+  return rows[0]?.ready_at;
+}
+
 /** The venue's default kitchen station id (`applyVenue` seeds one "Cocina" per location —
  *  venue-apply.ts). No fixture product names a station, itself or through its category, so the
  *  routes `offerProducts` writes send every line here; it is the id the whole-ticket bump and the
@@ -2381,6 +2389,74 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
 
     await asTenant((tx) => advanceTicketItem(tx, item!, "preparing"));
     expect(await ticketStateOf(id)).toBe("preparing");
+  });
+
+  it("advanceTicketItem refuses to put a Ready item back to preparing once its order is collected", async () => {
+    const { cfg, coffee, zoneId } = await modeVenue("prepay");
+    const collected = randomUUID();
+    await payWorkingOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      {
+        id: collected,
+        zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    const [collectedItem] = await ticketItemIdsFor(collected);
+    await asTenant((tx) => advanceTicketItem(tx, collectedItem!, "preparing"));
+    await asTenant((tx) => advanceTicketItem(tx, collectedItem!, "ready"));
+    const collectedReadyAt = await readyAtOf(collected);
+    expect(collectedReadyAt).toEqual(expect.any(String));
+    await markCollected({ db: suite.db }, cfg, collected);
+    expect(await collectedAtSet(collected)).toBe(true);
+
+    await expect(
+      asTenant((tx) => advanceTicketItem(tx, collectedItem!, "preparing")),
+    ).rejects.toMatchObject({
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: collectedItem },
+    });
+    expect(await ticketStateOf(collected)).toBe("ready");
+    expect(await readyAtOf(collected)).toBe(collectedReadyAt);
+  });
+
+  it("advanceTicketItem refuses to put a Ready item back to preparing once its order is cancelled", async () => {
+    const { cfg: counter, coffee, zoneId } = await modeVenue("ticket_then_pay");
+    const cancelled = randomUUID();
+    await parkOrder({ db: suite.db }, counter, {
+      id: cancelled,
+      zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
+    });
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      counter,
+      cancelled,
+      OPERATOR,
+    );
+    const [cancelledItem] = await ticketItemIdsFor(cancelled);
+    await asTenant((tx) => advanceTicketItem(tx, cancelledItem!, "preparing"));
+    await asTenant((tx) => advanceTicketItem(tx, cancelledItem!, "ready"));
+    const cancelledReadyAt = await readyAtOf(cancelled);
+    await cancelPlacedOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      counter,
+      cancelled,
+      "customer left",
+      UNUSED_SESSION_OPERATOR,
+    );
+
+    await expect(
+      asTenant((tx) => advanceTicketItem(tx, cancelledItem!, "preparing")),
+    ).rejects.toMatchObject({
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: cancelledItem },
+    });
+    expect(await ticketStateOf(cancelled)).toBe("ready");
+    expect(await readyAtOf(cancelled)).toBe(cancelledReadyAt);
   });
 
   it("listStationQueue lists this station's items grouped by order oldest-first, dropping collected and abandoned orders", async () => {

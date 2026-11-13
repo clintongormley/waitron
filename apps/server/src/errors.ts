@@ -1021,7 +1021,9 @@ declare module "@waitron/shared" {
     "station.no_replacement": { stationId: string; productIds: string[] };
     /**
      * A per-line kitchen ticket-item bump is not legal from the item's current state (a skip, a
-     * repeat, or backwards). Its conditional UPDATE is the check: an illegal move matches no row.
+     * repeat, or a Ready item going back once it is off its station's screen: fully served, its
+     * order collected or cancelled, or made on the spot at the sending device). Its conditional
+     * UPDATE is the check: an illegal move matches no row.
      */
     "ticket.invalid_transition": { ticketItemId: string };
     // `ticket_item.not_found` is declared in @waitron/venue-service's errors.ts.
