@@ -2569,7 +2569,11 @@ describe("waitron.sh --reset install", () => {
   });
 
   it("keeps its checked installer when the requested ref carries an older script", () => {
-    const sb = sandbox({ refScript: "pre-reset", systemd: true });
+    const sb = sandbox({
+      refScript: "pre-reset",
+      systemd: true,
+      tradingEnv: "WAITRON_ENV=production",
+    });
     installedBox(sb);
     const profiles = "COMPOSE_PROFILES=practice-inbox\n";
     writeFileSync(join(sb.boxDir, ".env"), profiles);
@@ -2578,6 +2582,8 @@ describe("waitron.sh --reset install", () => {
     expect(r.status).toBe(0);
     expect(readFileSync(sb.script, "utf8")).toBe(before);
     expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toContain(profiles);
+    expect(readFileSync(sb.log, "utf8")).not.toContain("rm -sf mailpit");
+    expect(readFileSync(sb.log, "utf8")).not.toContain("trading.env");
     expect(loggedCalls(sb).filter((c) => c.startsWith("waitron.sh-start "))).toEqual([]);
     expect(readFileSync(sb.log, "utf8")).toContain(
       `cli.mjs apply ${sb.boxDir} bash ${join(sb.root, "host/waitron.sh")} __candidate old-branch`,
