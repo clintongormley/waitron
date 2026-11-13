@@ -60,7 +60,7 @@ pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashb
 `packages/ui/src/form-feedback.test.ts` owns helper semantics. Keep existing caller
 assertions. Before refactoring, add the missing Floor-plan set focus assertion to its
 invalid-Save case and a reopen-in-another-mode case proving failed-Save errors reset;
-both must pass on old code. Other callers already assert focus and reset. Any bugfix requires an observed failing test
+both must pass on old code. The caller-coverage claim here is corrected in the 13 November build-review note below. Any bugfix requires an observed failing test
 first. No speculative helper tests, rewritten assertions or moved test files.
 
 - [ ] **After clearance:** one before/after visual comparison per form covers unchanged
@@ -75,4 +75,7 @@ docs separately approximately **75 lines**. Stop and return to the watcher at
 **13 November build-review correction:** Claude's deletion probe found Period's reopen
 reset had no caller assertion. This batch adds that case as well as the Floor-plan
 checks; the sentence above about all other callers was too broad. The same one-line
-reset remains in production. No extra source change or helper redesign.
+reset remains in production. Seasons retains “a Discard restores the baseline but
+never reuses a new row's key”: deleting only its feedback reset failed the
+`rowErrorsShown(el) === 0` assertion, and restoring it passed (13 November driver
+control). No extra source change or helper redesign.
