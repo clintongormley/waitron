@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -226,10 +226,11 @@ function crashingNode(): NodeDatabase {
   });
 }
 
-/** Another handle on the same node connection and write queue, with its own single-flight map. */
-function otherHandle(): NodeDatabase {
+/** Another handle on the same node connection and write queue. */
+function otherHandle(onRead: () => void = () => {}): NodeDatabase {
   return new Proxy(suite.node, {
     get: (target, key) => {
+      onRead();
       const value: unknown = Reflect.get(target, key);
       return typeof value === "function" ? value.bind(target) : value;
     },
@@ -307,9 +308,58 @@ describe("capturing a stepped-down box's final copy", () => {
 
   it("two captures through separate node handles on one connection record one event and both answer it", async () => {
     const self = await steppedDown();
+    const firstEntered = Promise.withResolvers<void>();
+    const secondEntered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const counted = countingVenue();
+    let entered = 0;
+    const venue = new Proxy(counted.venue, {
+      get: (target, key) => {
+        if (key === "archiveTo") {
+          return async (path: string) => {
+            (++entered === 1 ? firstEntered : secondEntered).resolve();
+            await release.promise;
+            await target.archiveTo(path);
+          };
+        }
+        return Reflect.get(target, key);
+      },
+    });
+    const first = captureFinalCopy(deps(self, { venue, node: otherHandle(), now: () => 1 }), OP);
+    await firstEntered.promise;
+    let secondRead = false;
+    const second = captureFinalCopy(
+      deps(self, {
+        venue,
+        node: otherHandle(() => {
+          secondRead = true;
+        }),
+        now: () => 2,
+      }),
+      OP,
+    );
+    const both = Promise.all([first, second]);
+    try {
+      // Wait for both archives only when B starts its own capture.
+      if (secondRead) await secondEntered.promise;
+    } finally {
+      release.resolve();
+    }
+    const [a, b] = await both;
+    const events = await finalStateEvents(self);
+    expect(events).toHaveLength(1);
+    expect(canonicalize(a as unknown as CanonicalValue)).toBe(events[0]!.envelope);
+    expect(canonicalize(b as unknown as CanonicalValue)).toBe(events[0]!.envelope);
+    expect(counted.copies()).toBe(1);
+  });
+
+  it("captures at separate paths recheck the event inside the node transaction", async () => {
+    const self = await steppedDown();
+    const otherState = join(stateDir, "other");
+    await mkdir(otherState);
     const [a, b] = await Promise.all([
-      captureFinalCopy(deps(self, { node: otherHandle(), now: () => 1 }), OP),
-      captureFinalCopy(deps(self, { node: otherHandle(), now: () => 2 }), OP),
+      captureFinalCopy(deps(self, { now: () => 1 }), OP),
+      captureFinalCopy(deps(self, { stateDir: otherState, now: () => 2 }), OP),
     ]);
     const events = await finalStateEvents(self);
     expect(events).toHaveLength(1);
