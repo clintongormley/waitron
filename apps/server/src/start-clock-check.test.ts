@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ClockServiceStatus } from "./box-host-client.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 import {
+  backToWaitingUnlessSynchronised,
   lookAtClockService,
   startClockAgreed,
   startClockCheck,
@@ -127,16 +128,23 @@ describe("moving between states", () => {
     },
   );
 
-  it("keeps by the internet whatever confirms it or sends it back", async () => {
+  it("keeps by the internet whatever confirms it", async () => {
     const l = look(async () => clockServiceAnswer(true));
     await startClockCheck(l.deps);
     for (const by of ["by_devices", "by_person", "by_internet"] as const) {
       l.state.confirm(by, { "node-a": 99 });
       expect(l.state.status).toBe("by_internet");
     }
-    l.state.backToWaiting("future_date_refused");
     expect(l.state).toMatchObject({ status: "by_internet", cause: null, mark: HEADS });
     expect(l.state.unconfirmed()).toBe(false);
+  });
+
+  it("sends by the internet back to waiting with the cause it is given, leaving the mark", async () => {
+    const l = look(async () => clockServiceAnswer(true));
+    await startClockCheck(l.deps);
+    l.state.backToWaiting("clock_jumped");
+    expect(l.state).toMatchObject({ status: "waiting", cause: "clock_jumped", mark: HEADS });
+    expect(l.state.unconfirmed()).toBe(true);
   });
 
   it("sends by a person back to waiting with the cause it is given, leaving the mark", () => {
@@ -150,6 +158,53 @@ describe("moving between states", () => {
     });
     expect(state.unconfirmed()).toBe(true);
   });
+});
+
+describe("going back to waiting unless the time service is synchronised", () => {
+  const confirmed = (by: "by_internet" | "by_devices") => {
+    const state = startClockState();
+    state.confirm(by, HEADS);
+    return state;
+  };
+
+  it.each([
+    ["not synchronised", async () => clockServiceAnswer(false)],
+    [
+      "not available",
+      async (): Promise<ClockServiceStatus> => ({ available: false, reason: "missing" }),
+    ],
+    [
+      "throwing",
+      async (): Promise<ClockServiceStatus> => {
+        throw new Error("socket gone");
+      },
+    ],
+  ] as const)(
+    "moves a box confirmed by the internet to waiting when the time service is %s",
+    async (_name, answer) => {
+      const state = confirmed("by_internet");
+      const clockStatus = vi.fn(answer);
+      await expect(
+        backToWaitingUnlessSynchronised({ state, clockStatus }, "clock_jumped"),
+      ).resolves.toBe(true);
+      expect(state).toMatchObject({ status: "waiting", cause: "clock_jumped" });
+      expect(clockStatus).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(["by_internet", "by_devices"] as const)(
+    "leaves %s alone when the time service is synchronised",
+    async (by) => {
+      const state = confirmed(by);
+      await expect(
+        backToWaitingUnlessSynchronised(
+          { state, clockStatus: async () => clockServiceAnswer(true) },
+          "clock_jumped",
+        ),
+      ).resolves.toBe(false);
+      expect(state).toMatchObject({ status: by, cause: null });
+    },
+  );
 });
 
 it("shows the waiting notice a count of at most 1, so never 2 of 2 while the box still waits", () => {
