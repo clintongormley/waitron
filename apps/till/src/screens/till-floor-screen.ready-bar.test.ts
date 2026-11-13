@@ -670,3 +670,74 @@ describe("till-floor-screen: the Ready bar's warning, on the screen's own clock"
     expect(title(el)).toBe("Ready 7 min");
   });
 });
+
+/** Three tables with realistic short names, one dish each, ready `waited` ago (9 minutes warns). */
+const threeShort = (waited: number): TableState[] =>
+  ["W1", "T5", "T12"].map((shortName, i) =>
+    table({
+      id: `s${i}`,
+      label: `Table ${shortName}`,
+      shortName,
+      party: party({ id: `p${i}`, displayName: shortName, tableIds: [`s${i}`] }),
+      signals: [ready(["bar", "Bar", 1, ago(waited), 3])],
+    }),
+  );
+
+const strip = (floor: TillFloorScreen) => bar(floor)!.querySelector<HTMLElement>(".ready-tables")!;
+
+describe("till-floor-screen: the Ready bar's entries on a phone", () => {
+  afterEach(async () => {
+    setLocale("en");
+    await resetPage();
+  });
+
+  for (const lang of ["en", "es"])
+    for (const [look, waited] of [
+      ["calm", minute],
+      ["warning", 9 * minute],
+    ] as const)
+      it(`three short-named tables fit without scrolling at 390 px (${lang}, ${look})`, async () => {
+        setLocale(lang);
+        await pageAt(390, 844);
+        const { floor } = await inShell(threeShort(waited));
+        expect(bar(floor)!.hasAttribute("data-warning")).toBe(look === "warning");
+        const tables = strip(floor);
+        expect(tables.querySelectorAll("[data-ready-table]")).toHaveLength(3);
+        expect(tables.scrollWidth).toBeLessThanOrEqual(tables.clientWidth);
+        const inside = tables.getBoundingClientRect();
+        for (const entry of tables.querySelectorAll("[data-ready-table]")) {
+          const box = entry.getBoundingClientRect();
+          expect(box.left).toBeGreaterThanOrEqual(inside.left);
+          expect(box.right).toBeLessThanOrEqual(inside.right);
+        }
+      });
+
+  it("fades the strip's trailing edge while more entries lie beyond it, and not once scrolled to the end", async () => {
+    await pageAt(390, 844);
+    const { floor } = await inShell(numbered(8, 8));
+    const tables = strip(floor);
+    expect(tables.scrollWidth).toBeGreaterThan(tables.clientWidth);
+    await vi.waitFor(() => expect(tables.dataset.overflow).toBe("end"));
+    expect(getComputedStyle(tables).maskImage).not.toBe("none");
+    tables.scrollLeft = tables.scrollWidth;
+    await vi.waitFor(() => expect(tables.dataset.overflow).toBe("start"));
+    tables.scrollLeft = 0;
+    await vi.waitFor(() => expect(tables.dataset.overflow).toBe("end"));
+    cleanupWidgets();
+    const fits = await inShell(threeShort(minute));
+    await fits.floor.updateComplete;
+    expect(strip(fits.floor).dataset.overflow).toBeUndefined();
+    expect(getComputedStyle(strip(fits.floor)).maskImage).toBe("none");
+  });
+
+  it("fades the trailing edge once the strip narrows below its entries, with no redraw", async () => {
+    await pageAt(390, 844);
+    const { floor, area } = await inShell(threeShort(minute));
+    const tables = strip(floor);
+    expect(tables.dataset.overflow).toBeUndefined();
+    const redraw = vi.spyOn(floor, "requestUpdate");
+    area.style.width = "320px";
+    await vi.waitFor(() => expect(tables.dataset.overflow).toBe("end"));
+    expect(redraw).not.toHaveBeenCalled();
+  });
+});

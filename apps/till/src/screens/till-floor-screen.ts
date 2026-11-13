@@ -828,7 +828,10 @@ export class TillFloorScreen extends LitElement {
         white-space: nowrap;
       }
 
+      /* Narrower than a small button's own, so three short names fit beside a warning heading on a
+         phone. */
       .ready-tables wt-button::part(button) {
+        padding-inline: var(--wt-space-2);
         border-radius: var(--wt-radius-full);
       }
 
@@ -885,9 +888,33 @@ export class TillFloorScreen extends LitElement {
       .ready-tables {
         display: flex;
         flex: 1;
-        gap: var(--wt-space-2);
+        gap: var(--wt-space-1);
         min-width: 0;
         overflow-x: auto;
+        --fade-start: 0px;
+        --fade-end: 0px;
+        --fade-towards: to right;
+      }
+      .ready-tables:dir(rtl) {
+        --fade-towards: to left;
+      }
+      .ready-tables[data-overflow="start"],
+      .ready-tables[data-overflow="both"] {
+        --fade-start: var(--wt-space-6);
+      }
+      .ready-tables[data-overflow="end"],
+      .ready-tables[data-overflow="both"] {
+        --fade-end: var(--wt-space-6);
+      }
+      /* A mask reads only alpha, and the background token is opaque in every theme. */
+      .ready-tables[data-overflow] {
+        mask-image: linear-gradient(
+          var(--fade-towards),
+          transparent 0,
+          var(--wt-color-bg) var(--fade-start),
+          var(--wt-color-bg) calc(100% - var(--fade-end)),
+          transparent 100%
+        );
       }
     `,
   ];
@@ -1000,6 +1027,8 @@ export class TillFloorScreen extends LitElement {
   #drawnEdges = "";
   #tabsObserver?: IntersectionObserver;
   #stripResize?: ResizeObserver;
+  #readyStrip?: HTMLElement;
+  #readyResize?: ResizeObserver;
   /** The strip being watched: `null` while there is none, `undefined` while not watching. */
   #tabsStrip?: HTMLElement | null;
   #tabsKeys?: string;
@@ -1024,6 +1053,7 @@ export class TillFloorScreen extends LitElement {
       this.#watchReminders();
       this.#watchFloor();
       this.#watchTabs();
+      this.#watchReadyStrip();
     }
   }
 
@@ -1035,6 +1065,7 @@ export class TillFloorScreen extends LitElement {
     this.#rereadTimer?.stop();
     this.#rereadTimer = undefined;
     this.#stopWatchingTabs();
+    this.#stopWatchingReadyStrip();
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -1088,6 +1119,7 @@ export class TillFloorScreen extends LitElement {
     this.#watchReminders();
     this.#watchFloor();
     this.#watchTabs();
+    this.#watchReadyStrip();
     this.#restStrip();
     const drawn = [...this.shadowRoot!.querySelectorAll<HTMLElement>("[data-tabs-edge]")]
       .map((edge) => edge.dataset.tabsEdge)
@@ -2933,7 +2965,9 @@ export class TillFloorScreen extends LitElement {
             : t("floor.ready_bar_waited").replace("{n}", String(waitedMinutes))
         }
       </h2>
-      <div class="ready-tables">${ready.map((entry) => this.#readyEntry(entry))}</div>
+      <div class="ready-tables" @scroll=${this.#markReadyOverflow}>
+        ${ready.map((entry) => this.#readyEntry(entry))}
+      </div>
       <wt-button
         size="sm"
         variant="secondary"
@@ -2947,6 +2981,38 @@ export class TillFloorScreen extends LitElement {
       })}
     </section>`;
   }
+
+  /** Keeps the fade on whichever end of the Ready bar's strip hides an entry as the strip resizes. */
+  #watchReadyStrip(): void {
+    const strip = this.shadowRoot!.querySelector<HTMLElement>("[data-ready-bar] .ready-tables");
+    if (strip !== this.#readyStrip) {
+      this.#stopWatchingReadyStrip();
+      this.#readyStrip = strip ?? undefined;
+      if (strip !== null) {
+        this.#readyResize = new ResizeObserver(this.#markReadyOverflow);
+        this.#readyResize.observe(strip);
+      }
+    }
+    this.#markReadyOverflow();
+  }
+
+  #stopWatchingReadyStrip(): void {
+    this.#readyResize?.disconnect();
+    this.#readyResize = undefined;
+    this.#readyStrip = undefined;
+  }
+
+  /** Scroll offsets are negative right to left, so the distance from the start is their size. */
+  readonly #markReadyOverflow = () => {
+    const strip = this.#readyStrip;
+    if (strip === undefined) return;
+    const fromStart = Math.abs(strip.scrollLeft);
+    const start = fromStart >= 1;
+    const end = strip.scrollWidth - strip.clientWidth - fromStart >= 1;
+    const overflow = start && end ? "both" : start ? "start" : end ? "end" : undefined;
+    if (overflow) strip.dataset.overflow = overflow;
+    else delete strip.dataset.overflow;
+  };
 
   #readyEntry(entry: ReadyBarTable): TemplateResult {
     return html`<wt-button

@@ -1013,7 +1013,9 @@ inset `box-shadow` doubling the edge without changing the bar's size; the edge p
 `--wt-duration-pulse-slow` to `--wt-color-warning-pulse-dim` (not moving under reduced motion, the
 floor's `reducedMotion` or the media query), the heading gains the first table's minutes ("Ready 4
 min"), warning tables come first and their entries are amber. The floor's one reminder timer
-redraws it when a table starts to warn and each minute while it warns. While the bar
+redraws it when a table starts to warn and each minute while it warns. Entries that do not fit
+scroll sideways between the heading and Open ›, and an end hiding an entry fades through a
+`mask-image`, as the till bar's table buttons do (`data-overflow`). While the bar
 is drawn the Floor carries a `ready-bar` attribute, and the app raises its Sent and Served toasts by
 the page's padding (`--wt-page-padding`, `apps/till/index.html`) so they sit above it.
 

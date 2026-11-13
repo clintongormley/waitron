@@ -578,7 +578,9 @@ su borde late despacio y dice cuánto ha esperado la comida de la primera mesa, 
 estación de 6 minutos y un plato de la parrilla de una de 3 avisan en momentos distintos. Las mesas
 cuya comida ha esperado ese tiempo van primero, en ámbar, y los minutos siguen contando mientras
 miras. En un dispositivo configurado para reducir el movimiento, la barra sigue en ámbar sin latir.
-Toca una mesa para abrirla, o toca **Abrir ›** para abrir la primera de la lista.
+Toca una mesa para abrirla, o toca **Abrir ›** para abrir la primera de la lista. Si hay más
+mesas de las que caben, desliza la lista hacia un lado; un borde difuminado indica que hay más por
+ese lado.
 
 La barra muestra solo las mesas de las zonas que enseña este dispositivo, y desaparece
 cuando no queda nada listo. Una caja muestra en cambio una lista **Listo** encima de las mesas, con

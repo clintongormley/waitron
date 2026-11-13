@@ -1078,13 +1078,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   grep -l '"Mesa ' -- 'apps/till/src/*.test.ts'`), against the English-only rule (CLAUDE.md §3).
   [Detail](backlog/till.md#a1102-the-tills-tests-name-tables-in-spanish)
 
-- **A1105. At 390 px in English the till's Ready bar hides its last entry under "Open ›".** Seen,
-  2026-10-25 (the A797 slice 1 look, `e-bar-dining-390-light-en.png` in
-  `~/waitron-campaign-c/a797-1-shots/`): with three entries the last, "W1 · 1", is cut off by the
-  "Open ›" button and the bar scrolls sideways to reach it; in Spanish all three fit
-  (`e-bar-dining-390-light-es.png`).
-  [Detail](backlog/till.md#a1105-at-390-px-in-english-the-tills-ready-bar-hides-its-last-entry-under-open-)
-
 - **A1112. The server, the API and a configuration file still accept a "+" in a short name.** The
   dashboard's floor plan editor refuses a "+" in a short name it would save, unless the table
   already had it stored (`refusesPlus`, `apps/dashboard/src/screens/floor-plan-draft.ts`; A797 slice
