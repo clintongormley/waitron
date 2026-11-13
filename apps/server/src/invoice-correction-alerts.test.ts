@@ -3,6 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { incidents, invoiceCorrections, sales, tenderRefunds, tenders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { markIncidentHandled, previewCorrectionAmounts } from "@waitron/core";
 import { hashPin, persons } from "@waitron/identity";
@@ -238,7 +239,7 @@ describe("the unfinished-correction alert", () => {
     ]);
   });
 
-  it("takes the write lock only when a correction is due an alert", async () => {
+  it("takes no write lock until a correction is due an alert", async () => {
     await fifteenBack();
     const lock = vi.spyOn(v.db, "withWriteLock");
     try {
@@ -411,10 +412,9 @@ describe("automatic filing of a correction whose money is all back", () => {
   });
 
   it("does not retry when the approver has been suspended, leaving the alert for Record correction", async () => {
-    const [approver] = await v.db
-      .insert(persons)
-      .values({ displayName: "Laura", pinHash: hashPin("7777"), role: "manager" })
-      .returning({ id: persons.id });
+    const [approver] = await inTx(v, (tx) =>
+      seedPersons(tx, { displayName: "Laura", pinHash: hashPin("7777"), role: "manager" }),
+    );
     const t = await paidOnTheReader();
     const correctionId = await open(t.saleId, "10.00", approver!.id);
     await v.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, approver!.id));
@@ -469,10 +469,9 @@ describe("automatic filing of a correction whose money is all back", () => {
   });
 
   it("takes no write lock for a correction whose approver's refusal is already alerted, and files once the approver is active again", async () => {
-    const [approver] = await v.db
-      .insert(persons)
-      .values({ displayName: "Marta", pinHash: hashPin("6666"), role: "manager" })
-      .returning({ id: persons.id });
+    const [approver] = await inTx(v, (tx) =>
+      seedPersons(tx, { displayName: "Martha", pinHash: hashPin("6666"), role: "manager" }),
+    );
     const t = await paidOnTheReader();
     const correctionId = await open(t.saleId, "10.00", approver!.id);
     await v.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, approver!.id));
