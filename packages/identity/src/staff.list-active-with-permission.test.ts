@@ -65,7 +65,7 @@ it("lists active managers for a registered module permission, excluding staff an
   ).toEqual([{ personId: managerId, displayName: "Manager" }]);
 });
 
-it("reads the supervisor picker in one query for 50 people", async () => {
+it("uses one select for a supervisor picker with 50 people", async () => {
   const people = await seedPersons(
     suite.db,
     Array.from({ length: 50 }, (_, index) => ({

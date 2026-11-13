@@ -50,7 +50,7 @@ describe("readManagerEmailRecipients", () => {
   });
 });
 
-it("reads eligible email recipients in two queries as the staff list grows", async () => {
+it("uses at most two selects to find eligible email recipients", async () => {
   const managerId = await person("Manager", { role: "manager", email: "manager@example.test" });
   await person("Staff", { role: "staff", email: "staff@example.test" });
   await withTransaction(suite.db, async (tx) => {
