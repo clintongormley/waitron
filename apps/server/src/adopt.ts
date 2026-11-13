@@ -134,8 +134,7 @@ export interface AdoptDeps {
   persistModuleConfig: (config: ModuleConfig) => Promise<void>;
   /** Replaces `backup.env` with the main box's settings, or removes it for `null`. */
   persistBackupSettings: (settings: Record<string, string> | null) => Promise<void>;
-  /** Where the finish-adoption latch is written. `PendingAdoption` in `finish-adoption.ts` says why
-   * that step cannot complete today. */
+  /** Where the adoption latch, the joined marker and the venue's TLS authority are written. */
   stateDir: string;
   /** The mirror's database NAME, echoed by `provisioning.foreign_tenant`. */
   database: string;

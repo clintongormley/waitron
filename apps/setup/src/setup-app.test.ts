@@ -2043,11 +2043,11 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
-        "The primary server has no backup key yet. Nothing was changed. Open Backups on the primary server, choose Turn on backups, then press Connect again.",
+        "The primary server has no backup key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
       ],
       [
         "es-ES",
-        "El servidor principal aún no tiene clave de copia de seguridad. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal, elige «Activar las copias» y vuelve a pulsar Conectar.",
+        "El servidor principal aún no tiene clave de copia de seguridad. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
       ],
     ] as const)(
       "shows the no-key refusal and leaves Connect working (%s)",

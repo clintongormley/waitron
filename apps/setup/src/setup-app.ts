@@ -1773,10 +1773,6 @@ export class SetupApp extends LitElement {
     }
   }
 
-  /**
-   * A successful adopt leaves the box adoption-pending, not a working mirror: the `PendingAdoption`
-   * header in `apps/server/src/finish-adoption.ts` says why.
-   */
   async #onAdoptRequested(event: CustomEvent<{ body: AdoptBody }>): Promise<void> {
     event.stopPropagation();
     this.connectError = undefined;

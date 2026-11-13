@@ -85,8 +85,8 @@ export class SetupDoneScreen extends LitElement {
 
   /**
    * True after a successful adopt, where the box restarts as a joining spare, not a trading
-   * server. A separate flag rather than a
-   * `breakGlassSecret` test: the secret is a value to display, not a statement of which path ran.
+   * server. A separate flag rather than a `breakGlassSecret` test: the secret is a value to
+   * display, not a statement of which path ran.
    */
   @property({ type: Boolean }) mirrorJoin = false;
 
@@ -112,6 +112,7 @@ export class SetupDoneScreen extends LitElement {
   }
 
   override firstUpdated(): void {
+    if (this.mirrorJoin) return;
     this.#timer = setTimeout(() => void this.#tick(), this.startDelayMs);
   }
 
@@ -172,7 +173,7 @@ export class SetupDoneScreen extends LitElement {
       <h2>${t("done.break_glass.heading")}</h2>
       <p class="break-glass-warning" data-test="break-glass-warning">
         ${t("done.break_glass.warning")}
-        ${this.mirrorJoin ? nothing : t("done.break_glass.promote")}
+        ${t(this.mirrorJoin ? "done.break_glass.take_over" : "done.break_glass.promote")}
       </p>
       ${this.breakGlassKeyName === undefined ? nothing : html`<p data-test="break-glass-key-name">${this.#keyName(this.breakGlassKeyName)}</p>`}
       <code class="break-glass-secret" data-test="break-glass-secret"

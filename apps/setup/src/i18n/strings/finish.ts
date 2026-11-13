@@ -69,6 +69,8 @@ export const finishEn = {
   "done.break_glass.warning":
     "Write this down and store it offline. It is shown once and will not be shown again.",
   "done.break_glass.promote": "You need it to promote this server if the primary is unreachable.",
+  "done.break_glass.take_over":
+    "You will need it if this server ever has to take over from the primary.",
   "done.joining.heading": "This server is joining",
   "done.joining.body":
     "The sign-in to the restaurant's primary worked. This server now takes its first copy of the restaurant's data from the primary, over the restaurant's network; no internet is needed. This can take a few minutes. It restarts by itself when it has the copy, and then waits as the standby. The primary keeps selling throughout.",
@@ -147,6 +149,8 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
     "Anótalo y guárdalo fuera de línea. Se muestra una sola vez y no se volverá a mostrar.",
   "done.break_glass.promote":
     "Lo necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
+  "done.break_glass.take_over":
+    "Lo necesitarás si algún día este servidor tiene que sustituir al principal.",
   "done.joining.heading": "Este servidor se está uniendo",
   "done.joining.body":
     "El inicio de sesión en el servidor principal del restaurante ha funcionado. Este servidor recibe ahora su primera copia de los datos del restaurante desde el principal, por la red del restaurante; no hace falta internet. Puede tardar unos minutos. Se reinicia solo cuando tiene la copia y después espera como servidor en espera. El principal sigue vendiendo todo el tiempo.",

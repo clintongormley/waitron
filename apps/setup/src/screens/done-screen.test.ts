@@ -33,10 +33,9 @@ const JOINING_BODY_EN =
 const JOINING_BODY_ES =
   "El inicio de sesión en el servidor principal del restaurante ha funcionado. Este servidor recibe ahora su primera copia de los datos del restaurante desde el principal, por la red del restaurante; no hace falta internet. Puede tardar unos minutos. Se reinicia solo cuando tiene la copia y después espera como servidor en espera. El principal sigue vendiendo todo el tiempo.";
 
-/** Lets the screen hear that the server is gone and redraw, as it would after the restart. */
-async function afterPolls(el: SetupDoneScreen, getStatus: ReturnType<typeof vi.fn>): Promise<void> {
-  await vi.waitFor(() => expect(getStatus).toHaveBeenCalled());
-  await new Promise((resolve) => setTimeout(resolve, 0));
+/** Waits past the first poll a trading server would make (`startDelayMs: 0`) and redraws. */
+async function afterATimerTurn(el: SetupDoneScreen): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 20));
   await el.updateComplete;
 }
 
@@ -440,7 +439,8 @@ describe("setup-done-screen", () => {
       setLocale(locale);
       const getStatus = vi.fn().mockRejectedValue(new Error("404"));
       const el = await mountDone(getStatus, { mirrorJoin: true, breakGlassSecret: "bg-9f3a" });
-      await afterPolls(el, getStatus);
+      await afterATimerTurn(el);
+      expect(getStatus).not.toHaveBeenCalled();
       const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
       expect(text).not.toMatch(/whoever|installed|support|avisa|instaló|soporte/i);
     },
@@ -455,7 +455,8 @@ describe("setup-done-screen", () => {
   it("shows no restart status and no reload on the mirror path", async () => {
     const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
     const el = await mountDone(getStatus, { mirrorJoin: true });
-    await afterPolls(el, getStatus);
+    await afterATimerTurn(el);
+    expect(getStatus).not.toHaveBeenCalled();
     expect(q(el, "[data-test=status]")).toBeNull();
     expect(q(el, "[data-test=reload]")).toBeNull();
   });
@@ -498,7 +499,7 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("You need it to promote this server if the primary is unreachable.");
-    expect(warning).not.toContain("cannot do that in this version");
+    expect(warning).not.toContain("take over from the primary");
   });
 
   it("shows the break-glass secret on the mirror path without promising a promote", async () => {
@@ -509,7 +510,9 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("will not be shown again");
-    expect(warning).not.toContain("cannot do that in this version");
+    expect(warning).toContain(
+      "You will need it if this server ever has to take over from the primary.",
+    );
     expect(warning).not.toContain("promote");
   });
 
@@ -568,7 +571,9 @@ describe("setup-done-screen", () => {
     );
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("Se muestra una sola vez y no se volverá a mostrar.");
-    expect(warning).not.toContain("En esta versión no puede hacerlo");
+    expect(warning).toContain(
+      "Lo necesitarás si algún día este servidor tiene que sustituir al principal.",
+    );
     expect(warning).not.toContain("pase a ser el principal");
     expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("bg-9f3a");
     expect(q(el, "[data-test=status]")).toBeNull();
@@ -581,6 +586,7 @@ describe("setup-done-screen", () => {
     expect(warning).toContain(
       "Lo necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
     );
+    expect(warning).not.toContain("sustituir al principal");
   });
 
   it("redraws in Spanish on a live language switch", async () => {

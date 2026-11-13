@@ -286,13 +286,13 @@ changes after the join (A1273).
 
 ## Adding a mirror while the internet is down
 
-Owner, 2026-10-02. Today the only way a second
-machine gets a copy of `venue.db` is from the owner's bucket — the rebuild
+Owner, 2026-10-02. A second machine can rebuild from the owner's bucket
 (`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket").
-Adoption (`apps/server/src/adopt.ts`) fetches its identity bundle from the primary by URL but
-carries no data, and nothing in the tree follows a stream yet. So with the internet down there is
-no way to add a mirror, which is the very case an on-prem mirror exists for. Wanted: a new mirror
-takes its first copy straight from the primary over the LAN. The topology design's §4.4 already
+For a venue that does not file with Veri*Factu, a joining spare now receives a copy from the
+primary over the venue's network, puts it in place at its next start and finishes joining as a
+standby (it cannot take over yet); a Veri*Factu venue is still refused until 3b-F. Wanted: adding
+a mirror works with the internet down, which is the very case an on-prem mirror exists for. The
+topology design's §4.4 already
 has the primary stream to the mirror box over the LAN once that box is enrolled, and a stream to a
 new place should begin with a full copy of the database (to be checked on the pinned Litestream),
 so the design may cover it — but it never says so, and it does not list what else enrolling needs
@@ -400,7 +400,8 @@ that slice 3 has to restore:
   the join without a relay, and the joining server takes a copy of the restaurant's data, puts it in
   place at its next start and finishes joining there. A venue that files with Veri*Factu is refused
   before anything is reserved (`mirror.standby_series_unsupported`) until 3b-F. The wizard's role and connect
-  wording says joining is not finished and points to restore; each refusal's wording says what
+  wording says a mirror keeps a copy of the restaurant's data but cannot take over yet, and points
+  to restore to recover a restaurant; each refusal's wording says what
   happened and either what to fix before pressing Connect again or to choose Back.
   Removing or disabling the option until slice 3
   lands the replacement is a product call, not a wording one. Whoever takes it should decide for

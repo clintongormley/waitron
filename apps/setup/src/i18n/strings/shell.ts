@@ -113,7 +113,7 @@ export const shellEn = {
   "shell.adopt.spare_already_joined":
     "The primary server already has a standby server that finished joining, and this version of Waitron keeps one standby per restaurant. A standby that finished joining cannot be removed in this version. Nothing was changed on either server. Choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant. You can also leave it switched off.",
   "shell.adopt.recovery_key_missing":
-    "The primary server has no backup key yet. Nothing was changed. Open Backups on the primary server, choose Turn on backups, then press Connect again.",
+    "The primary server has no backup key yet. Nothing was changed. Open Backups on the primary server and choose Turn on backups. Then enter a new authenticator code if you use one, and press Connect again.",
   "shell.adopt.clocks_apart":
     "This server's clock and the primary server's are 10 minutes or more apart: this server reads {standbyAt}, the primary reads {primaryAt}. The two servers can work together only while their clocks agree. Nothing was changed on either server. If this server's time is wrong, connect it to the internet for a minute so it sets its clock, then enter a new authenticator code if you use one, and press Connect again.",
   "shell.adopt.incomplete":
@@ -337,7 +337,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.adopt.spare_already_joined":
     "El servidor principal ya tiene un servidor en espera que terminó de unirse, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera que terminó de unirse no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo. También puedes dejarlo apagado.",
   "shell.adopt.recovery_key_missing":
-    "El servidor principal aún no tiene clave de copia de seguridad. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal, elige «Activar las copias» y vuelve a pulsar Conectar.",
+    "El servidor principal aún no tiene clave de copia de seguridad. No se ha cambiado nada. Abre Copias de seguridad en el servidor principal y elige «Activar las copias». Después introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
   "shell.adopt.clocks_apart":
     "El reloj de este servidor y el del servidor principal se diferencian en 10 minutos o más: este servidor marca {standbyAt} y el principal marca {primaryAt}. Los dos servidores solo pueden trabajar juntos mientras sus relojes coinciden. No se ha cambiado nada en ninguno de los dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para que ajuste su reloj, introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.",
   "shell.adopt.incomplete":
