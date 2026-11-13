@@ -29,8 +29,9 @@ export interface DeclarationPagesDeps {
   /** The folder holding the release's four files; defaults to `declarationRoot()`. */
   root?: string;
   build?: string;
-  /** The venue database's kept declarations; absent where no venue database is open. Asked per
-   * request, because `bootServer` mounts the pages before it opens the venue. */
+  /** The venue database's kept declarations. Asked per request, because `bootServer` sets it only
+   * once the fiscal module is resolved; absent in setup, adoption-pending, restricted and waiting
+   * starts, and where the fiscal module has no `declarations` seat. */
   kept?: () => KeptDeclarations | undefined;
 }
 

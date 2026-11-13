@@ -23,6 +23,10 @@ export async function keepRunningDeclaration(deps: {
   }
 }
 
+/** Plain reads on `db`, not `withWriteLock` turns: a sign-in-free page must not queue in the lock
+ * sales use, and a plain read neither waits on it nor drains the change list. Shown by
+ * `keep-declaration.test.ts`'s "answers while another caller holds the write lock, with committed
+ * rows only" and "reads with a change waiting in the change list and leaves it waiting". */
 export function keptDeclarationsReader(
   db: Database,
   seat: FiscalDeclarationsSeat,

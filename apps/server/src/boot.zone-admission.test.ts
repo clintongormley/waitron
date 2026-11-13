@@ -41,6 +41,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { insertInitiated } from "@waitron/payments";
 import { generateSync } from "otplib";
 import { accountPurposeKey } from "./account-key.js";
+import { ensureBoxSecrets } from "./box-secrets.js";
 import { enrolAuthenticator } from "./testing/authenticator.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { readZoneContext, validateRetainedZoneClock } from "./venue-zone-context.js";
@@ -64,18 +65,27 @@ import {
 import type { StartedServer, StartServerSeams } from "./boot.js";
 
 const listener = vi.hoisted(() => ({
+  landingPort: 32124,
   current: undefined as ReturnType<typeof import("@hono/node-server").serve> | undefined,
+  landing: undefined as ReturnType<typeof import("@hono/node-server").serve> | undefined,
 }));
 vi.mock("@hono/node-server", async (load) => {
   const actual = await load<typeof import("@hono/node-server")>();
   return {
     ...actual,
     serve: vi.fn((options, onListen) => {
-      listener.current = actual.serve({ ...options, port: 0 }, onListen);
-      return listener.current;
+      const server = actual.serve({ ...options, port: 0 }, onListen);
+      if (options.port === listener.landingPort) listener.landing = server;
+      else listener.current = server;
+      return server;
     }),
   };
 });
+// The landing listener needs a minted leaf here, which would otherwise put the trading listener on
+// HTTPS; this file's requests are plain HTTP.
+vi.mock("./trading-tls.js", () => ({
+  resolveTradingTls: (config: { tls?: unknown }) => config.tls,
+}));
 vi.mock("./venue-zone-context.js", async (load) => {
   const actual = await load<typeof import("./venue-zone-context.js")>();
   return {
@@ -146,6 +156,7 @@ function gate() {
 beforeEach(async () => {
   vi.clearAllMocks();
   listener.current = undefined;
+  listener.landing = undefined;
   fixture.beforeServerStarts();
   await suite.db
     .insert(tenants)
@@ -449,24 +460,39 @@ describe("startup zone admission", () => {
     );
     const declaration = join(scratch, "running-declaration");
     await writeDeclarationFolder(declaration);
+    await ensureBoxSecrets({
+      stateDir: scratch,
+      hostnames: ["waitron.local"],
+      now: () => new Date(),
+      listIpv4: () => [],
+    });
+    env = { ...env, WAITRON_HTTP_LANDING_PORT: String(listener.landingPort) };
     for (const [zone, kept] of [
       ["Invalid/Zone", ["1.0.0"]],
       ["Europe/Madrid", ["1.0.0", TEST_RELEASE.version]],
     ] as const) {
       await rawZone(zone);
       await boot({ declarationRoot: declaration });
-      const read = await request("/legal/declaration/1.0.0.txt");
-      expect({ zone, status: read.status, text: await read.text() }).toEqual({
-        zone,
-        status: 200,
-        text: "kept 1.0.0",
-      });
+      const landing = listener.landing!;
+      if (!landing.listening) await once(landing, "listening");
+      const landingUrl = `http://127.0.0.1:${(landing.address() as AddressInfo).port}`;
+      for (const [where, read] of [
+        ["main", await request("/legal/declaration/1.0.0.txt")],
+        ["landing", await fetch(`${landingUrl}/legal/declaration/1.0.0.txt`)],
+      ] as const)
+        expect({ zone, where, status: read.status, text: await read.text() }).toEqual({
+          zone,
+          where,
+          status: 200,
+          text: "kept 1.0.0",
+        });
       const rows = suite.db.all<{ version: string }>(
         sql`select version from declaraciones_responsables order by version`,
       );
       expect({ zone, kept: rows.map((row) => row.version) }).toEqual({ zone, kept });
       await server!.close();
       server = undefined;
+      listener.landing = undefined;
     }
   });
   it("keeps password login generic, and permits real login/session/logout in repair mode", async () => {
