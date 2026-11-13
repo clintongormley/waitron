@@ -862,7 +862,7 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
     const pin = "5151";
     const [colleague] = await inTx(venue, (tx) =>
-      seedPersons(tx, { displayName: "Pablo", pinHash: fixturePinHash(pin), role: "staff" }),
+      seedPersons(tx, { displayName: "Paul", pinHash: fixturePinHash(pin), role: "staff" }),
     );
 
     const refused = await postCancel(
