@@ -7852,7 +7852,7 @@ export async function advanceTicketItem(
   await captureKitchenActivity(
     tx,
     attendance,
-    attendance?.personId,
+    attendance.personId,
     (
       await tx
         .select({ orderId: workingOrderLines.workingOrderId })
