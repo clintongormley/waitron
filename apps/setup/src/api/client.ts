@@ -141,7 +141,7 @@ export interface AdoptOutcome {
   adopted: true;
   /** The offline promote fallback. The server returns it once, so the wizard must show it before
    * the box restarts. */
-  breakGlassSecret: string;
+  breakGlassSecret?: string;
   breakGlassKeyName?: string;
   restarting: true;
 }

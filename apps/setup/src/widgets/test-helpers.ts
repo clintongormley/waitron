@@ -26,7 +26,6 @@ export async function mountWidget<T extends HTMLElement>(
   applyTokens(host);
   if (theme) host.setAttribute("data-theme", theme);
   host.style.background = "var(--wt-color-surface-raised)";
-  paintCanvas(host);
   mounted.push(host);
 
   const el = document.createElement(tag) as T;
@@ -36,22 +35,9 @@ export async function mountWidget<T extends HTMLElement>(
   return { el, host };
 }
 
-/**
- * Paints `<body>` and `<html>` with `host`'s background, so nothing axe composites against the page
- * canvas meets the default white. `<body>` and `<html>` are not theme roots, so the concrete colour
- * is read off `host` rather than passed as a `var()`.
- */
-function paintCanvas(host: HTMLElement): void {
-  const bg = getComputedStyle(host).backgroundColor;
-  document.body.style.background = bg;
-  document.documentElement.style.background = bg;
-}
-
 /** Removes every host mounted since the last cleanup. Use as `afterEach(cleanupWidgets)`. */
 export function cleanupWidgets(): void {
   for (const host of mounted.splice(0)) host.remove();
-  document.body.style.background = "";
-  document.documentElement.style.background = "";
 }
 
 export function formatViolations(violations: axe.Result[]): string {

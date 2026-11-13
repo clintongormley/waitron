@@ -1104,7 +1104,11 @@ describe("setup-app", () => {
     expect((await screenHost(el, "cloud-restore")).shadowRoot!.textContent).toContain("12345678");
     cloudRecoveryAction(el, "status");
     await flush(el);
-    expect((await screenHost(el, "cloud-restore")).shadowRoot!.textContent).toContain("2026-09-24");
+    expect(
+      (await screenHost(el, "cloud-restore")).shadowRoot!.querySelector(
+        "time[datetime='2026-09-24T10:00:00.000Z']",
+      ),
+    ).not.toBeNull();
     cloudRecoveryAction(el, "restore", pointId);
     await flush(el);
     expect(restoreFromCloud).toHaveBeenCalledWith(pointId, false);
@@ -1687,7 +1691,10 @@ describe("setup-app", () => {
 
   it.each([
     ["a bare TypeError (network drop mid-provision)", new TypeError("network")],
-    ["a SyntaxError (non-JSON 502 error body)", new SyntaxError("Unexpected token < in JSON")],
+    [
+      "a SyntaxError (a success answer whose body is not JSON)",
+      new SyntaxError("Unexpected token < in JSON"),
+    ],
   ])(
     "routes a code-less rejection (%s) to the generic retryable failure without stranding",
     async (_label, rejection) => {
@@ -2268,7 +2275,10 @@ describe("setup-app", () => {
 
   it.each([
     ["a bare TypeError (network drop mid-adopt)", new TypeError("network")],
-    ["a SyntaxError (non-JSON 502 error body)", new SyntaxError("Unexpected token < in JSON")],
+    [
+      "a SyntaxError (a success answer whose body is not JSON)",
+      new SyntaxError("Unexpected token < in JSON"),
+    ],
   ])(
     "routes a code-less adopt rejection (%s) back to connect without stranding",
     async (_l, rejection) => {
