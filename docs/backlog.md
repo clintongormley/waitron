@@ -337,7 +337,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#vat-at-line-add-m7v-a68)
 
 - **Correcting a paid invoice: dish counts, earlier refunds and cancelled dishes (left open by
-  A802 slice 5b).** The correction window ticks whole dishes; an earlier ordinary refund does not
+  A802 slice 5b, #3108).** The correction window ticks whole dishes; an earlier ordinary refund does not
   count towards a correction; a refund of cancelled dishes does not yet file its corrective in the
   same step (A758 §3.8, owner Q43 e).
   [Detail](backlog/fiscal.md#correcting-a-paid-invoice-what-a802-left-open)

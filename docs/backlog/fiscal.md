@@ -893,7 +893,7 @@ Staff correct part of a paid invoice from **Correct invoice** on a past receipt 
 [design](../superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md) and the
 [reshape plan](../superpowers/plans/2026-11-12-a802-reshape.md); how it runs is the
 [owner's decision](#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12)). Left open by
-A802 slice 5b:
+A802 slice 5b (#3108):
 
 - **Picking how many of a dish to correct:** the window ticks whole dishes. The bills-and-tables
   brainstorm (2026-10-17/18) moves order lines to one portion per line; a correction then picks
