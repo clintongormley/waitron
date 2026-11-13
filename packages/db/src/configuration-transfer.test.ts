@@ -9,7 +9,6 @@ import {
   CORE_CONFIGURATION_TRANSFER,
   validateCoreConfiguration,
 } from "./configuration-transfer.js";
-import { storeTableShortNameKeys } from "./table-short-names.js";
 
 const stationRefusal = expect.objectContaining({
   code: "setup.request_invalid",
@@ -309,7 +308,6 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
         "merge_before_rotation",
       ],
     });
-    expect(CORE_CONFIGURATION_TRANSFER.afterImport).toBe(storeTableShortNameKeys);
   });
 
   it("A773 station policy: a station's pass waiting is carried", () => {
@@ -317,6 +315,7 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
       CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "kitchen_stations"),
     ).toEqual({
       name: "kitchen_stations",
+      jsonReferences: [{ column: "printer_ids", paths: [["*"]] }],
       omit: ["closed_on_day", "closed_sends_to_station_id"],
       leaveBehindWhenFalse: "active",
     });

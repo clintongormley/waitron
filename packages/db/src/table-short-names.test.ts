@@ -1,3 +1,4 @@
+import { CORE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "./migrations.js";
@@ -54,7 +55,7 @@ describe("storeTableShortNameKeys", () => {
       { label: "Terrace 1", shortName: "TÉ1" },
       { label: "Bar 1", shortName: null },
     ]);
-    await withTransaction(suite.db, storeTableShortNameKeys);
+    await withTransaction(suite.db, CORE_CONFIGURATION_TRANSFER.afterImport);
     expect(await key(named!)).toBe("té1");
     expect(await key(unnamed!)).toBeNull();
   });
