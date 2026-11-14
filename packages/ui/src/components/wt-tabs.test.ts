@@ -66,8 +66,10 @@ test("sticky tab selection keeps the content's scroll position", async () => {
   buttons(tabs)[0]!.focus({ preventScroll: true });
   scroller.scrollTop = 800;
   await userEvent.keyboard("{ArrowRight}");
+  expect(tabs.value).toBe("menus");
   expect(scroller.scrollTop).toBe(800);
   await userEvent.click(page.elementLocator(buttons(tabs)[2]!));
+  expect(tabs.value).toBe("routes");
   expect(scroller.scrollTop).toBe(800);
 });
 function buttons(el: WtTabs) {
