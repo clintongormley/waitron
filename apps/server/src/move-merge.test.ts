@@ -3069,7 +3069,7 @@ describe("a prep station's own print-MOVED-slips choice", () => {
   });
 });
 
-it("moves 32,767 lines, preserves sent numbers and portions, then moves the complete bill", async () => {
+it("moves 32,772 lines, preserves sent numbers and portions, then moves the complete bill", async () => {
   const v = await setupPartyVenue(db);
   const source = await seat(v, await v.table("Large source"));
   const target = {
@@ -3089,7 +3089,7 @@ it("moves 32,767 lines, preserves sent numbers and portions, then moves the comp
   const unrelated = await ticketItemsWithBill(db).where(
     eq(workingOrderLines.workingOrderId, target.tabId),
   );
-  const ids = [template!.id, ...Array.from({ length: 32766 }, () => randomUUID())];
+  const ids = [template!.id, ...Array.from({ length: 32771 }, () => randomUUID())];
   const portionIds = ids.map(() => randomUUID());
   const number = (await billRow(v, source.tabId)).orderNumber;
   await inTx(v, async (tx) => {
@@ -3173,7 +3173,7 @@ it("moves 32,767 lines, preserves sent numbers and portions, then moves the comp
     .select()
     .from(orderPortionEvents)
     .where(eq(orderPortionEvents.fromOrderId, source.tabId));
-  expect(events).toHaveLength(32767);
+  expect(events).toHaveLength(32772);
   expect(new Set(events.map((row) => row.portionId))).toEqual(new Set(portionIds));
   expect(events.every((row) => row.kind === "moved" && row.toOrderId === target.tabId)).toBe(true);
 

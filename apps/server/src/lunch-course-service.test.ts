@@ -3,11 +3,13 @@ import { recordAttendanceFact } from "./attendance-capture.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { systemClock } from "./till-backend.js";
 import { applyPartyAllergyPatch, allergyTargets, readAllergySendView } from "./party-allergy.js";
+import { serviceDishCondition } from "./service-dishes.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { eq, sql, inArray } from "drizzle-orm";
+import { and, eq, sql, inArray } from "drizzle-orm";
 import {
+  insertInChunks,
   ticketItems,
   printJobs,
   workingOrderLines,
@@ -18,7 +20,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { updateProduct, updateExtraList, writeProductModifiers } from "@waitron/catalogue";
-import { setRoutingCell } from "@waitron/venue-service";
+import { workingLineContexts, setRoutingCell } from "@waitron/venue-service";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -715,5 +717,49 @@ describe("set lunch course service", () => {
       { lineId: children.starter, stationId: venue.stations.kitchen },
       { lineId: children.main, stationId: venue.stations.fryer },
     ]);
+  });
+});
+
+it("selects the dishes of 32,767 set lunches while excluding their priced shells", async () => {
+  const venue = await setupSplitExtrasVenue();
+  await withTransaction(suite.db, async (tx) => {
+    await lunch(tx, venue);
+    await addTabRound(tx, venue.cfg, venue.party.tabId, [
+      { menuItemId: venue.tables.offerFor(venue.products.water), quantity: "1" },
+    ]);
+    const original = await rows(tx, venue.party.tabId);
+    const shell = original.find((row) => row.productId === venue.products.burger)!;
+    const children = original.filter((row) => row.parentLineId === shell.id);
+    const [context] = await tx
+      .select()
+      .from(workingLineContexts)
+      .where(eq(workingLineContexts.workingOrderLineId, shell.id));
+    const shells = Array.from({ length: 32766 }, () => randomUUID());
+    const dishes = shells.map(() => randomUUID());
+    await insertInChunks(
+      tx,
+      workingOrderLines,
+      shells.flatMap((id, i) => [
+        { ...shell, id, lineNo: 5 + i * 2 },
+        { ...children[0]!, id: dishes[i]!, parentLineId: id, lineNo: 6 + i * 2 },
+      ]),
+    );
+    await insertInChunks(
+      tx,
+      workingLineContexts,
+      shells.map((id) => ({ ...context!, workingOrderLineId: id })),
+    );
+    const scope = eq(workingOrderLines.workingOrderId, venue.party.tabId);
+    const selected = await tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(and(scope, await serviceDishCondition(tx, scope)));
+    expect(new Set(selected.map((row) => row.id))).toEqual(
+      new Set([
+        ...children.map((row) => row.id),
+        ...dishes,
+        original.find((row) => row.productId === venue.products.water)!.id,
+      ]),
+    );
   });
 });

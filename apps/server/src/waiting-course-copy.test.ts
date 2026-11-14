@@ -3111,7 +3111,7 @@ describe("A803 waiting copy: how long a group has been held", () => {
   });
 });
 
-it("copies 16,384 held dishes with their extras, HOLD stations, events and both draft references", async () => {
+it("copies 32,767 held dishes with their extras, HOLD stations, events and both draft references", async () => {
   const station = await stationWithPrinter("Large copy kitchen", ["Burger"]);
   const a = await seatWith([
     { names: ["Burger"], release: "hold" },
@@ -3128,7 +3128,7 @@ it("copies 16,384 held dishes with their extras, HOLD stations, events and both 
     .select()
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderLineId, dish.id));
-  const ids = [dish.id, ...Array.from({ length: 16383 }, () => randomUUID())];
+  const ids = [dish.id, ...Array.from({ length: 32766 }, () => randomUUID())];
   await inTx(v, async (tx) => {
     await insertInChunks(
       tx,
@@ -3158,7 +3158,7 @@ it("copies 16,384 held dishes with their extras, HOLD stations, events and both 
   const copyId = copies.get(dish.groupId!)!;
   expect([...copies.keys()]).toEqual([dish.groupId]);
   const rows = await linesOf(a.billId);
-  expect(rows.filter((row) => row.groupId === copyId)).toHaveLength(32768);
+  expect(rows.filter((row) => row.groupId === copyId)).toHaveLength(65534);
   expect(
     rows.filter((row) => row.parentLineId !== null).every((row) => row.groupId === copyId),
   ).toBe(true);

@@ -1262,17 +1262,19 @@ async function replaceLines(
 ): Promise<void> {
   const fresh = lines.map((line, index) => ({ line, position: index + 1 }));
   // Retained draft lines keep their allergy ticks, whose foreign key cascades on deletion.
-  await tx.delete(orderDraftLines).where(
-    and(
-      inArray(orderDraftLines.draftId, [...fromDraftIds]),
-      fresh.length === 0
-        ? undefined
-        : notInArray(
-            orderDraftLines.id,
-            fresh.map(({ line }) => line.id),
-          ),
-    ),
-  );
+  await tx
+    .delete(orderDraftLines)
+    .where(
+      and(
+        inArray(orderDraftLines.draftId, [...fromDraftIds]),
+        fresh.length === 0
+          ? undefined
+          : notInArray(
+              orderDraftLines.id,
+              sql`(select value from json_each(${JSON.stringify(fresh.map(({ line }) => line.id))}))`,
+            ),
+      ),
+    );
   if (fresh.length === 0) return;
   const rows = fresh.map(({ line, position }) => ({
     id: line.id,
