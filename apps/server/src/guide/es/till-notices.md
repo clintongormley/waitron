@@ -119,3 +119,14 @@ los resultados de envío y las incidencias existentes.
 Cuando la caja diga **Este servidor ya no es el servidor principal**, espera a que pase al
 servidor principal y vuelve a intentarlo. Si ya has cobrado con tarjeta en el datáfono, devuelve
 antes el importe ahí.
+
+## Guarda un informe sobre un problema {#problem-report}
+
+Si la caja se comporta de forma inesperada, elige **Informar de un problema** en **☰**. Antes de
+iniciar sesión o mientras se muestra la página de fichaje o de asistencia, usa el botón situado
+encima de la página. Abre la caja por HTTPS si no aparece el botón.
+
+Describe qué ha pasado, revisa la vista previa y elige **Descargar informe**. No incluyas contraseñas,
+datos de pago ni información personal en la descripción. El archivo contiene la actividad reciente
+de este navegador; no se envía nada ni se guarda en el servidor. Conservas el archivo para
+compartirlo cuando tú decidas.

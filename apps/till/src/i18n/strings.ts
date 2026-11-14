@@ -2,6 +2,19 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "problem_report.title": "Report a problem",
+  "problem_report.description": "What happened?",
+  "problem_report.scope":
+    "Save only this browser's activity to a file you keep; nothing is stored on the box or sent anywhere.",
+  "problem_report.warning":
+    "Your description may identify someone. Do not include passwords, payment details or personal information.",
+  "problem_report.preview": "Report preview",
+  "problem_report.invalid": "Check your description.",
+  "problem_report.description_invalid":
+    "Use up to 2,000 characters and remove unsupported characters.",
+  "problem_report.download": "Download report",
+  "problem_report.download_failed": "Could not create the download. Try again.",
+
   "lunch.choose_later": "Choose later",
   "lunch.choices": "Lunch choices",
   "recovery.open": "Open recovery",
@@ -2061,6 +2074,19 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "problem_report.title": "Informar de un problema",
+  "problem_report.description": "¿Qué ha pasado?",
+  "problem_report.scope":
+    "Guarda solo la actividad de este navegador en un archivo que conservas; no se guarda nada en el servidor ni se envía a ningún sitio.",
+  "problem_report.warning":
+    "Tu descripción puede identificar a alguien. No incluyas contraseñas, datos de pago ni información personal.",
+  "problem_report.preview": "Vista previa del informe",
+  "problem_report.invalid": "Revisa la descripción.",
+  "problem_report.description_invalid":
+    "Usa hasta 2000 caracteres y elimina los caracteres no admitidos.",
+  "problem_report.download": "Descargar informe",
+  "problem_report.download_failed": "No se ha podido crear la descarga. Inténtalo de nuevo.",
+
   "lunch.choose_later": "Elegir más tarde",
   "lunch.choices": "Elegir platos",
   "recovery.open": "Abrir recuperación",

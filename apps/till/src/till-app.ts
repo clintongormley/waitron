@@ -105,6 +105,7 @@ import {
 import { codeMessage } from "./i18n/codes.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { diag } from "./diagnostics.js";
+import { TillProblemReport } from "./problem-report.js";
 import {
   DepartmentTransferMonitor,
   type TransferSnapshot,
@@ -22024,6 +22025,12 @@ export class TillApp extends LitElement {
       ${this.#renderAllergyDialog()} ${this.#renderMoveAllergyDialog()}
       <div
         class="app"
+        @open-problem-report=${(event: CustomEvent<{ opener: HTMLElement }>) => {
+          event.stopPropagation();
+          this.shadowRoot!.querySelector<TillProblemReport>("till-problem-report")!.show(
+            event.detail.opener,
+          );
+        }}
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
         @my-hours=${(event: Event) => {
           event.stopPropagation();
@@ -22642,6 +22649,7 @@ export class TillApp extends LitElement {
               </div>`
             : nothing
         }
+        <till-problem-report .triggerVisible=${shellFormFactor === undefined}></till-problem-report>
         <!-- The device FRONT DOOR (device-enrolment §3.1), shown ahead of the shell/lock so it takes
              precedence over whatever screen the boot left set. The chooser is the dev-only device picker
              (its enrolled event is handled INSIDE the chooser — a dev-tab adopt, not the app's re-boot);

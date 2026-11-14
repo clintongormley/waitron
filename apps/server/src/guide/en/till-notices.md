@@ -104,3 +104,13 @@ filing results and cases unchanged.
 
 When the till says **This server is no longer the main server**, wait for the till to move to the
 main server, then try again. If you already charged a card on the terminal, refund it there first.
+
+## Keep a report about a problem {#problem-report}
+
+If the till behaves unexpectedly, choose **Report a problem** from **☰**. Before sign-in or while
+the clock or attendance page is open, use the button above the page. Open the till over HTTPS if
+the button is missing.
+
+Describe what happened, check the preview, then choose **Download report**. Keep passwords,
+payment details and personal information out of your description. The file contains this browser's
+recent activity; nothing is sent or stored on the box. You keep the file to share when you choose.
