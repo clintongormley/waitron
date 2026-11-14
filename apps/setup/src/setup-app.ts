@@ -2238,7 +2238,7 @@ export class SetupApp extends LitElement {
       );
       if (this.connectInvalidField === undefined) {
         this.connectError = adoptErrorWords(code, error.params);
-        this.connectErrorAboutLogin = code === "password.invalid";
+        this.connectErrorAboutLogin = code === "password.invalid" || code === "password.throttled";
       }
       this.connectRequest = body;
       this.screen = "connect";

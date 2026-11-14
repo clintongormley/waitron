@@ -985,10 +985,17 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     it("does not count a refusal that checks no password, nor a join refused after a correct sign-in", async () => {
       const { designated } = await setupVenue();
       const app = mountApp(designated);
+      for (let attempt = 0; attempt < 3; attempt += 1)
+        expect((await post(app, wrongAttempt(ADMIN_EMAIL))).status).toBe(401);
 
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const gated = await post(app, rightAttempt(), { veriFactu: true });
         expect((await gated.json()).error.code).toBe("mirror.standby_series_unsupported");
+        const badOperation = await rawPost(app, {
+          ...wrongAttempt(ADMIN_EMAIL),
+          moduleOperation: { nonsense: true },
+        });
+        expect((await badOperation.json()).error.code).toBe("module.operation_invalid");
         const malformed = await post(app, { ...wrongAttempt(ADMIN_EMAIL), totp: 123 });
         expect(await answer(malformed)).toEqual({
           status: 401,

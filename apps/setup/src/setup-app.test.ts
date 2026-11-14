@@ -2616,6 +2616,22 @@ describe("setup-app", () => {
       expect(await bottomOf(connect)).toBe("");
     });
 
+    it("after a join refused for too many attempts, drops the wait message once the person goes back to the address", async () => {
+      const adopt = vi.fn().mockRejectedValue({
+        code: "password.throttled",
+        params: { retryAfterSeconds: 30 },
+        status: 429,
+      });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      expect(await bottomOf(connect)).toBe("Too many attempts. Wait 30 seconds, then try again.");
+      button(connect, "check-address")!.click();
+      await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(input(connect, "primaryUrl").readOnly).toBe(false);
+      expect(await bottomOf(connect)).toBe("");
+    });
+
     it("after a join refused for its address, reopens the address step marked and editable, and reads the corrected one", async () => {
       const adopt = vi
         .fn()
