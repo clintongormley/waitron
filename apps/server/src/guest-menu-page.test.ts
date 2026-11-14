@@ -140,19 +140,19 @@ it.each(["bistro", "lunch-wine"] as const)(
         breaks: [0],
       }),
     );
-    expect(await p.locator("main > section > h2").allTextContents()).toEqual([
+    expect(await p.locator("[data-paper-member] > h2").allTextContents()).toEqual([
       "Desserts",
       "Starters",
     ]);
     expect(
       await p
-        .locator("main > section")
+        .locator("[data-paper-member]")
         .last()
         .evaluate((el) => getComputedStyle(el).breakBefore),
     ).toBe("page");
     expect(
       await p
-        .locator("main > section > h2")
+        .locator("[data-paper-member] > h2")
         .first()
         .evaluate((el) => getComputedStyle(el).color),
     ).toBe("rgb(101, 67, 33)");
@@ -170,7 +170,7 @@ it.each(["bistro", "lunch-wine"] as const)(
         .evaluate((el) => getComputedStyle(el).breakInside),
     ).toBe("avoid");
     await p.setContent(renderGuestMenuPage(dishes, "The Restaurant", "en"));
-    expect(await p.locator("main > section > h2").allTextContents()).toEqual([
+    expect(await p.locator("[data-paper-member] > h2").allTextContents()).toEqual([
       "Starters",
       "Desserts",
     ]);
@@ -216,14 +216,46 @@ it("gives Lunch and wine a wider dishes column and a narrow last-section panel",
       accent: "#654321",
     }),
   );
-  const boxes = await p
-    .locator("main > section")
-    .evaluateAll((nodes) =>
-      nodes.map((n) => ({
-        width: n.getBoundingClientRect().width,
-        top: n.getBoundingClientRect().top,
-      })),
-    );
+  const boxes = await p.locator("main > section").evaluateAll((nodes) =>
+    nodes.map((n) => ({
+      width: n.getBoundingClientRect().width,
+      top: n.getBoundingClientRect().top,
+    })),
+  );
   expect(boxes[0]!.width).toBeGreaterThan(boxes[1]!.width * 1.5);
   expect(Math.abs(boxes[0]!.top - boxes[1]!.top)).toBeLessThan(1);
+});
+
+it("starts a requested Bistro section on a new saved A4 page", async () => {
+  const p = await browser!.newPage();
+  onTestFinished(() => p.close());
+  const dish = {
+    ...menu,
+    members: [menu.members[0]!, { kind: "section" as const, name: "Desserts", members: [] }],
+  };
+  await p.setContent(
+    renderGuestMenuPage(dish, "The Restaurant", "en", false, {
+      preset: "bistro",
+      font: "serif",
+      spacing: "compact",
+      key: "end",
+      ink: "#123456",
+      accent: "#654321",
+      breaks: [1],
+    }),
+  );
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const loading = getDocument({
+    data: Uint8Array.from(await p.pdf({ preferCSSPageSize: true })),
+    useSystemFonts: false,
+  });
+  onTestFinished(() => loading.destroy());
+  const pdf = await loading.promise;
+  expect(pdf.numPages).toBe(2);
+  const first = await (await pdf.getPage(1)).getTextContent();
+  const second = await (await pdf.getPage(2)).getTextContent();
+  const text = (items: typeof first.items) => items.map((i) => ("str" in i ? i.str : "")).join(" ");
+  expect(text(first.items)).toContain("Starters");
+  expect(text(first.items)).not.toContain("Desserts");
+  expect(text(second.items)).toContain("Desserts");
 });

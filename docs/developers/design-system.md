@@ -6941,5 +6941,5 @@ The guest preview's A4 editor uses the same server renderer. Bistro balances two
 Lunch and wine gives dishes a wider column and the last section a narrow panel. Its saved scalar
 appearance has a draft scope under the preview, so Close and Escape ask before discarding edits.
 Logo, order and page breaks belong to the current captured publication. Preview A4 must be
-regenerated after a presentation edit; Print uses that captured HTML in an isolated frame and
+regenerated after a presentation edit; Print uses that captured HTML in a frame of its own and
 removes it after `afterprint`. Paper keeps a written declaration key or inline words and no popovers.
