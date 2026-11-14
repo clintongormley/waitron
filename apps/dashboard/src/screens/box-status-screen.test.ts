@@ -155,6 +155,46 @@ function deferred<T>() {
 }
 
 describe("dashboard-box-status-screen", () => {
+  it("shows the spare copy limit and receives freshness through the passive page refresh", async () => {
+    const spare = {
+      peerNodeId: "spare",
+      generation: "gen-1-main-20261114T120000Z",
+      state: "rebuilding" as const,
+      appliedTXID: null,
+      uploadedTXID: null,
+      lagMs: null,
+      lastAppliedAt: null,
+      clockAt: null,
+    };
+    const api = stubApi({
+      getBoxHealth: vi
+        .fn()
+        .mockResolvedValueOnce(health({ spare, stream: { state: "off", toSpare: true } }))
+        .mockResolvedValue(
+          health({
+            stream: { state: "off", toSpare: true },
+            spare: {
+              ...spare,
+              state: "following",
+              appliedTXID: "0000000000000002",
+              uploadedTXID: "0000000000000002",
+              lagMs: 0,
+              lastAppliedAt: "2026-11-14T12:00:00.000Z",
+            },
+          }),
+        ),
+    });
+    const { el } = await mount(api);
+    expect(q(el, "[data-test=row-bucket]")).toBeNull();
+    expect(text(q(el, "[data-test=row-spare]"))).toContain("Rebuilding the copy");
+    expect(text(q(el, "[data-test=row-spare]"))).toContain(
+      "Switching still uses the copy taken when this spare joined.",
+    );
+    api.liveData.refresh();
+    await flush(el);
+    expect(text(q(el, "[data-test=row-spare]"))).toContain("Up to date");
+  });
+
   it.each(["en", "es"] as const)(
     "explains exhausted cleanup without sending someone else to fix it (%s)",
     async (locale) => {

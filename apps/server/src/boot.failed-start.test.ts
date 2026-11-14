@@ -24,6 +24,7 @@ import { appendOnlyTriggerFaults } from "@waitron/store";
 import { tamperWatchJob } from "./append-only-watch.js";
 import { freeSpaceJob } from "./free-space-watch.js";
 import { startBoxEmailDuty } from "./box-alert-email.js";
+import { startSpareFollow } from "./spare-follow.js";
 import { runSpareSettings } from "./spare-settings.js";
 import { StreamHost } from "./stream-host.js";
 import { startServer, type StartedServer } from "./boot.js";
@@ -126,6 +127,17 @@ vi.mock("./free-space-watch.js", async (importOriginal) => {
 vi.mock("./box-alert-email.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./box-alert-email.js")>();
   return { ...actual, startBoxEmailDuty: vi.fn(actual.startBoxEmailDuty) };
+});
+
+vi.mock("./spare-follow.js", async (original) => {
+  const actual = await original<typeof import("./spare-follow.js")>();
+  return {
+    ...actual,
+    startSpareFollow: vi.fn((deps) => {
+      const duty = actual.startSpareFollow(deps);
+      return { ...duty, stop: vi.fn(() => duty.stop()) };
+    }),
+  };
 });
 
 vi.mock("./spare-settings.js", async (importOriginal) => {
@@ -902,6 +914,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
 
     await expect(startServer(env)).rejects.toBe(failure);
     expect(stop).toHaveBeenCalledOnce();
+    expect(vi.mocked(startSpareFollow).mock.results.at(-1)!.value.stop).toHaveBeenCalledOnce();
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 

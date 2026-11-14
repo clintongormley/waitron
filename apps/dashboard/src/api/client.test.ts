@@ -3331,3 +3331,31 @@ it("sends access-role lifecycle writes with their expected snapshots", async () 
     ["/management-api/access-roles/a%2Fb", "DELETE", undefined],
   ]);
 });
+
+it.each([
+  { lagMs: -1 },
+  { lagMs: NaN },
+  { appliedTXID: "oops" },
+  { state: ["following"] },
+  { clockAt: "bad" },
+])("keeps malformed spare facts unknown without losing box health: %j", async (patch) => {
+  const spare = {
+    peerNodeId: "spare",
+    generation: "gen-1-main-20261114T120000Z",
+    state: "following",
+    appliedTXID: "0000000000000001",
+    uploadedTXID: "0000000000000001",
+    lagMs: 0,
+    lastAppliedAt: "2026-11-14T12:00:00.000Z",
+    clockAt: "2026-11-14T12:00:00.000Z",
+    ...patch,
+  };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ sales: { lastAt: null }, spare }));
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  expect(await api.background.getBoxHealth()).toMatchObject({
+    sales: { lastAt: null },
+    spare: { state: "unknown", lagMs: null },
+  });
+  expect(active).not.toHaveBeenCalled();
+});

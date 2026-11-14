@@ -48,6 +48,11 @@ When nothing is wrong, each row says:
   send records to the tax agency says so instead.
 - **Bucket copy**: **Up to date**, and when the last upload was confirmed. It says **Not set up**
   when no copy is set up, and how many minutes behind the copy is when it falls behind.
+- **Spare box**: when your main box copies to a paired spare, this replaces **Bucket copy**.
+  It shows the measured delay in seconds and when the spare last applied an update.
+  **Rebuilding the copy** means the spare is restoring after a start; **Freshness unknown** means
+  the main box cannot confirm its progress. Open **Servers** to check the pair.
+  Switching still uses the copy taken when this spare joined.
 - **Printers**: **No problems reported**, and the names of the printers set up.
 - **Card readers**: **No problems reported**, and the names of the readers set up. A reader its
   card provider reports as offline shows here, as **“Bar” is offline.** While the bell or this page

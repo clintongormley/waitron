@@ -69,6 +69,7 @@ describe("POST /api/node/peer-status", () => {
   async function boxes(
     peerStanding: NodeStanding = "serving-secondary",
     joining?: boolean,
+    follow?: import("@waitron/stream").FollowProgress,
   ): Promise<Boxes> {
     const db = suite.db;
     await seedVenue(db, {
@@ -101,6 +102,7 @@ describe("POST /api/node/peer-status", () => {
         ring: RING,
         nodeId: self,
         ...(joining === undefined ? {} : { joining }),
+        ...(follow === undefined ? {} : { readFollow: () => follow }),
       },
       () => {},
     );
@@ -146,6 +148,36 @@ describe("POST /api/node/peer-status", () => {
         nonce: NONCE,
       },
     });
+  });
+
+  it("signs native follower facts without opening a private mirror read", async () => {
+    const follow = {
+      generation: "gen-4-main-20261114T120000Z",
+      state: "following" as const,
+      appliedTXID: "0000000000000001",
+      uploadedTXID: "0000000000000002",
+      lagMs: 1200,
+      lastAppliedAt: "2026-11-14T12:01:00.000Z",
+    };
+    const { app, self, peer, peerKey, selfKey } = await boxes(
+      "serving-secondary",
+      undefined,
+      follow,
+    );
+    const response = await ask(app, query({ nodeId: peer, privateKey: peerKey }));
+    const answer = (await response.json()) as SignedHandoverEnvelope<PeerStatusBody>;
+    expect(
+      verifyEnvelope<PeerStatusBody>(answer, "status", (id) =>
+        id === self ? nodeSigningPublicKey(selfKey) : undefined,
+      ),
+    ).toMatchObject({ valid: true, body: { follow } });
+    expect(
+      verifyEnvelope(
+        { ...answer, body: { ...answer.body, follow: { ...follow, lagMs: 0 } } },
+        "status",
+        (id) => (id === self ? nodeSigningPublicKey(selfKey) : undefined),
+      ),
+    ).toMatchObject({ valid: false });
   });
 
   it("the latch start's answer says it is joining, inside the signature", async () => {

@@ -5,7 +5,8 @@ import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
-export type PartId = "sales" | "tax" | "bucket" | "printers" | "readers" | "clock" | "disk";
+export type PartId =
+  "sales" | "tax" | "spare" | "bucket" | "printers" | "readers" | "clock" | "disk";
 export type PartState = "ok" | "attention" | "stopped";
 export interface PartRow {
   id: PartId;
@@ -26,6 +27,7 @@ const PART_ORDER: readonly PartId[] = [
   "sales",
   "tax",
   "bucket",
+  "spare",
   "printers",
   "readers",
   "clock",
@@ -36,6 +38,7 @@ const SCREENS: Readonly<Record<PartId, string | null>> = {
   sales: null,
   tax: null,
   bucket: "backup",
+  spare: "servers",
   printers: "printers",
   readers: "payments",
   clock: null,
@@ -73,7 +76,12 @@ export function boxStatusRows(
   health: BoxHealth,
   alerts: readonly AlertView[],
 ): { rows: PartRow[]; other: number; checksUnavailable: boolean } {
-  const parts = PART_ORDER.filter((id) => id !== "readers" || health.readers !== null);
+  const parts = PART_ORDER.filter(
+    (id) =>
+      (id !== "readers" || health.readers !== null) &&
+      (id !== "spare" || health.spare != null) &&
+      (id !== "bucket" || health.spare == null || health.stream.toSpare !== true),
+  );
   const noticesOn = new Map<PartId, Notice[]>(parts.map((id) => [id, []]));
   const alertsOn = new Map<PartId, AlertView[]>(parts.map((id) => [id, []]));
   let other = 0;
@@ -83,7 +91,9 @@ export function boxStatusRows(
     for (const id of on) noticesOn.get(id)!.push(notice);
   }
   for (const alert of alerts) {
-    const id = partOfAlert(alert);
+    const part = partOfAlert(alert);
+    const id =
+      part === "bucket" && health.spare != null && health.stream.toSpare === true ? "spare" : part;
     const list = id === null ? undefined : alertsOn.get(id);
     if (list === undefined) other += 1;
     else list.push(alert);
@@ -95,7 +105,13 @@ export function boxStatusRows(
     const state: PartState =
       stopped.length > 0
         ? "stopped"
-        : notices.length > 0 || rowAlerts.length > 0 || clockOff(id, health)
+        : notices.length > 0 ||
+            rowAlerts.length > 0 ||
+            (id === "spare" &&
+              (health.spare!.state !== "following" ||
+                health.spare!.lagMs === null ||
+                health.spare!.lagMs > 60000)) ||
+            clockOff(id, health)
           ? "attention"
           : "ok";
     return {
@@ -141,6 +157,14 @@ function factLine(id: PartId, health: BoxHealth, notices: readonly Notice[]): st
   switch (id) {
     case "tax":
       return taxLine(health, notices);
+    case "spare": {
+      const spare = health.spare!;
+      if (spare.state === "rebuilding") return t("box_status.spare.rebuilding");
+      if (spare.state !== "following" || spare.lagMs === null) return t("box_status.spare.unknown");
+      return spare.lagMs === 0 && spare.appliedTXID === spare.uploadedTXID
+        ? t("box_status.bucket.ok")
+        : fill("box_status.spare.behind", { seconds: String(Math.ceil(spare.lagMs / 1000)) });
+    }
     case "bucket":
       return bucketLine(health.stream);
     case "printers":
@@ -226,6 +250,15 @@ function detailsOf(id: PartId, health: BoxHealth): string[] {
           : fill("box_status.tax.last_accepted", {
               time: formatIsoMinute(health.outbox.lastAcceptedAt),
             }),
+      ];
+    case "spare":
+      return [
+        t("box_status.spare.switch_copy"),
+        ...(health.spare!.lastAppliedAt === null
+          ? []
+          : [
+              fill("box_status.spare.last", { time: formatIsoMinute(health.spare!.lastAppliedAt) }),
+            ]),
       ];
     case "bucket": {
       const last =

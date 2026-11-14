@@ -23,8 +23,10 @@ export async function verifyStreamKey(
   bucket: BucketConfig,
   generation: string,
   streamKey: string,
+  call?: StoreCall,
 ): Promise<void> {
   const client = createBucketClient(bucket);
+  const sent = { abortSignal: call?.signal };
   const prefix = bucketKey(bucket, generationPrefix(generation));
   try {
     let token: string | undefined;
@@ -35,6 +37,7 @@ export async function verifyStreamKey(
           Prefix: prefix,
           ContinuationToken: token,
         }),
+        sent,
       );
       const object = page.Contents?.find(
         ({ Key }) =>
@@ -53,6 +56,7 @@ export async function verifyStreamKey(
               .update(Buffer.from(streamKey, "base64"))
               .digest("base64"),
           }),
+          sent,
         );
         if (response.Body === undefined) throw new Error("IncompleteResponse");
         await response.Body.transformToByteArray();

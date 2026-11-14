@@ -94,6 +94,7 @@ import {
 } from "./spare-copy.js";
 import { placeFirstCopy } from "./spare-copy-placement.js";
 import { startStoreListener } from "./spare-pipe.js";
+import { startSpareFollow } from "./spare-follow.js";
 import { startSpareJoin } from "./spare-join.js";
 import { runSpareSettings } from "./spare-settings.js";
 import { finishPromotedRole } from "./promoted-role.js";
@@ -2813,8 +2814,32 @@ async function bootServer(
     },
     log,
   );
+  const readRecoveryKey = async (): Promise<string | undefined> =>
+    loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
   const peerDeps = { db, node: store.node, ring, nodeId: tradingContext.nodeId };
-  mountPeerStatusApi(app, peerDeps, log);
+  let readSendingStream = () => ({ state: "off" }) as import("@waitron/stream").StreamView;
+  const spareFollow =
+    isMirror || acceptingSales
+      ? startSpareFollow({
+          ...peerDeps,
+          stateDir: config.stateDir,
+          litestreamBin: config.litestreamBin,
+          mirror: isMirror,
+          ...(spareStore === undefined ? {} : { store: spareStore }),
+          readRecoveryKey,
+          now,
+          log,
+          readStream: () => readSendingStream(),
+          ...(seams.stream?.spawn === undefined ? {} : { spawn: seams.stream.spawn }),
+          ...(storeLookup === undefined ? {} : { lookup: storeLookup }),
+        })
+      : undefined;
+  undoOnFailure.push(async () => spareFollow?.stop());
+  mountPeerStatusApi(
+    app,
+    { ...peerDeps, followNow: now, readFollow: () => spareFollow?.progress() ?? null },
+    log,
+  );
   mountHandoverStatusApi(app, peerDeps, log);
   const handoverDestinationDuty = await startHandoverDestinationDuty({
     ...peerDeps,
@@ -3366,8 +3391,6 @@ async function bootServer(
   );
   // Filled by the supervisor's sweep and read by the backups alert source below.
   const backupOutcomes: BackupOutcomeHolder = { failed: new Map() };
-  const readRecoveryKey = async (): Promise<string | undefined> =>
-    loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
   const stagingTurn = createStagingTurn();
   const backupRoom = createBackupRoomHooks({
     db,
@@ -3481,6 +3504,7 @@ async function bootServer(
   await jobRunner.addService(
     streamService(streamHost, () => holders.singletonRole.current === "primary"),
   );
+  readSendingStream = () => streamHost.status();
   health.readStream = () => streamHost.status();
   // Only the one main box records its spare.
   const spareJoin = acceptingSales
@@ -3706,6 +3730,7 @@ async function bootServer(
       // Read through the supervisor, so box-status and the duty share one view.
       readBackup: () => backupSupervisor.status().then((s) => s.backupStatus),
       readStream: () => streamHost.status(),
+      readSpare: () => spareFollow?.status() ?? Promise.resolve(null),
       // The same holders the read-only gate and the duty loop read, so the status matches what the
       // box enforces and tracks a live promotion.
       readMode: () => holders.mode.current,
@@ -3749,6 +3774,7 @@ async function bootServer(
             log: pageNoticeLog,
           },
           stream: () => streamHost.status(),
+          spare: () => spareFollow?.status() ?? Promise.resolve(null),
           ...(fiscalOutbox === undefined
             ? {}
             : {
@@ -4516,6 +4542,7 @@ async function bootServer(
     spareStore,
     spareJoin,
     spareSettings,
+    spareFollow,
   });
   const started = makeStartedServer(
     server,

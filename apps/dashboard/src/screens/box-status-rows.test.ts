@@ -603,3 +603,73 @@ describe("the Clock row's comparison with the tax agency", () => {
     expect(row(rows, "clock").details).toEqual([compared()]);
   });
 });
+
+describe("spare copy row", () => {
+  const spare = {
+    peerNodeId: "spare",
+    generation: "gen-1-main-20261114T120000Z",
+    state: "following" as const,
+    appliedTXID: "0000000000000002",
+    uploadedTXID: "0000000000000002",
+    lagMs: 0,
+    lastAppliedAt: UPLOADED,
+    clockAt: UPLOADED,
+  };
+  it("replaces the to-spare bucket with measured seconds, last applied and the join-copy switching limit", () => {
+    const result = boxStatusRows(
+      quietHealth({ stream: { state: "off", toSpare: true }, spare: { ...spare, lagMs: 2300 } }),
+      [],
+    );
+    const copy = row(result.rows, "spare");
+    expect(result.rows.some((r) => r.id === "bucket")).toBe(false);
+    expect(copy.line).toBe("3 s behind");
+    expect(copy.details).toContain(`Last copy received ${formatIsoMinute(UPLOADED)}`);
+    expect(copy.details).toContain("Switching still uses the copy taken when this spare joined.");
+    expect(copy.screen).toBe("servers");
+  });
+  it("keeps rebuilding and unknown separate from a quiet caught-up copy", () => {
+    expect(row(boxStatusRows(quietHealth({ spare }), []).rows, "spare").line).toBe("Up to date");
+    expect(
+      row(
+        boxStatusRows(quietHealth({ spare: { ...spare, state: "rebuilding", lagMs: null } }), [])
+          .rows,
+        "spare",
+      ).line,
+    ).toBe("Rebuilding the copy");
+    expect(
+      row(
+        boxStatusRows(quietHealth({ spare: { ...spare, state: "unknown", lagMs: null } }), []).rows,
+        "spare",
+      ).line,
+    ).toBe("Freshness unknown");
+    expect(boxStatusRows(quietHealth({ spare: null }), []).rows.some((r) => r.id === "spare")).toBe(
+      false,
+    );
+  });
+  it("never calls a trailing applied position current even at zero observed delay, and moves to-spare alerts to its row", () => {
+    const result = boxStatusRows(
+      quietHealth({
+        stream: { state: "off", toSpare: true },
+        spare: { ...spare, appliedTXID: "0000000000000001" },
+      }),
+      [alert("backup.stream_behind", "backup")],
+    );
+    const copy = row(result.rows, "spare");
+    expect(copy.line).not.toBe("Up to date");
+    expect(copy.alerts).toHaveLength(1);
+  });
+  it("keeps an actual bucket copy row beside a paired spare", () => {
+    const rows = boxStatusRows(quietHealth({ spare }), []).rows;
+    expect(rows.some((r) => r.id === "bucket")).toBe(true);
+    expect(rows.some((r) => r.id === "spare")).toBe(true);
+  });
+  it.each([
+    [3000, "ok"],
+    [60000, "ok"],
+    [60001, "attention"],
+  ] as const)("shows measured delay %d without an early amber warning", (lagMs, state) => {
+    expect(
+      row(boxStatusRows(quietHealth({ spare: { ...spare, lagMs } }), []).rows, "spare").state,
+    ).toBe(state);
+  });
+});

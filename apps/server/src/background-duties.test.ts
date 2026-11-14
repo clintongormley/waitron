@@ -316,3 +316,15 @@ describe("spare join shutdown", () => {
     expect(duties.closers.map((closer) => closer.name)).not.toContain("spareJoin");
   });
 });
+
+it("stops an owned follower once through the stepdown and shutdown table", async () => {
+  const calls: string[] = [];
+  const duties = backgroundDuties(
+    recordingHandles(calls, { spareFollow: { stop: () => void calls.push("stop follower") } }),
+  );
+  const closer = duties.closers.find((item) => item.name === "spareFollow");
+  expect(closer?.atStepdown).toBe(true);
+  await closer!.close();
+  await stopBackgroundDuties(duties);
+  expect(calls.filter((call) => call === "stop follower")).toEqual(["stop follower"]);
+});

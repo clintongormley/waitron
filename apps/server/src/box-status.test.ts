@@ -16,6 +16,20 @@ const base: BoxStatusReaders = {
 };
 
 describe("collectBoxStatus", () => {
+  it("includes the cached spare view separately from the sending stream", async () => {
+    const spare = {
+      peerNodeId: "spare",
+      generation: null,
+      state: "unknown" as const,
+      appliedTXID: null,
+      uploadedTXID: null,
+      lagMs: null,
+      lastAppliedAt: null,
+      clockAt: null,
+    };
+    expect((await collectBoxStatus({ ...base, spare: async () => spare })).spare).toEqual(spare);
+  });
+
   it("composes every field with cert available and backup N-A", async () => {
     const status = await collectBoxStatus(base);
     expect(status).toEqual({

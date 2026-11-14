@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect } from "vitest";
+import { SPARE_FOLLOW_DIR } from "@waitron/store";
 import { readPairLink } from "@waitron/node-db";
 import { BOX_HOSTNAME, ownContactUrl } from "../box-name.js";
 import type { StreamHostDeps } from "../stream-host.js";
@@ -56,10 +57,12 @@ const HEALTH_MS = POLL_TRIES * POLL_INTERVAL_MS;
 // The two adopt requests, two sign-ins and closing three servers and C's store have no limits of
 // their own.
 const SPARE_UNTIMED_MS = 30_000;
-// B and C start side by side under one BOOT_MS; B restarts once more for the start check. C's
+// B and C start side by side under one BOOT_MS; B restarts for the start check and C after its
+// followed copy is inspected with the follower stopped. C's
 // restarts during the join happen inside the link, copy and mirror waits, which bound them.
 export const STREAM_LOOP_SPARE_MS =
-  2 * BOOT_MS +
+  3 * BOOT_MS +
+  2 * STREAM_WAIT_MS +
   2 * HEALTH_MS +
   STREAM_WAIT_MS +
   LINK_WAIT_MS +
@@ -146,7 +149,7 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
         WAITRON_SPARE_STORE_PORT: String(storeC),
         WAITRON_SPARE_STORE_LOOPBACK_PORT: String(storeLoopbackC),
       },
-      {},
+      { stream: { ...input.serverSeams } },
     );
     boxes.push(boxC);
     const logAtStart = logSoFar().length;
@@ -228,6 +231,81 @@ async function runCaptured(input: LoopSpareInput, log: readonly string[]): Promi
     expect(fiscalRowsIn(dirsB.venue)).toEqual(fiscalAtJoin);
     expect(await preparationIn(dirsB.state)).toBe(preparationB);
     expect(await preparationIn(dirsC.state)).toBeNull();
+
+    let observedPosition = "";
+    const readSpare = async () => {
+      const response = await fetch(`${urlB}/api/box/health`, {
+        ...viaB,
+        headers: { ...managing, "x-waitron-live": "1" },
+      });
+      expect(response.status).toBe(200);
+      const view = (await response.json()) as {
+        stream: unknown;
+        spare?: {
+          state: string;
+          appliedTXID: string | null;
+          uploadedTXID: string | null;
+          lagMs: number | null;
+        };
+      };
+      const position = JSON.stringify([
+        view.spare?.state,
+        view.spare?.appliedTXID,
+        view.spare?.uploadedTXID,
+      ]);
+      if (position !== observedPosition)
+        console.log(
+          `follower observation ${JSON.stringify({ stream: view.stream, spare: view.spare })}`,
+        );
+      observedPosition = position;
+      return view.spare;
+    };
+    const initial = await wait("C's follower to catch up", STREAM_WAIT_MS, async () => {
+      const copy = await readSpare();
+      return copy?.state === "following" &&
+        copy.appliedTXID !== null &&
+        copy.appliedTXID === copy.uploadedTXID
+        ? copy
+        : undefined;
+    });
+    const detailsResponse = await fetch(`${urlB}/management-api/venue-details`, {
+      ...viaB,
+      headers: managing,
+    });
+    const details = (await detailsResponse.json()) as { details: Record<string, unknown> };
+    const changedName = "Followed dining room";
+    const changed = await fetch(`${urlB}/management-api/venue-details`, {
+      ...viaB,
+      method: "PATCH",
+      headers: { ...managing, "content-type": "application/json" },
+      body: JSON.stringify({ expected: details.details, changes: { name: changedName } }),
+    });
+    expect(changed.status, await changed.text()).toBe(200);
+    await wait("C to apply the post-join update", STREAM_WAIT_MS, async () => {
+      const copy = await readSpare();
+      return copy?.state === "following" &&
+        copy.appliedTXID! > initial.appliedTXID! &&
+        copy.appliedTXID === copy.uploadedTXID
+        ? copy
+        : undefined;
+    });
+    await boxC.stopForRestart();
+    const nameSql =
+      "select json_extract(doc, '$.name') as name from settings where module = 'venue'";
+    expect(firstRowIn(join(dirsC.state, SPARE_FOLLOW_DIR), nameSql)).toEqual({
+      name: changedName,
+    });
+    expect(firstRowIn(dirsC.venue, nameSql)).toEqual({ name: details.details.name });
+    expect(fiscalRowsIn(dirsC.venue)).toEqual(fiscalAtJoin);
+    expect(fiscalRowsIn(dirsB.venue)).toEqual(fiscalAtJoin);
+    await boundedStart(boxC.start(), "C's fresh follower start");
+    await waitForMirrorStart(wait, dirsC.state, urlC, viaB);
+    const mirrorHealth = await fetch(`${urlC}/health`, viaB);
+    const mirrorHealthBody = await mirrorHealth.json();
+    console.log(
+      `restarted spare health ${JSON.stringify({ status: mirrorHealth.status, body: mirrorHealthBody })}`,
+    );
+    expect([200, 503]).toContain(mirrorHealth.status);
 
     begin("start-check");
     const logAtCheck = logSoFar().length;

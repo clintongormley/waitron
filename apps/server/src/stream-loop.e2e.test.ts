@@ -113,6 +113,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       s3 = server;
       const events: StreamLoopEvent[] = [];
       // Which box's `replicate` children the seam was told of.
+      const following: Array<{ pid: number; startTime: string | null }> = [];
       const replicating: Array<{ box: string; pid: number; startTime: string | null }> = [];
       running = runUnderPlan({ bucket: server.bucket, apis: LOOP_APIS, prefixes: ["loop/"] }, () =>
         runStreamLoopScenario({
@@ -138,6 +139,10 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
           },
           serverSeams: {
             spawn: trackedSpawn((pid, args) => {
+              if (args[0] === "restore" && args.includes("-f")) {
+                following.push({ pid, startTime: processStartTime(pid) });
+                console.log(`native follower child ${pid}`);
+              }
               if (args[0] !== "replicate") return;
               const box = /[/\\](box-[ab])[/\\]/.exec(args.at(-1) ?? "")?.[1] ?? "unknown";
               replicating.push({ box, pid, startTime: processStartTime(pid) });
@@ -153,6 +158,9 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       // The scenario's closes stopped every Litestream it started.
       expect(replicating.every(({ startTime }) => startTime !== null)).toBe(true);
       expect(await stillRunning(replicating)).toEqual([]);
+      expect(following.length).toBeGreaterThan(0);
+      expect(following.every(({ startTime }) => startTime !== null)).toBe(true);
+      expect(await stillRunning(following)).toEqual([]);
     },
     LOOP_TIMEOUT_MS,
   );

@@ -37,6 +37,7 @@ export const FLOWS_DIR = "flows";
 export const SETUP_FLOW_DIR = "flows/setup";
 export const RESTORE_FLOW_DIR = "flows/restore";
 export const SCRATCH_DIR = "scratch";
+export const SPARE_FOLLOW_DIR = `${SCRATCH_DIR}/spare-follow`;
 export const RESTORE_STAGING_DIR = "scratch/restore";
 export const BACKUP_STAGING_DIR = "scratch/backup";
 export const STREAM_RESTORE_PREFIX = "stream-restore-";

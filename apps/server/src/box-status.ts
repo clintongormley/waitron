@@ -8,6 +8,7 @@ import {
   type SingletonRole,
 } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
+import type { SpareFollowView } from "./spare-follow.js";
 import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
 import { readCertExpiry, type CertExpiry } from "./cert-expiry.js";
@@ -32,6 +33,7 @@ export type BoxStatus = {
   singletonRole: SingletonRole;
   backup: BackupStatus;
   stream: StreamView;
+  spare?: SpareFollowView | null;
   duties: Record<string, unknown>;
   jobs: Readonly<Record<string, JobView>>;
 };
@@ -46,6 +48,7 @@ export type BoxStatusReaders = {
   singletonRole: () => Promise<SingletonRole>;
   backup: (() => Promise<BackupStatus>) | undefined;
   stream: () => StreamView;
+  spare?: () => Promise<SpareFollowView | null>;
   duties: () => Record<string, unknown>;
   jobs: () => Readonly<Record<string, JobView>>;
 };
@@ -85,6 +88,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     singletonRole,
     backup,
     stream: readers.stream(),
+    ...(readers.spare === undefined ? {} : { spare: await readers.spare() }),
     duties: readers.duties(),
     jobs: readers.jobs(),
   };
@@ -99,6 +103,7 @@ export type BoxStatusDeps = {
   tlsCertPath: string | undefined;
   readBackup: (() => Promise<BackupStatus>) | undefined;
   readStream: () => StreamView;
+  readSpare?: () => Promise<SpareFollowView | null>;
   readMode: () => DeploymentMode;
   readJobs: () => Readonly<Record<string, JobView>>;
   readSingletonRole: () => SingletonRole;
@@ -137,6 +142,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         chain: async () => chain,
         backup: deps.readBackup,
         stream: deps.readStream,
+        ...(deps.readSpare === undefined ? {} : { spare: deps.readSpare }),
         jobs: deps.readJobs,
         duties: () =>
           healthSnapshot(deps.health, deps.now()).body.duties as Record<string, unknown>,

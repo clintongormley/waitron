@@ -1874,6 +1874,65 @@ export interface BoxNetwork {
   wifi: { connectedSsidHex: string | null; savedSsidHex: string | null };
 }
 
+/** Cached, signed follower facts from the main box's paired spare. */
+export interface SpareFollowView {
+  peerNodeId: string;
+  generation: string | null;
+  state: "rebuilding" | "following" | "unknown";
+  appliedTXID: string | null;
+  uploadedTXID: string | null;
+  lagMs: number | null;
+  lastAppliedAt: string | null;
+  clockAt: string | null;
+}
+
+function spareFollowView(value: unknown): SpareFollowView | null {
+  if (value === undefined || value === null) return null;
+  const v =
+    typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  const unknown: SpareFollowView = {
+    peerNodeId: typeof v.peerNodeId === "string" ? v.peerNodeId : "",
+    generation: null,
+    state: "unknown",
+    appliedTXID: null,
+    uploadedTXID: null,
+    lagMs: null,
+    lastAppliedAt: null,
+    clockAt: null,
+  };
+  const txid = (x: unknown) => x === null || (typeof x === "string" && /^[0-9a-f]{16}$/.test(x));
+  const date = (x: unknown) =>
+    x === null ||
+    (typeof x === "string" && Number.isFinite(Date.parse(x)) && new Date(x).toISOString() === x);
+  if (
+    typeof v.peerNodeId !== "string" ||
+    v.peerNodeId === "" ||
+    !(
+      v.generation === null ||
+      (typeof v.generation === "string" &&
+        /^gen-(0|[1-9][0-9]*)-[A-Za-z0-9][A-Za-z0-9-]*-[0-9]{8}T[0-9]{6}Z$/.test(v.generation))
+    ) ||
+    typeof v.state !== "string" ||
+    !["following", "rebuilding", "unknown"].includes(v.state) ||
+    !txid(v.appliedTXID) ||
+    !txid(v.uploadedTXID) ||
+    !date(v.lastAppliedAt) ||
+    !date(v.clockAt) ||
+    !(
+      v.lagMs === null ||
+      (typeof v.lagMs === "number" && Number.isFinite(v.lagMs) && v.lagMs >= 0)
+    ) ||
+    (v.state === "following" &&
+      (typeof v.appliedTXID !== "string" ||
+        typeof v.uploadedTXID !== "string" ||
+        v.appliedTXID > v.uploadedTXID ||
+        v.lagMs === null ||
+        v.generation === null))
+  )
+    return unknown;
+  return value as SpareFollowView;
+}
+
 /** LOCAL copy of the server's `BoxHealth` (`apps/server/src/box-health.ts`). */
 export interface BoxHealth {
   at: string;
@@ -1889,6 +1948,7 @@ export interface BoxHealth {
   filing: boolean;
   outbox: { lastAcceptedAt: string | null; waiting: number; awaitingCertificate: boolean } | null;
   stream: StreamStatusView;
+  spare?: SpareFollowView | null;
   clock: {
     authority:
       { state: "unknown" } | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
@@ -2011,8 +2071,9 @@ export interface StreamSupervisorStatus {
 
 /** LOCAL copy of `@waitron/stream`'s `StreamView`: a supervisor's status; a copy whose
  * settings are stored but that has no supervisor, with why; or plain off. */
-export type StreamStatusView =
-  StreamSupervisorStatus | { state: "off"; reason: string; stateSince: string } | { state: "off" };
+export type StreamStatusView = (
+  StreamSupervisorStatus | { state: "off"; reason: string; stateSince: string } | { state: "off" }
+) & { toSpare?: true };
 
 /** LOCAL copy of `LoadFailureDetail` (`apps/server/src/backup-settings-evidence.ts`). */
 export type BackupLoadFailureDetail = { reason: string } | { keyVersion: number } | { min: number };
@@ -4842,8 +4903,11 @@ export class DashboardApi {
     return this.#request<BoxNetwork>("/api/box/network", "GET");
   }
 
-  getBoxHealth(): Promise<BoxHealth> {
-    return this.#request<BoxHealth>("/api/box/health", "GET");
+  async getBoxHealth(): Promise<BoxHealth> {
+    const health = await this.#request<BoxHealth>("/api/box/health", "GET");
+    return health.spare === undefined
+      ? health
+      : { ...health, spare: spareFollowView(health.spare) };
   }
 
   clockChallenge(): Promise<ClockChallengeView> {
