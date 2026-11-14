@@ -37,7 +37,11 @@ describe("renameTaxpayer", () => {
 
   it("writes nothing when the stored name is not the one expected", async () => {
     const result = await withTransaction(suite.db, (tx) =>
-      renameTaxpayer(tx, { personId: null, expected: "Someone Else SL", legalName: "Deli Nueva SL" }),
+      renameTaxpayer(tx, {
+        personId: null,
+        expected: "Someone Else SL",
+        legalName: "Deli Nueva SL",
+      }),
     );
 
     expect(result).toEqual({ renamed: false });
@@ -46,11 +50,21 @@ describe("renameTaxpayer", () => {
 });
 
 it("records the old and new legal name with the actor", async () => {
-  await suite.db.insert(taxpayer).values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Old SL" });
-  await withTransaction(suite.db, (tx) => renameTaxpayer(tx, { expected: "Old SL", legalName: "New SL", personId: null }));
+  await suite.db
+    .insert(taxpayer)
+    .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Old SL" });
+  await withTransaction(suite.db, (tx) =>
+    renameTaxpayer(tx, { expected: "Old SL", legalName: "New SL", personId: null }),
+  );
   const entries = await readActivityForSubject(suite.db, { kind: "taxpayer", id: "1" });
   expect(entries).toHaveLength(1);
-  expect(entries[0]).toMatchObject({ kind: "taxpayer.legal_name_changed", personId: null, data: { from: "Old SL", to: "New SL" } });
-  await withTransaction(suite.db, (tx) => renameTaxpayer(tx, { expected: "Old SL", legalName: "Other SL", personId: null }));
+  expect(entries[0]).toMatchObject({
+    kind: "taxpayer.legal_name_changed",
+    personId: null,
+    data: { from: "Old SL", to: "New SL" },
+  });
+  await withTransaction(suite.db, (tx) =>
+    renameTaxpayer(tx, { expected: "Old SL", legalName: "Other SL", personId: null }),
+  );
   expect(await readActivityForSubject(suite.db, { kind: "taxpayer", id: "1" })).toEqual(entries);
 });

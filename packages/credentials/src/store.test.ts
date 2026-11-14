@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { readActivityForSubject, CORE_MIGRATIONS, withTransaction, venueCredentials } from "@waitron/db";
+import {
+  readActivityForSubject,
+  CORE_MIGRATIONS,
+  withTransaction,
+  venueCredentials,
+} from "@waitron/db";
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
@@ -41,7 +46,11 @@ beforeEach(async () => {
 describe("the seal binds each credential to its purpose", () => {
   it("round-trips a credential through the seal and the store", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE });
+      await putCredential(tx, RING_V1, {
+        personId: null,
+        purpose: "payments.stripe",
+        value: STRIPE,
+      });
     });
     const actual = await withTransaction(suite.db, async (tx) => {
       return getCredential(tx, RING_V1, { purpose: "payments.stripe" });
@@ -131,7 +140,11 @@ describe("putCredential and getCredential", () => {
 
   it("stamps the ring's current key version", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V2_ONLY, { personId: null, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V2_ONLY, {
+        personId: null,
+        purpose: "payments.stripe",
+        value: STRIPE,
+      }),
     );
     const rows = await suite.db.execute<{ key_version: number }>(sql`
       select key_version from venue_credentials`);
@@ -181,7 +194,8 @@ describe("putCredential and getCredential", () => {
     // validated before the insert or after it.
     const n = await withTransaction(suite.db, async (tx) => {
       const error = await captured(() =>
-        putCredential(tx, RING_V1, { personId: null,
+        putCredential(tx, RING_V1, {
+          personId: null,
           purpose: "payments.stripe",
           value: { secretKey: "sk_test_x" },
         }),
@@ -241,7 +255,8 @@ describe("putCredential and getCredential", () => {
       WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
     });
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, both, { personId: null,
+      putCredential(tx, both, {
+        personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),
@@ -447,13 +462,34 @@ describe("readCredentialMeta", () => {
 });
 
 it("records credential saves and removals with only their key version", async () => {
-  await withTransaction(suite.db, (tx) => putCredential(tx, RING_V2_ONLY, { purpose: "email.smtp", value: { url: "smtp://synthetic-secret" }, personId: null }));
-  expect(await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: "email.smtp", personId: null }))).toBe(true);
-  expect(await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: "email.smtp", personId: null }))).toBe(false);
+  await withTransaction(suite.db, (tx) =>
+    putCredential(tx, RING_V2_ONLY, {
+      purpose: "email.smtp",
+      value: { url: "smtp://synthetic-secret" },
+      personId: null,
+    }),
+  );
+  expect(
+    await withTransaction(suite.db, (tx) =>
+      deleteCredential(tx, { purpose: "email.smtp", personId: null }),
+    ),
+  ).toBe(true);
+  expect(
+    await withTransaction(suite.db, (tx) =>
+      deleteCredential(tx, { purpose: "email.smtp", personId: null }),
+    ),
+  ).toBe(false);
   const entries = await readActivityForSubject(suite.db, { kind: "credential", id: "email.smtp" });
-  expect(entries.map(({ kind, personId, subjectId, data }) => ({ kind, personId, subjectId, data }))).toEqual([
+  expect(
+    entries.map(({ kind, personId, subjectId, data }) => ({ kind, personId, subjectId, data })),
+  ).toEqual([
     { kind: "credentials.saved", subjectId: "email.smtp", personId: null, data: { keyVersion: 2 } },
-    { kind: "credentials.removed", subjectId: "email.smtp", personId: null, data: { keyVersion: 2 } },
+    {
+      kind: "credentials.removed",
+      subjectId: "email.smtp",
+      personId: null,
+      data: { keyVersion: 2 },
+    },
   ]);
   expect(JSON.stringify(entries)).not.toContain("smtp://synthetic-secret");
 });

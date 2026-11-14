@@ -333,7 +333,8 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         `https://127.0.0.1:${port}`,
       );
       await withTransaction(seeding.venue, (tx) =>
-        putCredential(tx, ring, { personId: null,
+        putCredential(tx, ring, {
+          personId: null,
           purpose: "backup.stream",
           value: streamSettingsPayload({ bucket }),
         }),

@@ -803,7 +803,9 @@ it("subscribes the venue defaults to the clock document, venue document and menu
 
 it("subscribes the venue's privacy contact to its venue settings document alone", () => {
   const api = new DashboardApi("", async () => new Response("{}"));
-  expect(dashboardQuery(api, "getVenuePrivacy", []).dependencies).toEqual([{ type: "settings.venue" }]);
+  expect(dashboardQuery(api, "getVenuePrivacy", []).dependencies).toEqual([
+    { type: "settings.venue" },
+  ]);
 });
 
 it.each([

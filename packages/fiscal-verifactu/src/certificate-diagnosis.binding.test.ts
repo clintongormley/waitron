@@ -25,7 +25,11 @@ describe("certificate evidence association", () => {
     async (association) => {
       const f = await parentFixture(suite.db, false);
       await withTransaction(suite.db, async (tx) => {
-        await putCredential(tx, f.deps.ring, { personId: null, purpose: "fiscal.aeat", value: material() });
+        await putCredential(tx, f.deps.ring, {
+          personId: null,
+          purpose: "fiscal.aeat",
+          value: material(),
+        });
         if (association !== "no-install")
           await recordInstall(tx, {
             nodeId: association === "other-node" ? TENANT_A.nodeId2 : TENANT_A.nodeId,
@@ -69,7 +73,8 @@ describe("certificate evidence association", () => {
         const output = await f.deps.runChild(input, signal);
         await withTransaction(suite.db, async (tx) => {
           if (change !== "new-install")
-            await putCredential(tx, f.deps.ring, { personId: null,
+            await putCredential(tx, f.deps.ring, {
+              personId: null,
               purpose: "fiscal.aeat",
               value: material(change === "replace" ? candidate : installed),
             });
@@ -95,7 +100,8 @@ describe("certificate evidence association", () => {
   it("rejects replacement before start without running native work", async () => {
     const f = await parentFixture(suite.db);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, f.deps.ring, { personId: null,
+      putCredential(tx, f.deps.ring, {
+        personId: null,
         purpose: "fiscal.aeat",
         value: material(candidate, "representante"),
       }),

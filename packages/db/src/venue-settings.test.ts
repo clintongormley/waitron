@@ -48,8 +48,8 @@ describe("the venue document", () => {
       contentLanguages: null,
       defaultContentLanguage: null,
       holidayArea: null,
-  privacyNoticeUrl: null,
-  privacyEmail: null,
+      privacyNoticeUrl: null,
+      privacyEmail: null,
     });
     expect(api.VENUE_SETTINGS.parse(api.VENUE_SETTINGS.defaults())).toEqual({
       ok: false,
@@ -74,13 +74,22 @@ describe("the venue document", () => {
     });
   });
 
-  it.each(["privacyNoticeUrl", "privacyEmail"] as const)("checks the required privacy field %s", (field) => {
-    for (const value of [undefined, 42, "invalid", ""]) {
-      expect(api.VENUE_SETTINGS.parse({ ...doc, [field]: value })).toEqual({ ok: false, field });
-    }
-    const privacy = { privacyNoticeUrl: "https://example.test/privacy", privacyEmail: "privacy@example.test" };
-    expect(api.VENUE_SETTINGS.parse({ ...doc, ...privacy })).toEqual({ ok: true, doc: { ...doc, ...privacy } });
-  });
+  it.each(["privacyNoticeUrl", "privacyEmail"] as const)(
+    "checks the required privacy field %s",
+    (field) => {
+      for (const value of [undefined, 42, "invalid", ""]) {
+        expect(api.VENUE_SETTINGS.parse({ ...doc, [field]: value })).toEqual({ ok: false, field });
+      }
+      const privacy = {
+        privacyNoticeUrl: "https://example.test/privacy",
+        privacyEmail: "privacy@example.test",
+      };
+      expect(api.VENUE_SETTINGS.parse({ ...doc, ...privacy })).toEqual({
+        ok: true,
+        doc: { ...doc, ...privacy },
+      });
+    },
+  );
 
   it.each([[], ["es", "ca", "en"], ["es", "es"], [""], "es"].map((value) => [value]))(
     "refuses invalid receipt languages %j",
@@ -245,8 +254,8 @@ describe("the venue document", () => {
         contentLanguages: null,
         defaultContentLanguage: null,
         holidayArea: null,
-          privacyNoticeUrl: null,
-          privacyEmail: null,
+        privacyNoticeUrl: null,
+        privacyEmail: null,
       },
       revision: 1,
     });

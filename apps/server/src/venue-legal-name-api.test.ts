@@ -74,7 +74,13 @@ describe("changing the taxpayer's legal name", () => {
     expect(await taxpayerRow()).toEqual({ ...before, legalName: "Deli Nueva SL" });
     const entries = await readActivityForSubject(suite.db, { kind: "taxpayer", id: "1" });
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ kind: "taxpayer.legal_name_changed", personId: suite.db.all<{ id: string }>(sql`select id from persons where display_name = 'The Manager'`)[0]!.id, data: { from: original, to: "Deli Nueva SL" } });
+    expect(entries[0]).toMatchObject({
+      kind: "taxpayer.legal_name_changed",
+      personId: suite.db.all<{ id: string }>(
+        sql`select id from persons where display_name = 'The Manager'`,
+      )[0]!.id,
+      data: { from: original, to: "Deli Nueva SL" },
+    });
   });
 
   it("refuses a stale expected name and writes nothing", async () => {

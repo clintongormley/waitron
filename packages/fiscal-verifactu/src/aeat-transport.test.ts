@@ -50,7 +50,8 @@ afterAll(async () => {
 
 async function provision(certKind: string): Promise<void> {
   await withTransaction(suite.db, (tx) =>
-    putCredential(tx, ring, { personId: null,
+    putCredential(tx, ring, {
+      personId: null,
       purpose: "fiscal.aeat",
       value: {
         pfxBase64: material.clientPfx.toString("base64"),

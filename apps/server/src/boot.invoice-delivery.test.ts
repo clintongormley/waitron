@@ -532,10 +532,14 @@ describe("invoice email worker at trading boot", () => {
   it("sends the invoice customers' privacy notice in the text, read from the stored values", async () => {
     const ctx = await fixture();
     await withTransaction(suite.db, async (tx) => {
-      await savePrivacyContact(tx, {
-        privacyNoticeUrl: "https://example.com/privacy",
-        privacyEmail: "privacy@example.com",
-      }, null);
+      await savePrivacyContact(
+        tx,
+        {
+          privacyNoticeUrl: "https://example.com/privacy",
+          privacyEmail: "privacy@example.com",
+        },
+        null,
+      );
     });
     const [taxpayerRow] = await suite.db.select({ legalName: taxpayer.legalName }).from(taxpayer);
     const smtp = await smtpFixture();

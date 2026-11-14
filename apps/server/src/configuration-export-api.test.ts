@@ -333,25 +333,31 @@ describe("configuration export API", () => {
     const archiveSecret = "archive-secret-for-export-0123456789";
     const bucket = { region: "eu-west-1", bucket: "venue-copy", prefix: "", accessKeyId: "AKIAX" };
     await withTransaction(suite.db, async (tx) => {
-      await putCredential(tx, ring, { personId: null,
+      await putCredential(tx, ring, {
+        personId: null,
         purpose: STREAM_PURPOSE,
         value: streamSettingsPayload({
           bucket: { ...bucket, secretAccessKey: originalStreamSecret },
         }),
       });
-      await writeArchiveSettings(tx, ring, {
-        enabled: true,
-        destinations: [
-          {
-            kind: "s3",
-            id: "bucket",
-            bucket: { ...bucket, bucket: "archives", secretAccessKey: archiveSecret },
-          },
-        ],
-        schedule: { kind: "interval", ms: 3_600_000 },
-        retention: { count: 7, days: 30 },
-        destinationTimeoutMs: 900_000,
-      }, null);
+      await writeArchiveSettings(
+        tx,
+        ring,
+        {
+          enabled: true,
+          destinations: [
+            {
+              kind: "s3",
+              id: "bucket",
+              bucket: { ...bucket, bucket: "archives", secretAccessKey: archiveSecret },
+            },
+          ],
+          schedule: { kind: "interval", ms: 3_600_000 },
+          retention: { count: 7, days: 30 },
+          destinationTimeoutMs: 900_000,
+        },
+        null,
+      );
     });
     const sealed = await suite.db.execute<{ blob: Uint8Array }>(sql`
       select ciphertext as blob from venue_credentials

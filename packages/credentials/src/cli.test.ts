@@ -515,7 +515,8 @@ describe("unknown commands", () => {
 it.each(["set", "delete"])("refuses SMTP %s and keeps the vault unchanged", async (command) => {
   if (command === "delete")
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, { personId: null,
+      putCredential(tx, RING, {
+        personId: null,
         purpose: "email.smtp",
         value: { url: "smtp://old.example.test:587" },
       }),

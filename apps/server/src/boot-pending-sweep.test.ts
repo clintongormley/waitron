@@ -447,7 +447,8 @@ describe("connectedCardProviderSweep", () => {
   it("sweeps a pooled provider only when the taxpayer has its sealed credential (negative control: none → not swept)", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, { personId: null,
+      putCredential(tx, ring, {
+        personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_x",

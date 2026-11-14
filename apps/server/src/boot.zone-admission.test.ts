@@ -711,7 +711,8 @@ describe("startup zone admission", () => {
         externalRef: reference,
         amount: decimal("12.10"),
       });
-      await putCredential(tx, loadKeyRing(env), { personId: null,
+      await putCredential(tx, loadKeyRing(env), {
+        personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_synthetic_zone",

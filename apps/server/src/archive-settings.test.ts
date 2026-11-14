@@ -563,8 +563,12 @@ describe("stored archive settings", () => {
   });
 
   it("mints a new revision on every write and reads back the latest", async () => {
-    const first = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
-    const second = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
+    const first = await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(tx, ring, input, null),
+    );
+    const second = await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(tx, ring, input, null),
+    );
     expect(second.revision).not.toBe(first.revision);
     expect(second).toEqual({ ...input, revision: second.revision });
     expect(await readArchiveSettings(suite.db, ring)).toEqual(second);
@@ -580,9 +584,12 @@ describe("stored archive settings", () => {
   });
 
   it("refuses a tampered stored record with the domain code", async () => {
-    const written = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
+    const written = await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(tx, ring, input, null),
+    );
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, { personId: null,
+      putCredential(tx, ring, {
+        personId: null,
         purpose: ARCHIVE_PURPOSE,
         value: { settings: JSON.stringify({ ...written, enabled: 1 }) },
       }),
@@ -598,7 +605,9 @@ describe("stored archive settings", () => {
       meta: null,
       settings: null,
     });
-    const written = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
+    const written = await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(tx, ring, input, null),
+    );
     const read = await readArchiveSettingsWithMeta(suite.db, ring);
     expect(read.settings).toEqual(written);
     expect(read.meta).toEqual({
@@ -627,9 +636,12 @@ describe("stored archive settings", () => {
   });
 
   it("carries the failed row's digest when the record does not parse", async () => {
-    const written = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input, null));
+    const written = await withTransaction(suite.db, (tx) =>
+      writeArchiveSettings(tx, ring, input, null),
+    );
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, { personId: null,
+      putCredential(tx, ring, {
+        personId: null,
         purpose: ARCHIVE_PURPOSE,
         value: { settings: JSON.stringify({ ...written, retention: { count: 0, days: 30 } }) },
       }),

@@ -38,7 +38,14 @@ export async function savePrivacyContact(
   if (changes.privacyNoticeUrl !== undefined) values.privacyNoticeUrl = changes.privacyNoticeUrl;
   if (changes.privacyEmail !== undefined) values.privacyEmail = changes.privacyEmail;
   if (Object.keys(values).length > 0)
-    await saveSettings(tx, VENUE_SETTINGS, { doc: { ...saved.doc, ...values }, expectedRevision: saved.revision, personId });
-  return { privacyNoticeUrl: values.privacyNoticeUrl === undefined ? saved.doc.privacyNoticeUrl : values.privacyNoticeUrl,
-    privacyEmail: values.privacyEmail === undefined ? saved.doc.privacyEmail : values.privacyEmail };
+    await saveSettings(tx, VENUE_SETTINGS, {
+      doc: { ...saved.doc, ...values },
+      expectedRevision: saved.revision,
+      personId,
+    });
+  return {
+    privacyNoticeUrl:
+      values.privacyNoticeUrl === undefined ? saved.doc.privacyNoticeUrl : values.privacyNoticeUrl,
+    privacyEmail: values.privacyEmail === undefined ? saved.doc.privacyEmail : values.privacyEmail,
+  };
 }

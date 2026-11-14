@@ -2133,6 +2133,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Query plans and indexes, measured on a year of data** (bundle of 4, 3 important, size M, waits for another entry). [Detail](backlog/architecture.md#bundle-query-plans-and-indexes-measured-on-a-year-of-data)
 
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
+  Privacy details now live in venue settings, and legal-name and credential changes keep activity history.
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
   [design](superpowers/specs/2026-11-02-rationalisation/README.md) is written, and the owner has
   reviewed every file and answered every question (2026-11-04). **Approved by the owner, 2026-11-04, and the top priority: it runs before more code is built on the old tables.**

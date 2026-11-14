@@ -8,7 +8,11 @@ import { recordActivity, taxpayer, type Transaction } from "@waitron/db";
  */
 export async function renameTaxpayer(
   tx: Transaction,
-  input: { readonly expected: string; readonly legalName: string; readonly personId: string | null },
+  input: {
+    readonly expected: string;
+    readonly legalName: string;
+    readonly personId: string | null;
+  },
 ): Promise<{ renamed: boolean }> {
   const updated = await tx
     .update(taxpayer)
@@ -16,6 +20,11 @@ export async function renameTaxpayer(
     .where(and(eq(taxpayer.id, 1), eq(taxpayer.legalName, input.expected)))
     .returning({ id: taxpayer.id });
   if (updated.length > 0)
-    await recordActivity(tx, { kind: "taxpayer.legal_name_changed", subjectId: "1", personId: input.personId, data: { from: input.expected, to: input.legalName } });
+    await recordActivity(tx, {
+      kind: "taxpayer.legal_name_changed",
+      subjectId: "1",
+      personId: input.personId,
+      data: { from: input.expected, to: input.legalName },
+    });
   return { renamed: updated.length > 0 };
 }

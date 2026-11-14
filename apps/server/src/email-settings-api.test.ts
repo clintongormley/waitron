@@ -801,7 +801,11 @@ describe("removing saved SMTP settings", () => {
     const app = mount();
     expect((await request(app, venue.admin, settings)).status).toBe(200);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, { personId: null, purpose: "backup.archive", value: { settings: "{}" } }),
+      putCredential(tx, ring, {
+        personId: null,
+        purpose: "backup.archive",
+        value: { settings: "{}" },
+      }),
     );
     const [archive] = await suite.db
       .select()

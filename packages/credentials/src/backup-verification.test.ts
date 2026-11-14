@@ -75,7 +75,11 @@ describe("read-only backup vault authentication", () => {
 
   it("authenticates all rows including previous key versions without reseal or writes", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, loadKeyRing(inputs), { personId: null, purpose: "email.smtp", value: email }),
+      putCredential(tx, loadKeyRing(inputs), {
+        personId: null,
+        purpose: "email.smtp",
+        value: email,
+      }),
     );
     await row("backup.archive", '{"settings":"old-private-sentinel"}', { key: key1, version: 1 });
     const before = suite.db.all(sql`select * from venue_credentials order by purpose`);

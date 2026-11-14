@@ -37,7 +37,8 @@ describe("credentialProvisioned", () => {
     // A credential for a DIFFERENT purpose first: with an empty vault, `false` could not show that
     // the answer looks at the purpose rather than at whether any row exists.
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, { personId: null,
+      putCredential(tx, RING, {
+        personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),

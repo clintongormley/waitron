@@ -223,7 +223,11 @@ async function connectStripe(db: Database): Promise<void> {
     },
   );
   await withTransaction(db, (tx) =>
-    putCredential(tx, RING, { personId: null, purpose: stripe.credentialPurpose, value: sealedPayload }),
+    putCredential(tx, RING, {
+      personId: null,
+      purpose: stripe.credentialPurpose,
+      value: sealedPayload,
+    }),
   );
 }
 

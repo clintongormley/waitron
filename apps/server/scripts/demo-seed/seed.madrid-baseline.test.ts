@@ -550,8 +550,10 @@ for (const locale of ["en", "es"] as const) {
             contentLanguages: null,
             defaultContentLanguage: null,
             holidayArea: null,
-            privacyNoticeUrl: Object.values(expected[phase].tables.taxpayer!.rows)[0]?.privacy_notice_url ?? null,
-            privacyEmail: Object.values(expected[phase].tables.taxpayer!.rows)[0]?.privacy_email ?? null,
+            privacyNoticeUrl:
+              Object.values(expected[phase].tables.taxpayer!.rows)[0]?.privacy_notice_url ?? null,
+            privacyEmail:
+              Object.values(expected[phase].tables.taxpayer!.rows)[0]?.privacy_email ?? null,
           },
         },
       );

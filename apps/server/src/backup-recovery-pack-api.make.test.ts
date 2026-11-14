@@ -115,7 +115,8 @@ beforeEach(async () => {
   keyInForce = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, nodeId);
   await withTransaction(suite.db, async (tx) => {
     await ensureStreamId(tx);
-    await putCredential(tx, RING, { personId: null,
+    await putCredential(tx, RING, {
+      personId: null,
       purpose: STREAM_PURPOSE,
       value: streamSettingsPayload({ bucket: BUCKET }),
     });
@@ -702,7 +703,11 @@ describe("a made pack", () => {
       },
     ]);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, { personId: null, purpose: ARCHIVE_PURPOSE, value: { settings: "{not json" } }),
+      putCredential(tx, RING, {
+        personId: null,
+        purpose: ARCHIVE_PURPOSE,
+        value: { settings: "{not json" },
+      }),
     );
     const failing = await fixture({
       evidence: async () => {
@@ -1149,7 +1154,11 @@ describe("the status route", () => {
     await f.received(1);
     expect((await read(f)).upToDate).toBe(true);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, { personId: null, purpose: ARCHIVE_PURPOSE, value: { settings: "{not json" } }),
+      putCredential(tx, RING, {
+        personId: null,
+        purpose: ARCHIVE_PURPOSE,
+        value: { settings: "{not json" },
+      }),
     );
     const answer = await read(f);
     expect(answer.upToDate).toBe(false);
@@ -1161,7 +1170,12 @@ describe("the status route", () => {
       { kind: "s3", id: "bucket", bucket: { ...BUCKET, bucket } },
     ];
     await withTransaction(suite.db, (tx) =>
-      writeArchiveSettings(tx, RING, { ...ARCHIVES, destinations: destinations("old-bucket") }, null),
+      writeArchiveSettings(
+        tx,
+        RING,
+        { ...ARCHIVES, destinations: destinations("old-bucket") },
+        null,
+      ),
     );
     const f = fixture();
     const file = await readRecoveryPackPdf(new Uint8Array(await (await f.make()).arrayBuffer()));
@@ -1172,7 +1186,12 @@ describe("the status route", () => {
     for (const value of [BUCKET.accessKeyId, BUCKET.secretAccessKey, KEY])
       expect(stored).not.toContain(value);
     await withTransaction(suite.db, (tx) =>
-      writeArchiveSettings(tx, RING, { ...ARCHIVES, destinations: destinations("new-bucket") }, null),
+      writeArchiveSettings(
+        tx,
+        RING,
+        { ...ARCHIVES, destinations: destinations("new-bucket") },
+        null,
+      ),
     );
     const answer = await read(f);
     expect(answer.upToDate).toBe(false);

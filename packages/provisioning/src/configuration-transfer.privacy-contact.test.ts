@@ -71,10 +71,14 @@ function withContact(privacyContact: ConfigurationBundle["privacyContact"]): Con
 it("exports the stored privacy contact at the top level, never inside the venue", async () => {
   const bundle = await exported(async () => {
     await withTransaction(suite.db, (tx) =>
-      savePrivacyContact(tx, {
-        privacyNoticeUrl: "https://example.com/privacy",
-        privacyEmail: "privacy@example.com",
-      }, null),
+      savePrivacyContact(
+        tx,
+        {
+          privacyNoticeUrl: "https://example.com/privacy",
+          privacyEmail: "privacy@example.com",
+        },
+        null,
+      ),
     );
   });
   expect(bundle.version).toBe(33);

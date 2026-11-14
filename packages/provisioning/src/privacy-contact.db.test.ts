@@ -14,7 +14,9 @@ const suite = useVenueDb({
 
 async function stored() {
   const [row] = await suite.db.select().from(taxpayer).where(eq(taxpayer.id, 1));
-  return row === undefined ? row : { ...row, ...(await withTransaction(suite.db, readPrivacyContact)) };
+  return row === undefined
+    ? row
+    : { ...row, ...(await withTransaction(suite.db, readPrivacyContact)) };
 }
 
 async function insertTaxpayer() {
@@ -42,10 +44,14 @@ describe("readPrivacyContact and savePrivacyContact", () => {
     const before = await stored();
 
     const result = await withTransaction(suite.db, (tx) =>
-      savePrivacyContact(tx, {
-        privacyNoticeUrl: "https://example.com/privacy",
-        privacyEmail: "privacy@example.com",
-      }, null),
+      savePrivacyContact(
+        tx,
+        {
+          privacyNoticeUrl: "https://example.com/privacy",
+          privacyEmail: "privacy@example.com",
+        },
+        null,
+      ),
     );
 
     expect(result).toEqual({
@@ -62,10 +68,14 @@ describe("readPrivacyContact and savePrivacyContact", () => {
   it("saving one field leaves the other as stored", async () => {
     await insertTaxpayer();
     await withTransaction(suite.db, (tx) =>
-      savePrivacyContact(tx, {
-        privacyNoticeUrl: "https://example.com/privacy",
-        privacyEmail: "privacy@example.com",
-      }, null),
+      savePrivacyContact(
+        tx,
+        {
+          privacyNoticeUrl: "https://example.com/privacy",
+          privacyEmail: "privacy@example.com",
+        },
+        null,
+      ),
     );
     const before = await stored();
 
@@ -93,9 +103,11 @@ describe("readPrivacyContact and savePrivacyContact", () => {
 
     expect(result).toEqual({ privacyNoticeUrl: null, privacyEmail: null });
     expect(await stored()).toEqual({ ...before, privacyEmail: null });
-    expect(suite.db.all(sql`select json_extract(doc, '$.privacyEmail') is null as unset from settings where module = 'venue'`)).toEqual([
-      { unset: 1 },
-    ]);
+    expect(
+      suite.db.all(
+        sql`select json_extract(doc, '$.privacyEmail') is null as unset from settings where module = 'venue'`,
+      ),
+    ).toEqual([{ unset: 1 }]);
   });
 
   it("writes only the two privacy columns when handed an object carrying another key", async () => {
@@ -129,10 +141,14 @@ describe("readPrivacyContact and savePrivacyContact", () => {
   ])("writes nothing and answers the stored pair when given %s", async (_name, changes) => {
     await insertTaxpayer();
     await withTransaction(suite.db, (tx) =>
-      savePrivacyContact(tx, {
-        privacyNoticeUrl: "https://example.com/privacy",
-        privacyEmail: "privacy@example.com",
-      }, null),
+      savePrivacyContact(
+        tx,
+        {
+          privacyNoticeUrl: "https://example.com/privacy",
+          privacyEmail: "privacy@example.com",
+        },
+        null,
+      ),
     );
     const before = await stored();
 

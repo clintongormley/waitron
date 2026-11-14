@@ -119,7 +119,10 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
   const authorize = async (c: Context): Promise<string> => {
     const sessionId = requireManagementSession(c);
     return withTransaction(deps.db, async (tx) => {
-      const { authorizedBy } = await authorizeManager(tx, { managementSessionId: sessionId, permission: "system.manage" });
+      const { authorizedBy } = await authorizeManager(tx, {
+        managementSessionId: sessionId,
+        permission: "system.manage",
+      });
       return authorizedBy;
     });
   };
@@ -257,7 +260,8 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
           await refuseWhilePaired(nodeTx);
           await withTransaction(deps.db, async (tx) => {
             await ensureStreamId(tx);
-            await putCredential(tx, deps.ring, { personId,
+            await putCredential(tx, deps.ring, {
+              personId,
               purpose: STREAM_PURPOSE,
               value: streamSettingsPayload({ bucket }),
             });
@@ -302,7 +306,9 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       return deps.turns(async () => {
         guardPrimary();
-        await withTransaction(deps.db, (tx) => deleteCredential(tx, { personId, purpose: STREAM_PURPOSE }));
+        await withTransaction(deps.db, (tx) =>
+          deleteCredential(tx, { personId, purpose: STREAM_PURPOSE }),
+        );
         await deps.stream.reload();
         return c.json(await view());
       });

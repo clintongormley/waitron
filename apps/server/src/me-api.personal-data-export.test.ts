@@ -180,7 +180,9 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
   it("passes the venue's language and the privacy notice's address to the README", async () => {
     const url = "https://venue.example/privacy";
     const files = await download(["core", "identity"], { venueLocale: "es-ES" }, async () => {
-      await withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl: url }, null));
+      await withTransaction(suite.db, (tx) =>
+        savePrivacyContact(tx, { privacyNoticeUrl: url }, null),
+      );
     });
     const readme = files["README.txt"]!.trimEnd().split("\n");
     expect(readme[0]).toBe(PERSONAL_DATA_README_WORDS.es.title.replace("{venue}", "Test SL"));

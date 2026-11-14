@@ -136,7 +136,11 @@ describe("real certificate parent and isolated child preserve persistent state",
           if (mode === "stale" || mode === "revoked") {
             await withTransaction(suite.db, async (tx) => {
               if (mode === "stale")
-                await putCredential(tx, f.deps.ring, { personId: null, purpose: "fiscal.aeat", value: material() });
+                await putCredential(tx, f.deps.ring, {
+                  personId: null,
+                  purpose: "fiscal.aeat",
+                  value: material(),
+                });
               else await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
             });
             expected = await rawState(suite.db);

@@ -545,10 +545,16 @@ describe("readBucketPointerTerm", () => {
   };
   const storeSettings = (settings: StreamSettings) =>
     withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, { personId: null, purpose: STREAM_PURPOSE, value: streamSettingsPayload(settings) }),
+      putCredential(tx, RING, {
+        personId: null,
+        purpose: STREAM_PURPOSE,
+        value: streamSettingsPayload(settings),
+      }),
     );
   afterEach(async () => {
-    await withTransaction(suite.db, (tx) => deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE }));
+    await withTransaction(suite.db, (tx) =>
+      deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE }),
+    );
   });
 
   it("answers null when the box has no bucket settings, without opening a bucket", async () => {
@@ -707,7 +713,8 @@ describe("runFirstStart", () => {
   it("keeps the restore marker until missing bucket settings are repaired", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, { personId: null,
+      putCredential(tx, RING, {
+        personId: null,
         purpose: STREAM_PURPOSE,
         value: streamSettingsPayload({
           bucket: {
@@ -740,7 +747,8 @@ describe("runFirstStart", () => {
       expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
 
       await withTransaction(suite.db, (tx) =>
-        putCredential(tx, RING, { personId: null,
+        putCredential(tx, RING, {
+          personId: null,
           purpose: STREAM_PURPOSE,
           value: streamSettingsPayload({
             bucket: {
@@ -760,7 +768,9 @@ describe("runFirstStart", () => {
       expect(openStore).toHaveBeenCalledTimes(1);
       await expect(stat(join(stateDir, RESTORE_RECORD))).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
-      await withTransaction(suite.db, (tx) => deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE }));
+      await withTransaction(suite.db, (tx) =>
+        deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE }),
+      );
     }
   });
 
@@ -785,7 +795,8 @@ describe("runFirstStart", () => {
   it("fails, keeps the marker and does not stream, when a bucket is set up but does not answer", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, { personId: null,
+      putCredential(tx, RING, {
+        personId: null,
         purpose: STREAM_PURPOSE,
         value: streamSettingsPayload({
           bucket: {
@@ -816,7 +827,9 @@ describe("runFirstStart", () => {
       await stat(join(stateDir, RESTORE_RECORD));
       expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
     } finally {
-      await withTransaction(suite.db, (tx) => deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE }));
+      await withTransaction(suite.db, (tx) =>
+        deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE }),
+      );
     }
   });
 

@@ -246,7 +246,8 @@ describe("allocated fiscal standby contract", () => {
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     });
     await withTransaction(db, (tx) =>
-      putCredential(tx, ring, { personId: null,
+      putCredential(tx, ring, {
+        personId: null,
         purpose: "backup.archive",
         value: { settings: "held-primary-test-key" },
       }),

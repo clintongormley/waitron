@@ -119,10 +119,14 @@ async function configurationArtifact() {
       unitPrice: "7.25",
       vatClass: "general",
     });
-    await savePrivacyContact(tx, {
-      privacyNoticeUrl: "https://example.com/privacy",
-      privacyEmail: "privacy@example.com",
-    }, null);
+    await savePrivacyContact(
+      tx,
+      {
+        privacyNoticeUrl: "https://example.com/privacy",
+        privacyEmail: "privacy@example.com",
+      },
+      null,
+    );
   });
   const bundle = await buildConfigurationBundle(
     source.db,

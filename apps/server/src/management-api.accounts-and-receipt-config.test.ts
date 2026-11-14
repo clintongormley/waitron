@@ -1694,7 +1694,9 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       return res.json();
     };
     const store = (privacyNoticeUrl: string | null, privacyEmail?: string) =>
-      withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyNoticeUrl, privacyEmail }, null));
+      withTransaction(suite.db, (tx) =>
+        savePrivacyContact(tx, { privacyNoticeUrl, privacyEmail }, null),
+      );
 
     expect(await config()).toEqual({ configured: true });
     await setupVenue();

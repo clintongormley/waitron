@@ -289,7 +289,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   const authorize = async (c: Context): Promise<string> => {
     const sessionId = requireManagementSession(c);
     return withTransaction(deps.db, async (tx) => {
-      const { authorizedBy } = await authorizeManager(tx, { managementSessionId: sessionId, permission: "system.manage" });
+      const { authorizedBy } = await authorizeManager(tx, {
+        managementSessionId: sessionId,
+        permission: "system.manage",
+      });
       return authorizedBy;
     });
   };
@@ -311,9 +314,14 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     await deps.stream.reload(() => persist(() => writeRecoveryKey(deps.stateDir, key)));
   };
 
-  const storeSettings = (settings: Omit<ArchiveSettings, "revision">, personId: string): Promise<void> =>
+  const storeSettings = (
+    settings: Omit<ArchiveSettings, "revision">,
+    personId: string,
+  ): Promise<void> =>
     persist(async () => {
-      await withTransaction(deps.db, (tx) => writeArchiveSettings(tx, deps.ring, settings, personId));
+      await withTransaction(deps.db, (tx) =>
+        writeArchiveSettings(tx, deps.ring, settings, personId),
+      );
     });
 
   /** Runs outside every transaction; a failure is reported, not thrown, because the write stands. */

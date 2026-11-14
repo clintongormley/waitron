@@ -124,7 +124,8 @@ describe.each([false, true])("the running server with Payments Off (installed=%s
             expectedRevision: 0,
             personId: null,
           });
-          await putCredential(tx, loadKeyRing(env), { personId: null,
+          await putCredential(tx, loadKeyRing(env), {
+            personId: null,
             purpose: "payments.stripe",
             value: {
               secretKey: "sk_test_retained",

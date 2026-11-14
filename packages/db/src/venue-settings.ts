@@ -130,7 +130,10 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
       if (value[field] !== null && typeof value[field] !== "string") return { ok: false, field };
     for (const field of ["privacyNoticeUrl", "privacyEmail"] as const) {
       const contact = value[field];
-      if ((contact !== null && typeof contact !== "string") || privacyContactProblem(field, contact as string | null) !== undefined)
+      if (
+        (contact !== null && typeof contact !== "string") ||
+        privacyContactProblem(field, contact as string | null) !== undefined
+      )
         return { ok: false, field };
     }
     return {

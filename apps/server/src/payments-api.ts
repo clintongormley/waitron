@@ -949,7 +949,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // Validate the seat-assembled payload against the purpose's declared fields before sealing, so
         // a provider that returns a wrong-shaped payload fails loudly rather than sealing junk.
         validatePayload(seat.credentialPurpose, sealedPayload);
-        await putCredential(tx, deps.ring, { personId,
+        await putCredential(tx, deps.ring, {
+          personId,
           purpose: seat.credentialPurpose,
           value: sealedPayload,
         });

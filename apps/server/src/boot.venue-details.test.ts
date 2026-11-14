@@ -97,13 +97,20 @@ async function prepareBox(
   };
   beforeServerStarts();
   await withTransaction(suite.db, (tx) =>
-    writeArchiveSettings(tx, loadKeyRing(env), {
-      enabled: true,
-      destinations: [{ kind: "local-fs", id: "primary", dir: join(scratch, "backup-destination") }],
-      schedule: { kind: "interval", ms: 86_400_000 },
-      retention: { count: 7, days: 30 },
-      destinationTimeoutMs: 900_000,
-    }, null),
+    writeArchiveSettings(
+      tx,
+      loadKeyRing(env),
+      {
+        enabled: true,
+        destinations: [
+          { kind: "local-fs", id: "primary", dir: join(scratch, "backup-destination") },
+        ],
+        schedule: { kind: "interval", ms: 86_400_000 },
+        retention: { count: 7, days: 30 },
+        destinationTimeoutMs: 900_000,
+      },
+      null,
+    ),
   );
   const [admin] = await seedPersons(suite.db, {
     displayName: "Email Clock Admin",

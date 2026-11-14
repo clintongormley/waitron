@@ -621,7 +621,8 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
 
   await m1Files.db.execute(sql`update card_readers set provider = 'stripe'`);
   await withTransaction(m1Files.db, (tx) =>
-    putCredential(tx, ring, { personId: null,
+    putCredential(tx, ring, {
+      personId: null,
       purpose: "payments.stripe",
       value: {
         secretKey: "sk_test_controlled",

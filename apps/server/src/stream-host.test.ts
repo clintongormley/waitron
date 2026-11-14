@@ -278,7 +278,8 @@ describe("the live copy's wiring", () => {
         await vi.waitFor(() => expect(reads.mock.calls.length).toBeGreaterThanOrEqual(3));
         expect(opened).toHaveBeenCalledTimes(1);
         await withTransaction(db, (tx) =>
-          putCredential(tx, RING, { personId: null,
+          putCredential(tx, RING, {
+            personId: null,
             purpose: STREAM_PURPOSE,
             value: { ...SETTINGS, secretAccessKey: "replacement-secret" },
           }),
@@ -496,7 +497,8 @@ describe("the live copy's wiring", () => {
 
     it("reads a stored endpoint and prefix back as themselves", async () => {
       await withTransaction(db, (tx) =>
-        putCredential(tx, RING, { personId: null,
+        putCredential(tx, RING, {
+          personId: null,
           purpose: STREAM_PURPOSE,
           value: { ...SETTINGS, endpoint: "https://s3.example", prefix: "copies/" },
         }),
@@ -979,7 +981,8 @@ describe("the live copy's wiring", () => {
             await withTransaction(db, async (tx) => {
               await deleteCredential(tx, { personId: null, purpose: STREAM_PURPOSE });
               await ensureStreamId(tx);
-              await putCredential(tx, RING, { personId: null,
+              await putCredential(tx, RING, {
+                personId: null,
                 purpose: STREAM_PURPOSE,
                 value: { ...SETTINGS, prefix },
               });
@@ -1397,7 +1400,8 @@ describe("the live copy's wiring", () => {
 
     it("streams to the bucket when there is no pair link", async () => {
       await withTransaction(db, (tx) =>
-        putCredential(tx, RING, { personId: null,
+        putCredential(tx, RING, {
+          personId: null,
           purpose: STREAM_PURPOSE,
           value: { ...SETTINGS, endpoint: "https://s3.example.test" },
         }),

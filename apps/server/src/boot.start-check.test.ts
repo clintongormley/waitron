@@ -393,7 +393,11 @@ describe("the start check on a real start", () => {
               saveVenueFields(tx, { streamId: "c0000000-0000-4000-8000-000000000002" }, null),
             );
             await withTransaction(suite.db, (tx) =>
-              putCredential(tx, loadKeyRing(KEY_ENV), { personId: null, purpose: STREAM_PURPOSE, value: settings }),
+              putCredential(tx, loadKeyRing(KEY_ENV), {
+                personId: null,
+                purpose: STREAM_PURPOSE,
+                value: settings,
+              }),
             );
             const held = (await readNodeMembership(suite.db))!;
             await seedVenueSettings(spareSuite.db, {

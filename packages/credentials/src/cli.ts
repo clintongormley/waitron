@@ -178,7 +178,9 @@ async function remove(argv: string[], deps: CliDeps): Promise<number> {
     deps.io.stderr("Use the dashboard's Email settings to save or remove SMTP settings.");
     return 2;
   }
-  const deleted = await withTransaction(deps.db, (tx) => deleteCredential(tx, { personId: null, purpose }));
+  const deleted = await withTransaction(deps.db, (tx) =>
+    deleteCredential(tx, { personId: null, purpose }),
+  );
   if (!deleted) {
     // Non-zero: "there was nothing there" is a different outcome from "removed it", and a script
     // that de-provisions a purpose should be able to tell them apart.

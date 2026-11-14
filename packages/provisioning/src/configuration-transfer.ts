@@ -991,14 +991,18 @@ export async function importConfigurationTables(
     }
   }
   const { privacyNoticeUrl, privacyEmail } = bundle.privacyContact;
-  await savePrivacyContact(tx, {
-    privacyNoticeUrl:
-      privacyNoticeUrl === null
-        ? null
-        : privacyContactChecked("privacyNoticeUrl", privacyNoticeUrl),
-    privacyEmail:
-      privacyEmail === null ? null : privacyContactChecked("privacyEmail", privacyEmail),
-  }, null);
+  await savePrivacyContact(
+    tx,
+    {
+      privacyNoticeUrl:
+        privacyNoticeUrl === null
+          ? null
+          : privacyContactChecked("privacyNoticeUrl", privacyNoticeUrl),
+      privacyEmail:
+        privacyEmail === null ? null : privacyContactChecked("privacyEmail", privacyEmail),
+    },
+    null,
+  );
   await saveVenueFields(
     tx,
     {

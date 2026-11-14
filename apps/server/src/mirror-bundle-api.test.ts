@@ -1752,7 +1752,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const { designated } = await setupVenue();
       const app = mountApp(designated);
       await withTransaction(db, (tx) =>
-        putCredential(tx, RING, { personId: null,
+        putCredential(tx, RING, {
+          personId: null,
           purpose: "backup.stream",
           value: streamSettingsPayload({
             bucket: {
@@ -1787,7 +1788,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       const before = await reservedAndListed();
       pause.beforeModuleConfigRead = async () => {
         await withTransaction(db, (tx) =>
-          putCredential(tx, RING, { personId: null,
+          putCredential(tx, RING, {
+            personId: null,
             purpose: "backup.stream",
             value: streamSettingsPayload({
               bucket: {
@@ -1833,7 +1835,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         entered();
         await gate;
         await withTransaction(db, (tx) =>
-          putCredential(tx, RING, { personId: null,
+          putCredential(tx, RING, {
+            personId: null,
             purpose: "backup.stream",
             value: streamSettingsPayload({
               bucket: {
@@ -1881,7 +1884,8 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         WAITRON_CREDENTIALS_KEY_VERSION: "1",
       });
       await withTransaction(db, (tx) =>
-        putCredential(tx, otherRing, { personId: null,
+        putCredential(tx, otherRing, {
+          personId: null,
           purpose: "backup.stream",
           value: streamSettingsPayload({
             bucket: {

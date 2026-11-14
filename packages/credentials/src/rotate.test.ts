@@ -71,9 +71,14 @@ describe("rotateCredentials", () => {
       putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
 
-    const history = await readActivityForSubject(suite.db, { kind: "credential", id: "payments.stripe" });
+    const history = await readActivityForSubject(suite.db, {
+      kind: "credential",
+      id: "payments.stripe",
+    });
     const result = await rotateCredentials(suite.db, RING_BOTH, suite.node);
-    expect(await readActivityForSubject(suite.db, { kind: "credential", id: "payments.stripe" })).toEqual(history);
+    expect(
+      await readActivityForSubject(suite.db, { kind: "credential", id: "payments.stripe" }),
+    ).toEqual(history);
     expect(result.rotated).toBe(1);
     expect(result.alreadyCurrent).toBe(0);
 
@@ -90,7 +95,8 @@ describe("rotateCredentials", () => {
 
   it("is idempotent — a second run rotates nothing", async () => {
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { personId: null,
+      putCredential(tx, RING_V1, {
+        personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
       }),
@@ -111,7 +117,8 @@ describe("rotateCredentials", () => {
       putCredential(tx, RING_V1, { personId: null, purpose: "payments.stripe", value: STRIPE }),
     );
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_BOTH, { personId: null,
+      putCredential(tx, RING_BOTH, {
+        personId: null,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
       }),

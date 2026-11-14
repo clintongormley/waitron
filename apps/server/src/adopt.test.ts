@@ -962,7 +962,8 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       .insert(taxpayer)
       .values({ id: 1, country: "ES", taxId: "80000001K", legalName: "Same taxpayer SL" });
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, { personId: null,
+      putCredential(tx, RING, {
+        personId: null,
         purpose: "payments.sumup",
         value: {
           apiKey: "sup_sk_x",

@@ -293,3 +293,9 @@ argument changes are counted separately in the pull request.
 
 At 00:30 the watcher cleared the three live-query dependency assertions to name settings.venue;
 the exact dependency equality and real invalidation/refetch checks stay.
+
+At 00:33 the watcher cleared the missing-taxpayer README's two notice-presence expectations
+(the notice remains in the venue document), the pinned formatter output up to 1,800 gross lines,
+and ACTIVATION_ROWS 126 to 127. The read-only activation probe found exactly one new
+credentials.saved entry for email.smtp with no person and keyVersion 1. All existing exact
+holdings counts, kept/record/accepted checks, and copy checks stay.

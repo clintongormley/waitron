@@ -22,7 +22,8 @@ describe("stripeAccountResolver", () => {
   it("builds the account from the taxpayer's own secret key", async () => {
     await seedTaxpayer(suite.db);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, { personId: null,
+      putCredential(tx, ring, {
+        personId: null,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_taxpayer_one",

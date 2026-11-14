@@ -234,7 +234,8 @@ export async function installCertificate(
     if (tooLate !== null) return tooLate.answer;
     const current = await credentialRevision(tx, { purpose: "fiscal.aeat" });
     if (current !== body.expectedRevision) throw new AppError("fiscal.certificate_changed", {});
-    await putCredential(tx, deps.ring, { personId,
+    await putCredential(tx, deps.ring, {
+      personId,
       purpose: "fiscal.aeat",
       value: { pfxBase64: body.pfxBase64, passphrase: body.passphrase, certKind: body.certKind },
     });

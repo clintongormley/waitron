@@ -564,7 +564,8 @@ describe("deferredClient", () => {
     const client = deferredClient({ db: suite.db, ring, fetch });
     await expect(client.memberships()).rejects.toMatchObject({ code: "credentials.missing" });
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, { personId: null,
+      putCredential(tx, ring, {
+        personId: null,
         purpose: "payments.sumup",
         value: { apiKey: "k", merchantCode: "M" },
       }),

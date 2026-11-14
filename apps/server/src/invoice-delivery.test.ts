@@ -2191,7 +2191,9 @@ describe("invoice email worker pass", () => {
         },
       });
     const store = (privacyEmail: string | null, privacyNoticeUrl: string | null) =>
-      withTransaction(suite.db, (tx) => savePrivacyContact(tx, { privacyEmail, privacyNoticeUrl }, null));
+      withTransaction(suite.db, (tx) =>
+        savePrivacyContact(tx, { privacyEmail, privacyNoticeUrl }, null),
+      );
     const queueCopy = async () => {
       const copy = await withTransaction(suite.db, (tx) =>
         reserveInvoiceDelivery(tx, sale.saleId, email()),

@@ -99,7 +99,8 @@ export async function sealAeatSecret(
   const opened = openCertificateFile(Buffer.from(cert.pfxBase64, "base64"), cert.passphrase);
 
   await withTransaction(deps.db, async (tx) => {
-    await putCredential(tx, deps.ring, { personId: null,
+    await putCredential(tx, deps.ring, {
+      personId: null,
       purpose: "fiscal.aeat",
       value: {
         pfxBase64: cert.pfxBase64,
