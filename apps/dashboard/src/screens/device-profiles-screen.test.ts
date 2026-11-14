@@ -245,7 +245,7 @@ describe("device-profiles-screen list mode", () => {
       "Dining room",
     );
     expect(root.querySelector('[data-test="profile-scope-p2"]')!.textContent).toContain(
-      "Kitchen screens",
+      "Station screens",
     );
     const summary = root.querySelector('[data-test="profile-caps-p1"]')!.textContent!;
     expect(summary).toContain("Integrated card payment");
@@ -276,7 +276,7 @@ describe("device-profiles-screen list mode", () => {
     expect(keys()).toEqual(["p1"]);
     await userEvent.fill(
       table!.shadowRoot!.querySelector<HTMLInputElement>('input[name="search"]')!,
-      "Kitchen display",
+      "Prep station display",
     );
     await table!.updateComplete;
     expect(keys()).toEqual(["p2"]);
