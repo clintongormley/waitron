@@ -248,3 +248,16 @@ it("executes its entry point using the current working repository", async () => 
     process.exitCode = exitCode;
   }
 });
+
+it("keeps the reviewed Madrid table map while renaming and reporting ordinary references beside it", () => {
+  const mapping =
+    'const renames = { tenants: "taxpayer", tenant_credentials: "venue_credentials" };';
+  const source = `${mapping}\nconst row = db.select().from(tenants); readCredential(tenant_credentials);`;
+  expect(renameText(source)).toBe(
+    `${mapping}\nconst row = db.select().from(taxpayer); readCredential(venue_credentials);`,
+  );
+  expect(residuals("seed.madrid-baseline.test.ts", source)).toEqual([
+    "seed.madrid-baseline.test.ts:2: const row = db.select().from(tenants); readCredential(tenant_credentials);",
+  ]);
+  expect(residuals("seed.madrid-baseline.test.ts", renameText(source))).toEqual([]);
+});

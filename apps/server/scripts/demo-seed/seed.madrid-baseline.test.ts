@@ -1,6 +1,7 @@
 import { withTransaction, persons, deviceProfiles } from "@waitron/db";
 import { listStaffAdmittedTo } from "@waitron/identity";
 import { STARTER_JOB_ROLE_NAMES, DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
+import { madridWithRenamedTables } from "./testing/madrid-renamed-tables.js";
 import { madridWithFoldedTables } from "./testing/madrid-folded-tables.js";
 import { madridWithDocument, madridWithMenuSettings } from "./testing/madrid-documents.js";
 import { stable } from "./testing/madrid-semantics.js";
@@ -428,11 +429,18 @@ for (const locale of ["en", "es"] as const) {
         row.name = name;
       }
     }
+    const tableRenames = { tenants: "taxpayer", tenant_credentials: "venue_credentials" };
+    for (const phase of ["before", "provisioned", "seeded"] as const)
+      expected[phase] = madridWithRenamedTables(expected[phase], tableRenames);
     expected.before = madridWithRenamedColumns(expected.before, RENAMED_COLUMNS);
     expected.provisioned = madridWithRenamedColumns(expected.provisioned, RENAMED_COLUMNS);
     expected.seeded = madridWithRenamedColumns(expected.seeded, RENAMED_COLUMNS);
     const phases = structuredClone(manifest.phases[locale]!);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
+      for (const [old, next] of Object.entries(tableRenames)) {
+        phases[phase]![next] = phases[phase]![old]!;
+        delete phases[phase]![old];
+      }
       const at = "2026-10-08T10:00:00.000Z";
       const accessMemberships = Object.values(expected[phase].tables.persons!.rows).map(
         (person) => ({ person_id: person.id, role_id: `@roles:${stable([person.role])}` }),

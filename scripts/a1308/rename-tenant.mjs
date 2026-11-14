@@ -4,6 +4,8 @@ import { dirname, matchesGlob, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const shields = [
+  'tenants: "taxpayer"',
+  'tenant_credentials: "venue_credentials"',
   "registros_tenant_node_secuencia_uq",
   "TenantTransport",
   "tenantsWithWork",
