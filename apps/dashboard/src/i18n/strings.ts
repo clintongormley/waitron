@@ -3137,6 +3137,8 @@ export const en = {
   "menus.schedule_not_saved":
     "The schedule change for {name} was not confirmed. Open its Preview tab and check Scheduled versions before trying again.",
   "menus.change_not_saved": "Your change to {name} was not saved. {reason}",
+  "menus.guest_sharing_unavailable":
+    "Sharing is On, but no menu is available. Choose an active default menu in Menus and publish it. Cloud delivery is not available yet.",
   "menus.guest_local_link": "Open the shared menu on this box",
   "menus.guest_sharing_on":
     "Public sharing is On for the default menu. Only its published version is shared. Cloud delivery is not available yet.",
@@ -7140,6 +7142,8 @@ export const es: Record<StringKey, string> = {
   "menus.schedule_not_saved":
     "No se ha confirmado el cambio de programación de {name}. Abre su pestaña Vista previa y comprueba las Versiones programadas antes de volver a intentarlo.",
   "menus.change_not_saved": "No se ha guardado tu cambio en {name}. {reason}",
+  "menus.guest_sharing_unavailable":
+    "La carta está compartida, pero no hay ninguna disponible. Elige una carta predeterminada activa en Cartas y publícala. El envío a Cloud aún no está disponible.",
   "menus.guest_local_link": "Abrir la carta compartida en esta caja",
   "menus.guest_sharing_on":
     "La carta predeterminada está compartida. Solo se comparte su versión publicada. El envío a Cloud aún no está disponible.",

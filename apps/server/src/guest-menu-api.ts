@@ -1,5 +1,12 @@
 import type { Hono } from "hono";
-import { readSettings, readVenue, saveSettings, withTransaction, type Database } from "@waitron/db";
+import {
+  readSettings,
+  readVenue,
+  saveSettings,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   GUEST_MENU_SETTINGS,
   readContentLanguages,
@@ -15,8 +22,7 @@ import {
 } from "@waitron/server-kit";
 import { AppError, FALLBACK_LOCALE, publicGuestMenu } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import { renderGuestMenuPage } from "./guest-menu-page.js";
-import { readVenueLocale } from "./venue-locale.js";
+import { renderGuestMenuPage, renderGuestMenuUnavailable } from "./guest-menu-page.js";
 import "./errors.js";
 const run = createErrorBoundary(
   {
@@ -31,6 +37,10 @@ const run = createErrorBoundary(
   },
   "catalogue.failed",
 );
+async function sharingStatus(tx: Transaction) {
+  const { doc, revision } = await readSettings(tx, GUEST_MENU_SETTINGS);
+  return { ...doc, revision, available: (await readGuestMenu(tx)) !== null };
+}
 export function mountGuestMenuApi(
   app: Hono,
   deps: { db: Database; venueLocale?: string },
@@ -44,8 +54,7 @@ export function mountGuestMenuApi(
           managementSessionId: sessionId,
           permission: "catalogue.manage",
         });
-        const { doc, revision } = await readSettings(tx, GUEST_MENU_SETTINGS);
-        return { ...doc, revision };
+        return sharingStatus(tx);
       });
       c.header("Cache-Control", "no-store");
       return c.json(answer);
@@ -59,18 +68,19 @@ export function mountGuestMenuApi(
         throw new AppError("management.request_invalid", { field: "enabled" });
       if (!Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 0)
         throw new AppError("management.request_invalid", { field: "expectedRevision" });
-      const { doc, revision } = await withTransaction(deps.db, async (tx) => {
+      const answer = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "catalogue.manage",
         });
-        return saveSettings(tx, GUEST_MENU_SETTINGS, {
+        await saveSettings(tx, GUEST_MENU_SETTINGS, {
           doc: { enabled: body.enabled as boolean },
           expectedRevision: body.expectedRevision as number,
           personId: authorizedBy,
         });
+        return sharingStatus(tx);
       });
-      return c.json({ ...doc, revision });
+      return c.json(answer);
     }),
   );
   app.get("/management-api/catalogues/:id/guest-preview", (c) =>
@@ -105,33 +115,39 @@ export function mountGuestMenuApi(
 
 export function mountPublicGuestMenu(
   app: Hono,
-  deps: { db: Database; serving: () => boolean },
+  deps: { db: Database; serving: () => boolean; venueLocale?: () => string },
   log: Logger,
 ): void {
-  app.all("/public/menu", (c) =>
-    run(c, log, async () => {
+  app.all("/public/menu", async (c) => {
+    const serving = deps.serving();
+    const locale = serving ? (deps.venueLocale?.() ?? FALLBACK_LOCALE) : FALLBACK_LOCALE;
+    const response = await run(c, log, async () => {
       c.header("Cache-Control", "no-store");
-      if (c.req.method !== "GET" && c.req.method !== "HEAD") return c.body(null, 405);
-      if (!deps.serving()) return c.body(null, 503);
-      const locale = await readVenueLocale(deps.db);
-      const html = await withTransaction(deps.db, async (tx) => {
-        const live = await readGuestMenu(tx);
-        if (live === null) return null;
-        const languages = await readContentLanguages(tx, locale);
-        const menu = publicGuestMenu(
-          live.document,
-          languages,
-          c.req.query("language") ?? languages.defaultLanguage,
-        );
-        return renderGuestMenuPage(
-          menu,
-          (await readVenue(tx)).name,
-          languages.defaultLanguage,
-          true,
-        );
-      });
-      return html === null ? c.body(null, 404) : c.html(html);
-    }),
-  );
+      if (c.req.method !== "GET" && c.req.method !== "HEAD") {
+        c.header("Allow", "GET, HEAD");
+        return c.body(null, 405);
+      }
+      if (!serving) return c.body(null, 503);
+      // Anonymous reads use committed rows without reserving the sale write queue.
+      const live = await readGuestMenu(deps.db);
+      if (live === null) return c.body(null, 404);
+      const languages = await readContentLanguages(deps.db, locale);
+      const menu = publicGuestMenu(
+        live.document,
+        languages,
+        c.req.query("language") ?? languages.defaultLanguage,
+      );
+      return c.html(
+        renderGuestMenuPage(menu, (await readVenue(deps.db)).name, languages.defaultLanguage, true),
+      );
+    });
+    if (response.ok) return response;
+    const headers = new Headers(response.headers);
+    headers.set("Content-Type", "text/html; charset=UTF-8");
+    return new Response(renderGuestMenuUnavailable(c.req.query("language") ?? locale, locale), {
+      status: response.status,
+      headers,
+    });
+  });
   app.all("/public/menu/*", (c) => c.body(null, 404));
 }

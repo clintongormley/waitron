@@ -1,6 +1,8 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { expect, it } from "vitest";
+import { sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, saveSettings } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { startManagementSession } from "@waitron/identity";
@@ -11,6 +13,7 @@ import {
   updateProduct,
   setVenueDefaultCatalogue,
   writeContentLanguages,
+  GUEST_MENU_SETTINGS,
 } from "@waitron/catalogue";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountGuestMenuApi, mountPublicGuestMenu } from "./guest-menu-api.js";
@@ -89,13 +92,15 @@ it("starts public sharing Off and limits its status to managers", async () => {
   ] as const) {
     const answer = await f.app.request("/management-api/guest-menu", { headers: { cookie } });
     expect(answer.status).toBe(status);
-    if (code === null) expect(await answer.json()).toEqual({ enabled: false, revision: 0 });
+    if (code === null)
+      expect(await answer.json()).toEqual({ enabled: false, revision: 0, available: false });
     else expect(await answer.json()).toMatchObject({ error: { code } });
   }
 });
 
 it("lets a manager change sharing with its current revision and keeps refusals from changing it", async () => {
   const f = await fixture();
+  await withTransaction(suite.db, (tx) => setVenueDefaultCatalogue(tx, f.lunch));
   const save = (body: object, cookie = f.cookies.manager) =>
     f.app.request("/management-api/guest-menu", {
       method: "PUT",
@@ -104,7 +109,7 @@ it("lets a manager change sharing with its current revision and keeps refusals f
     });
   const enabled = await save({ enabled: true, expectedRevision: 0 });
   expect(enabled.status).toBe(200);
-  expect(await enabled.json()).toEqual({ enabled: true, revision: 1 });
+  expect(await enabled.json()).toEqual({ enabled: true, revision: 1, available: true });
   for (const [body, cookie, status, code] of [
     [{ enabled: false, expectedRevision: 1 }, f.cookies.staff, 403, "authorization.not_permitted"],
     [{ enabled: false, expectedRevision: 0 }, f.cookies.manager, 409, "settings.out_of_date"],
@@ -121,11 +126,11 @@ it("lets a manager change sharing with its current revision and keeps refusals f
     const current = await f.app.request("/management-api/guest-menu", {
       headers: { cookie: f.cookies.manager },
     });
-    expect(await current.json()).toEqual({ enabled: true, revision: 1 });
+    expect(await current.json()).toEqual({ enabled: true, revision: 1, available: true });
   }
   const disabled = await save({ enabled: false, expectedRevision: 1 });
   expect(disabled.status).toBe(200);
-  expect(await disabled.json()).toEqual({ enabled: false, revision: 2 });
+  expect(await disabled.json()).toEqual({ enabled: false, revision: 2, available: false });
 });
 
 it("serves only the opted-in publication without sign-in and closes it when serving stops", async () => {
@@ -153,14 +158,70 @@ it("serves only the opted-in publication without sign-in and closes it when serv
   expect(html).not.toContain("Secret draft");
   expect(html).not.toContain(f.soup);
   expect((await read("HEAD")).status).toBe(200);
-  expect(await (await read("HEAD")).text()).toBe("");
-  expect((await read("POST")).status).toBe(405);
+  const refusedWrite = await read("POST");
+  expect(refusedWrite.status).toBe(405);
+  expect(refusedWrite.headers.get("allow")).toBe("GET, HEAD");
   expect((await read("GET", `/public/menu/${f.dinner}`)).status).toBe(404);
   await withTransaction(suite.db, (tx) => setVenueDefaultCatalogue(tx, f.dinner));
-  expect((await read()).status).toBe(404);
+  const missing = await read();
+  expect(missing.status).toBe(404);
+  expect(await missing.text()).toContain("Menu unavailable");
+  const status = await f.app.request("/management-api/guest-menu", {
+    headers: { cookie: f.cookies.manager },
+  });
+  expect(await status.json()).toEqual({ enabled: true, revision: 1, available: false });
   await withTransaction(suite.db, (tx) => setVenueDefaultCatalogue(tx, f.lunch));
   f.serve(false);
   expect((await read()).status).toBe(503);
   f.serve(true);
   expect((await read()).status).toBe(200);
+});
+
+it("answers public reads from committed rows while a write is open", async () => {
+  const f = await fixture();
+  await withTransaction(suite.db, async (tx) => {
+    await setVenueDefaultCatalogue(tx, f.lunch);
+    await saveSettings(tx, GUEST_MENU_SETTINGS, {
+      doc: { enabled: true },
+      expectedRevision: 0,
+      personId: null,
+    });
+  });
+  let release!: () => void;
+  let started!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const begun = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const turn = withTransaction(suite.db, async () => {
+    started();
+    await gate;
+  });
+  await begun;
+  const read = f.app.request("/public/menu");
+  try {
+    expect((await Promise.race([read, delay(250).then(() => null)]))?.status).toBe(200);
+  } finally {
+    release();
+    await turn;
+    await read;
+  }
+});
+
+it("gives guests a page rather than an internal settings failure", async () => {
+  const f = await fixture();
+  await withTransaction(suite.db, (tx) =>
+    saveSettings(tx, GUEST_MENU_SETTINGS, {
+      doc: { enabled: true },
+      expectedRevision: 0,
+      personId: null,
+    }),
+  );
+  suite.db.execute(sql`update settings set version = 2 where module = 'catalogue'`);
+  const failure = await f.app.request("/public/menu");
+  expect(failure.status).toBe(500);
+  expect(failure.headers.get("content-type")).toContain("text/html");
+  expect(await failure.text()).toContain("Menu unavailable");
 });

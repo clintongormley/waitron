@@ -96,3 +96,13 @@ it("opens explanations only on activation, with keyboard and Escape dismissal", 
   await button.press("Space");
   expect(await page.locator(":popover-open").count()).toBe(1);
 });
+
+it("labels guest language links in their own languages", async () => {
+  const p = await browser!.newPage();
+  onTestFinished(() => p.close());
+  await p.setContent(
+    renderGuestMenuPage({ ...menu, language: "es" }, "The Restaurant", "en", true),
+  );
+  expect(await p.getByRole("navigation", { name: "Idiomas" }).count()).toBe(1);
+  expect(await p.locator('a[href="?language=en"]').textContent()).toBe("English");
+});

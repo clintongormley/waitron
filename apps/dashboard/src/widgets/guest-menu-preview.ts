@@ -37,7 +37,8 @@ export class GuestMenuPreview extends LitElement {
   @state() private error = "";
   @state() private source = "";
 
-  @state() private sharing: { enabled: boolean; revision: number } | null = null;
+  @state() private sharing: { enabled: boolean; revision: number; available: boolean } | null =
+    null;
   @state() private sharingBusy = false;
   @state() private sharingError = "";
 
@@ -163,8 +164,8 @@ export class GuestMenuPreview extends LitElement {
               ? html`<p>${t("menus.guest_unpublished")}</p>`
               : nothing
         }
-        ${this.sharing?.enabled ? html`<a href="/public/menu" target="_blank" rel="noopener">${t("menus.guest_local_link")}</a>` : nothing}
-        <p>${t(this.sharing?.enabled ? "menus.guest_sharing_on" : "menus.guest_sharing_off")}</p>
+        ${this.sharing?.available ? html`<a href="/public/menu" target="_blank" rel="noopener">${t("menus.guest_local_link")}</a>` : nothing}
+        ${this.sharing ? html`<p>${t(!this.sharing.enabled ? "menus.guest_sharing_off" : this.sharing.available ? "menus.guest_sharing_on" : "menus.guest_sharing_unavailable")}</p>` : nothing}
         ${this.sharingError ? html`<p id="sharing-error" role="alert">${this.sharingError}</p>` : nothing}
         <wt-button
           id="sharing-action"

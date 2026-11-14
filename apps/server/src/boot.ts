@@ -1439,7 +1439,11 @@ async function bootServer(
   // Setup and recovery must answer unavailable before their HTML catch-all can handle this path.
   let cloudServing = () => false;
   mountCloudPublic(app, () => cloudServing());
-  mountPublicGuestMenu(app, { db, serving: () => cloudServing() }, log);
+  mountPublicGuestMenu(
+    app,
+    { db, serving: () => cloudServing(), venueLocale: () => venueLocale },
+    log,
+  );
 
   // Help, guide pages and certificate downloads precede every mode-specific gate and SPA catch-all.
   // Machine discovery remains setup-only; the fallback CA does not certify operator TLS.

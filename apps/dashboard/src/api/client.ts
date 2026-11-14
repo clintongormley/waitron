@@ -3133,14 +3133,14 @@ export class DashboardApi {
     });
   }
 
-  getGuestMenuSharing(): Promise<{ enabled: boolean; revision: number }> {
+  getGuestMenuSharing(): Promise<{ enabled: boolean; revision: number; available: boolean }> {
     return this.#request("/management-api/guest-menu", "GET", undefined, { passive: true });
   }
 
   setGuestMenuSharing(
     enabled: boolean,
     expectedRevision: number,
-  ): Promise<{ enabled: boolean; revision: number }> {
+  ): Promise<{ enabled: boolean; revision: number; available: boolean }> {
     return this.#request("/management-api/guest-menu", "PUT", { enabled, expectedRevision });
   }
 
@@ -4906,7 +4906,7 @@ export class DashboardApi {
     id: string,
     enabled: boolean,
     revision: number,
-  ): Promise<{ enabled: boolean; revision: number }> {
+  ): Promise<{ enabled: boolean; revision: number; available: boolean }> {
     return this.#request(`/management-api/payments/providers/${id}/state`, "PUT", {
       enabled,
       revision,
