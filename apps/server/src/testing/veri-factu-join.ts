@@ -4,13 +4,18 @@ import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect } from "vitest";
 import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
-import { stampDeployment, withTransaction, writeNodeMembership } from "@waitron/db";
+import {
+  stampDeployment,
+  withTransaction,
+  writeNodeMembership,
+  type Database,
+  type NodeDatabase,
+} from "@waitron/db";
 import type { VenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { enabledModules } from "@waitron/module";
 import { planVenue } from "@waitron/provisioning";
-import { applyAllocatedTestVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { adoptFromPrimary, type AdoptCredential } from "../adopt.js";
 import { replaceBackupSettings } from "../backup-env-writer.js";
 import type { MirrorBundle } from "../mirror-bundle.js";
@@ -22,6 +27,7 @@ import { mintSelfSignedServerCert } from "../self-signed-cert.js";
 import { TOTP_KEY_RING } from "./authenticator.js";
 import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 import { signedMembershipDoc } from "./membership-doc-fixture.js";
+import { applyWithFirstSetup } from "./minute-first-setup.js";
 import { holdRecoveryKey } from "./recovery-key.js";
 
 export const MAIN_URL = "https://main.test";
@@ -44,11 +50,12 @@ export interface TwoBoxes {
 export async function veriFactuMainBox(boxes: TwoBoxes) {
   const { mainBox, mainState, ring } = boxes;
   const modules = enabledModules(ALL_MODULES, await readModuleConfig(mainState));
-  const venue = await applyAllocatedTestVenue(
+  await stampDeployment(mainBox.db, "preproduction");
+  const venue = await applyWithFirstSetup(mainState)(
     planVenue(
       {
         country: "ES",
-        taxId: "81000001K",
+        taxId: "89890001K",
         legalName: "Two Boxes SL",
         name: "Main box",
         fiscalTerritory: "ES-common",
@@ -74,16 +81,7 @@ export async function veriFactuMainBox(boxes: TwoBoxes) {
     ),
     { db: mainBox.db, modules },
   );
-  await stampDeployment(mainBox.db, "preproduction");
-  await mkdir(join(mainState, "tls"), { recursive: true });
-  const authority = mintSelfSignedServerCert({
-    hostnames: ["waitron.local"],
-    ipAddresses: [],
-    now: new Date(),
-  });
-  await writeFile(join(mainState, "tls", "ca.crt"), authority.caCertPem);
-  await writeFile(join(mainState, "tls", "ca.key"), authority.caKeyPem);
-  await holdRecoveryKey(mainState);
+  await holdBoxSecrets(mainState);
   const mainId: string = venue.nodeId;
   await establishNodeIdentity({ ownerDb: mainBox.db, node: mainBox.node, ring }, mainId);
   const mainKey = await readNodeIdentityKey(mainBox.node, ring, mainId);
@@ -103,26 +101,54 @@ export async function veriFactuMainBox(boxes: TwoBoxes) {
   ).rows as [{ email: string }];
   await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, session.token));
 
+  const bundleApp = mirrorBundleApp(
+    { db: mainBox.db, node: mainBox.node, stateDir: mainState, ring },
+    mainId,
+    MAIN_URL,
+  );
+  return { modules, mainId, mainKey, session, email, bundleApp };
+}
+
+/** The real bundle route of the main box `nodeId`, whose files are `box`'s. */
+export function mirrorBundleApp(
+  box: { db: Database; node: NodeDatabase; stateDir: string; ring: KeyRing },
+  nodeId: string,
+  advertisedOrigin: string,
+): Hono {
   const bundleApp = new Hono();
   mountMirrorBundleApi(bundleApp, {
-    appDb: mainBox.db,
-    node: mainBox.node,
-    ring,
-    stateDir: mainState,
+    appDb: box.db,
+    node: box.node,
+    ring: box.ring,
+    stateDir: box.stateDir,
     boxHostname: "waitron.local",
-    advertisedOrigin: MAIN_URL,
-    designated: { nodeId: mainId },
+    advertisedOrigin,
+    designated: { nodeId },
     accountKey: Buffer.alloc(32, 9).toString("base64"),
     credentialKeyRing: TOTP_KEY_RING,
     wakeSpareJoin: () => {},
   });
-  return { modules, mainId, mainKey, session, email, bundleApp };
+  return bundleApp;
+}
+
+/** A box authority and the recovery key in `stateDir`, as a main box's state folder holds them. */
+export async function holdBoxSecrets(stateDir: string): Promise<void> {
+  await mkdir(join(stateDir, "tls"), { recursive: true });
+  const authority = mintSelfSignedServerCert({
+    hostnames: ["waitron.local"],
+    ipAddresses: [],
+    now: new Date(),
+  });
+  await writeFile(join(stateDir, "tls", "ca.crt"), authority.caCertPem);
+  await writeFile(join(stateDir, "tls", "ca.key"), authority.caKeyPem);
+  await holdRecoveryKey(stateDir);
 }
 
 /** The spare joins `main` through the real `adoptFromPrimary`, the bundle route answering 200. */
 export async function joinSpare(
-  boxes: TwoBoxes,
-  main: Awaited<ReturnType<typeof veriFactuMainBox>>,
+  boxes: Pick<TwoBoxes, "spareBox" | "spareState" | "ring">,
+  main: { bundleApp: Hono; email: string },
+  { primaryUrl = MAIN_URL, spareUrl = SPARE_URL } = {},
 ) {
   const { spareBox, spareState, ring } = boxes;
   let bundle!: MirrorBundle;
@@ -154,7 +180,7 @@ export async function joinSpare(
         bundle = body as MirrorBundle;
         return bundle;
       },
-      advertisedOrigin: SPARE_URL,
+      advertisedOrigin: spareUrl,
       spareStorePort: 7443,
       environment: "preproduction",
       persistTrading: async (args) => {
@@ -169,7 +195,7 @@ export async function joinSpare(
       listIpv4: () => [],
       now: () => new Date(),
     },
-    { primaryUrl: MAIN_URL, credential: { email: main.email, password: ADMIN_PASSWORD } },
+    { primaryUrl, credential: { email: main.email, password: ADMIN_PASSWORD } },
     { beforeFirstWrite: async () => {} },
   );
   return { bundle, standby, spareId };
