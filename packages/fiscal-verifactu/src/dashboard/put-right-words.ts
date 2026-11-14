@@ -25,7 +25,6 @@ export const REFUSAL_WORDS: Record<RemedyRefusal, AeatCertificateKey> = {
   "fiscal.record_already_corrected": "fiscal_filing.refused.changed",
   "fiscal.chain_handed_over": "fiscal_filing.refused.not_main",
   "node.read_only": "fiscal_filing.refused.not_main",
-  "clock.behind_chain": "fiscal_filing.refused.clock_behind",
   "clock.unconfirmed": "fiscal_filing.refused.clock_unconfirmed",
   "clock.unusable": "fiscal_filing.refused.clock_unusable",
   "venue.time_zone_not_ready": "fiscal_filing.refused.time_zone",
