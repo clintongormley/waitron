@@ -19,7 +19,12 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 
-const encoding = vi.hoisted(() => ({ observe: false, order: [] as string[] }));
+const encoding = vi.hoisted(() => ({
+  observe: false,
+  order: [] as string[],
+  before: undefined as undefined | (() => Promise<void>),
+  after: undefined as undefined | (() => void),
+}));
 vi.mock("./configuration-transfer.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./configuration-transfer.js")>();
   return {
@@ -27,14 +32,15 @@ vi.mock("./configuration-transfer.js", async (importOriginal) => {
     encodeConfigurationBundleAsync: async (
       ...args: Parameters<typeof actual.encodeConfigurationBundleAsync>
     ) => {
-      if (!encoding.observe) return actual.encodeConfigurationBundleAsync(...args);
-      const turn = setImmediate(() => encoding.order.push("turned"));
+      await encoding.before?.();
+      const turn = encoding.observe ? setImmediate(() => encoding.order.push("turned")) : undefined;
       try {
         const bytes = await actual.encodeConfigurationBundleAsync(...args);
-        encoding.order.push("encoded");
+        if (encoding.observe) encoding.order.push("encoded");
         return bytes;
       } finally {
-        clearImmediate(turn);
+        if (turn !== undefined) clearImmediate(turn);
+        encoding.after?.();
       }
     },
   };
@@ -187,6 +193,57 @@ describe("configuration export API", () => {
       encoding.observe = false;
     }
   });
+
+  it.each([false, true])(
+    "serializes export derivations even if the first fails: %s",
+    async (failFirst) => {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let started!: () => void;
+      const firstStarted = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const order: string[] = [];
+      encoding.before = async () => {
+        const first = order.length === 0;
+        order.push("start");
+        if (first) {
+          started();
+          await held;
+          if (failFirst) {
+            order.push("end");
+            throw new Error("derivation failed");
+          }
+        }
+      };
+      encoding.after = () => {
+        order.push("end");
+      };
+      const server = app();
+      const send = () =>
+        server.request("/management-api/configuration-export", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie },
+          body: JSON.stringify({ passphrase: "a strong passphrase" }),
+        });
+      try {
+        const first = send();
+        await firstStarted;
+        const second = send();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        release();
+        expect((await first).status).toBe(failFirst ? 500 : 200);
+        expect((await second).status).toBe(200);
+        expect(order).toEqual(["start", "end", "start", "end"]);
+      } finally {
+        release();
+        encoding.before = undefined;
+        encoding.after = undefined;
+      }
+    },
+  );
 
   it("returns an encrypted configuration-only artifact", async () => {
     const response = await app().request("/management-api/configuration-export", {

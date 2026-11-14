@@ -388,7 +388,7 @@ it("encodes an asynchronously encrypted bundle readable by the existing decoder"
   expect(decodeConfigurationBundle(encoded, "twelve chars")).toEqual(bundle);
 });
 
-it("refuses a short passphrase before asynchronous encryption", async () => {
+it("refuses a short passphrase", async () => {
   await expect(
     encodeConfigurationBundleAsync(configurationBundle(), "elevenchar!"),
   ).rejects.toMatchObject(invalid("passphrase"));

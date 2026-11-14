@@ -36,6 +36,7 @@ export function mountConfigurationExportApi(
   deps: ConfigurationExportDeps,
   log: Logger,
 ): void {
+  let previousExport = Promise.resolve();
   app.post("/management-api/configuration-export", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -60,7 +61,14 @@ export function mountConfigurationExportApi(
           deps.moduleVersions,
         );
       });
-      const artifact = await encodeConfigurationBundleAsync(bundle, passphrase);
+      const artifactReady = previousExport.then(() =>
+        encodeConfigurationBundleAsync(bundle, passphrase),
+      );
+      previousExport = artifactReady.then(
+        () => undefined,
+        () => undefined,
+      );
+      const artifact = await artifactReady;
       c.header("content-type", "application/octet-stream");
       c.header("content-disposition", 'attachment; filename="waitron-configuration.enc"');
       c.header("cache-control", "no-store");

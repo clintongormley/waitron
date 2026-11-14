@@ -1,3 +1,4 @@
+import { scrypt } from "node:crypto";
 import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -30,6 +31,11 @@ import {
   type FirstSetupFrozen,
 } from "./first-setup-state.js";
 import { createFirstSetupNodeKeys, readFirstSetupStagedKey } from "./first-setup-node-key.js";
+
+vi.mock("node:crypto", async (original) => {
+  const actual = await original<typeof import("node:crypto")>();
+  return { ...actual, scrypt: vi.fn(actual.scrypt) };
+});
 
 const database = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
@@ -96,7 +102,9 @@ async function fixture(stage = true) {
 }
 
 it("retains the same delivered key on a reconfirmed repeat without persisting its secret", async () => {
+  vi.mocked(scrypt).mockClear();
   const f = await fixture();
+  expect(vi.mocked(scrypt).mock.calls.map(([secret]) => secret)).toContain(f.staged!.key.secret);
   const before = await readFile(f.path);
   const token = await f.grant();
   const repeated = await f.coordinator.run((hold) =>
