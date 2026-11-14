@@ -4,6 +4,7 @@ import { expect, it, vi, onTestFinished } from "vitest";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { CORE_MIGRATIONS, withTransaction, saveSettings } from "@waitron/db";
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { startManagementSession } from "@waitron/identity";
@@ -406,6 +407,7 @@ it("reads a due edition without a save and follows the new default on the next r
   vi.setSystemTime(new Date("2026-11-14T05:00:00Z"));
   const f = await fixture();
   await withTransaction(suite.db, async (tx) => {
+    await seedBusinessDay(tx, { timeZone: "Asia/Tokyo" });
     await setVenueDefaultCatalogue(tx, f.lunch);
     await saveSettings(tx, GUEST_MENU_SETTINGS, {
       doc: { enabled: true },
@@ -429,7 +431,7 @@ it("reads a due edition without a save and follows the new default on the next r
   expect((await guestMenuApi.readGuestMenuPages(suite.db, "en"))!.pages.en).toContain(
     "Scheduled soup",
   );
-  expect((await guestMenuApi.readGuestMenuPages(suite.db, "en"))!.pages.en).toContain("06:01");
+  expect((await guestMenuApi.readGuestMenuPages(suite.db, "en"))!.pages.en).toContain("02:01 PM");
   await withTransaction(suite.db, async (tx) => {
     const preview = await previewMenu(tx, f.dinner);
     await publishMenu(tx, f.dinner, preview.hash, f.cookies.managerId);
@@ -438,4 +440,18 @@ it("reads a due edition without a save and follows the new default on the next r
   const dinner = (await guestMenuApi.readGuestMenuPages(suite.db, "en"))!.pages.en;
   expect(dinner).toContain("Burger for guests");
   expect(dinner).not.toContain("Scheduled soup");
+});
+
+it("renders Cloud pages in UTC while the saved venue zone needs repair", async () => {
+  const f = await fixture();
+  await withTransaction(suite.db, async (tx) => {
+    await seedBusinessDay(tx, { timeZone: "Invalid/Zone" });
+    await setVenueDefaultCatalogue(tx, f.lunch);
+    await saveSettings(tx, GUEST_MENU_SETTINGS, {
+      doc: { enabled: true },
+      expectedRevision: 0,
+      personId: null,
+    });
+  });
+  expect((await guestMenuApi.readGuestMenuPages(suite.db, "en"))!.pages.en).toContain("UTC");
 });

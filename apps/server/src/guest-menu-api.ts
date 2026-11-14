@@ -22,8 +22,9 @@ import {
   requireManagementSession,
   requireUuidParam,
   readJsonBody,
+  codeOf,
 } from "@waitron/server-kit";
-import { AppError, FALLBACK_LOCALE, publicGuestMenu } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE, publicGuestMenu, classifySavedTimeZone } from "@waitron/shared";
 import type { GuestMenuDeliveryStatus } from "./cloud-guest-menu.js";
 import type { Logger } from "./logger.js";
 import { renderGuestMenuPage, renderGuestMenuUnavailable } from "./guest-menu-page.js";
@@ -50,6 +51,7 @@ export async function readGuestMenuPages(db: Database, venueLocale: string) {
   if (live === null) return null;
   const languages = await readContentLanguages(db, venueLocale);
   const venue = await readVenue(db);
+  const zone = classifySavedTimeZone(venue.timeZone);
   return {
     defaultLanguage: languages.defaultLanguage,
     pages: Object.fromEntries(
@@ -63,7 +65,7 @@ export async function readGuestMenuPages(db: Database, venueLocale: string) {
           undefined,
           "lang",
           live.since,
-          venue.timeZone,
+          zone.kind === "valid" ? zone.timeZone : "UTC",
         ),
       ]),
     ),
@@ -82,7 +84,8 @@ export function mountGuestMenuApi(
   async function deliveryStatus() {
     try {
       return deps.delivery ? { delivery: await deps.delivery() } : {};
-    } catch {
+    } catch (error) {
+      log("warn", "cloud.guest_menu_status_failed", { errorCode: codeOf(error) });
       return {};
     }
   }
