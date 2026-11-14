@@ -870,7 +870,7 @@ tests. Media still validates required image names and translates its refusal to
 
 ## Bundle: wt-data-table: heading wrap, long names, odds and ends
 
-10 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **The Products tree's hidden counts may be placed against the page at narrow width** — not measured; left open by A453.
   [Detail](catalogue.md#the-products-trees-hidden-counts-may-be-placed-against-the-page-at-narrow-width)
@@ -1072,7 +1072,7 @@ The proposal distinguishes the narrower measured cases from these original obser
 
 ## Decisions and deliberate limits
 
-- **Prep stations at phone width (watcher, 2026-11-13 23:51).** Use the existing whole-table wrapping; no per-column heading API. The EN/ES two-station fixture measures 388/476 px in a 388 px box at 390 px. The remaining 88 px Spanish scroll is accepted; names and read-outs stay within their cells. Receipt: `station-table.test.ts`, the 390 px read-outs cases; this is a fixture measurement, not a promise for arbitrary names.
+- **Prep stations at phone width (watcher, 2026-11-13 23:51).** Use the existing whole-table wrapping; no per-column heading API. Remaining Spanish horizontal scrolling is accepted. The 390 px read-outs cases in `station-table.test.ts` check that headings wrap, names and read-outs stay within their cells, and Actions stays reachable; they do not pin a width or promise no scrolling for arbitrary names.
 
 - **Sent declarations (A1517 decision 6, owner 2026-11-11, “As recommended”).** Sent till dishes and
   Orders history detail use declarations captured at the first send, including each extra's own

@@ -44,8 +44,12 @@ export function formatShortDate(date: LocalDate, year: boolean): string {
 }
 
 /** A month's name from its number, 1 to 12, "December", in `language`, else the dashboard's. */
-export function formatMonthName(month: number, language?: string): string {
-  return dateFormat({ month: "long" }, language).format(
+export function formatMonthName(
+  month: number,
+  language?: string,
+  style: "long" | "short" = "long",
+): string {
+  return dateFormat({ month: style }, language).format(
     asUtc(`2001-${String(month).padStart(2, "0")}-01`),
   );
 }

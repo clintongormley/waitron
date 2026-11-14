@@ -36,7 +36,7 @@ export class StationTable extends LitElement {
         align-items: center;
       }
       wt-data-table::part(station-name-details) {
-        min-width: min-content;
+        min-width: 0;
       }
       wt-data-table::part(station-colour) {
         display: inline-block;

@@ -5045,7 +5045,7 @@ when the labels do not fit.
 Stations shows no live kitchen numbers: each station's name with its
 Default mark, Printed on (its printers, or "No printer"), Shown on (the devices whose kitchen screens
 show it, and a link to Devices), Waits for the pass (Yes or No) and Actions, the row's menu.
-The table uses `wrapToFit`; the name grid and its details keep their min-content width so names and the Default mark stay inside Name.
+The table uses `wrapToFit`; the name grid keeps its min-content width so names and the Default mark stay inside Name.
 A closure note beside its name reads Closed for today and its destination;
 open and default stations need no closure note (`packages/venue-service/src/dashboard/station-table.ts`).
 Use the till's Station screen or the kitchen display for Close for today and Open for today.

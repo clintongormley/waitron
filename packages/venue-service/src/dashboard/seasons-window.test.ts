@@ -391,7 +391,7 @@ it.each(["en", "es"] as const)(
 );
 
 it.each(["en", "es"] as const)(
-  "at 390 every row's bin and date controls are on screen on opening, and the bin stays put while the table scrolls (%s)",
+  "at 390 every row's bin and date controls are on screen even with a wide font, and the bin stays put while the table scrolls (%s)",
   async (locale) => {
     const old = [window.innerWidth, window.innerHeight] as const;
     try {
@@ -399,12 +399,14 @@ it.each(["en", "es"] as const)(
       await page.viewport(390, 800);
       expect(window.innerWidth).toBe(390);
       const el = await mount();
+      el.style.setProperty("--wt-font-family", "Verdana");
       await change(el, "season-1-day", "31");
       // The longest colour name in each language: Turquesa in Spanish, Magenta in English.
       await change(el, "season-0-colour", locale === "es" ? "teal" : "magenta");
       await frames();
       expect(document.documentElement.scrollWidth).toBe(window.innerWidth);
       const day = field(el, "season-1-day").shadowRoot!.querySelector<HTMLElement>(".value")!;
+      expect(getComputedStyle(day).fontFamily).toContain("Verdana");
       expect(day.textContent!.trim()).toBe("31");
       expect(day.scrollWidth, "the Day box shows 31 whole").toBeLessThanOrEqual(day.clientWidth);
       const modal = root(el).querySelector("wt-modal")!;

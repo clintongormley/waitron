@@ -490,7 +490,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Public opt-in, Cloud delivery and fixed A4 presets remain; no ordering.
   [Detail](backlog/catalogue.md#a670--guest-menu-sharing-and-fixed-a4-presets)
 
-- **wt-data-table: heading wrap, long names, odds and ends** (size M). Holds A543. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
+- **wt-data-table: heading wrap, long names, odds and ends** (bundle of 9, size M). Holds A543. [Detail](backlog/catalogue.md#bundle-wt-data-table-heading-wrap-long-names-odds-and-ends)
 
 - **One language fallback rule** (bundle of 5, 1 important, size M). [Detail](backlog/catalogue.md#bundle-one-language-fallback-rule)
 

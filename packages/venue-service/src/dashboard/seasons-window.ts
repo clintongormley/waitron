@@ -19,7 +19,6 @@ import "@waitron/ui/src/components/wt-colour-chooser.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { currentLocale, dateTimeFormat } from "@waitron/dashboard-kit";
 import { listOf } from "./painter-labels.js";
 import type { CalendarColour } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
@@ -133,6 +132,10 @@ export class SeasonsWindow extends LitElement {
         min-width: calc(var(--wt-space-6) * 4.5);
       }
       @container (width < 480px) {
+        th:nth-child(2),
+        .name {
+          padding-inline: 0;
+        }
         .starts {
           padding-inline: 0;
         }
@@ -502,9 +505,7 @@ export class SeasonsWindow extends LitElement {
     MONTHS.map((month) => ({
       value: month,
       label: formatMonthName(Number(month)),
-      valueLabel: dateTimeFormat(currentLocale(), { month: "short", timeZone: "UTC" }).format(
-        new Date(`2001-${month}-01T00:00:00Z`),
-      ),
+      valueLabel: formatMonthName(Number(month), undefined, "short"),
     }));
 
   private editableRow(row: SeasonRow, index: number, marks: Marks) {
