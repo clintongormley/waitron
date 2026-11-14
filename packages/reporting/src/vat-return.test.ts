@@ -147,7 +147,7 @@ describe("computeVatReturn", () => {
 
     async function replace(
       replacementAt: string,
-      operationDate?: string,
+      supplyDay?: string,
     ): Promise<{ replacement: SaleId }> {
       const original = await seedSale(suite.db, venue, {
         invoiceNumber: 1,
@@ -159,7 +159,7 @@ describe("computeVatReturn", () => {
         issuedAt: replacementAt,
         correctsSaleId: original,
         replacesOriginal: true,
-        ...(operationDate === undefined ? {} : { operationDate }),
+        ...(supplyDay === undefined ? {} : { supplyDay }),
         ...ticket,
       });
       return { replacement };

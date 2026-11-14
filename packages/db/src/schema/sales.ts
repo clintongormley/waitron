@@ -100,7 +100,7 @@ export const sales = table(
     replacesOriginal: flag("replaces_original").notNull().default(false),
     // On a replacement only: the day the replaced sale really happened, as filed in its record's
     // FechaOperacion. The VAT return counts the replaced sale in this day's period.
-    operationDate: day("operation_date"),
+    supplyDay: day("supply_day"),
     // The recipient of a full invoice, NULL when the sale names none. Kept here as well as in the
     // fiscal record because it is a reprint/Z-report fact. Mirrors `Counterparty`
     // (packages/fiscal/src/backend.ts).
@@ -141,7 +141,7 @@ export const sales = table(
       "sales_replaces_original_ck",
       sql`${t.replacesOriginal} = 0 or ${t.correctsSaleId} is not null`,
     ),
-    check("sales_operation_date_ck", sql`${t.operationDate} is null or ${t.replacesOriginal} = 1`),
+    check("sales_supply_day_ck", sql`${t.supplyDay} is null or ${t.replacesOriginal} = 1`),
     foreignKey({
       columns: [t.nodeId],
       foreignColumns: [nodes.id],

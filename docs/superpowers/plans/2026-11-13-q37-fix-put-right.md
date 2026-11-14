@@ -314,7 +314,7 @@ lines, grouped):
 
 | Reader | What it does with correctives | Decision | Task |
 | --- | --- | --- | --- |
-| `packages/reporting/src/vat-return.ts:39` via `activeSalesClause` (`business-day.ts:217-220`) | counts every sale, correctives included | leave out the replacement; the original carries the sale (owner's answer E), in the period of its replacement's `operation_date` when it has one (2026-11-14, Task 3g) | 3b-1, 3g |
+| `packages/reporting/src/vat-return.ts:39` via `activeSalesClause` (`business-day.ts:217-220`) | counts every sale, correctives included | leave out the replacement; the original carries the sale (owner's answer E), in the period of its replacement's `supply_day` when it has one (2026-11-14, Task 3g) | 3b-1, 3g |
 | `issuedSalesClause` / `reversedSalesClause` (`business-day.ts:229-244`): `vat-summary.ts:111,127`, `counts.ts:18-21`, `category-sales.ts:208,216`, `top-sellers.ts:71,78` | count correctives as rows on their day | leave out the replacement | 3b-1 |
 | `top-sellers.ts:105` | nets corrective lines against the invoice line they name | none needed: replacement lines name no line (`correctsLineId` null, Task 3a); a later refund names the replacement's lines, which are counted on the replacement's day — the replacement itself is out, so test that a refund of a replaced sale nets against nothing it should not | 3b-1 |
 | `apps/server/src/accountant-export.ts:194-212`, `:110` | one row per invoice, type "corrective" | replacement row typed `replacement`, whose label says not to add it; the replaced original keeps its own type (M8 below) | 3b-1 |
@@ -944,7 +944,7 @@ comment, refusal wording, held-chain, clock-still-ahead, future-dated-test and p
   its REAL day, the replacement's `FechaOperacion`, matching AEAT; built in PR 3 with the 28 February
   / stamped 2 March example. This supersedes the "E: the sale's period" paragraph under "Answers".
   Waitron stores that day only in `registros_facturacion.fecha_operacion` (fiscal-verifactu's
-  table), which `@waitron/reporting` must not read, so `sales` gains a nullable `operation_date`
+  table), which `@waitron/reporting` must not read, so `sales` gains a nullable `supply_day`
   (Task 3g). Recorded as a DEVIATION for the watcher in lane L `questions.md` (2026-11-14).
 
 ### Task 3g — the VAT return counts a replaced sale in its real day's period (PR 3)
@@ -953,18 +953,16 @@ Files: `packages/db/src/schema/sales.ts` (column + CHECK), core's starting migra
 `pnpm --filter @waitron/db db:generate`, never hand-edited), `packages/core/src/record-replacement.ts`
 (stores the day), `packages/reporting/src/vat-return.ts` (the date it buckets by).
 
-- `sales.operation_date`: `day("operation_date")`, nullable; CHECK `sales_operation_date_ck`:
-  `operation_date is null or replaces_original = 1`. Written only by `recordReplacement`, on the
+- `sales.supply_day`: `day("supply_day")`, nullable; CHECK `sales_supply_day_ck`:
+  `supply_day is null or replaces_original = 1` (named for the day of supply, the watcher 18:22, so
+  it does not revive the `sales.operation_date` A444 removed). Written only by `recordReplacement`, on the
   replacement's row, when it is given an `operationDate` (exactly the string it hands the backend).
-- `computeVatReturn`'s output side buckets a sale by its replacement's `operation_date` when it
+- `computeVatReturn`'s output side buckets a sale by its replacement's `supply_day` when it
   has a replacement with one, else by its filed issue date as today. Nothing else changes: the
   replacement itself stays left out (`activeSalesClause`), a later refund of the replacement (Task
   3f) is counted in its own issue period, and the day reports keep the original on the day it was
   taken.
-- `apps/server/src/accountant-export.ts` (`:218-246`): a replaced original's row gains its real day
-  in a new "Operation date" / "Fecha de operación" column, empty on every other row, so the
-  accountant can match the 303. The period VAT summary (`packages/reporting/src/vat-summary.ts`,
-  day-based) keeps the original on the day it was taken; the PR says the two differ for such a sale.
+- The accountant export is unchanged: A444 (#2946, owner 2026-11-12) removed its operation-date column; it lists invoices by issue date, so for a replaced sale whose real day falls in an earlier month it differs from the VAT return — said in the PR.
 - Claims this retires, rewritten in the same task: `vat-return.ts:13-17` and `:24-28`,
   `business-day.ts:211-214` ("in its own VAT period"), and this plan's "How the sale is counted
   once" row for the VAT return.
@@ -972,7 +970,7 @@ Files: `packages/db/src/schema/sales.ts` (column + CHECK), core's starting migra
   date 28 February 2026: February's return holds its base and VAT, March's is zero (both checked);
   the same with no operation date stays in March; a refund of the replacement issued in March
   counts in March. `record-replacement.test.ts` — the day is stored on the replacement's row, and
-  null when not given. A database test that the CHECK refuses `operation_date` on a sale that is not
+  null when not given. A database test that the CHECK refuses `supply_day` on a sale that is not
   a replacement (assert the refusal by its words, CLAUDE.md §3 / 1811 rule).
 - Guards (run): `pnpm exec vitest run scripts/schema-constraints.test.ts
   scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts
@@ -1042,7 +1040,7 @@ Size: about 170 production lines, 260 test lines.
 
 **PR 3 totals (estimate):** about 345 production and 720 test lines, plus the generated migration.
 First lines of the PR: fiscal; resets every venue (core's starting migration rebuilt); `sales`
-gains `operation_date`.
+gains `supply_day`.
 
 **Still open, asked of the watcher with this rewrite:** "Still open" A's preproduction probe of an
 R5 "S" with 0 / 0 after a `1112` refusal. Default: PR 3 does not wait for it (no venue is live and

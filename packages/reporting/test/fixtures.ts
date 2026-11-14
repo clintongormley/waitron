@@ -162,7 +162,7 @@ export async function seedSale(
     /** A corrective by replacement: it carries the full amounts and takes `correctsSaleId`'s place. */
     replacesOriginal?: true;
     /** On a replacement, the day the original sale really happened, `YYYY-MM-DD`. */
-    operationDate?: string;
+    supplyDay?: string;
     counterpartyTaxId?: string;
     /** Overrides the breakdown derived from `lines`, for a test that needs a specific desglose. */
     vatBreakdown?: { rate: string; base: string; tax: string }[];
@@ -196,7 +196,7 @@ export async function seedSale(
       fiscalState: "recorded",
       correctsSaleId: opts.correctsSaleId,
       replacesOriginal: opts.replacesOriginal ?? false,
-      operationDate: opts.operationDate ?? null,
+      supplyDay: opts.supplyDay ?? null,
       workingOrderId: opts.workingOrderId ?? null,
     })
     .returning({ id: sales.id });

@@ -257,16 +257,16 @@ describe("recordReplacement — the replacement sale", () => {
     });
   });
 
-  it("stores the operation date it was given on the replacement's own row", async () => {
+  it("stores the operation date it was given on the replacement's own row, as its supply day", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
 
     const { saleId } = await replace(backend, originalId, { operationDate: "2026-02-27" });
 
-    const { rows } = await suite.db.execute<{ id: string; operation_date: string | null }>(
-      sql`select id, operation_date from sales order by invoice_number, series_id`,
+    const { rows } = await suite.db.execute<{ id: string; supply_day: string | null }>(
+      sql`select id, supply_day from sales order by invoice_number, series_id`,
     );
-    expect(Object.fromEntries(rows.map((r) => [r.id, r.operation_date]))).toEqual({
+    expect(Object.fromEntries(rows.map((r) => [r.id, r.supply_day]))).toEqual({
       [originalId]: null,
       [saleId]: "2026-02-27",
     });
@@ -278,10 +278,10 @@ describe("recordReplacement — the replacement sale", () => {
 
     const { saleId } = await replace(backend, originalId);
 
-    const { rows } = await suite.db.execute<{ operation_date: string | null }>(
-      sql`select operation_date from sales where id = ${saleId}`,
+    const { rows } = await suite.db.execute<{ supply_day: string | null }>(
+      sql`select supply_day from sales where id = ${saleId}`,
     );
-    expect(rows).toEqual([{ operation_date: null }]);
+    expect(rows).toEqual([{ supply_day: null }]);
   });
 
   it("names no operation date to the backend when it was given none", async () => {

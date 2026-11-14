@@ -155,7 +155,7 @@ export async function recordReplacement(
     fiscalState: "recorded",
     correctsSaleId: input.correctsSaleId,
     replacesOriginal: true,
-    operationDate: input.operationDate ?? null,
+    supplyDay: input.operationDate ?? null,
     authorizedBy: authorization.authorizedBy,
   });
 

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b00a48ee-cd7e-40fa-9e7f-65cbf908c1f4",
+  "id": "6946bc86-ef96-49ed-b7f3-6bfd5251dd16",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8569,8 +8569,8 @@
           "autoincrement": false,
           "default": false
         },
-        "operation_date": {
-          "name": "operation_date",
+        "supply_day": {
+          "name": "supply_day",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -8767,9 +8767,9 @@
           "name": "sales_replaces_original_ck",
           "value": "\"sales\".\"replaces_original\" = 0 or \"sales\".\"corrects_sale_id\" is not null"
         },
-        "sales_operation_date_ck": {
-          "name": "sales_operation_date_ck",
-          "value": "\"sales\".\"operation_date\" is null or \"sales\".\"replaces_original\" = 1"
+        "sales_supply_day_ck": {
+          "name": "sales_supply_day_ck",
+          "value": "\"sales\".\"supply_day\" is null or \"sales\".\"replaces_original\" = 1"
         },
         "sales_total_ck": {
           "name": "sales_total_ck",

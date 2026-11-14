@@ -22,7 +22,7 @@ import type { VatReturn, VatReturnInput } from "./types.js";
  * There is no gross box on a 303, so `VatReturn` omits `grossTotal`.
  *
  * The output side buckets a sale by a CIVIL date, not the operational business day, so it needs no
- * `timeZone` input: the `operation_date` its replacement filed as *fecha de operación* when it has
+ * `timeZone` input: the `supply_day` its replacement filed as *fecha de operación* when it has
  * one, else its own filed *fecha de expedición* — the issuance instant shifted by the sale's own
  * snapshotted offset, the date `@waitron/verifactu`'s `formatDate(issued_at, issued_offset_minutes)`
  * filed.
@@ -36,10 +36,10 @@ export async function computeVatReturn(tx: Transaction, input: VatReturnInput): 
   const filedDate = sql`date(s.issued_at, printf('%+d minutes', s.issued_offset_minutes))`;
   // `s` is the alias `aggregateVatByRate` gives `sales`; `sales_one_replacement_uq` admits at most
   // one replacement per sale.
-  const operationDate = sql`(select r.operation_date from sales r
+  const supplyDay = sql`(select r.supply_day from sales r
     where r.corrects_sale_id = s.id and r.replaces_original = 1)`;
   const dateFilter = periodDateFilter(
-    sql`coalesce(${operationDate}, ${filedDate})`,
+    sql`coalesce(${supplyDay}, ${filedDate})`,
     input.year,
     input.period,
   );
