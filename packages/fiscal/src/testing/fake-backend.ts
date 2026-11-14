@@ -119,6 +119,7 @@ export class FakeFiscalBackend implements FiscalBackend {
         -- EXACT figures filed. Set for a sale and a correction, the kinds they read; NULL for a
         -- void or a substitution. JSON in a text column: the engine has no jsonb.
         vat_breakdown text,
+        replaces integer not null default 0,
         unique (node_id, sequence)
       );
     `);
@@ -217,7 +218,7 @@ export class FakeFiscalBackend implements FiscalBackend {
   async recordCorrection(
     tx: Transaction,
     sale: SaleForFiscalRecord,
-    correction: { correctsSaleId: SaleId },
+    correction: { correctsSaleId: SaleId; replaces?: true },
   ): Promise<FiscalRecordRef> {
     const rows = await tx.execute<{ record_id: string }>(sql`
       select record_id from fake_fiscal_records
@@ -236,6 +237,7 @@ export class FakeFiscalBackend implements FiscalBackend {
       issuedAt: sale.issuedAt,
       offsetMinutes: sale.offsetMinutes,
       vatBreakdown: sale.vatBreakdown,
+      replaces: correction.replaces === true,
     });
   }
 
@@ -366,6 +368,16 @@ export class FakeFiscalBackend implements FiscalBackend {
     return rows.rows;
   }
 
+  /** The sales whose corrections on `nodeId` were recorded as replacements, in chain order. */
+  async replacementsFor(nodeId: NodeId): Promise<string[]> {
+    const rows = await this.db.execute<{ saleId: string }>(sql`
+      select sale_id as "saleId" from fake_fiscal_records
+      where node_id = ${nodeId} and replaces = 1
+      order by sequence
+    `);
+    return rows.rows.map((row) => row.saleId);
+  }
+
   // ---- internals ------------------------------------------------------------------------
 
   private async assertRegistered(tx: Transaction, nodeId: string): Promise<void> {
@@ -388,6 +400,7 @@ export class FakeFiscalBackend implements FiscalBackend {
       issuedAt: Date;
       offsetMinutes: number;
       vatBreakdown?: readonly VatBreakdownLine[];
+      replaces?: boolean;
     },
   ): Promise<FiscalRecordRef> {
     const recordId = nextId();
@@ -404,10 +417,11 @@ export class FakeFiscalBackend implements FiscalBackend {
     await tx.execute(sql`
       insert into fake_fiscal_records
         (record_id, node_id, sale_id, sequence, kind, invoice_number, total, state,
-         vat_breakdown)
+         vat_breakdown, replaces)
       values
         (${recordId}, ${entry.nodeId}, ${entry.saleId}, ${sequence},
-         ${entry.kind}, ${entry.invoiceNumber}, ${entry.total}, 'pending', ${vatBreakdown})
+         ${entry.kind}, ${entry.invoiceNumber}, ${entry.total}, 'pending', ${vatBreakdown},
+         ${entry.replaces === true ? 1 : 0})
     `);
     return {
       backend: this.id,
