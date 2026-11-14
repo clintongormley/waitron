@@ -36,7 +36,7 @@ export const handoverEn = {
   "handover.emergency.backup_intro":
     "To use an encrypted backup instead, choose its file. This replaces the copy on this spare and restarts it before you review and declare.",
   "handover.emergency.backup_file": "Encrypted backup file",
-  "handover.emergency.backup_key": "Backup recovery key, if this box has none",
+  "handover.emergency.backup_key": "Backup recovery key",
   "handover.emergency.use_backup": "Use this backup",
   "handover.emergency.backup_restarting":
     "Placing the selected backup. Keep this page open while this box restarts.",
@@ -95,7 +95,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.backup_intro":
     "Para usar una copia de seguridad cifrada, elige su archivo. Sustituye la copia de este servidor de reserva y lo reinicia antes de que la revises y hagas la declaración.",
   "handover.emergency.backup_file": "Archivo de copia de seguridad cifrada",
-  "handover.emergency.backup_key": "Clave de recuperación, si este servidor no tiene una",
+  "handover.emergency.backup_key": "Clave de recuperación",
   "handover.emergency.use_backup": "Usar esta copia de seguridad",
   "handover.emergency.backup_restarting":
     "Colocando la copia seleccionada. Mantén esta página abierta mientras se reinicia el servidor.",

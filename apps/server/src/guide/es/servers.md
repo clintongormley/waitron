@@ -43,12 +43,6 @@ reserva.
 
 ## Iniciar aquí si ha fallado el equipo principal {#emergency}
 
-Para usar una copia de seguridad cifrada, elige su archivo y pulsa **Usar esta copia de seguridad**.
-Si este equipo no tiene una clave guardada, introduce la clave de la copia cuando se te pida.
-Mantén la página abierta mientras se reinicia y revisa **Copia de seguridad seleccionada** y su
-última actividad antes de declarar. Elige una copia hecha después de que este equipo de reserva
-se uniera a su principal actual, para que el equipo antiguo pueda reconocerlo cuando vuelva.
-
 Usa un equipo de reserva que haya terminado de unirse a este local. Apaga el equipo principal
 anterior y mantenlo apagado, porque dos equipos principales encendidos podrían cobrar y enviar
 registros por separado. Esta declaración no se puede deshacer.
@@ -58,6 +52,12 @@ Abre la dirección HTTPS del equipo de reserva y añade `/handover/emergency`, p
 administrador y su código actual de autenticador, si está configurado, y elige **Comprobar esta
 copia**. Revisa su última actividad con fecha. Puede faltar la actividad posterior; si no hay
 ninguna fecha disponible, la página lo indica.
+
+Para usar una copia de seguridad cifrada, elige su archivo y pulsa **Usar esta copia de seguridad**.
+Si este equipo no tiene una clave guardada, introduce la clave de la copia cuando se te pida.
+Mantén la página abierta mientras se reinicia y revisa **Copia de seguridad seleccionada** y su
+última actividad antes de declarar. Elige una copia hecha después de que este equipo de reserva
+se uniera a su principal actual, para que el equipo antiguo pueda reconocerlo cuando vuelva.
 
 Lee las advertencias, marca las tres declaraciones y explica el motivo. Elige **Declarar apagado
 el servidor principal anterior**. En la comprobación del reloj, marca **Estos datos son correctos.**
