@@ -832,3 +832,17 @@ it("prepared revisions keep retained history in the module's one record", async 
   });
   expect(await fs.readdir(f.stateDir)).toEqual(["module-records"]);
 });
+
+it("refuses an aggregate prepared history over 1 MiB before writing another module", async () => {
+  const f = await fixture();
+  const payments = { ...binding, module: "payments" };
+  const value = { text: "x".repeat(600 * 1024) };
+  await f.store.withState(payments, (state) => state.replace(value));
+  const path = join(f.stateDir, "module-records/payments.json");
+  const before = await fs.readFile(path);
+  await expect(f.store.withState(binding, (state) => state.replace(value))).rejects.toMatchObject({
+    code: "setup.attempt_invalid",
+  });
+  expect(await fs.readFile(path)).toEqual(before);
+  await expect(fs.readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+});

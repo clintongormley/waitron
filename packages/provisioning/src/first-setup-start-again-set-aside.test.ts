@@ -33,6 +33,7 @@ import {
   resumeStartAgainSetAside,
   setAsideDestinations,
   setAsideFolderPaths,
+  setAsideUnreadableModuleRecord,
   type SetAsideIo,
 } from "./first-setup-start-again-set-aside.js";
 
@@ -1610,3 +1611,34 @@ it("a ring file that cannot be read, a copy that cannot be looked at, or a link 
   expect(await readdir(elsewhere)).toEqual([]);
   expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
 });
+
+it("an unreadable module record that is a folder stays in place", async () => {
+  const stateDir = await scratch();
+  const path = join(stateDir, "module-records/payments.json");
+  await put(join(path, "keep"), "untouched");
+  const before = await snapshot(stateDir);
+  await expect(setAsideUnreadableModuleRecord(stateDir, path)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+  });
+  expect(await snapshot(stateDir)).toEqual(before);
+  expect(await readFile(join(path, "keep"), "utf8")).toBe("untouched");
+});
+
+it.each(["records", "records/set-aside"])(
+  "an unreadable module record is not moved through a linked %s folder",
+  async (name) => {
+    const stateDir = await scratch();
+    const target = await scratch();
+    const path = join(stateDir, "module-records/payments.json");
+    await put(path, "{damaged");
+    await put(join(target, "keep"), "untouched");
+    await mkdir(dirname(join(stateDir, name)), { recursive: true });
+    await fs.symlink(target, join(stateDir, name));
+    await expect(setAsideUnreadableModuleRecord(stateDir, path)).rejects.toMatchObject({
+      code: "setup.start_again_incomplete",
+    });
+    expect(await readFile(path, "utf8")).toBe("{damaged");
+    expect(await readdir(target)).toEqual(["keep"]);
+    expect(await readFile(join(target, "keep"), "utf8")).toBe("untouched");
+  },
+);
