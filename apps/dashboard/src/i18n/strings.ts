@@ -2819,7 +2819,10 @@ export const en = {
   "sales.accountant_dates":
     "Issued invoices and recorded purchases for your accountant. From and To include both calendar dates, regardless of the trading-day cut-off.",
   "sales.print_sent": "Category sales sent to {printer}.",
-  "sales.no_printers": "No active printer at this venue. Ask a manager to add one under Printers.",
+  "sales.no_printers_manage":
+    "No active printer at this venue. Add a receipt printer on Printers to print this report here.",
+  "sales.no_printers_sign_in":
+    "No active printer at this venue. Sign in as an administrator to add a receipt printer on Printers, so this report can be printed here. Then sign back in to your account.",
 
   // The leading space is deliberate: the call site appends this directly to the name.
 
@@ -7049,8 +7052,10 @@ export const es: Record<StringKey, string> = {
   "sales.accountant_dates":
     "Facturas emitidas y compras registradas para tu gestor. Desde y Hasta incluyen ambas fechas naturales, independientemente de la hora de cierre del día de trabajo.",
   "sales.print_sent": "Ventas por categoría enviadas a {printer}.",
-  "sales.no_printers":
-    "No hay ninguna impresora activa en este local. Pide a un encargado que añada una en Impresoras.",
+  "sales.no_printers_manage":
+    "No hay ninguna impresora activa en este local. Añade una impresora de recibos en Impresoras para imprimir aquí este informe.",
+  "sales.no_printers_sign_in":
+    "No hay ninguna impresora activa en este local. Inicia sesión como administrador para añadir una impresora de recibos en Impresoras y poder imprimir aquí este informe. Después, vuelve a iniciar sesión en tu cuenta.",
 
   "device_profiles.title": "Perfiles de dispositivo",
   "device_profiles.create": "Añadir perfil",

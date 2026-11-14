@@ -2641,6 +2641,44 @@ describe("dashboard-app", () => {
     },
   );
 
+  it.each([
+    { permissions: ["report.view"], canManagePrinters: false },
+    { permissions: ["report.view", "hardware.manage"], canManagePrinters: true },
+  ])(
+    "tells the sales screen whether the session may add printers ($permissions)",
+    async ({ permissions, canManagePrinters }) => {
+      history.replaceState(null, "", "/manage/sales");
+      const api = stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getMe: vi.fn().mockResolvedValue(venueViewer(permissions)),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      const sales = el.shadowRoot!.querySelector("dashboard-sales-screen") as HTMLElement & {
+        canManagePrinters: boolean;
+      };
+      expect(sales.canManagePrinters).toBe(canManagePrinters);
+    },
+  );
+
+  it("signs out to come back to Printers when the sales screen asks for an administrator", async () => {
+    history.replaceState(null, "", "/manage/sales");
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      getMe: vi.fn().mockResolvedValue(venueViewer(["report.view"])),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(sales(el)).not.toBeNull();
+
+    sales(el)!.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }));
+
+    await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
+    await expect.poll(() => login(el)).toBeTruthy();
+    expect(sales(el)).toBeNull();
+    expect(location.pathname).toBe("/manage/printers");
+  });
+
   it("tells the open devices screen when a session re-read finds hardware.manage gone", async () => {
     const getMe = vi
       .fn()

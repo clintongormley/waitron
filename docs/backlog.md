@@ -1295,12 +1295,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
-- **The sales screen's "no printer" note sends staff to a manager.** `sales.no_printers`
-  (`apps/dashboard/src/i18n/strings.ts`, English and Spanish; shown by
-  `apps/dashboard/src/screens/dashboard-sales-screen.ts:605`) says "Ask a manager to add one under
-  Printers.", against CLAUDE.md §3's rule that a refusal never sends the person to somebody else.
-  Say what adding a printer does and link Printers, or offer the sign-in there (found by A1301 S19).
-
 - **A print agent somewhere other than the box** (bundle of 4, size L, waits for another entry). Holds A1203, A1204, A1175. [Detail](backlog/printers.md#bundle-a-print-agent-somewhere-other-than-the-box)
 
 - **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer

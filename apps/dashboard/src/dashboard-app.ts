@@ -3023,6 +3023,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-sales-screen
           .api=${this.api}
           .canExport=${this.#sessionPermissions.includes("report.export")}
+          .canManagePrinters=${this.#sessionPermissions.includes("hardware.manage")}
+          @admin-sign-in=${() => void this.#onLogout("printers")}
         ></dashboard-sales-screen>`;
       case "handover-intervals":
         return html`<dashboard-handover-intervals-screen
